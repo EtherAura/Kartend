@@ -10,5 +10,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   navigationmanagersubcollection.cpp
   navigationmanagertitle.cpp
   navigationmanager.h
+  inavigationmanager.h
   navigationstackmanager.h
 )

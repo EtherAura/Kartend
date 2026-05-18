@@ -13,7 +13,7 @@ class ScrollManager;
 class DetailsPaneManager;
 class ISessionManager;
 class ISettingsManager;
-class NavigationManager;
+class INavigationManager;
 class AnimationManager;
 class ViewportManager;
 class IArtworkManager;
@@ -219,7 +219,7 @@ private:
   [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
   }
-  [[nodiscard]] NavigationManager *navMgr() const {
+  [[nodiscard]] INavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
   [[nodiscard]] AnimationManager *animMgr() const {

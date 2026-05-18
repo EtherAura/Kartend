@@ -29,7 +29,7 @@ class ISessionManager;
 class DetailsPaneManager;
 class DetailPageManager;
 class IDatabaseManager;
-class NavigationManager;
+class INavigationManager;
 class AnimationManager;
 class SelectionManager;
 class ViewportManager;
@@ -119,7 +119,7 @@ struct ApplicationContext {
     DetailsPaneManager *detailsPaneManager = nullptr;
     DetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
-    NavigationManager *navigationManager = nullptr;
+    INavigationManager *navigationManager = nullptr;
     AnimationManager *animationManager = nullptr;
     SelectionManager *selectionManager = nullptr;
     ViewportManager *viewportManager = nullptr;
@@ -172,7 +172,7 @@ struct ApplicationContext {
   }
   [[nodiscard]] DetailPageManager *detailPageManager() const { return managers.detailPageManager; }
   [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }
-  [[nodiscard]] NavigationManager *navigationManager() const { return managers.navigationManager; }
+  [[nodiscard]] INavigationManager *navigationManager() const { return managers.navigationManager; }
   [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }
   [[nodiscard]] SelectionManager *selectionManager() const { return managers.selectionManager; }
   [[nodiscard]] ViewportManager *viewportManager() const { return managers.viewportManager; }

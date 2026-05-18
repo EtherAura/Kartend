@@ -35,7 +35,7 @@ class AlphabeticNavigationHandler;
 
 class ItemWidget;
 class IDatabaseManager;
-class NavigationManager;
+class INavigationManager;
 class ISettingsManager;
 class DetailsPaneManager;
 class DetailPageManager;
@@ -60,7 +60,7 @@ struct InteractionManagerSetup {
   DetailPageManager *detailPageManager = nullptr;
   ISettingsManager *settingsManager = nullptr;
   IDatabaseManager *databaseManager = nullptr;
-  NavigationManager *navigationManager = nullptr;
+  INavigationManager *navigationManager = nullptr;
   ISessionManager *sessionManager = nullptr;
   IArtworkManager *artworkManager = nullptr;
 
@@ -87,7 +87,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_MGR_SAME(DetailPageManager *, DetailPageManager, detailPageManager)
   SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
+  SETUP_GETTER_INLINE_MGR_SAME(INavigationManager *, NavigationManager, navigationManager)
   SETUP_GETTER_INLINE_MGR_SAME(ISessionManager *, SessionManager, sessionManager)
   SETUP_GETTER_INLINE_MGR_SAME(IArtworkManager *, ArtworkManager, artworkManager)
 
@@ -367,7 +367,7 @@ private:
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
-  [[nodiscard]] NavigationManager *navMgr() const {
+  [[nodiscard]] INavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
   [[nodiscard]] class IPlaylistManager *playlistMgr() const {

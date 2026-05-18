@@ -1,6 +1,7 @@
 #ifndef NAVIGATIONMANAGER_H
 #define NAVIGATIONMANAGER_H
 
+#include "inavigationmanager.h"
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "errorutils.h"
@@ -88,7 +89,9 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
 };
 
-class NavigationManager : public QObject {
+// QObject must be the first base; INavigationManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class NavigationManager : public QObject, public INavigationManager {
   Q_OBJECT
 public:
   explicit NavigationManager(QObject *parent = nullptr);
@@ -100,7 +103,9 @@ public:
   void prepareForShutdown();
 
   // Navigation stack manager for hierarchy traversal
-  [[nodiscard]] NavigationStackManager *stackManager() const { return m_stackManager.get(); }
+  [[nodiscard]] NavigationStackManager *stackManager() const override {
+    return m_stackManager.get();
+  }
 
 private:
   std::unique_ptr<NavigationStackManager> m_stackManager;
@@ -110,32 +115,32 @@ public:
   void setupReferences(const NavigationManagerSetup &setup);
 
 public slots:
-  auto showCollectionItems(int collectionIndex) -> bool;
+  bool showCollectionItems(int collectionIndex) override;
   void navigateWithSharedItems(int collectionIndex);
-  void safeReloadCollection(int collectionIndex);
+  void safeReloadCollection(int collectionIndex) override;
   void forceRescanCollection(int collectionIndex);
   void onCollectionSelected(int collectionIndex);
   void onSubcollectionEntered(int subcollectionIndex);
-  void onVirtualFolderEntered(const QString &folderPath);
-  void goBackFromVirtualFolder();
+  void onVirtualFolderEntered(const QString &folderPath) override;
+  void goBackFromVirtualFolder() override;
   void loadCurrentAndSubcollections();
   void loadAllCollectionsView();
   // Renders the synthetic "Home" view: every root collection (parent == -1)
   // shown as a tile grid with no host collection of its own. No DB query;
   // tiles come from the in-memory collection list.
-  void loadRootView();
+  void loadRootView() override;
 
   /// True when the synthetic Home view (one tile per root collection,
   /// currentCollectionIndex == -1) is currently active. Search routing
   /// uses this to detect "no collection selected" and divert to
   /// cross-collection search instead of no-op'ing.
-  [[nodiscard]] bool isInRootView() const { return m_inRootView; }
+  [[nodiscard]] bool isInRootView() const override { return m_inRootView; }
   void goBackToCollections();
-  void filterItems(const QString &searchText);
-  void filterItemsCurrentAndSubcollections(const QString &searchText);
-  void filterItemsAllCollections(const QString &searchText);
-  auto scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
-                                int finalEnsureDelayMs) -> void;
+  void filterItems(const QString &searchText) override;
+  void filterItemsCurrentAndSubcollections(const QString &searchText) override;
+  void filterItemsAllCollections(const QString &searchText) override;
+  void scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
+                                int finalEnsureDelayMs) override;
   void onItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);
   void onBackgroundCollectionScanCompleted(const QString &collectionUuid);

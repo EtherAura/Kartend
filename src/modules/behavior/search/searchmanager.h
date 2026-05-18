@@ -19,7 +19,7 @@ QT_END_NAMESPACE
 
 class IDatabaseManager;
 class InteractionStateHolder;
-class NavigationManager;
+class INavigationManager;
 class ScrollManager;
 class ISettingsManager;
 struct ApplicationContext;
@@ -110,7 +110,7 @@ private:
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
-  [[nodiscard]] NavigationManager *navMgr() const {
+  [[nodiscard]] INavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
   [[nodiscard]] ScrollManager *scrollMgr() const {
