@@ -2,6 +2,7 @@
 #define DETAILSPANEMANAGER_H
 
 #include "collectionutils.h"
+#include "idetailspanemanager.h"
 #include "setuputils.h"
 #include <QObject>
 #include <QString>
@@ -43,41 +44,43 @@ struct DetailsPaneManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
-class DetailsPaneManager : public QObject {
+// QObject must be the first base; IDetailsPaneManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class DetailsPaneManager : public QObject, public IDetailsPaneManager {
   Q_OBJECT
 
 public:
   explicit DetailsPaneManager(QObject *parent = nullptr);
   void setupReferences(const DetailsPaneManagerSetup &setup);
   void setupSidebar();
-  void toggleSidebar();
+  void toggleSidebar() override;
   /// Debounced sidebar refresh. Coalesces rapid selection changes
   /// (wheel/arrow storms) into a single update once the selection
   /// settles — the actual refresh runs ~METADATA_DEBOUNCE_MS after
   /// the last call. Deselect (empty path) bypasses the debounce so
   /// clears feel instant.
-  void updateSidebarMetadata(ItemWidget *selectedItem);
+  void updateSidebarMetadata(ItemWidget *selectedItem) override;
   /// Path-based overload used when no ItemWidget is materialized for the
   /// selection (notably Cover Flow, which renders its own CoverFlowCards
   /// instead of ItemWidgets in the virtual grid). Populates
   /// m_currentItemContext so DetailPageManager and other consumers can
   /// resolve the same item without an ItemWidget pointer.
-  void updateSidebarMetadata(const QString &filePath, const QString &itemName);
+  void updateSidebarMetadata(const QString &filePath, const QString &itemName) override;
   /// Force an immediate sidebar refresh, bypassing the debounce. Use
   /// from explicit user actions where the latency would be noticed —
   /// post-edit (context-menu metadata changes) and tab switches. Uses
   /// the most recent pending args if a debounced update is queued,
   /// otherwise falls back to the currently-displayed item context.
-  void refreshSidebarMetadataImmediate();
-  void applySidebarStateForCollection(int collectionIndex);
+  void refreshSidebarMetadataImmediate() override;
+  void applySidebarStateForCollection(int collectionIndex) override;
   void updateSidebarLayout(int currentCollectionIndex);
   void positionSidebarOverlay();
   /// Recomputes the collection-level summary the sidebar shows when no
   /// item is selected. Cheap; safe to call after collection
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
-  [[nodiscard]] bool isSidebarVisible() const;
-  [[nodiscard]] DetailsPane *sidebarWidget() const { return m_DetailsPane; }
+  [[nodiscard]] bool isSidebarVisible() const override;
+  [[nodiscard]] DetailsPane *sidebarWidget() const override { return m_DetailsPane; }
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
@@ -98,23 +101,13 @@ public:
   /// re-stack the sidebar above the active overlay.
   void setOverlayActive(bool active);
 
-  /// cached resolution context for the currently-displayed item.
-  /// Populated in updateSidebarMetadata() so siblings (e.g. DetailPageManager)
-  /// can render the same item without redoing the showAllSubcollectionItems-
-  /// aware owner / artwork / video / manual directory lookup. `uuid` is empty
-  /// when no item is selected, the lookup failed, or the user is showing the
-  /// collection summary (no-selection state).
-  struct ItemContext {
-    QString filePath;
-    QString itemName;
-    QString uuid;         // collection_uuid for DB metadata lookup
-    QString artworkDir;   // expanded, owner-aware artwork directory
-    QString videoDir;     // expanded, owner-aware video directory
-    QString manualDir;    // expanded, owner-aware manual directory
-    int owningIndex = -1; // index in m_collections, -1 if unknown
-    [[nodiscard]] bool isValid() const { return !filePath.isEmpty() && !uuid.isEmpty(); }
-  };
-  [[nodiscard]] const ItemContext &currentItemContext() const { return m_currentItemContext; }
+  /// ItemContext (the cached resolution context for the currently-displayed
+  /// item) now lives in IDetailsPaneManager so the data contract travels
+  /// with the interface; re-exported here for source compatibility.
+  using ItemContext = IDetailsPaneManager::ItemContext;
+  [[nodiscard]] const ItemContext &currentItemContext() const override {
+    return m_currentItemContext;
+  }
 
 signals:
   void sidebarVisibilityChanged(bool visible);

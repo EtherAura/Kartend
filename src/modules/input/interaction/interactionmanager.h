@@ -37,7 +37,7 @@ class ItemWidget;
 class IDatabaseManager;
 class INavigationManager;
 class ISettingsManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class IDetailPageManager;
 class ScrollManager;
 class ISessionManager;
@@ -56,7 +56,7 @@ struct InteractionManagerSetup {
 
   // Manager dependencies (can be overridden or taken from ctx)
   ScrollManager *scrollManager = nullptr;
-  DetailsPaneManager *detailsPaneManager = nullptr;
+  IDetailsPaneManager *detailsPaneManager = nullptr;
   IDetailPageManager *detailPageManager = nullptr;
   ISettingsManager *settingsManager = nullptr;
   IDatabaseManager *databaseManager = nullptr;
@@ -83,7 +83,7 @@ struct InteractionManagerSetup {
 
   // Manager accessors that check ctx fallback
   SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+  SETUP_GETTER_INLINE_MGR_SAME(IDetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDetailPageManager *, DetailPageManager, detailPageManager)
   SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
@@ -355,7 +355,7 @@ private:
   [[nodiscard]] ScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] IDetailPageManager *detailPageMgr() const {

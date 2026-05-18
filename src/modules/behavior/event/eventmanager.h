@@ -27,7 +27,7 @@ class ViewportManager;
 class SelectionManager;
 class IArtworkManager;
 class IDatabaseManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class InteractionStateHolder;
 class HoverScrollHandler;
 class WheelEventHandler;
@@ -156,7 +156,7 @@ private:
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
-  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {

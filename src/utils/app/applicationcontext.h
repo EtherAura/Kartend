@@ -26,7 +26,7 @@ class ScrollManager;
 class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class IDetailPageManager;
 class IDatabaseManager;
 class INavigationManager;
@@ -116,7 +116,7 @@ struct ApplicationContext {
     IArtworkManager *artworkManager = nullptr;
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
-    DetailsPaneManager *detailsPaneManager = nullptr;
+    IDetailsPaneManager *detailsPaneManager = nullptr;
     IDetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
     INavigationManager *navigationManager = nullptr;
@@ -167,7 +167,7 @@ struct ApplicationContext {
   [[nodiscard]] IArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }
-  [[nodiscard]] DetailsPaneManager *detailsPaneManager() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneManager() const {
     return managers.detailsPaneManager;
   }
   [[nodiscard]] IDetailPageManager *detailPageManager() const { return managers.detailPageManager; }

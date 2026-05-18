@@ -15,7 +15,7 @@ class QWidget;
 QT_END_NAMESPACE
 
 class AnimationManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class InteractionStateHolder;
 class MouseManager;
 class ScrollManager;
@@ -90,7 +90,7 @@ private:
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }
   [[nodiscard]] MouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
-  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {

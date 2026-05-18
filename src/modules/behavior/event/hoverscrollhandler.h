@@ -16,7 +16,7 @@ class QWidget;
 QT_END_NAMESPACE
 
 class ArtworkManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class InteractionStateHolder;
 class ItemWidget;
 class ScrollManager;
@@ -81,7 +81,7 @@ private:
   [[nodiscard]] ViewportManager *viewportMgr() const {
     return m_ctx ? m_ctx->viewportManager() : nullptr;
   }
-  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {

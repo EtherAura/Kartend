@@ -10,7 +10,7 @@
 
 class ItemWidget;
 class ScrollManager;
-class DetailsPaneManager;
+class IDetailsPaneManager;
 class ISessionManager;
 class ISettingsManager;
 class INavigationManager;
@@ -210,7 +210,7 @@ private:
   [[nodiscard]] ScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] ISessionManager *sessionMgr() const {

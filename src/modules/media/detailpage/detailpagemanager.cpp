@@ -36,7 +36,7 @@ void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
 }
 
 void DetailPageManager::showForCurrentSelection() {
-  DetailsPaneManager *detailsPane = m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  IDetailsPaneManager *detailsPane = m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_overlay || !detailsPane) {
     return;
