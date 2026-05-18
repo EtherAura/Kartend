@@ -1,9 +1,9 @@
-// Static helpers extracted from querymanager.cpp:
+// Pure list/map post-processing helpers in the QueryManagerInternal
+// namespace (declared in querymanagerhelpers.h):
 //   - appendFileMapsAndListCanonical
 //   - sortFiles
-//   - getCharacterSortPriority
-// These are pure (non-state-touching) member functions that operate on
-// caller-supplied containers / strings.
+// These touch no QSqlDatabase or worker-thread state — they operate only
+// on caller-supplied containers / strings.
 #include "pathutils.h"
 #include "queryhelpers.h"
 #include "querymanager.h"
@@ -21,7 +21,7 @@ using QueryManagerInternal::canonicalKeyPath;
 using QueryManagerInternal::displayNameForBase;
 using QueryManagerInternal::insertIfAbsent;
 
-void QueryManager::appendFileMapsAndListCanonical(
+void QueryManagerInternal::appendFileMapsAndListCanonical(
     int collectionIndex, const CollectionConfig &expandedCollection,
     const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
     QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
@@ -109,7 +109,7 @@ void QueryManager::appendFileMapsAndListCanonical(
   }
 }
 
-void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
+void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode) {
   if (mode == SortMode::Random) {
     // Fisher-Yates shuffle
     auto seed = static_cast<unsigned>(QDateTime::currentMSecsSinceEpoch());
@@ -150,7 +150,8 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
       numericKey = info.exists() ? info.size() : 0;
     }
 
-    entries.append(SortEntry{path, sortKey, getCharacterSortPriority(sortKey), numericKey});
+    entries.append(
+        SortEntry{path, sortKey, QueryHelpers::characterSortPriority(sortKey), numericKey});
   }
 
   std::ranges::sort(entries, [&](const SortEntry &lhs, const SortEntry &rhs) {
@@ -175,6 +176,3 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
   }
 }
 
-int QueryManager::getCharacterSortPriority(const QString &text) {
-  return QueryHelpers::characterSortPriority(text);
-}

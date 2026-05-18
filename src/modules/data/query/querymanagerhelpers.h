@@ -20,6 +20,7 @@
 #include <QMutexLocker>
 #include <QRegularExpression>
 #include <QRunnable>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QString>
@@ -27,6 +28,7 @@
 #include <QVector>
 #include <QWaitCondition>
 
+#include "collectionutils.h"
 #include "queryhelpers.h"
 #include "uiconstants.h"
 
@@ -357,6 +359,26 @@ public:
 private:
   QSqlDatabase &m_db;
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// Pure list/map post-processing — promoted out of the QueryManager class.
+// Operate only on caller-supplied containers (no QSqlDatabase, no worker
+// state), so they live here as free functions instead of widening
+// querymanager.h. Definitions are in querymanagerstatichelpers.cpp.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Appends one collection's resolved file list to the combined output maps,
+/// applying optional canonical-path dedup across collections.
+void appendFileMapsAndListCanonical(
+    int collectionIndex, const CollectionConfig &expandedCollection,
+    const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
+    QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
+    QHash<QString, QString> &fileToMediaDir, QHash<QString, int> &fileToCollectionIndex,
+    bool dedup, QSet<QString> *seenCanonicalPaths = nullptr,
+    QHash<QString, QString> *canonicalPathCache = nullptr);
+
+/// Sorts file paths in place according to the given SortMode.
+void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
 
 } // namespace QueryManagerInternal
 

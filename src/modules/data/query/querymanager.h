@@ -346,16 +346,9 @@ private:
   // Builds SQL IN clause with placeholders for the given UUID count
   [[nodiscard]] static QString buildUuidInClause(int uuidCount);
 
-  static void appendFileMapsAndListCanonical(
-      int collectionIndex, const CollectionConfig &expandedCollection,
-      const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
-      QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
-      QHash<QString, QString> &fileToMediaDir, QHash<QString, int> &fileToCollectionIndex,
-      bool dedup, QSet<QString> *seenCanonicalPaths = nullptr,
-      QHash<QString, QString> *canonicalPathCache = nullptr);
-
-  static void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
-  static int getCharacterSortPriority(const QString &text);
+  // appendFileMapsAndListCanonical() and sortFiles() were pure static
+  // members; they are now free functions in the QueryManagerInternal
+  // namespace (querymanagerhelpers.h) so they no longer widen this header.
 };
 
 #endif // QUERYMANAGER_H

@@ -83,13 +83,13 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
     QHash<QString, QDateTime> timestamps;
     QStringList filePaths = loadOrScanCollection(collectionIndex, collection, timestamps);
 
-    appendFileMapsAndListCanonical(
+    QueryManagerInternal::appendFileMapsAndListCanonical(
         collectionIndex, collection,
         CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), filePaths,
         allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
   }
 
-  sortFiles(allFilePaths);
+  QueryManagerInternal::sortFiles(allFilePaths);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                    fileToCollectionIndex);
@@ -163,11 +163,11 @@ void QueryManager::loadItems(const CollectionContext &context,
   QString resolvedArtworkDir =
       CollectionUtils::resolveArtworkDirectory(ctx.currentIndex, allCollections);
 
-  appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths,
+  QueryManagerInternal::appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths,
                                  allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                                  fileToCollectionIndex, false);
 
-  sortFiles(allFilePaths, ctx.sortMode);
+  QueryManagerInternal::sortFiles(allFilePaths, ctx.sortMode);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                    fileToCollectionIndex);
@@ -239,7 +239,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     seenCanonicalPaths.reserve(mainFilePaths.size());
     canonicalPathCache.reserve(mainFilePaths.size());
 
-    appendFileMapsAndListCanonical(
+    QueryManagerInternal::appendFileMapsAndListCanonical(
         mainCtx.currentIndex, mainCtx.config,
         CollectionUtils::resolveArtworkDirectory(mainCtx.currentIndex, allCollections),
         mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
@@ -282,14 +282,14 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     QHash<QString, QDateTime> subTimestamps;
     QStringList subFilePaths = loadOrScanCollection(collectionIndex, collection, subTimestamps);
 
-    appendFileMapsAndListCanonical(
+    QueryManagerInternal::appendFileMapsAndListCanonical(
         collectionIndex, collection,
         CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), subFilePaths,
         allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, true,
         &seenCanonicalPaths, &canonicalPathCache);
   }
 
-  sortFiles(allFilePaths, context.sortMode);
+  QueryManagerInternal::sortFiles(allFilePaths, context.sortMode);
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                    fileToCollectionIndex);
 }
