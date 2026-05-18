@@ -41,7 +41,7 @@ class DetailsPaneManager;
 class DetailPageManager;
 class ScrollManager;
 class ISessionManager;
-class ArtworkManager;
+class IArtworkManager;
 class DetailsPane;
 
 /**
@@ -62,7 +62,7 @@ struct InteractionManagerSetup {
   IDatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
   ISessionManager *sessionManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
+  IArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
   DetailsPane *sidebar = nullptr;
@@ -89,7 +89,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
   SETUP_GETTER_INLINE_MGR_SAME(ISessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
+  SETUP_GETTER_INLINE_MGR_SAME(IArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -376,7 +376,7 @@ private:
   [[nodiscard]] ISessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
-  [[nodiscard]] ArtworkManager *artworkMgr() const {
+  [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

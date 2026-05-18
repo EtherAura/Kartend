@@ -9,7 +9,7 @@ class QWidget;
 class DetailsPaneManager;
 class ScrollManager;
 class NavigationManager;
-class ArtworkManager;
+class IArtworkManager;
 class ICacheManager;
 class IDatabaseManager;
 
@@ -50,7 +50,7 @@ public:
       const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
       const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
       DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
-      NavigationManager *navigationManager, ArtworkManager *artworkManager,
+      NavigationManager *navigationManager, IArtworkManager *artworkManager,
       ICacheManager *cacheManager, int currentCollectionIndex) = 0;
 
   virtual void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
@@ -60,7 +60,7 @@ public:
                                    bool alignmentChangedForView, bool fontSizeChangedForView,
                                    bool hideTitlesChangedForView,
                                    DetailsPaneManager *detailsPaneManager,
-                                   ScrollManager *scrollManager, ArtworkManager *artworkManager,
+                                   ScrollManager *scrollManager, IArtworkManager *artworkManager,
                                    int currentCollectionIndex) = 0;
 
 signals:

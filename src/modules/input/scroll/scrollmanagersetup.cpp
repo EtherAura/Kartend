@@ -64,7 +64,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
 
   // Snapshot sibling-manager pointers for setter-based handoff to helpers.
   // These mirror ctx and are not stored as ScrollManager member fields.
-  ArtworkManager *artwork = m_ctx ? m_ctx->artworkManager() : nullptr;
+  IArtworkManager *artwork = m_ctx ? m_ctx->artworkManager() : nullptr;
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
 

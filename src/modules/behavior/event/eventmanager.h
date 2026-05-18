@@ -25,7 +25,7 @@ class MouseManager;
 class AnimationManager;
 class ViewportManager;
 class SelectionManager;
-class ArtworkManager;
+class IArtworkManager;
 class IDatabaseManager;
 class DetailsPaneManager;
 class InteractionStateHolder;
@@ -150,7 +150,7 @@ private:
   [[nodiscard]] SelectionManager *selectionMgr() const {
     return m_ctx ? m_ctx->selectionManager() : nullptr;
   }
-  [[nodiscard]] ArtworkManager *artworkMgr() const {
+  [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
   [[nodiscard]] IDatabaseManager *databaseMgr() const {

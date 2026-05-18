@@ -34,12 +34,12 @@ public:
 
   void handleReloadRequired(const QList<CollectionConfig> &, const QList<CollectionConfig> &,
                             const QList<CollectionConfig> &, int, DetailsPaneManager *,
-                            ScrollManager *, NavigationManager *, ArtworkManager *, ICacheManager *,
+                            ScrollManager *, NavigationManager *, IArtworkManager *, ICacheManager *,
                             int) override {}
 
   void handleLayoutChanges(QWidget *, const QList<CollectionConfig> &, int, bool, bool, bool, bool,
                            bool, bool, bool, bool, DetailsPaneManager *, ScrollManager *,
-                           ArtworkManager *, int) override {}
+                           IArtworkManager *, int) override {}
 
 private:
   QHash<int, int> m_lastSelected;

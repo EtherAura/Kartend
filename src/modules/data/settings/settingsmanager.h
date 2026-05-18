@@ -33,7 +33,7 @@ public:
                             const QList<CollectionConfig> &originalCollections,
                             int viewingCollectionIndex, DetailsPaneManager *detailsPaneManager,
                             ScrollManager *scrollManager, NavigationManager *navigationManager,
-                            ArtworkManager *artworkManager, ICacheManager *cacheManager,
+                            IArtworkManager *artworkManager, ICacheManager *cacheManager,
                             int currentCollectionIndex) override;
 
   void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
@@ -42,7 +42,7 @@ public:
                            bool gridWidthChangedForView, bool spacingChangedForView,
                            bool alignmentChangedForView, bool fontSizeChangedForView,
                            bool hideTitlesChangedForView, DetailsPaneManager *detailsPaneManager,
-                           ScrollManager *scrollManager, ArtworkManager *artworkManager,
+                           ScrollManager *scrollManager, IArtworkManager *artworkManager,
                            int currentCollectionIndex) override;
 
 private slots:

@@ -20,7 +20,7 @@ class QScrollBar;
 class ItemWidget;
 class DatabaseManager;
 class QPropertyAnimation;
-class ArtworkManager;
+class IArtworkManager;
 class CoverFlowWidget;
 class WidgetPoolManager;
 class FilterManager;
@@ -59,7 +59,7 @@ struct ScrollManagerSetup {
   // All fields resolved through ApplicationContext typed accessors.
   SETUP_GETTER_DECL_CTX_ONLY(QWidget *, GridContainer)
   SETUP_GETTER_DECL_CTX_ONLY(QScrollArea *, MediaScrollArea)
-  SETUP_GETTER_DECL_CTX_ONLY(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL_CTX_ONLY(IArtworkManager *, ArtworkManager)
   SETUP_GETTER_DECL_CTX_ONLY(const QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL_CTX_ONLY(const CollectionHierarchyCache *, HierarchyCache)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)

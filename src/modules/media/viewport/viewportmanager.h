@@ -14,7 +14,7 @@ QT_END_NAMESPACE
 class AnimationManager;
 class ScrollManager;
 class SelectionManager;
-class ArtworkManager;
+class IArtworkManager;
 class InteractionStateHolder;
 struct ApplicationContext;
 
@@ -162,7 +162,7 @@ private:
   [[nodiscard]] AnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }
-  [[nodiscard]] ArtworkManager *artworkMgr() const {
+  [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {

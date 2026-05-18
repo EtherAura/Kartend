@@ -212,7 +212,7 @@ void VirtualScrollEngine::removeUnneededWidgets(const QSet<int> &needed) {
 }
 
 void VirtualScrollEngine::updateArtworkIfAllowed() {
-  ArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
+  IArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
   InteractionStateHolder *state = m_owner->m_ctx ? m_owner->m_ctx->interactionState() : nullptr;
   if (!QApplication::closingDown() && art) {
     const bool suppressArtwork = state && state->artwork().suppressArtwork;
@@ -571,7 +571,7 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
 }
 
 void VirtualScrollEngine::reconfigureArtworkForActiveWidgets() {
-  ArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
+  IArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
   if (!m_owner->m_widgetFactory || !art) {
     return;
   }

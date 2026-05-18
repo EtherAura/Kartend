@@ -191,11 +191,11 @@ void refreshSidebar(DetailsPaneManager *detailsPaneManager,
 }
 
 // Handles scroll manager branching
-void handleScrollBranch(ScrollManager *scrollManager, ArtworkManager *artworkManager,
+void handleScrollBranch(ScrollManager *scrollManager, IArtworkManager *artworkManager,
                         const QList<CollectionConfig> &collections, int viewingIndex,
                         bool spacingChanged, bool sidebarModeChanged, bool gridWidthChanged,
                         bool alignmentChanged, bool fontSizeChanged, bool hideTitlesChanged) {
-  auto scheduleGridWidthRefresh = [](ScrollManager *scrollManager, ArtworkManager *artworkManager,
+  auto scheduleGridWidthRefresh = [](ScrollManager *scrollManager, IArtworkManager *artworkManager,
                                      int viewingIndex,
                                      const QList<CollectionConfig> *collectionsPtr) {
     if (!scrollManager || !collectionsPtr) {
@@ -342,7 +342,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     return;
   }
 
-  ArtworkManager *art = m_ctx ? m_ctx->artworkManager() : nullptr;
+  IArtworkManager *art = m_ctx ? m_ctx->artworkManager() : nullptr;
   ICacheManager *cache = m_ctx ? m_ctx->cacheManager() : nullptr;
   if (art && art->getTimerCoordinator()) {
     art->getTimerCoordinator()->stopAllTimers();
@@ -473,7 +473,7 @@ auto SettingsManager::handleReloadRequired(
     const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
     DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
-    NavigationManager *navigationManager, ArtworkManager *artworkManager,
+    NavigationManager *navigationManager, IArtworkManager *artworkManager,
     ICacheManager *cacheManager, int currentCollectionIndex) -> void {
   Q_UNUSED(detailsPaneManager)
   Q_UNUSED(currentCollectionIndex)
@@ -528,7 +528,7 @@ auto SettingsManager::handleLayoutChanges(
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
     bool fontSizeChangedForView, bool hideTitlesChangedForView,
     DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
-    ArtworkManager *artworkManager, int currentCollectionIndex) -> void {
+    IArtworkManager *artworkManager, int currentCollectionIndex) -> void {
   if (viewingCollectionIndex < 0 || viewingCollectionIndex >= collections.size()) {
     return;
   }

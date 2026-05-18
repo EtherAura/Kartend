@@ -16,7 +16,7 @@ class ISettingsManager;
 class NavigationManager;
 class AnimationManager;
 class ViewportManager;
-class ArtworkManager;
+class IArtworkManager;
 class DetailsPane;
 class InteractionStateHolder;
 class QWidget;
@@ -228,7 +228,7 @@ private:
   [[nodiscard]] ViewportManager *viewportMgr() const {
     return m_ctx ? m_ctx->viewportManager() : nullptr;
   }
-  [[nodiscard]] ArtworkManager *artworkMgr() const {
+  [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
 

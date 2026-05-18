@@ -9,7 +9,7 @@ class QScrollBar;
 class QWidget;
 class ItemWidget;
 class WidgetPoolManager;
-class ArtworkManager;
+class IArtworkManager;
 
 /**
  * @brief Manages pre-search widget state for fast search result restoration.
@@ -73,7 +73,7 @@ public:
    * @return true if state was restored
    */
   bool restoreState(QHash<int, ItemWidget *> &activeWidgets, QWidget *virtualContainer,
-                    WidgetPoolManager *widgetPool, ArtworkManager *artworkManager,
+                    WidgetPoolManager *widgetPool, IArtworkManager *artworkManager,
                     std::function<QPoint(int)> getPositionFunc, int itemWidth, int itemHeight);
 
   /**

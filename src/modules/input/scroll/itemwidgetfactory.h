@@ -9,7 +9,7 @@
 
 class ItemWidget;
 class QWidget;
-class ArtworkManager;
+class IArtworkManager;
 class IDatabaseManager;
 class WidgetPoolManager;
 
@@ -28,7 +28,7 @@ public:
 
   // Dependencies
   void setWidgetPool(WidgetPoolManager *pool) { m_widgetPool = pool; }
-  void setArtworkManager(ArtworkManager *manager) { m_artworkManager = manager; }
+  void setArtworkManager(IArtworkManager *manager) { m_artworkManager = manager; }
   void setDatabaseManager(IDatabaseManager *manager) { m_databaseManager = manager; }
   void setParentWidget(QWidget *parent) { m_parentWidget = parent; }
 
@@ -162,7 +162,7 @@ private:
   void applyPlaceholderArtwork(ItemWidget *widget, const QString &placeholderArtwork) const;
 
   WidgetPoolManager *m_widgetPool = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
+  IArtworkManager *m_artworkManager = nullptr;
   IDatabaseManager *m_databaseManager = nullptr;
   QWidget *m_parentWidget = nullptr;
 

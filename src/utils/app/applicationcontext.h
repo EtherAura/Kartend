@@ -23,7 +23,7 @@ class EmptyStateWidget;
 
 // Forward declarations for managers
 class ScrollManager;
-class ArtworkManager;
+class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
 class DetailsPaneManager;
@@ -113,7 +113,7 @@ struct ApplicationContext {
   // ─────────────────────────────────────────────────────────────────────────
   struct ManagerRefs {
     ScrollManager *scrollManager = nullptr;
-    ArtworkManager *artworkManager = nullptr;
+    IArtworkManager *artworkManager = nullptr;
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
     DetailsPaneManager *detailsPaneManager = nullptr;
@@ -164,7 +164,7 @@ struct ApplicationContext {
   // managers; managers should not cache sibling-manager pointers as fields.
   // ─────────────────────────────────────────────────────────────────────────
   [[nodiscard]] ScrollManager *scrollManager() const { return managers.scrollManager; }
-  [[nodiscard]] ArtworkManager *artworkManager() const { return managers.artworkManager; }
+  [[nodiscard]] IArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }
   [[nodiscard]] DetailsPaneManager *detailsPaneManager() const {

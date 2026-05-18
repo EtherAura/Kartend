@@ -9,6 +9,7 @@
 
 #include "adaptivebatcher.h"
 #include "artworkpathcatalog.h"
+#include "iartworkmanager.h"
 #include "itemwidget.h"
 #include "setuputils.h"
 
@@ -101,7 +102,9 @@ struct UIReferences {
  *
  * Results are delivered back to main thread via queued signal connections.
  */
-class ArtworkManager : public QObject {
+// QObject must be the first base; IArtworkManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class ArtworkManager : public QObject, public IArtworkManager {
   Q_OBJECT
 
 public:
@@ -110,25 +113,25 @@ public:
   void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
                            int customBatchSize = 0);
-  void cancelAllArtworkLoading();
-  void addPendingArtwork(ItemWidget *widget, const QString &artworkPath);
-  void clearPendingArtworkForWidget(ItemWidget *widget);
-  void clearWidgetReferences();
+  void cancelAllArtworkLoading() override;
+  void addPendingArtwork(ItemWidget *widget, const QString &artworkPath) override;
+  void clearPendingArtworkForWidget(ItemWidget *widget) override;
+  void clearWidgetReferences() override;
   static QString findArtworkForFile(const QString &fileName, const QString &artworkDirectory);
-  void scheduleViewportUpdate();
+  void scheduleViewportUpdate() override;
   void startSilentLoading();
-  void startEarlyDentryPrewarm(int collectionIndex);
+  void startEarlyDentryPrewarm(int collectionIndex) override;
   void preloadArtworkForCollection();
-  void stopSilentLoading();
+  void stopSilentLoading() override;
   void processPersistentSilentLoad();
   void processContinuousSilentLoad();
-  void updateUserActivity();
+  void updateUserActivity() override;
   [[nodiscard]] bool isUserIdle() const;
   [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }
-  [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const;
-  void updateViewportArtwork();
+  [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const override;
+  void updateViewportArtwork() override;
   void initializeCache();
-  void clearLoadedArtworkState();
+  void clearLoadedArtworkState() override;
 
   // ─── Per-item artwork-type override ─────────────────────────
   // The shift+middle-click gesture cycles the displayed artwork through the
@@ -136,10 +139,10 @@ public:
   // `m_artworkTypeOverrides` keyed on the absolute file path, so widget
   // recycling re-applies the override when the same item scrolls back into
   // view. Empty string == "the legacy flat-directory artwork (primary)".
-  void cycleArtworkType(ItemWidget *widget, const QString &fullPath, int collectionIndex);
-  [[nodiscard]] QString artworkTypeOverrideFor(const QString &fullPath) const;
+  void cycleArtworkType(ItemWidget *widget, const QString &fullPath, int collectionIndex) override;
+  [[nodiscard]] QString artworkTypeOverrideFor(const QString &fullPath) const override;
   void clearArtworkTypeOverrides();
-  [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const;
+  [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const override;
 
   [[nodiscard]] static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
   [[nodiscard]] QPixmap getCachedPixmap(const QString &artworkPath);

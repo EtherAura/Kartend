@@ -29,7 +29,7 @@ class DetailsPaneManager;
 class ScrollManager;
 class IDatabaseManager;
 class ISessionManager;
-class ArtworkManager;
+class IArtworkManager;
 class DetailsPane;
 class SelectionRestoreManager;
 class LoadingOverlay;
@@ -190,7 +190,7 @@ private:
   [[nodiscard]] ISessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
-  [[nodiscard]] ArtworkManager *artworkMgr() const {
+  [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
 

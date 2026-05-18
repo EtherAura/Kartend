@@ -289,7 +289,7 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
 // ScrollManagerSetup getter definitions (all resolve through ApplicationContext)
 SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, IArtworkManager *, ArtworkManager, artworkManager)
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
                               collections)
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
