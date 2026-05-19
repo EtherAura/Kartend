@@ -73,3 +73,5 @@ __pycache__/
 .dolt/
 *.db
 .beads-credential-key
+# Issue-tracker export — kept local only, never shared (purged from history)
+.beads/issues.jsonl
