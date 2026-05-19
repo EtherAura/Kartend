@@ -1,0 +1,23 @@
+# Reproduces the GitHub Actions CI build environment locally.
+#
+# CI runs on ubuntu-24.04 runners, whose `qt6-base-dev` is Qt 6.4.2 — the
+# project's KARTEND_MIN_QT_VERSION. A developer machine with a newer Qt
+# silently accepts Qt 6.5+ APIs that then fail the CI build. Building inside
+# this image catches that class of mismatch before pushing.
+#
+# Usage:
+#   docker build -f .scripts/Dockerfile.ci -t kartend-ci .
+#   docker run --rm -v "$PWD":/src:ro kartend-ci \
+#     bash -c 'cmake -S /src -B /tmp/b -G Ninja -DCMAKE_BUILD_TYPE=Release \
+#                    -DKARTEND_BUILD_TESTS=ON && cmake --build /tmp/b --parallel'
+FROM ubuntu:24.04
+
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      clang cmake ninja-build lld ccache git python3 \
+      qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
+      clang-tidy clang-format-19 cppcheck jq \
+ && ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

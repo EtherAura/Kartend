@@ -17,7 +17,6 @@
 #include <QLocale>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
-#include <QTimeZone>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -676,8 +675,12 @@ void ScreenScraperProvider::updateQuotaFromResponse(const QByteArray &json) {
   m_lastQuota.koMax = info->maxRequestsKoPerDay;
   // SS rolls the per-day counters at 00:00 UTC. Compute the next such
   // boundary so the dialog can show the user when their quota frees up.
-  const QDate todayUtc = QDateTime::currentDateTimeUtc().date();
-  m_lastQuota.resetAtUtc = QDateTime(todayUtc.addDays(1), QTime(0, 0), QTimeZone::UTC);
+  // currentDateTimeUtc() + setTime + addDays uses only long-stable QDateTime
+  // API — avoids the QTimeZone::UTC initialization enum, which is Qt 6.5+ and
+  // breaks the build against the Qt 6.4 the CI runners ship.
+  QDateTime resetUtc = QDateTime::currentDateTimeUtc();
+  resetUtc.setTime(QTime(0, 0));
+  m_lastQuota.resetAtUtc = resetUtc.addDays(1);
 }
 
 void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
