@@ -1,0 +1,7 @@
+# The CI-reproduction image (.scripts/Dockerfile.ci) installs packages only —
+# it copies nothing from the build context. Keep the context tiny and avoid
+# scanning build outputs (which container runs may create root-owned).
+build/
+.git/
+.lupdate/
+translations/*.qm

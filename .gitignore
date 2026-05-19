@@ -35,6 +35,11 @@ tests/**/Makefile
 .qt/
 *_autogen/
 
+# Qt Linguist build artifacts: *.qm are compiled translations (built from
+# the tracked translations/*.ts sources); .lupdate/ is lupdate's scan cache.
+*.qm
+.lupdate/
+
 # IDE files
 *.user
 *.swp
