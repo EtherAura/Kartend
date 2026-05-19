@@ -69,9 +69,9 @@ __pycache__/
 # Obsidian vault metadata (personal note-taking, not project state)
 .obsidian/
 
-# Beads / Dolt files (added by bd init)
+# Beads — local-only issue tracker; the whole dir is untracked (bd still
+# uses it on disk, it's just not shared via git).
+.beads/
 .dolt/
 *.db
 .beads-credential-key
-# Issue-tracker export — kept local only, never shared (purged from history)
-.beads/issues.jsonl

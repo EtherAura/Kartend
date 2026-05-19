@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "Kartend",
-  "project_id": "3186fcd7-8863-4631-aa36-4aa5a31455ca"
-}
