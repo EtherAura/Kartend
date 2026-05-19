@@ -17,6 +17,7 @@
 #include <QLocale>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QTimeZone>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -614,6 +615,12 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
                          .withDetails(QString::fromUtf8(bytes).trimmed()));
             return;
           }
+          // Refresh the cached quota from this response's `ssuser`
+          // block before parsing the game data. Runs on the "no
+          // match" path too (SS still reports the counters there),
+          // so the dialog's live readout stays current even for a
+          // collection full of unmatched ROMs.
+          updateQuotaFromResponse(bytes);
           // Parse twice: once for the candidate list (what the dialog
           // shows) and once for the full ScrapedItem (cached so
           // fetchDetail() can return it without a second roundtrip).
@@ -653,6 +660,24 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
           callback(cands);
         });
   });
+}
+
+void ScreenScraperProvider::updateQuotaFromResponse(const QByteArray &json) {
+  // SS reports the per-account request counters inside the `ssuser`
+  // block of every jeuInfos.php reply. Pull it once per item — free,
+  // since the bytes are already in hand — so the dialog's live quota
+  // readout tracks without a dedicated ssuserInfos.php round-trip.
+  const auto info = ScreenScraperParser::extractUserInfo(json);
+  if (!info) return; // Anonymous tier / no block — keep the prior snapshot.
+  m_lastQuota.valid = true;
+  m_lastQuota.dailyUsed = info->requestsToday;
+  m_lastQuota.dailyMax = info->maxRequestsPerDay;
+  m_lastQuota.koUsed = info->requestsKoToday;
+  m_lastQuota.koMax = info->maxRequestsKoPerDay;
+  // SS rolls the per-day counters at 00:00 UTC. Compute the next such
+  // boundary so the dialog can show the user when their quota frees up.
+  const QDate todayUtc = QDateTime::currentDateTimeUtc().date();
+  m_lastQuota.resetAtUtc = QDateTime(todayUtc.addDays(1), QTime(0, 0), QTimeZone::UTC);
 }
 
 void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,

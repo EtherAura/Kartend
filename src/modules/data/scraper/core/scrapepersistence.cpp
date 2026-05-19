@@ -38,7 +38,10 @@ namespace Scraper {
 
 namespace {
 
-constexpr int MAX_REPORTED_FAILURES = 8;
+// Bounded so a pathological all-failing run can't grow the retained
+// failure list without limit; high enough to stay diagnostically
+// complete in the scrape-error details view.
+constexpr int MAX_REPORTED_FAILURES = 1000;
 
 bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
   // Caller already mkpath'd the parent dir; this just streams the

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Scraping now shows your ScreenScraper request quota and stops
+  automatically when the daily limit is reached.** The scrape window
+  displays a live "requests today" count with the time the quota
+  resets, and as soon as ScreenScraper reports the daily request (or
+  failed-lookup) quota is exhausted the scrape stops instead of
+  burning the rest of the run against an empty allowance — your place
+  is kept so you can resume once the quota resets.
+
 ### Fixed
 
 - **Large scrapes no longer crash on PDF manuals.** When a scrape saved a
@@ -15,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   application mid-scrape. Non-image files are now kept out of every
   artwork image loader, so a downloaded manual can no longer take the
   app down.
+- **The scrape window's collection label no longer freezes.** When a
+  collection's items all failed (a quota or provider error, say), the
+  progress window kept showing an earlier collection's name while the
+  scrape had already moved on. The label now updates as each collection
+  is reached, whether or not its items succeed.
+- **The scrape error list is now scrollable.** Clicking the error count
+  during a scrape opened a dialog that showed only the first few
+  messages with no way to reach the rest. It now opens a resizable,
+  scrollable list, and far more error detail is kept.
 
 ### Security
 

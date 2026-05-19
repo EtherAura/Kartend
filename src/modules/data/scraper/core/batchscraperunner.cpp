@@ -38,6 +38,12 @@ namespace {
 /// block the UI on close. Mirrors DatabaseManager's SHUTDOWN_WAIT_MS
 /// budget for the same reason.
 constexpr int kWriteWorkerShutdownWaitMs = 2000;
+
+/// Upper bound on per-collection failure messages retained for the
+/// scrape-error details view. High enough to stay diagnostically
+/// complete for a badly-misconfigured collection, bounded so a
+/// pathological all-failing run can't grow the list without limit.
+constexpr int kMaxReportedFailures = 1000;
 } // namespace
 
 BatchScrapeRunner::BatchScrapeRunner(IDatabaseManager *db,
@@ -188,7 +194,13 @@ void BatchScrapeRunner::filterAlreadyScraped() {
 }
 
 void BatchScrapeRunner::pump() {
-  if (m_cancelled) {
+  // m_cancelled and m_quotaStopped both stop NEW dispatch here; the
+  // difference is purely in the per-item callbacks (m_cancelled makes
+  // in-flight items abandon their work, m_quotaStopped lets them run
+  // to completion — m_quotaStopped is never checked there). Either
+  // way the drain below emits finished() once the in-flight count
+  // returns to 0.
+  if (m_cancelled || m_quotaStopped) {
     if (m_inFlight == 0 && !m_finishedEmitted) {
       m_finishedEmitted = true;
       emit finished(m_summary);
@@ -233,8 +245,7 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
       return;
     }
     if (result.isError()) {
-      self->recordError(
-          QStringLiteral("%1: %2").arg(QFileInfo(state->path).fileName(), result.error().message));
+      self->recordError(QFileInfo(state->path).fileName(), result.error());
       return;
     }
     const auto candidates = result.value();
@@ -262,8 +273,7 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
             return;
           }
           if (result.isError()) {
-            self->recordError(QStringLiteral("%1: %2").arg(QFileInfo(state->path).fileName(),
-                                                           result.error().message));
+            self->recordError(QFileInfo(state->path).fileName(), result.error());
             return;
           }
           const auto scraped = result.value();
@@ -325,6 +335,15 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
                     w.asset = asset;
                     w.bytes = r.value();
                     agg->writes.append(w);
+                  } else if (r.isError() &&
+                             (r.error().httpStatus == 430 || r.error().httpStatus == 431)) {
+                    // A quota-exhausted media fetch is still
+                    // non-fatal for THIS item (it keeps its
+                    // metadata + whatever assets already landed),
+                    // but it must stop new items from dispatching
+                    // — same stop signal as the lookup/detail path.
+                    self->m_summary.quotaExhausted = true;
+                    self->m_quotaStopped = true;
                   }
                   // Asset fetch failures are non-fatal — partial
                   // success is better than failing the whole item
@@ -379,92 +398,92 @@ void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
   // writeCompleted signal back here.
   auto *watcher = new QFutureWatcher<Scraper::MediaWriteResult>(this);
   QPointer<BatchScrapeRunner> self(this);
-  connect(
-      watcher, &QFutureWatcher<Scraper::MediaWriteResult>::finished, this,
-      [self, watcher, state, effective, baseName]() {
-        watcher->deleteLater();
-        if (self.isNull()) return;
-        if (self->m_cancelled) {
-          self->itemFinished();
-          return;
-        }
-        const Scraper::MediaWriteResult writeRes = watcher->result();
+  connect(watcher, &QFutureWatcher<Scraper::MediaWriteResult>::finished, this,
+          [self, watcher, state, effective, baseName]() {
+            watcher->deleteLater();
+            if (self.isNull()) return;
+            if (self->m_cancelled) {
+              self->itemFinished();
+              return;
+            }
+            const Scraper::MediaWriteResult writeRes = watcher->result();
 
-        // Probe for an existing primary-cover file on disk and append
-        // it to the thumbnail-strip paths when no fresh write
-        // happened — FillMissing / UpdateChanged commonly skip
-        // writing if the file already exists, but the user still
-        // wants a visual ping for each item. Probes the canonical
-        // subdirs the persistence layer can use (top-level mirror,
-        // /front/, /covers/, /box-2D/, /screenshot/).
-        QStringList thumbPaths = writeRes.writtenPaths;
-        if (thumbPaths.isEmpty() && !self->m_artworkDir.isEmpty()) {
-          static const QStringList kProbeDirs = {QString(), QStringLiteral("front"),
-                                                 QStringLiteral("covers"), QStringLiteral("box-2D"),
-                                                 QStringLiteral("screenshot")};
-          static const QStringList kProbeExts = {QStringLiteral("png"), QStringLiteral("jpg"),
-                                                 QStringLiteral("jpeg"), QStringLiteral("webp")};
-          for (const QString &dir : kProbeDirs) {
-            QString prefix = self->m_artworkDir;
-            if (!dir.isEmpty()) prefix += QLatin1Char('/') + dir;
-            prefix += QLatin1Char('/') + baseName + QLatin1Char('.');
-            bool found = false;
-            for (const QString &ext : kProbeExts) {
-              const QString p = prefix + ext;
-              if (QFileInfo::exists(p)) {
-                thumbPaths.append(p);
-                found = true;
-                break;
+            // Probe for an existing primary-cover file on disk and append
+            // it to the thumbnail-strip paths when no fresh write
+            // happened — FillMissing / UpdateChanged commonly skip
+            // writing if the file already exists, but the user still
+            // wants a visual ping for each item. Probes the canonical
+            // subdirs the persistence layer can use (top-level mirror,
+            // /front/, /covers/, /box-2D/, /screenshot/).
+            QStringList thumbPaths = writeRes.writtenPaths;
+            if (thumbPaths.isEmpty() && !self->m_artworkDir.isEmpty()) {
+              static const QStringList kProbeDirs = {
+                  QString(), QStringLiteral("front"), QStringLiteral("covers"),
+                  QStringLiteral("box-2D"), QStringLiteral("screenshot")};
+              static const QStringList kProbeExts = {QStringLiteral("png"), QStringLiteral("jpg"),
+                                                     QStringLiteral("jpeg"),
+                                                     QStringLiteral("webp")};
+              for (const QString &dir : kProbeDirs) {
+                QString prefix = self->m_artworkDir;
+                if (!dir.isEmpty()) prefix += QLatin1Char('/') + dir;
+                prefix += QLatin1Char('/') + baseName + QLatin1Char('.');
+                bool found = false;
+                for (const QString &ext : kProbeExts) {
+                  const QString p = prefix + ext;
+                  if (QFileInfo::exists(p)) {
+                    thumbPaths.append(p);
+                    found = true;
+                    break;
+                  }
+                }
+                if (found) break;
               }
             }
-            if (found) break;
-          }
-        }
 
-        // ── DB-write phase: dispatch ──────────────────────
-        // Stash everything onWriteCompleted needs (the original
-        // ItemState for cancellation/error context, the effective
-        // ScrapedItem for the itemCompleted signal payload, the
-        // thumbPaths the dialog renders) keyed on a fresh
-        // requestId. The worker emits writeCompleted(requestId,
-        // ok) once the SQLite save returns.
-        //
-        // Null-DB carve-out: the test fixture and a few
-        // metadata-only callers pass nullptr. With no worker thread
-        // we keep the legacy synchronous "treat as success" path so
-        // existing tests keep passing.
-        if (!self->m_db || !self->m_writeWorker) {
-          ++self->m_summary.scraped;
-          self->m_summary.mediaWritten += writeRes.mediaWritten;
-          emit self->itemCompleted(self->m_summary.scraped + self->m_summary.skipped +
-                                       self->m_summary.errors,
-                                   self->totalItemCount(), effective, thumbPaths);
-          self->itemFinished();
-          return;
-        }
+            // ── DB-write phase: dispatch ──────────────────────
+            // Stash everything onWriteCompleted needs (the original
+            // ItemState for cancellation/error context, the effective
+            // ScrapedItem for the itemCompleted signal payload, the
+            // thumbPaths the dialog renders) keyed on a fresh
+            // requestId. The worker emits writeCompleted(requestId,
+            // ok) once the SQLite save returns.
+            //
+            // Null-DB carve-out: the test fixture and a few
+            // metadata-only callers pass nullptr. With no worker thread
+            // we keep the legacy synchronous "treat as success" path so
+            // existing tests keep passing.
+            if (!self->m_db || !self->m_writeWorker) {
+              ++self->m_summary.scraped;
+              self->m_summary.mediaWritten += writeRes.mediaWritten;
+              emit self->itemCompleted(self->m_summary.scraped + self->m_summary.skipped +
+                                           self->m_summary.errors,
+                                       self->totalItemCount(), effective, thumbPaths);
+              self->itemFinished();
+              return;
+            }
 
-        const quint64 requestId = ++self->m_nextWriteId;
-        PendingWrite pending;
-        pending.state = state;
-        pending.scraped = effective;
-        pending.writtenPaths = thumbPaths;
-        pending.mediaWritten = writeRes.mediaWritten;
-        pending.baseName = baseName;
-        if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-          pending.dispatchedAtMs = QDateTime::currentMSecsSinceEpoch();
-        }
-        self->m_pendingWrites.insert(requestId, std::move(pending));
+            const quint64 requestId = ++self->m_nextWriteId;
+            PendingWrite pending;
+            pending.state = state;
+            pending.scraped = effective;
+            pending.writtenPaths = thumbPaths;
+            pending.mediaWritten = writeRes.mediaWritten;
+            pending.baseName = baseName;
+            if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+              pending.dispatchedAtMs = QDateTime::currentMSecsSinceEpoch();
+            }
+            self->m_pendingWrites.insert(requestId, std::move(pending));
 
-        // Queued cross-thread invocation. The worker handles the
-        // load → merge → save against its own connection and
-        // queues the writeCompleted signal back to the runner's
-        // (main) thread.
-        QMetaObject::invokeMethod(
-            self->m_writeWorker, "performWrite", Qt::QueuedConnection, Q_ARG(quint64, requestId),
-            Q_ARG(QString, self->m_collectionUuid), Q_ARG(QString, state->path),
-            Q_ARG(Scraper::ScrapedItem, effective),
-            Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
-      });
+            // Queued cross-thread invocation. The worker handles the
+            // load → merge → save against its own connection and
+            // queues the writeCompleted signal back to the runner's
+            // (main) thread.
+            QMetaObject::invokeMethod(
+                self->m_writeWorker, "performWrite", Qt::QueuedConnection,
+                Q_ARG(quint64, requestId), Q_ARG(QString, self->m_collectionUuid),
+                Q_ARG(QString, state->path), Q_ARG(Scraper::ScrapedItem, effective),
+                Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
+          });
   watcher->setFuture(QtConcurrent::run(
       [artworkDir = m_artworkDir, baseName, writes, effective, rescrapeMode = m_rescrapeMode]() {
         // Human-readable JSON sidecar alongside the artwork. `effective`
@@ -526,10 +545,22 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
 
 void BatchScrapeRunner::recordError(const QString &reason) {
   ++m_summary.errors;
-  if (m_summary.firstFailures.size() < 5) {
+  if (m_summary.firstFailures.size() < kMaxReportedFailures) {
     m_summary.firstFailures.append(reason);
   }
   itemFinished();
+}
+
+void BatchScrapeRunner::recordError(const QString &itemName, const ErrorUtils::ErrorContext &err) {
+  // HTTP 430 (SS daily request quota) / 431 (SS daily failed-lookup
+  // quota) mean every remaining item would just burn against an
+  // exhausted quota. Flag it so pump() stops dispatching new items;
+  // in-flight items still finish (they're not gated on m_quotaStopped).
+  if (err.httpStatus == 430 || err.httpStatus == 431) {
+    m_summary.quotaExhausted = true;
+    m_quotaStopped = true;
+  }
+  recordError(QStringLiteral("%1: %2").arg(itemName, err.message));
 }
 
 void BatchScrapeRunner::itemFinished() {
@@ -537,6 +568,15 @@ void BatchScrapeRunner::itemFinished() {
   // another item from the queue (steady state) or emit `finished` if
   // the queue is drained AND no items are left in flight.
   --m_inFlight;
+  // Surface the provider's latest request quota to observers. Only
+  // ScreenScraper reports a valid one (after its first response);
+  // other providers return an invalid status and stay silent.
+  if (m_provider) {
+    const Scraper::QuotaStatus quota = m_provider->quotaStatus();
+    if (quota.valid) {
+      emit quotaUpdated(quota);
+    }
+  }
   pump();
 }
 

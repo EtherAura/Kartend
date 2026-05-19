@@ -1,6 +1,7 @@
 #ifndef SCRAPERTYPES_H
 #define SCRAPERTYPES_H
 
+#include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QMetaType>
@@ -99,6 +100,24 @@ struct ScrapedItem {
   /// "screenscraper", etc.).
   QString sourceProviderId;
   QList<MediaAsset> media;
+};
+
+/// Snapshot of the provider's per-account request quota, surfaced live
+/// in the scrape dialog and used to halt the batch when the daily
+/// allowance runs out. `valid` is false for providers that don't
+/// expose a quota (everything except ScreenScraper today) and for a
+/// default-constructed instance — consumers must check it before
+/// rendering any field. The daily / KO (failed-lookup) counters mirror
+/// ScreenScraper's `requeststoday` / `maxrequestsperday` and
+/// `requestskotoday` / `maxrequestskoperday`; `resetAtUtc` is the next
+/// 00:00 UTC, when SS rolls the per-day counters back to zero.
+struct QuotaStatus {
+  bool valid = false;
+  int dailyUsed = 0;
+  int dailyMax = 0;
+  int koUsed = 0;
+  int koMax = 0;
+  QDateTime resetAtUtc;
 };
 
 } // namespace Scraper

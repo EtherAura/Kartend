@@ -74,6 +74,13 @@ public:
     /// Bounded so a 10k-item rescrape with a broken provider doesn't
     /// produce an unreadable wall of text.
     QStringList firstFailures;
+    /// Set when an item failed with an HTTP 430/431 — ScreenScraper's
+    /// daily request / failed-lookup quota is exhausted. The runner
+    /// stops dispatching new items (in-flight ones still finish); the
+    /// caller uses this to leave a resume point instead of advancing
+    /// to the next collection and burning the rest of the queue
+    /// against an exhausted quota.
+    bool quotaExhausted = false;
   };
 
   /// `db` may be nullptr — the runner still drives the scrape but
@@ -159,6 +166,12 @@ signals:
   /// zero-work runs all reach here so the caller can dismiss the
   /// progress dialog from one signal handler.
   void finished(const Summary &summary);
+  /// Emitted after each item is accounted for, carrying the provider's
+  /// latest per-account request quota. Only fired when the provider
+  /// reports a valid quota (ScreenScraper after its first response);
+  /// other providers never trigger it. Lets the dialog show a live
+  /// "N / M requests today" readout.
+  void quotaUpdated(const Scraper::QuotaStatus &quota);
 
 private:
   /// Per-item state captured by the async callback chain. Each item's
@@ -193,6 +206,16 @@ private:
                       const QList<Scraper::PendingMediaWrite> &writes);
   /// Record a per-item failure, mark the slot free, and pump.
   void recordError(const QString &reason);
+  /// Per-item failure overload that also inspects the error's HTTP
+  /// status: an HTTP 430 (SS daily request quota) or 431 (SS daily
+  /// failed-lookup quota) flips `m_summary.quotaExhausted` and
+  /// `m_quotaStopped` so `pump()` stops dispatching new items. The
+  /// item's message is composed as "<itemName>: <message>" and
+  /// forwarded to the contextless `recordError` for the count + the
+  /// first-failures list. In-flight callbacks are deliberately NOT
+  /// gated on `m_quotaStopped` — only new dispatch stops; whatever is
+  /// already mid-chain runs to completion.
+  void recordError(const QString &itemName, const ErrorUtils::ErrorContext &err);
   /// Mark one item complete (success / skip / error). When the queue
   /// is drained and the in-flight count returns to 0, emits
   /// `finished` exactly once.
@@ -246,6 +269,14 @@ private:
   /// separately so `totalItemCount()` can report the pre-filter total.
   int m_preSkippedCount = 0;
   bool m_cancelled = false;
+  /// Set when an HTTP 430/431 quota-exhausted error arrived. Distinct
+  /// from m_cancelled: this is checked ONLY in pump() to stop NEW
+  /// dispatch — in-flight per-item callbacks ignore it and run to
+  /// completion (the user wants whatever is already mid-flight to
+  /// finish). m_cancelled, by contrast, makes in-flight callbacks
+  /// abandon their item. The drain that emits finished() observes
+  /// either flag.
+  bool m_quotaStopped = false;
   bool m_finishedEmitted = false; ///< Guard against double-emit on cancel races.
   Summary m_summary;
 

@@ -26,7 +26,11 @@ constexpr int kCurrentStateVersion = 1;
 /// Cap on the per-run failure-message list surfaced in the error
 /// details popup. Bounded so a run with a broken provider doesn't
 /// produce an unreadable wall of text.
-constexpr int kMaxReportedFailures = 5;
+// Upper bound on retained failure messages surfaced in the scrape-error
+// details view — generous enough to stay diagnostically complete,
+// bounded so a pathological all-failing run can't grow the list without
+// limit. Mirrors BatchScrapeRunner's per-collection cap.
+constexpr int kMaxReportedFailures = 1000;
 } // namespace
 
 int ScraperService::PendingState::totalRemaining() const {
@@ -352,6 +356,9 @@ void ScraperService::startAutoCollection() {
           });
   connect(m_autoRunner, &BatchScrapeRunner::finished, this,
           [this](const BatchScrapeRunner::Summary &s) { onAutoFinished(s); });
+  // Pass the runner's per-account quota updates straight through to
+  // the dialog. Main-thread → main-thread, so no qRegisterMetaType.
+  connect(m_autoRunner, &BatchScrapeRunner::quotaUpdated, this, &ScraperService::quotaUpdated);
   m_autoRunner->start();
 }
 
@@ -434,7 +441,32 @@ void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
     m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
   }
   qCInfo(lcScraperService) << "onAutoFinished collection done — scraped=" << summary.scraped
-                           << "skipped=" << summary.skipped << "errors=" << summary.errors;
+                           << "skipped=" << summary.skipped << "errors=" << summary.errors
+                           << "quotaExhausted=" << summary.quotaExhausted;
+
+  // Quota exhausted (HTTP 430/431): SS's daily allowance is spent, so
+  // every remaining item in every remaining collection would just
+  // fail. Stop the whole queue here. Crucially we do NOT clear the
+  // current collection's items or advance m_queueCursor — the items
+  // still un-scraped (the runner removes only successfully-scraped
+  // ones) stay in the queue, and the schedulePersist below writes
+  // them out so the user can resume after the quota resets. We also
+  // do NOT clearStateFile() (unlike the normal queue-drained path in
+  // pump()) — the persisted state IS the resume point.
+  if (summary.quotaExhausted) {
+    m_summary.quotaExhausted = true;
+    if (m_autoRunner) {
+      m_autoRunner->deleteLater();
+      m_autoRunner = nullptr;
+    }
+    schedulePersist();
+    flushPendingPersist(); // ensure the resume point hits disk now
+    m_state = State::Finishing;
+    emit scrapeFinished(m_summary);
+    m_state = State::Idle;
+    return;
+  }
+
   // Backfill itemsCompleted to the full collection size — progress
   // signal stops just before the last item completes (no signal fires
   // for "the last item is done"), so we explicitly snap to the total

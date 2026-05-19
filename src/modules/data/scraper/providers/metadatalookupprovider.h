@@ -89,6 +89,16 @@ public:
   virtual void fetchHealthStatus(HealthCallback callback) {
     if (callback) callback(HealthStatus{});
   }
+
+  /// Provider's most recent per-account request-quota snapshot. Read
+  /// by the batch-scrape driver after each item so the dialog can
+  /// surface a live "N / M requests today" readout. The default
+  /// returns an invalid (`valid == false`) status — providers without
+  /// a quota concept (everything except ScreenScraper today) inherit
+  /// it and stay silent. ScreenScraperProvider overrides this to
+  /// return the quota parsed from the `ssuser` block every lookup /
+  /// detail response carries.
+  [[nodiscard]] virtual Scraper::QuotaStatus quotaStatus() const { return {}; }
 };
 
 #endif // METADATALOOKUPPROVIDER_H

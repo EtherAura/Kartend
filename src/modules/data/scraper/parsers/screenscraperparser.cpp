@@ -305,6 +305,32 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
   return out;
 }
 
+/// Map a ScreenScraper `ssuser` JSON object onto the typed
+/// ScreenScraperUserInfo struct. SS encodes numeric fields as JSON
+/// strings (`"maxthreads": "6"`); `.toString().toInt()` handles both
+/// the string and numeric variants, with the toInt fallback to 0
+/// covering "field absent". Shared by `parseUserInfoResponse` (the
+/// dedicated `ssuserInfos.php` endpoint) and `extractUserInfo` (the
+/// `ssuser` block every `jeuInfos.php` reply also carries) so the two
+/// callers can never drift apart on field names.
+ScreenScraperUserInfo mapUserInfo(const QJsonObject &ssuser) {
+  auto asInt = [](const QJsonValue &v) {
+    if (v.isDouble()) return v.toInt();
+    return v.toString().toInt();
+  };
+  ScreenScraperUserInfo info;
+  info.id = ssuser.value(QStringLiteral("id")).toString();
+  info.level = ssuser.value(QStringLiteral("niveau")).toString();
+  info.maxThreads = asInt(ssuser.value(QStringLiteral("maxthreads")));
+  info.requestsToday = asInt(ssuser.value(QStringLiteral("requeststoday")));
+  info.maxRequestsPerDay = asInt(ssuser.value(QStringLiteral("maxrequestsperday")));
+  info.maxDownloadSpeedKBps = asInt(ssuser.value(QStringLiteral("maxdownloadspeed")));
+  info.maxRequestsPerMinute = asInt(ssuser.value(QStringLiteral("maxrequestspermin")));
+  info.maxRequestsKoPerDay = asInt(ssuser.value(QStringLiteral("maxrequestskoperday")));
+  info.requestsKoToday = asInt(ssuser.value(QStringLiteral("requestskotoday")));
+  return info;
+}
+
 QString collectGenres(const QJsonArray &genres, const QStringList &languagePrefs) {
   QStringList names;
   for (const auto &v : genres) {
@@ -560,24 +586,24 @@ ErrorUtils::Result<ScreenScraperUserInfo> parseUserInfoResponse(const QByteArray
                                QStringLiteral("Response missing `ssuser` block"),
                                "ScreenScraperParser::parseUserInfoResponse");
   }
-  // SS encodes numeric fields as JSON strings (`"maxthreads": "6"`).
-  // .toString().toInt() handles both numeric + string variants — the
-  // toInt fallback to 0 covers the "field absent" case.
-  auto asInt = [](const QJsonValue &v) {
-    if (v.isDouble()) return v.toInt();
-    return v.toString().toInt();
-  };
-  ScreenScraperUserInfo info;
-  info.id = ssuser.value(QStringLiteral("id")).toString();
-  info.level = ssuser.value(QStringLiteral("niveau")).toString();
-  info.maxThreads = asInt(ssuser.value(QStringLiteral("maxthreads")));
-  info.requestsToday = asInt(ssuser.value(QStringLiteral("requeststoday")));
-  info.maxRequestsPerDay = asInt(ssuser.value(QStringLiteral("maxrequestsperday")));
-  info.maxDownloadSpeedKBps = asInt(ssuser.value(QStringLiteral("maxdownloadspeed")));
-  info.maxRequestsPerMinute = asInt(ssuser.value(QStringLiteral("maxrequestspermin")));
-  info.maxRequestsKoPerDay = asInt(ssuser.value(QStringLiteral("maxrequestskoperday")));
-  info.requestsKoToday = asInt(ssuser.value(QStringLiteral("requestskotoday")));
-  return info;
+  return mapUserInfo(ssuser);
+}
+
+std::optional<ScreenScraperUserInfo> extractUserInfo(const QByteArray &json) {
+  // Best-effort: SS embeds `response.ssuser` in every jeuInfos.php
+  // lookup/detail reply, but an anonymous-tier scrape legitimately
+  // omits it. Any parse failure (plain-text error blob, garbage,
+  // missing block) yields nullopt so the caller keeps its prior
+  // quota snapshot rather than treating the absence as an error.
+  const QString head = QString::fromUtf8(json.left(64)).trimmed();
+  if (!head.startsWith('{')) return std::nullopt;
+  QJsonParseError err{};
+  const QJsonDocument doc = parseTolerant(json, &err);
+  if (doc.isNull() || !doc.isObject()) return std::nullopt;
+  const QJsonObject response = doc.object().value(QStringLiteral("response")).toObject();
+  const QJsonObject ssuser = response.value(QStringLiteral("ssuser")).toObject();
+  if (ssuser.isEmpty()) return std::nullopt;
+  return mapUserInfo(ssuser);
 }
 
 ErrorUtils::Result<ScreenScraperInfraInfo> parseInfraInfoResponse(const QByteArray &json) {

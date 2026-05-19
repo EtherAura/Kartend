@@ -90,6 +90,12 @@ public:
   void lookup(const LookupContext &ctx, LookupCallback callback) override;
   void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) override;
   void fetchMediaBytes(const QUrl &url, MediaCallback callback) override;
+  /// Most recent per-account quota snapshot, parsed from the `ssuser`
+  /// block every jeuInfos.php lookup response carries. Stays invalid
+  /// (`valid == false`) until the first lookup completes — the batch
+  /// driver checks that flag before surfacing the readout. See
+  /// `m_lastQuota` for the storage and `updateQuotaFromResponse`.
+  [[nodiscard]] Scraper::QuotaStatus quotaStatus() const override { return m_lastQuota; }
   /// Polls SS's `ssinfraInfos.php` and projects the response into
   /// the provider-agnostic HealthStatus shape the dialog consumes.
   /// Honors `closeforleecher` for anonymous-only callers — the
@@ -111,6 +117,13 @@ private:
   /// the same async chain the original synchronous-hash code used.
   void runLookupAfterHash(const QString &query, const RomHasher::Result &hashes,
                           LookupCallback callback);
+
+  /// Refresh `m_lastQuota` from a raw jeuInfos.php response body. SS
+  /// embeds the account's `ssuser` block (request counters + quotas)
+  /// in every lookup reply, so this runs once per item with no extra
+  /// network cost. A response with no parseable `ssuser` block (e.g.
+  /// an anonymous-tier scrape) leaves the previous snapshot intact.
+  void updateQuotaFromResponse(const QByteArray &json);
 
   /// Returns ("dev_id", "dev_password", "ssid", "ss_password") tuple
   /// or empties when not configured. The lookup short-circuits with
@@ -147,6 +160,12 @@ private:
   /// never re-fetches an older candidate.
   mutable QString m_lastDetailId;
   mutable Scraper::ScrapedItem m_lastDetail;
+
+  /// Live per-account quota, refreshed from the `ssuser` block of
+  /// every jeuInfos.php response by `updateQuotaFromResponse`.
+  /// `quotaStatus()` returns this; it stays invalid until the first
+  /// lookup response with an `ssuser` block lands.
+  Scraper::QuotaStatus m_lastQuota;
 
   /// Cached SS media-type catalog (`mediasJeuListe.php`). Populated
   /// lazily — the first scrape kicks off a background fetch via

@@ -73,6 +73,11 @@ public:
     /// of just an item count.
     int mediaWritten = 0;
     QStringList firstFailures;
+    /// Set when a collection's runner stopped because ScreenScraper's
+    /// daily quota was exhausted (HTTP 430/431). The service then
+    /// stops walking the queue and leaves the persisted resume point
+    /// intact so the user can continue after the quota resets.
+    bool quotaExhausted = false;
   };
 
   /// Persistence snapshot returned by loadPendingState(). Empty
@@ -212,6 +217,10 @@ signals:
   void scrapePaused();
   void scrapeResumed();
   void scrapeFinished(const Summary &summary);
+  /// Relays the active runner's `quotaUpdated` straight through so the
+  /// dialog can show a live ScreenScraper request-quota readout. Only
+  /// fires for providers that report a valid quota.
+  void quotaUpdated(const Scraper::QuotaStatus &quota);
 
 private:
   void pump();

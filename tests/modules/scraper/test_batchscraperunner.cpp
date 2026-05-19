@@ -48,6 +48,10 @@ public:
     /// Force lookup() to return this error instead of the candidates.
     /// Empty message = no error.
     QString lookupError;
+    /// HTTP status to stamp onto the lookup error's ErrorContext.
+    /// 0 = leave it unset. 430/431 mark a ScreenScraper quota
+    /// exhaustion the runner is expected to stop the batch on.
+    int lookupErrorHttpStatus = 0;
     /// Force fetchDetail() to return this error.
     QString detailError;
   };
@@ -77,27 +81,28 @@ public:
     QTimer::singleShot(0, [this, query, cb = std::move(cb)]() {
       const Canned &c = byQuery.value(query);
       if (!c.lookupError.isEmpty()) {
-        cb(ErrorUtils::ErrorContext::error(
-            ErrorUtils::ErrorCode::InvalidArgument, c.lookupError, "stub"));
+        auto err = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                   c.lookupError, "stub");
+        if (c.lookupErrorHttpStatus != 0) {
+          err.withHttpStatus(c.lookupErrorHttpStatus);
+        }
+        cb(err);
         return;
       }
       cb(c.candidates);
     });
   }
 
-  void fetchDetail(const Scraper::ScrapeCandidate &candidate,
-                   DetailCallback cb) override {
+  void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback cb) override {
     QTimer::singleShot(0, [this, candidate, cb = std::move(cb)]() {
       // Match the candidate back to its query by walking byQuery —
       // the test's data tables are small so the lookup cost is fine.
       for (auto it = byQuery.constBegin(); it != byQuery.constEnd(); ++it) {
         if (!it.value().candidates.isEmpty() &&
-            it.value().candidates.first().providerSpecificId ==
-                candidate.providerSpecificId) {
+            it.value().candidates.first().providerSpecificId == candidate.providerSpecificId) {
           if (!it.value().detailError.isEmpty()) {
-            cb(ErrorUtils::ErrorContext::error(
-                ErrorUtils::ErrorCode::InvalidArgument,
-                it.value().detailError, "stub"));
+            cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                               it.value().detailError, "stub"));
             return;
           }
           cb(it.value().detail);
@@ -112,9 +117,8 @@ public:
     mediaRequestLog.append(url);
     QTimer::singleShot(0, [this, url, cb = std::move(cb)]() {
       if (mediaErrorUrls.contains(url)) {
-        cb(ErrorUtils::ErrorContext::error(
-            ErrorUtils::ErrorCode::InvalidArgument,
-            QStringLiteral("media fetch failed"), "stub"));
+        cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           QStringLiteral("media fetch failed"), "stub"));
         return;
       }
       cb(mediaByUrl.value(url));
@@ -154,8 +158,7 @@ StubProvider::Canned makeMatch(const QString &id, const QString &title) {
 /// detail so the cover-fetch branch fires for it. Returns the URL
 /// the runner is expected to request so the caller can populate the
 /// stub's `mediaByUrl` / `mediaErrorUrls` table.
-QPair<StubProvider::Canned, QUrl> makeMatchWithCover(const QString &id,
-                                                     const QString &title) {
+QPair<StubProvider::Canned, QUrl> makeMatchWithCover(const QString &id, const QString &title) {
   StubProvider::Canned c = makeMatch(id, title);
   Scraper::MediaAsset front;
   front.type = QStringLiteral("front");
@@ -196,7 +199,7 @@ private slots:
   void skipsItemsWithNoCandidates();
   void countsErrorsOnLookupFailure();
   void countsErrorsOnFetchDetailFailure();
-  void firstFailuresIsCappedAtFive();
+  void firstFailuresRecordsEveryFailure();
   void cancelStopsAfterInFlightItem();
   void emptyPathListFinishesImmediately();
   void nullProviderEmitsFinishedWithExplanation();
@@ -206,6 +209,7 @@ private slots:
   void coverFetchFailureLeavesMetadataSavedAndCountsAsScraped();
   void coverFetchSkippedWhenNoFrontAsset();
   void skipModeCountsAlreadyScrapedItemsAsSkipped();
+  void quotaExhaustedStopsBatchAndSkipsRemainingItems();
 };
 
 void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
@@ -214,11 +218,9 @@ void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
   stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta (USA)");
   stub->byQuery[QStringLiteral("Gamma")] = makeMatch("3", "Gamma (USA)");
 
-  const QStringList paths{QStringLiteral("/games/Alpha.bin"),
-                          QStringLiteral("/games/Beta.bin"),
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin"),
                           QStringLiteral("/games/Gamma.bin")};
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    paths, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 3);
@@ -234,11 +236,9 @@ void TestBatchScrapeRunner::skipsItemsWithNoCandidates() {
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
   stub->byQuery[QStringLiteral("Gamma")] = makeMatch("3", "Gamma");
 
-  const QStringList paths{QStringLiteral("/games/Alpha.bin"),
-                          QStringLiteral("/games/Beta.bin"),
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin"),
                           QStringLiteral("/games/Gamma.bin")};
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    paths, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 2);
@@ -255,10 +255,8 @@ void TestBatchScrapeRunner::countsErrorsOnLookupFailure() {
   bad.lookupError = QStringLiteral("HTTP 500");
   stub->byQuery[QStringLiteral("Beta")] = bad;
 
-  const QStringList paths{QStringLiteral("/games/Alpha.bin"),
-                          QStringLiteral("/games/Beta.bin")};
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    paths, QString());
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -281,20 +279,21 @@ void TestBatchScrapeRunner::countsErrorsOnFetchDetailFailure() {
   detailFail.detailError = QStringLiteral("detail not found");
   stub->byQuery[QStringLiteral("Alpha")] = detailFail;
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.errors, 1);
   QCOMPARE(summary.scraped, 0);
 }
 
-void TestBatchScrapeRunner::firstFailuresIsCappedAtFive() {
-  // Failure messages can be arbitrarily long and a misconfigured
-  // provider could fail every single one of a 10k-item collection —
-  // the runner caps the captured list at 5 so the summary stays
-  // readable in the UI.
+void TestBatchScrapeRunner::firstFailuresRecordsEveryFailure() {
+  // Every per-item failure message is retained so the scrape-error
+  // details view can list them all — a misconfigured provider that
+  // fails 10 items must surface all 10, not just the first few. The
+  // runner caps the list at 1000 only to guard against a pathological
+  // all-failing run of a huge collection; that bound is far above any
+  // count worth materialising in a unit test.
   auto stub = std::make_shared<StubProvider>();
   StubProvider::Canned bad;
   bad.lookupError = QStringLiteral("nope");
@@ -304,12 +303,11 @@ void TestBatchScrapeRunner::firstFailuresIsCappedAtFive() {
     stub->byQuery[name] = bad;
     paths.append(QStringLiteral("/games/") + name + QStringLiteral(".bin"));
   }
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    paths, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.errors, 10);
-  QCOMPARE(summary.firstFailures.size(), 5);
+  QCOMPARE(summary.firstFailures.size(), 10);
 }
 
 void TestBatchScrapeRunner::cancelStopsAfterInFlightItem() {
@@ -329,8 +327,7 @@ void TestBatchScrapeRunner::cancelStopsAfterInFlightItem() {
   for (int i = 0; i < 10; ++i) {
     paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
   }
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    paths, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   QObject::connect(&runner, &Scraper::BatchScrapeRunner::progress,
                    [&runner](int done, int /*total*/, const QString &) {
                      if (done == 1) runner.cancel();
@@ -346,8 +343,8 @@ void TestBatchScrapeRunner::cancelStopsAfterInFlightItem() {
 
 void TestBatchScrapeRunner::emptyPathListFinishesImmediately() {
   auto stub = std::make_shared<StubProvider>();
-  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
-                                    QStringList{}, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), QStringList{},
+                                    QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 0);
@@ -380,17 +377,16 @@ void TestBatchScrapeRunner::progressSignalReportsCurrentItem() {
 
   Scraper::BatchScrapeRunner runner(
       nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin"),
-                  QStringLiteral("/games/Beta.bin")},
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
       QString());
   QSignalSpy spy(&runner, &Scraper::BatchScrapeRunner::progress);
   runner.start();
   waitForFinish(&runner);
   QCOMPARE(spy.count(), 2);
-  QCOMPARE(spy.at(0).at(0).toInt(), 0);  // done = 0 before first item
-  QCOMPARE(spy.at(0).at(1).toInt(), 2);  // total = 2
+  QCOMPARE(spy.at(0).at(0).toInt(), 0); // done = 0 before first item
+  QCOMPARE(spy.at(0).at(1).toInt(), 2); // total = 2
   QCOMPARE(spy.at(0).at(2).toString(), QStringLiteral("Alpha.bin"));
-  QCOMPARE(spy.at(1).at(0).toInt(), 1);  // done = 1 before second
+  QCOMPARE(spy.at(1).at(0).toInt(), 1); // done = 1 before second
   QCOMPARE(spy.at(1).at(2).toString(), QStringLiteral("Beta.bin"));
 }
 
@@ -406,9 +402,8 @@ void TestBatchScrapeRunner::fetchesPrimaryCoverByDefault() {
   stub->byQuery[QStringLiteral("Alpha")] = canned;
   stub->mediaByUrl[coverUrl] = QByteArrayLiteral("\x89PNG\r\nfakebytes");
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -426,10 +421,9 @@ void TestBatchScrapeRunner::coverFetchDisabledSkipsMediaCall() {
   stub->byQuery[QStringLiteral("Alpha")] = canned;
   stub->mediaByUrl[coverUrl] = QByteArrayLiteral("png");
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, QString(),
-      /*fetchPrimaryCover=*/false);
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, QString(),
+                                    /*fetchPrimaryCover=*/false);
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -446,9 +440,8 @@ void TestBatchScrapeRunner::coverFetchFailureLeavesMetadataSavedAndCountsAsScrap
   stub->byQuery[QStringLiteral("Alpha")] = canned;
   stub->mediaErrorUrls.insert(coverUrl);
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -465,9 +458,8 @@ void TestBatchScrapeRunner::coverFetchSkippedWhenNoFrontAsset() {
   auto stub = std::make_shared<StubProvider>();
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -497,6 +489,44 @@ void TestBatchScrapeRunner::skipModeCountsAlreadyScrapedItemsAsSkipped() {
   QCOMPARE(summary.skipped, 3);
   QCOMPARE(summary.scraped, 0);
   QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {
+  // ScreenScraper returns HTTP 430 when the account's daily request
+  // quota is spent (431 for the failed-lookup quota). The runner must
+  // treat that NOT as an ordinary per-item error-and-continue, but as
+  // a hard stop: every item after the one that hit 430 must be left
+  // unprocessed (otherwise the rest of a 10k-item batch just burns
+  // against an exhausted quota). The first item's lookup returns a
+  // 430; the remaining nine must never run.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned quotaHit;
+  quotaHit.lookupError = QStringLiteral("daily request quota exhausted");
+  quotaHit.lookupErrorHttpStatus = 430;
+  // Item0 hits the quota wall; Item1..9 would scrape fine IF reached.
+  stub->byQuery[QStringLiteral("Item0")] = quotaHit;
+  for (int i = 1; i < 10; ++i) {
+    const QString name = QStringLiteral("Item%1").arg(i);
+    stub->byQuery[name] = makeMatch(QString::number(i), name);
+  }
+  QStringList paths;
+  for (int i = 0; i < 10; ++i) {
+    paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
+  }
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  // The quota wall is recorded in the summary so the service can
+  // leave a resume point instead of advancing the queue.
+  QVERIFY(summary.quotaExhausted);
+  // Only the quota-failing item was accounted for; the run stopped
+  // dispatching before the other nine — so the total processed count
+  // is far below the 10 queued. (With itemConcurrency 1 it is exactly
+  // 1, but the assertion stays loose to tolerate scheduler slop.)
+  const int processed = summary.scraped + summary.skipped + summary.errors;
+  QVERIFY(processed < 10);
+  QCOMPARE(summary.errors, processed); // every processed item was the error
+  QCOMPARE(summary.scraped, 0);        // nothing after the wall scraped
 }
 
 QTEST_MAIN(TestBatchScrapeRunner)

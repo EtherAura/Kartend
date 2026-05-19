@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QElapsedTimer>
@@ -1083,6 +1084,14 @@ void ScrapeResultDialog::buildUnifiedPanel() {
   connect(m_unifiedCountsLabel, &QLabel::linkActivated, this,
           [this](const QString &) { showScrapeErrorDetails(); });
   root->addWidget(m_unifiedCountsLabel);
+
+  // ScreenScraper request-quota readout. Hidden until a live scrape
+  // delivers a valid quota via the service's quotaUpdated signal
+  // (non-SS providers never do, so the row stays absent for them).
+  m_unifiedQuotaLabel = new QLabel(m_unifiedPage);
+  m_unifiedQuotaLabel->setWordWrap(true);
+  m_unifiedQuotaLabel->hide();
+  root->addWidget(m_unifiedQuotaLabel);
 }
 
 void ScrapeResultDialog::setScraperContext(const ScraperContext &ctx) {
@@ -1362,6 +1371,7 @@ void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QStrin
     m_unifiedCurrentLabel->setText(tr("Collection: %1 — scraping: %2")
                                        .arg(m_service->currentCollectionName(),
                                             QFileInfo(m_service->currentItemPath()).fileName()));
+    m_shownCollectionName = m_service->currentCollectionName();
     // Restore the recent-media thumbnail strip from the service so
     // the user doesn't see an empty band when re-entering. Icon-only
     // rows + auto-scroll to the latest match the same shape as the
@@ -1663,6 +1673,11 @@ void ScrapeResultDialog::setUnifiedSetupEnabled(bool enabled) {
   m_unifiedProgressBar->setVisible(showProgress);
   m_unifiedTimingLabel->setVisible(showProgress);
   m_unifiedCountsLabel->setVisible(showProgress);
+  // The quota label is shown only once a live scrape reports a valid
+  // quota (the quotaUpdated handler reveals it). Returning to the
+  // setup view always hides it; entering the live view leaves it
+  // hidden until that first quota update arrives.
+  if (m_unifiedQuotaLabel && !showProgress) m_unifiedQuotaLabel->hide();
   if (m_liveMetadataGroup) m_liveMetadataGroup->setVisible(showProgress);
   if (m_liveThumbsGroup) m_liveThumbsGroup->setVisible(showProgress);
   if (m_closeButton) m_closeButton->setVisible(showProgress);
@@ -1719,21 +1734,29 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
           [this](int done, int total, const QString &collectionName, const QString &name) {
             Q_UNUSED(total);
             Q_UNUSED(done);
-            Q_UNUSED(collectionName);
-            Q_UNUSED(name);
             // Hidden dialog → skip the label-update work. With high
             // batchItemConcurrency this fires several times per second;
             // not worth updating widgets nobody can see.
             if (!isVisible()) return;
             qCDebug(lcDialogTimings) << "DIALOG service.itemBegan name=" << name;
-            // With batchItemConcurrency > 1, multiple items run in
-            // parallel — itemBegan fires for each one as it starts,
-            // which is much faster than items complete. Don't touch
-            // the label or clear the metadata here; doing so would
-            // wipe the panel every few hundred ms while items rush
-            // through their lookup phase. Label + metadata are
-            // updated together by the itemCompleted handler below
-            // so they always describe the same completed item.
+            // Refresh the collection label HERE, not only in the
+            // itemCompleted handler below: itemCompleted fires only on a
+            // successful scrape, so a collection whose items all error
+            // (or all skip) would otherwise leave the label frozen on the
+            // last collection that produced a success while the scrape
+            // churns on. itemBegan fires for every item whatever the
+            // outcome. Gated on an actual collection change so
+            // batchItemConcurrency > 1 doesn't re-set the label as each
+            // parallel item in the same collection starts.
+            if (collectionName != m_shownCollectionName) {
+              m_shownCollectionName = collectionName;
+              m_unifiedCurrentLabel->setText(tr("Collection: %1").arg(collectionName));
+            }
+            // The metadata panel and the richer "last scraped" label form
+            // are still updated together by the itemCompleted handler so
+            // they always describe the same completed item — deliberately
+            // not touched here, where many parallel items mid-lookup would
+            // wipe the panel every few hundred ms.
             updateUnifiedProgressLabel();
           });
   connect(m_service, &Scraper::ScraperService::itemCompleted, this,
@@ -1845,12 +1868,49 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
             setUnifiedSetupEnabled(true);
             if (m_scrapeButton) m_scrapeButton->show();
             if (m_applyButton) m_applyButton->hide();
+            // Quota-exhausted stop: setUnifiedSetupEnabled(true) hid
+            // the progress label, but the user needs to see WHY the
+            // scrape ended early — and when they can resume. Re-show
+            // the current-status label with the quota message. The
+            // reset time comes from the live quota readout when we
+            // have one (the label still holds it); otherwise fall
+            // back to the generic "midnight UTC" wording.
+            if (s.quotaExhausted) {
+              // m_lastQuotaResetText is the local-time HH:mm captured
+              // from the last live quota update; fall back to the
+              // generic wording when no quota update arrived (e.g.
+              // the very first item hit 430 before any ssuser block
+              // was parsed).
+              const QString resetText =
+                  m_lastQuotaResetText.isEmpty() ? tr("midnight UTC") : m_lastQuotaResetText;
+              m_unifiedCurrentLabel->setText(
+                  tr("Scrape stopped — ScreenScraper's daily quota is exhausted. "
+                     "Resume after it resets (%1).")
+                      .arg(resetText));
+              m_unifiedCurrentLabel->show();
+            }
             emit unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.firstFailures);
           });
   connect(m_service, &Scraper::ScraperService::scrapePaused, this, [this]() {
     m_unifiedCurrentLabel->setText(tr("Scrape paused — close to keep paused, or "
                                       "reopen to continue."));
   });
+  connect(m_service, &Scraper::ScraperService::quotaUpdated, this,
+          [this](const Scraper::QuotaStatus &quota) {
+            if (!m_unifiedQuotaLabel) return;
+            // dailyMax 0 = quota unknown (SS didn't report a ceiling);
+            // keep the row hidden rather than showing "N / 0".
+            if (!quota.valid || quota.dailyMax <= 0) {
+              m_unifiedQuotaLabel->hide();
+              return;
+            }
+            m_lastQuotaResetText = quota.resetAtUtc.toLocalTime().toString(QStringLiteral("HH:mm"));
+            m_unifiedQuotaLabel->setText(tr("ScreenScraper: %1 / %2 requests today · resets %3")
+                                             .arg(quota.dailyUsed)
+                                             .arg(quota.dailyMax)
+                                             .arg(m_lastQuotaResetText));
+            m_unifiedQuotaLabel->show();
+          });
 }
 
 int ScrapeResultDialog::totalCheckedItemCount() const {
@@ -1957,19 +2017,39 @@ void ScrapeResultDialog::showScrapeErrorDetails() {
     }
   }
 
-  QMessageBox box(this);
-  box.setIcon(QMessageBox::Warning);
-  box.setWindowTitle(tr("Scrape errors"));
+  // The total error count comes straight off the summary; failures is
+  // what was actually retained (capped — see kMaxReportedFailures).
+  const int totalErrors = m_service ? m_service->summary().errors : failures.size();
+
+  // A resizable dialog with a scrollable list — a misconfigured
+  // collection can report hundreds of failures, far past what a
+  // QMessageBox can show without clipping.
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Scrape errors"));
+  auto *layout = new QVBoxLayout(&dlg);
   if (failures.isEmpty()) {
-    // The error counter advanced but no message was captured (the
-    // failure-message lists are capped per collection).
-    box.setText(tr("No further error detail was recorded for this scrape."));
+    // The error counter advanced but no message was captured.
+    layout->addWidget(
+        new QLabel(tr("No further error detail was recorded for this scrape."), &dlg));
   } else {
-    box.setText(tr("The scrape reported the following errors:"));
-    box.setInformativeText(failures.join(QLatin1Char('\n')));
+    QString header = tr("The scrape reported the following errors:");
+    if (failures.size() < totalErrors) {
+      // More items errored than messages were retained — say so rather
+      // than letting the user assume the list is complete.
+      header = tr("Showing %1 of %2 errors:").arg(failures.size()).arg(totalErrors);
+    }
+    layout->addWidget(new QLabel(header, &dlg));
+    auto *list = new QListWidget(&dlg);
+    list->addItems(failures);
+    list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    list->setWordWrap(true);
+    layout->addWidget(list);
   }
-  box.setStandardButtons(QMessageBox::Close);
-  box.exec();
+  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+  connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  layout->addWidget(buttons);
+  dlg.resize(640, 420);
+  dlg.exec();
 }
 
 void ScrapeResultDialog::onScrapeClicked() {

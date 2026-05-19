@@ -290,7 +290,23 @@ private:
   QProgressBar *m_unifiedProgressBar = nullptr;
   QLabel *m_unifiedTimingLabel = nullptr;
   QLabel *m_unifiedCountsLabel = nullptr;
+  /// Live ScreenScraper request-quota readout ("N / M requests today
+  /// · resets HH:MM"). Hidden by default and whenever the active
+  /// provider reports no quota (every non-SS provider, and SS before
+  /// its first response); shown only once a valid quota arrives via
+  /// the service's quotaUpdated signal during a live scrape.
+  QLabel *m_unifiedQuotaLabel = nullptr;
+  /// Local-time "HH:mm" the SS quota next resets at, captured from
+  /// the most recent quotaUpdated signal. Reused by the quota-
+  /// exhausted scrapeFinished message so it can name the reset time
+  /// without re-deriving it. Empty until the first quota update.
+  QString m_lastQuotaResetText;
   QLabel *m_unifiedCurrentLabel = nullptr;
+  /// Collection name currently shown in m_unifiedCurrentLabel. Tracked so
+  /// the itemBegan handler can refresh the label whenever the scrape moves
+  /// to a new collection — without re-setting it per-item when
+  /// batchItemConcurrency > 1 starts several items at once.
+  QString m_shownCollectionName;
   // Live-view widgets (shown when ScraperService is active). Layered
   // into the unified page; visibility toggled by setUnifiedSetupEnabled.
   QGroupBox *m_liveMetadataGroup = nullptr;

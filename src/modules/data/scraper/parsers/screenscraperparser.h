@@ -1,6 +1,8 @@
 #ifndef SCREENSCRAPERPARSER_H
 #define SCREENSCRAPERPARSER_H
 
+#include <optional>
+
 #include <QByteArray>
 #include <QHash>
 #include <QList>
@@ -103,6 +105,18 @@ struct ScreenScraperUserInfo {
 /// the SS error text in the details.
 [[nodiscard]] ErrorUtils::Result<ScreenScraperUserInfo>
 parseUserInfoResponse(const QByteArray &json);
+
+/// Extract the `ssuser` account block from *any* ScreenScraper API
+/// response that carries one. SS embeds the same `response.ssuser`
+/// object in every `jeuInfos.php` lookup/detail reply, not just
+/// `ssuserInfos.php` — so the provider can keep a live quota readout
+/// updated without a dedicated request per item. Unlike
+/// `parseUserInfoResponse` this is best-effort: it returns
+/// `std::nullopt` (rather than an error context) when the response
+/// has no parseable `ssuser` block, since a lookup response legitimately
+/// may omit it (anonymous-tier scrape) and the caller just keeps its
+/// previous snapshot.
+[[nodiscard]] std::optional<ScreenScraperUserInfo> extractUserInfo(const QByteArray &json);
 
 /// Realtime infrastructure status returned by SS's `ssinfraInfos.php`.
 /// Surfaced before a scrape so users get a heads-up when the SS API
