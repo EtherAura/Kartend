@@ -28,8 +28,7 @@
     git add <files>
     git commit -m "..."
     git pull --rebase
-    bd dolt push              # push beads database
-    git push                  # push code
+    git push                  # push code (beads DB is local-only — never pushed)
     git status                # MUST show "up to date with origin"
     ```
 12. **Verify** — `git status` clean, `bd list --status=in_progress` empty (or only intentionally deferred work).
