@@ -51,10 +51,29 @@ class ScrapeWriteWorker;
 /// where the user only wants metadata (large libraries on metered
 /// connections, etc.).
 ///
-/// `RescrapeMode::Skip` filters items that already have a non-empty
-/// `source` in their ItemMetadata at `start()`. Other rescrape modes
-/// (Overwrite / FillMissing / UpdateChanged) visit every item and
-/// let the per-asset persistence gate decide.
+/// `RescrapeMode::Skip` and `RescrapeMode::FillMissing` both
+/// pre-filter the queue at `start()` so a quota-limited provider is
+/// only asked about items where the run could actually contribute
+/// something:
+///   * Skip drops any item that already has a metadata marker —
+///     either `item_metadata.source` non-empty OR a metadata
+///     sidecar JSON (`{artworkDir}/metadata/{basename}.json`) on
+///     disk. The sidecar branch catches kart imports, partial
+///     scrapes that lost their DB row, and migrations from older
+///     builds.
+///   * FillMissing drops items where every ticked field already
+///     has data — `_metadata` covered by the same DB/sidecar
+///     check above, plus each enabled media type covered by a
+///     file in `{artworkDir}/{type}/{basename}.<ext>` (or the
+///     flat `{artworkDir}/{basename}.<ext>` mirror for `front`).
+///     An item missing even one ticked field still flows through
+///     so the provider can fill the gaps.
+/// The optional `skipRecentScrapeDays` window narrows both modes
+/// to "covered within the last N days" so users can refresh stale
+/// entries; 0 keeps the legacy "skip / fill-skip if covered, ever"
+/// behaviour. Overwrite and UpdateChanged intentionally visit every
+/// item — Overwrite always re-fetches, and UpdateChanged needs the
+/// bytes back to compare.
 class BatchScrapeRunner : public QObject {
   Q_OBJECT
 
@@ -95,11 +114,17 @@ public:
   /// `"front"`-asset download (default on — see the class doc).
   /// `itemConcurrency` defaults to 1 (legacy strict-serial behaviour);
   /// pass 4-8 for Skyscraper-style item parallelism.
+  /// `skipRecentDays` applies under both `RescrapeMode::Skip` and
+  /// `RescrapeMode::FillMissing` and gates the pre-filter: 0 =
+  /// always skip covered items (legacy), N > 0 = only skip items
+  /// covered within the last N days (anything older flows back
+  /// into the queue for refresh).
   BatchScrapeRunner(IDatabaseManager *db, std::shared_ptr<MetadataLookupProvider> provider,
                     QString collectionUuid, QStringList paths, QString artworkDir,
                     bool fetchPrimaryCover = true,
                     Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Overwrite,
-                    int itemConcurrency = 1, QObject *parent = nullptr);
+                    int itemConcurrency = 1, int skipRecentDays = 0,
+                    QObject *parent = nullptr);
   ~BatchScrapeRunner() override;
 
   /// Restrict the per-item media-fetch pass to these asset types
@@ -183,11 +208,20 @@ private:
     int queueIndex = -1; ///< Position in the original m_paths queue.
   };
 
-  /// Fetch ItemMetadata for each candidate path; drop the ones that
-  /// already have a non-empty `source` (i.e. previously scraped).
-  /// Called at start() before any provider hit so the user's "items
-  /// scraped" tally tracks real work. Only runs under
-  /// `RescrapeMode::Skip`; other modes visit every item.
+  /// Pre-filter the queue for the Skip and FillMissing rescrape
+  /// modes. Under Skip, drops items with any metadata marker
+  /// (`item_metadata.source` non-empty OR sidecar JSON on disk).
+  /// Under FillMissing, drops items where every ticked field is
+  /// already covered on disk — _metadata via the same metadata
+  /// check, plus each media type from `m_mediaTypeFilter` (or the
+  /// legacy front-cover-only fallback) via a basename-indexed scan
+  /// of `{artworkDir}/{type}/`. `m_skipRecentDays > 0` gates the
+  /// drop on the timestamp: only items refreshed within the window
+  /// stay skipped, anything older flows back for refresh. Runs at
+  /// start() before any provider hit so the user's tally tracks
+  /// real work. Overwrite and UpdateChanged never call this — they
+  /// visit every item and let the per-asset persistence gate
+  /// decide.
   void filterAlreadyScraped();
 
   /// Top of the worker loop. Fills empty in-flight slots from the
@@ -253,6 +287,10 @@ private:
   bool m_fetchPrimaryCover = true;
   Scraper::RescrapeMode m_rescrapeMode = Scraper::RescrapeMode::Overwrite;
   int m_itemConcurrency = 1;
+  /// "Skip if scraped within N days" window for Skip rescrape mode.
+  /// 0 disables the time gate (legacy behaviour: skip every already-
+  /// scraped item). Clamped 0..365 by the caller (SettingsManager).
+  int m_skipRecentDays = 0;
   /// User-selected media types to fetch per item (e.g. "front",
   /// "screenshot", "fanart"). Lowercase. Empty = legacy front-only.
   QSet<QString> m_mediaTypeFilter;

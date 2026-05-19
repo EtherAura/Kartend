@@ -16,6 +16,7 @@
 #include <utility>
 
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QLoggingCategory>
@@ -50,11 +51,12 @@ BatchScrapeRunner::BatchScrapeRunner(IDatabaseManager *db,
                                      std::shared_ptr<MetadataLookupProvider> provider,
                                      QString collectionUuid, QStringList paths, QString artworkDir,
                                      bool fetchPrimaryCover, Scraper::RescrapeMode rescrapeMode,
-                                     int itemConcurrency, QObject *parent)
+                                     int itemConcurrency, int skipRecentDays, QObject *parent)
     : QObject(parent), m_db(db), m_provider(std::move(provider)),
       m_collectionUuid(std::move(collectionUuid)), m_paths(std::move(paths)),
       m_artworkDir(std::move(artworkDir)), m_fetchPrimaryCover(fetchPrimaryCover),
-      m_rescrapeMode(rescrapeMode), m_itemConcurrency(std::max(1, itemConcurrency)) {}
+      m_rescrapeMode(rescrapeMode), m_itemConcurrency(std::max(1, itemConcurrency)),
+      m_skipRecentDays(qBound(0, skipRecentDays, 365)) {}
 
 BatchScrapeRunner::~BatchScrapeRunner() {
   shutdownWriteWorker();
@@ -82,12 +84,17 @@ void BatchScrapeRunner::start() {
       }
       return;
     }
-    // filterAlreadyScraped is the batch-level expression of the
-    // `Skip` re-scrape mode (drop items that already have metadata).
-    // For Overwrite / FillMissing / UpdateChanged we want every item
-    // to flow through so the per-asset persistence gate inside
-    // applyScrapedItem can decide what to actually write.
-    if (m_rescrapeMode == Scraper::RescrapeMode::Skip) {
+    // filterAlreadyScraped is the batch-level pre-flight for both
+    // `Skip` (drop any item with metadata on disk) and `FillMissing`
+    // (drop items where every ticked checkbox is already covered).
+    // FillMissing's per-asset gate inside applyScrapedItem still
+    // catches the partial-coverage case mid-run — this filter only
+    // skips items where there is literally nothing the provider
+    // would have to fill, saving the lookup request. Overwrite /
+    // UpdateChanged intentionally hit every item: Overwrite always
+    // re-fetches, and UpdateChanged needs the bytes back to compare.
+    if (m_rescrapeMode == Scraper::RescrapeMode::Skip ||
+        m_rescrapeMode == Scraper::RescrapeMode::FillMissing) {
       filterAlreadyScraped();
     }
     pump();
@@ -174,12 +181,185 @@ void BatchScrapeRunner::cancel() {
 }
 
 void BatchScrapeRunner::filterAlreadyScraped() {
-  if (!m_db || m_collectionUuid.isEmpty()) return;
+  // No DB AND no artwork dir means nothing to check against — bail
+  // before the loop so an empty test fixture (no DB, no artwork dir)
+  // keeps every item, matching the legacy behaviour for those callers.
+  const bool dbCheckPossible = m_db && !m_collectionUuid.isEmpty();
+  const bool sidecarCheckPossible = !m_artworkDir.isEmpty();
+  if (!dbCheckPossible && !sidecarCheckPossible) return;
+
+  // Effective "wanted" set under FillMissing — mirrors what the
+  // per-item write phase would attempt for this run. mediaTypeFilter
+  // non-empty wins; otherwise the legacy "front only" fallback
+  // applies when fetchPrimaryCover is on (the runner header
+  // documents this). With nothing wanted at all we have nothing to
+  // pre-skip on, so leave the queue untouched.
+  QSet<QString> wantedTypes;
+  for (const QString &type : m_mediaTypeFilter) {
+    wantedTypes.insert(type.toLower());
+  }
+  if (wantedTypes.isEmpty() && m_fetchPrimaryCover) {
+    wantedTypes.insert(QStringLiteral("front"));
+  }
+  const bool isFillMissing = m_rescrapeMode == Scraper::RescrapeMode::FillMissing;
+  if (isFillMissing && wantedTypes.isEmpty() && !m_writeMetadata) {
+    // Nothing is being asked for; the run is a no-op anyway. Keep
+    // the queue untouched so the caller's tallies match.
+    return;
+  }
+
+  // Build a basename-set per wanted type so the per-item check is an
+  // O(1) hash lookup instead of a directory scan per item. Files in
+  // each type's subdir are indexed by lowercase complete base name
+  // (the runner uses completeBaseName when assembling per-item paths,
+  // so the same key roundtrips).
+  QHash<QString, QSet<QString>> presentByType;
+  if (sidecarCheckPossible) {
+    for (const QString &type : wantedTypes) {
+      const QString subdir = QDir(m_artworkDir).filePath(type);
+      QDir d(subdir);
+      if (!d.exists()) continue;
+      QSet<QString> bases;
+      const auto files = d.entryList(QDir::Files | QDir::NoDotAndDotDot);
+      bases.reserve(files.size());
+      for (const QString &f : files) {
+        bases.insert(QFileInfo(f).completeBaseName().toLower());
+      }
+      presentByType.insert(type, std::move(bases));
+    }
+  }
+  // `front` also mirrors to the flat artwork directory ({base}.<ext>)
+  // for the grid tile — that is the slot the auto-discoverer reads.
+  // Treat either location as "front covered".
+  QSet<QString> frontFlatBases;
+  if (sidecarCheckPossible && wantedTypes.contains(QStringLiteral("front"))) {
+    static const QStringList kImageGlobs = {QStringLiteral("*.png"),  QStringLiteral("*.jpg"),
+                                            QStringLiteral("*.jpeg"), QStringLiteral("*.webp"),
+                                            QStringLiteral("*.gif"),  QStringLiteral("*.bmp")};
+    QDir d(m_artworkDir);
+    const auto files = d.entryList(kImageGlobs, QDir::Files | QDir::NoDotAndDotDot);
+    frontFlatBases.reserve(files.size());
+    for (const QString &f : files) {
+      frontFlatBases.insert(QFileInfo(f).completeBaseName().toLower());
+    }
+  }
+  // updated_at is stored UTC ISO; compute the cutoff in UTC so the
+  // comparison stays timezone-agnostic regardless of how the parsed
+  // QDateTime's TimeSpec ends up after fromString().
+  const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+  const bool hasWindow = m_skipRecentDays > 0;
+  const QDateTime cutoff = hasWindow ? nowUtc.addDays(-m_skipRecentDays) : QDateTime();
+
+  // Helper: decide whether the metadata "slot" is covered for an item.
+  // Returns one of three states so the caller can apply the time-window
+  // gate consistently for both DB and on-disk evidence.
+  struct MetaPresence {
+    bool present = false;
+    bool hasTimestamp = false;
+    QDateTime timestampUtc;
+  };
+  auto metadataPresenceFor = [&](const QString &path,
+                                 const QString &baseName) -> MetaPresence {
+    MetaPresence out;
+    if (dbCheckPossible) {
+      const auto md = m_db->loadItemMetadata(m_collectionUuid, path);
+      if (!md.source.isEmpty()) {
+        out.present = true;
+        QDateTime ts = QDateTime::fromString(md.updatedAt, Qt::ISODate);
+        // toString(Qt::ISODate) writes UTC values without the "Z"
+        // suffix, so fromString() returns a LocalTime-spec datetime
+        // whose values are actually UTC. Re-label as UTC so the
+        // comparison against `cutoff` (UTC) lines up.
+        if (ts.isValid()) {
+          ts.setTimeSpec(Qt::UTC);
+          out.hasTimestamp = true;
+          out.timestampUtc = ts;
+        }
+      }
+    }
+    if (!out.present && sidecarCheckPossible && !baseName.isEmpty()) {
+      const QString sidecar = QDir(m_artworkDir)
+                                  .filePath(QStringLiteral("metadata/") + baseName +
+                                            QStringLiteral(".json"));
+      const QFileInfo fi(sidecar);
+      if (fi.exists() && fi.isFile()) {
+        out.present = true;
+        const QDateTime mtime = fi.lastModified().toUTC();
+        if (mtime.isValid()) {
+          out.hasTimestamp = true;
+          out.timestampUtc = mtime;
+        }
+      }
+    }
+    return out;
+  };
+
+  // Helper: per-type media-on-disk check using the pre-built indexes.
+  auto typeCoveredFor = [&](const QString &baseNameLower, const QString &type) {
+    if (type == QStringLiteral("front") && frontFlatBases.contains(baseNameLower)) {
+      return true;
+    }
+    return presentByType.value(type).contains(baseNameLower);
+  };
+
+  // Helper: apply the window to a presence record. "Within window"
+  // means the saved timestamp is at-or-after the cutoff. Items with
+  // no readable timestamp keep the safe behaviour (preserve the
+  // skip) — the user can clear the row or delete the file if they
+  // really want a refresh.
+  auto withinWindow = [&](const MetaPresence &mp) {
+    if (!hasWindow) return true;
+    if (!mp.hasTimestamp) return true;
+    return mp.timestampUtc >= cutoff;
+  };
+
   QStringList kept;
   kept.reserve(m_paths.size());
   for (const QString &path : m_paths) {
-    const auto md = m_db->loadItemMetadata(m_collectionUuid, path);
-    if (md.source.isEmpty()) {
+    const QString baseName = QFileInfo(path).completeBaseName();
+    const QString baseNameLower = baseName.toLower();
+    const MetaPresence meta = metadataPresenceFor(path, baseName);
+
+    bool skipThis = false;
+    if (m_rescrapeMode == Scraper::RescrapeMode::Skip) {
+      // Skip mode: any metadata marker is enough — the user told us
+      // "if scraped, leave it alone." The time window optionally
+      // releases stale items back for refresh.
+      if (meta.present && withinWindow(meta)) {
+        skipThis = true;
+      }
+    } else { // FillMissing
+      // FillMissing only burns a request when there is at least one
+      // missing field for this item. Walk the user's ticked
+      // checkboxes (_metadata implicit via m_writeMetadata, plus the
+      // resolved mediaTypeFilter). If every ticked field is already
+      // covered AND the existing data is within the refresh window,
+      // there is nothing the provider could give us — skip.
+      bool fullyCovered = true;
+      if (m_writeMetadata) {
+        if (!meta.present || !withinWindow(meta)) {
+          fullyCovered = false;
+        }
+      }
+      if (fullyCovered) {
+        for (const QString &type : wantedTypes) {
+          if (!typeCoveredFor(baseNameLower, type)) {
+            fullyCovered = false;
+            break;
+          }
+        }
+      }
+      // Media-only runs (m_writeMetadata == false) still want to
+      // honour the refresh window when *any* timestamp is available
+      // (sidecar or DB row). If the only signal of staleness is the
+      // sidecar mtime, treat that as the run's freshness anchor.
+      if (fullyCovered && !m_writeMetadata && meta.present && !withinWindow(meta)) {
+        fullyCovered = false;
+      }
+      skipThis = fullyCovered;
+    }
+
+    if (!skipThis) {
       kept.append(path);
     }
   }

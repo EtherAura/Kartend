@@ -315,7 +315,9 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       m_generalSettings.scraperOptions.batchItemConcurrency !=
           m_originalGeneralSettings.scraperOptions.batchItemConcurrency ||
       m_generalSettings.scraperOptions.rescrapeMode !=
-          m_originalGeneralSettings.scraperOptions.rescrapeMode) {
+          m_originalGeneralSettings.scraperOptions.rescrapeMode ||
+      m_generalSettings.scraperOptions.skipRecentScrapeDays !=
+          m_originalGeneralSettings.scraperOptions.skipRecentScrapeDays) {
     return true;
   }
   // ScraperCredentialsPanel: full credential map compare. QHash

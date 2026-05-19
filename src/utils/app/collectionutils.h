@@ -1138,6 +1138,23 @@ struct GeneralSettings {
     // 1 = strictly serial (the legacy behavior).
     int batchItemConcurrency = 4; // 1..16
     ScraperRescrapeMode rescrapeMode = ScraperRescrapeMode::FillMissing;
+    // Refresh window (in days) used by the rescrape modes that
+    // pre-filter the queue (Skip and FillMissing) to decide whether
+    // an already-covered item should be re-scraped this run.
+    //   0      = no time gate; skip every covered item (the legacy
+    //            behaviour, preserved for users that never want to
+    //            refresh).
+    //   N > 0  = skip items whose last scrape (item_metadata.updated_at,
+    //            or the sidecar JSON's mtime when there is no DB row)
+    //            falls within the last N days. Items covered longer
+    //            ago become eligible to refresh. Overwrite and
+    //            UpdateChanged ignore this — they visit every item by
+    //            design.
+    // Range clamped 0..365 by SettingsManager. Default 30 — long enough
+    // to let users page through a quota-limited backlog over multiple
+    // days without re-paying for items just scraped, short enough that
+    // a monthly refresh works without manual intervention.
+    int skipRecentScrapeDays = 30;
     // Stamp `outputformat=jpg` onto image media URLs so SS re-encodes
     // assets as smaller (lossy) JPGs. Only sensible on the Fastest
     // preset where bandwidth dominates fidelity; the preset toggles

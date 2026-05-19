@@ -2225,6 +2225,7 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
   const Scraper::RescrapeMode rescrapeMode =
       static_cast<Scraper::RescrapeMode>(m_scraperCtx.generalSettings->scraperOptions.rescrapeMode);
   const int itemConcurrency = m_scraperCtx.generalSettings->scraperOptions.batchItemConcurrency;
+  const int skipRecentDays = m_scraperCtx.generalSettings->scraperOptions.skipRecentScrapeDays;
 
   // Translate the user's media-type checkboxes into the runner's
   // filter set. The synthetic `_metadata` key gates text-field
@@ -2244,7 +2245,8 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
 
   auto *runner = new Scraper::BatchScrapeRunner(m_scraperCtx.databaseManager, std::move(provider),
                                                 uuid, items, artworkDir, /*fetchPrimaryCover=*/true,
-                                                rescrapeMode, itemConcurrency, this);
+                                                rescrapeMode, itemConcurrency, skipRecentDays,
+                                                this);
   runner->setMediaTypeFilter(mediaFilter);
   runner->setWriteMetadata(writeMetadata);
   m_batchRunner = runner;

@@ -23,9 +23,13 @@
 #include "scrapertypes.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
@@ -139,6 +143,56 @@ public:
   }
 };
 
+/// IDatabaseManager double that returns a non-empty source AND a fixed
+/// `updated_at` timestamp. Lets tests stage the runner's
+/// recent-window filter against a known scrape age — pass an offset
+/// (in days from "now") to simulate items just scraped vs. items
+/// scraped beyond the configured Skip window.
+class TimestampedScrapedDb : public KartendTest::MockDatabaseManager {
+public:
+  explicit TimestampedScrapedDb(int daysAgo) {
+    m_updatedAt =
+        QDateTime::currentDateTimeUtc().addDays(-daysAgo).toString(Qt::ISODate);
+  }
+  [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &,
+                                                                 const QString &) const override {
+    ItemMetadataStore::ItemMetadata md;
+    md.source = QStringLiteral("screenscraper");
+    md.updatedAt = m_updatedAt;
+    return md;
+  }
+
+private:
+  QString m_updatedAt;
+};
+
+/// Writes a stub metadata sidecar to `{artworkDir}/metadata/{baseName}.json`
+/// so the runner's on-disk skip branch has something to find. Returns the
+/// absolute path so the caller can stat it (e.g. to confirm mtime
+/// adjustment landed). Failures are reported via QVERIFY in the caller.
+QString writeStubSidecar(const QString &artworkDir, const QString &baseName,
+                         qint64 mtimeOffsetSeconds = 0) {
+  const QString metadataDir = QDir(artworkDir).filePath(QStringLiteral("metadata"));
+  if (!QDir().mkpath(metadataDir)) return {};
+  const QString sidecarPath =
+      QDir(metadataDir).filePath(baseName + QStringLiteral(".json"));
+  QFile f(sidecarPath);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return {};
+  f.write("{\"title\":\"stub\"}");
+  f.close();
+  if (mtimeOffsetSeconds != 0) {
+    const QDateTime mtime = QDateTime::currentDateTime().addSecs(mtimeOffsetSeconds);
+    // setFileTime returns false silently on filesystems that don't
+    // support sub-second precision; callers compare day-scale offsets
+    // so the granularity is fine. We swallow the bool — best-effort.
+    QFile rewriter(sidecarPath);
+    rewriter.open(QIODevice::ReadWrite);
+    rewriter.setFileTime(mtime, QFileDevice::FileModificationTime);
+    rewriter.close();
+  }
+  return sidecarPath;
+}
+
 /// Helper to build a deterministic candidate + detail pair for a
 /// given query. Keeps the test bodies focused on the controller
 /// behaviour rather than the structural data.
@@ -209,6 +263,13 @@ private slots:
   void coverFetchFailureLeavesMetadataSavedAndCountsAsScraped();
   void coverFetchSkippedWhenNoFrontAsset();
   void skipModeCountsAlreadyScrapedItemsAsSkipped();
+  void skipModeAlsoSkipsItemsWithSidecarButNoDbRow();
+  void skipModeWindowKeepsRecentScrapesSkipped();
+  void skipModeWindowReleasesStaleScrapesForRefresh();
+  void skipModeWindowZeroPreservesLegacyBehaviour();
+  void fillMissingPreSkipsItemsWithEveryTickedFieldCovered();
+  void fillMissingScrapesItemsMissingAnyTickedField();
+  void fillMissingHonoursRefreshWindowSameAsSkip();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
 };
 
@@ -488,6 +549,222 @@ void TestBatchScrapeRunner::skipModeCountsAlreadyScrapedItemsAsSkipped() {
   // none scraped, none errored. scraped+skipped+errors == 3 == total.
   QCOMPARE(summary.skipped, 3);
   QCOMPARE(summary.scraped, 0);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::skipModeAlsoSkipsItemsWithSidecarButNoDbRow() {
+  // Regression: items where the metadata sidecar JSON is on disk but
+  // the DB row was lost (kart import, partial scrape mid-write,
+  // upgrade from a version pre-dating item_metadata) used to slip past
+  // the Skip pre-filter and burn one provider lookup each before the
+  // per-asset gate skipped the file writes. The fix is to also check
+  // the on-disk sidecar at `{artworkDir}/metadata/{baseName}.json`.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // Plant a sidecar for Alpha; leave Beta with no on-disk trace.
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha")).isEmpty());
+
+  // Stub provider would happily answer either query — we assert below
+  // that only Beta's lookup actually fires.
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+
+  // No DB → the DB-row branch is a no-op; only the on-disk sidecar
+  // gate decides. Alpha must be pre-skipped; Beta must scrape.
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
+      tmp.path(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/0);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 1);
+  QCOMPARE(summary.skipped, 1);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::skipModeWindowKeepsRecentScrapesSkipped() {
+  // With skipRecentDays > 0, items whose updated_at falls INSIDE the
+  // window must stay skipped (the user just scraped them, no point
+  // burning quota again). Stage a DB that reports a 5-day-old scrape
+  // and a 30-day Skip window — all three items must be filtered out.
+  TimestampedScrapedDb db(/*daysAgo=*/5);
+  auto stub = std::make_shared<StubProvider>();
+  Scraper::BatchScrapeRunner runner(
+      &db, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin"),
+                  QStringLiteral("/games/C.bin")},
+      QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/30);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.skipped, 3);
+  QCOMPARE(summary.scraped, 0);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::skipModeWindowReleasesStaleScrapesForRefresh() {
+  // Once an item ages past skipRecentDays, the Skip filter must let it
+  // back through — that is the entire point of a refresh window. We
+  // back the freshness check with the on-disk sidecar branch (null DB,
+  // so no write-worker / SQLite schema worry) and rewind both sidecar
+  // mtimes by 90 days. With a 30-day window the runner must release
+  // both items to the provider; null DB takes the synchronous-success
+  // apply path so the scraped count ticks up.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // ~90 days in seconds; far enough beyond any 30-day window that
+  // small filesystem mtime quantisation can't drag the value back in.
+  constexpr qint64 kNinetyDaysSec = qint64{90} * 24 * 60 * 60;
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha"), -kNinetyDaysSec).isEmpty());
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Beta"), -kNinetyDaysSec).isEmpty());
+
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
+      tmp.path(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/30);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 2);
+  QCOMPARE(summary.skipped, 0);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::skipModeWindowZeroPreservesLegacyBehaviour() {
+  // skipRecentDays == 0 means "no time gate" — every item with a
+  // non-empty source is dropped regardless of age. This is the
+  // pre-fix behaviour and must stay reachable for users that never
+  // want refreshes. A 90-day-old scrape under a zero window stays
+  // skipped despite being well outside any reasonable refresh
+  // window the user might set later.
+  TimestampedScrapedDb db(/*daysAgo=*/90);
+  auto stub = std::make_shared<StubProvider>();
+  Scraper::BatchScrapeRunner runner(
+      &db, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin")},
+      QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/0);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.skipped, 2);
+  QCOMPARE(summary.scraped, 0);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::fillMissingPreSkipsItemsWithEveryTickedFieldCovered() {
+  // The core "skip existing" fix: under FillMissing, an item whose
+  // ticked checkboxes (metadata + selected media types) are all
+  // already on disk must NOT generate a provider request. Set up an
+  // artwork directory where Alpha has metadata sidecar + front cover
+  // + screenshot files (the three ticked fields), and Beta has only
+  // the sidecar. Alpha must pre-skip; Beta must still scrape because
+  // it is missing the two media types.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // Alpha: sidecar + front (flat) + screenshot (subdir)
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha")).isEmpty());
+  {
+    QFile front(QDir(tmp.path()).filePath(QStringLiteral("Alpha.png")));
+    QVERIFY(front.open(QIODevice::WriteOnly));
+    front.write("png");
+  }
+  QVERIFY(QDir().mkpath(QDir(tmp.path()).filePath(QStringLiteral("screenshot"))));
+  {
+    QFile shot(
+        QDir(tmp.path()).filePath(QStringLiteral("screenshot/Alpha.png")));
+    QVERIFY(shot.open(QIODevice::WriteOnly));
+    shot.write("png");
+  }
+  // Beta: sidecar only — missing front + screenshot
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Beta")).isEmpty());
+
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+  // Alpha is intentionally absent from the stub — if the runner
+  // contacts the provider for it, the test would surface a "no
+  // candidates" result and the skipped count would be > 1.
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
+      tmp.path(), /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/0);
+  runner.setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot")});
+  runner.setWriteMetadata(true);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.skipped, 1); // Alpha pre-skipped
+  QCOMPARE(summary.scraped, 1); // Beta scraped through
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::fillMissingScrapesItemsMissingAnyTickedField() {
+  // A single missing field is enough to force the provider request —
+  // FillMissing is "fill the gap", and the only way the runner knows
+  // what the gap is, is to ask. Plant the sidecar + front cover but
+  // NOT the ticked screenshot. The item must flow through to scrape.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha")).isEmpty());
+  {
+    QFile front(QDir(tmp.path()).filePath(QStringLiteral("Alpha.png")));
+    QVERIFY(front.open(QIODevice::WriteOnly));
+    front.write("png");
+  }
+  // No screenshot subdir → screenshot is uncovered for Alpha.
+
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
+      /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/0);
+  runner.setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot")});
+  runner.setWriteMetadata(true);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.skipped, 0);
+  QCOMPARE(summary.scraped, 1);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::fillMissingHonoursRefreshWindowSameAsSkip() {
+  // The refresh window applies to FillMissing too. Plant a fully-
+  // covered Alpha (sidecar + front) but stamp the sidecar mtime 90
+  // days in the past. Under a 30-day window the item must be
+  // released for refresh, exactly like the Skip-mode counterpart.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  constexpr qint64 kNinetyDaysSec = qint64{90} * 24 * 60 * 60;
+  QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha"), -kNinetyDaysSec).isEmpty());
+  {
+    QFile front(QDir(tmp.path()).filePath(QStringLiteral("Alpha.png")));
+    QVERIFY(front.open(QIODevice::WriteOnly));
+    front.write("png");
+  }
+
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
+      /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
+      /*itemConcurrency=*/1, /*skipRecentDays=*/30);
+  runner.setMediaTypeFilter({QStringLiteral("front")});
+  runner.setWriteMetadata(true);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 1);
+  QCOMPARE(summary.skipped, 0);
   QCOMPARE(summary.errors, 0);
 }
 

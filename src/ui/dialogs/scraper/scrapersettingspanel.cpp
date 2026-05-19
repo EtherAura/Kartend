@@ -171,6 +171,9 @@ void ScraperSettingsPanel::buildLayout() {
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::Overwrite));
   m_rescrapeCombo->addItem(tr("Fill missing — keep existing, only download what's missing"),
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing));
+  // (Fill missing also skips the provider request entirely for items
+  // whose checkboxes are already fully covered — see the refresh
+  // window spinbox below.)
   m_rescrapeCombo->addItem(tr("Update changed — compare bytes, write only if different"),
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::UpdateChanged));
   m_rescrapeCombo->addItem(tr("Skip — don't re-scrape items that already have metadata"),
@@ -191,6 +194,37 @@ void ScraperSettingsPanel::buildLayout() {
   m_rescrapeWarning->setStyleSheet("color: palette(highlight); font-style: italic;");
   m_rescrapeWarning->hide();
   form->addRow(m_rescrapeWarning);
+
+  // Refresh-window gate that pairs with both Skip and Fill missing.
+  // Under Skip the filter drops items with any metadata; under
+  // Fill missing it drops items whose checked fields are all already
+  // on disk. The spinbox lets users mark items as eligible for
+  // refresh once they pass the chosen age. 0 disables the window
+  // (legacy: skip covered items regardless of age). Range 0..365 —
+  // matches SettingsManager's clamp. Visible only when Skip or Fill
+  // missing is the active rescrape mode; the label toggles in
+  // lockstep so the form layout stays clean.
+  m_skipRecentDaysSpin = new QSpinBox(this);
+  m_skipRecentDaysSpin->setRange(0, 365);
+  m_skipRecentDaysSpin->setSingleStep(1);
+  m_skipRecentDaysSpin->setSuffix(tr(" days"));
+  m_skipRecentDaysSpin->setSpecialValueText(tr("Always skip (no refresh)"));
+  m_skipRecentDaysSpin->setToolTip(
+      tr("Skip and Fill missing modes drop items whose data is already "
+         "on disk — Skip if any metadata is present, Fill missing if "
+         "every ticked checkbox in the scrape dialog has a file. Set "
+         "this to a number of days to let those items become eligible "
+         "for re-scraping after the chosen age — e.g. 30 means items "
+         "covered longer than 30 days ago will refresh on the next "
+         "batch.\n\n"
+         "Items without a readable scrape timestamp (sidecar-only "
+         "imports, hand-edited entries) stay skipped regardless of "
+         "the window. 0 disables the window entirely so every covered "
+         "item is skipped."));
+  m_skipRecentDaysLabel = new QLabel(tr("Refresh items scraped before:"), this);
+  form->addRow(m_skipRecentDaysLabel, m_skipRecentDaysSpin);
+  m_skipRecentDaysLabel->hide();
+  m_skipRecentDaysSpin->hide();
 
   // Fallback region for ScreenScraper's region-keyed fields. Each
   // scraped item first honours its own matched-ROM region — a Japanese
@@ -295,6 +329,24 @@ void ScraperSettingsPanel::connectChangeSignals() {
     const auto mode =
         static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
     m_rescrapeWarning->setVisible(mode == GeneralSettings::ScraperRescrapeMode::UpdateChanged);
+    // The refresh-window controls only have meaning under modes that
+    // pre-filter the queue (Skip, Fill missing). Hide them under
+    // Overwrite / Update changed where every item already flows
+    // through to the provider regardless.
+    const bool windowApplies =
+        mode == GeneralSettings::ScraperRescrapeMode::Skip ||
+        mode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+    if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
+    if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
+    writeModel();
+    emit changed();
+  });
+
+  // Skip-window spinbox: independent of preset; emits changed() so the
+  // host dialog persists. The visibility tracks the rescrape combo (see
+  // the lambda above); no toggling needed here.
+  connect(m_skipRecentDaysSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) {
+    if (m_loading) return;
     writeModel();
     emit changed();
   });
@@ -429,6 +481,16 @@ void ScraperSettingsPanel::refresh() {
   m_rescrapeCombo->setCurrentIndex(m_rescrapeCombo->findData(static_cast<int>(opts.rescrapeMode)));
   m_rescrapeWarning->setVisible(opts.rescrapeMode ==
                                 GeneralSettings::ScraperRescrapeMode::UpdateChanged);
+  if (m_skipRecentDaysSpin) {
+    QSignalBlocker b(m_skipRecentDaysSpin);
+    m_skipRecentDaysSpin->setValue(qBound(0, opts.skipRecentScrapeDays, 365));
+  }
+  // Mirror the visibility rule from the rescrape-combo change handler.
+  const bool windowApplies =
+      opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::Skip ||
+      opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+  if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
+  if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
   if (m_autoResumeCheck) {
     QSignalBlocker b(m_autoResumeCheck);
     m_autoResumeCheck->setChecked(opts.scrapeAutoResume);
@@ -459,6 +521,9 @@ void ScraperSettingsPanel::writeModel() {
   opts.preferJpgOutput = m_preferJpgCheck->isChecked();
   opts.rescrapeMode =
       static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
+  if (m_skipRecentDaysSpin) {
+    opts.skipRecentScrapeDays = m_skipRecentDaysSpin->value();
+  }
   if (m_autoResumeCheck) {
     opts.scrapeAutoResume = m_autoResumeCheck->isChecked();
   }

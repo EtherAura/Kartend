@@ -31,6 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Skip and Fill missing rescrape modes no longer burn quota on items
+  whose ticked fields are already on disk.** Both modes previously
+  contacted the provider for every item and only decided at write time
+  whether to keep or replace each asset — exhausting the daily quota
+  long before reaching items that actually had nothing on disk. The
+  scraper now pre-filters the queue before any provider request: Skip
+  drops items whose metadata is already present (either a database row
+  or a sidecar JSON on disk, so items recovered from a kart import or
+  older build are caught too); Fill missing drops items whose ticked
+  checkboxes (metadata plus each selected media type) are all already
+  on disk. A new **Refresh items scraped before** spinbox in the
+  scraper settings lets you mark items as eligible for refresh once
+  they pass a chosen number of days (default 30; set to 0 to always
+  skip covered items).
 - **Large scrapes no longer crash on PDF manuals.** When a scrape saved a
   manual as a PDF, the artwork loader could hand that PDF to Qt's image
   decoder, which routed it to the PDF plugin and aborted the whole

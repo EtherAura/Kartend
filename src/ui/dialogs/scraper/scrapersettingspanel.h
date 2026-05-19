@@ -58,6 +58,13 @@ private:
   QPushButton *m_detectButton = nullptr;
   QComboBox *m_rescrapeCombo = nullptr;
   QLabel *m_rescrapeWarning = nullptr;
+  /// "Skip if scraped within the last N days" gate for Skip rescrape
+  /// mode. 0 disables (legacy "always skip already-scraped" behaviour);
+  /// N > 0 lets items become eligible for refresh after N days. Only
+  /// rendered (label + spinbox) while Skip mode is selected — the value
+  /// has no effect in the other modes.
+  QSpinBox *m_skipRecentDaysSpin = nullptr;
+  QLabel *m_skipRecentDaysLabel = nullptr;
   /// Fallback region for ScreenScraper's region-keyed fields (title,
   /// release date, box art). Each item still honours its own
   /// matched-ROM region first; this only backstops items whose region

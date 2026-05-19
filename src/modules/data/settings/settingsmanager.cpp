@@ -321,6 +321,11 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.scraperOptions.rescrapeMode = static_cast<GeneralSettings::ScraperRescrapeMode>(
       s.value("rescrapeMode", static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing))
           .toInt());
+  // Clamp 0..365 — defensive against hand-edited INIs. 0 disables the
+  // time gate (skip every already-scraped item); 365 is a year, which
+  // is the longest "refresh window" we expect anyone to want.
+  settings.scraperOptions.skipRecentScrapeDays =
+      qBound(0, s.value("skipRecentScrapeDays", 30).toInt(), 365);
   settings.scraperOptions.preferJpgOutput = s.value("preferJpgOutput", false).toBool();
   settings.scraperOptions.scrapeAutoResume = s.value("scrapeAutoResume", false).toBool();
   settings.scraperOptions.scrapeLogging = s.value("scrapeLogging", false).toBool();
@@ -436,6 +441,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.scraperOptions.batchItemConcurrency =
       qBound(1, settings.scraperOptions.batchItemConcurrency, 16);
   m_generalSettings.scraperOptions.rescrapeMode = settings.scraperOptions.rescrapeMode;
+  m_generalSettings.scraperOptions.skipRecentScrapeDays =
+      qBound(0, settings.scraperOptions.skipRecentScrapeDays, 365);
   m_generalSettings.scraperOptions.preferJpgOutput = settings.scraperOptions.preferJpgOutput;
   m_generalSettings.scraperOptions.scrapeAutoResume = settings.scraperOptions.scrapeAutoResume;
   m_generalSettings.scraperOptions.scrapeLogging = settings.scraperOptions.scrapeLogging;
@@ -636,6 +643,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("mediaThrottleMs", m_generalSettings.scraperOptions.mediaThrottleMs);
   s.setValue("batchItemConcurrency", m_generalSettings.scraperOptions.batchItemConcurrency);
   s.setValue("rescrapeMode", static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
+  s.setValue("skipRecentScrapeDays", m_generalSettings.scraperOptions.skipRecentScrapeDays);
   s.setValue("preferJpgOutput", m_generalSettings.scraperOptions.preferJpgOutput);
   s.setValue("scrapeAutoResume", m_generalSettings.scraperOptions.scrapeAutoResume);
   s.setValue("scrapeLogging", m_generalSettings.scraperOptions.scrapeLogging);
