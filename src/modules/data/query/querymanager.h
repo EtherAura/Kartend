@@ -4,11 +4,10 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "preparedstatementcache.h"
-#include "scanworkcontroller.h"
+#include "scanservice.h"
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
-#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
@@ -64,7 +63,8 @@ public slots:
 
   // Scans the current collection (and descendants when
   // showAllSubcollectionItems is set) if a rescan is needed, without blocking
-  // query operations in another worker.
+  // query operations in another worker. Handles connection availability and
+  // WAL-view freshness here, then delegates the scan work to m_scanService.
   void ensureScannedForContext(const CollectionContext &context,
                                const QList<CollectionConfig> &allCollections);
 
@@ -95,10 +95,17 @@ signals:
                             const QHash<QString, qint64> &directCountsByUuid);
 
   /// Emitted during loadAllCollections to report scan progress.
+  /// Owned by QueryManager: emitted only by the load loop (loadAllCollections),
+  /// never by the scan subsystem.
   /// @param current The 1-based index of the collection being scanned
   /// @param total The total number of collections to scan
   /// @param collectionName The name of the collection being scanned
   void scanProgress(int current, int total, const QString &collectionName);
+
+  // The four scan signals below are forwarded: ScanService declares and emits
+  // its own copies; QueryManager's constructor connects each ScanService
+  // signal to the matching QueryManager signal so DatabaseManager keeps
+  // wiring to QueryManager unchanged.
 
   /// Emitted when a long-running scan is starting (allows UI to show overlay)
   void scanStarting(const QString &collectionName, int estimatedItems);
@@ -125,13 +132,16 @@ signals:
   void cacheInvalidated(const QString &collectionUuid);
 
 public:
-  /// Request cancellation of any in-progress scan (thread-safe)
+  /// Request cancellation of any in-progress scan (thread-safe).
+  /// Delegates to m_scanService.
   void requestCancelScan();
 
-  /// Check if scan cancellation was requested (thread-safe)
+  /// Check if scan cancellation was requested (thread-safe).
+  /// Delegates to m_scanService.
   [[nodiscard]] bool isScanCancelled() const;
 
-  /// Reset cancellation flag (call before starting new scan)
+  /// Reset cancellation flag (call before starting new scan).
+  /// Delegates to m_scanService.
   void resetScanCancellation();
 
   /// Force connection to see latest WAL commits from other connections
@@ -154,27 +164,23 @@ private:
                                        const QList<CollectionConfig> &allCollections,
                                        const QString &filter);
 
-  // Owns the per-scan cancellation token + the dedicated worker pool that
-  // dispatches directory-walk tasks. Replaces the in-line m_scanCancellationToken
-  // and m_scanThreadPool that QueryManager used to manage directly.
-  ScanWorkController m_scanWork;
   ISessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
-
-  // Collection UUIDs whose scan failed earlier this session. A failed scan
-  // rolls back without persisting dir_signature, so needsRescan() keeps
-  // returning true; combined with the collectionScanCompleted-driven reload
-  // that re-enters ensureCollectionScanned(), an always-failing scan spins an
-  // unbreakable scan->fail->reload loop. Once a UUID lands here it is not
-  // retried automatically — only worker-thread access, so no locking needed.
-  QSet<QString> m_failedScanUuids;
 
   // LRU cache of prepared QSqlQuery statements bound to m_db. Reuses
   // compiled statements across slot invocations; reset on every get() so
   // stale bound values can't leak across reuse.
   static constexpr int MAX_STATEMENT_CACHE_SIZE = 32;
   PreparedStatementCache m_statementCache{MAX_STATEMENT_CACHE_SIZE};
+
+  // The collection-rescan subsystem (filesystem walk, scanned_items staging,
+  // scan-and-save pipelines, cancellation token). Borrows m_db and
+  // m_statementCache by reference — declared AFTER both so those members are
+  // already constructed. QueryManager keeps only a thin delegating surface:
+  // its scan slots forward here, and its scan signals are re-emitted from
+  // this object's matching signals (wired in the constructor).
+  ScanService m_scanService{m_db, m_statementCache, this};
 
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);
@@ -201,63 +207,22 @@ private:
 
   [[nodiscard]] bool isItemsFtsReadyFromDb();
 
-  [[nodiscard]] bool ensureCollectionScanned(int collectionIndex,
-                                             const CollectionConfig &collection);
-  [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
-                                                const CollectionConfig &collection,
-                                                int *outItemsScanned = nullptr,
-                                                int *outItemsApplied = nullptr);
-
-  // Phase 1: Walk the filesystem (flat or recursive) and stream discovered
-  // files into the scanned_items temp table. Returns the number of files
-  // staged and the computed directory signature. On cancellation the temp
-  // table may be partially populated; the caller decides whether to proceed.
-  [[nodiscard]] bool stageFilesystemScan(const CollectionConfig &collection,
-                                         const QStringList &nameFilters, int &itemsStaged,
-                                         QString &dirSignatureOut);
-
-  // Phase 2: Upsert rows from the scanned_items temp table into the
-  // persistent items table, delete items no longer on disk, and update
-  // collection metadata. Must be called inside a valid staging window
-  // (i.e. after stageFilesystemScan succeeded and before the temp table is
-  // cleared). Returns the number of items applied.
-  [[nodiscard]] bool commitStagedScanResults(const CollectionConfig &collection,
-                                             const QString &uuid, const QString &extSignature,
-                                             const QString &dirSignature, int &itemsApplied);
-
-  bool needsRescan(int collectionIndex, const CollectionConfig &collection);
-  QStringList scanMediaDirectory(const CollectionConfig &collection,
-                                 QHash<QString, QDateTime> &timestamps, QString *dirSignatureOut);
   QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
+
+  // Load-or-scan hybrid used by the four load slots. Unidirectional bridge
+  // into the scan subsystem: when a rescan is needed it routes through
+  // m_scanService (needsRescan / scanMediaDirectory / saveItemsToDatabase),
+  // otherwise it loads cached rows via loadItemsFromDatabaseByUuid. No
+  // ScanService->QueryManager calls, so the load/scan boundary stays
+  // untangled.
   QStringList loadOrScanCollection(int collectionIndex, const CollectionConfig &collection,
                                    QHash<QString, QDateTime> &timestamps);
-  void saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
-                           const QHash<QString, QDateTime> &timestamps,
-                           const CollectionConfig &collection, const QString &dirSignature);
 
-  [[nodiscard]] bool prepareCollectionForItemsInsert(const CollectionConfig &collection,
-                                                     const QString &uuid,
-                                                     const QString &extSignature, int &legacyIdOut);
-  void insertItemsBatch(int legacyId, const QString &uuid, const QStringList &paths,
-                        const QHash<QString, QDateTime> &timestamps, const QString &mediaRoot);
-
-  // One-time reconcile for the v13 path-convention change: existing items
-  // rows hold a media-dir-relative `path` and a NULL `rel_path`. This
-  // rewrites `path` to the ABSOLUTE form and backfills `rel_path` with the
-  // relative form, preserving every other column (date_added, rating, usage
-  // stats, id). Gated by the meta flag `items_paths_absolutized`; runs as a
-  // cheap no-op once every non-playlist collection has been processed. Must
-  // run before any scan so the absolute-vs-absolute join in
-  // deleteMissingItemsByUuidUsingScannedItems stays consistent.
-  void maybeAbsolutizeItemPaths(const QList<CollectionConfig> &allCollections);
-
-  [[nodiscard]] bool ensureScannedItemsTempTable();
-  void clearScannedItemsTempTable();
-  void insertScannedItemsBatch(const QStringList &paths,
-                               const QHash<QString, QDateTime> &timestamps,
-                               const QString &mediaRoot);
-  [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId, const QString &collectionUuid);
-  [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
+  // The scan subsystem (needsRescan, scanMediaDirectory, the scan-and-save
+  // pipelines, prepareCollectionForItemsInsert, the scanned_items staging)
+  // was extracted into ScanService (m_scanService) — see scanservice.h.
+  // The v13 path-absolutize migration and clearCollectionFromDatabaseByUuid
+  // became free functions in querymanagerhelpers.h::QueryManagerInternal.
 
   // Query UUID temp table helpers - used when UUID count exceeds SQLite
   // variable limit SQLite has a default limit of 999 bind variables; we use a
@@ -325,7 +290,6 @@ private:
   [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);
   [[nodiscard]] qint64 countCollectionRecursive(int collectionIndex,
                                                 const QList<CollectionConfig> &allCollections);
-  void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
   // Helper struct for UUID-to-directory mappings
   struct CollectionDirMaps {

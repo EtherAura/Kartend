@@ -283,68 +283,10 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   // because it still sees old collection data that was just deleted.
   refreshWalView();
 
-  // v13 path-convention reconcile: must run before any scan so the
-  // absolute-vs-absolute join in deleteMissingItemsByUuidUsingScannedItems
-  // stays consistent. The meta-flag gate makes this a cheap no-op once the
-  // reconcile (typically done first in loadAllCollections) has completed.
-  maybeAbsolutizeItemPaths(allCollections);
-
-  if (!context.isValid()) {
-    auto err =
-        ErrorContext::error(ErrorCode::InvalidCollectionContext, "Invalid collection context",
-                            "QueryManager::ensureScannedForContext");
-    ErrorUtils::logError(err);
-    emit errorOccurred(err);
-    return;
-  }
-
-  CollectionContext ctx = context;
-  ctx.config.mediaDirectory =
-      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
-
-  // Scan current collection if needed. ensureCollectionScanned now handles
-  // emitting both scanStarting and collectionScanCompleted signals internally,
-  // ensuring proper overlay tracking even when scans fail.
-  if (!ctx.config.mediaDirectory.trimmed().isEmpty()) {
-    (void)ensureCollectionScanned(ctx.currentIndex, ctx.config);
-  }
-
-  // Scan all collections if the query scope requests it.
-  if (ctx.queryIncludeAllCollections) {
-    for (int i = 0; i < allCollections.size(); ++i) {
-      CollectionConfig col = allCollections[i];
-      col.mediaDirectory = PathUtils::validateAndExpandPath(col.mediaDirectory, col.name);
-      if (col.mediaDirectory.trimmed().isEmpty()) {
-        continue;
-      }
-      (void)ensureCollectionScanned(i, col);
-    }
-    return;
-  }
-
-  // Scan descendants if requested.
-  if (ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants) {
-    // Use pre-computed descendants if available (O(1) from cache), otherwise
-    // fall back to O(n²) tree traversal for backward compatibility
-    const QList<int> &rawDescendants =
-        ctx.precomputedDescendants.isEmpty()
-            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
-            : ctx.precomputedDescendants;
-    for (int descendantIndex : rawDescendants) {
-      if (descendantIndex == ctx.currentIndex || descendantIndex < 0 ||
-          descendantIndex >= allCollections.size()) {
-        continue;
-      }
-
-      CollectionConfig subCol = allCollections[descendantIndex];
-      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
-      if (subCol.mediaDirectory.trimmed().isEmpty()) {
-        continue;
-      }
-
-      (void)ensureCollectionScanned(descendantIndex, subCol);
-    }
-  }
+  // Connection availability + WAL freshness are QueryManager's responsibility;
+  // the actual scan work (including the v13 path-absolutize reconcile) is the
+  // scan subsystem's. Delegate the rest.
+  m_scanService.ensureScannedForContext(context, allCollections);
 }
 
 void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,

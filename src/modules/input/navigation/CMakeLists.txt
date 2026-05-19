@@ -1,4 +1,10 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  backdropbluroverlay.cpp
+  backgroundvideowidget.cpp
+  collectionbackgroundcontroller.cpp
+  emptystatewidget.cpp
+  headerlogooverlay.cpp
+  loadingoverlay.cpp
   navigationhelpers.cpp
   navigationmanager.cpp
   navigationmanagerappearance.cpp
@@ -9,7 +15,14 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   navigationmanagerstack.cpp
   navigationmanagersubcollection.cpp
   navigationmanagertitle.cpp
+  vignetteoverlay.cpp
+  backdropbluroverlay.h
+  backgroundvideowidget.h
+  collectionbackgroundcontroller.h
+  emptystatewidget.h
+  headerlogooverlay.h
+  loadingoverlay.h
   navigationmanager.h
-  inavigationmanager.h
   navigationstackmanager.h
+  vignetteoverlay.h
 )

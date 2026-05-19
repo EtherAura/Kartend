@@ -1,7 +1,1 @@
-add_subdirectory(animation)
 add_subdirectory(application)
-add_subdirectory(event)
-add_subdirectory(filter)
-add_subdirectory(launch)
-add_subdirectory(search)
-add_subdirectory(widgetpool)

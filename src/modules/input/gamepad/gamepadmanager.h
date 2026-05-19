@@ -10,17 +10,17 @@ QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
 
-class KeyboardManager;
+class IKeyboardManager;
 struct ApplicationContext;
 struct GeneralSettings;
 
 struct GamepadManagerSetup {
   const ApplicationContext *ctx = nullptr;
-  KeyboardManager *keyboardManager = nullptr;
+  IKeyboardManager *keyboardManager = nullptr;
   const GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
-  SETUP_GETTER_DECL(KeyboardManager *, KeyboardManager)
+  SETUP_GETTER_DECL(IKeyboardManager *, KeyboardManager)
   SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
 };
@@ -63,7 +63,7 @@ private:
 
   [[nodiscard]] bool shuttingDown() const;
 
-  KeyboardManager *m_keyboardManager = nullptr;
+  IKeyboardManager *m_keyboardManager = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 

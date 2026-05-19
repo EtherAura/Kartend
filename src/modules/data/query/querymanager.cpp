@@ -4,9 +4,9 @@
 #include "collectionutils.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "isessionmanager.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
-#include "isessionmanager.h"
 #include "uiconstants.h"
 #include <algorithm>
 #include <atomic>
@@ -48,6 +48,17 @@ QueryManager::QueryManager(ISessionManager *sessionManager, const QString &conne
     : QObject(parent), m_sessionManager(sessionManager), m_connectionName(connectionName) {
   // Register ErrorContext for queued signal/slot connections
   qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
+
+  // Forward the scan subsystem's signals so external listeners (DatabaseManager)
+  // keep connecting to QueryManager unchanged. m_scanService lives on the same
+  // thread, so these are direct connections — no signal-timing change.
+  connect(&m_scanService, &ScanService::errorOccurred, this, &QueryManager::errorOccurred);
+  connect(&m_scanService, &ScanService::scanStarting, this, &QueryManager::scanStarting);
+  connect(&m_scanService, &ScanService::scanItemsProgress, this, &QueryManager::scanItemsProgress);
+  connect(&m_scanService, &ScanService::collectionScanCompleted, this,
+          &QueryManager::collectionScanCompleted);
+  connect(&m_scanService, &ScanService::collectionScanSummary, this,
+          &QueryManager::collectionScanSummary);
 }
 
 QueryManager::~QueryManager() {
@@ -61,15 +72,15 @@ QueryManager::~QueryManager() {
 }
 
 void QueryManager::requestCancelScan() {
-  m_scanWork.requestCancel();
+  m_scanService.requestCancelScan();
 }
 
 bool QueryManager::isScanCancelled() const {
-  return m_scanWork.isCancelled();
+  return m_scanService.isScanCancelled();
 }
 
 void QueryManager::resetScanCancellation() {
-  m_scanWork.reset();
+  m_scanService.resetScanCancellation();
 }
 
 // Forces the connection to see the latest WAL commits from other connections.

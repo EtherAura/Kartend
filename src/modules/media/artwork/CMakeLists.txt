@@ -6,7 +6,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkwidgetregistry.cpp
   artworkloaddispatcher.h
   artworkmanager.h
-  iartworkmanager.h
   artworkpathcatalog.h
   artworkwidgetregistry.h
 )

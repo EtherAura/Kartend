@@ -3,7 +3,7 @@
 // class state.
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
-#include "artworkmanager.h"
+#include "iartworkmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidgetfactory.h"
 #include "scrolldatamanager.h"

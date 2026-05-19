@@ -91,7 +91,7 @@ void KeyboardManager::beginHoldRepeat() {
 
 void KeyboardManager::stopRepeat(bool suppressRecentering) {
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
 
   if (m_isShuttingDown || QApplication::closingDown()) {
     clearRepeatState();
@@ -151,7 +151,7 @@ void KeyboardManager::onRepeatStep() {
     stopRepeat();
     return;
   }
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
   if (!scroll || !m_collections || !m_currentCollectionIndex) {
     stopRepeat();
     return;

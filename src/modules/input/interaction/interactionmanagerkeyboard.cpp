@@ -23,27 +23,25 @@
 #include "arrownavigationhandler.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
-#include "keyboardmanager.h"
+#include "ikeyboardmanager.h"
+#include "imousemanager.h"
 #include "launchmanager.h"
-#include "mousemanager.h"
 #include "searchmanager.h"
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "artworkmanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
-#include "detailpagemanager.h"
-#include "detailpageoverlay.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
 #include "gridutils.h"
-#include "itemwidget.h"
-#include "navigationmanager.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
+#include "idetailpagemanager.h"
+#include "idetailspanemanager.h"
+#include "inavigationmanager.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -224,13 +222,9 @@ auto InteractionManager::handleEscapeKey() -> bool {
   // handle Escape, but the app-wide event filter consumes the key first via
   // KeyboardManager → requestEscapeAction; route the dismiss here so the
   // overlay closes regardless of which path the key takes.
-  if (detailPageMgr()) {
-    if (auto *overlay = detailPageMgr()->overlay()) {
-      if (overlay->isActive()) {
-        detailPageMgr()->hideOverlay();
-        return true;
-      }
-    }
+  if (detailPageMgr() && detailPageMgr()->isOverlayActive()) {
+    detailPageMgr()->hideOverlay();
+    return true;
   }
 
   const QString current = (m_searchBar ? m_searchBar->text().trimmed() : QString());

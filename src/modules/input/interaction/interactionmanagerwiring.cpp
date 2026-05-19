@@ -25,9 +25,9 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "detailspanemanager.h"
+#include "idetailspanemanager.h"
+#include "inavigationmanager.h"
 #include "itemwidget.h"
-#include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
 

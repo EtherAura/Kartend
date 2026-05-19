@@ -44,9 +44,9 @@ public:
   /// `parentCollectionUuid` empty parks the playlist at the root level.
   /// `reservedKind` is normally empty — reserved for built-in playlists
   /// (follow-up).
-  ErrorUtils::Result<QString>
-  createPlaylist(const QString &name, const QString &parentCollectionUuid = QString(),
-                 const QString &reservedKind = QString()) override;
+  ErrorUtils::Result<QString> createPlaylist(const QString &name,
+                                             const QString &parentCollectionUuid = QString(),
+                                             const QString &reservedKind = QString()) override;
 
   /// Create a smart playlist whose items are evaluated from `filter` on
   /// each open. Distinct from `createPlaylist` so the call site is
@@ -146,9 +146,9 @@ public:
   /// match any indexed item are skipped (the count of skipped lines is
   /// available via `outSkipped` for caller-facing diagnostics). Returns the
   /// new playlist id.
-  [[nodiscard]] ErrorUtils::Result<QString>
-  importFromM3U(const QString &inPath, const QString &playlistName,
-                int *outSkipped = nullptr) override;
+  [[nodiscard]] ErrorUtils::Result<QString> importFromM3U(const QString &inPath,
+                                                          const QString &playlistName,
+                                                          int *outSkipped = nullptr) override;
 
   // ─── Favorites built-in ────────────────────────────────────
 

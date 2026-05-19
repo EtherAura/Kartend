@@ -61,7 +61,7 @@ suite which links all of its `TestXxx` classes into a single binary
 | Module unit tests | `tests/modules/<feature>/` | Per-manager and per-helper coverage for `src/modules/`. One flat folder per feature — the `behavior/data/input/media` group level is omitted. Includes `dat/` and `scraper/`. |
 | Utility unit tests | `tests/utils/` | Helpers under `src/utils/` **only** (`app`, `db`, `fs`, `text`, `threading`, `view`). Tests for `src/modules/` files must NOT land here. |
 | Integration tests | `tests/integration/` | One binary (`test_integration`). `MainWindowFixture`-driven multi-manager scenarios; shared mocks under `tests/integration/mocks/`. |
-| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`). |
+| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior for generic `src/ui/widgets/` widgets (e.g. `CoverFlowWidget`). Tests for widgets that live under `src/modules/` go in `tests/modules/<feature>/`. |
 | Benchmarks | `tests/benchmarks/` | Perf benchmarks labelled `benchmark`; skipped by default. Run with `ctest -L benchmark`. |
 
 Binary and method counts drift fast — prefer `ctest --output-on-failure

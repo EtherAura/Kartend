@@ -4,10 +4,11 @@
 // m_widgetFactory, m_widgetPool, m_artworkManager, m_metrics, etc.).
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
-#include "artworkmanager.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "coverflowcontroller.h"
 #include "filtermanager.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
@@ -175,13 +176,11 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   // Trigger update of visible widgets
   updateVirtualView();
 
-  // cover-flow keeps a flat card list, refresh it whenever
-  // new file data lands. Skip when not in cover flow — building a card
-  // descriptor for every visual index is fast per-item but pointless work
-  // when the widget is hidden, and 30+ chunk arrivals × 29k items adds up.
-  if (m_coverFlowWidget && coverFlowActive()) {
-    rebuildCoverFlowCards();
-  }
+  // cover-flow keeps a flat card list, refresh it whenever new file data
+  // lands. Skip when not in cover flow — building a card descriptor for
+  // every visual index is fast per-item but pointless work when the widget
+  // is hidden, and 30+ chunk arrivals × 29k items adds up.
+  m_coverFlow->rebuildCardsIfActive();
 }
 
 void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,

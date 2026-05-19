@@ -1,14 +1,14 @@
 // Subcollection / virtual-folder navigation methods for NavigationManager.
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; pure translation-unit split.
-#include "detailspanemanager.h"
 #include "emptystatewidget.h"
+#include "idetailspanemanager.h"
 #include "interactionmanager.h"
+#include "isettingsmanager.h"
 #include "navigationhelpers.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
 

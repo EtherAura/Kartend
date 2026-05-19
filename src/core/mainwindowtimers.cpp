@@ -6,19 +6,20 @@
 #include <QTimer>
 
 #include "applicationmanager.h"
-#include "artworkmanager.h"
-#include "cachemanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "iartworkmanager.h"
+#include "icachemanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
 #include "interactionmanager.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -108,6 +109,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
       context.databaseManager = getDatabaseManager();
+      context.createSettingsDialog = makeSettingsDialogFactory();
       getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {

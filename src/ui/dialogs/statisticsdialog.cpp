@@ -24,9 +24,9 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include "databasemanager.h"
+#include "idatabasemanager.h"
+#include "isettingsmanager.h"
 #include "pathutils.h"
-#include "settingsmanager.h"
 
 namespace {
 constexpr int DIALOG_WIDTH = 920;

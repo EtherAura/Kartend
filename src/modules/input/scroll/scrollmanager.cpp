@@ -3,18 +3,18 @@
 #include "scrollmanager.h"
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
-#include "artworkmanager.h"
 #include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "coverflowcontroller.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
-#include "listheaderwidget.h"
 #include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
@@ -58,7 +58,7 @@ Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
 
 // Initializes timers for throttle, arrow-key updates, and a short idle window
 // to treat any scrollbar interaction as user-driven scrolling
-ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
+ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
   // Widget pool for recycling ItemWidgets
   m_widgetPool = std::make_unique<WidgetPoolManager>(this);
 
@@ -199,28 +199,20 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
     }
   });
 
-  // Cover-flow resolve debouncer — coalesces per-tick DB + FS lookups
-  // during a wheel sweep across the carousel. The cheap parts of the
-  // selection update (overlay state, glide animation) still run
-  // synchronously in updateSelectionForIndex; only the per-item video
-  // + gallery resolution waits for the selection to settle.
-  m_coverFlowResolveDebouncer =
-      new TimerUtils::DebouncedTimer(UIConstants::Scroll::COVER_FLOW_RESOLVE_DEBOUNCE_MS, this);
-  connect(m_coverFlowResolveDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
-    if (m_pendingCoverFlowVisualIndex < 0) {
-      return;
-    }
-    const int idx = m_pendingCoverFlowVisualIndex;
-    m_pendingCoverFlowVisualIndex = -1;
-    // Re-gate on coverFlowActive() — the user may have switched view
-    // type during the debounce window. The resolve fns also guard, but
-    // bailing here avoids the redundant work.
-    if (!coverFlowActive() || !m_coverFlowWidget) {
-      return;
-    }
-    resolveAndPushCoverFlowVideo(idx);
-    resolveAndPushCoverFlowGallery(idx);
-  });
+  // Cover-flow controller — owns the CoverFlowWidget. Its carousel signals
+  // are forwarded straight through ScrollManager's own signals so external
+  // wiring (MainWindow) keeps connecting to ScrollManager.
+  m_coverFlow = std::make_unique<CoverFlowController>(this);
+  connect(m_coverFlow.get(), &CoverFlowController::selectItemByIndex, this,
+          &ScrollManager::selectItemByIndex);
+  connect(m_coverFlow.get(), &CoverFlowController::subcollectionEntered, this,
+          &ScrollManager::subcollectionEntered);
+  connect(m_coverFlow.get(), &CoverFlowController::virtualFolderEntered, this,
+          &ScrollManager::virtualFolderEntered);
+  connect(m_coverFlow.get(), &CoverFlowController::itemActivated, this,
+          &ScrollManager::coverFlowItemActivated);
+  connect(m_coverFlow.get(), &CoverFlowController::activeChanged, this,
+          &ScrollManager::coverFlowActiveChanged);
 }
 
 // Destructor disconnects scroll events, clears timers, deletes widgets and
@@ -336,13 +328,9 @@ void ScrollManager::updateViewType(ViewType viewType) {
 
   handleLayoutChange();
 
-  // cover-flow uses a parallel widget tree; keep its config,
-  // card list, and visibility in sync with the grid's. ensureCoverFlowWidget
-  // is idempotent so we can call it on every transition.
-  ensureCoverFlowWidget();
-  applyCoverFlowConfig();
-  rebuildCoverFlowCards();
-  applyCoverFlowVisibility();
+  // cover-flow uses a parallel widget tree; keep its config, card list, and
+  // visibility in sync with the grid's.
+  m_coverFlow->refreshForViewTypeChange();
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {

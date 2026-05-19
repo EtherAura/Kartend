@@ -4,6 +4,7 @@
 #include "applysettingsdialog.h"
 #include "collectionremover.h"
 #include "collectionutils.h"
+#include "isettingsdialog.h"
 #include "settingsmodel.h"
 #include <memory>
 #include <QDialog>
@@ -26,6 +27,7 @@ class QPushButton;
 QT_END_NAMESPACE
 
 class CollectionTreeWidget;
+class ConfigProfileController;
 class DetailsPaneManager;
 class GamepadCaptureController;
 class ScrollManager;
@@ -33,7 +35,7 @@ class NavigationManager;
 class SidebarPanel;
 class TreeManager;
 
-class SettingsDialog : public QDialog, public CollectionRemoverHost {
+class SettingsDialog : public QDialog, public CollectionRemoverHost, public ISettingsDialog {
   Q_OBJECT
 
 public:
@@ -51,7 +53,16 @@ public:
                           int initialIndex = -1);
   ~SettingsDialog() override;
 
-  [[nodiscard]] const QList<CollectionConfig> &getCollections() const { return collections; }
+  // ISettingsDialog — neutral role interface for the data-layer controller.
+  [[nodiscard]] const QList<CollectionConfig> &getCollections() const override {
+    return collections;
+  }
+
+  /// Run the dialog modally. Thin forwarder so the single derived override
+  /// satisfies both QDialog::exec() and the ISettingsDialog::exec() contract
+  /// (otherwise the interface's pure virtual would leave SettingsDialog
+  /// abstract).
+  int exec() override { return QDialog::exec(); }
 
   /// Returns the index of the collection currently selected in the tree.
   [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }
@@ -276,6 +287,12 @@ private:
   /// select-target) and the orchestrator that strings them together
   /// with the user-confirm prompt. Parented to this dialog.
   CollectionRemover *m_collectionRemover = nullptr;
+
+  /// Configuration backup/restore controller — owns the Export / Load
+  /// config-profile controls and their .cfg export/import logic.
+  /// Parented to this dialog. setupGeneralSettingsConnections() hands it
+  /// the three borrowed widgets.
+  ConfigProfileController *m_configProfileController = nullptr;
 
   /// active scope for Save actions. Defaults to `Current` so
   /// legacy behavior is preserved until the user explicitly opts into a

@@ -3,7 +3,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingshelpers.cpp
   settingsmanager.cpp
   settingsmanagercollections.cpp
-  isettingsmanager.h
   settingshelpers.h
   settingsmanager.h
 )

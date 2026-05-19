@@ -2,9 +2,9 @@
 // split out from itemwidgetfactory.cpp.
 #include "itemwidgetfactory.h"
 
-#include "artworkmanager.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "itemartwork.h"
 #include "itemwidget.h"
 #include "loggingcategories.h"

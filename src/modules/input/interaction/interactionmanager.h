@@ -3,6 +3,7 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
+#include "iinteractionmanager.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
 #include "setuputils.h"
 #include <memory>
@@ -39,7 +40,7 @@ class INavigationManager;
 class ISettingsManager;
 class IDetailsPaneManager;
 class IDetailPageManager;
-class ScrollManager;
+class IScrollManager;
 class ISessionManager;
 class IArtworkManager;
 class DetailsPane;
@@ -55,7 +56,7 @@ struct InteractionManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
   // Manager dependencies (can be overridden or taken from ctx)
-  ScrollManager *scrollManager = nullptr;
+  IScrollManager *scrollManager = nullptr;
   IDetailsPaneManager *detailsPaneManager = nullptr;
   IDetailPageManager *detailPageManager = nullptr;
   ISettingsManager *settingsManager = nullptr;
@@ -82,7 +83,7 @@ struct InteractionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
+  SETUP_GETTER_INLINE_MGR_SAME(IScrollManager *, ScrollManager, scrollManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDetailPageManager *, DetailPageManager, detailPageManager)
   SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
@@ -123,7 +124,7 @@ struct InteractionManagerSetup {
  * Sub-managers are registered in ApplicationContext after setup for sibling
  * access.
  */
-class InteractionManager : public QObject {
+class InteractionManager : public QObject, public IInteractionManager {
   Q_OBJECT
 public:
   explicit InteractionManager(QObject *parent = nullptr);
@@ -152,30 +153,30 @@ public:
   void handleWidgetDoubleClickedWithCollection(const QString &filePath, int collectionIndex);
   void selectItemByIndex(int index, bool allowHorizontalScroll);
   void clearSelection();
-  void clearSelectionAndFocus();
-  [[nodiscard]] int currentSelectedIndex() const;
+  void clearSelectionAndFocus() override;
+  [[nodiscard]] int currentSelectedIndex() const override;
   [[nodiscard]] int getCurrentGridWidth() const;
   void toggleSearchMode();
   void updateSearchModeButton();
   void updateSearchBarPlaceholder();
   void launchItemWithCollection(const QString &filePath, int collectionIndex);
-  [[nodiscard]] bool isWheelScrolling() const;
+  [[nodiscard]] bool isWheelScrolling() const override;
   auto eventFilter(QObject *obj, QEvent *event) -> bool override;
   auto handleGlobalKeyPress(QKeyEvent *event) -> bool;
   [[nodiscard]] ItemWidget *getSelectedMediaItem() const;
   void setSelectedMediaItem(ItemWidget *widget);
-  [[nodiscard]] QString selectedFilePath() const;
+  [[nodiscard]] QString selectedFilePath() const override;
   void ensureItemVisible(int index, bool allowHorizontalScroll);
   void applyImmediateViewportPositioningForSelection(int targetIndex);
-  void initializeSearchModeForCurrentCollection();
-  void beginSelectionRestore(int targetIndex);
-  void cancelPendingSelectionRestore();
-  void resetSelectionRestoreState(); // Reset for new navigation (allows
-                                     // auto-restore)
-  void stopRepeat(bool suppressRecentering = false);
+  void initializeSearchModeForCurrentCollection() override;
+  void beginSelectionRestore(int targetIndex) override;
+  void cancelPendingSelectionRestore() override;
+  void resetSelectionRestoreState() override; // Reset for new navigation (allows
+                                              // auto-restore)
+  void stopRepeat(bool suppressRecentering = false) override;
   // Stops any running scroll animations (wheel/arrow key) to prevent stale
   // animations from applying after a view rebuild (e.g., entering a subfolder).
-  void stopScrollAnimations();
+  void stopScrollAnimations() override;
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
   // Opens the custom-fields editor for the given media item.
@@ -240,7 +241,7 @@ public:
   // Navigation progress state - set by NavigationManager during collection
   // switches
   [[nodiscard]] bool isNavigationInProgress() const { return m_navigationInProgress; }
-  void setNavigationInProgress(bool inProgress) { m_navigationInProgress = inProgress; }
+  void setNavigationInProgress(bool inProgress) override { m_navigationInProgress = inProgress; }
 
   // Centralized interaction state holder - provides typed access to state
   // that was previously stored as Qt dynamic properties
@@ -262,7 +263,7 @@ signals:
   void selectionChanged(int index);
 
 public slots:
-  void saveCurrentSelection();
+  void saveCurrentSelection() override;
   void handleImmediateSearchTextChanged(const QString &text);
   /// Triggered when the user activates (Enter / double-click) while the
   /// artwork preview overlay is visible. Hides the overlay, clears expand
@@ -352,7 +353,7 @@ private:
   // below are the canonical read path; never cache sibling-manager pointers
   // as direct fields.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] ScrollManager *scrollMgr() const {
+  [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {

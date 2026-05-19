@@ -14,9 +14,9 @@
 
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "isettingsmanager.h"
 #include "mainwindow.h"
 #include "scrollmanager.h"
-#include "settingsmanager.h"
 #include "textzoom.h"
 #include "textzoomhud.h"
 #include "toolbarcontroller.h"

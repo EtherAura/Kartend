@@ -32,6 +32,8 @@
 #include "queryhelpers.h"
 #include "uiconstants.h"
 
+class PreparedStatementCache;
+
 namespace QueryManagerInternal {
 
 inline auto buildFtsPrefixQuery(const QString &raw) -> QString {
@@ -74,8 +76,7 @@ inline void insertIfAbsent(Map &map, const Key &key, const Value &value) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Filesystem-scan helpers (deduplicated from querymanager.cpp,
-// querymanagerscan.cpp, querymanagerscanandsave.cpp, querymanagerpersist.cpp)
+// Filesystem-scan helpers — used by the scan subsystem (scanservice.cpp).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Result struct for parallel directory scanning.
@@ -369,16 +370,41 @@ private:
 
 /// Appends one collection's resolved file list to the combined output maps,
 /// applying optional canonical-path dedup across collections.
-void appendFileMapsAndListCanonical(
-    int collectionIndex, const CollectionConfig &expandedCollection,
-    const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
-    QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
-    QHash<QString, QString> &fileToMediaDir, QHash<QString, int> &fileToCollectionIndex,
-    bool dedup, QSet<QString> *seenCanonicalPaths = nullptr,
-    QHash<QString, QString> *canonicalPathCache = nullptr);
+void appendFileMapsAndListCanonical(int collectionIndex, const CollectionConfig &expandedCollection,
+                                    const QString &mappingArtworkDir, const QStringList &filePaths,
+                                    QStringList &allFilePaths,
+                                    QHash<QString, QString> &allFileNames,
+                                    QHash<QString, QString> &fileToArtworkDir,
+                                    QHash<QString, QString> &fileToMediaDir,
+                                    QHash<QString, int> &fileToCollectionIndex, bool dedup,
+                                    QSet<QString> *seenCanonicalPaths = nullptr,
+                                    QHash<QString, QString> *canonicalPathCache = nullptr);
 
 /// Sorts file paths in place according to the given SortMode.
 void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Connection-level item operations shared by the load and scan paths.
+// They belong to neither QueryManager nor ScanService — they operate over a
+// borrowed worker connection (and, for the delete, its prepared-statement
+// cache) — so they live here as free functions callable from both. Both were
+// QueryManager members before the ScanService extraction. Definitions are in
+// querymanagerstatichelpers.cpp.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Deletes a collection's items rows and the collection row itself. Retries
+/// with exponential backoff on SQLite lock contention. No-op if @p db is
+/// closed.
+void clearCollectionFromDatabaseByUuid(QSqlDatabase &db, PreparedStatementCache &cache,
+                                       const QString &collectionUuid);
+
+/// One-time reconcile for the v13 path-convention change: rewrites pre-v13
+/// relative items.path values to ABSOLUTE form and backfills rel_path,
+/// preserving every other column. Gated by the `items_paths_absolutized` meta
+/// flag, so it is a cheap no-op once every non-playlist collection has been
+/// processed. Must run before any scan so the absolute-vs-absolute join in
+/// deleteItemsMissingFromScan stays consistent.
+void maybeAbsolutizeItemPaths(QSqlDatabase &db, const QList<CollectionConfig> &allCollections);
 
 } // namespace QueryManagerInternal
 

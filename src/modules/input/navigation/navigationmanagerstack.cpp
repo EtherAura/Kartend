@@ -4,15 +4,15 @@
 #include "navigationmanager.h"
 
 #include "applicationcontext.h"
-#include "artworkmanager.h"
 #include "detailspane.h"
+#include "iartworkmanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
+#include "isettingsmanager.h"
 #include "navigationhelpers.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
-#include "settingsmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 

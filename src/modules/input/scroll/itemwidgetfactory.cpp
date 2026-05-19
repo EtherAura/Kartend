@@ -1,9 +1,9 @@
 // Factory for creating and configuring ItemWidget instances.
 #include "itemwidgetfactory.h"
 
-#include "artworkmanager.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "itemwidget.h"
 #include "textzoom.h"
 #include "uiconstants.h"

@@ -10,10 +10,10 @@
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
 #include "detailpagehelpers.h"
 #include "detailpageoverlay.h"
-#include "detailspanemanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
 #include "itemartwork.h"
 #include "videoutils.h"
 
@@ -136,4 +136,8 @@ void DetailPageManager::hideOverlay() {
   if (m_overlay) {
     m_overlay->hideOverlay();
   }
+}
+
+bool DetailPageManager::isOverlayActive() const {
+  return m_overlay && m_overlay->isActive();
 }

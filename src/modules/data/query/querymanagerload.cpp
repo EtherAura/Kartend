@@ -50,9 +50,9 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
   // v13 path-convention reconcile: rewrite any pre-v13 relative items.path
   // rows to absolute (and backfill rel_path) BEFORE the per-collection loop
   // can trigger a scan — the absolute-vs-absolute join in
-  // deleteMissingItemsByUuidUsingScannedItems depends on it. Gated by a meta
-  // flag, so this is a cheap no-op after it has completed once.
-  maybeAbsolutizeItemPaths(allCollections);
+  // deleteItemsMissingFromScan depends on it. Gated by a meta flag, so this
+  // is a cheap no-op after it has completed once.
+  QueryManagerInternal::maybeAbsolutizeItemPaths(m_db, allCollections);
 
   QStringList allFilePaths;
   QHash<QString, QString> allFileNames;
@@ -76,7 +76,7 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
 
     // Only emit progress signal when a scan is actually needed (not for cached
     // loads)
-    if (needsRescan(collectionIndex, collection)) {
+    if (m_scanService.needsRescan(collectionIndex, collection)) {
       emit scanProgress(collectionIndex + 1, totalCollections, collection.name);
     }
 
@@ -163,9 +163,9 @@ void QueryManager::loadItems(const CollectionContext &context,
   QString resolvedArtworkDir =
       CollectionUtils::resolveArtworkDirectory(ctx.currentIndex, allCollections);
 
-  QueryManagerInternal::appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths,
-                                 allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-                                 fileToCollectionIndex, false);
+  QueryManagerInternal::appendFileMapsAndListCanonical(
+      ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths, allFilePaths, allFileNames,
+      fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
 
   QueryManagerInternal::sortFiles(allFilePaths, ctx.sortMode);
 

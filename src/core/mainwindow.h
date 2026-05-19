@@ -3,6 +3,8 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
+#include "imainwindow.h"
+#include <functional>
 #include <memory>
 #include <QHash>
 #include <QList>
@@ -47,7 +49,9 @@ class NowPlayingOverlay;
 class DetailPageOverlay;
 class DetailPageManager;
 class MenuController;
+class MarqueeController;
 class TextZoomHud;
+class ISettingsDialog;
 
 namespace kart {
 class KartManager;
@@ -57,7 +61,7 @@ namespace TimerUtils {
 class DebouncedTimer;
 }
 
-class MainWindow : public QMainWindow {
+class MainWindow : public QMainWindow, public IMainWindow {
   Q_OBJECT
 
 public:
@@ -83,8 +87,13 @@ public:
   ApplicationContext m_appContext; // Shared context for manager setup
 
   void refreshTitleCounts();
-  void updateWindowTitleForCollection(int collectionIndex);
+  void updateWindowTitleForCollection(int collectionIndex) override;
   void rebuildHierarchyCache();
+
+  // IMainWindow — neutral role interface for the data-layer coordinators.
+  [[nodiscard]] const QList<CollectionConfig> &collections() const override {
+    return m_collections;
+  }
   [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const {
     return m_hierarchyCache;
   }
@@ -130,7 +139,8 @@ public:
   /// collection-tree picker, per-item checkboxes, media-type filter,
   /// Auto/Interactive toggle, and per-collection BatchScrapeRunner
   /// orchestration.
-  void openScraperDialog(int preCollectionIndex = -1, const QString &preItemPath = QString());
+  void openScraperDialog(int preCollectionIndex = -1,
+                         const QString &preItemPath = QString()) override;
 
   /// Accessor for the long-lived ScraperService that survives
   /// dialog close + app restart. Owns the active scrape queue;
@@ -232,18 +242,11 @@ private:
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;
   TextZoomHud *m_textZoomHud = nullptr;
-  /// Secondary-monitor "marquee" / topper window. Lazily created the
-  /// first time settings.marqueeEnabled is true; lives on the screen
-  /// chosen via settings.marqueeScreenName. Owned by MainWindow so it
-  /// disposes alongside the app rather than leaking on exit.
-  class MarqueeWindow *m_marqueeWindow = nullptr;
-  /// Coalesces marquee-artwork refreshes during selection storms (wheel
-  /// scrolling, arrow-key holds). Each selectionChanged tick re-runs path
-  /// expansion + a filesystem video probe + (in image mode) a QPixmap disk
-  /// load — same per-tick cost the sidebar refresh used to pay before its
-  /// own debounce. Trailing-edge fire mirrors DetailsPaneManager's metadata
-  /// debouncer so a single click still feels instant.
-  TimerUtils::DebouncedTimer *m_marqueeDebouncer = nullptr;
+  /// Drives the secondary-monitor "marquee" / topper window — owns the
+  /// MarqueeWindow (lazily created on first enable) and the trailing-edge
+  /// artwork-refresh debounce timer. applyMarqueeSettings() and
+  /// updateMarqueeArtwork() delegate straight to it.
+  std::unique_ptr<MarqueeController> m_marqueeController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -272,6 +275,18 @@ private:
   ScrapeResultDialog *m_scraperDialog = nullptr;
 
   void setupManagerConnections();
+
+  /// Build the factory the data-layer SettingsDialogController uses to
+  /// construct + signal-wire the concrete SettingsDialog. Lives on MainWindow
+  /// because only the ui/ side may name SettingsDialog and its Qt signals;
+  /// the controller drives the result through the neutral ISettingsDialog
+  /// interface. Both openSettingsDialog call sites assign the result into
+  /// SettingsDialogContext::createSettingsDialog.
+  [[nodiscard]] std::function<std::unique_ptr<ISettingsDialog>(
+      QWidget *, const QList<CollectionConfig> &, int,
+      std::function<void(const QList<CollectionConfig> &)>, std::function<void(int)>)>
+  makeSettingsDialogFactory();
+
   void updateWindowTitleWithFilter(int visible, int total);
   /// Refreshes the itemPositionLabel in the top bar with the current
   /// selection position and total item count.

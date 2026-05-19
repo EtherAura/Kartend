@@ -19,7 +19,7 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "settingsmanager.h"
+#include "isettingsmanager.h"
 #include "uiconstants.h"
 
 // Stops key/mouse repeat navigation and restores artwork / centering properties

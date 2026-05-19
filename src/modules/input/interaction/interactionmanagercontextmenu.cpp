@@ -18,24 +18,22 @@
 #include "collectionutils.h"
 #include "createsmartplaylistdialog.h"
 #include "customfieldsdialog.h"
-#include "databasemanager.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
+#include "imainwindow.h"
+#include "inavigationmanager.h"
+#include "iplaylistmanager.h"
+#include "iselectionmanager.h"
 #include "itemmetadata.h"
 #include "itemwidget.h"
-#include "launcherchooserdialog.h"
 #include "launchmanager.h"
-#include "mainwindow.h"
 #include "metadatalookupprovider.h"
 #include "metadataprovider.h"
 #include "metadataproviderregistry.h"
-#include "navigationmanager.h"
 #include "pathutils.h"
-#include "playlistmanager.h"
 #include "scrapepersistence.h"
-#include "scraperesultdialog.h"
 #include "scrollmanager.h"
-#include "selectionmanager.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
@@ -180,13 +178,16 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // live inside the dialog now.
       QAction *scraperAction = menu.addAction(tr("Scraper…"));
       QObject::connect(scraperAction, &QAction::triggered, this, [this, filePath]() {
-        auto *mw = qobject_cast<MainWindow *>(QApplication::activeWindow());
+        // Reach the main window through its neutral IMainWindow role
+        // interface — IMainWindow is a plain abstract base, so cross-cast
+        // with dynamic_cast, not qobject_cast.
+        auto *mw = dynamic_cast<IMainWindow *>(QApplication::activeWindow());
         if (!mw) {
           // Fall back to walking the parent chain — the active
           // window may be the menu's own QMenu while the click
           // is dispatching.
           for (QWidget *w = QApplication::focusWidget(); w; w = w->parentWidget()) {
-            mw = qobject_cast<MainWindow *>(w);
+            mw = dynamic_cast<IMainWindow *>(w);
             if (mw) break;
           }
         }
@@ -256,9 +257,13 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
                 : std::clamp(owning.defaultLauncherIndex, 0, launcherCount - 1);
         QObject::connect(setLauncherAction, &QAction::triggered, this,
                          [this, filePath, collectionName, launcherNames, defaultIndex]() {
-                           const int chosen = LauncherChooserDialog::choose(
-                               QApplication::activeWindow(), collectionName, launcherNames,
-                               defaultIndex);
+                           // The chooser dialog lives in the UI layer; route
+                           // through LaunchManager's owner-injected callback.
+                           if (!launchManager()) {
+                             return;
+                           }
+                           const int chosen = launchManager()->promptLauncherChoice(
+                               collectionName, launcherNames, defaultIndex);
                            if (chosen < 0) {
                              return; // User cancelled.
                            }

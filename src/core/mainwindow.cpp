@@ -22,23 +22,28 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "attractmanager.h"
-#include "cachemanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
+#include "eventmanager.h"
 #include "gridwidthdebouncer.h"
+#include "icachemanager.h"
+#include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "kartmanager.h"
+#include "kartprogressdialog.h"
 #include "kartreader.h"
 
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
+#include "launcherchooserdialog.h"
 #include "launchmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include "marqueecontroller.h"
 #include "menucontroller.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
@@ -50,7 +55,6 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
 #include "splashoverlay.h"
@@ -79,6 +83,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_appManager = std::make_unique<ApplicationManager>(this);
   m_appManager->initialize(&m_appContext);
   m_scraperService = std::make_unique<Scraper::ScraperService>(this);
+  m_marqueeController = std::make_unique<MarqueeController>(this);
 
   ui->setupUi(this);
   setupUI();
@@ -484,6 +489,24 @@ void MainWindow::setupManagerConnections() {
   connectScrollBars();
   connectFilterToolbar();
 
+  // EventManager gates item-grid input while a modal scrape dialog is up,
+  // and LaunchManager prompts a launcher chooser for multi-launcher
+  // collections. Both dialog types live in the UI layer, so MainWindow
+  // injects the callbacks rather than the input module including the
+  // dialog headers.
+  if (auto *interaction = getInteractionManager()) {
+    if (auto *events = interaction->eventManager()) {
+      events->setModalScrapeDialogVisiblePredicate(
+          []() { return ScrapeResultDialog::isAnyInstanceVisible(); });
+    }
+    if (auto *launch = interaction->launchManager()) {
+      launch->setChooseLauncherCallback([this](const QString &collectionName,
+                                               const QStringList &launcherNames, int defaultIndex) {
+        return LauncherChooserDialog::choose(window(), collectionName, launcherNames, defaultIndex);
+      });
+    }
+  }
+
   // detail page wiring. The overlay was created in
   // mainwindowsetup.cpp and parented to ui->centralwidget so it can cover
   // the entire window. Hand it to DetailPageManager along with the sidebar
@@ -533,6 +556,24 @@ void MainWindow::setupManagerConnections() {
       if (auto *sm = getSettingsManager()) {
         sm->saveCollections(m_collections);
       }
+    });
+
+    // KartManager is a data-layer manager and no longer #includes the
+    // KartProgressDialog (a ui/ type). It emits a kartProgressStarted signal
+    // when a long import/export begins; the owner builds the dialog here and
+    // wires the remaining progress/lifecycle signals to it. The dialog is the
+    // connection context for those onward hops, so they tear down when it
+    // closes (WA_DeleteOnClose). cancelRequested routes back to KartManager.
+    connect(km, &kart::KartManager::kartProgressStarted, this, [this, km](const QString &title) {
+      auto *dlg = new KartProgressDialog(title, this);
+      dlg->setAttribute(Qt::WA_DeleteOnClose);
+      connect(km, &kart::KartManager::kartProgressFraction, dlg, &KartProgressDialog::setFraction);
+      connect(km, &kart::KartManager::kartProgressEntry, dlg, &KartProgressDialog::setEntryName);
+      connect(km, &kart::KartManager::kartProgressFinished, dlg, &KartProgressDialog::markFinished);
+      connect(km, &kart::KartManager::kartProgressFailed, dlg, &QDialog::reject);
+      connect(dlg, &KartProgressDialog::cancelRequested, km,
+              &kart::KartManager::cancelActiveKartOperation);
+      dlg->show();
     });
   }
 }

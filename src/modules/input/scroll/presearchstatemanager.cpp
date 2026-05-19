@@ -1,5 +1,5 @@
 #include "presearchstatemanager.h"
-#include "artworkmanager.h"
+#include "iartworkmanager.h"
 #include "itemwidget.h"
 #include "widgetpoolmanager.h"
 #include <QScrollArea>

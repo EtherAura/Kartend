@@ -1,10 +1,10 @@
 #ifndef NAVIGATIONMANAGER_H
 #define NAVIGATIONMANAGER_H
 
-#include "inavigationmanager.h"
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "inavigationmanager.h"
 #include "setuputils.h"
 #include <functional>
 #include <memory>
@@ -23,11 +23,11 @@ class QScrollArea;
 class QStackedWidget;
 QT_END_NAMESPACE
 
-class InteractionManager;
+class IInteractionManager;
 class InteractionStateHolder;
 class ISettingsManager;
 class IDetailsPaneManager;
-class ScrollManager;
+class IScrollManager;
 class IDatabaseManager;
 class ISessionManager;
 class IArtworkManager;
@@ -36,10 +36,7 @@ class SelectionRestoreManager;
 class LoadingOverlay;
 class EmptyStateWidget;
 class NavigationStackManager;
-class BackgroundVideoWidget;
-class BackdropBlurOverlay;
-class HeaderLogoOverlay;
-class VignetteOverlay;
+class CollectionBackgroundController;
 
 /**
  * @brief Setup struct for NavigationManager dependencies.
@@ -118,7 +115,7 @@ public slots:
   bool showCollectionItems(int collectionIndex) override;
   void navigateWithSharedItems(int collectionIndex);
   void safeReloadCollection(int collectionIndex) override;
-  void forceRescanCollection(int collectionIndex);
+  void forceRescanCollection(int collectionIndex) override;
   void onCollectionSelected(int collectionIndex);
   void onSubcollectionEntered(int subcollectionIndex);
   void onVirtualFolderEntered(const QString &folderPath) override;
@@ -156,8 +153,13 @@ public slots:
   void onBreadcrumbLinkClicked(const QString &link);
 
   // Appearance methods - can be called from SettingsManager after dialog closes
-  void applyBackgroundForCollection(int collectionIndex);
-  void applyPrimaryColorForCollection(int collectionIndex);
+  void applyBackgroundForCollection(int collectionIndex) override;
+  void applyPrimaryColorForCollection(int collectionIndex) override;
+
+signals:
+  /// Emitted when a media-library load fails. The owner (MainWindow) shows the
+  /// error dialog — NavigationManager stays out of the UI-chrome layer.
+  void mediaLibraryErrorRaised(const ErrorUtils::ErrorContext &error);
 
 private:
   // Helper methods for navigateWithSharedItems
@@ -174,7 +176,7 @@ private:
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] InteractionManager *interactionMgr() const {
+  [[nodiscard]] IInteractionManager *interactionMgr() const {
     return m_ctx ? m_ctx->interactionManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {
@@ -186,7 +188,7 @@ private:
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
-  [[nodiscard]] ScrollManager *scrollMgr() const {
+  [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
@@ -225,30 +227,11 @@ private:
   // Recreated on each onMediaLibraryError() call; QPointer because the
   // Qt parent (m_gridContainer) owns it and may delete it during teardown.
   QPointer<QWidget> m_errorWidget;
-  // lazy-created on first collection that requests a video
-  // background. Parented to the items viewport so its lifetime mirrors the
-  // scroll area's. Hidden + decoder-released when the active collection
-  // doesn't use video, so collections without one pay zero playback cost.
-  BackgroundVideoWidget *m_backgroundVideo = nullptr;
-  // lazy-created header logo overlay; same lifetime/parenting
-  // pattern as m_backgroundVideo. Hidden when the active collection has no
-  // logo configured.
-  HeaderLogoOverlay *m_headerLogo = nullptr;
-  // lazy-created vignette overlay layered above the logo so
-  // the logo isn't darkened along with the corners.
-  VignetteOverlay *m_vignette = nullptr;
-  // lazy-created toolbar backdrop blur. Hidden whenever the
-  // active collection has the toggle off or uses a video bg (sampling
-  // frames every paint is too expensive without GPU shaders).
-  BackdropBlurOverlay *m_toolbarBlur = nullptr;
-  // throttle for parallax stylesheet rebuilds. Lazy-created
-  // on first scroll while parallax is active. Caps QSS updates at ~60Hz
-  // so a fast scroll doesn't thrash Qt's stylesheet engine.
-  QTimer *m_parallaxThrottle = nullptr;
-  bool m_scrollListenerConnected = false;
-  // Helpers exposed via the .cpp.
-  void onItemsScrolled();
-  void applyParallaxOffset();
+  // Owns the items-page background render (video / image / color bg, header
+  // logo, vignette, toolbar blur, wallpaper parallax) and the primary-color
+  // toolbar/menubar/search-bar theming. applyBackgroundForCollection and
+  // applyPrimaryColorForCollection delegate straight to it.
+  std::unique_ptr<CollectionBackgroundController> m_backgroundController;
   std::function<bool()> m_isShuttingDown;
   std::function<void()> m_refreshTitleCounts;
 

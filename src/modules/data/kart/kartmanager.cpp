@@ -9,11 +9,16 @@
 
 #include "collectionutils.h"
 #include "kartdb.h"
+// kartmergedialog.h is intentionally still included: the merge dialog is a
+// blocking, interactive decision (KartManager::makeInteractiveResolver runs
+// dlg.exec() mid-import and waits on the user's choice). Converting that to a
+// signal-driven flow is a larger redesign tracked as a follow-up. The
+// one-way progress dialog, by contrast, has been replaced with signals — see
+// the kartProgress* signals in the header.
+#include "isettingsmanager.h"
 #include "kartmergedialog.h"
-#include "kartprogressdialog.h"
 #include "kartreader.h"
 #include "kartwriter.h"
-#include "settingsmanager.h"
 
 namespace kart {
 
@@ -35,6 +40,18 @@ KartManager::~KartManager() = default;
 
 void KartManager::setupReferences(const KartManagerSetup &setup) {
   m_setup = setup;
+}
+
+void KartManager::cancelActiveKartOperation() {
+  // Whichever operation is in flight (at most one) gets its cooperative
+  // cancel flag set. The progress dialog's cancelRequested signal lands here,
+  // so the dialog type stays entirely on the owner's side.
+  if (m_activeReader) {
+    m_activeReader->cancel();
+  }
+  if (m_activeWriter) {
+    m_activeWriter->cancel();
+  }
 }
 
 ErrorUtils::Result<KartReader::ExtractResult> KartManager::extractKart(const QString &kartPath,
@@ -230,28 +247,29 @@ void KartManager::exportCollectionInteractive(int collectionIndex) {
 }
 
 void KartManager::runImport(const QString &kartPath, const QString &destDir) {
-  QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
-
   m_activeReader = std::make_unique<KartReader::Extractor>(this);
-  auto *dlg = new KartProgressDialog(tr("Importing Kart"), parent);
-  dlg->setAttribute(Qt::WA_DeleteOnClose);
 
-  connect(m_activeReader.get(), &KartReader::Extractor::progress, dlg,
-          &KartProgressDialog::setFraction, Qt::QueuedConnection);
-  connect(m_activeReader.get(), &KartReader::Extractor::entryExtracted, dlg,
-          &KartProgressDialog::setEntryName, Qt::QueuedConnection);
-  connect(dlg, &KartProgressDialog::cancelRequested, m_activeReader.get(),
-          &KartReader::Extractor::cancel);
+  // Ask the owner to put up a progress dialog, then feed it through signals.
+  // reader->progress/entryExtracted fire on the QtConcurrent worker thread,
+  // so the chain into our own signals is a QueuedConnection (marshals onto
+  // KartManager's thread); the owner's onward signal->dialog hops are
+  // same-thread and stay direct.
+  emit kartProgressStarted(tr("Importing Kart"));
+
+  connect(m_activeReader.get(), &KartReader::Extractor::progress, this,
+          &KartManager::kartProgressFraction, Qt::QueuedConnection);
+  connect(m_activeReader.get(), &KartReader::Extractor::entryExtracted, this,
+          &KartManager::kartProgressEntry, Qt::QueuedConnection);
 
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>(this);
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>::finished, this,
-          [this, watcher, dlg]() {
+          [this, watcher]() {
             const auto extracted = watcher->result();
             watcher->deleteLater();
             m_activeReader.reset();
             if (extracted.isError()) {
               emit importFailed(extracted.error());
-              if (dlg) dlg->reject();
+              emit kartProgressFailed();
               QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
               if (parent) {
                 QMessageBox::warning(parent, tr("Import Kart"), extracted.error().message);
@@ -263,13 +281,13 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
                 finalizeImport(extracted.value(), true, makeInteractiveResolver(parent));
             if (finalRes.isError()) {
               emit importFailed(finalRes.error());
-              if (dlg) dlg->reject();
+              emit kartProgressFailed();
               if (parent) {
                 QMessageBox::warning(parent, tr("Import Kart"), finalRes.error().message);
               }
               return;
             }
-            dlg->markFinished();
+            emit kartProgressFinished();
             emit collectionImported(finalRes.value());
           });
 
@@ -277,43 +295,39 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
     KartReader::Extractor extractor;
     return extractor.extractTo(kartPath, destDir);
   }));
-  dlg->show();
 }
 
 void KartManager::runExport(int collectionIndex, const QString &outPath) {
-  QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
-
   m_activeWriter = std::make_unique<KartWriter::Writer>(this);
-  auto *dlg = new KartProgressDialog(tr("Exporting Kart"), parent);
-  dlg->setAttribute(Qt::WA_DeleteOnClose);
 
-  connect(m_activeWriter.get(), &KartWriter::Writer::progress, dlg,
-          &KartProgressDialog::setFraction, Qt::QueuedConnection);
-  connect(dlg, &KartProgressDialog::cancelRequested, m_activeWriter.get(),
-          &KartWriter::Writer::cancel);
+  // Same one-way progress flow as runImport(); see the comment there. The
+  // writer emits no per-entry signal, so kartProgressEntry is never sent.
+  emit kartProgressStarted(tr("Exporting Kart"));
+
+  connect(m_activeWriter.get(), &KartWriter::Writer::progress, this,
+          &KartManager::kartProgressFraction, Qt::QueuedConnection);
 
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<void>>(this);
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<void>>::finished, this,
-          [this, watcher, dlg, outPath]() {
+          [this, watcher, outPath]() {
             const auto res = watcher->result();
             watcher->deleteLater();
             m_activeWriter.reset();
             if (res.isError()) {
               emit exportFailed(res.error());
-              if (dlg) dlg->reject();
+              emit kartProgressFailed();
               QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
               if (parent) {
                 QMessageBox::warning(parent, tr("Export Kart"), res.error().message);
               }
             } else {
-              dlg->markFinished();
+              emit kartProgressFinished();
               emit kartExported(outPath);
             }
           });
 
   watcher->setFuture(QtConcurrent::run(
       [this, collectionIndex, outPath]() { return exportCollection(collectionIndex, outPath); }));
-  dlg->show();
 }
 
 } // namespace kart

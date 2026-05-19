@@ -346,7 +346,7 @@ launchParameters=--fullscreen --verbose
 
 ## For developers
 
-- Launch pipeline: [src/modules/behavior/launch/](../../src/modules/behavior/launch/)
+- Launch pipeline: [src/modules/input/launch/](../../src/modules/input/launch/)
   (`LaunchManager`, validators, `LaunchUtils`).
 - Preset resolution: `LauncherUtils::resolvePreset(config, presets)` in
   [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h)

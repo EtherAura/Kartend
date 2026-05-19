@@ -12,22 +12,22 @@
 #include <QTimer>
 #include <QWidget>
 
-#include "animationmanager.h"
 #include "applicationcontext.h"
-#include "artworkmanager.h"
 #include "collectionutils.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
+#include "ianimationmanager.h"
+#include "iartworkmanager.h"
+#include "idetailspanemanager.h"
+#include "imousemanager.h"
+#include "inavigationmanager.h"
 #include "interactionstateholder.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "itemwidget.h"
-#include "mousemanager.h"
-#include "navigationmanager.h"
+#include "iviewportmanager.h"
 #include "scrollmanager.h"
 #include "selectionhelpers.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "uiconstants.h"
-#include "viewportmanager.h"
 
 #include <QLoggingCategory>
 // Default to warning — persistSelection fires per grid move, which

@@ -10,6 +10,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   attractpanel.cpp
   collectionstreeshell.cpp
   collectiontreewidget.cpp
+  configprofilecontroller.cpp
   configurationpanel.cpp
   controlspanel.cpp
   fontspanel.cpp
@@ -43,6 +44,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   attractpanel.h
   collectionstreeshell.h
   collectiontreewidget.h
+  configprofilecontroller.h
   configurationpanel.h
   controlspanel.h
   fontspanel.h

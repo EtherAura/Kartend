@@ -1,23 +1,22 @@
 // Manages collection switching, navigation stack, and subcollection hierarchy
 // traversal.
 #include "navigationmanager.h"
-#include "artworkmanager.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "collectionbackgroundcontroller.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
-#include "errordialog.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
-#include "itemwidget.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -43,6 +42,7 @@ Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
 
 NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent), m_stackManager(std::make_unique<NavigationStackManager>(this)),
+      m_backgroundController(std::make_unique<CollectionBackgroundController>(this)),
       m_selectionRestoreManager(std::make_unique<SelectionRestoreManager>(this)) {}
 
 NavigationManager::~NavigationManager() = default;
@@ -76,6 +76,18 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
     restoreSetup.ctx = setup.ctx;
     restoreSetup.isShuttingDown = m_isShuttingDown;
     m_selectionRestoreManager->setupReferences(restoreSetup);
+  }
+
+  // Setup the background controller with the borrowed UI surface it drives.
+  if (m_backgroundController) {
+    CollectionBackgroundControllerSetup bgSetup;
+    bgSetup.itemScrollArea = m_itemScrollArea;
+    bgSetup.itemsTopBar = m_itemsTopBar;
+    bgSetup.menubar = m_menubar;
+    bgSetup.searchBar = m_searchBar;
+    bgSetup.currentCollectionIndex = m_currentCollectionIndex;
+    bgSetup.collections = m_collections;
+    m_backgroundController->setupReferences(bgSetup);
   }
 }
 

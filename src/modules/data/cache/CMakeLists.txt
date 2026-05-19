@@ -4,5 +4,4 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   cachemanagerdisk.cpp
   cachediskstorage.h
   cachemanager.h
-  icachemanager.h
 )

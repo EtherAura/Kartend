@@ -8,10 +8,10 @@
 #include <QDir>
 
 #include "applicationcontext.h"
-#include "artworkmanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
 #include "detailspane.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "itemartwork.h"
 #include "itemartworklinksdialog.h"
 #include "itemmetadata.h"

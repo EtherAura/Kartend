@@ -33,12 +33,12 @@ public:
   }
 
   void handleReloadRequired(const QList<CollectionConfig> &, const QList<CollectionConfig> &,
-                            const QList<CollectionConfig> &, int, DetailsPaneManager *,
-                            ScrollManager *, NavigationManager *, IArtworkManager *, ICacheManager *,
-                            int) override {}
+                            const QList<CollectionConfig> &, int, IDetailsPaneManager *,
+                            IScrollManager *, INavigationManager *, IArtworkManager *,
+                            ICacheManager *, int) override {}
 
   void handleLayoutChanges(QWidget *, const QList<CollectionConfig> &, int, bool, bool, bool, bool,
-                           bool, bool, bool, bool, DetailsPaneManager *, ScrollManager *,
+                           bool, bool, bool, bool, IDetailsPaneManager *, IScrollManager *,
                            IArtworkManager *, int) override {}
 
 private:

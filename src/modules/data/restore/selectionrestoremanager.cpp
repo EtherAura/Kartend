@@ -8,12 +8,12 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "interactionmanager.h"
+#include "iinteractionmanager.h"
 #include "interactionstateholder.h"
-#include "scrollmanager.h"
+#include "iscrollmanager.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "selectionrestorehelpers.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "setuputils.h"
 #include "uiconstants.h"
 
@@ -225,7 +225,7 @@ void SelectionRestoreManager::scheduleSelectionRestore(int desiredIndex, int max
     // Connection. Lambda capture by value is required so the handle outlives
     // the surrounding scope.
     auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(scrollMgr(), &ScrollManager::virtualScrollSetupComplete, this,
+    *conn = connect(scrollMgr(), &IScrollManager::virtualScrollSetupComplete, this,
                     [conn, doRestore, validator]() {
                       QObject::disconnect(*conn);
                       if (validator()) {

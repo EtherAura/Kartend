@@ -10,16 +10,11 @@ Kartend uses a **module-based architecture** where `MainWindow` owns `Applicatio
 
 ```
 src/
+├── api/                 # Neutral header-only role interfaces (i*.h); no .cpp
 ├── core/                # Main application entry and window
 ├── modules/             # Feature modules grouped by domain
-│   ├── behavior/        # App lifecycle, animation, search, launch, event filtering
-│   │   ├── animation/   # Scroll animations, easing curves
-│   │   ├── application/ # Manager lifecycle coordination
-│   │   ├── event/       # Event filtering, gesture detection
-│   │   ├── filter/      # Search and subcollection filtering
-│   │   ├── launch/      # Item launching, process spawning
-│   │   ├── search/      # Search bar logic, search modes
-│   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
+│   ├── behavior/        # Manager lifecycle coordination
+│   │   └── application/ # Manager lifecycle coordination
 │   ├── data/            # Persistence: SQLite, cache, sessions, settings, playlists
 │   │   ├── cache/       # In-memory pixmap cache, disk persistence
 │   │   ├── database/    # SQLite coordination via worker thread
@@ -31,25 +26,34 @@ src/
 │   │   ├── scraper/     # Metadata scraping (core/ + parsers/ + providers/)
 │   │   ├── session/     # Selection state persistence
 │   │   └── settings/    # Config file I/O, settings dialog
-│   ├── input/           # User input and navigation
+│   ├── input/           # User input, navigation, and input-driven behavior
+│   │   ├── animation/   # Scroll animations, easing curves
+│   │   ├── attract/     # Attract-mode idle scroll/advance
+│   │   ├── event/       # Event filtering, gesture detection
+│   │   ├── filter/      # Search and subcollection filtering
 │   │   ├── gamepad/     # Optional Qt6::Gamepad / SDL2 input backend
 │   │   ├── interaction/ # Central input coordination, selection state
 │   │   ├── keyboard/    # Arrow key navigation, key repeat, alphabetic jumping
+│   │   ├── launch/      # Item launching, process spawning
 │   │   ├── mouse/       # Click-hold scrolling, wheel events
-│   │   ├── navigation/  # Collection switching, navigation stack
-│   │   ├── scroll/      # Virtual scrolling, grid layout, widget factory
-│   │   └── selection/   # Selection logic, click processing
-│   └── media/           # Artwork pipeline, detail pages, overlays, viewport
+│   │   ├── navigation/  # Collection switching, navigation stack, background
+│   │   │                # + loading + empty-state widgets
+│   │   ├── overlay/     # Selection / search loading overlays
+│   │   ├── scroll/      # Virtual scrolling, grid layout, widget factory,
+│   │   │                # list-header widget
+│   │   ├── search/      # Search bar logic, search modes
+│   │   ├── selection/   # Selection logic, click processing
+│   │   ├── viewport/    # Centering, viewport positioning
+│   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
+│   └── media/           # Artwork pipeline, detail pages
 │       ├── artwork/     # Async artwork loading with QtConcurrent
-│       ├── attract/     # Attract-mode idle scroll/advance
 │       ├── detailpage/  # Detail-page coordinator
-│       ├── detailspane/ # Metadata / details side pane
-│       ├── overlay/     # Selection / search loading overlays
-│       └── viewport/    # Centering, viewport positioning
+│       └── detailspane/ # Metadata / details side pane
 ├── ui/                  # UI components and constants
 │   ├── dialogs/         # Dialogs grouped by domain: settings/, collection/,
 │   │                    # launcher/, scraper/, kart/ (loose dialogs at root)
-│   └── widgets/         # Item widget, details pane, list header, overlays
+│   └── widgets/         # Item widget, details pane, generic overlays,
+│                        # video-preview widgets
 └── utils/               # Shared utilities and data structures
 ```
 
@@ -59,6 +63,7 @@ src/
 |-----------|-------------|
 | `main.cpp` | Application entry point that initializes Qt and displays the main window. |
 | `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. |
+| `marqueecontroller` | Drives the secondary-monitor marquee / topper window — owns the MarqueeWindow and the artwork-refresh debounce timer (extracted from MainWindow). |
 
 ## Modules (`src/modules/`)
 
@@ -97,7 +102,7 @@ src/
 - **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`, `PlaylistManager`, `DetailPageManager`, `KartManager`
 - **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`, `AttractManager`
 
-Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
+Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`, `CollectionBackgroundController`.
 
 ## UI (`src/ui/`)
 

@@ -68,11 +68,7 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QDir>
 #include <QFileInfo>
-#include <QGuiApplication>
-#include <QPixmap>
-#include <QScreen>
 #include <QScrollBar>
 #include <QTimer>
 #include <QToolButton>
@@ -85,11 +81,12 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
+#include "errordialog.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
-#include "marqueewindow.h"
+#include "marqueecontroller.h"
 #include "metadatalookupprovider.h"
 #include "metadataproviderregistry.h"
 #include "navigationmanager.h"
@@ -101,7 +98,6 @@
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
-#include "videoutils.h"
 
 // =====================================================================
 // Slot handlers — extracted from inline lambdas. Each handler captures
@@ -362,35 +358,16 @@ void MainWindow::onInteractionSelectionChanged(int /*index*/) {
   // on direct selection moves.
   if (!QApplication::closingDown()) {
     updateItemPositionLabel();
-    // Push the new selection's artwork to the marquee through the debouncer
-    // so a wheel/arrow storm coalesces into a single trailing-edge refresh
-    // — the per-tick cost (path expand + FS video probe + image-mode disk
-    // load) is the same the sidebar used to pay before its own debounce.
-    // Fallback to direct call if setup hasn't wired the debouncer yet
-    // (rare: very early teardown / tests).
-    if (m_marqueeDebouncer) {
-      m_marqueeDebouncer->trigger();
-    } else {
-      updateMarqueeArtwork();
+    // Push the new selection's artwork to the marquee through the controller's
+    // debounced refresh so a wheel/arrow storm coalesces into a single
+    // trailing-edge update.
+    if (m_marqueeController) {
+      m_marqueeController->requestArtworkRefresh();
     }
   }
 }
 
 namespace {
-
-/// Resolve a configured marquee screen name to a live QScreen pointer.
-/// Empty / missing names return the primary screen so a never-configured
-/// (or unplugged-since-config) target still works.
-QScreen *resolveMarqueeScreen(const QString &screenName) {
-  if (!screenName.isEmpty()) {
-    for (QScreen *s : QGuiApplication::screens()) {
-      if (s->name() == screenName) return s;
-    }
-    qWarning("Marquee: configured screen '%s' not found — falling back to primary",
-             qPrintable(screenName));
-  }
-  return QGuiApplication::primaryScreen();
-}
 
 /// Resolve the metadata-lookup provider for a collection scrape. An
 /// explicit `CollectionConfig::scraperProviderId` override wins; with no
@@ -443,108 +420,18 @@ pickLookupProvider(std::vector<std::unique_ptr<MetadataProvider>> &registry,
 } // namespace
 
 void MainWindow::applyMarqueeSettings() {
-  if (QApplication::closingDown()) return;
-  if (!m_generalSettings.marqueeEnabled) {
-    // Disable path: tear the window down so the user reclaims the
-    // secondary monitor. The pointer is set to nullptr (rather than
-    // hide()) so the next enable starts from a clean state — handles
-    // the case where the user changed the target screen as part of
-    // the same Save action.
-    if (m_marqueeDebouncer) {
-      // Drop any in-flight selection-storm trigger so it can't fire after
-      // teardown and run updateMarqueeArtwork's no-op early return for
-      // nothing. Harmless either way; this just avoids the spurious wakeup.
-      m_marqueeDebouncer->cancel();
-    }
-    if (m_marqueeWindow) {
-      m_marqueeWindow->close();
-      m_marqueeWindow->deleteLater();
-      m_marqueeWindow = nullptr;
-    }
-    return;
+  if (m_marqueeController) {
+    m_marqueeController->applyMarqueeSettings();
   }
-  QScreen *target = resolveMarqueeScreen(m_generalSettings.marqueeScreenName);
-  if (!m_marqueeWindow) {
-    m_marqueeWindow = new MarqueeWindow(target);
-  } else {
-    m_marqueeWindow->pinToScreen(target);
-  }
-  m_marqueeWindow->show();
-  // Settings save / first enable — push immediately, not through the
-  // debouncer, so the user sees the marquee populated as soon as they
-  // hit Save (no 60ms blank flash).
-  if (m_marqueeDebouncer) {
-    m_marqueeDebouncer->cancel();
-  }
-  updateMarqueeArtwork();
 }
 
 void MainWindow::updateMarqueeArtwork() {
-  if (!m_marqueeWindow || !m_generalSettings.marqueeEnabled) return;
-
-  // Mode 2 — video / attract loop. Source priority: per-item preview
-  // video (resolved like the details-pane preview) → collection's
-  // backgroundVideo. Empty path stops playback and clears the window.
-  if (m_generalSettings.marqueeMode == 2) {
-    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
-    QString videoPath;
-    if (auto *im = getInteractionManager()) {
-      const QString filePath = im->selectedFilePath();
-      if (!filePath.isEmpty()) {
-        const CollectionConfig &cfg = m_collections[currentCollectionIndex];
-        QString videoDir = PathUtils::validateAndExpandPath(cfg.videoDirectory, cfg.name);
-        if (!videoDir.isEmpty()) {
-          videoPath = VideoUtils::findVideoForFile(filePath, videoDir);
-        }
-        // Fall back to the artwork-tree's `video/` subdir, mirroring
-        // the details-pane preview lookup so a single-root collection
-        // still finds its videos.
-        if (videoPath.isEmpty()) {
-          const QString artDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
-          if (!artDir.isEmpty()) {
-            videoPath = VideoUtils::findVideoForFile(filePath, QDir(artDir).filePath("video"));
-          }
-        }
-      }
-    }
-    if (videoPath.isEmpty()) {
-      videoPath = m_collections[currentCollectionIndex].backgroundVideo;
-    }
-    m_marqueeWindow->setVideo(videoPath);
-    return;
+  if (m_marqueeController) {
+    m_marqueeController->updateMarqueeArtwork();
   }
-
-  QString artworkPath;
-  if (m_generalSettings.marqueeMode == 0) {
-    // Item Artwork mode — the cover of the currently-selected item.
-    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
-    auto *im = getInteractionManager();
-    if (!im) return;
-    const QString filePath = im->selectedFilePath();
-    if (filePath.isEmpty()) return;
-    const CollectionConfig &cfg = m_collections[currentCollectionIndex];
-    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
-    artworkPath = ArtworkManager::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDir);
-  } else {
-    // Collection Icon mode — the active collection's icon. Stable
-    // even as the user scrolls so the marquee acts as a banner.
-    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
-    artworkPath = m_collections[currentCollectionIndex].collectionIcon;
-  }
-
-  if (artworkPath.isEmpty()) {
-    m_marqueeWindow->setPixmap(
-        QPixmap()); // Clear to background; user sees the topper still exists.
-    return;
-  }
-  QPixmap pix(artworkPath);
-  m_marqueeWindow->setPixmap(pix);
 }
 
 void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
-  qInfo() << "[MainWindow] openScraperDialog called preCol=" << preCollectionIndex
-          << "preItem=" << preItemPath << "dialogExists=" << (m_scraperDialog != nullptr)
-          << "service=" << m_scraperService.get();
   if (!getDatabaseManager()) {
     QMessageBox::warning(this, tr("Scraper"), tr("Database is not ready."));
     return;
@@ -801,6 +688,11 @@ void MainWindow::connectDatabaseManager() {
                    &NavigationManager::onItemsRangeLoaded);
   QObject::connect(db, &DatabaseManager::errorOccurred, nav,
                    &NavigationManager::onMediaLibraryError);
+  // NavigationManager raises media-library errors as a signal; MainWindow owns
+  // the ErrorDialog so the input layer stays free of UI-chrome includes.
+  QObject::connect(
+      nav, &NavigationManager::mediaLibraryErrorRaised, this,
+      [this](const ErrorUtils::ErrorContext &error) { ErrorDialog::showError(window(), error); });
 
   // DatabaseManager → ScrollManager
   QObject::connect(db, &DatabaseManager::visualIndexForPathLoaded, scroll,

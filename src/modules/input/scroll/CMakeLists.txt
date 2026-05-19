@@ -1,15 +1,16 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   arrowkeyscrollhelper.cpp
+  coverflowcontroller.cpp
   datasourcemanager.cpp
   gridlayoutcalculator.cpp
   itemwidgetfactory.cpp
   itemwidgetfactorycreate.cpp
+  listheaderwidget.cpp
   presearchstatemanager.cpp
   scrolldatamanager.cpp
   scrolleventhandler.cpp
   scrollhelpers.cpp
   scrollmanager.cpp
-  scrollmanagercoverflow.cpp
   scrollmanagerdata.cpp
   scrollmanagerevents.cpp
   scrollmanagerfilter.cpp
@@ -22,9 +23,11 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   virtualcontainermanager.cpp
   virtualscrollengine.cpp
   arrowkeyscrollhelper.h
+  coverflowcontroller.h
   datasourcemanager.h
   gridlayoutcalculator.h
   itemwidgetfactory.h
+  listheaderwidget.h
   presearchstatemanager.h
   scrolldatamanager.h
   scrolleventhandler.h

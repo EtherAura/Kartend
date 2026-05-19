@@ -48,8 +48,7 @@ public:
                            qint64 recursiveCount) override;
   [[nodiscard]] bool getCollectionCounts(const CollectionConfig &collection,
                                          const QList<CollectionConfig> &allCollections,
-                                         qint64 &itemCount,
-                                         qint64 &recursiveCount) const override;
+                                         qint64 &itemCount, qint64 &recursiveCount) const override;
 
   // Cached viewport for instant startup
   void setCachedViewport(const QString &collectionKey, int startIndex, int totalItems,

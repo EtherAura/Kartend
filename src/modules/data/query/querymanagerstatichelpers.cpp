@@ -4,19 +4,32 @@
 //   - sortFiles
 // These touch no QSqlDatabase or worker-thread state — they operate only
 // on caller-supplied containers / strings.
+#include "collectionutils.h"
+#include "errorutils.h"
 #include "pathutils.h"
+#include "preparedstatementcache.h"
 #include "queryhelpers.h"
 #include "querymanager.h"
 #include "querymanagerhelpers.h"
+#include "querymanagersql.h"
 #include <algorithm>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QList>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QString>
 #include <QStringList>
+#include <QThread>
+#include <QVariant>
 #include <QVector>
 #include <random>
+#include <stdexcept>
 
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
 using QueryManagerInternal::canonicalKeyPath;
 using QueryManagerInternal::displayNameForBase;
 using QueryManagerInternal::insertIfAbsent;
@@ -176,3 +189,209 @@ void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode) {
   }
 }
 
+void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
+                                                             PreparedStatementCache &cache,
+                                                             const QString &collectionUuid) {
+  if (!db.isOpen()) {
+    return;
+  }
+
+  // Retry logic for database lock scenarios
+  constexpr int MAX_RETRIES = 5;
+  constexpr int BASE_DELAY_MS = 100;
+
+  for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
+    if (attempt > 0) {
+      // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+      QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+    }
+
+    if (!db.transaction()) {
+      continue; // Retry if can't start transaction
+    }
+
+    try {
+      // Use cached prepared statement for deleting items
+      QSqlQuery &query = cache.get(QuerySQL::DELETE_ITEMS_BY_UUID);
+      query.bindValue(0, collectionUuid);
+      if (!query.exec()) {
+        throw std::runtime_error(query.lastError().text().toStdString());
+      }
+
+      // Use cached prepared statement for deleting collection
+      QSqlQuery &delc = cache.get(QuerySQL::DELETE_COLLECTION_BY_UUID);
+      delc.bindValue(0, collectionUuid);
+      delc.exec();
+
+      db.commit();
+      return; // Success - exit retry loop
+    } catch (const std::exception &e) {
+      db.rollback();
+
+      QString errorText = QString::fromStdString(e.what());
+      bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
+
+      if (!isLockError || attempt == MAX_RETRIES - 1) {
+        // Non-lock error or final attempt - log and give up
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to clear collection from database",
+                                          "QueryManagerInternal::clearCollectionFromDatabaseByUuid")
+                       .withDetails(errorText);
+        ErrorUtils::logError(err);
+        return;
+      }
+      // Lock error - will retry
+    }
+  }
+}
+
+void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
+                                                    const QList<CollectionConfig> &allCollections) {
+  if (!db.isOpen()) {
+    return;
+  }
+
+  // Gate: the v13 reconcile only needs to run once. Seed the flag at '0' if
+  // it doesn't exist yet, then bail immediately if a prior run completed.
+  {
+    QSqlQuery seed(db);
+    if (!seed.exec("INSERT OR IGNORE INTO meta(key, value) "
+                   "VALUES('items_paths_absolutized', '0')")) {
+      // meta table may not exist on a very old DB that never reached the v3
+      // migration; nothing to reconcile in that case either.
+      return;
+    }
+  }
+  {
+    QSqlQuery check(db);
+    if (check.exec("SELECT value FROM meta WHERE key = 'items_paths_absolutized'") &&
+        check.next() && check.value(0).toString() == QStringLiteral("1")) {
+      return;
+    }
+  }
+
+  if (!db.transaction()) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                     "Failed to start transaction to absolutize item paths",
+                                     "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                   .withDetails(db.lastError().text());
+    ErrorUtils::logError(err);
+    return;
+  }
+
+  bool allCollectionsProcessed = true;
+  bool reconcileFailed = false;
+
+  for (const CollectionConfig &cfg : allCollections) {
+    // Playlists are virtual collections — they own no items rows of their
+    // own, so there is nothing to rewrite (and no media directory to use).
+    if (cfg.isPlaylist) {
+      continue;
+    }
+
+    // Compute the expanded media dir + uuid IDENTICALLY to every other call
+    // site (loadAllCollections, computeCollectionUuid, the scanner).
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    if (expandedMediaDir.trimmed().isEmpty()) {
+      // Media directory unresolved (e.g. an offline mount). Skip this
+      // collection and remember the run is incomplete so the next startup
+      // retries it.
+      allCollectionsProcessed = false;
+      continue;
+    }
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    if (uuid.isEmpty()) {
+      allCollectionsProcessed = false;
+      continue;
+    }
+
+    QSqlQuery rows(db);
+    rows.prepare("SELECT id, path, rel_path FROM items WHERE collection_uuid = ?");
+    rows.addBindValue(uuid);
+    if (!rows.exec()) {
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to read items for path absolutization",
+                                       "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                     .withDetails(rows.lastError().text());
+      ErrorUtils::logError(err);
+      reconcileFailed = true;
+      break;
+    }
+
+    const QDir mediaDir(expandedMediaDir);
+
+    struct PendingUpdate {
+      qint64 id = 0;
+      QString path;
+      QString relPath;
+    };
+    QList<PendingUpdate> updates;
+    while (rows.next()) {
+      const qint64 id = rows.value(0).toLongLong();
+      const QString storedPath = rows.value(1).toString();
+      const QVariant relPathValue = rows.value(2);
+
+      if (!QDir::isAbsolutePath(storedPath)) {
+        // Pre-v13 row: path is relative. Rewrite to absolute and stash the
+        // original relative form into rel_path.
+        updates.append({id, mediaDir.absoluteFilePath(storedPath), storedPath});
+      } else if (relPathValue.isNull() || relPathValue.toString().isEmpty()) {
+        // Path is already absolute (written by a post-v13 scan, or a prior
+        // partial reconcile) but rel_path was never populated — backfill it.
+        updates.append({id, storedPath, mediaDir.relativeFilePath(storedPath)});
+      }
+      // else: already fully migrated, nothing to do.
+    }
+
+    QSqlQuery update(db);
+    update.prepare("UPDATE items SET path = ?, rel_path = ? WHERE id = ?");
+    for (const PendingUpdate &u : updates) {
+      update.bindValue(0, u.path);
+      update.bindValue(1, u.relPath);
+      update.bindValue(2, u.id);
+      if (!update.exec()) {
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to absolutize item path",
+                                  "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                .withDetails(update.lastError().text());
+        ErrorUtils::logError(err);
+        reconcileFailed = true;
+        break;
+      }
+    }
+    if (reconcileFailed) {
+      break;
+    }
+  }
+
+  if (reconcileFailed) {
+    db.rollback();
+    return;
+  }
+
+  // Only flip the flag to '1' when EVERY non-playlist collection was
+  // processed. If any was skipped (offline mount), leave it '0' so the next
+  // startup retries — the per-row guards above make the retry idempotent.
+  if (allCollectionsProcessed) {
+    QSqlQuery mark(db);
+    mark.prepare("UPDATE meta SET value = '1' WHERE key = 'items_paths_absolutized'");
+    if (!mark.exec()) {
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to mark item paths as absolutized",
+                                       "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                     .withDetails(mark.lastError().text());
+      ErrorUtils::logError(err);
+      db.rollback();
+      return;
+    }
+  }
+
+  if (!db.commit()) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                     "Failed to commit item path absolutization",
+                                     "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                   .withDetails(db.lastError().text());
+    ErrorUtils::logError(err);
+    db.rollback();
+  }
+}

@@ -243,14 +243,9 @@ target_compile_definitions(${KARTEND_LIB_TARGET}
 target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   ${SRC_DIR}
+  ${SRC_DIR}/api
   ${SRC_DIR}/core
-  ${SRC_DIR}/modules/behavior/animation
   ${SRC_DIR}/modules/behavior/application
-  ${SRC_DIR}/modules/behavior/event
-  ${SRC_DIR}/modules/behavior/filter
-  ${SRC_DIR}/modules/behavior/launch
-  ${SRC_DIR}/modules/behavior/search
-  ${SRC_DIR}/modules/behavior/widgetpool
   ${SRC_DIR}/modules/data/cache
   ${SRC_DIR}/modules/data/database
   ${SRC_DIR}/modules/data/dat
@@ -263,19 +258,25 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/data/scraper/providers
   ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/modules/data/settings
+  ${SRC_DIR}/modules/input/animation
+  ${SRC_DIR}/modules/input/attract
+  ${SRC_DIR}/modules/input/event
+  ${SRC_DIR}/modules/input/filter
   ${SRC_DIR}/modules/input/gamepad
   ${SRC_DIR}/modules/input/interaction
   ${SRC_DIR}/modules/input/keyboard
+  ${SRC_DIR}/modules/input/launch
   ${SRC_DIR}/modules/input/mouse
   ${SRC_DIR}/modules/input/navigation
+  ${SRC_DIR}/modules/input/overlay
   ${SRC_DIR}/modules/input/scroll
+  ${SRC_DIR}/modules/input/search
   ${SRC_DIR}/modules/input/selection
+  ${SRC_DIR}/modules/input/viewport
+  ${SRC_DIR}/modules/input/widgetpool
   ${SRC_DIR}/modules/media/artwork
-  ${SRC_DIR}/modules/media/attract
   ${SRC_DIR}/modules/media/detailpage
   ${SRC_DIR}/modules/media/detailspane
-  ${SRC_DIR}/modules/media/overlay
-  ${SRC_DIR}/modules/media/viewport
   ${SRC_DIR}/ui
   ${SRC_DIR}/ui/widgets/items
   ${SRC_DIR}/ui/widgets/media

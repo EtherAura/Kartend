@@ -31,12 +31,11 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
 #include "gridutils.h"
+#include "iartworkmanager.h"
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
@@ -46,7 +45,6 @@
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
-#include "viewportmanager.h"
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")

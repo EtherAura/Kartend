@@ -8,12 +8,14 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   querymanagerfetchrange.cpp
   querymanagerlifecycle.cpp
   querymanagerload.cpp
-  querymanagerpersist.cpp
   querymanagerscan.cpp
-  querymanagerscanandsave.cpp
   querymanagerstatichelpers.cpp
+  scanneditemstable.cpp
+  scanservice.cpp
   scanworkcontroller.cpp
   preparedstatementcache.h
   querymanager.h
+  scanneditemstable.h
+  scanservice.h
   scanworkcontroller.h
 )

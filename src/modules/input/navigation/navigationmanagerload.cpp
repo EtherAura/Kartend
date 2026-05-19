@@ -4,15 +4,14 @@
 #include "navigationmanager.h"
 
 #include "applicationcontext.h"
-#include "artworkmanager.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
-#include "detailspanemanager.h"
 #include "emptystatewidget.h"
-#include "errordialog.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
-#include "itemwidget.h"
+#include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
 #include "navigationstackmanager.h"
@@ -20,7 +19,6 @@
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -425,9 +423,9 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
     }
   }
 
-  // Show error dialog for database errors - use the full ErrorContext
-  QWidget *parentWidget = m_gridContainer ? m_gridContainer->window() : nullptr;
-  ErrorDialog::showError(parentWidget, error);
+  // Surface the database error to the owner, which shows the ErrorDialog —
+  // NavigationManager itself stays out of the UI-chrome layer.
+  emit mediaLibraryErrorRaised(error);
 
   // Drop the previous error widget so rapid load failures don't accumulate
   // children on m_gridContainer.

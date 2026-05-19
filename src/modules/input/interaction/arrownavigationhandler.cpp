@@ -3,11 +3,11 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "interactionstateholder.h"
+#include "iviewportmanager.h"
 #include "keyboardmanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "uiconstants.h"
-#include "viewportmanager.h"
 
 #include <QApplication>
 #include <QScrollArea>

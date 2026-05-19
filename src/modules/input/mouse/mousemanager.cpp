@@ -4,12 +4,12 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
+#include "ikeyboardmanager.h"
 #include "interactionstateholder.h"
+#include "iselectionmanager.h"
 #include "itemwidget.h"
-#include "keyboardmanager.h"
 #include "mousehelpers.h"
 #include "scrollmanager.h"
-#include "selectionmanager.h"
 #include "uiconstants.h"
 
 #include <QScrollArea>
@@ -140,7 +140,7 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
                                            int gridWidth, int totalItems) {
   Q_UNUSED(clickPos);
 
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   if (!scroll || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
@@ -318,7 +318,7 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex, int gridWidth)
 }
 
 void MouseManager::onMouseHoldScrollStep() {
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
   if (!m_mouseHoldScrolling || !scroll) {
     stopMouseHoldScrolling();
     return;
@@ -340,7 +340,7 @@ void MouseManager::onMouseHoldScrollStep() {
 // --- Widget Finding Utilities (static) ---
 
 std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &clickPos,
-                                                                  ScrollManager *scrollManager,
+                                                                  IScrollManager *scrollManager,
                                                                   QWidget *gridContainer) {
   if (!scrollManager || !gridContainer) {
     return {nullptr, -1};

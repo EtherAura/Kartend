@@ -46,7 +46,8 @@ public:
   /// dismiss the detail page (collection change, search, etc.).
   void hideOverlay() override;
 
-  [[nodiscard]] DetailPageOverlay *overlay() const override { return m_overlay; }
+  /// True while the detail-page overlay is showing.
+  [[nodiscard]] bool isOverlayActive() const override;
 
 private:
   // ctx is the single source of truth for sibling managers (DetailsPaneManager,

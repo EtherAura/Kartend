@@ -1,5 +1,5 @@
 #include "gamepadmanager.h"
-#include "keyboardmanager.h"
+#include "ikeyboardmanager.h"
 #include "uiconstants.h"
 
 #include <QApplication>
@@ -15,7 +15,7 @@
 #endif
 
 // GamepadManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(GamepadManagerSetup, KeyboardManager *, KeyboardManager, keyboardManager)
+SETUP_GETTER_DEF_MGR_SAME(GamepadManagerSetup, IKeyboardManager *, KeyboardManager, keyboardManager)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const GeneralSettings *, GeneralSettings,
                           generalSettings)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const bool *, IsShuttingDown, isShuttingDown)

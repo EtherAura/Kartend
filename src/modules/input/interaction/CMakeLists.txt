@@ -9,9 +9,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   interactionmanagerselection.cpp
   interactionmanagersetup.cpp
   interactionmanagerwiring.cpp
-  interactionstateholder.cpp
   arrownavigationhandler.h
   interactionhelpers.h
   interactionmanager.h
-  interactionstateholder.h
 )

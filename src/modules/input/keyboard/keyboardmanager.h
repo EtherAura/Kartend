@@ -2,6 +2,7 @@
 #define KEYBOARDMANAGER_H
 
 #include "collectionutils.h"
+#include "ikeyboardmanager.h"
 #include "setuputils.h"
 #include <QKeyEvent>
 #include <QObject>
@@ -44,7 +45,9 @@ struct KeyboardManagerSetup {
  * shortcuts. Coordinates with ScrollManager for selection updates and
  * InteractionManager for centering.
  */
-class KeyboardManager : public QObject {
+// QObject must be the first base; IKeyboardManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class KeyboardManager : public QObject, public IKeyboardManager {
   Q_OBJECT
 
 public:
@@ -54,30 +57,30 @@ public:
   void setupReferences(const KeyboardManagerSetup &setup);
 
   // Key event handling
-  [[nodiscard]] bool handleKeyPress(QKeyEvent *event, bool searchBarFocused);
-  [[nodiscard]] bool handleKeyRelease(QKeyEvent *event);
+  [[nodiscard]] bool handleKeyPress(QKeyEvent *event, bool searchBarFocused) override;
+  [[nodiscard]] bool handleKeyRelease(QKeyEvent *event) override;
 
   // Key repeat management
   void beginHoldRepeat();
-  void stopRepeat(bool suppressRecentering = false);
-  [[nodiscard]] bool isRepeating() const { return m_repeating; }
-  void finalizeKeyRepeatForKey(Qt::Key key, int direction, bool vertical);
-  [[nodiscard]] bool consumePendingNavigationKey(Qt::Key &outKey);
+  void stopRepeat(bool suppressRecentering = false) override;
+  [[nodiscard]] bool isRepeating() const override { return m_repeating; }
+  void finalizeKeyRepeatForKey(Qt::Key key, int direction, bool vertical) override;
+  [[nodiscard]] bool consumePendingNavigationKey(Qt::Key &outKey) override;
 
   // Navigation state
-  [[nodiscard]] bool isPhysicalKeyDown() const { return m_physicalKeyDown; }
-  void setPhysicalKeyDown(bool down) { m_physicalKeyDown = down; }
-  [[nodiscard]] int repeatDelta() const { return m_repeatDelta; }
-  [[nodiscard]] bool repeatVertical() const { return m_repeatVertical; }
+  [[nodiscard]] bool isPhysicalKeyDown() const override { return m_physicalKeyDown; }
+  void setPhysicalKeyDown(bool down) override { m_physicalKeyDown = down; }
+  [[nodiscard]] int repeatDelta() const override { return m_repeatDelta; }
+  [[nodiscard]] bool repeatVertical() const override { return m_repeatVertical; }
   [[nodiscard]] Qt::Key repeatKey() const { return m_repeatKey; }
 
   // Wrap navigation state
-  [[nodiscard]] bool isWrapSequenceActive() const { return m_wrapSequenceActive; }
-  void setWrapSequenceActive(bool active) { m_wrapSequenceActive = active; }
+  [[nodiscard]] bool isWrapSequenceActive() const override { return m_wrapSequenceActive; }
+  void setWrapSequenceActive(bool active) override { m_wrapSequenceActive = active; }
 
   // Continuous scroll state
-  [[nodiscard]] bool isContinuousScrollActive() const { return m_continuousScrollActive; }
-  void setContinuousScrollActive(bool active) { m_continuousScrollActive = active; }
+  [[nodiscard]] bool isContinuousScrollActive() const override { return m_continuousScrollActive; }
+  void setContinuousScrollActive(bool active) override { m_continuousScrollActive = active; }
 
   // Selection calculation helpers
   static int calculateNewSelection(int totalItems, int currentSelection, int direction,
@@ -101,10 +104,10 @@ public:
   static bool deriveDirectionForKey(int key, int gridWidth, int &direction, bool &vertical);
 
   // Prepare for key navigation step
-  void prepareKeyNavigationState();
+  void prepareKeyNavigationState() override;
 
   // Finalize key repeat state
-  void finalizeKeyRepeat(QKeyEvent *event, int direction, bool vertical);
+  void finalizeKeyRepeat(QKeyEvent *event, int direction, bool vertical) override;
 
 signals:
   // Action requests for InteractionManager

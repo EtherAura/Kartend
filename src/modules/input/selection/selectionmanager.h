@@ -2,6 +2,7 @@
 #define SELECTIONMANAGER_H
 
 #include "collectionutils.h"
+#include "iselectionmanager.h"
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
@@ -9,13 +10,13 @@
 #include <QString>
 
 class ItemWidget;
-class ScrollManager;
+class IScrollManager;
 class IDetailsPaneManager;
 class ISessionManager;
 class ISettingsManager;
 class INavigationManager;
-class AnimationManager;
-class ViewportManager;
+class IAnimationManager;
+class IViewportManager;
 class IArtworkManager;
 class DetailsPane;
 class InteractionStateHolder;
@@ -57,7 +58,9 @@ struct SelectionManagerSetup {
  * Coordinates with ScrollManager for widget lookups and DetailsPaneManager for
  * metadata updates.
  */
-class SelectionManager : public QObject {
+// QObject must be the first base; ISelectionManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class SelectionManager : public QObject, public ISelectionManager {
   Q_OBJECT
 
 public:
@@ -67,12 +70,12 @@ public:
   void setupReferences(const SelectionManagerSetup &setup);
 
   // Core selection state accessors
-  [[nodiscard]] int currentSelectedIndex() const { return m_selectedItemIndex; }
+  [[nodiscard]] int currentSelectedIndex() const override { return m_selectedItemIndex; }
   [[nodiscard]] const QString &selectedFilePath() const { return m_selectedFilePath; }
   [[nodiscard]] ItemWidget *selectedWidget() const { return m_selectedMediaItem; }
 
   // Selection state mutators
-  void setSelectedIndex(int index);
+  void setSelectedIndex(int index) override;
   void setSelectedFilePath(const QString &path);
   void setSelectedWidget(ItemWidget *widget);
 
@@ -80,7 +83,7 @@ public:
   // setSelectedIndex() from paths that don't go through selectItemByIndex /
   // selectItemByHover (e.g. wheel scroll, arrow handler, hold-scroll) so that
   // listeners like the toolbar position label stay in sync.
-  void notifySelectionChanged();
+  void notifySelectionChanged() override;
 
   // Primary selection operations
   void clearSelection(bool isShuttingDown = false);
@@ -88,7 +91,7 @@ public:
 
   // Selection restore operations
   void beginSelectionRestore(int targetIndex);
-  void cancelPendingSelectionRestore();
+  void cancelPendingSelectionRestore() override;
   void resetSelectionRestoreState(); // Reset state for new navigation (doesn't
                                      // set userSelectionMade)
   void prepareForRestore(int targetIndex);
@@ -96,12 +99,12 @@ public:
   // Restore-state accessors proxy the canonical state in InteractionStateHolder
   // (m_state->selectionRestore()). m_state is asserted non-null in setup, so
   // these accessors don't guard.
-  [[nodiscard]] bool isRestoringSelection() const;
-  [[nodiscard]] int targetRestoreIndex() const;
+  [[nodiscard]] bool isRestoringSelection() const override;
+  [[nodiscard]] int targetRestoreIndex() const override;
 
   // Restore state flags (exposed for InteractionManager coordination)
-  void setRestoringSelection(bool restoring);
-  void setTargetRestoreIndex(int index);
+  void setRestoringSelection(bool restoring) override;
+  void setTargetRestoreIndex(int index) override;
   void setForceImmediateCenter(bool force);
   [[nodiscard]] bool forceImmediateCenter() const;
 
@@ -112,7 +115,7 @@ public:
   [[nodiscard]] QString titleForIndex(int index, const QList<int> &subcollections) const;
 
   // File path resolution for selection
-  void updateFilePathForSelection(int index, const QList<int> &subcollections);
+  void updateFilePathForSelection(int index, const QList<int> &subcollections) override;
 
   // Widget selection state updates
   void applyWidgetSelection(ItemWidget *widget);
@@ -122,10 +125,10 @@ public:
   [[nodiscard]] ItemWidget *widgetForIndex(int index) const;
 
   // Get subcollections list for current collection
-  [[nodiscard]] QList<int> getSubcollections(int parentIndex) const;
+  [[nodiscard]] QList<int> getSubcollections(int parentIndex) const override;
 
   // Check if selection matches restore target and finalize restore
-  bool checkAndFinalizeRestore(int index);
+  bool checkAndFinalizeRestore(int index) override;
 
   // Click selection helpers
   [[nodiscard]] bool shouldTreatAsNewRow(int targetIndex, int gridWidth) const;
@@ -133,7 +136,7 @@ public:
   [[nodiscard]] static bool isNewRow(int currentSelection, int newSelection, int gridWidth);
 
   // Row tracking for click detection
-  void setLastSelectedRow(int row) { m_lastSelectedRow = row; }
+  void setLastSelectedRow(int row) override { m_lastSelectedRow = row; }
   [[nodiscard]] int lastSelectedRow() const { return m_lastSelectedRow; }
 
   // Click selection processing (moved from InteractionManager)
@@ -163,7 +166,7 @@ public:
   // Select the item currently under the mouse cursor without recentering the
   // viewport; hover selection should not move content out from under the
   // pointer.
-  void selectItemByHover(int index);
+  void selectItemByHover(int index) override;
 
   // Persistence helpers
   void persistSuppressedSelectionAndMaybeCenter(int index, const QList<int> &subcollections,
@@ -207,7 +210,7 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
-  [[nodiscard]] ScrollManager *scrollMgr() const {
+  [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
@@ -222,10 +225,10 @@ private:
   [[nodiscard]] INavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
-  [[nodiscard]] AnimationManager *animMgr() const {
+  [[nodiscard]] IAnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }
-  [[nodiscard]] ViewportManager *viewportMgr() const {
+  [[nodiscard]] IViewportManager *viewportMgr() const {
     return m_ctx ? m_ctx->viewportManager() : nullptr;
   }
   [[nodiscard]] IArtworkManager *artworkMgr() const {

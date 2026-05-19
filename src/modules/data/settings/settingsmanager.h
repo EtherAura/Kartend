@@ -31,8 +31,8 @@ public:
   void handleReloadRequired(const QList<CollectionConfig> &collections,
                             const QList<CollectionConfig> &newCollections,
                             const QList<CollectionConfig> &originalCollections,
-                            int viewingCollectionIndex, DetailsPaneManager *detailsPaneManager,
-                            ScrollManager *scrollManager, NavigationManager *navigationManager,
+                            int viewingCollectionIndex, IDetailsPaneManager *detailsPaneManager,
+                            IScrollManager *scrollManager, INavigationManager *navigationManager,
                             IArtworkManager *artworkManager, ICacheManager *cacheManager,
                             int currentCollectionIndex) override;
 
@@ -41,8 +41,8 @@ public:
                            bool scrollbarChangedForView, bool sidebarModeChangedForView,
                            bool gridWidthChangedForView, bool spacingChangedForView,
                            bool alignmentChangedForView, bool fontSizeChangedForView,
-                           bool hideTitlesChangedForView, DetailsPaneManager *detailsPaneManager,
-                           ScrollManager *scrollManager, IArtworkManager *artworkManager,
+                           bool hideTitlesChangedForView, IDetailsPaneManager *detailsPaneManager,
+                           IScrollManager *scrollManager, IArtworkManager *artworkManager,
                            int currentCollectionIndex) override;
 
 private slots:

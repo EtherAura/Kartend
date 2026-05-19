@@ -1,7 +1,7 @@
 // Sibling TU: Qt6::Gamepad backend (attach/detach + input slots) for
 // GamepadManager.
 #include "gamepadmanager.h"
-#include "keyboardmanager.h"
+#include "ikeyboardmanager.h"
 #include "uiconstants.h"
 
 #include <QApplication>

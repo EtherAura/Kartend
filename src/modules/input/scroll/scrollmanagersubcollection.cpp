@@ -1,4 +1,5 @@
 // Subcollection-context + filter cluster split out from scrollmanager.cpp.
+#include "coverflowcontroller.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "itemwidget.h"
@@ -81,11 +82,9 @@ void ScrollManager::rebuildFilteredView() {
   updateVirtualView();
   enforceScrollContentConstraints();
 
-  // cover-flow operates over the same filtered card list, so
-  // any filter rebuild that re-sources the grid also re-sources the
-  // carousel. Gate on coverFlowActive() so grid-mode users don't pay the
-  // per-item descriptor build for no visible result.
-  if (m_coverFlowWidget && coverFlowActive()) {
-    rebuildCoverFlowCards();
-  }
+  // cover-flow operates over the same filtered card list, so any filter
+  // rebuild that re-sources the grid also re-sources the carousel. The
+  // controller gates on the carousel being active so grid-mode users don't
+  // pay the per-item descriptor build for no visible result.
+  m_coverFlow->rebuildCardsIfActive();
 }

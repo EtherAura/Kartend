@@ -8,7 +8,7 @@
 #include <QStringList>
 
 class ScrollManager;
-class SelectionManager;
+class ISelectionManager;
 class FilterManager;
 struct ApplicationContext;
 

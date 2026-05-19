@@ -4,6 +4,7 @@
 #include "artworkpreviewoverlay.h"
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
+#include "iscrollmanager.h"
 #include "setuputils.h"
 #include <memory>
 #include <QDateTime>
@@ -21,7 +22,7 @@ class ItemWidget;
 class DatabaseManager;
 class QPropertyAnimation;
 class IArtworkManager;
-class CoverFlowWidget;
+class CoverFlowController;
 class WidgetPoolManager;
 class FilterManager;
 class DataSourceManager;
@@ -79,7 +80,7 @@ struct ScrollManagerSetup {
  * - Widget ownership: ItemWidgets in m_activeWidgets are managed by
  * WidgetPoolManager
  */
-class ScrollManager : public QObject {
+class ScrollManager : public IScrollManager {
   Q_OBJECT
   // Engine is a sibling helper that drives virtual-scrolling layout and
   // widget materialization. It accesses ScrollManager's state
@@ -90,71 +91,71 @@ public:
   ScrollManager(QObject *parent = nullptr);
   ~ScrollManager() override;
   void setupReferences(const ScrollManagerSetup &setup);
-  void setupVirtualScrolling(int totalCount, const CollectionContext &context);
+  void setupVirtualScrolling(int totalCount, const CollectionContext &context) override;
   // Updates only the media-file portion of the data model (keeps subcollections
   // and virtual folders intact) and recalculates container metrics without
   // tearing down the view.
-  void updateMediaItemCount(int mediaItemCount);
+  void updateMediaItemCount(int mediaItemCount) override;
   void receiveItemsRange(int offset, const QStringList &filePaths,
                          const QHash<QString, QString> &fileNames,
-                         const QHash<QString, QString> &fileToArtworkDir);
-  void cleanup();
-  void updateGridWidth(int newGridWidth);
+                         const QHash<QString, QString> &fileToArtworkDir) override;
+  void cleanup() override;
+  void updateGridWidth(int newGridWidth) override;
   /// live-apply a change to the per-collection items-per-column
   /// for the Horizontal view mode. No-op when the active view is not Horizontal,
   /// since the value only feeds the layout in that mode. Pass 0 to mean
   /// "fall back to gridWidth".
-  void updateHorizontalGridHeight(int newHorizontalGridHeight);
+  void updateHorizontalGridHeight(int newHorizontalGridHeight) override;
   /// track whether the sidebar is currently hidden AND its mode
   /// would shrink the grid (Expand). MainWindow updates this whenever the
   /// sidebar's visibility changes, before triggering recalculateContainerMetrics.
   /// When the flag is true and the active collection has gridWidthSidebarHidden
   /// (or horizontalGridHeightSidebarHidden) configured non-zero, those values
   /// override the primary ones in the layout calculator.
-  void setSidebarShrinkingActive(bool active);
-  [[nodiscard]] bool sidebarShrinkingActive() const { return m_sidebarShrinkingActive; }
-  void updateViewType(ViewType viewType);
-  void updateVirtualView();
-  [[nodiscard]] int getEffectiveHorizontalSpacing() const;
+  void setSidebarShrinkingActive(bool active) override;
+  [[nodiscard]] bool sidebarShrinkingActive() const override { return m_sidebarShrinkingActive; }
+  void updateViewType(ViewType viewType) override;
+  void updateVirtualView() override;
+  [[nodiscard]] int getEffectiveHorizontalSpacing() const override;
   [[nodiscard]] int getFirstVisibleRow() const;
   [[nodiscard]] int getLastVisibleRow() const;
-  void updateSelectionForIndex(int selectedIndex);
-  void refreshSelectionOverlayState();
-  void setForceSelectionOverlayVisible(bool force);
-  [[nodiscard]] QString getSubcollectionName(int subcollectionIndex) const;
-  void recenterVirtualContainer();
+  void updateSelectionForIndex(int selectedIndex) override;
+  void refreshSelectionOverlayState() override;
+  void setForceSelectionOverlayVisible(bool force) override;
+  [[nodiscard]] QString getSubcollectionName(int subcollectionIndex) const override;
+  void recenterVirtualContainer() override;
   [[nodiscard]] HorizontalAlignment getCurrentAlignment() const;
-  void applyFilter(const QString &searchText);
-  void cleanupActiveWidgets();
-  void clearFilter();
-  void showSearchLoadingOverlay();
-  void hideSearchLoadingOverlay();
-  void savePreSearchState();
-  void restorePreSearchState();
-  [[nodiscard]] bool hasPreSearchState() const;
-  [[nodiscard]] int getFilteredIndex(int visualIndex) const;
+  void applyFilter(const QString &searchText) override;
+  void cleanupActiveWidgets() override;
+  void clearFilter() override;
+  void showSearchLoadingOverlay() override;
+  void hideSearchLoadingOverlay() override;
+  void savePreSearchState() override;
+  void restorePreSearchState() override;
+  [[nodiscard]] bool hasPreSearchState() const override;
+  [[nodiscard]] int getFilteredIndex(int visualIndex) const override;
   [[nodiscard]] int getScrollbarWidth() const;
   [[nodiscard]] bool willNeedVerticalScrollbar() const;
-  [[nodiscard]] int getTotalItems() const;
-  [[nodiscard]] const GridMetrics &getMetrics() const { return m_metrics; }
+  [[nodiscard]] int getTotalItems() const override;
+  [[nodiscard]] const GridMetrics &getMetrics() const override { return m_metrics; }
   void enforceScrollContentConstraints();
-  void recreateLayout();
+  void recreateLayout() override;
 
   /// Set file path to restore selection to after items are loaded (for sort
   /// changes)
-  void setPendingSelectionRestoreByPath(const QString &filePath);
+  void setPendingSelectionRestoreByPath(const QString &filePath) override;
 
   /// Check if there's a pending selection restore by file path
   /// Used to skip index-based selection restore during sort changes
-  [[nodiscard]] bool hasPendingSelectionRestoreByPath() const {
+  [[nodiscard]] bool hasPendingSelectionRestoreByPath() const override {
     return !m_pendingRestoreFilePath.isEmpty();
   }
 
   /// Check if artwork preview overlay is currently visible
-  [[nodiscard]] bool isArtworkPreviewVisible() const;
+  [[nodiscard]] bool isArtworkPreviewVisible() const override;
   /// Hide the artwork preview overlay if visible (returns true if it was
   /// visible)
-  bool hideArtworkPreview();
+  bool hideArtworkPreview() override;
   /// Show the artwork preview overlay for the given file path. Used by
   /// expand-mode two-stage activation in InteractionManager.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
@@ -164,48 +165,51 @@ public:
   /// Returns true when a preview was shown, false when the item has
   /// neither a video nor artwork (the overlay stays hidden).
   bool showMediaPreview(const QString &filePath, const QString &artworkDir,
-                        const QString &videoDir);
+                        const QString &videoDir) override;
   /// Forwarder for SelectionDisplayManager::setArtworkPreviewGallery.
   /// Populates the expand-mode overlay's bottom thumb strip so Left/Right
   /// + thumb clicks can cycle between the item's scraped artwork types.
   void setArtworkPreviewGallery(const QList<ArtworkPreviewOverlay::GalleryEntry> &entries);
 
   void centerHorizontalScrollbar(int currentCollectionIndex,
-                                 const QList<CollectionConfig> &collections);
-  void handleLayoutChange();
+                                 const QList<CollectionConfig> &collections) override;
+  void handleLayoutChange() override;
   void notifyUserActivity();
-  [[nodiscard]] int getCurrentGridWidth() const;
-  void updateContextForSubcollection(int subcollectionIndex);
-  void applySubcollectionFilter(int subcollectionIndex);
+  [[nodiscard]] int getCurrentGridWidth() const override;
+  void updateContextForSubcollection(int subcollectionIndex) override;
+  void applySubcollectionFilter(int subcollectionIndex) override;
   [[nodiscard]] int getEffectiveViewportWidth() const;
-  void recalculateContainerMetrics();
-  void forceVirtualViewUpdate();
-  void preCalculateLayout();
-  [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const { return m_activeWidgets; }
+  void recalculateContainerMetrics() override;
+  void forceVirtualViewUpdate() override;
+  void preCalculateLayout() override;
+  [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const override {
+    return m_activeWidgets;
+  }
   // Injects cached items for instant startup display (bypasses database fetch)
   void injectCachedItems(int startIndex, const QStringList &filePaths,
                          const QHash<QString, QString> &fileNames,
-                         const QHash<QString, QString> &artworkPaths = {});
+                         const QHash<QString, QString> &artworkPaths = {}) override;
   // Gets current viewport data for session caching (returns true if valid data)
-  [[nodiscard]] bool getCurrentViewportForCache(int &startIndex, int &totalItems,
-                                                QStringList &filePaths,
-                                                QHash<QString, QString> &fileNames,
-                                                QHash<QString, QString> &artworkPaths) const;
+  [[nodiscard]] bool
+  getCurrentViewportForCache(int &startIndex, int &totalItems, QStringList &filePaths,
+                             QHash<QString, QString> &fileNames,
+                             QHash<QString, QString> &artworkPaths) const override;
   // Data accessors - delegate to ScrollDataManager
-  [[nodiscard]] const QStringList &getFilePaths() const;
-  [[nodiscard]] const QHash<QString, QString> &getFileNames() const;
-  [[nodiscard]] int getSubcollectionCount() const;
-  [[nodiscard]] int getVirtualFolderCount() const;
-  [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
-  [[nodiscard]] QString virtualFolderPathForVisualIndex(int visualIndex) const;
-  void primeLayoutFor(const CollectionConfig &config);
-  void setInitialScrollIndex(int index);
+  [[nodiscard]] const QStringList &getFilePaths() const override;
+  [[nodiscard]] const QHash<QString, QString> &getFileNames() const override;
+  [[nodiscard]] int getSubcollectionCount() const override;
+  [[nodiscard]] int getVirtualFolderCount() const override;
+  [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const override;
+  [[nodiscard]] QString virtualFolderPathForVisualIndex(int visualIndex) const override;
+  void primeLayoutFor(const CollectionConfig &config) override;
+  void setInitialScrollIndex(int index) override;
 
 signals:
   void subcollectionEntered(int subcollectionIndex);
   void virtualFolderEntered(const QString &folderPath);
   void requestItemsRange(int offset, int limit);
-  void virtualScrollSetupComplete();
+  // virtualScrollSetupComplete() is declared on IScrollManager (a QObject
+  // interface); ScrollManager inherits and emits it. Not redeclared here.
   void filterChanged(int visibleItems, int totalOriginal);
   void
   sortModeChangeRequested(SortMode sortMode); // Request sort mode change from list header click
@@ -310,6 +314,12 @@ private:
   // Arrow key scroll helper for centering animation
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
+  // Cover-flow controller: owns the CoverFlowWidget and keeps its card list,
+  // appearance config, and visibility in sync with the grid. ScrollManager
+  // forwards its carousel signals out through coverFlowItemActivated /
+  // coverFlowActiveChanged.
+  std::unique_ptr<CoverFlowController> m_coverFlow;
+
   // Data manager and pre-search state manager are now owned by m_dataSource
   // Raw aliases above (m_dataManager, m_preSearchStateManager).
 
@@ -321,7 +331,7 @@ public:
   // if the item is not part of a subcollection (or the data manager isn't
   // wired). Encapsulates ScrollDataManager so callers don't need to reach
   // into ScrollManager's internals.
-  [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const;
+  [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const override;
 
 private:
   // ctx is the single source of truth for sibling managers (ArtworkManager,
@@ -351,11 +361,6 @@ private:
   bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
-  /// Debounces resolveAndPushCoverFlowVideo + resolveAndPushCoverFlowGallery
-  /// so a wheel sweep across the carousel runs the per-item DB + FS lookups
-  /// once at the trailing edge instead of every ~10ms tick.
-  TimerUtils::DebouncedTimer *m_coverFlowResolveDebouncer = nullptr;
-  int m_pendingCoverFlowVisualIndex = -1;
   qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
 
   // Initial scroll index for pre-positioning before widget creation
@@ -382,27 +387,10 @@ private:
   void setupEmptyVirtualScrolling();
   void setupNormalVirtualScrolling();
 
-  // cover-flow integration — the widget is a sibling of
-  // m_gridContainer in the items page scroll-area layout and is shown only
-  // when CollectionConfig::viewType == CoverFlow.
-  void ensureCoverFlowWidget();
-  void rebuildCoverFlowCards();
-  void applyCoverFlowConfig();
-  void applyCoverFlowVisibility();
-  [[nodiscard]] bool coverFlowActive() const;
-  /// Resolve the preview-video path for @p visualIndex and push it to the
-  /// carousel widget. Called from updateSelectionForIndex on every
-  /// selection change so the per-item video lookup stays lazy — scanning
-  /// the video directory for tens of thousands of items at rebuild time
-  /// would freeze the UI thread the same way artwork lookup did.
-  void resolveAndPushCoverFlowVideo(int visualIndex);
-  /// Resolve the per-item gallery (standard + custom artwork variants
-  /// from ItemArtworkStore plus the preview video) for @p visualIndex
-  /// and push it to the carousel widget. Mirrors the resolver in
-  /// DetailsPaneManager::updateSidebarMetadata so the cover-flow gallery
-  /// surfaces the same set of entries the sidebar would.
-  void resolveAndPushCoverFlowGallery(int visualIndex);
-  CoverFlowWidget *m_coverFlowWidget = nullptr;
+  // cover-flow integration was extracted into CoverFlowController
+  // (m_coverFlow) — the carousel is a sibling of m_gridContainer in the
+  // items-page scroll-area layout, shown only when the active collection's
+  // ViewType is CoverFlow.
 
   void handleProgrammaticScroll();
   void handleUserScroll();

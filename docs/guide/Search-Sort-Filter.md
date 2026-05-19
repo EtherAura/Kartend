@@ -290,7 +290,7 @@ For per-type filtering, file a feature request.
 
 ## For developers
 
-- Search: [src/modules/behavior/search/](../../src/modules/behavior/search/) (`SearchManager`)
+- Search: [src/modules/input/search/](../../src/modules/input/search/) (`SearchManager`)
   manages the search bar; FTS5 query layer is in
   [src/modules/data/query/](../../src/modules/data/query/) (`QueryManager`).
 - Title pattern stripping: `TitleFilter`
@@ -298,7 +298,7 @@ For per-type filtering, file a feature request.
   per-collection.
 - Sort: applied in `QueryManager` at SQL level for `sortMode`.
 - Filter pipeline: `FilterManager`
-  ([src/modules/behavior/filter/](../../src/modules/behavior/filter/))
+  ([src/modules/input/filter/](../../src/modules/input/filter/))
   owns the active filter set; `ScrollManager` consumes the filtered
   index list and maps visual index ↔ source-item index for virtual
   scrolling.

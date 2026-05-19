@@ -12,11 +12,11 @@ class QStackedWidget;
 class QWidget;
 QT_END_NAMESPACE
 
-class KeyboardManager;
-class ScrollManager;
-class AnimationManager;
-class ViewportManager;
-class SelectionManager;
+class IKeyboardManager;
+class IScrollManager;
+class IAnimationManager;
+class IViewportManager;
+class ISelectionManager;
 class InteractionStateHolder;
 struct CollectionConfig;
 struct GeneralSettings;
@@ -112,19 +112,19 @@ private:
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] KeyboardManager *keyboardMgr() const {
+  [[nodiscard]] IKeyboardManager *keyboardMgr() const {
     return m_ctx ? m_ctx->keyboardManager() : nullptr;
   }
-  [[nodiscard]] ScrollManager *scrollMgr() const {
+  [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] AnimationManager *animMgr() const {
+  [[nodiscard]] IAnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }
-  [[nodiscard]] ViewportManager *viewportMgr() const {
+  [[nodiscard]] IViewportManager *viewportMgr() const {
     return m_ctx ? m_ctx->viewportManager() : nullptr;
   }
-  [[nodiscard]] SelectionManager *selectionMgr() const {
+  [[nodiscard]] ISelectionManager *selectionMgr() const {
     return m_ctx ? m_ctx->selectionManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {

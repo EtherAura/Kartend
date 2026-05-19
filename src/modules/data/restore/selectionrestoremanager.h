@@ -11,9 +11,9 @@ QT_BEGIN_NAMESPACE
 class QLineEdit;
 QT_END_NAMESPACE
 
-class InteractionManager;
+class IInteractionManager;
 class InteractionStateHolder;
-class ScrollManager;
+class IScrollManager;
 class ISessionManager;
 class ISettingsManager;
 struct ApplicationContext;
@@ -138,13 +138,13 @@ private:
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] InteractionManager *interactionMgr() const {
+  [[nodiscard]] IInteractionManager *interactionMgr() const {
     return m_ctx ? m_ctx->interactionManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
-  [[nodiscard]] ScrollManager *scrollMgr() const {
+  [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
   [[nodiscard]] ISessionManager *sessionMgr() const {

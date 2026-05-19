@@ -73,7 +73,7 @@ public:
   /// otherwise falls back to the currently-displayed item context.
   void refreshSidebarMetadataImmediate() override;
   void applySidebarStateForCollection(int collectionIndex) override;
-  void updateSidebarLayout(int currentCollectionIndex);
+  void updateSidebarLayout(int currentCollectionIndex) override;
   void positionSidebarOverlay();
   /// Recomputes the collection-level summary the sidebar shows when no
   /// item is selected. Cheap; safe to call after collection

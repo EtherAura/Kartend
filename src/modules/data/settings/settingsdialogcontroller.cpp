@@ -7,19 +7,20 @@
 // updateWindowTitle, applyScrollbarSettings, refreshSidebar,
 // handleScrollBranch, detectChanges).
 #include "applicationcontext.h"
-#include "artworkmanager.h"
-#include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
-#include "detailspanemanager.h"
-#include "mainwindow.h"
-#include "navigationmanager.h"
-#include "scrollmanager.h"
-#include "settingsdialog.h"
+#include "iartworkmanager.h"
+#include "icachemanager.h"
+#include "idetailspanemanager.h"
+#include "imainwindow.h"
+#include "inavigationmanager.h"
+#include "iscrollmanager.h"
+#include "isettingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
+#include <memory>
 #include <QDialog>
 #include <QLabel>
 #include <QList>
@@ -153,7 +154,10 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
 // Title update logic separated from handleLayoutChanges
 void updateWindowTitle(QWidget *parent, int viewingIndex,
                        const QList<CollectionConfig> &collections) {
-  if (auto *mw = qobject_cast<MainWindow *>(parent)) {
+  // dynamic_cast (not qobject_cast): IMainWindow is a plain abstract base
+  // with no Qt meta-object. The cross-cast still resolves whenever `parent`
+  // is the real MainWindow.
+  if (auto *mw = dynamic_cast<IMainWindow *>(parent)) {
     mw->updateWindowTitleForCollection(viewingIndex);
   }
   auto *titleLabel = parent->findChild<QLabel *>("itemsTitleLabel");
@@ -183,7 +187,7 @@ void applyScrollbarSettings(QWidget *parent, int viewingIndex,
 }
 
 // Updates sidebar layout when mode changes
-void refreshSidebar(DetailsPaneManager *detailsPaneManager,
+void refreshSidebar(IDetailsPaneManager *detailsPaneManager,
                     const QList<CollectionConfig> & /*collections*/, int currentCollectionIndex) {
   if (detailsPaneManager) {
     detailsPaneManager->updateSidebarLayout(currentCollectionIndex);
@@ -191,11 +195,11 @@ void refreshSidebar(DetailsPaneManager *detailsPaneManager,
 }
 
 // Handles scroll manager branching
-void handleScrollBranch(ScrollManager *scrollManager, IArtworkManager *artworkManager,
+void handleScrollBranch(IScrollManager *scrollManager, IArtworkManager *artworkManager,
                         const QList<CollectionConfig> &collections, int viewingIndex,
                         bool spacingChanged, bool sidebarModeChanged, bool gridWidthChanged,
                         bool alignmentChanged, bool fontSizeChanged, bool hideTitlesChanged) {
-  auto scheduleGridWidthRefresh = [](ScrollManager *scrollManager, IArtworkManager *artworkManager,
+  auto scheduleGridWidthRefresh = [](IScrollManager *scrollManager, IArtworkManager *artworkManager,
                                      int viewingIndex,
                                      const QList<CollectionConfig> *collectionsPtr) {
     if (!scrollManager || !collectionsPtr) {
@@ -283,38 +287,49 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   QList<CollectionConfig> &collections = *context.collections;
   int &currentCollectionIndex = *context.currentCollectionIndex;
   QWidget *parent = context.parent;
-  DetailsPaneManager *detailsPaneManager = context.detailsPaneManager;
-  ScrollManager *scrollManager = context.scrollManager;
-  NavigationManager *navigationManager = context.navigationManager;
+  IDetailsPaneManager *detailsPaneManager = context.detailsPaneManager;
+  IScrollManager *scrollManager = context.scrollManager;
+  INavigationManager *navigationManager = context.navigationManager;
   IDatabaseManager *databaseManager = context.databaseManager;
 
   int viewingCollectionIndex = currentCollectionIndex;
   QList<CollectionConfig> originalCollections = collections;
 
-  SettingsDialog dlg(parent, collections, viewingCollectionIndex);
+  // The concrete SettingsDialog lives in the ui/ layer; the data layer must
+  // not name it. MainWindow supplies a factory that constructs the dialog and
+  // wires its collectionSaved / rescanRequired Qt signals to the two callbacks
+  // below (the signal connections need the concrete symbols). We then drive
+  // the dialog through the neutral ISettingsDialog interface.
+  if (!context.createSettingsDialog) {
+    return;
+  }
 
-  connect(&dlg, &SettingsDialog::collectionSaved, this,
-          [this, &collections](const QList<CollectionConfig> &savedCollections) {
-            collections = savedCollections;
-            saveCollections(collections);
-          });
+  auto onCollectionSaved = [this, &collections](const QList<CollectionConfig> &savedCollections) {
+    collections = savedCollections;
+    saveCollections(collections);
+  };
 
-  // Connect rescan signal to trigger database rescan after dialog closes
-  connect(&dlg, &SettingsDialog::rescanRequired, this, [navigationManager](int collectionIndex) {
+  // Defer rescan to allow the dialog to fully close first.
+  auto onRescanRequired = [navigationManager](int collectionIndex) {
     if (navigationManager) {
-      // Defer rescan to allow dialog to fully close first
       QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
                          [navigationManager, collectionIndex]() {
                            navigationManager->forceRescanCollection(collectionIndex);
                          });
     }
-  });
+  };
 
-  if (dlg.exec() != QDialog::Accepted) {
+  std::unique_ptr<ISettingsDialog> dlg = context.createSettingsDialog(
+      parent, collections, viewingCollectionIndex, onCollectionSaved, onRescanRequired);
+  if (!dlg) {
     return;
   }
 
-  QList<CollectionConfig> newCollections = dlg.getCollections();
+  if (dlg->exec() != QDialog::Accepted) {
+    return;
+  }
+
+  QList<CollectionConfig> newCollections = dlg->getCollections();
 
   // Don't switch viewingCollectionIndex - user should stay on the collection
   // they were viewing when they opened the dialog, even if they added or
@@ -472,8 +487,8 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 auto SettingsManager::handleReloadRequired(
     const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
-    DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
-    NavigationManager *navigationManager, IArtworkManager *artworkManager,
+    IDetailsPaneManager *detailsPaneManager, IScrollManager *scrollManager,
+    INavigationManager *navigationManager, IArtworkManager *artworkManager,
     ICacheManager *cacheManager, int currentCollectionIndex) -> void {
   Q_UNUSED(detailsPaneManager)
   Q_UNUSED(currentCollectionIndex)
@@ -527,7 +542,7 @@ auto SettingsManager::handleLayoutChanges(
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
     bool fontSizeChangedForView, bool hideTitlesChangedForView,
-    DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
+    IDetailsPaneManager *detailsPaneManager, IScrollManager *scrollManager,
     IArtworkManager *artworkManager, int currentCollectionIndex) -> void {
   if (viewingCollectionIndex < 0 || viewingCollectionIndex >= collections.size()) {
     return;

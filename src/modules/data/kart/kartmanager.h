@@ -62,11 +62,32 @@ public:
   [[nodiscard]] ErrorUtils::Result<void> exportCollection(int collectionIndex,
                                                           const QString &outPath);
 
+  /// Cancel the in-flight import/export, if any. Owner-facing slot: the
+  /// progress dialog's cancelRequested signal is connected here so the data
+  /// layer no longer needs to know the dialog type.
+public slots:
+  void cancelActiveKartOperation();
+
 signals:
   void collectionImported(const QString &name);
   void importFailed(ErrorUtils::ErrorContext ctx);
   void kartExported(const QString &kartPath);
   void exportFailed(ErrorUtils::ErrorContext ctx);
+
+  // Progress-dialog lifecycle, emitted so the owner (MainWindow) can create
+  // and drive a KartProgressDialog without KartManager — a data-layer
+  // manager — #including the ui/ dialog header. One import/export runs at a
+  // time, so a single in-flight dialog is implied.
+  /// A long-running kart operation began; @p title is the dialog caption.
+  void kartProgressStarted(const QString &title);
+  /// Completion fraction in [0, 1] for the active operation.
+  void kartProgressFraction(double fraction);
+  /// Relative path of the entry currently being extracted (import only).
+  void kartProgressEntry(const QString &relPath);
+  /// The active operation finished successfully — dialog should show "done".
+  void kartProgressFinished();
+  /// The active operation failed or was cancelled — dialog should close.
+  void kartProgressFailed();
 
 private:
   KartManagerSetup m_setup;

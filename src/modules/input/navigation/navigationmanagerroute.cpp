@@ -1,15 +1,15 @@
 // Routing/dispatch cluster split out from navigationmanager.cpp.
-#include "detailspanemanager.h"
+#include "idetailspanemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
 

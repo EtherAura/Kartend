@@ -6,9 +6,9 @@
 // TUs that managed the same widgets through MainWindow::* members.
 #include "toolbarcontroller.h"
 
+#include "isettingsmanager.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
 

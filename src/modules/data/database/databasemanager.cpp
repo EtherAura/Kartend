@@ -17,10 +17,10 @@
 #include "collectionutils.h"
 #include "databaseschema.h"
 #include "errorutils.h"
+#include "isessionmanager.h"
 #include "loggingcategories.h"
 #include "pathutils.h"
 #include "querymanager.h"
-#include "sessionmanager.h"
 #include "titlefilter.h"
 #include "uiconstants.h"
 

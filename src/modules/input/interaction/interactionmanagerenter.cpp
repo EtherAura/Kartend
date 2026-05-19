@@ -19,31 +19,31 @@
 #include <QWheelEvent>
 
 #include "alphabeticnavigationhandler.h"
-#include "animationmanager.h"
 #include "arrownavigationhandler.h"
 #include "artworkpreviewoverlay.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
+#include "ianimationmanager.h"
+#include "ikeyboardmanager.h"
+#include "imousemanager.h"
 #include "interactionhelpers.h"
-#include "keyboardmanager.h"
+#include "iviewportmanager.h"
 #include "launchmanager.h"
-#include "mousemanager.h"
 #include "searchmanager.h"
 #include "selectionmanager.h"
-#include "viewportmanager.h"
 
-#include "artworkmanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
 #include "detailspane.h"
-#include "detailspanemanager.h"
 #include "gridutils.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
+#include "idetailspanemanager.h"
+#include "inavigationmanager.h"
+#include "isessionmanager.h"
+#include "isettingsmanager.h"
 #include "itemwidget.h"
-#include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
-#include "sessionmanager.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -272,7 +272,7 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
     for (const auto &e : sidebarEntries) {
       overlayEntries.append({e.label, e.path, e.isVideo});
     }
-    scrollMgr()->setArtworkPreviewGallery(overlayEntries);
+    static_cast<ScrollManager *>(scrollMgr())->setArtworkPreviewGallery(overlayEntries);
   }
   m_state.setExpandedItemIndex(activationIndex);
   return true;
@@ -354,7 +354,7 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
     for (const auto &e : sidebarEntries) {
       overlayEntries.append({e.label, e.path, e.isVideo});
     }
-    scrollMgr()->setArtworkPreviewGallery(overlayEntries);
+    static_cast<ScrollManager *>(scrollMgr())->setArtworkPreviewGallery(overlayEntries);
   }
 }
 

@@ -22,7 +22,7 @@ class LoadingOverlay;
 class EmptyStateWidget;
 
 // Forward declarations for managers
-class ScrollManager;
+class IScrollManager;
 class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
@@ -30,12 +30,12 @@ class IDetailsPaneManager;
 class IDetailPageManager;
 class IDatabaseManager;
 class INavigationManager;
-class AnimationManager;
-class SelectionManager;
-class ViewportManager;
-class InteractionManager;
-class MouseManager;
-class KeyboardManager;
+class IAnimationManager;
+class ISelectionManager;
+class IViewportManager;
+class IInteractionManager;
+class IMouseManager;
+class IKeyboardManager;
 class EventManager;
 class SearchManager;
 class LaunchManager;
@@ -112,7 +112,7 @@ struct ApplicationContext {
   // Manager references — populated after each manager is created
   // ─────────────────────────────────────────────────────────────────────────
   struct ManagerRefs {
-    ScrollManager *scrollManager = nullptr;
+    IScrollManager *scrollManager = nullptr;
     IArtworkManager *artworkManager = nullptr;
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
@@ -120,12 +120,12 @@ struct ApplicationContext {
     IDetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
     INavigationManager *navigationManager = nullptr;
-    AnimationManager *animationManager = nullptr;
-    SelectionManager *selectionManager = nullptr;
-    ViewportManager *viewportManager = nullptr;
-    InteractionManager *interactionManager = nullptr;
-    MouseManager *mouseManager = nullptr;
-    KeyboardManager *keyboardManager = nullptr;
+    IAnimationManager *animationManager = nullptr;
+    ISelectionManager *selectionManager = nullptr;
+    IViewportManager *viewportManager = nullptr;
+    IInteractionManager *interactionManager = nullptr;
+    IMouseManager *mouseManager = nullptr;
+    IKeyboardManager *keyboardManager = nullptr;
     EventManager *eventManager = nullptr;
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
@@ -163,7 +163,7 @@ struct ApplicationContext {
   // (initializeAppContext), these are the canonical access path for sibling
   // managers; managers should not cache sibling-manager pointers as fields.
   // ─────────────────────────────────────────────────────────────────────────
-  [[nodiscard]] ScrollManager *scrollManager() const { return managers.scrollManager; }
+  [[nodiscard]] IScrollManager *scrollManager() const { return managers.scrollManager; }
   [[nodiscard]] IArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }
@@ -173,14 +173,14 @@ struct ApplicationContext {
   [[nodiscard]] IDetailPageManager *detailPageManager() const { return managers.detailPageManager; }
   [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }
   [[nodiscard]] INavigationManager *navigationManager() const { return managers.navigationManager; }
-  [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }
-  [[nodiscard]] SelectionManager *selectionManager() const { return managers.selectionManager; }
-  [[nodiscard]] ViewportManager *viewportManager() const { return managers.viewportManager; }
-  [[nodiscard]] InteractionManager *interactionManager() const {
+  [[nodiscard]] IAnimationManager *animationManager() const { return managers.animationManager; }
+  [[nodiscard]] ISelectionManager *selectionManager() const { return managers.selectionManager; }
+  [[nodiscard]] IViewportManager *viewportManager() const { return managers.viewportManager; }
+  [[nodiscard]] IInteractionManager *interactionManager() const {
     return managers.interactionManager;
   }
-  [[nodiscard]] MouseManager *mouseManager() const { return managers.mouseManager; }
-  [[nodiscard]] KeyboardManager *keyboardManager() const { return managers.keyboardManager; }
+  [[nodiscard]] IMouseManager *mouseManager() const { return managers.mouseManager; }
+  [[nodiscard]] IKeyboardManager *keyboardManager() const { return managers.keyboardManager; }
   [[nodiscard]] EventManager *eventManager() const { return managers.eventManager; }
   [[nodiscard]] SearchManager *searchManager() const { return managers.searchManager; }
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }

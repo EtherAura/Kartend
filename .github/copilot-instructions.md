@@ -74,16 +74,11 @@ Qt6 KDE frontend for organizing and launching multimedia collections. Uses **mod
 
 ```
 src/
+├── api/                 # Neutral header-only role interfaces (i*.h); no .cpp
 ├── core/                # Main application entry and window
 ├── modules/             # Feature modules grouped by domain
-│   ├── behavior/        # App lifecycle, animation, search, launch, event filtering
-│   │   ├── animation/   # Scroll animations, easing curves
-│   │   ├── application/ # Manager lifecycle coordination
-│   │   ├── event/       # Event filtering, gesture detection
-│   │   ├── filter/      # Search and subcollection filtering
-│   │   ├── launch/      # Item launching, process spawning
-│   │   ├── search/      # Search bar logic, search modes
-│   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
+│   ├── behavior/        # Manager lifecycle coordination
+│   │   └── application/ # Manager lifecycle coordination
 │   ├── data/            # Persistence: SQLite, cache, sessions, settings, playlists
 │   │   ├── cache/       # In-memory pixmap cache, disk persistence
 │   │   ├── database/    # SQLite coordination via worker thread
@@ -98,21 +93,29 @@ src/
 │   │   │   └── providers/   # Metadata providers + registry
 │   │   ├── session/     # Selection state persistence
 │   │   └── settings/    # Config file I/O, settings dialog
-│   ├── input/           # User input and navigation
+│   ├── input/           # User input, navigation, and input-driven behavior
+│   │   ├── animation/   # Scroll animations, easing curves
+│   │   ├── attract/     # Attract-mode idle scroll/advance
+│   │   ├── event/       # Event filtering, gesture detection
+│   │   ├── filter/      # Search and subcollection filtering
 │   │   ├── gamepad/     # Optional Qt6::Gamepad / SDL2 input backend
 │   │   ├── interaction/ # Central input coordination, selection state
 │   │   ├── keyboard/    # Arrow key navigation, key repeat, alphabetic jumping
+│   │   ├── launch/      # Item launching, process spawning
 │   │   ├── mouse/       # Click-hold scrolling, wheel events
-│   │   ├── navigation/  # Collection switching, navigation stack
-│   │   ├── scroll/      # Virtual scrolling, grid layout, widget factory
-│   │   └── selection/   # Selection logic, click processing
-│   └── media/           # Artwork pipeline, detail pages, overlays, viewport
+│   │   ├── navigation/  # Collection switching, navigation stack, background
+│   │   │                # + loading + empty-state widgets
+│   │   ├── overlay/     # Selection / search loading overlays
+│   │   ├── scroll/      # Virtual scrolling, grid layout, widget factory,
+│   │   │                # list-header widget
+│   │   ├── search/      # Search bar logic, search modes
+│   │   ├── selection/   # Selection logic, click processing
+│   │   ├── viewport/    # Centering, viewport positioning
+│   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
+│   └── media/           # Artwork pipeline, detail pages
 │       ├── artwork/     # Async artwork loading with QtConcurrent
-│       ├── attract/     # Attract-mode idle scroll/advance
 │       ├── detailpage/  # Detail-page coordinator
-│       ├── detailspane/ # Metadata / details side pane
-│       ├── overlay/     # Selection / search loading overlays
-│       └── viewport/    # Centering, viewport positioning
+│       └── detailspane/ # Metadata / details side pane
 ├── ui/                  # UI components and constants
 │   ├── dialogs/         # Dialogs and settings panels, grouped by domain
 │   │   ├── settings/    # Settings dialog core + all tab panels
@@ -122,7 +125,8 @@ src/
 │   │   └── kart/        # Kart merge / progress dialogs
 │   │                    # (errordialog, firstrunwizard, shortcutsdialog,
 │   │                    #  statisticsdialog stay at dialogs/ root)
-│   └── widgets/         # Item widget, details pane, list header, overlays
+│   └── widgets/         # Item widget, details pane, generic overlays,
+│                        # video-preview widgets
 └── utils/               # Shared utilities and data structures
 ```
 
@@ -135,6 +139,13 @@ lint instead:
 > **`src/utils/` is the foundation layer.** It must not `#include` any
 > header from `src/modules/`, `src/ui/`, or `src/core/`. Shared code that
 > a utils file needs belongs *in* `src/utils/`.
+
+> **`src/api/` is the neutral role-interface layer.** It holds the abstract
+> manager interfaces (`i*.h`) and carries no `.cpp`. Each interface depends
+> only on Qt headers, `src/utils/` headers, and forward declarations, so any
+> module may `#include` an `i*.h` without creating a module→module edge.
+> Consumers that only call interface-covered methods should include the
+> relevant `src/api/i*.h` instead of the concrete manager header.
 
 `.scripts/check-layering.py` checks this and runs in the
 `maintenance-check` CI job. (`uiconstants.h` is a documented allowlisted
@@ -195,6 +206,7 @@ if (auto *im = getInteractionManager()) {
 | `SelectionOverlayManager` | ScrollManager | (helper, no signals) |
 | `SelectionRestoreManager` | NavigationManager | (helper, no signals) |
 | `NavigationStackManager` | NavigationManager | (helper, no signals) |
+| `CollectionBackgroundController` | NavigationManager | (helper, no signals) — drives the items-page background/overlay UI surface |
 
 ### Atomic File Writes Pattern
 
@@ -324,6 +336,7 @@ The scroll module handles virtual scrolling with widget pooling:
 | Class | Purpose |
 |-------|---------|
 | `ScrollManager` | Core orchestration of virtual scrolling, viewport updates |
+| `CoverFlowController` | Drives the CoverFlow ViewType — owns the carousel widget, syncs its card list / config / visibility with the grid |
 | `VirtualScrollEngine` | Visible-range computation and row materialization |
 | `GridLayoutCalculator` | Stateless grid metric calculations (row/column positions) |
 | `ItemWidgetFactory` | Widget creation and configuration, delegates to the pool |
@@ -340,8 +353,8 @@ The scroll module handles virtual scrolling with widget pooling:
 Note: the widget-recycling pool (`WidgetPoolManager`), search/subcollection
 filtering (`FilterManager`), and glide-overlay rendering
 (`SelectionOverlayManager`) are *not* in this folder — they live in
-`src/modules/behavior/widgetpool/`, `src/modules/behavior/filter/`, and
-`src/modules/media/overlay/` respectively.
+`src/modules/input/widgetpool/`, `src/modules/input/filter/`, and
+`src/modules/input/overlay/` respectively.
 
 ### Interaction Module (`src/modules/input/interaction/`)
 
@@ -360,6 +373,7 @@ Database operations use a worker thread pattern:
 |-------|---------|
 | `DatabaseManager` | Main thread coordinator, emits signals to worker |
 | `QueryManager` | Worker thread, executes SQL queries, emits results |
+| `ScanService` | Owns QueryManager's collection-rescan subsystem (filesystem walk, `scanned_items` staging, scan-and-save pipelines, scan cancellation token); borrows the worker `QSqlDatabase` + `PreparedStatementCache` by reference |
 
 All database errors use structured `ErrorContext` reporting via `errorutils.h`.
 
@@ -575,7 +589,8 @@ tests/
 │   ├── keyboard/            #   test_keyboardhelpers, test_keyboardmanager
 │   ├── launch/              #   test_launchmanager
 │   ├── mouse/               #   test_mousehelpers
-│   ├── navigation/          #   test_navigationhelpers, test_navigationstackmanager
+│   ├── navigation/          #   test_navigationhelpers, test_navigationstackmanager,
+│   │                        #   test_emptystatewidget
 │   ├── overlay/             #   test_overlayhelpers
 │   ├── playlist/            #   test_playlistmanager
 │   ├── query/               #   test_queryhelpers, test_querymanager_{abspath,broken_symlinks,cancel_scan,cross_collection_count,shell_collection_sort}
@@ -628,8 +643,7 @@ tests/
 ├── benchmarks/              # Perf benchmarks — ctest label "benchmark",
 │   └── bench_filterhelpers.cpp   #   skipped by default; run via `ctest -L benchmark`
 └── ui/widgets/              # Widget-level rendering and behavior
-    ├── test_coverflowwidget.cpp
-    └── test_emptystatewidget.cpp
+    └── test_coverflowwidget.cpp
 ```
 
 ### Building Tests
@@ -697,7 +711,7 @@ suite which links all of its `TestXxx` classes into a single binary
 | Module unit tests | `tests/modules/<feature>/` | Per-manager and per-helper coverage for `src/modules/`. One flat folder per feature (the `behavior/data/input/media` group level is omitted). Includes `dat/` and `scraper/`. |
 | Utility unit tests | `tests/utils/` | Helpers under `src/utils/` **only** — `app`, `db`, `fs`, `text`, `threading`, `view`. Tests for `src/modules/` files must NOT land here. |
 | Integration tests | `tests/integration/` | One binary (`test_integration`). `MainWindowFixture`-driven multi-manager scenarios; shared mocks under `tests/integration/mocks/`. |
-| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`). |
+| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior for generic `src/ui/widgets/` widgets (e.g. `CoverFlowWidget`). Tests for widgets that live under `src/modules/` go in `tests/modules/<feature>/`. |
 | Benchmarks | `tests/benchmarks/` | Perf benchmarks labelled `benchmark`; skipped by default. Run with `ctest -L benchmark`. |
 
 Binary and method counts drift fast — prefer `ctest --output-on-failure

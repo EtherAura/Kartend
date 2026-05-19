@@ -1,18 +1,16 @@
 // Sibling TU: setup + grid config methods for ScrollManager.
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
-#include "artworkmanager.h"
-#include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
-#include "databasemanager.h"
+#include "coverflowcontroller.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
+#include "iartworkmanager.h"
+#include "idatabasemanager.h"
 #include "interactionstateholder.h"
-#include "itemwidget.h"
 #include "itemwidgetfactory.h"
-#include "listheaderwidget.h"
 #include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
@@ -61,6 +59,19 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_mediaScrollArea = setup.getMediaScrollArea();
   m_collections = setup.getCollections();
   m_hierarchyCache = setup.getHierarchyCache();
+
+  // Hand the cover-flow controller its borrowed dependencies. m_context is a
+  // ScrollManager member whose address is stable across collection switches,
+  // so a pointer to it stays valid even as its contents are reassigned.
+  if (m_coverFlow) {
+    m_coverFlow->setupReferences({.ctx = m_ctx,
+                                  .mediaScrollArea = m_mediaScrollArea,
+                                  .gridContainer = m_gridContainer,
+                                  .context = &m_context,
+                                  .collections = m_collections,
+                                  .dataManager = m_dataManager,
+                                  .filterManager = m_filterManager});
+  }
 
   // Snapshot sibling-manager pointers for setter-based handoff to helpers.
   // These mirror ctx and are not stored as ScrollManager member fields.
@@ -265,18 +276,17 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   setupNormalVirtualScrolling();
 
-  // refresh cover-flow card list and visibility on every
-  // navigation entry so switching into a collection that uses cover flow
-  // shows up correctly even though handleLayoutChange isn't called here.
-  // Card-list rebuild is gated on the widget actually being in use so we
-  // don't pay per-item descriptor work when navigating into a grid/list
-  // collection.
-  if (coverFlowActive()) {
-    ensureCoverFlowWidget();
-    applyCoverFlowConfig();
-    rebuildCoverFlowCards();
+  // refresh cover-flow card list and visibility on every navigation entry
+  // so switching into a collection that uses cover flow shows up correctly
+  // even though handleLayoutChange isn't called here. Card-list rebuild is
+  // gated on the carousel being the active view so we don't pay per-item
+  // descriptor work when navigating into a grid/list collection.
+  if (m_coverFlow->isActive()) {
+    m_coverFlow->ensureWidget();
+    m_coverFlow->applyConfig();
+    m_coverFlow->rebuildCards();
   }
-  applyCoverFlowVisibility();
+  m_coverFlow->applyVisibility();
 
   // If we have a pending selection restore, query the database now that
   // the context and data are set up

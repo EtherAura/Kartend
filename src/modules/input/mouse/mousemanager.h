@@ -1,6 +1,7 @@
 #ifndef MOUSEMANAGER_H
 #define MOUSEMANAGER_H
 
+#include "imousemanager.h"
 #include "setuputils.h"
 #include <QObject>
 #include <QPoint>
@@ -13,7 +14,7 @@ class QWheelEvent;
 class QWidget;
 QT_END_NAMESPACE
 
-class ScrollManager;
+class IScrollManager;
 class SelectionManager;
 class ItemWidget;
 class InteractionStateHolder;
@@ -41,7 +42,10 @@ struct MouseManagerSetup {
 /// Manages mouse hold scrolling behavior for click-and-hold navigation.
 /// Handles both vertical (row-by-row) and horizontal (item-by-item) scrolling.
 /// Also manages click hold timer and left mouse button tracking.
-class MouseManager : public QObject {
+//
+// QObject must be the first base; IMouseManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class MouseManager : public QObject, public IMouseManager {
   Q_OBJECT
 public:
   explicit MouseManager(QObject *parent = nullptr);
@@ -50,7 +54,7 @@ public:
   void setupReferences(const MouseManagerSetup &setup);
 
   // --- State Queries ---
-  [[nodiscard]] bool isMouseHoldScrolling() const { return m_mouseHoldScrolling; }
+  [[nodiscard]] bool isMouseHoldScrolling() const override { return m_mouseHoldScrolling; }
   [[nodiscard]] bool isHorizontalMode() const { return m_mouseHoldHorizontal; }
   [[nodiscard]] int holdDirection() const { return m_mouseHoldDirection; }
   [[nodiscard]] int horizontalDirection() const { return m_mouseHoldHorizontalDirection; }
@@ -58,14 +62,14 @@ public:
   [[nodiscard]] bool isWheelScrolling() const { return m_wheelScrolling; }
 
   // --- Wheel Scrolling State ---
-  void setWheelScrolling(bool scrolling);
+  void setWheelScrolling(bool scrolling) override;
 
   // --- Wheel Computation (static) ---
   /// Computes wheel scroll steps from angleDelta or pixelDelta
   [[nodiscard]] static int computeWheelSteps(const QWheelEvent *wheelEvent);
 
   // --- Left Mouse Button Tracking ---
-  void setLeftMouseDown(bool down);
+  void setLeftMouseDown(bool down) override;
 
   // --- Click Hold Timer ---
   /// Starts the click hold timer that triggers hold scrolling after delay
@@ -73,7 +77,7 @@ public:
                            int totalItems);
 
   /// Stops the click hold timer if active
-  void stopClickHoldTimer();
+  void stopClickHoldTimer() override;
 
   /// Returns true if click hold timer is active
   [[nodiscard]] bool isClickHoldTimerActive() const;
@@ -84,7 +88,7 @@ public:
                                           int gridWidth);
 
   /// Clears the horizontal hold candidate state
-  void clearHorizontalCandidate();
+  void clearHorizontalCandidate() override;
 
   // --- Hold Scrolling Control ---
   /// Starts mouse hold scrolling from a click position
@@ -96,13 +100,13 @@ public:
   [[nodiscard]] bool tryStartHorizontalClickHold(int totalItems, int selectedItemIndex);
 
   /// Stops mouse hold scrolling
-  void stopMouseHoldScrolling();
+  void stopMouseHoldScrolling() override;
 
   // --- Widget Finding Utilities (static) ---
   /// Finds the best widget at the given click position and returns its visual
   /// index Returns {widget, visualIndex} pair; visualIndex is -1 if not found
   static std::pair<ItemWidget *, int> findBestWidgetForClick(const QPoint &clickPos,
-                                                             ScrollManager *scrollManager,
+                                                             IScrollManager *scrollManager,
                                                              QWidget *gridContainer);
 
   /// Finds the closest widget to the click position from candidates

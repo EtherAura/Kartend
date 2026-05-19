@@ -13,40 +13,46 @@
 #include <QTimer>
 #include <QToolButton>
 
+#include "animationmanager.h"
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
-#include "databasemanager.h"
+#include "detailpagemanager.h"
 #include "detailspane.h"
 #include "firstrunwizard.h"
 #include "gridwidthdebouncer.h"
+#include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
+#include "keyboardmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include "marqueecontroller.h"
 #include "menucontroller.h"
-#include "detailpagemanager.h"
+#include "mousemanager.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrapercredentialsdialog.h"
 #include "scrollmanager.h"
+#include "selectionmanager.h"
 #include "toolbarcontroller.h"
+#include "viewportmanager.h"
 
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
+#include "isettingsdialog.h"
+#include "isettingsmanager.h"
 #include "nowplayingoverlay.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
-#include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
 #include "textzoomhud.h"
-#include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 #include "videothumbnailextractor.h"
@@ -54,14 +60,28 @@
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
-namespace {
-// Trailing-edge debounce window for marquee-artwork refreshes triggered by
-// selection storms (wheel / arrow-key holds). Matches the sidebar metadata
-// debounce by intent, not by reference — same cost profile (path expand +
-// FS video probe + QPixmap disk load), tuned to the same wheel-tick cadence.
-// Kept local so a future tweak to either subsystem stays scoped.
-constexpr int kMarqueeArtworkDebounceMs = 60;
-} // namespace
+std::function<std::unique_ptr<ISettingsDialog>(QWidget *, const QList<CollectionConfig> &, int,
+                                               std::function<void(const QList<CollectionConfig> &)>,
+                                               std::function<void(int)>)>
+MainWindow::makeSettingsDialogFactory() {
+  return [](QWidget *parent, const QList<CollectionConfig> &initialCollections, int initialIndex,
+            std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
+            std::function<void(int)> onRescanRequired) -> std::unique_ptr<ISettingsDialog> {
+    auto dlg = std::make_unique<SettingsDialog>(parent, initialCollections, initialIndex);
+    // Wire the concrete Qt signals here — they cannot cross to the neutral
+    // ISettingsDialog interface. The dialog object is the connection context
+    // so each connection is torn down with the dialog.
+    if (onCollectionSaved) {
+      QObject::connect(dlg.get(), &SettingsDialog::collectionSaved, dlg.get(),
+                       std::move(onCollectionSaved));
+    }
+    if (onRescanRequired) {
+      QObject::connect(dlg.get(), &SettingsDialog::rescanRequired, dlg.get(),
+                       std::move(onRescanRequired));
+    }
+    return dlg;
+  };
+}
 
 void MainWindow::setupUI() {
   setAcceptDrops(true);
@@ -152,17 +172,17 @@ void MainWindow::setupUI() {
         });
   }
 
-  // Coalesce marquee-artwork refreshes during selection storms. Trailing
-  // edge — single clicks still feel instant. No-op for marquee-disabled users:
-  // updateMarqueeArtwork's early return makes the debounced fire free.
-  if (!m_marqueeDebouncer) {
-    m_marqueeDebouncer = new TimerUtils::DebouncedTimer(kMarqueeArtworkDebounceMs, this);
-    connect(m_marqueeDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
-      if (m_isShuttingDown || QApplication::closingDown()) {
-        return;
-      }
-      updateMarqueeArtwork();
-    });
+  // Wire the marquee controller. The borrowed ctx pointer is filled in-place
+  // by initializeAppContext() below; the controller reads it lazily so this
+  // ordering is safe.
+  if (m_marqueeController) {
+    MarqueeControllerSetup marqueeSetup;
+    marqueeSetup.ctx = &m_appContext;
+    marqueeSetup.generalSettings = &m_generalSettings;
+    marqueeSetup.currentCollectionIndex = &currentCollectionIndex;
+    marqueeSetup.collections = &m_collections;
+    marqueeSetup.isShuttingDown = [this]() { return m_isShuttingDown; };
+    m_marqueeController->setupReferences(marqueeSetup);
   }
 
   initializeAppContext();
@@ -358,6 +378,7 @@ void MainWindow::createMenuBar() {
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
       context.databaseManager = getDatabaseManager();
+      context.createSettingsDialog = makeSettingsDialogFactory();
       getSettingsManager()->openSettingsDialog(context);
     }
   };

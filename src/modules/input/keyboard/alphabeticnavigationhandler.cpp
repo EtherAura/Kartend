@@ -2,16 +2,16 @@
 #include "alphabeticnavigationhandler.h"
 #include "applicationcontext.h"
 #include "filtermanager.h"
+#include "iselectionmanager.h"
 #include "scrollmanager.h"
-#include "selectionmanager.h"
 
 #include <QFileInfo>
 
 AlphabeticNavigationHandler::AlphabeticNavigationHandler(QObject *parent) : QObject(parent) {}
 
 auto AlphabeticNavigationHandler::navigateToNextLetter(bool forward) -> int {
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
-  SelectionManager *selection = m_ctx ? m_ctx->selectionManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  ISelectionManager *selection = m_ctx ? m_ctx->selectionManager() : nullptr;
   if (!scroll || !selection) {
     return -1;
   }
@@ -49,7 +49,7 @@ auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const ->
 }
 
 auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const -> QString {
-  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
   if (!scroll) {
     return QString();
   }
