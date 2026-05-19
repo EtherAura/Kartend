@@ -11,51 +11,17 @@
    <item>
     <widget class="QGroupBox" name="appearanceTitlesFontGroupBox">
      <property name="title"><string>Font</string></property>
-     <!-- Two-column section: two equal-width column wrappers side by side. -->
-     <layout class="QHBoxLayout" name="appearanceTitlesFontRowLayout">
-      <property name="spacing"><number>24</number></property>
-      <item>
-       <widget class="QWidget" name="appearanceTitlesFontColLeft" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QFormLayout" name="appearanceTitlesFontFormLeft">
-         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
-         <property name="horizontalSpacing"><number>8</number></property>
-         <property name="verticalSpacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
-         <item row="0" column="0"><widget class="QLabel" name="label_titles"><property name="text"><string>Font Size:</string></property></widget></item>
-         <item row="0" column="1"><widget class="QSpinBox" name="fontSizeSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Font size for item titles</string></property><property name="minimum"><number>8</number></property><property name="maximum"><number>72</number></property><property name="value"><number>12</number></property></widget></item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="appearanceTitlesFontColRight" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QFormLayout" name="appearanceTitlesFontFormRight">
-         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
-         <property name="horizontalSpacing"><number>8</number></property>
-         <property name="verticalSpacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
-         <item row="0" column="0"><widget class="QLabel" name="label_customFont"><property name="text"><string>Custom Font:</string></property></widget></item>
-         <item row="0" column="1">
-          <layout class="QHBoxLayout" name="customFontLayout">
-           <item><widget class="QLineEdit" name="customFontEdit"><property name="toolTip"><string>Custom font family for item titles (leave empty for system default)</string></property><property name="placeholderText"><string>System Default</string></property></widget></item>
-           <item><widget class="QPushButton" name="browseFontButton"><property name="text"><string>Browse...</string></property><property name="toolTip"><string>Select a font family</string></property></widget></item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
+     <layout class="QGridLayout" name="appearanceTitlesFontFormLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_titles"><property name="text"><string>Font Size:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QSpinBox" name="fontSizeSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Font size for item titles</string></property><property name="minimum"><number>8</number></property><property name="maximum"><number>72</number></property><property name="value"><number>12</number></property></widget></item>
+      <item row="0" column="2"><widget class="QLabel" name="label_customFont"><property name="text"><string>Custom Font:</string></property></widget></item>
+      <item row="0" column="3">
+       <layout class="QHBoxLayout" name="customFontLayout">
+        <item><widget class="QLineEdit" name="customFontEdit"><property name="toolTip"><string>Custom font family for item titles (leave empty for system default)</string></property><property name="placeholderText"><string>System Default</string></property></widget></item>
+        <item><widget class="QPushButton" name="browseFontButton"><property name="text"><string>Browse...</string></property><property name="toolTip"><string>Select a font family</string></property></widget></item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -63,41 +29,11 @@
    <item>
     <widget class="QGroupBox" name="appearanceTitlesVisibilityGroupBox">
      <property name="title"><string>Visibility</string></property>
-     <!-- Two-column section: one checkbox per column wrapper. -->
-     <layout class="QHBoxLayout" name="appearanceTitlesVisibilityRowLayout">
-      <property name="spacing"><number>24</number></property>
-      <item>
-       <widget class="QWidget" name="appearanceTitlesVisibilityColLeft" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QVBoxLayout" name="appearanceTitlesVisibilityColLeftLayout">
-         <property name="spacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <item><widget class="QCheckBox" name="hideTitlesCheckBox"><property name="toolTip"><string>Hide titles for this collection</string></property><property name="text"><string>Hide Titles</string></property></widget></item>
-         <item><spacer name="appearanceTitlesVisibilityColLeftSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="appearanceTitlesVisibilityColRight" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QVBoxLayout" name="appearanceTitlesVisibilityColRightLayout">
-         <property name="spacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <item><widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox"><property name="toolTip"><string>Hide titles for subcollections</string></property><property name="text"><string>Hide Subcollection Titles</string></property></widget></item>
-         <item><spacer name="appearanceTitlesVisibilityColRightSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
-        </layout>
-       </widget>
-      </item>
+     <layout class="QGridLayout" name="appearanceTitlesVisibilityLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <item row="0" column="0" colspan="2"><widget class="QCheckBox" name="hideTitlesCheckBox"><property name="toolTip"><string>Hide titles for this collection</string></property><property name="text"><string>Hide Titles</string></property></widget></item>
+      <item row="0" column="2" colspan="2"><widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox"><property name="toolTip"><string>Hide titles for subcollections</string></property><property name="text"><string>Hide Subcollection Titles</string></property></widget></item>
      </layout>
     </widget>
    </item>

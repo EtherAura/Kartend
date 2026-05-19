@@ -11,12 +11,11 @@
    <item>
     <widget class="QGroupBox" name="artworkDirsGroupBox">
      <property name="title"><string>Asset Directories</string></property>
-     <layout class="QFormLayout" name="artworkDirsFormLayout">
-      <property name="horizontalSpacing"><number>8</number></property>
+     <layout class="QGridLayout" name="artworkDirsFormLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
       <item row="0" column="0"><widget class="QLabel" name="label_artworkDir"><property name="text"><string>Artwork:</string></property></widget></item>
-      <item row="0" column="1">
+      <item row="0" column="1" colspan="5">
        <layout class="QHBoxLayout" name="artworkDirLayout">
         <item><widget class="QLineEdit" name="artworkDirLineEdit"><property name="toolTip"><string>Single root folder for all of this collection's scraped + manual media. Scraping auto-creates per-type subfolders (box/, screenshot/, marquee/, fanart/, logo/, title/, video/, manual/, …) under it as needed — you don't need to define separate folders for each kind.</string></property></widget></item>
         <item><widget class="QPushButton" name="browseArtworkDirButton"><property name="text"><string>Browse</string></property></widget></item>
@@ -28,52 +27,19 @@
    <item>
     <widget class="QGroupBox" name="artworkCustomGroupBox">
      <property name="title"><string>Customization</string></property>
-     <!-- Two-column section: two equal-width column wrappers side by side. -->
-     <layout class="QHBoxLayout" name="artworkCustomRowLayout">
-      <property name="spacing"><number>24</number></property>
-      <item>
-       <widget class="QWidget" name="artworkCustomColLeft" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QFormLayout" name="artworkCustomFormLeft">
-         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
-         <property name="horizontalSpacing"><number>8</number></property>
-         <property name="verticalSpacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
-         <item row="0" column="0"><widget class="QLabel" name="label_placeholderArtwork"><property name="text"><string>Placeholder Artwork:</string></property></widget></item>
-         <item row="0" column="1">
-          <layout class="QHBoxLayout" name="placeholderArtworkLayout">
-           <item><widget class="QLineEdit" name="placeholderArtworkLineEdit"><property name="toolTip"><string>Image shown for collection items when no matching artwork is found</string></property></widget></item>
-           <item><widget class="QPushButton" name="browsePlaceholderArtworkButton"><property name="text"><string>Browse</string></property></widget></item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
+     <!-- Two label/field pairs share one row (two-column section). -->
+     <layout class="QGridLayout" name="artworkCustomFormLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_placeholderArtwork"><property name="text"><string>Placeholder Artwork:</string></property></widget></item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="placeholderArtworkLayout">
+        <item><widget class="QLineEdit" name="placeholderArtworkLineEdit"><property name="toolTip"><string>Image shown for collection items when no matching artwork is found</string></property></widget></item>
+        <item><widget class="QPushButton" name="browsePlaceholderArtworkButton"><property name="text"><string>Browse</string></property></widget></item>
+       </layout>
       </item>
-      <item>
-       <widget class="QWidget" name="artworkCustomColRight" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
-        </property>
-        <layout class="QFormLayout" name="artworkCustomFormRight">
-         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
-         <property name="horizontalSpacing"><number>8</number></property>
-         <property name="verticalSpacing"><number>6</number></property>
-         <property name="leftMargin"><number>0</number></property>
-         <property name="topMargin"><number>0</number></property>
-         <property name="rightMargin"><number>0</number></property>
-         <property name="bottomMargin"><number>0</number></property>
-         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
-         <item row="0" column="0"><widget class="QLabel" name="label_customArtworkTypes"><property name="text"><string>Custom Artwork Types:</string></property></widget></item>
-         <item row="0" column="1"><widget class="QLineEdit" name="customArtworkTypesLineEdit"><property name="toolTip"><string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string></property><property name="placeholderText"><string>e.g. cabinet, flyer, character_select</string></property></widget></item>
-        </layout>
-       </widget>
-      </item>
+      <item row="0" column="2"><widget class="QLabel" name="label_customArtworkTypes"><property name="text"><string>Custom Artwork Types:</string></property></widget></item>
+      <item row="0" column="3"><widget class="QLineEdit" name="customArtworkTypesLineEdit"><property name="toolTip"><string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string></property><property name="placeholderText"><string>e.g. cabinet, flyer, character_select</string></property></widget></item>
      </layout>
     </widget>
    </item>

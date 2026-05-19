@@ -6,6 +6,7 @@
 #include <QAbstractButton>
 #include <QByteArray>
 #include <QFont>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QIcon>
 #include <QLabel>
@@ -116,6 +117,18 @@ void SettingsDialog::setupNavigation() {
   // header) — this drives the initial page + context header via the
   // currentItemChanged connection above.
   list->setCurrentRow(1);
+
+  // Section grids: each section is a QGridLayout sized to its own field
+  // count — one, two, or three label/field pairs per row. Stretch every
+  // field column (the odd ones) equally so the pairs span the section's
+  // full width; uic ignores QGridLayout columnStretch from the .ui, so it
+  // is applied here. Iterating to columnCount() keeps a two-column section
+  // from reserving stretch for a phantom, unused third column.
+  for (QGridLayout *grid : findChildren<QGridLayout *>()) {
+    for (int col = 1; col < grid->columnCount(); col += 2) {
+      grid->setColumnStretch(col, 1);
+    }
+  }
 
   // Geometry / splitter restore comes after setSizes() so a saved layout wins.
   restoreDialogState();

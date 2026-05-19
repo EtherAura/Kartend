@@ -11,12 +11,11 @@
    <item>
     <widget class="QGroupBox" name="appearanceHeaderLogoGroupBox">
      <property name="title"><string>Header Logo</string></property>
-     <layout class="QFormLayout" name="appearanceToolbarFormLayout">
-      <property name="horizontalSpacing"><number>8</number></property>
+     <layout class="QGridLayout" name="appearanceToolbarFormLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
       <item row="0" column="0"><widget class="QLabel" name="label_headerLogo"><property name="text"><string>Image:</string></property></widget></item>
-      <item row="0" column="1">
+      <item row="0" column="1" colspan="5">
        <layout class="QHBoxLayout" name="headerLogoLayout">
         <item><widget class="QLineEdit" name="headerLogoEdit"><property name="toolTip"><string>Path to a logo/banner image painted at the top of the items area</string></property><property name="placeholderText"><string>None</string></property></widget></item>
         <item><widget class="QPushButton" name="browseHeaderLogoButton"><property name="text"><string>Browse...</string></property><property name="toolTip"><string>Select a header logo image</string></property></widget></item>
