@@ -129,3 +129,27 @@ race:QMetaType::create
 # at the same heap slot via allocator reuse) appears to race with the
 # previous worker's mutex unlock.
 race:CacheManager::initialize
+# Same teardown race seen from the destructor side: the QtConcurrent
+# cache-init lambda in ApplicationManager::initialize reads CacheManager
+# state while CacheManager::~CacheManager frees it. ApplicationManager's
+# destructor calls m_cacheInitFuture.waitForFinished() before the
+# m_cacheManager unique_ptr is destroyed (applicationmanager.cpp:52), so the
+# worker has provably finished — but TSan can't see the QFuture wait's
+# happens-before edge. CacheManager::initialize is inlined into the
+# QtConcurrent lambda and never appears as its own frame, so the destructor
+# symbol is matched instead.
+race:CacheManager::~CacheManager
+
+# Queued QMetaObject::invokeMethod(obj, functor): the calling thread heap-
+# allocates a QtPrivate::QFunctorSlotObject wrapping the functor, posts it
+# to the target object's thread, and that thread runs it. Qt orders the
+# post-then-run pair through the event queue's QMutex, but QMutex's fast
+# path is futex/atomic-based — not a pthread_mutex TSan intercepts — so the
+# functor's construction (calling thread) and execution (target thread)
+# look unsynchronised. The functor-call machinery in qobjectdefs_impl.h is
+# symbolised by TSan only as bare template names (`impl`, `call`) that no
+# stable suppression can match, so this matches the invokeMethod frame on
+# the allocating side instead. Surfaces across the QueryManager scan tests,
+# which drive the worker-thread QueryManager via
+# invokeMethod(qm, lambda, Qt::QueuedConnection).
+race:invokeMethod

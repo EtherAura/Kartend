@@ -2,7 +2,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -15,6 +14,7 @@
 #include "collectionutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
+#include "workersignalspy.h"
 
 class TestQueryManagerCancelScan : public QObject {
   Q_OBJECT
@@ -156,7 +156,10 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
     QVERIFY(q.exec());
   }
 
-  QSignalSpy itemCountSpy(qm, &QueryManager::itemCountLoaded);
+  // WorkerSignalSpy (not QSignalSpy): qm lives on the worker thread, and
+  // Qt 6.4's QSignalSpy connects DirectConnection with no locking, so it
+  // would mutate its list on the worker thread while this thread reads it.
+  WorkerSignalSpy itemCountSpy(qm, &QueryManager::itemCountLoaded);
   QVERIFY(itemCountSpy.isValid());
 
   // Cancel immediately when scan starts.

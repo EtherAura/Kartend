@@ -17,7 +17,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -31,6 +30,7 @@
 #include "collectionutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
+#include "workersignalspy.h"
 
 class TestQueryManagerAbsPath : public QObject {
   Q_OBJECT
@@ -167,7 +167,10 @@ void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  QSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
+  // WorkerSignalSpy (not QSignalSpy): qm lives on the worker thread, and
+  // Qt 6.4's QSignalSpy connects DirectConnection with no locking, so it
+  // would mutate its list on the worker thread while this thread reads it.
+  WorkerSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
   QVERIFY(scanCompletedSpy.isValid());
 
   QMetaObject::invokeMethod(
@@ -304,7 +307,8 @@ void TestQueryManagerAbsPath::reconcileAbsolutizesExistingRowsPreservingStats() 
   }
 
   // loadAllCollections calls maybeAbsolutizeItemPaths before its scan loop.
-  QSignalSpy itemsLoadedSpy(qm, &QueryManager::itemsLoaded);
+  // WorkerSignalSpy (not QSignalSpy): see the threading note above.
+  WorkerSignalSpy itemsLoadedSpy(qm, &QueryManager::itemsLoaded);
   QVERIFY(itemsLoadedSpy.isValid());
 
   QMetaObject::invokeMethod(

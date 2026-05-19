@@ -370,6 +370,7 @@ add_test(NAME SessionManager COMMAND test_sessionmanager)
 # QueryManager cancellation semantics test
 add_executable(test_querymanager_cancel_scan
   modules/query/test_querymanager_cancel_scan.cpp
+  modules/query/workersignalspy.h
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
@@ -417,6 +418,7 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_broken_symlinks
   modules/query/test_querymanager_broken_symlinks.cpp
+  modules/query/workersignalspy.h
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
@@ -466,6 +468,7 @@ add_test(NAME QueryManagerBrokenSymlinks COMMAND test_querymanager_broken_symlin
 # QueryManagerBrokenSymlinks.
 add_executable(test_querymanager_abspath
   modules/query/test_querymanager_abspath.cpp
+  modules/query/workersignalspy.h
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
@@ -514,6 +517,7 @@ add_test(NAME QueryManagerAbsPath COMMAND test_querymanager_abspath)
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_cross_collection_count
   modules/query/test_querymanager_cross_collection_count.cpp
+  modules/query/workersignalspy.h
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
@@ -559,6 +563,7 @@ add_test(NAME QueryManagerCrossCollectionCount COMMAND test_querymanager_cross_c
 
 add_executable(test_querymanager_shell_collection_sort
   modules/query/test_querymanager_shell_collection_sort.cpp
+  modules/query/workersignalspy.h
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp

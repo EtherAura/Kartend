@@ -8,7 +8,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -21,6 +20,7 @@
 #include "collectionutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
+#include "workersignalspy.h"
 
 class TestQueryManagerCrossCollectionCount : public QObject {
   Q_OBJECT
@@ -141,7 +141,10 @@ void TestQueryManagerCrossCollectionCount::duplicateNamedFilesCountSeparately() 
   }
 
   // Scan both collections so each gets its own row in items.
-  QSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
+  // WorkerSignalSpy (not QSignalSpy): qm lives on the worker thread, and
+  // Qt 6.4's QSignalSpy connects DirectConnection with no locking, so it
+  // would mutate its list on the worker thread while this thread reads it.
+  WorkerSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
   QVERIFY(scanCompletedSpy.isValid());
 
   for (int i = 0; i < allCollections.size(); ++i) {
@@ -166,7 +169,8 @@ void TestQueryManagerCrossCollectionCount::duplicateNamedFilesCountSeparately() 
   // Now ask QueryManager for the count via the production path. With the
   // pre-fix SQL (COUNT(DISTINCT path)) this collapses to 1; with the fix it
   // counts each (uuid, path) row, yielding 2.
-  QSignalSpy itemCountSpy(qm, &QueryManager::itemCountLoaded);
+  // WorkerSignalSpy (not QSignalSpy): see the threading note above.
+  WorkerSignalSpy itemCountSpy(qm, &QueryManager::itemCountLoaded);
   QVERIFY(itemCountSpy.isValid());
 
   QMetaObject::invokeMethod(

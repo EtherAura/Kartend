@@ -14,7 +14,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -29,6 +28,7 @@
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
+#include "workersignalspy.h"
 
 class TestQueryManagerShellCollectionSort : public QObject {
   Q_OBJECT
@@ -154,7 +154,10 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
   }
 
   // Scan every collection so each file gets its own row in items.
-  QSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
+  // WorkerSignalSpy (not QSignalSpy): qm lives on the worker thread, and
+  // Qt 6.4's QSignalSpy connects DirectConnection with no locking, so it
+  // would mutate its list on the worker thread while this thread reads it.
+  WorkerSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
   QVERIFY(scanCompletedSpy.isValid());
 
   for (int i = 0; i < allCollections.size(); ++i) {
@@ -176,7 +179,8 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
     QCOMPARE(q.value(0).toInt(), kCollectionCount);
   }
 
-  QSignalSpy rangeSpy(qm, &QueryManager::itemsRangeLoaded);
+  // WorkerSignalSpy (not QSignalSpy): see the threading note above.
+  WorkerSignalSpy rangeSpy(qm, &QueryManager::itemsRangeLoaded);
   QVERIFY(rangeSpy.isValid());
 
   // First fetch with an offset past PRECOMPUTE_SORT_THRESHOLD: this schedules

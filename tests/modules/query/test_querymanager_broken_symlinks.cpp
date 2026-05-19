@@ -8,7 +8,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -21,6 +20,7 @@
 #include "collectionutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
+#include "workersignalspy.h"
 
 class TestQueryManagerBrokenSymlinks : public QObject {
   Q_OBJECT
@@ -138,7 +138,10 @@ void TestQueryManagerBrokenSymlinks::brokenSymlinkSurvivesScan() {
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  QSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
+  // WorkerSignalSpy (not QSignalSpy): qm lives on the worker thread, and
+  // Qt 6.4's QSignalSpy connects DirectConnection with no locking, so it
+  // would mutate its list on the worker thread while this thread reads it.
+  WorkerSignalSpy scanCompletedSpy(qm, &QueryManager::collectionScanCompleted);
   QVERIFY(scanCompletedSpy.isValid());
 
   QMetaObject::invokeMethod(
