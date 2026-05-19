@@ -66,6 +66,11 @@ __pycache__/
 # Per-developer agent / editor state
 .claude/
 
+# AI-agent instruction files — kept local, not shared with the repo
+/CLAUDE.md
+/AGENTS.md
+/.github/copilot-instructions.md
+
 # Obsidian vault metadata (personal note-taking, not project state)
 .obsidian/
 
