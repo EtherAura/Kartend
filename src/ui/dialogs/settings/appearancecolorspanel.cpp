@@ -88,23 +88,11 @@ AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
   connect(ui->browseListAltRowColorButton, &QPushButton::clicked, this,
           &AppearanceColorsPanel::onBrowseListAltRowColor);
 
-  // Insert the color-scheme loader at the very top of the panel so the
-  // bulk action sits above the per-field pickers — users typically pick
-  // a scheme first, then tweak. Done programmatically (no .ui edit) to
-  // keep the Designer surface stable.
-  if (auto *root = qobject_cast<QBoxLayout *>(layout())) {
-    auto *row = new QHBoxLayout();
-    m_loadSchemeButton = new QPushButton(tr("Load color scheme…"), this);
-    m_loadSchemeButton->setToolTip(
-        tr("Apply the colors from a bundled or KDE Plasma color scheme. Only "
-           "the per-collection color fields and the global title base color are "
-           "touched — vignette, blur, parallax, and fonts are left as-is."));
-    connect(m_loadSchemeButton, &QPushButton::clicked, this,
-            &AppearanceColorsPanel::onLoadColorScheme);
-    row->addWidget(m_loadSchemeButton);
-    row->addStretch();
-    root->insertLayout(0, row);
-  }
+  // The color-scheme loader lives in its own "Color Scheme" group box in
+  // appearancecolorspanel.ui — a real container, consistent with the other
+  // sections. Wire its click here.
+  connect(ui->loadColorSchemeButton, &QPushButton::clicked, this,
+          &AppearanceColorsPanel::onLoadColorScheme);
 }
 
 AppearanceColorsPanel::~AppearanceColorsPanel() {

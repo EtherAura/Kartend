@@ -14,13 +14,14 @@
      <layout class="QFormLayout" name="appearanceParallaxFormLayout">
       <property name="horizontalSpacing"><number>8</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
       <item row="0" column="0"><widget class="QLabel" name="label_wallpaperParallax"><property name="text"><string>Wallpaper Parallax:</string></property></widget></item>
       <item row="0" column="1">
        <layout class="QHBoxLayout" name="wallpaperParallaxLayout">
+        <property name="spacing"><number>14</number></property>
         <item><widget class="QCheckBox" name="wallpaperParallaxCheckBox"><property name="text"><string>Enable</string></property><property name="toolTip"><string>Tie the image background's vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</string></property></widget></item>
         <item><widget class="QLabel" name="label_parallaxStrength"><property name="text"><string>Strength:</string></property></widget></item>
-        <item><widget class="QSpinBox" name="parallaxStrengthSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>30</number></property></widget></item>
+        <item><widget class="QSpinBox" name="parallaxStrengthSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>30</number></property></widget></item>
        </layout>
       </item>
      </layout>
@@ -32,13 +33,14 @@
      <layout class="QFormLayout" name="appearanceEffectsFormLayout">
       <property name="horizontalSpacing"><number>8</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
       <item row="0" column="0"><widget class="QLabel" name="label_toolbarBackdropBlur"><property name="text"><string>Toolbar Blur:</string></property></widget></item>
       <item row="0" column="1">
        <layout class="QHBoxLayout" name="toolbarBackdropBlurLayout">
+        <property name="spacing"><number>14</number></property>
         <item><widget class="QCheckBox" name="toolbarBackdropBlurCheckBox"><property name="text"><string>Enable</string></property><property name="toolTip"><string>Use a blurred copy of the wallpaper as the toolbar background, mimicking macOS Vibrancy. Image bg only — no-op while a video bg is active.</string></property></widget></item>
         <item><widget class="QLabel" name="label_backdropBlurRadius"><property name="text"><string>Radius:</string></property></widget></item>
-        <item><widget class="QSpinBox" name="backdropBlurRadiusSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</string></property><property name="minimum"><number>4</number></property><property name="maximum"><number>32</number></property><property name="value"><number>12</number></property></widget></item>
+        <item><widget class="QSpinBox" name="backdropBlurRadiusSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</string></property><property name="minimum"><number>4</number></property><property name="maximum"><number>32</number></property><property name="value"><number>12</number></property></widget></item>
        </layout>
       </item>
      </layout>

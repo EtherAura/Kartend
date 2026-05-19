@@ -155,6 +155,12 @@ private slots:
   /// alias parents. Excludes self + descendants from the picker (cycles
   /// can't be expressed via the UI).
   void onEditLinkedParents();
+  /// Nav-rail row changed — swap the visible page in the QStackedWidget and
+  /// refresh the context header.
+  void onNavigationRowChanged();
+  /// Settings-search text changed — filter the category list to rows whose
+  /// label or indexed field text matches the query.
+  void onSettingsSearchTextChanged(const QString &text);
 
 private:
   void updateCollectionTreeWidget() override;
@@ -175,6 +181,20 @@ private:
   [[nodiscard]] static auto spacingInternalToUi(int spacing) -> int;
   [[nodiscard]] static auto spacingUiToInternal(int spacing) -> int;
   void setupGeneralSettingsConnections();
+  /// Builds the left-rail category list, wires it to the page stack, styles
+  /// the context header, and indexes settings for search. Implementation in
+  /// settingsdialognav.cpp.
+  void setupNavigation();
+  /// Refreshes the context header (icon + title + collection subtitle) for
+  /// the currently selected nav row.
+  void updateContextHeader();
+  /// Indexes every page's visible label / button / group-box text so the
+  /// search box can match settings by name. Stored on each category row.
+  void buildSettingsSearchIndex();
+  /// Restore / persist the dialog geometry and rail splitter position so the
+  /// layout survives across runs.
+  void restoreDialogState();
+  void saveDialogState();
   void loadCollectionToUI(int index) override;
   void clearCollectionUI() override;
   void saveCollectionFromUI(int index);

@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   burning the rest of the run against an empty allowance — your place
   is kept so you can resume once the quota resets.
 
+### Changed
+
+- **The Settings dialog has a new sidebar layout.** Settings categories
+  now live in a navigation list down the left side — next to the
+  collection tree and a new search box — instead of nested rows of
+  tabs. Pick a category to show its page on the right; a header names
+  the category and, for per-collection pages, the collection being
+  edited. A labelled **Save** button sits in the dialog's button row,
+  draggable dividers resize the rail and split its height between the
+  collection tree and the category list, and the dialog remembers its
+  size and divider positions between runs.
+
 ### Fixed
 
 - **Large scrapes no longer crash on PDF manuals.** When a scrape saved a

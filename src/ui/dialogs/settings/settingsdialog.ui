@@ -6,147 +6,67 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1100</width>
-    <height>920</height>
+    <width>1160</width>
+    <height>900</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>820</width>
-    <height>720</height>
+    <width>900</width>
+    <height>680</height>
    </size>
   </property>
   <property name="windowTitle">
    <string>Settings</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="rootLayout">
    <property name="spacing"><number>8</number></property>
    <property name="leftMargin"><number>10</number></property>
    <property name="rightMargin"><number>10</number></property>
    <property name="topMargin"><number>10</number></property>
    <property name="bottomMargin"><number>10</number></property>
    <item>
-    <widget class="QTabWidget" name="tabWidget">
-     <property name="currentIndex">
-      <number>0</number>
-     </property>
-     <widget class="QWidget" name="collectionsTab">
-      <attribute name="icon">
-       <iconset theme="folder-open"/>
-      </attribute>
-      <attribute name="title">
-       <string>Collections</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="collectionsTabLayout">
+    <widget class="QSplitter" name="mainSplitter">
+     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+     <property name="handleWidth"><number>8</number></property>
+     <property name="childrenCollapsible"><bool>false</bool></property>
+     <!-- ============================ LEFT: navigation rail ===================== -->
+     <widget class="QWidget" name="navPane">
+      <property name="minimumSize"><size><width>220</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>440</width><height>16777215</height></size></property>
+      <layout class="QVBoxLayout" name="navPaneLayout">
+       <property name="spacing"><number>6</number></property>
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
        <item>
-        <widget class="CollectionsTreeShell" name="collectionsTreeShell" native="true"/>
+        <widget class="QLineEdit" name="settingsSearchEdit">
+         <property name="clearButtonEnabled"><bool>true</bool></property>
+         <property name="placeholderText"><string>Search settings…</string></property>
+         <property name="toolTip"><string>Filter the categories below by setting name</string></property>
+        </widget>
        </item>
-              <item>
-        <widget class="QTabWidget" name="collectionConfigTabWidget">
-         <property name="currentIndex">
-          <number>0</number>
-         </property>
-         <!-- Configuration Tab: artwork & launcher have dedicated tabs -->
-         <widget class="QWidget" name="configurationTab">
-          <attribute name="title">
-           <string>Configuration</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="configurationTabLayout">
-           <item>
-            <widget class="ConfigurationPanel" name="configurationPanel" native="true"/>
-           </item>
-          </layout>
+       <item>
+        <widget class="QSplitter" name="navSplitter">
+         <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+         <property name="handleWidth"><number>6</number></property>
+         <property name="childrenCollapsible"><bool>false</bool></property>
+         <widget class="CollectionsTreeShell" name="collectionsTreeShell" native="true">
+          <property name="minimumSize"><size><width>0</width><height>150</height></size></property>
          </widget>
-         <!-- Artwork Tab -->
-         <widget class="QWidget" name="artworkTab">
-          <attribute name="title">
-           <string>Artwork</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="artworkTabLayout">
+         <widget class="QGroupBox" name="categoryGroupBox">
+          <property name="minimumSize"><size><width>0</width><height>140</height></size></property>
+          <layout class="QVBoxLayout" name="categoryGroupLayout">
            <item>
-            <widget class="ArtworkTabPanel" name="artworkPanel" native="true"/>
-           </item>
-          </layout>
-         </widget>
-         <!-- Launcher Tab -->
-         <widget class="QWidget" name="launcherTab">
-          <attribute name="title">
-           <string>Launcher</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="launcherTabLayout">
-           <item>
-            <widget class="LauncherTabPanel" name="launcherPanel" native="true"/>
-           </item>
-          </layout>
-         </widget>
-         <!-- Appearance Tab -->
-         <widget class="QWidget" name="appearanceTab">
-          <attribute name="title">
-           <string>Appearance</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="appearanceTabLayout">
-           <property name="spacing"><number>4</number></property>
-           <property name="leftMargin"><number>4</number></property>
-           <property name="rightMargin"><number>4</number></property>
-           <property name="topMargin"><number>4</number></property>
-           <property name="bottomMargin"><number>4</number></property>
-           <item>
-            <widget class="QTabWidget" name="appearanceSubTabWidget">
-             <property name="currentIndex"><number>0</number></property>
-             <!-- Sub-tab: Layout -->
-             <widget class="QWidget" name="appearanceLayoutSubTab">
-              <attribute name="title"><string>Layout</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceLayoutSubTabLayout">
-               <item><widget class="AppearanceLayoutPanel" name="appearanceLayoutPanel" native="true"/></item>
-              </layout>
-             </widget>
-             <!-- Sub-tab: Titles -->
-             <widget class="QWidget" name="appearanceTitlesSubTab">
-              <attribute name="title"><string>Titles</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceTitlesSubTabLayout">
-               <item><widget class="AppearanceTitlesPanel" name="appearanceTitlesPanel" native="true"/></item>
-              </layout>
-             </widget>
-             <!-- Sub-tab: Colors -->
-             <widget class="QWidget" name="appearanceColorsSubTab">
-              <attribute name="title"><string>Colors</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceColorsSubTabLayout">
-               <item><widget class="AppearanceColorsPanel" name="appearanceColorsPanel" native="true"/></item>
-              </layout>
-             </widget>
-             <!-- Sub-tab: List Mode -->
-             <widget class="QWidget" name="appearanceListSubTab">
-              <attribute name="title"><string>List Mode</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceListSubTabLayout">
-               <item><widget class="AppearanceListPanel" name="appearanceListPanel" native="true"/></item>
-              </layout>
-             </widget>
-             <!-- Sub-tab: Toolbar -->
-             <widget class="QWidget" name="appearanceToolbarSubTab">
-              <attribute name="title"><string>Header Logo</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceToolbarSubTabLayout">
-               <item><widget class="AppearanceToolbarPanel" name="appearanceToolbarPanel" native="true"/></item>
-              </layout>
-             </widget>
-             <!-- Sub-tab: Effects -->
-             <widget class="QWidget" name="appearanceEffectsSubTab">
-              <attribute name="title"><string>Effects</string></attribute>
-              <layout class="QVBoxLayout" name="appearanceEffectsSubTabLayout">
-               <item><widget class="AppearanceEffectsPanel" name="appearanceEffectsPanel" native="true"/></item>
-              </layout>
-             </widget>
+            <widget class="QListWidget" name="categoryList">
+             <property name="toolTip"><string>Choose a settings category</string></property>
+             <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+             <property name="alternatingRowColors"><bool>false</bool></property>
+             <property name="iconSize"><size><width>22</width><height>22</height></size></property>
+             <property name="spacing"><number>2</number></property>
+             <property name="uniformItemSizes"><bool>false</bool></property>
             </widget>
-           </item>
-          </layout>
-         </widget>
-         <!-- Subfolders Tab -->
-         <widget class="QWidget" name="subfoldersTab">
-          <attribute name="title">
-           <string>Subfolders</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="subfoldersTabLayout">
-           <item>
-            <widget class="SubfoldersPanel" name="subfoldersPanel" native="true"/>
            </item>
           </layout>
          </widget>
@@ -154,293 +74,454 @@
        </item>
       </layout>
      </widget>
-     <!-- Details-pane Tab: top-level category.
-          Settings are per-collection — the row below shows which collection
-          is being edited (driven by the Collections tab tree selection). -->
-     <widget class="QWidget" name="sidebarTab">
-      <attribute name="icon">
-       <iconset theme="format-justify-right"/>
-      </attribute>
-      <attribute name="title">
-       <string>Details Pane</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="sidebarTabLayout">
+     <!-- ============================ RIGHT: content pane ======================= -->
+     <widget class="QWidget" name="contentPane">
+      <layout class="QVBoxLayout" name="contentPaneLayout">
+       <property name="spacing"><number>8</number></property>
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
        <item>
-        <widget class="SidebarPanel" name="sidebarPanel" native="true"/>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="launchersTab">
-      <attribute name="icon">
-       <iconset theme="system-run"/>
-      </attribute>
-      <attribute name="title">
-       <string>Launchers</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="launchersTabLayout">
-       <item>
-        <widget class="LauncherPresetsPanel" name="launcherPresetsPanel" native="true"/>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="scrapersTab">
-      <attribute name="icon">
-       <iconset theme="folder-download"/>
-      </attribute>
-      <attribute name="title">
-       <string>Scrapers</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="scrapersTabLayout">
-       <item>
-        <widget class="QTabWidget" name="scrapersSubTabWidget">
-         <property name="currentIndex">
-          <number>0</number>
-         </property>
-         <widget class="QWidget" name="scraperScreenScraperSubTab">
-          <attribute name="title">
-           <string>ScreenScraper</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="scraperScreenScraperSubTabLayout">
-           <item>
-            <widget class="ScraperCredentialsPanel" name="screenScraperCredentialsPanel" native="true"/>
-           </item>
-           <item>
-            <widget class="ScraperSettingsPanel" name="scraperSettingsPanel" native="true"/>
-           </item>
-          </layout>
-         </widget>
-         <widget class="QWidget" name="scraperMusicBrainzSubTab">
-          <attribute name="title">
-           <string>MusicBrainz</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="scraperMusicBrainzSubTabLayout">
-           <item>
-            <widget class="QLabel" name="musicBrainzPlaceholder">
-             <property name="wordWrap"><bool>true</bool></property>
-             <property name="text">
-              <string>MusicBrainz uses a fixed 1 req/sec policy per the provider's terms of service. No tunable performance options, and no credentials are required for public lookups.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="musicBrainzSpacer">
-             <property name="orientation"><enum>Qt::Vertical</enum></property>
-             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </widget>
-         <widget class="QWidget" name="scraperOpenLibrarySubTab">
-          <attribute name="title">
-           <string>OpenLibrary</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="scraperOpenLibrarySubTabLayout">
-           <item>
-            <widget class="QLabel" name="openLibraryPlaceholder">
-             <property name="wordWrap"><bool>true</bool></property>
-             <property name="text">
-              <string>OpenLibrary requires no credentials and has no documented per-key concurrency cap. The active per-host throttle for openlibrary.org / covers.openlibrary.org is fixed at conservative defaults to respect their public-API policy.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="openLibrarySpacer">
-             <property name="orientation"><enum>Qt::Vertical</enum></property>
-             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </widget>
-         <widget class="QWidget" name="scraperTmdbSubTab">
-          <attribute name="title">
-           <string>TMDB</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="scraperTmdbSubTabLayout">
-           <item>
-            <widget class="ScraperCredentialsPanel" name="tmdbCredentialsPanel" native="true"/>
-           </item>
-           <item>
-            <widget class="QLabel" name="tmdbPlaceholder">
-             <property name="wordWrap"><bool>true</bool></property>
-             <property name="text">
-              <string>No tunable performance options yet — TMDB's documented rate limit is generous and the built-in throttle stays well under it.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="tmdbSpacer">
-             <property name="orientation"><enum>Qt::Vertical</enum></property>
-             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </widget>
+        <widget class="QWidget" name="contextHeader">
+         <layout class="QHBoxLayout" name="contextHeaderLayout">
+          <property name="spacing"><number>10</number></property>
+          <property name="leftMargin"><number>2</number></property>
+          <property name="topMargin"><number>2</number></property>
+          <property name="rightMargin"><number>2</number></property>
+          <property name="bottomMargin"><number>2</number></property>
+          <item>
+           <widget class="QLabel" name="contextIconLabel">
+            <property name="minimumSize"><size><width>36</width><height>36</height></size></property>
+            <property name="maximumSize"><size><width>36</width><height>36</height></size></property>
+            <property name="scaledContents"><bool>true</bool></property>
+            <property name="text"><string/></property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="contextHeaderTextLayout">
+            <property name="spacing"><number>0</number></property>
+            <item>
+             <widget class="QLabel" name="contextTitleLabel">
+              <property name="text"><string>Settings</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="contextSubtitleLabel">
+              <property name="text"><string/></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <spacer name="contextHeaderSpacer">
+            <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+            <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+           </spacer>
+          </item>
+         </layout>
         </widget>
        </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="generalTab">
-      <attribute name="icon">
-       <iconset theme="document-properties"/>
-      </attribute>
-      <attribute name="title">
-       <string>General</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="generalTabLayout">
        <item>
-                <widget class="QTabWidget" name="generalSubTabWidget">
-                 <property name="currentIndex">
-                    <number>0</number>
-                 </property>
-                 <widget class="QWidget" name="generalSettingsSubTab">
-                    <attribute name="title">
-                     <string>General</string>
-                    </attribute>
-                    <layout class="QVBoxLayout" name="generalSettingsSubTabLayout">
-           <item>
-            <widget class="GeneralSettingsPanel" name="generalSettingsPanel" native="true"/>
-           </item>
-           <item>
-            <widget class="QGroupBox" name="backupGroupBox">
-             <property name="title">
-              <string>Configuration Backup</string>
-             </property>
-             <layout class="QVBoxLayout" name="backupContentLayout">
+        <widget class="Line" name="contextHeaderLine">
+         <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="pageStack">
+         <property name="currentIndex"><number>0</number></property>
+         <!-- page 0 — Configuration -->
+         <widget class="QScrollArea" name="configurationPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="configurationPageContents">
+           <layout class="QVBoxLayout" name="configurationPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="ConfigurationPanel" name="configurationPanel" native="true"/></item>
+            <item><spacer name="configurationPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 1 — Artwork -->
+         <widget class="QScrollArea" name="artworkPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="artworkPageContents">
+           <layout class="QVBoxLayout" name="artworkPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="ArtworkTabPanel" name="artworkPanel" native="true"/></item>
+            <item><spacer name="artworkPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 2 — Appearance (two-column composite of six panels) -->
+         <widget class="QScrollArea" name="appearancePage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="appearancePageContents">
+           <layout class="QHBoxLayout" name="appearancePageLayout">
+            <property name="spacing"><number>16</number></property>
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item>
+             <layout class="QVBoxLayout" name="appearanceColumnLeft">
+              <property name="spacing"><number>6</number></property>
               <item>
-               <widget class="QLabel" name="backupDescriptionLabel">
-                <property name="wordWrap">
-                 <bool>true</bool>
-                </property>
-                <property name="text">
-                 <string>Export your full Kartend configuration (general settings, all collections, and launcher presets) to a .cfg file in the config directory, or load a previously exported file. Loading replaces the active configuration; the previous one is preserved as kartend.cfg.bak.</string>
-                </property>
+               <widget class="QLabel" name="appearanceLayoutHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>Layout</string></property>
                </widget>
               </item>
+              <item><widget class="AppearanceLayoutPanel" name="appearanceLayoutPanel" native="true"/></item>
               <item>
-               <layout class="QHBoxLayout" name="backupExportLayout">
-                <item>
-                 <widget class="QPushButton" name="exportConfigButton">
-                  <property name="toolTip">
-                   <string>Save the current Kartend configuration to a named .cfg file in the config directory</string>
-                  </property>
-                  <property name="text">
-                   <string>Export...</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="backupExportSpacer">
-                  <property name="orientation">
-                   <enum>Qt::Orientation::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-               </layout>
+               <widget class="QLabel" name="appearanceColorsHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>Colors</string></property>
+               </widget>
               </item>
-              <item>
-               <layout class="QHBoxLayout" name="backupImportLayout">
-                <item>
-                 <widget class="QLabel" name="importConfigLabel">
-                  <property name="text">
-                   <string>Load profile:</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QComboBox" name="importConfigComboBox">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="toolTip">
-                   <string>.cfg files found in the Kartend config directory. The currently active config is marked with "(active)".</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="importConfigButton">
-                  <property name="toolTip">
-                   <string>Replace the active configuration with the selected profile (requires restart)</string>
-                  </property>
-                  <property name="text">
-                   <string>Load</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
+              <item><widget class="AppearanceColorsPanel" name="appearanceColorsPanel" native="true"/></item>
+              <item><spacer name="appearanceColumnLeftSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
              </layout>
-            </widget>
-           </item>
-          </layout>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="appearanceColumnRight">
+              <property name="spacing"><number>6</number></property>
+              <item>
+               <widget class="QLabel" name="appearanceTitlesHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>Titles</string></property>
+               </widget>
+              </item>
+              <item><widget class="AppearanceTitlesPanel" name="appearanceTitlesPanel" native="true"/></item>
+              <item>
+               <widget class="QLabel" name="appearanceEffectsHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>Effects</string></property>
+               </widget>
+              </item>
+              <item><widget class="AppearanceEffectsPanel" name="appearanceEffectsPanel" native="true"/></item>
+              <item>
+               <widget class="QLabel" name="appearanceListHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>List Mode</string></property>
+               </widget>
+              </item>
+              <item><widget class="AppearanceListPanel" name="appearanceListPanel" native="true"/></item>
+              <item>
+               <widget class="QLabel" name="appearanceLogoHeader">
+                <property name="font"><font><bold>true</bold></font></property>
+                <property name="text"><string>Header Logo</string></property>
+               </widget>
+              </item>
+              <item><widget class="AppearanceToolbarPanel" name="appearanceToolbarPanel" native="true"/></item>
+              <item><spacer name="appearanceColumnRightSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="splashSubTab">
-          <attribute name="title">
-           <string>Splash</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="splashSubTabLayout">
-           <item>
-            <widget class="SplashPanel" name="splashPanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 3 — Launcher -->
+         <widget class="QScrollArea" name="launcherPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="launcherPageContents">
+           <layout class="QVBoxLayout" name="launcherPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="LauncherTabPanel" name="launcherPanel" native="true"/></item>
+            <item><spacer name="launcherPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="fontsSubTab">
-          <attribute name="title">
-           <string>Fonts</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="fontsSubTabLayout">
-           <item>
-            <widget class="FontsPanel" name="fontsPanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 4 — Subfolders -->
+         <widget class="QScrollArea" name="subfoldersPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="subfoldersPageContents">
+           <layout class="QVBoxLayout" name="subfoldersPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="SubfoldersPanel" name="subfoldersPanel" native="true"/></item>
+            <item><spacer name="subfoldersPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="attractSubTab">
-          <attribute name="title">
-           <string>Attract Mode</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="attractSubTabLayout">
-           <item>
-            <widget class="AttractPanel" name="attractPanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 5 — Details Pane -->
+         <widget class="QScrollArea" name="detailsPanePage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="detailsPanePageContents">
+           <layout class="QVBoxLayout" name="detailsPanePageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="SidebarPanel" name="sidebarPanel" native="true"/></item>
+            <item><spacer name="detailsPanePageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="marqueeSubTab">
-          <attribute name="title">
-           <string>Marquee</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="marqueeSubTabLayout">
-           <item>
-            <widget class="MarqueePanel" name="marqueePanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 6 — General (general settings + configuration backup) -->
+         <widget class="QScrollArea" name="generalPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="generalPageContents">
+           <layout class="QVBoxLayout" name="generalPageLayout">
+            <property name="spacing"><number>10</number></property>
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="GeneralSettingsPanel" name="generalSettingsPanel" native="true"/></item>
+            <item>
+             <widget class="QGroupBox" name="backupGroupBox">
+              <property name="title"><string>Configuration Backup</string></property>
+              <layout class="QVBoxLayout" name="backupContentLayout">
+               <item>
+                <widget class="QLabel" name="backupDescriptionLabel">
+                 <property name="wordWrap"><bool>true</bool></property>
+                 <property name="text">
+                  <string>Export your full Kartend configuration (general settings, all collections, and launcher presets) to a .cfg file in the config directory, or load a previously exported file. Loading replaces the active configuration; the previous one is preserved as kartend.cfg.bak.</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="backupExportLayout">
+                 <item>
+                  <widget class="QPushButton" name="exportConfigButton">
+                   <property name="toolTip">
+                    <string>Save the current Kartend configuration to a named .cfg file in the config directory</string>
+                   </property>
+                   <property name="text"><string>Export...</string></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="backupExportSpacer">
+                   <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+                   <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="backupImportLayout">
+                 <item>
+                  <widget class="QLabel" name="importConfigLabel">
+                   <property name="text"><string>Load profile:</string></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="importConfigComboBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>.cfg files found in the Kartend config directory. The currently active config is marked with "(active)".</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="importConfigButton">
+                   <property name="toolTip">
+                    <string>Replace the active configuration with the selected profile (requires restart)</string>
+                   </property>
+                   <property name="text"><string>Load</string></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item><spacer name="generalPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="toolbarSubTab">
-          <attribute name="title">
-           <string>Toolbar Buttons</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="toolbarSubTabLayout">
-           <item>
-            <widget class="ToolbarPanel" name="toolbarPanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 7 — Fonts -->
+         <widget class="QScrollArea" name="fontsPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="fontsPageContents">
+           <layout class="QVBoxLayout" name="fontsPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="FontsPanel" name="fontsPanel" native="true"/></item>
+            <item><spacer name="fontsPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
-         <widget class="QWidget" name="controlsSubTab">
-          <attribute name="title">
-           <string>Controls</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="controlsSubTabLayout">
-           <item>
-            <widget class="ControlsPanel" name="controlsPanel" native="true"/>
-           </item>
-          </layout>
+         <!-- page 8 — Splash -->
+         <widget class="QScrollArea" name="splashPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="splashPageContents">
+           <layout class="QVBoxLayout" name="splashPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="SplashPanel" name="splashPanel" native="true"/></item>
+            <item><spacer name="splashPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 9 — Attract Mode -->
+         <widget class="QScrollArea" name="attractPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="attractPageContents">
+           <layout class="QVBoxLayout" name="attractPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="AttractPanel" name="attractPanel" native="true"/></item>
+            <item><spacer name="attractPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 10 — Marquee -->
+         <widget class="QScrollArea" name="marqueePage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="marqueePageContents">
+           <layout class="QVBoxLayout" name="marqueePageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="MarqueePanel" name="marqueePanel" native="true"/></item>
+            <item><spacer name="marqueePageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 11 — Toolbar -->
+         <widget class="QScrollArea" name="toolbarPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="toolbarPageContents">
+           <layout class="QVBoxLayout" name="toolbarPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="ToolbarPanel" name="toolbarPanel" native="true"/></item>
+            <item><spacer name="toolbarPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 12 — Controls -->
+         <widget class="QScrollArea" name="controlsPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="controlsPageContents">
+           <layout class="QVBoxLayout" name="controlsPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="ControlsPanel" name="controlsPanel" native="true"/></item>
+            <item><spacer name="controlsPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 13 — Launchers (presets) -->
+         <widget class="QScrollArea" name="launchersPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="launchersPageContents">
+           <layout class="QVBoxLayout" name="launchersPageLayout">
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item><widget class="LauncherPresetsPanel" name="launcherPresetsPanel" native="true"/></item>
+            <item><spacer name="launchersPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </widget>
+         <!-- page 14 — Scrapers (one section per provider) -->
+         <widget class="QScrollArea" name="scrapersPage">
+          <property name="widgetResizable"><bool>true</bool></property>
+          <property name="frameShape"><enum>QFrame::Shape::NoFrame</enum></property>
+          <widget class="QWidget" name="scrapersPageContents">
+           <layout class="QVBoxLayout" name="scrapersPageLayout">
+            <property name="spacing"><number>6</number></property>
+            <property name="leftMargin"><number>4</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>6</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <item>
+             <widget class="QLabel" name="scraperScreenScraperHeader">
+              <property name="font"><font><bold>true</bold></font></property>
+              <property name="text"><string>ScreenScraper</string></property>
+             </widget>
+            </item>
+            <item><widget class="ScraperCredentialsPanel" name="screenScraperCredentialsPanel" native="true"/></item>
+            <item><widget class="ScraperSettingsPanel" name="scraperSettingsPanel" native="true"/></item>
+            <item>
+             <widget class="QLabel" name="scraperMusicBrainzHeader">
+              <property name="font"><font><bold>true</bold></font></property>
+              <property name="text"><string>MusicBrainz</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="musicBrainzPlaceholder">
+              <property name="wordWrap"><bool>true</bool></property>
+              <property name="text">
+               <string>MusicBrainz uses a fixed 1 req/sec policy per the provider's terms of service. No tunable performance options, and no credentials are required for public lookups.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="scraperOpenLibraryHeader">
+              <property name="font"><font><bold>true</bold></font></property>
+              <property name="text"><string>OpenLibrary</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="openLibraryPlaceholder">
+              <property name="wordWrap"><bool>true</bool></property>
+              <property name="text">
+               <string>OpenLibrary requires no credentials and has no documented per-key concurrency cap. The active per-host throttle for openlibrary.org / covers.openlibrary.org is fixed at conservative defaults to respect their public-API policy.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="scraperTmdbHeader">
+              <property name="font"><font><bold>true</bold></font></property>
+              <property name="text"><string>TMDB</string></property>
+             </widget>
+            </item>
+            <item><widget class="ScraperCredentialsPanel" name="tmdbCredentialsPanel" native="true"/></item>
+            <item>
+             <widget class="QLabel" name="tmdbPlaceholder">
+              <property name="wordWrap"><bool>true</bool></property>
+              <property name="text">
+               <string>No tunable performance options yet — TMDB's documented rate limit is generous and the built-in throttle stays well under it.</string>
+              </property>
+             </widget>
+            </item>
+            <item><spacer name="scrapersPageSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
          </widget>
         </widget>
        </item>
@@ -449,27 +530,32 @@
     </widget>
    </item>
    <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Orientation::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="orientation">
-      <enum>Qt::Orientation::Horizontal</enum>
-     </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="buttonRow">
+     <item>
+      <widget class="QPushButton" name="saveButton">
+       <property name="enabled"><bool>false</bool></property>
+       <property name="text"><string>Save</string></property>
+       <property name="icon"><iconset theme="document-save"/></property>
+       <property name="toolTip">
+        <string>Save changes to the selected collection and to the application settings</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="buttonRowSpacer">
+       <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+       <property name="standardButtons">
+        <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>

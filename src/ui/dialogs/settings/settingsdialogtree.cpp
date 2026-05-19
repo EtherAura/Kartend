@@ -54,6 +54,7 @@ void SettingsDialog::onTreeItemSelectionChanged() {
     currentTreeItem = nullptr;
     currentCollectionIndex = -1;
     updateDeleteButtonState();
+    updateContextHeader();
     return;
   }
 

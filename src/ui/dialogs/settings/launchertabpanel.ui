@@ -11,43 +11,108 @@
    <item>
     <widget class="QGroupBox" name="launcherExecutableGroupBox">
      <property name="title"><string>Executable</string></property>
-     <layout class="QFormLayout" name="launcherExecutableFormLayout">
-      <property name="horizontalSpacing"><number>8</number></property>
-      <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_launcher"><property name="text"><string>Launcher:</string></property></widget></item>
-      <item row="0" column="1">
-       <layout class="QHBoxLayout" name="launcherLayout">
-        <item><widget class="QLineEdit" name="launcherLineEdit"/></item>
-        <item><widget class="QPushButton" name="browseLauncherButton"><property name="text"><string>Browse</string></property></widget></item>
-       </layout>
+     <!-- Two-column section: two equal-width column wrappers side by side. -->
+     <layout class="QHBoxLayout" name="launcherExecutableRowLayout">
+      <property name="spacing"><number>24</number></property>
+      <item>
+       <widget class="QWidget" name="launcherExecutableColLeft" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QFormLayout" name="launcherExecutableFormLeft">
+         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>6</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+         <item row="0" column="0"><widget class="QLabel" name="label_launcher"><property name="text"><string>Launcher:</string></property></widget></item>
+         <item row="0" column="1">
+          <layout class="QHBoxLayout" name="launcherLayout">
+           <item><widget class="QLineEdit" name="launcherLineEdit"/></item>
+           <item><widget class="QPushButton" name="browseLauncherButton"><property name="text"><string>Browse</string></property></widget></item>
+          </layout>
+         </item>
+         <item row="1" column="0"><widget class="QLabel" name="label_core"><property name="text"><string>Core Path:</string></property></widget></item>
+         <item row="1" column="1">
+          <layout class="QHBoxLayout" name="coreLayout">
+           <item><widget class="QComboBox" name="coreComboBox"><property name="toolTip"><string>Cores detected in your RetroArch install — pick one to fill the path.</string></property></widget></item>
+           <item><widget class="QLineEdit" name="coreLineEdit"><property name="toolTip"><string>Path to libretro core file</string></property></widget></item>
+           <item><widget class="QPushButton" name="browseCoreButton"><property name="text"><string>Browse</string></property></widget></item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
       </item>
-      <item row="1" column="0"><widget class="QLabel" name="label_core"><property name="text"><string>Core Path:</string></property></widget></item>
-      <item row="1" column="1">
-       <layout class="QHBoxLayout" name="coreLayout">
-        <item><widget class="QComboBox" name="coreComboBox"><property name="toolTip"><string>Cores detected in your RetroArch install — pick one to fill the path.</string></property></widget></item>
-        <item><widget class="QLineEdit" name="coreLineEdit"><property name="toolTip"><string>Path to libretro core file</string></property></widget></item>
-        <item><widget class="QPushButton" name="browseCoreButton"><property name="text"><string>Browse</string></property></widget></item>
-       </layout>
+      <item>
+       <widget class="QWidget" name="launcherExecutableColRight" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QFormLayout" name="launcherExecutableFormRight">
+         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>6</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+         <item row="0" column="0"><widget class="QLabel" name="label_launchParams"><property name="text"><string>Launch Parameters:</string></property></widget></item>
+         <item row="0" column="1"><widget class="QLineEdit" name="launchParamsLineEdit"><property name="toolTip"><string>Additional command-line parameters for the launcher</string></property><property name="placeholderText"><string>Optional parameters (e.g., -fullscreen, -config file.cfg)</string></property></widget></item>
+         <item row="1" column="0"><widget class="QLabel" name="label_launcherName"><property name="text"><string>Launcher Name:</string></property></widget></item>
+         <item row="1" column="1"><widget class="QLineEdit" name="launcherNameLineEdit"><property name="toolTip"><string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string></property><property name="placeholderText"><string>Display label (defaults to executable name)</string></property></widget></item>
+        </layout>
+       </widget>
       </item>
-      <item row="2" column="0"><widget class="QLabel" name="label_launchParams"><property name="text"><string>Launch Parameters:</string></property></widget></item>
-      <item row="2" column="1"><widget class="QLineEdit" name="launchParamsLineEdit"><property name="toolTip"><string>Additional command-line parameters for the launcher</string></property><property name="placeholderText"><string>Optional parameters (e.g., -fullscreen, -config file.cfg)</string></property></widget></item>
-      <item row="3" column="0"><widget class="QLabel" name="label_launcherName"><property name="text"><string>Launcher Name:</string></property></widget></item>
-      <item row="3" column="1"><widget class="QLineEdit" name="launcherNameLineEdit"><property name="toolTip"><string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string></property><property name="placeholderText"><string>Display label (defaults to executable name)</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="launcherArchiveGroupBox">
      <property name="title"><string>Archive Handling</string></property>
-     <layout class="QFormLayout" name="launcherArchiveFormLayout">
-      <property name="horizontalSpacing"><number>8</number></property>
-      <property name="verticalSpacing"><number>6</number></property>
-      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_extractArchives"><property name="text"><string>Extract Archives:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QCheckBox" name="extractArchivesCheckBox"><property name="toolTip"><string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string></property><property name="text"><string/></property></widget></item>
-      <item row="1" column="0"><widget class="QLabel" name="label_extractedExtension"><property name="text"><string>Launch Extension:</string></property></widget></item>
-      <item row="1" column="1"><widget class="QLineEdit" name="extractedExtensionLineEdit"><property name="toolTip"><string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string></property><property name="placeholderText"><string>e.g., .cue, .bin, .iso</string></property></widget></item>
+     <layout class="QHBoxLayout" name="launcherArchiveRowLayout">
+      <property name="spacing"><number>24</number></property>
+      <item>
+       <widget class="QWidget" name="launcherArchiveColLeft" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QFormLayout" name="launcherArchiveFormLeft">
+         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>6</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+         <item row="0" column="0"><widget class="QLabel" name="label_extractArchives"><property name="text"><string>Extract Archives:</string></property></widget></item>
+         <item row="0" column="1"><widget class="QCheckBox" name="extractArchivesCheckBox"><property name="toolTip"><string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string></property><property name="text"><string/></property></widget></item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="launcherArchiveColRight" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QFormLayout" name="launcherArchiveFormRight">
+         <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>6</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+         <item row="0" column="0"><widget class="QLabel" name="label_extractedExtension"><property name="text"><string>Launch Extension:</string></property></widget></item>
+         <item row="0" column="1"><widget class="QLineEdit" name="extractedExtensionLineEdit"><property name="toolTip"><string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string></property><property name="placeholderText"><string>e.g., .cue, .bin, .iso</string></property></widget></item>
+        </layout>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

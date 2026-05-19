@@ -14,38 +14,71 @@
      <item>
       <widget class="QGroupBox" name="startupGroupBox">
        <property name="title"><string>Startup</string></property>
-       <layout class="QFormLayout" name="startupFormLayout">
-        <property name="horizontalSpacing"><number>8</number></property>
-        <property name="verticalSpacing"><number>6</number></property>
-        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-        <item row="0" column="0"><widget class="QLabel" name="startupCollectionLabel"><property name="text"><string>Startup Collection:</string></property></widget></item>
-        <item row="0" column="1"><widget class="QComboBox" name="startupCollectionComboBox"><property name="minimumWidth"><number>180</number></property><property name="toolTip"><string>Collection to open on startup. &quot;(Default)&quot; opens the first root collection.</string></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="useHomeViewLabel"><property name="text"><string>Use Home View:</string></property></widget></item>
-        <item row="1" column="1"><widget class="QCheckBox" name="useHomeViewCheckBox"><property name="toolTip"><string>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</string></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="homeViewLabelLabel"><property name="text"><string>Home View Label:</string></property></widget></item>
-        <item row="2" column="1"><widget class="QLineEdit" name="homeViewLabelLineEdit"><property name="toolTip"><string>Title shown at the top of the synthetic Home view and as the toolbar Home button's tooltip. Empty falls back to &quot;Home&quot;.</string></property><property name="placeholderText"><string>Home</string></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="homeViewIconLabel"><property name="text"><string>Home View Icon:</string></property></widget></item>
-        <item row="3" column="1">
-         <layout class="QHBoxLayout" name="homeViewIconLayout">
-          <item><widget class="QLineEdit" name="homeViewIconLineEdit"><property name="toolTip"><string>Absolute path to a custom icon for the toolbar Home button. Empty falls back to the themed go-home icon.</string></property></widget></item>
-          <item><widget class="QPushButton" name="browseHomeViewIconButton"><property name="text"><string>Browse</string></property></widget></item>
-         </layout>
+       <!-- Two-column section: two equal-width column wrappers side by side. -->
+       <layout class="QHBoxLayout" name="startupRowLayout">
+        <property name="spacing"><number>24</number></property>
+        <item>
+         <widget class="QWidget" name="startupColLeft" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="startupFormLeft">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="startupCollectionLabel"><property name="text"><string>Startup Collection:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QComboBox" name="startupCollectionComboBox"><property name="minimumWidth"><number>180</number></property><property name="toolTip"><string>Collection to open on startup. &quot;(Default)&quot; opens the first root collection.</string></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="useHomeViewLabel"><property name="text"><string>Use Home View:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QCheckBox" name="useHomeViewCheckBox"><property name="toolTip"><string>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</string></property></widget></item>
+           <item row="2" column="0"><widget class="QLabel" name="homeViewLabelLabel"><property name="text"><string>Home View Label:</string></property></widget></item>
+           <item row="2" column="1"><widget class="QLineEdit" name="homeViewLabelLineEdit"><property name="toolTip"><string>Title shown at the top of the synthetic Home view and as the toolbar Home button's tooltip. Empty falls back to &quot;Home&quot;.</string></property><property name="placeholderText"><string>Home</string></property></widget></item>
+           <item row="3" column="0"><widget class="QLabel" name="homeViewIconLabel"><property name="text"><string>Home View Icon:</string></property></widget></item>
+           <item row="3" column="1">
+            <layout class="QHBoxLayout" name="homeViewIconLayout">
+             <item><widget class="QLineEdit" name="homeViewIconLineEdit"><property name="toolTip"><string>Absolute path to a custom icon for the toolbar Home button. Empty falls back to the themed go-home icon.</string></property></widget></item>
+             <item><widget class="QPushButton" name="browseHomeViewIconButton"><property name="text"><string>Browse</string></property></widget></item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
         </item>
-        <item row="4" column="0"><widget class="QLabel" name="startupVideoEnabledLabel"><property name="text"><string>Startup Video:</string></property></widget></item>
-        <item row="4" column="1"><widget class="QCheckBox" name="startupVideoEnabledCheckBox"><property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property></widget></item>
-        <item row="5" column="0"><widget class="QLabel" name="startupVideoPathLabel"><property name="text"><string>Video File:</string></property></widget></item>
-        <item row="5" column="1">
-         <layout class="QHBoxLayout" name="startupVideoPathLayout">
-          <item><widget class="QLineEdit" name="startupVideoPathLineEdit"><property name="toolTip"><string>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above.</string></property></widget></item>
-          <item><widget class="QPushButton" name="browseStartupVideoButton"><property name="text"><string>Browse</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="6" column="0"><widget class="QLabel" name="retroarchConfigLabel"><property name="text"><string>RetroArch Config:</string></property></widget></item>
-        <item row="6" column="1">
-         <layout class="QHBoxLayout" name="retroarchConfigLayout">
-          <item><widget class="QLineEdit" name="retroarchConfigLineEdit"><property name="toolTip"><string>Optional path to a retroarch.cfg file or a libretro core directory, used to list installed cores in the collection Core picker. Empty auto-detects the standard RetroArch config location.</string></property></widget></item>
-          <item><widget class="QPushButton" name="browseRetroarchConfigButton"><property name="text"><string>Browse</string></property></widget></item>
-         </layout>
+        <item>
+         <widget class="QWidget" name="startupColRight" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="startupFormRight">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="startupVideoEnabledLabel"><property name="text"><string>Startup Video:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QCheckBox" name="startupVideoEnabledCheckBox"><property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="startupVideoPathLabel"><property name="text"><string>Video File:</string></property></widget></item>
+           <item row="1" column="1">
+            <layout class="QHBoxLayout" name="startupVideoPathLayout">
+             <item><widget class="QLineEdit" name="startupVideoPathLineEdit"><property name="toolTip"><string>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above.</string></property></widget></item>
+             <item><widget class="QPushButton" name="browseStartupVideoButton"><property name="text"><string>Browse</string></property></widget></item>
+            </layout>
+           </item>
+           <item row="2" column="0"><widget class="QLabel" name="retroarchConfigLabel"><property name="text"><string>RetroArch Config:</string></property></widget></item>
+           <item row="2" column="1">
+            <layout class="QHBoxLayout" name="retroarchConfigLayout">
+             <item><widget class="QLineEdit" name="retroarchConfigLineEdit"><property name="toolTip"><string>Optional path to a retroarch.cfg file or a libretro core directory, used to list installed cores in the collection Core picker. Empty auto-detects the standard RetroArch config location.</string></property></widget></item>
+             <item><widget class="QPushButton" name="browseRetroarchConfigButton"><property name="text"><string>Browse</string></property></widget></item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
         </item>
        </layout>
       </widget>
@@ -53,18 +86,50 @@
      <item>
       <widget class="QGroupBox" name="selectionGroupBox">
        <property name="title"><string>Selection &amp; Display</string></property>
-       <layout class="QFormLayout" name="selectionFormLayout">
-        <property name="horizontalSpacing"><number>8</number></property>
-        <property name="verticalSpacing"><number>6</number></property>
-        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-        <item row="0" column="0"><widget class="QLabel" name="rememberSelectionLabel"><property name="text"><string>Remember Selection:</string></property></widget></item>
-        <item row="0" column="1"><widget class="QCheckBox" name="rememberSelectionCheckBox"><property name="toolTip"><string>Remember the last selected item when returning to a collection</string></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="wrapNavigationLabel"><property name="text"><string>Wrap Navigation:</string></property></widget></item>
-        <item row="1" column="1"><widget class="QCheckBox" name="wrapNavigationCheckBox"><property name="toolTip"><string>When navigating with arrow keys, wrap at edges</string></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="selectItemOnHoverLabel"><property name="text"><string>Select on Hover:</string></property></widget></item>
-        <item row="2" column="1"><widget class="QCheckBox" name="selectItemOnHoverCheckBox"><property name="toolTip"><string>Move selection to the visible item under the mouse pointer without clicking</string></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="showTitleInPlaceholderLabel"><property name="text"><string>Title in Placeholder Art:</string></property></widget></item>
-        <item row="3" column="1"><widget class="QCheckBox" name="showTitleInPlaceholderCheckBox"><property name="toolTip"><string>Draw the item title on top of placeholder art (the hatched pattern or any user-supplied placeholder image) when no real artwork exists for the item.</string></property></widget></item>
+       <layout class="QHBoxLayout" name="selectionRowLayout">
+        <property name="spacing"><number>24</number></property>
+        <item>
+         <widget class="QWidget" name="selectionColLeft" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="selectionFormLeft">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="rememberSelectionLabel"><property name="text"><string>Remember Selection:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QCheckBox" name="rememberSelectionCheckBox"><property name="toolTip"><string>Remember the last selected item when returning to a collection</string></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="wrapNavigationLabel"><property name="text"><string>Wrap Navigation:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QCheckBox" name="wrapNavigationCheckBox"><property name="toolTip"><string>When navigating with arrow keys, wrap at edges</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="selectionColRight" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="selectionFormRight">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="selectItemOnHoverLabel"><property name="text"><string>Select on Hover:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QCheckBox" name="selectItemOnHoverCheckBox"><property name="toolTip"><string>Move selection to the visible item under the mouse pointer without clicking</string></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="showTitleInPlaceholderLabel"><property name="text"><string>Title in Placeholder Art:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QCheckBox" name="showTitleInPlaceholderCheckBox"><property name="toolTip"><string>Draw the item title on top of placeholder art (the hatched pattern or any user-supplied placeholder image) when no real artwork exists for the item.</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
        </layout>
       </widget>
      </item>
@@ -82,48 +147,112 @@
      <item>
       <widget class="QGroupBox" name="inputTimingGroupBox">
        <property name="title"><string>Input &amp; Scroll Timing</string></property>
-       <layout class="QFormLayout" name="inputTimingFormLayout">
-        <property name="horizontalSpacing"><number>8</number></property>
-        <property name="verticalSpacing"><number>6</number></property>
-        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-        <item row="0" column="0"><widget class="QLabel" name="mouseWheelSpeedLabel"><property name="text"><string>Mouse Wheel Rows:</string></property></widget></item>
-        <item row="0" column="1"><widget class="QSpinBox" name="mouseWheelSpeedSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Number of rows to scroll per mouse wheel step</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>1</number></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="scrollVelocityMultiplierLabel"><property name="text"><string>Scroll Velocity Multiplier:</string></property></widget></item>
-        <item row="1" column="1"><widget class="QDoubleSpinBox" name="scrollVelocityMultiplierSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Multiplier applied to mouse wheel rows and held-arrow key-repeat cadence. 1.0× = unchanged.</string></property><property name="suffix"><string>×</string></property><property name="decimals"><number>2</number></property><property name="singleStep"><double>0.25</double></property><property name="minimum"><double>0.25</double></property><property name="maximum"><double>5.00</double></property><property name="value"><double>1.00</double></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="scrollAnimationSpeedLabel"><property name="text"><string>Scroll Animation Duration:</string></property></widget></item>
-        <item row="2" column="1"><widget class="QSpinBox" name="scrollAnimationSpeedSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Duration of smooth scroll animations when centering selection (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>1500</number></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="clickHoldDelayLabel"><property name="text"><string>Click-Hold Delay:</string></property></widget></item>
-        <item row="3" column="1"><widget class="QSpinBox" name="clickHoldDelaySpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Delay before click-hold scroll mode activates (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>500</number></property></widget></item>
-        <item row="4" column="0"><widget class="QLabel" name="clickHoldRepeatIntervalLabel"><property name="text"><string>Grid View Click-Hold Repeat:</string></property></widget></item>
-        <item row="4" column="1"><widget class="QSpinBox" name="clickHoldRepeatIntervalSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Interval between steps during click-hold scrolling in grid view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>320</number></property></widget></item>
-        <item row="5" column="0"><widget class="QLabel" name="listClickHoldRepeatLabel"><property name="text"><string>List View Click-Hold Repeat:</string></property></widget></item>
-        <item row="5" column="1"><widget class="QSpinBox" name="listClickHoldRepeatSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Interval between steps during click-hold scrolling in list view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>80</number></property></widget></item>
-        <item row="6" column="0"><widget class="QLabel" name="keyboardSpeedLabel"><property name="text"><string>Grid View Key Repeat:</string></property></widget></item>
-        <item row="6" column="1"><widget class="QSpinBox" name="keyboardSpeedSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Interval between arrow key repeats when holding keys in grid view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>260</number></property></widget></item>
-        <item row="7" column="0"><widget class="QLabel" name="keyboardRepeatDelayLabel"><property name="text"><string>Keyboard Repeat Delay:</string></property></widget></item>
-        <item row="7" column="1"><widget class="QSpinBox" name="keyboardRepeatDelaySpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Initial delay before keyboard repeat starts (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>260</number></property></widget></item>
-        <item row="8" column="0"><widget class="QLabel" name="listKeyboardRepeatLabel"><property name="text"><string>List View Key Repeat:</string></property></widget></item>
-        <item row="8" column="1"><widget class="QSpinBox" name="listKeyboardRepeatSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Interval between arrow key repeats when holding keys in list view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>50</number></property></widget></item>
+       <layout class="QHBoxLayout" name="inputTimingRowLayout">
+        <property name="spacing"><number>24</number></property>
+        <item>
+         <widget class="QWidget" name="inputTimingColLeft" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="inputTimingFormLeft">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="mouseWheelSpeedLabel"><property name="text"><string>Mouse Wheel Rows:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="mouseWheelSpeedSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Number of rows to scroll per mouse wheel step</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>1</number></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="scrollVelocityMultiplierLabel"><property name="text"><string>Scroll Velocity Multiplier:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QDoubleSpinBox" name="scrollVelocityMultiplierSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Multiplier applied to mouse wheel rows and held-arrow key-repeat cadence. 1.0× = unchanged.</string></property><property name="suffix"><string>×</string></property><property name="decimals"><number>2</number></property><property name="singleStep"><double>0.25</double></property><property name="minimum"><double>0.25</double></property><property name="maximum"><double>5.00</double></property><property name="value"><double>1.00</double></property></widget></item>
+           <item row="2" column="0"><widget class="QLabel" name="scrollAnimationSpeedLabel"><property name="text"><string>Scroll Animation Duration:</string></property></widget></item>
+           <item row="2" column="1"><widget class="QSpinBox" name="scrollAnimationSpeedSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Duration of smooth scroll animations when centering selection (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>1500</number></property></widget></item>
+           <item row="3" column="0"><widget class="QLabel" name="clickHoldDelayLabel"><property name="text"><string>Click-Hold Delay:</string></property></widget></item>
+           <item row="3" column="1"><widget class="QSpinBox" name="clickHoldDelaySpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Delay before click-hold scroll mode activates (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>500</number></property></widget></item>
+           <item row="4" column="0"><widget class="QLabel" name="clickHoldRepeatIntervalLabel"><property name="text"><string>Grid View Click-Hold Repeat:</string></property></widget></item>
+           <item row="4" column="1"><widget class="QSpinBox" name="clickHoldRepeatIntervalSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Interval between steps during click-hold scrolling in grid view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>320</number></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="inputTimingColRight" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="inputTimingFormRight">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="listClickHoldRepeatLabel"><property name="text"><string>List View Click-Hold Repeat:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="listClickHoldRepeatSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Interval between steps during click-hold scrolling in list view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>80</number></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="keyboardSpeedLabel"><property name="text"><string>Grid View Key Repeat:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QSpinBox" name="keyboardSpeedSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Interval between arrow key repeats when holding keys in grid view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>260</number></property></widget></item>
+           <item row="2" column="0"><widget class="QLabel" name="keyboardRepeatDelayLabel"><property name="text"><string>Keyboard Repeat Delay:</string></property></widget></item>
+           <item row="2" column="1"><widget class="QSpinBox" name="keyboardRepeatDelaySpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Initial delay before keyboard repeat starts (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>260</number></property></widget></item>
+           <item row="3" column="0"><widget class="QLabel" name="listKeyboardRepeatLabel"><property name="text"><string>List View Key Repeat:</string></property></widget></item>
+           <item row="3" column="1"><widget class="QSpinBox" name="listKeyboardRepeatSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Interval between arrow key repeats when holding keys in list view (milliseconds)</string></property><property name="suffix"><string> ms</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>99999</number></property><property name="value"><number>50</number></property></widget></item>
+          </layout>
+         </widget>
+        </item>
        </layout>
       </widget>
      </item>
      <item>
       <widget class="QGroupBox" name="performanceHistoryGroupBox">
        <property name="title"><string>Performance &amp; History</string></property>
-       <layout class="QFormLayout" name="performanceHistoryFormLayout">
-        <property name="horizontalSpacing"><number>8</number></property>
-        <property name="verticalSpacing"><number>6</number></property>
-        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-        <item row="0" column="0"><widget class="QLabel" name="pixmapCacheLabel"><property name="text"><string>Pixmap Cache Size:</string></property></widget></item>
-        <item row="0" column="1"><widget class="QSpinBox" name="pixmapCacheSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Memory allocated for caching artwork images (10-500 MB). Larger values improve scrolling performance.</string></property><property name="minimum"><number>10</number></property><property name="maximum"><number>500</number></property><property name="singleStep"><number>10</number></property><property name="value"><number>50</number></property><property name="suffix"><string> MB</string></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="runtimeDetectionLabel"><property name="text"><string>Runtime Detection:</string></property></widget></item>
-        <item row="1" column="1"><widget class="QCheckBox" name="runtimeDetectionCheckBox"><property name="toolTip"><string>Track launched items so Kartend hides behind a &quot;Now Playing&quot; overlay while running and returns automatically when the program closes</string></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="historyEnabledLabel"><property name="text"><string>Launch History:</string></property></widget></item>
-        <item row="2" column="1"><widget class="QCheckBox" name="historyEnabledCheckBox"><property name="toolTip"><string>Record a chronological log of every successful launch. Disabling stops new entries; existing entries remain until cleared from the Statistics dialog.</string></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="historyMaxEntriesLabel"><property name="text"><string>History Max Entries:</string></property></widget></item>
-        <item row="3" column="1"><widget class="QSpinBox" name="historyMaxEntriesSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>After each launch, oldest entries above this count are deleted. Range: 10–50000.</string></property><property name="minimum"><number>10</number></property><property name="maximum"><number>50000</number></property><property name="singleStep"><number>50</number></property><property name="value"><number>500</number></property></widget></item>
-        <item row="4" column="0"><widget class="QLabel" name="videoThumbnailTimeoutLabel"><property name="text"><string>Video Thumbnail Timeout:</string></property></widget></item>
-        <item row="4" column="1"><widget class="QSpinBox" name="videoThumbnailTimeoutSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>How long to wait for a single video thumbnail to decode before giving up. Increase on slow systems where legitimate videos miss the default 4s window. Range: 1000–30000 ms.</string></property><property name="minimum"><number>1000</number></property><property name="maximum"><number>30000</number></property><property name="singleStep"><number>500</number></property><property name="value"><number>4000</number></property><property name="suffix"><string> ms</string></property></widget></item>
+       <layout class="QHBoxLayout" name="performanceHistoryRowLayout">
+        <property name="spacing"><number>24</number></property>
+        <item>
+         <widget class="QWidget" name="performanceHistoryColLeft" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="performanceHistoryFormLeft">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="pixmapCacheLabel"><property name="text"><string>Pixmap Cache Size:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="pixmapCacheSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Memory allocated for caching artwork images (10-500 MB). Larger values improve scrolling performance.</string></property><property name="minimum"><number>10</number></property><property name="maximum"><number>500</number></property><property name="singleStep"><number>10</number></property><property name="value"><number>50</number></property><property name="suffix"><string> MB</string></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="runtimeDetectionLabel"><property name="text"><string>Runtime Detection:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QCheckBox" name="runtimeDetectionCheckBox"><property name="toolTip"><string>Track launched items so Kartend hides behind a &quot;Now Playing&quot; overlay while running and returns automatically when the program closes</string></property></widget></item>
+           <item row="2" column="0"><widget class="QLabel" name="historyEnabledLabel"><property name="text"><string>Launch History:</string></property></widget></item>
+           <item row="2" column="1"><widget class="QCheckBox" name="historyEnabledCheckBox"><property name="toolTip"><string>Record a chronological log of every successful launch. Disabling stops new entries; existing entries remain until cleared from the Statistics dialog.</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="performanceHistoryColRight" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+          </property>
+          <layout class="QFormLayout" name="performanceHistoryFormRight">
+           <property name="formAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+           <property name="horizontalSpacing"><number>8</number></property>
+           <property name="verticalSpacing"><number>6</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="historyMaxEntriesLabel"><property name="text"><string>History Max Entries:</string></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="historyMaxEntriesSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>After each launch, oldest entries above this count are deleted. Range: 10–50000.</string></property><property name="minimum"><number>10</number></property><property name="maximum"><number>50000</number></property><property name="singleStep"><number>50</number></property><property name="value"><number>500</number></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="videoThumbnailTimeoutLabel"><property name="text"><string>Video Thumbnail Timeout:</string></property></widget></item>
+           <item row="1" column="1"><widget class="QSpinBox" name="videoThumbnailTimeoutSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>How long to wait for a single video thumbnail to decode before giving up. Increase on slow systems where legitimate videos miss the default 4s window. Range: 1000–30000 ms.</string></property><property name="minimum"><number>1000</number></property><property name="maximum"><number>30000</number></property><property name="singleStep"><number>500</number></property><property name="value"><number>4000</number></property><property name="suffix"><string> ms</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
        </layout>
       </widget>
      </item>

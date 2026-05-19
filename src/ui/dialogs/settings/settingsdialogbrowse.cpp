@@ -241,6 +241,8 @@ void SettingsDialog::loadCollectionToUI(int index) {
   updateFieldVisibility();
   updateGridWidthLimits();
   m_isLoading = false;
+  // Reflect the now-loaded collection in the rail's context header.
+  updateContextHeader();
 }
 
 void SettingsDialog::clearCollectionUI() {
@@ -263,4 +265,5 @@ void SettingsDialog::clearCollectionUI() {
     ui->configurationPanel->parentCollectionComboBox()->clear();
 
   m_isLoading = false;
+  updateContextHeader();
 }

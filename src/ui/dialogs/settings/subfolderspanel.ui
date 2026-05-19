@@ -11,53 +11,79 @@
    <item>
     <widget class="QGroupBox" name="contentSubfoldersGroupBox">
      <property name="title"><string>Content Subfolders</string></property>
-     <layout class="QVBoxLayout" name="contentSubfoldersGroupBoxLayout">
-      <property name="spacing"><number>6</number></property>
+     <!-- Two-column section: two equal-width column wrappers side by side. -->
+     <layout class="QHBoxLayout" name="contentSubfoldersRowLayout">
+      <property name="spacing"><number>24</number></property>
       <item>
-       <layout class="QHBoxLayout" name="contentOptionsLayout">
-        <item>
-         <widget class="QCheckBox" name="includeContentSubfoldersCheckBox">
-          <property name="toolTip"><string>Show subfolders as navigable virtual folders (does not create subcollections)</string></property>
-          <property name="text"><string>Include Subfolders</string></property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="contentOptionsSpacer">
-          <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
-          <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QWidget" name="subfolderOptionsWidget">
-        <layout class="QHBoxLayout" name="subfolderOptionsLayout">
+       <widget class="QWidget" name="contentSubfoldersColLeft" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QVBoxLayout" name="contentSubfoldersColLeftLayout">
          <property name="leftMargin"><number>0</number></property>
          <property name="topMargin"><number>0</number></property>
          <property name="rightMargin"><number>0</number></property>
          <property name="bottomMargin"><number>0</number></property>
+         <property name="spacing"><number>6</number></property>
          <item>
-          <widget class="QCheckBox" name="showAllSubfolderItemsCheckBox">
-           <property name="toolTip"><string>Mix items from subfolders with parent collection items, sorted alphabetically</string></property>
-           <property name="text"><string>Show All Items</string></property>
+          <widget class="QCheckBox" name="includeContentSubfoldersCheckBox">
+           <property name="toolTip"><string>Show subfolders as navigable virtual folders (does not create subcollections)</string></property>
+           <property name="text"><string>Include Subfolders</string></property>
           </widget>
          </item>
          <item>
-          <widget class="QCheckBox" name="hideSubfolderTitlesCheckBox">
-           <property name="toolTip"><string>Hide titles on virtual subfolder widgets</string></property>
-           <property name="text"><string>Hide Titles</string></property>
-          </widget>
+          <spacer name="contentSubfoldersColLeftSpacer">
+           <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property>
+          </spacer>
          </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="contentSubfoldersColRight" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy>
+        </property>
+        <layout class="QVBoxLayout" name="contentSubfoldersColRightLayout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="spacing"><number>6</number></property>
          <item>
-          <widget class="QCheckBox" name="showHiddenFoldersCheckBox">
-           <property name="toolTip"><string>Show hidden folders (folders starting with a dot)</string></property>
-           <property name="text"><string>Show Hidden</string></property>
+          <widget class="QWidget" name="subfolderOptionsWidget" native="true">
+           <layout class="QVBoxLayout" name="subfolderOptionsLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <property name="spacing"><number>6</number></property>
+            <item>
+             <widget class="QCheckBox" name="showAllSubfolderItemsCheckBox">
+              <property name="toolTip"><string>Mix items from subfolders with parent collection items, sorted alphabetically</string></property>
+              <property name="text"><string>Show All Items</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="hideSubfolderTitlesCheckBox">
+              <property name="toolTip"><string>Hide titles on virtual subfolder widgets</string></property>
+              <property name="text"><string>Hide Titles</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="showHiddenFoldersCheckBox">
+              <property name="toolTip"><string>Show hidden folders (folders starting with a dot)</string></property>
+              <property name="text"><string>Show Hidden</string></property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
          <item>
           <spacer name="subfolderOptionsSpacer">
-           <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
-           <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+           <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property>
           </spacer>
          </item>
         </layout>

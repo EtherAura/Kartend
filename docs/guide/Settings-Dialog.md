@@ -4,8 +4,8 @@ The Settings Dialog is the front door to nearly every per-collection
 and global option Kartend supports. Open with `Ctrl+,` or **File →
 Settings**.
 
-This page is a tour of the dialog's structure: what each tab covers,
-how the **scope selector** propagates changes across collections, the
+This page is a tour of the dialog's structure: what each category
+covers, how the **scope selector** propagates changes across collections, the
 **Apply Settings** workflow for selectively copying fields, and how to
 duplicate / reparent / delete collections from the tree.
 
@@ -15,28 +15,49 @@ descriptions repeat there; this page focuses on the *workflow*.
 
 ## Anatomy
 
+The dialog is a two-pane layout — a navigation rail on the left, the
+selected category's page on the right:
+
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ Scope:  Current ▼     [Save *]  Revert  Cancel                 │
-├──────────┬─────────────────────────────────────────────────────┤
-│  ┌────┐  │  Basic | Paths | Launcher | Appearance | Colors |   │
-│  │tree│  │  Sidebar | List View | Text & Fonts | General       │
-│  │    │  │ ──────────────────────────────────────────────────  │
-│  └────┘  │                                                     │
-│ + Add    │  (tab content)                                      │
-└──────────┴─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ ┌─ navigation rail ───┐ ┌─ content ────────────────────────────┐ │
+│ │ Search settings…    │ │ Appearance                           │ │
+│ │ ┌ Collections ────┐ │ │ Editing collection: Arcade           │ │
+│ │ │ tree  [+][-][⧉] │ │ │ ──────────────────────────────────── │ │
+│ │ │ Mode: Current ▼ │ │ │                                      │ │
+│ │ └─────────────────┘ │ │  (selected category's panel)         │ │
+│ │ COLLECTION SETTINGS │ │                                      │ │
+│ │  Configuration      │ │                                      │ │
+│ │  Artwork            │ │                                      │ │
+│ │  Appearance   …     │ │                                      │ │
+│ │ APPLICATION         │ │                                      │ │
+│ │  General      …     │ │                                      │ │
+│ └─────────────────────┘ └──────────────────────────────────────┘ │
+│  [Save]                                       [Cancel]   [OK]    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Top bar**: Scope selector + Save / Revert / Cancel buttons.
-- **Left pane**: Collection tree with add / context menu.
-- **Right pane**: Tabbed editor for the selected collection (and
-  global settings under the **General** tab).
+- **Navigation rail** (left): a search box, the collection tree with
+  add / remove / duplicate buttons and the **Mode** (scope) selector,
+  and a categorised list of settings pages.
+- **Content pane** (right): a context header naming the current
+  category — and, for per-collection categories, the collection being
+  edited — above the selected page.
+- **Button row** (bottom): **Save** commits changes without closing
+  the dialog; **OK** saves and closes; **Cancel** closes (with a
+  confirm prompt when there are unsaved edits).
 
-The **Save** button pulses with a drop-shadow glow while there are
-unsaved changes — an at-a-glance reminder. Clicking it commits all
-changes in the current scope; **Revert** discards them; **Cancel**
-closes the dialog without saving (with a confirm prompt if there are
-unsaved edits).
+The category list is split into **Collection settings** (per-collection:
+Configuration, Artwork, Appearance, Launcher, Subfolders, Details Pane)
+and **Application** (app-wide: General, Fonts, Splash, Attract Mode,
+Marquee, Toolbar, Controls, Launchers, Scrapers). Type in the search
+box to filter the list to categories containing a matching setting.
+
+Drag the splitter handles to resize the rail and to set how its height
+is split between the collection tree and the category list; the dialog
+remembers its size and divider positions between runs. The **Save**
+button pulses with a drop-shadow glow while there are unsaved changes —
+an at-a-glance reminder.
 
 ## Collection tree
 
@@ -57,7 +78,7 @@ Selection in the tree drives the right pane: the tab editor reflects
 the highlighted collection. Multi-select is not supported — use
 **Apply To Selected** for batch operations.
 
-## Tabs (per-collection)
+## Per-collection categories
 
 ### Basic
 
@@ -158,10 +179,10 @@ in `[General]`.
 | **Title Base Color** | Hex; empty = use selection color. |
 | **Show Title in Placeholder** | Global. |
 
-## The General tab (global settings)
+## Application categories (global settings)
 
-The **General** tab applies to the entire app, not the selected
-collection. It groups:
+The **Application** categories apply to the entire app, not the
+selected collection. They group:
 
 - **Selection & Navigation** — remember selection, wrap, hover-select.
 - **Performance** — pixmap cache, scroll animation duration, scroll
@@ -189,7 +210,7 @@ collection. It groups:
   selection. See [Attract Mode](Attract-Mode.md).
 - **Startup collection** — name of the collection opened on launch.
 
-Each section is a fold-down so the tab stays scannable.
+Each section is a fold-down so the page stays scannable.
 
 > **Config-only globals** — a few `[General]` keys have no Settings
 > Dialog control and must be edited in `kartend.cfg` by hand:
@@ -330,9 +351,11 @@ you don't want to propagate.
 ## For developers
 
 - Settings UI: [src/ui/dialogs/settings/](../../src/ui/dialogs/settings/)
-  — split into multiple translation units (`settingsdialogtree`,
-  `settingsdialogfields`, `settingsdialogapply`, etc.) for build
-  speed.
+  — the dialog shell is split across sibling translation units
+  (`settingsdialog`, `settingsdialognav` for the left-rail navigation,
+  `settingsdialogtree`, `settingsdialogform`, `settingsdialogbrowse`,
+  `settingsdialogchecks`, …), and each settings page is its own
+  `*panel` widget added to the `pageStack` in `settingsdialog.ui`.
 - Persistence: [src/modules/data/settings/settingsmanager\*](../../src/modules/data/settings/)
   drives INI read/write, with `configvalidation*` for live validation.
 - Apply rules: `applysettingsdialog.cpp` enumerates which fields
@@ -346,5 +369,5 @@ you don't want to propagate.
   appropriate `settingsdialog*` file, classify into a category in
   `applysettingsdialog`, and update
   [Configuration Reference](Configuration-Reference.md).
-- Save-button pulse animation: `SettingsDialog::onUnsavedChanges` and
-  the `QGraphicsDropShadowEffect` it drives.
+- Save-button pulse animation: `SettingsDialog::updateSaveButtonStyle`
+  and the `QGraphicsDropShadowEffect` it drives.

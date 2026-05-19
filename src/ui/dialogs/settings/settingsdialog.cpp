@@ -75,19 +75,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   setWindowTitle(tr("Settings"));
   setModal(true);
 
-  // Persistent save icon — lives in the top-right corner of the main
-  // tab widget so its position is identical regardless of which page
-  // the user is on. The previous location (inside the Collections
-  // tree shell) disappeared on every other tab. Click handler +
-  // dirty-glow wiring are set up alongside the other tab connections
-  // below.
-  m_saveButton = new QPushButton(this);
-  m_saveButton->setIcon(QIcon::fromTheme(QStringLiteral("document-save")));
-  m_saveButton->setToolTip(tr("Save changes"));
-  m_saveButton->setFlat(true);
-  m_saveButton->setMaximumSize(30, 30);
-  m_saveButton->setEnabled(false);
-  ui->tabWidget->setCornerWidget(m_saveButton, Qt::TopRightCorner);
+  // Persistent Save button — lives in the dialog's bottom button row, left of
+  // Cancel/OK, so it's reachable from every settings page. Its text, icon and
+  // initial disabled state come from settingsdialog.ui; the click handler and
+  // dirty-state glow are wired with the other connections below.
+  m_saveButton = ui->saveButton;
 
   // Gamepad button-capture state machine. Constructed before
   // setupConnections() runs so the Detect-button click handlers can
@@ -460,6 +452,7 @@ void SettingsDialog::setupConnections() {
   setupTreeWidgetConnections();
   setupUIConstraints();
   setupGeneralSettingsConnections();
+  setupNavigation();
 }
 
 void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
@@ -576,6 +569,9 @@ void SettingsDialog::hideEvent(QHideEvent *event) {
   if (g_settingsVisibleInstanceCount > 0) {
     --g_settingsVisibleInstanceCount;
   }
+  // Persist dialog geometry + rail splitter position so the layout the user
+  // settled on is restored the next time the dialog opens.
+  saveDialogState();
   QDialog::hideEvent(event);
 }
 
