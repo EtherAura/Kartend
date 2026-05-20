@@ -80,3 +80,7 @@ __pycache__/
 .dolt/
 *.db
 .beads-credential-key
+
+# graphify knowledge graph artifacts (generated)
+graphify-out/
+.graphify/
