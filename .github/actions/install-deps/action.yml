@@ -1,9 +1,16 @@
 name: 'Install Kartend build dependencies'
 description: >-
-  Installs apt packages required for a Kartend CI job, using
-  awalsh128/cache-apt-pkgs-action so the .deb downloads are cached across
-  workflow runs. Each job specifies its own package list so we don't pay for
-  packages it doesn't need (e.g. coverage doesn't need libzstd-dev).
+  Installs apt packages required for a Kartend CI job. Each job specifies its
+  own package list so we don't pay for packages it doesn't need (e.g. coverage
+  doesn't need libzstd-dev).
+
+  This used to wrap awalsh128/cache-apt-pkgs-action to cache the .deb
+  downloads, but that action pinned actions/cache/restore@v4 and
+  actions/upload-artifact@v4 (Node 20), which GitHub forces off the runners
+  starting 2026-09-16. Direct `apt-get install` keeps us first-party-only with
+  no Node-20 transitive deps; the cache restore the wrapper used to do saved
+  roughly 30-60s per job on a hit, which is acceptable to give up to drop the
+  third-party dependency.
 
 inputs:
   packages:
@@ -11,55 +18,26 @@ inputs:
       Space-separated list of apt packages to install (e.g.
       "cmake ninja-build qt6-base-dev libqt6sql6-sqlite").
     required: true
-  cache-version:
-    description: >-
-      Bump to invalidate the apt cache when the runner image bumps a Qt /
-      compiler default to a version that needs different transitive deps.
-      The cache key is content-addressed on `packages` already, so this is
-      only needed for "same packages, different runner" cases.
-    required: false
-    default: '1'
 
 runs:
   using: 'composite'
   steps:
-    # Two preparation steps that real GHA's runner image already covers,
-    # but `act`'s catthehacker/ubuntu:full-24.04 image does not:
-    #
-    # 1. Refresh apt lists. The cache wrapper's pre-cache step does
-    #    `apt-cache show <pkg>` on every requested name; on GHA the
-    #    runner image ships a populated apt index, but full-24.04 ships
-    #    with the lists pruned, so a truly fresh `act` run fails with
-    #    "Unable to locate package clang" before the cache even checks.
-    #
-    # 2. Pre-create the dirs apt-fast resolves at startup. apt-fast
-    #    runs
-    #      DLDIR="$(realpath "${APTCACHE}/../apt-fast")"
-    #    where APTCACHE=/var/cache/apt/archives/ (the trailing slash
-    #    comes from `apt-config shell APTCACHE Dir::Cache::archives/d`).
-    #    `realpath` (no `-m`) refuses to canonicalize a path whose
-    #    components don't exist — BOTH `archives/` (for the `..`
-    #    traversal) AND `apt-fast/` (for the final component) need to
-    #    be on disk before apt-fast is even invoked. GHA runners ship
-    #    with both directories present; act's catthehacker image
-    #    doesn't have `/var/cache/apt/archives/` at all (it's created
-    #    lazily by `apt-get install`, never reached if apt-fast aborts
-    #    first). Without these mkdirs the local act run dies with
-    #    "realpath: /var/cache/apt/archives//../apt-fast: No such
-    #    file or directory" before downloading anything.
-    #
-    # Both are tiny no-ops on real CI (~5s update, mkdir on existing
-    # dirs) and let `act` bootstrap from a truly empty state.
+    # Refresh apt lists before install. Real GHA runners ship with a populated
+    # apt index, but act's catthehacker/ubuntu:full-24.04 image prunes the
+    # lists, so a truly fresh `act` run would fail with "Unable to locate
+    # package clang" without this. Cheap (~5s) on real CI and required for
+    # local `act` reproduction via .scripts/ci-local.sh.
     - name: Update apt package index
       shell: bash
       run: sudo apt-get update -qq
 
-    - name: Pre-create apt-fast download directories
+    - name: Install apt packages
       shell: bash
-      run: sudo mkdir -p /var/cache/apt/archives /var/cache/apt/apt-fast
-
-    - name: Install apt packages (with cache)
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: ${{ inputs.packages }}
-        version: ${{ inputs.cache-version }}
+      # DEBIAN_FRONTEND=noninteractive prevents tzdata/etc. from prompting if
+      # any of the requested packages pulls them in transitively. Recommends
+      # are left at apt's default (installed) — the previous cache wrapper
+      # also installed them, and dropping them would silently change the
+      # dependency closure each job sees.
+      run: |
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          ${{ inputs.packages }}

@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI `install-deps` composite action now calls `apt-get install` directly
+  instead of wrapping `awalsh128/cache-apt-pkgs-action@v1`. The wrapper
+  pinned `actions/cache/restore@v4` (Node 20), which GitHub forces off
+  runners starting 2026-09-16. Dropping the wrapper costs ~30–60 s per
+  job on cache-hit runs but removes the only Node-20 transitive dep in
+  Kartend's workflows
+
 ### Fixed
 
 ### Removed
