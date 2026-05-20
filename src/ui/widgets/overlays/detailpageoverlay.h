@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QWidget>
 
+#include "idetailpageoverlay.h"
 #include "itemmetadata.h"
 #include "usagestatsstore.h"
 
@@ -31,39 +32,24 @@ QT_END_NAMESPACE
  * Pattern mirrors NowPlayingOverlay — the widget is created by MainWindow as a
  * child of the central widget, covers the full window when shown, and is
  * driven by DetailPageManager. Escape / the close button dismisses it.
+ *
+ * Implements `IDetailPageOverlay` so the data-layer `DetailPageManager`
+ * holds a neutral pointer (Kartend-n8kh). `Payload` + `ArtworkEntry` are
+ * defined on the interface; the type aliases below preserve the legacy
+ * `DetailPageOverlay::Payload` spelling used by existing impl files.
  */
-class DetailPageOverlay : public QWidget {
+class DetailPageOverlay : public QWidget, public IDetailPageOverlay {
   Q_OBJECT
 public:
-  /// One artwork tile available for the hero pane. `label` is the human-
-  /// readable type name; `path` is the resolved on-disk file. The list is
-  /// rendered in order with Left/Right cycling between entries.
-  struct ArtworkEntry {
-    QString label;
-    QString path;
-    bool isVideo = false;
-  };
-
-  /// Bundle of everything the overlay displays. Populated by
-  /// DetailPageManager from DatabaseManager + filesystem before show().
-  struct Payload {
-    QString filePath;
-    QString itemName; // Display title (scraped title overrides file stem)
-    ItemMetadataStore::ItemMetadata metadata;
-    UsageStatsStore::ItemUsageStats usage;
-    QString manualPath; // Resolved manual file (empty hides the button)
-    QList<ArtworkEntry> artwork;
-    qint64 fileSize = -1;  // Bytes; negative means "unknown"
-    QString fileModified;  // Pre-formatted modification timestamp
-    QString fileExtension; // ".sfc" etc., already lower-cased
-  };
+  using Payload = IDetailPageOverlay::Payload;
+  using ArtworkEntry = IDetailPageOverlay::ArtworkEntry;
 
   explicit DetailPageOverlay(QWidget *parent = nullptr);
   ~DetailPageOverlay() override;
 
-  void showWith(const Payload &payload);
-  void hideOverlay();
-  [[nodiscard]] bool isActive() const { return m_active; }
+  void showWith(const Payload &payload) override;
+  void hideOverlay() override;
+  [[nodiscard]] bool isActive() const override { return m_active; }
 
 signals:
   /// Fires when the overlay opens (true) or closes (false). DetailsPaneManager

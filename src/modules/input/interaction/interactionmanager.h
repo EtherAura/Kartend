@@ -5,8 +5,12 @@
 #include "collectionutils.h"
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
+#include "itemmetadata.h"
 #include "setuputils.h"
+#include "smartfilter.h"
+#include <functional>
 #include <memory>
+#include <optional>
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
@@ -51,6 +55,28 @@ class DetailsPane;
  * Fields can be set individually, or common fields can be populated
  * from an ApplicationContext via the ctx pointer.
  */
+/// Result of a successful CreateSmartPlaylistDialog run. nullopt return
+/// from the runner means the user cancelled.
+struct SmartPlaylistEdit {
+  QString name;
+  SmartFilter::Filter filter;
+};
+
+/// Runs the modal CreateSmartPlaylistDialog with the given pre-population
+/// and returns the edited values, or nullopt on cancel. Kartend-n8kh: lets
+/// InteractionManager pop the dialog without #including its header — the
+/// UI layer supplies a closure that builds the dialog with the right
+/// parent and reads back the result.
+using SmartPlaylistDialogRunner =
+    std::function<std::optional<SmartPlaylistEdit>(const QString &initialName,
+                                                    const std::optional<SmartFilter::Filter> &initialFilter)>;
+
+/// Runs the modal CustomFieldsDialog seeded with the item's title and
+/// current custom fields. Returns the edited fields, or nullopt on cancel.
+using CustomFieldsDialogRunner =
+    std::function<std::optional<ItemMetadataStore::CustomFieldList>(
+        const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
+
 struct InteractionManagerSetup {
   // Optional: shared context for common fields
   const ApplicationContext *ctx = nullptr;
@@ -81,6 +107,13 @@ struct InteractionManagerSetup {
   GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
+
+  /// Owner-supplied dialog runners (Kartend-n8kh). InteractionManager
+  /// invokes these instead of constructing the dialog itself so the
+  /// data->ui edge is gone — the UI layer provides the runner closure
+  /// from MainWindow setup wiring.
+  SmartPlaylistDialogRunner runSmartPlaylistDialog;
+  CustomFieldsDialogRunner runCustomFieldsDialog;
 
   // Manager accessors that check ctx fallback
   SETUP_GETTER_INLINE_MGR_SAME(IScrollManager *, ScrollManager, scrollManager)
@@ -389,6 +422,13 @@ private:
   QLineEdit *m_searchBar = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
+
+  // Kartend-n8kh: owner-supplied dialog runners. Stored as the closure
+  // types defined above; the closures themselves live in the UI layer
+  // (MainWindow setup wiring), so the data-layer manager never #includes
+  // the dialog header for the symbols.
+  SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
+  CustomFieldsDialogRunner m_runCustomFieldsDialog;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;

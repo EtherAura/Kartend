@@ -4,8 +4,12 @@
 #include "collectionutils.h"
 #include "idetailspanemanager.h"
 #include "setuputils.h"
+#include <functional>
+#include <optional>
+#include <QHash>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 
 class QHBoxLayout;
@@ -20,6 +24,26 @@ struct ApplicationContext;
 namespace TimerUtils {
 class DebouncedTimer;
 }
+
+/// Input bundle for the ItemArtworkLinksDialog runner. The dialog needs
+/// both the configured custom artwork types (so it can render the right
+/// rows) and the auto-resolved on-disk paths (so it can show the "auto"
+/// hint for rows the user hasn't manually overridden).
+struct ItemArtworkLinksInput {
+  QString itemTitle;
+  QStringList standardTypes;
+  QStringList customTypes;
+  QHash<QString, QString> overrides;          // artworkType -> manualPath
+  QHash<QString, QString> autoResolvedPaths;  // artworkType -> resolved path
+  QString browseStartDir;
+};
+
+/// Runs the modal ItemArtworkLinksDialog seeded with @p input. Returns
+/// the edited overrides on accept, or nullopt on cancel. Kartend-n8kh:
+/// supplied by the UI layer so DetailsPaneManager (media-layer) doesn't
+/// #include the dialog header.
+using ItemArtworkLinksDialogRunner =
+    std::function<std::optional<QHash<QString, QString>>(const ItemArtworkLinksInput &)>;
 
 struct DetailsPaneManagerSetup {
   const ApplicationContext *ctx = nullptr;
@@ -37,6 +61,10 @@ struct DetailsPaneManagerSetup {
   QWidget *contentWidget = nullptr;
   QScrollArea *scrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
+
+  /// Owner-supplied runner for the per-item artwork-links dialog
+  /// (Kartend-n8kh). Null in headless contexts; the call site guards.
+  ItemArtworkLinksDialogRunner runArtworkLinksDialog;
 
   SETUP_GETTER_DECL(DetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
@@ -140,6 +168,9 @@ private:
   // ArtworkManager, DatabaseManager).
   const ApplicationContext *m_ctx = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
+  /// Kartend-n8kh: artwork-links dialog runner copied from setup. Null
+  /// in headless contexts; metadata callers guard before invoking.
+  ItemArtworkLinksDialogRunner m_runArtworkLinksDialog;
   bool m_sidebarVisible = false;
   /// separate from m_sidebarVisible because this flag is
   /// driven by the active view type (cover flow auto-hides) rather than

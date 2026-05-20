@@ -16,8 +16,11 @@
 
 #include "artworkutils.h"
 #include "collectionutils.h"
-#include "createsmartplaylistdialog.h"
-#include "customfieldsdialog.h"
+// Kartend-n8kh: createsmartplaylistdialog.h / customfieldsdialog.h are no
+// longer #included here. The two dialogs are launched via owner-supplied
+// closures (InteractionManagerSetup::runSmartPlaylistDialog /
+// runCustomFieldsDialog) so the data layer doesn't need the ui/ dialog
+// headers for the symbols. The runners themselves live in MainWindow.
 #include "detailspane.h"
 #include "idatabasemanager.h"
 #include "idetailspanemanager.h"
@@ -497,18 +500,14 @@ void InteractionManager::addItemToPlaylist(const QString &playlistId, const QStr
 }
 
 void InteractionManager::createSmartPlaylistDialog() {
-  if (!playlistMgr()) {
+  if (!playlistMgr() || !m_runSmartPlaylistDialog) {
     return;
   }
-  CreateSmartPlaylistDialog dialog(QApplication::activeWindow());
-  if (dialog.exec() != QDialog::Accepted) {
+  auto edit = m_runSmartPlaylistDialog(QString(), std::nullopt);
+  if (!edit.has_value() || edit->name.isEmpty()) {
     return;
   }
-  const QString name = dialog.name();
-  if (name.isEmpty()) {
-    return;
-  }
-  auto created = playlistMgr()->createSmartPlaylist(name, dialog.filter());
+  auto created = playlistMgr()->createSmartPlaylist(edit->name, edit->filter);
   if (created.isError()) {
     QMessageBox::warning(QApplication::activeWindow(), tr("Could not create smart playlist"),
                          created.error().message);
@@ -519,7 +518,7 @@ void InteractionManager::createSmartPlaylistDialog() {
 
 void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
                                                  const QString &currentName) {
-  if (!playlistMgr() || playlistId.isEmpty()) {
+  if (!playlistMgr() || playlistId.isEmpty() || !m_runSmartPlaylistDialog) {
     return;
   }
   auto loaded = playlistMgr()->loadSmartFilter(playlistId);
@@ -528,13 +527,11 @@ void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
                          loaded.error().message);
     return;
   }
-  CreateSmartPlaylistDialog dialog(QApplication::activeWindow());
-  dialog.setInitialName(currentName);
-  dialog.setInitialFilter(loaded.value());
-  if (dialog.exec() != QDialog::Accepted) {
+  auto edit = m_runSmartPlaylistDialog(currentName, loaded.value());
+  if (!edit.has_value()) {
     return;
   }
-  if (!playlistMgr()->updateSmartFilter(playlistId, dialog.filter())) {
+  if (!playlistMgr()->updateSmartFilter(playlistId, edit->filter)) {
     QMessageBox::warning(QApplication::activeWindow(), tr("Could not update smart filter"),
                          tr("The filter update failed. See logs for details."));
     return;
@@ -542,8 +539,8 @@ void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
   // Rename if the user changed the name. Done after the filter update so
   // a partial failure (rename ok, filter ok, but signal handlers race)
   // still lands the more important payload first.
-  if (!dialog.name().isEmpty() && dialog.name() != currentName) {
-    playlistMgr()->renamePlaylist(playlistId, dialog.name());
+  if (!edit->name.isEmpty() && edit->name != currentName) {
+    playlistMgr()->renamePlaylist(playlistId, edit->name);
   }
   // Re-evaluate and re-render the current view so the new filter takes
   // effect immediately rather than on the next collection switch.
@@ -618,14 +615,16 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
 
-  CustomFieldsDialog dialog(QApplication::activeWindow());
-  dialog.setItemTitle(itemName);
-  dialog.setFields(ItemMetadataStore::parseCustomFields(metadata.customFields));
-  if (dialog.exec() != QDialog::Accepted) {
+  if (!m_runCustomFieldsDialog) {
+    return;
+  }
+  auto edited = m_runCustomFieldsDialog(itemName,
+                                         ItemMetadataStore::parseCustomFields(metadata.customFields));
+  if (!edited.has_value()) {
     return;
   }
 
-  metadata.customFields = ItemMetadataStore::serializeCustomFields(dialog.fields());
+  metadata.customFields = ItemMetadataStore::serializeCustomFields(*edited);
   // Mark the row as user-edited so future scraper integrations can decide
   // whether to overwrite. Existing rows from a scraper keep their source
   // until the user touches them via this dialog.

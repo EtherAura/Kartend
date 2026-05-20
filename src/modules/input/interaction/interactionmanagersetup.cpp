@@ -70,6 +70,11 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_generalSettings = setup.getGeneralSettings();
   m_isShuttingDown = setup.getIsShuttingDown();
 
+  // Kartend-n8kh: capture the dialog runners. Either may be null in
+  // headless contexts; the call sites guard before invoking.
+  m_runSmartPlaylistDialog = setup.runSmartPlaylistDialog;
+  m_runCustomFieldsDialog = setup.runCustomFieldsDialog;
+
   // Setup SearchManager with its dependencies
   if (m_searchManager) {
     SearchManagerSetup searchSetup;

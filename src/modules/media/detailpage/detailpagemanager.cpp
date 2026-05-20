@@ -2,17 +2,15 @@
 #include "detailpagemanager.h"
 
 #include <QDateTime>
-#include <QDesktopServices>
 #include <QFileInfo>
 #include <QHash>
 #include <QStringList>
-#include <QUrl>
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
 #include "detailpagehelpers.h"
-#include "detailpageoverlay.h"
 #include "idatabasemanager.h"
+#include "idetailpageoverlay.h"
 #include "idetailspanemanager.h"
 #include "itemartwork.h"
 #include "videoutils.h"
@@ -23,16 +21,11 @@ DetailPageManager::~DetailPageManager() = default;
 void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
   m_ctx = setup.ctx;
   m_overlay = setup.overlay;
-
-  if (m_overlay) {
-    // QDesktopServices is the same hand-off the sidebar uses for manuals so
-    // both surfaces respect the user's xdg-open / Finder default handler.
-    connect(m_overlay, &DetailPageOverlay::manualRequested, this, [](const QString &manualPath) {
-      if (!manualPath.isEmpty()) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(manualPath));
-      }
-    });
-  }
+  // Kartend-n8kh: the `manualRequested` -> QDesktopServices::openUrl wiring
+  // used to live here, but it required #including the concrete
+  // DetailPageOverlay header for the signal symbol. The connection is now
+  // made in MainWindow alongside the overlay's other UI-layer wiring;
+  // DetailPageManager just builds payloads and drives showWith().
 }
 
 void DetailPageManager::showForCurrentSelection() {
@@ -48,7 +41,7 @@ void DetailPageManager::showForCurrentSelection() {
     return;
   }
 
-  DetailPageOverlay::Payload payload;
+  IDetailPageOverlay::Payload payload;
   payload.filePath = itemCtx.filePath;
   payload.itemName = itemCtx.itemName;
 

@@ -24,6 +24,7 @@
 #include "gridwidthdebouncer.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
+#include "itemartworklinksdialog.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
@@ -492,6 +493,25 @@ void MainWindow::setupSidebar() {
     // needed.
     setup.outerLayout = ui->itemsPageLayout;
     setup.contentWidget = m_mainContentWidget;
+    // Kartend-n8kh: the artwork-links dialog runs from here so the media
+    // layer (DetailsPaneManager) doesn't #include itemartworklinksdialog.h.
+    setup.runArtworkLinksDialog =
+        [this](const ItemArtworkLinksInput &in) -> std::optional<QHash<QString, QString>> {
+      ItemArtworkLinksDialog dialog(this);
+      dialog.setItemTitle(in.itemTitle);
+      dialog.setTypeRows(in.standardTypes, in.customTypes);
+      dialog.setOverrides(in.overrides);
+      if (!in.autoResolvedPaths.isEmpty()) {
+        dialog.setAutoResolvedPaths(in.autoResolvedPaths);
+      }
+      if (!in.browseStartDir.isEmpty()) {
+        dialog.setBrowseStartDirectory(in.browseStartDir);
+      }
+      if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+      }
+      return dialog.overrides();
+    };
 
     getDetailsPaneManager()->setupReferences(setup);
 

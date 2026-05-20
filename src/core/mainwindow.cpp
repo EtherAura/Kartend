@@ -4,6 +4,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -23,6 +24,8 @@
 #include "artworkmanager.h"
 #include "attractmanager.h"
 #include "collectionutils.h"
+#include "createsmartplaylistdialog.h"
+#include "customfieldsdialog.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
 #include "eventmanager.h"
@@ -30,6 +33,7 @@
 #include "icachemanager.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
+#include "itemartworklinksdialog.h"
 #include "kartmanager.h"
 #include "kartmergedialog.h"
 #include "kartprogressdialog.h"
@@ -424,6 +428,43 @@ void MainWindow::setupManagerConnections() {
   InteractionManagerSetup setup;
   setup.ctx = &m_appContext; // Managers and UI elements from shared context
 
+  // Kartend-n8kh: the input layer's right-click menu used to construct
+  // CreateSmartPlaylistDialog / CustomFieldsDialog directly, taking an
+  // upward input -> ui edge. The dialogs now run via these closures
+  // supplied here in the UI layer; InteractionManager just invokes
+  // them and reads the result.
+  setup.runSmartPlaylistDialog =
+      [this](const QString &initialName,
+             const std::optional<SmartFilter::Filter> &initialFilter)
+          -> std::optional<SmartPlaylistEdit> {
+    CreateSmartPlaylistDialog dialog(this);
+    if (!initialName.isEmpty()) {
+      dialog.setInitialName(initialName);
+    }
+    if (initialFilter.has_value()) {
+      dialog.setInitialFilter(*initialFilter);
+    }
+    if (dialog.exec() != QDialog::Accepted) {
+      return std::nullopt;
+    }
+    SmartPlaylistEdit out;
+    out.name = dialog.name();
+    out.filter = dialog.filter();
+    return out;
+  };
+  setup.runCustomFieldsDialog =
+      [this](const QString &itemTitle,
+             const ItemMetadataStore::CustomFieldList &initial)
+          -> std::optional<ItemMetadataStore::CustomFieldList> {
+    CustomFieldsDialog dialog(this);
+    dialog.setItemTitle(itemTitle);
+    dialog.setFields(initial);
+    if (dialog.exec() != QDialog::Accepted) {
+      return std::nullopt;
+    }
+    return dialog.fields();
+  };
+
   loadingLabel = ui->loadingLabel;
 
   // ctx is already fully populated by initializeAppContext() — InteractionManager
@@ -542,6 +583,19 @@ void MainWindow::setupManagerConnections() {
           sb->setOverlayActive(v);
         }
       });
+
+      // Kartend-n8kh: this connect previously lived in DetailPageManager
+      // (data/media layer), which required #including the concrete
+      // DetailPageOverlay header for the signal symbol. Moved here so the
+      // manager sees only IDetailPageOverlay. QDesktopServices is the
+      // same hand-off the sidebar uses for manuals so both surfaces
+      // respect the user's xdg-open / Finder default handler.
+      connect(m_detailPageOverlay, &DetailPageOverlay::manualRequested, this,
+              [](const QString &manualPath) {
+                if (!manualPath.isEmpty()) {
+                  QDesktopServices::openUrl(QUrl::fromLocalFile(manualPath));
+                }
+              });
     }
   }
 

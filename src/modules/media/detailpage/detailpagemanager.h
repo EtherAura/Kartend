@@ -2,11 +2,11 @@
 #define DETAILPAGEMANAGER_H
 
 #include "idetailpagemanager.h"
+#include "idetailpageoverlay.h"
 #include "setuputils.h"
 #include <QObject>
 
 class DatabaseManager;
-class DetailPageOverlay;
 class DetailsPaneManager;
 struct ApplicationContext;
 
@@ -23,7 +23,11 @@ struct ApplicationContext;
 struct DetailPageManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  DetailPageOverlay *overlay = nullptr;
+  /// Neutral pointer to the overlay (Kartend-n8kh). The concrete
+  /// `DetailPageOverlay` widget lives in src/ui/ and implements
+  /// `IDetailPageOverlay`; MainWindow constructs it and hands the
+  /// already-wired instance in here.
+  IDetailPageOverlay *overlay = nullptr;
 };
 
 // QObject must be the first base; IDetailPageManager is a plain (non-QObject)
@@ -53,7 +57,7 @@ private:
   // ctx is the single source of truth for sibling managers (DetailsPaneManager,
   // DatabaseManager) — never cache them as direct fields.
   const ApplicationContext *m_ctx = nullptr;
-  DetailPageOverlay *m_overlay = nullptr;
+  IDetailPageOverlay *m_overlay = nullptr;
 };
 
 #endif // DETAILPAGEMANAGER_H

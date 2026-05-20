@@ -60,6 +60,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   m_mainContentWidget = setup.contentWidget;
   m_itemScrollArea = setup.getScrollArea();
   m_collections = setup.getCollections();
+  m_runArtworkLinksDialog = setup.runArtworkLinksDialog;
 
   if (!m_metadataDebouncer) {
     m_metadataDebouncer =

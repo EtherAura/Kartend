@@ -10,6 +10,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   icachemanager.h
   idatabasemanager.h
   idetailpagemanager.h
+  idetailpageoverlay.h
   idetailspanemanager.h
   iinteractionmanager.h
   ikeyboardmanager.h

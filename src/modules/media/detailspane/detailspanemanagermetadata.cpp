@@ -13,7 +13,9 @@
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
 #include "itemartwork.h"
-#include "itemartworklinksdialog.h"
+// Kartend-n8kh: itemartworklinksdialog.h is no longer #included here. The
+// dialog is launched via DetailsPaneManagerSetup::runArtworkLinksDialog
+// (a closure supplied by the UI layer in MainWindow setup wiring).
 #include "itemmetadata.h"
 #include "itemwidget.h"
 #include "pathutils.h"
@@ -527,17 +529,21 @@ void DetailsPaneManager::openArtworkLinksDialog() {
     }
   }
 
-  ItemArtworkLinksDialog dialog(m_DetailsPane->window());
-  dialog.setItemTitle(m_currentItemName.isEmpty() ? baseName : m_currentItemName);
-  dialog.setTypeRows(ItemArtworkStore::standardTypes(), allCustomTypes);
-  dialog.setOverrides(originalOverrides);
+  if (!m_runArtworkLinksDialog) {
+    return;
+  }
+
+  ItemArtworkLinksInput input;
+  input.itemTitle = m_currentItemName.isEmpty() ? baseName : m_currentItemName;
+  input.standardTypes = ItemArtworkStore::standardTypes();
+  input.customTypes = allCustomTypes;
+  input.overrides = originalOverrides;
   // Bug: gallery showed types (front/box/etc.) that auto-resolved from
   // {artworkDirectory}/<type>/ but the dialog left those rows blank,
   // making the scrape look only half-mapped. Compute the auto-resolved
   // path for every row that lacks a DB override and pass it through so
   // the dialog can render it as an "auto" hint in the path column.
   if (!m_currentItemArtworkDir.trimmed().isEmpty()) {
-    QHash<QString, QString> autoPaths;
     const auto addAuto = [&](const QString &type) {
       if (originalOverrides.contains(type)) {
         return; // override wins, no auto hint needed
@@ -545,7 +551,7 @@ void DetailsPaneManager::openArtworkLinksDialog() {
       const QString resolved =
           ItemArtworkStore::resolveArtworkPath(QString(), baseName, m_currentItemArtworkDir, type);
       if (!resolved.isEmpty()) {
-        autoPaths.insert(type, resolved);
+        input.autoResolvedPaths.insert(type, resolved);
       }
     };
     for (const QString &type : ItemArtworkStore::standardTypes()) {
@@ -554,17 +560,15 @@ void DetailsPaneManager::openArtworkLinksDialog() {
     for (const QString &type : allCustomTypes) {
       addAuto(type);
     }
-    dialog.setAutoResolvedPaths(autoPaths);
-  }
-  if (!m_currentItemArtworkDir.trimmed().isEmpty()) {
-    dialog.setBrowseStartDirectory(m_currentItemArtworkDir);
+    input.browseStartDir = m_currentItemArtworkDir;
   }
 
-  if (dialog.exec() != QDialog::Accepted) {
+  auto edited = m_runArtworkLinksDialog(input);
+  if (!edited.has_value()) {
     return;
   }
 
-  const QHash<QString, QString> newOverrides = dialog.overrides();
+  const QHash<QString, QString> newOverrides = *edited;
 
   // Persist the diff: every type whose final value differs from the
   // original gets either a save (non-empty) or a remove (cleared). We

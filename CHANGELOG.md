@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data-layer manager invokes the closure when a conflict needs resolving
   and never touches the dialog type, eliminating the last real data→ui
   include edge in `src/modules/data/`
+- `InteractionManager` and `DetailsPaneManager` no longer include
+  `createsmartplaylistdialog.h`, `customfieldsdialog.h`, or
+  `itemartworklinksdialog.h`. The three modal edit dialogs are now
+  launched through owner-supplied closures
+  (`InteractionManagerSetup::runSmartPlaylistDialog` /
+  `runCustomFieldsDialog`,
+  `DetailsPaneManagerSetup::runArtworkLinksDialog`) wired from MainWindow.
+  Together with the `IDetailPageOverlay` extraction below, this kills the
+  remaining input→ui and media→ui include edges
+- `DetailPageManager` now holds an `IDetailPageOverlay*` rather than a
+  concrete `DetailPageOverlay*`, and the `Payload` / `ArtworkEntry`
+  value types live on the new `src/api/idetailpageoverlay.h` neutral
+  interface. The `manualRequested` → `QDesktopServices::openUrl` wiring
+  moved to MainWindow alongside the overlay's other UI-layer connects
 
 ### Fixed
 
