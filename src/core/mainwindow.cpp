@@ -31,6 +31,7 @@
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "kartmanager.h"
+#include "kartmergedialog.h"
 #include "kartprogressdialog.h"
 #include "kartreader.h"
 
@@ -550,6 +551,25 @@ void MainWindow::setupManagerConnections() {
     kartSetup.getCollections = [this]() { return &m_collections; };
     kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
     kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
+    // Kartend-a3ir: the interactive merge dialog lives in the UI layer
+    // and is constructed here. KartManager (data layer) just invokes the
+    // closure with the conflicting metadata and uses the returned
+    // ConflictResolution. The dialog parents to `this` so it modals
+    // correctly over the main window.
+    kartSetup.mergeResolver = [this](const QString &itemPath,
+                                     const ItemMetadataStore::ItemMetadata &existing,
+                                     const ItemMetadataStore::ItemMetadata &incoming) {
+      KartMergeDialog dlg(itemPath, existing, incoming, this);
+      kart::ConflictResolution r;
+      if (dlg.exec() == QDialog::Accepted) {
+        r.choice = dlg.choice();
+        r.policy = dlg.policy();
+        r.applyToAll = dlg.applyToAll();
+      } else {
+        r.choice = kart::MergeChoice::Skip;
+      }
+      return r;
+    };
     km->setupReferences(kartSetup);
 
     connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {

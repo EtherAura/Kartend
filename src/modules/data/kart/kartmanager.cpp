@@ -9,14 +9,15 @@
 
 #include "collectionutils.h"
 #include "kartdb.h"
-// kartmergedialog.h is intentionally still included: the merge dialog is a
-// blocking, interactive decision (KartManager::makeInteractiveResolver runs
-// dlg.exec() mid-import and waits on the user's choice). Converting that to a
-// signal-driven flow is a larger redesign tracked as a follow-up. The
-// one-way progress dialog, by contrast, has been replaced with signals — see
-// the kartProgress* signals in the header.
+// Kartend-a3ir: the previous #include of "kartmergedialog.h" was the last
+// data->ui edge in src/. The interactive merge-conflict decision is now
+// supplied by the owner (typically MainWindow) as a ConflictResolver
+// closure in KartManagerSetup::mergeResolver — see runImport(). The
+// closure builds the KartMergeDialog with the right parent and returns
+// the user's choice; KartManager itself never knows the dialog type. The
+// one-way progress dialog uses the kartProgress* signal family for the
+// same reason (see the header).
 #include "isettingsmanager.h"
-#include "kartmergedialog.h"
 #include "kartreader.h"
 #include "kartwriter.h"
 
@@ -180,22 +181,6 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex,
   return {};
 }
 
-ConflictResolver KartManager::makeInteractiveResolver(QWidget *parent) {
-  return [parent](const QString &itemPath, const ItemMetadataStore::ItemMetadata &existing,
-                  const ItemMetadataStore::ItemMetadata &incoming) {
-    KartMergeDialog dlg(itemPath, existing, incoming, parent);
-    ConflictResolution r;
-    if (dlg.exec() == QDialog::Accepted) {
-      r.choice = dlg.choice();
-      r.policy = dlg.policy();
-      r.applyToAll = dlg.applyToAll();
-    } else {
-      r.choice = MergeChoice::Skip;
-    }
-    return r;
-  };
-}
-
 void KartManager::importInteractive() {
   QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
 
@@ -277,8 +262,13 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
               return;
             }
             QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
-            auto finalRes =
-                finalizeImport(extracted.value(), true, makeInteractiveResolver(parent));
+            // The interactive merge resolver lives in the UI layer (see
+            // Kartend-a3ir) — fall back to Skip in headless contexts where
+            // no resolver was wired.
+            const ConflictResolver &resolver = m_setup.mergeResolver
+                                                   ? m_setup.mergeResolver
+                                                   : makeFixedChoiceResolver(MergeChoice::Skip);
+            auto finalRes = finalizeImport(extracted.value(), true, resolver);
             if (finalRes.isError()) {
               emit importFailed(finalRes.error());
               emit kartProgressFailed();

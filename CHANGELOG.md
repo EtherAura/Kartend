@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `src/modules/input/` and `src/modules/media/` no longer take an upward
   dep on `src/ui/` to reach these widgets; the include statements
   themselves are unchanged (CMake resolves them to the new path)
+- `KartManager` no longer includes `kartmergedialog.h` — the interactive
+  merge-conflict dialog is now supplied by the UI layer (MainWindow) as
+  a `ConflictResolver` closure on `KartManagerSetup::mergeResolver`. The
+  data-layer manager invokes the closure when a conflict needs resolving
+  and never touches the dialog type, eliminating the last real data→ui
+  include edge in `src/modules/data/`
 
 ### Fixed
 

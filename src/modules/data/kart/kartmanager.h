@@ -29,6 +29,16 @@ struct KartManagerSetup {
   std::function<QList<CollectionConfig> *()> getCollections;
   std::function<QList<LauncherPreset>()> getLauncherPresets;
   std::function<QWidget *()> getParentWindow;
+
+  /// Owner-provided resolver for the interactive merge-conflict decision.
+  /// Kartend-a3ir: KartManager previously #included kartmergedialog.h and
+  /// constructed/exec()ed the dialog itself, which was the last data->ui
+  /// edge in src/. With this seam the data layer takes a neutral
+  /// std::function and the UI layer (typically MainWindow) supplies a
+  /// closure that builds the dialog with the right parent and returns the
+  /// user's choice. Left null in headless contexts — the manager falls
+  /// back to MergeChoice::Skip if no resolver is wired.
+  ConflictResolver mergeResolver;
 };
 
 class KartManager : public QObject {
@@ -96,8 +106,6 @@ private:
 
   void runImport(const QString &kartPath, const QString &destDir);
   void runExport(int collectionIndex, const QString &outPath);
-
-  ConflictResolver makeInteractiveResolver(QWidget *parent);
 };
 
 } // namespace kart
