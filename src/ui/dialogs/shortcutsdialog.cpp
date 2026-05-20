@@ -1,7 +1,7 @@
 // Keyboard shortcuts help dialog
 #include "shortcutsdialog.h"
 
-#include "mainwindow.h"
+#include "imainwindow.h"
 
 #include <QFont>
 #include <QGroupBox>
@@ -80,8 +80,8 @@ void ShortcutsDialog::populateContent() {
   clearLayout(m_leftColumnLayout);
   clearLayout(m_rightColumnLayout);
 
-  const auto *mw = qobject_cast<MainWindow *>(parent());
-  const auto settings = mw ? mw->m_generalSettings : GeneralSettings{};
+  const auto *mw = dynamic_cast<IMainWindow *>(parent());
+  const auto settings = mw ? mw->generalSettings() : GeneralSettings{};
 
   auto keyText = [](int key) -> QString {
     const QKeySequence seq(key);

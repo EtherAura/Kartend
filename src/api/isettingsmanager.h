@@ -2,6 +2,7 @@
 #define ISETTINGSMANAGER_H
 
 #include "collectionutils.h"
+#include "errorutils.h"
 #include <functional>
 #include <memory>
 #include <QList>
@@ -56,10 +57,16 @@ public:
   ~ISettingsManager() override = default;
 
   virtual void loadCollections(QList<CollectionConfig> &collections) = 0;
-  virtual void saveCollections(const QList<CollectionConfig> &collections) = 0;
+  // Returns Result<void>::success() on a clean QSettings::sync, or an
+  // ErrorContext describing the FileWriteError otherwise. Dialog callers
+  // surface the error via ErrorDialog and keep the dialog open; non-dialog
+  // callers (timers, controllers, kart imports) discard the result — the
+  // implementation still logs internally.
+  virtual ErrorUtils::Result<void>
+  saveCollections(const QList<CollectionConfig> &collections) = 0;
   virtual void openSettingsDialog(const SettingsDialogContext &context) = 0;
   virtual void loadGeneralSettings(GeneralSettings &settings) = 0;
-  virtual void saveGeneralSettings(const GeneralSettings &settings) = 0;
+  virtual ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &settings) = 0;
   virtual void setLastSelectedItem(int collectionIndex, int itemIndex) = 0;
   [[nodiscard]] virtual int getLastSelectedItem(int collectionIndex) const = 0;
 

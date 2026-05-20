@@ -1,4 +1,4 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+target_sources(kartend_input PRIVATE
   eventhelpers.cpp
   eventmanager.cpp
   eventmanagermouse.cpp

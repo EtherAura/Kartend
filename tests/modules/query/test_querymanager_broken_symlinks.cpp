@@ -91,7 +91,7 @@ void TestQueryManagerBrokenSymlinks::brokenSymlinkSurvivesScan() {
   CollectionConfig collection;
   collection.name = QStringLiteral("BrokenSymlinkCollection");
   collection.mediaDirectory = mediaDir.path();
-  collection.includeContentSubfolders = false;
+  collection.folderBrowsing.includeContentSubfolders = false;
   collection.extensions = {QStringLiteral("bin")};
 
   QList<CollectionConfig> allCollections;

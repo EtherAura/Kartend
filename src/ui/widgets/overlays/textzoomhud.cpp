@@ -4,6 +4,8 @@
 // hold timer so an in-progress zoom burst keeps the HUD visible.
 #include "textzoomhud.h"
 
+#include "overlaylayermanager.h"
+
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -88,7 +90,11 @@ void TextZoomHud::showZoom(int percent) {
   }
 
   QWidget::show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
 
   m_holdTimer->start();
 }

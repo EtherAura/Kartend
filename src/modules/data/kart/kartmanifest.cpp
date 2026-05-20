@@ -100,17 +100,17 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   QJsonObject o;
   o["name"] = c.name;
   o["type"] = c.type;
-  o["launcher_path"] = c.launcherPath;
-  o["core_path"] = c.corePath;
-  o["launch_parameters"] = c.launchParameters;
-  o["launcher_name"] = c.launcherName;
+  o["launcher_path"] = c.launcher.launcherPath;
+  o["core_path"] = c.launcher.corePath;
+  o["launch_parameters"] = c.launcher.launchParameters;
+  o["launcher_name"] = c.launcher.launcherName;
 
   QJsonArray addl;
-  for (const LauncherConfig &lc : c.additionalLaunchers) {
+  for (const LauncherConfig &lc : c.launcher.additionalLaunchers) {
     addl.append(launcherConfigToJson(lc));
   }
   o["additional_launchers"] = addl;
-  o["default_launcher_index"] = c.defaultLauncherIndex;
+  o["default_launcher_index"] = c.launcher.defaultLauncherIndex;
 
   o["media_directory"] = c.mediaDirectory;
   o["artwork_directory"] = c.artworkDirectory;
@@ -121,88 +121,88 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["extensions"] = stringListToJson(c.extensions);
   o["custom_artwork_types"] = stringListToJson(c.customArtworkTypes);
 
-  o["grid_width"] = c.gridWidth;
-  o["horizontal_grid_height"] = c.horizontalGridHeight;
-  o["grid_width_sidebar_hidden"] = c.gridWidthSidebarHidden;
-  o["horizontal_grid_height_sidebar_hidden"] = c.horizontalGridHeightSidebarHidden;
+  o["grid_width"] = c.gridLayout.gridWidth;
+  o["horizontal_grid_height"] = c.gridLayout.horizontalGridHeight;
+  o["grid_width_sidebar_hidden"] = c.gridLayout.gridWidthSidebarHidden;
+  o["horizontal_grid_height_sidebar_hidden"] = c.gridLayout.horizontalGridHeightSidebarHidden;
   // alt items-per-column for Top/Bottom-pane-shrink case.
-  o["grid_height_sidebar_hidden"] = c.gridHeightSidebarHidden;
-  o["sidebar_visible"] = c.sidebarVisible;
+  o["grid_height_sidebar_hidden"] = c.gridLayout.gridHeightSidebarHidden;
+  o["sidebar_visible"] = c.sidebar.sidebarVisible;
   o["parent_collection_index"] = c.parentCollectionIndex;
   o["is_subcollection"] = c.isSubcollection;
   o["show_all_subcollection_items"] = c.showAllSubcollectionItems;
   o["hide_titles"] = c.hideTitles;
   o["hide_subcollection_titles"] = c.hideSubcollectionTitles;
-  o["title_exclusion_patterns"] = stringListToJson(c.titleExclusionPatterns);
-  o["title_exclusion_enabled"] = c.titleExclusionEnabled;
+  o["title_exclusion_patterns"] = stringListToJson(c.filter.titleExclusionPatterns);
+  o["title_exclusion_enabled"] = c.filter.titleExclusionEnabled;
 
   o["horizontal_alignment"] = CollectionUtils::alignmentToString(c.horizontalAlignment);
-  o["sidebar_mode"] = sidebarModeToString(c.sidebarMode);
-  o["sidebar_position"] = CollectionUtils::detailsPanePositionToString(c.sidebarPosition);
+  o["sidebar_mode"] = sidebarModeToString(c.sidebar.sidebarMode);
+  o["sidebar_position"] = CollectionUtils::detailsPanePositionToString(c.sidebar.sidebarPosition);
   o["sidebar_background_type"] =
-      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebarBackgroundType);
-  o["sidebar_background_color"] = c.sidebarBackgroundColor;
-  o["sidebar_background_image"] = c.sidebarBackgroundImage;
-  o["sidebar_pattern"] = CollectionUtils::detailsPanePatternToString(c.sidebarPattern);
-  o["sidebar_pattern_intensity"] = c.sidebarPatternIntensity;
-  o["sidebar_pattern_color"] = c.sidebarPatternColor;
-  o["sidebar_text_color"] = c.sidebarTextColor;
-  o["sidebar_accent_color"] = c.sidebarAccentColor;
-  o["sidebar_header_bg_color"] = c.sidebarHeaderBgColor;
-  o["sidebar_section_bg_color"] = c.sidebarSectionBgColor;
-  o["sidebar_header_bg_opacity"] = c.sidebarHeaderBgOpacity;
-  o["sidebar_section_bg_opacity"] = c.sidebarSectionBgOpacity;
-  o["sidebar_width"] = c.sidebarWidth;
+      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebar.sidebarBackgroundType);
+  o["sidebar_background_color"] = c.sidebar.sidebarBackgroundColor;
+  o["sidebar_background_image"] = c.sidebar.sidebarBackgroundImage;
+  o["sidebar_pattern"] = CollectionUtils::detailsPanePatternToString(c.sidebar.sidebarPattern);
+  o["sidebar_pattern_intensity"] = c.sidebar.sidebarPatternIntensity;
+  o["sidebar_pattern_color"] = c.sidebar.sidebarPatternColor;
+  o["sidebar_text_color"] = c.sidebar.sidebarTextColor;
+  o["sidebar_accent_color"] = c.sidebar.sidebarAccentColor;
+  o["sidebar_header_bg_color"] = c.sidebar.sidebarHeaderBgColor;
+  o["sidebar_section_bg_color"] = c.sidebar.sidebarSectionBgColor;
+  o["sidebar_header_bg_opacity"] = c.sidebar.sidebarHeaderBgOpacity;
+  o["sidebar_section_bg_opacity"] = c.sidebar.sidebarSectionBgOpacity;
+  o["sidebar_width"] = c.sidebar.sidebarWidth;
   // pane height for Top/Bottom dock.
-  o["sidebar_height"] = c.sidebarHeight;
-  o["sidebar_width_locked"] = c.sidebarWidthLocked;
-  o["sidebar_active_tab"] = CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab);
-  o["sidebar_font_family"] = c.sidebarFontFamily;
-  o["sidebar_font_point_size"] = c.sidebarFontPointSize;
+  o["sidebar_height"] = c.sidebar.sidebarHeight;
+  o["sidebar_width_locked"] = c.sidebar.sidebarWidthLocked;
+  o["sidebar_active_tab"] = CollectionUtils::detailsPaneTabToString(c.sidebar.sidebarActiveTab);
+  o["sidebar_font_family"] = c.sidebar.sidebarFontFamily;
+  o["sidebar_font_point_size"] = c.sidebar.sidebarFontPointSize;
 
   o["view_type"] = CollectionUtils::viewTypeToString(c.viewType);
   o["hide_missing_artwork"] = c.hideMissingArtwork;
-  o["horizontal_spacing"] = c.horizontalSpacing;
-  o["vertical_spacing"] = c.verticalSpacing;
-  o["hide_horizontal_scrollbar"] = c.hideHorizontalScrollbar;
-  o["hide_vertical_scrollbar"] = c.hideVerticalScrollbar;
-  o["item_width"] = c.itemWidth;
-  o["item_height"] = c.itemHeight;
-  o["font_size"] = c.fontSize;
-  o["corner_radius"] = c.cornerRadius;
+  o["horizontal_spacing"] = c.gridLayout.horizontalSpacing;
+  o["vertical_spacing"] = c.gridLayout.verticalSpacing;
+  o["hide_horizontal_scrollbar"] = c.gridLayout.hideHorizontalScrollbar;
+  o["hide_vertical_scrollbar"] = c.gridLayout.hideVerticalScrollbar;
+  o["item_width"] = c.gridLayout.itemWidth;
+  o["item_height"] = c.gridLayout.itemHeight;
+  o["font_size"] = c.gridLayout.fontSize;
+  o["corner_radius"] = c.gridLayout.cornerRadius;
 
-  o["background_type"] = backgroundTypeToString(c.backgroundType);
-  o["background_color"] = c.backgroundColor;
-  o["background_image"] = c.backgroundImage;
-  o["background_video"] = c.backgroundVideo;
-  o["primary_color"] = c.primaryColor;
-  o["tile_color"] = c.tileColor;
-  o["selection_color"] = c.selectionColor;
+  o["background_type"] = backgroundTypeToString(c.background.backgroundType);
+  o["background_color"] = c.background.backgroundColor;
+  o["background_image"] = c.background.backgroundImage;
+  o["background_video"] = c.background.backgroundVideo;
+  o["primary_color"] = c.background.primaryColor;
+  o["tile_color"] = c.background.tileColor;
+  o["selection_color"] = c.background.selectionColor;
 
-  o["header_logo_image"] = c.headerLogoImage;
-  o["header_logo_position"] = CollectionUtils::headerLogoPositionToString(c.headerLogoPosition);
+  o["header_logo_image"] = c.background.headerLogoImage;
+  o["header_logo_position"] = CollectionUtils::headerLogoPositionToString(c.background.headerLogoPosition);
 
-  o["vignette_enabled"] = c.vignetteEnabled;
-  o["vignette_intensity"] = c.vignetteIntensity;
-  o["wallpaper_parallax"] = c.wallpaperParallax;
-  o["parallax_strength"] = c.parallaxStrength;
-  o["toolbar_backdrop_blur"] = c.toolbarBackdropBlur;
-  o["backdrop_blur_radius"] = c.backdropBlurRadius;
+  o["vignette_enabled"] = c.background.vignetteEnabled;
+  o["vignette_intensity"] = c.background.vignetteIntensity;
+  o["wallpaper_parallax"] = c.background.wallpaperParallax;
+  o["parallax_strength"] = c.background.parallaxStrength;
+  o["toolbar_backdrop_blur"] = c.background.toolbarBackdropBlur;
+  o["backdrop_blur_radius"] = c.background.backdropBlurRadius;
 
-  o["extract_archives"] = c.extractArchives;
-  o["extracted_extension"] = c.extractedExtension;
+  o["extract_archives"] = c.archive.extractArchives;
+  o["extracted_extension"] = c.archive.extractedExtension;
   o["expand_mode"] = c.expandMode;
 
-  o["include_content_subfolders"] = c.includeContentSubfolders;
-  o["include_artwork_subfolders"] = c.includeArtworkSubfolders;
-  o["show_all_subfolder_items"] = c.showAllSubfolderItems;
-  o["hide_subfolder_titles"] = c.hideSubfolderTitles;
-  o["show_hidden_folders"] = c.showHiddenFolders;
+  o["include_content_subfolders"] = c.folderBrowsing.includeContentSubfolders;
+  o["include_artwork_subfolders"] = c.folderBrowsing.includeArtworkSubfolders;
+  o["show_all_subfolder_items"] = c.folderBrowsing.showAllSubfolderItems;
+  o["hide_subfolder_titles"] = c.folderBrowsing.hideSubfolderTitles;
+  o["show_hidden_folders"] = c.folderBrowsing.showHiddenFolders;
 
-  o["list_font_size"] = c.listFontSize;
-  o["list_row_height"] = c.listRowHeight;
-  o["list_row_color"] = c.listRowColor;
-  o["list_alt_row_color"] = c.listAltRowColor;
+  o["list_font_size"] = c.listView.listFontSize;
+  o["list_row_height"] = c.listView.listRowHeight;
+  o["list_row_color"] = c.listView.listRowColor;
+  o["list_alt_row_color"] = c.listView.listAltRowColor;
   o["custom_font_family"] = c.customFontFamily;
 
   o["additional_parent_names"] = stringListToJson(c.additionalParentNames);
@@ -213,16 +213,16 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   CollectionConfig c;
   c.name = o["name"].toString();
   c.type = o["type"].toString();
-  c.launcherPath = o["launcher_path"].toString();
-  c.corePath = o["core_path"].toString();
-  c.launchParameters = o["launch_parameters"].toString();
-  c.launcherName = o["launcher_name"].toString();
+  c.launcher.launcherPath = o["launcher_path"].toString();
+  c.launcher.corePath = o["core_path"].toString();
+  c.launcher.launchParameters = o["launch_parameters"].toString();
+  c.launcher.launcherName = o["launcher_name"].toString();
 
   const QJsonArray addlArr = o["additional_launchers"].toArray();
   for (const auto &v : addlArr) {
-    c.additionalLaunchers.append(jsonToLauncherConfig(v.toObject()));
+    c.launcher.additionalLaunchers.append(jsonToLauncherConfig(v.toObject()));
   }
-  c.defaultLauncherIndex = o["default_launcher_index"].toInt(0);
+  c.launcher.defaultLauncherIndex = o["default_launcher_index"].toInt(0);
 
   c.mediaDirectory = o["media_directory"].toString();
   c.artworkDirectory = o["artwork_directory"].toString();
@@ -233,88 +233,88 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.extensions = jsonToStringList(o["extensions"]);
   c.customArtworkTypes = jsonToStringList(o["custom_artwork_types"]);
 
-  c.gridWidth = o["grid_width"].toInt(4);
-  c.horizontalGridHeight = o["horizontal_grid_height"].toInt(0);
-  c.gridWidthSidebarHidden = o["grid_width_sidebar_hidden"].toInt(0);
-  c.horizontalGridHeightSidebarHidden = o["horizontal_grid_height_sidebar_hidden"].toInt(0);
-  c.gridHeightSidebarHidden = o["grid_height_sidebar_hidden"].toInt(0);
-  c.sidebarVisible = o["sidebar_visible"].toBool(false);
+  c.gridLayout.gridWidth = o["grid_width"].toInt(4);
+  c.gridLayout.horizontalGridHeight = o["horizontal_grid_height"].toInt(0);
+  c.gridLayout.gridWidthSidebarHidden = o["grid_width_sidebar_hidden"].toInt(0);
+  c.gridLayout.horizontalGridHeightSidebarHidden = o["horizontal_grid_height_sidebar_hidden"].toInt(0);
+  c.gridLayout.gridHeightSidebarHidden = o["grid_height_sidebar_hidden"].toInt(0);
+  c.sidebar.sidebarVisible = o["sidebar_visible"].toBool(false);
   c.parentCollectionIndex = o["parent_collection_index"].toInt(-1);
   c.isSubcollection = o["is_subcollection"].toBool(false);
   c.showAllSubcollectionItems = o["show_all_subcollection_items"].toBool(false);
   c.hideTitles = o["hide_titles"].toBool(false);
   c.hideSubcollectionTitles = o["hide_subcollection_titles"].toBool(false);
-  c.titleExclusionPatterns = jsonToStringList(o["title_exclusion_patterns"]);
-  c.titleExclusionEnabled = o["title_exclusion_enabled"].toBool(true);
+  c.filter.titleExclusionPatterns = jsonToStringList(o["title_exclusion_patterns"]);
+  c.filter.titleExclusionEnabled = o["title_exclusion_enabled"].toBool(true);
 
   c.horizontalAlignment = CollectionUtils::stringToAlignment(o["horizontal_alignment"].toString());
-  c.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
-  c.sidebarPosition =
+  c.sidebar.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
+  c.sidebar.sidebarPosition =
       CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
-  c.sidebarBackgroundType =
+  c.sidebar.sidebarBackgroundType =
       CollectionUtils::stringToDetailsPaneBackgroundType(o["sidebar_background_type"].toString());
-  c.sidebarBackgroundColor = o["sidebar_background_color"].toString();
-  c.sidebarBackgroundImage = o["sidebar_background_image"].toString();
-  c.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(o["sidebar_pattern"].toString());
-  c.sidebarPatternIntensity = o["sidebar_pattern_intensity"].toInt(50);
-  c.sidebarPatternColor = o["sidebar_pattern_color"].toString();
-  c.sidebarTextColor = o["sidebar_text_color"].toString();
-  c.sidebarAccentColor = o["sidebar_accent_color"].toString();
-  c.sidebarHeaderBgColor = o["sidebar_header_bg_color"].toString();
-  c.sidebarSectionBgColor = o["sidebar_section_bg_color"].toString();
-  c.sidebarHeaderBgOpacity = o["sidebar_header_bg_opacity"].toInt(200);
-  c.sidebarSectionBgOpacity = o["sidebar_section_bg_opacity"].toInt(170);
-  c.sidebarWidth = o["sidebar_width"].toInt(UIConstants::DetailsPane::FIXED_WIDTH);
-  c.sidebarHeight = o["sidebar_height"].toInt(UIConstants::DetailsPane::FIXED_HEIGHT);
-  c.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
-  c.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
-  c.sidebarFontFamily = o["sidebar_font_family"].toString();
-  c.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
+  c.sidebar.sidebarBackgroundColor = o["sidebar_background_color"].toString();
+  c.sidebar.sidebarBackgroundImage = o["sidebar_background_image"].toString();
+  c.sidebar.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(o["sidebar_pattern"].toString());
+  c.sidebar.sidebarPatternIntensity = o["sidebar_pattern_intensity"].toInt(50);
+  c.sidebar.sidebarPatternColor = o["sidebar_pattern_color"].toString();
+  c.sidebar.sidebarTextColor = o["sidebar_text_color"].toString();
+  c.sidebar.sidebarAccentColor = o["sidebar_accent_color"].toString();
+  c.sidebar.sidebarHeaderBgColor = o["sidebar_header_bg_color"].toString();
+  c.sidebar.sidebarSectionBgColor = o["sidebar_section_bg_color"].toString();
+  c.sidebar.sidebarHeaderBgOpacity = o["sidebar_header_bg_opacity"].toInt(200);
+  c.sidebar.sidebarSectionBgOpacity = o["sidebar_section_bg_opacity"].toInt(170);
+  c.sidebar.sidebarWidth = o["sidebar_width"].toInt(UIConstants::DetailsPane::FIXED_WIDTH);
+  c.sidebar.sidebarHeight = o["sidebar_height"].toInt(UIConstants::DetailsPane::FIXED_HEIGHT);
+  c.sidebar.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
+  c.sidebar.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
+  c.sidebar.sidebarFontFamily = o["sidebar_font_family"].toString();
+  c.sidebar.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
 
   c.viewType = CollectionUtils::stringToViewType(o["view_type"].toString());
   c.hideMissingArtwork = o["hide_missing_artwork"].toBool(false);
-  c.horizontalSpacing = o["horizontal_spacing"].toInt(UIConstants::Grid::SPACING);
-  c.verticalSpacing = o["vertical_spacing"].toInt(20);
-  c.hideHorizontalScrollbar = o["hide_horizontal_scrollbar"].toBool(false);
-  c.hideVerticalScrollbar = o["hide_vertical_scrollbar"].toBool(false);
-  c.itemWidth = o["item_width"].toInt(UIConstants::Item::DEFAULT_WIDTH);
-  c.itemHeight = o["item_height"].toInt(UIConstants::Item::DEFAULT_HEIGHT);
-  c.fontSize = o["font_size"].toInt(UIConstants::Item::DEFAULT_FONT_SIZE);
-  c.cornerRadius = o["corner_radius"].toInt(UIConstants::Item::DEFAULT_CORNER_RADIUS);
+  c.gridLayout.horizontalSpacing = o["horizontal_spacing"].toInt(UIConstants::Grid::SPACING);
+  c.gridLayout.verticalSpacing = o["vertical_spacing"].toInt(20);
+  c.gridLayout.hideHorizontalScrollbar = o["hide_horizontal_scrollbar"].toBool(false);
+  c.gridLayout.hideVerticalScrollbar = o["hide_vertical_scrollbar"].toBool(false);
+  c.gridLayout.itemWidth = o["item_width"].toInt(UIConstants::Item::DEFAULT_WIDTH);
+  c.gridLayout.itemHeight = o["item_height"].toInt(UIConstants::Item::DEFAULT_HEIGHT);
+  c.gridLayout.fontSize = o["font_size"].toInt(UIConstants::Item::DEFAULT_FONT_SIZE);
+  c.gridLayout.cornerRadius = o["corner_radius"].toInt(UIConstants::Item::DEFAULT_CORNER_RADIUS);
 
-  c.backgroundType = stringToBackgroundType(o["background_type"].toString());
-  c.backgroundColor = o["background_color"].toString();
-  c.backgroundImage = o["background_image"].toString();
-  c.backgroundVideo = o["background_video"].toString();
-  c.primaryColor = o["primary_color"].toString();
-  c.tileColor = o["tile_color"].toString();
-  c.selectionColor = o["selection_color"].toString();
+  c.background.backgroundType = stringToBackgroundType(o["background_type"].toString());
+  c.background.backgroundColor = o["background_color"].toString();
+  c.background.backgroundImage = o["background_image"].toString();
+  c.background.backgroundVideo = o["background_video"].toString();
+  c.background.primaryColor = o["primary_color"].toString();
+  c.background.tileColor = o["tile_color"].toString();
+  c.background.selectionColor = o["selection_color"].toString();
 
-  c.headerLogoImage = o["header_logo_image"].toString();
-  c.headerLogoPosition =
+  c.background.headerLogoImage = o["header_logo_image"].toString();
+  c.background.headerLogoPosition =
       CollectionUtils::stringToHeaderLogoPosition(o["header_logo_position"].toString());
 
-  c.vignetteEnabled = o["vignette_enabled"].toBool(false);
-  c.vignetteIntensity = o["vignette_intensity"].toInt(60);
-  c.wallpaperParallax = o["wallpaper_parallax"].toBool(false);
-  c.parallaxStrength = o["parallax_strength"].toInt(30);
-  c.toolbarBackdropBlur = o["toolbar_backdrop_blur"].toBool(false);
-  c.backdropBlurRadius = o["backdrop_blur_radius"].toInt(12);
+  c.background.vignetteEnabled = o["vignette_enabled"].toBool(false);
+  c.background.vignetteIntensity = o["vignette_intensity"].toInt(60);
+  c.background.wallpaperParallax = o["wallpaper_parallax"].toBool(false);
+  c.background.parallaxStrength = o["parallax_strength"].toInt(30);
+  c.background.toolbarBackdropBlur = o["toolbar_backdrop_blur"].toBool(false);
+  c.background.backdropBlurRadius = o["backdrop_blur_radius"].toInt(12);
 
-  c.extractArchives = o["extract_archives"].toBool(false);
-  c.extractedExtension = o["extracted_extension"].toString();
+  c.archive.extractArchives = o["extract_archives"].toBool(false);
+  c.archive.extractedExtension = o["extracted_extension"].toString();
   c.expandMode = o["expand_mode"].toBool(false);
 
-  c.includeContentSubfolders = o["include_content_subfolders"].toBool(false);
-  c.includeArtworkSubfolders = o["include_artwork_subfolders"].toBool(false);
-  c.showAllSubfolderItems = o["show_all_subfolder_items"].toBool(false);
-  c.hideSubfolderTitles = o["hide_subfolder_titles"].toBool(false);
-  c.showHiddenFolders = o["show_hidden_folders"].toBool(false);
+  c.folderBrowsing.includeContentSubfolders = o["include_content_subfolders"].toBool(false);
+  c.folderBrowsing.includeArtworkSubfolders = o["include_artwork_subfolders"].toBool(false);
+  c.folderBrowsing.showAllSubfolderItems = o["show_all_subfolder_items"].toBool(false);
+  c.folderBrowsing.hideSubfolderTitles = o["hide_subfolder_titles"].toBool(false);
+  c.folderBrowsing.showHiddenFolders = o["show_hidden_folders"].toBool(false);
 
-  c.listFontSize = o["list_font_size"].toInt(UIConstants::Item::DEFAULT_FONT_SIZE);
-  c.listRowHeight = o["list_row_height"].toInt(UIConstants::ListView::DEFAULT_ROW_HEIGHT);
-  c.listRowColor = o["list_row_color"].toString();
-  c.listAltRowColor = o["list_alt_row_color"].toString();
+  c.listView.listFontSize = o["list_font_size"].toInt(UIConstants::Item::DEFAULT_FONT_SIZE);
+  c.listView.listRowHeight = o["list_row_height"].toInt(UIConstants::ListView::DEFAULT_ROW_HEIGHT);
+  c.listView.listRowColor = o["list_row_color"].toString();
+  c.listView.listAltRowColor = o["list_alt_row_color"].toString();
   c.customFontFamily = o["custom_font_family"].toString();
 
   c.additionalParentNames = jsonToStringList(o["additional_parent_names"]);

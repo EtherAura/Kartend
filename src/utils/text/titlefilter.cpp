@@ -56,12 +56,12 @@ void rebuildFromCollections(const QList<CollectionConfig> &collections) {
   next.reserve(collections.size());
   for (int i = 0; i < collections.size(); ++i) {
     const CollectionConfig &c = collections[i];
-    if (c.titleExclusionPatterns.isEmpty()) {
+    if (c.filter.titleExclusionPatterns.isEmpty()) {
       continue;
     }
     CollectionEntry entry;
-    entry.enabled = c.titleExclusionEnabled;
-    entry.compiled = compilePatterns(c.titleExclusionPatterns, c.name);
+    entry.enabled = c.filter.titleExclusionEnabled;
+    entry.compiled = compilePatterns(c.filter.titleExclusionPatterns, c.name);
     if (entry.compiled.isEmpty()) {
       continue;
     }

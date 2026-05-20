@@ -23,6 +23,48 @@
 #include <QSize>
 #include <QToolButton>
 
+namespace {
+
+// Sort / layout / orientation actions share a setup-then-sync pattern:
+// each entry binds a QAction (from .ui or a member of MenuController) to
+// a model value. The setup loop wires `triggered → write+save+reload`;
+// the sync loop just walks the same table to drive `setChecked`. Two
+// callsites per group → one table per group keeps each group's
+// shape declarative.
+
+struct SortActionEntry {
+  QAction *Ui_MainWindow::*action;
+  SortMode mode;
+};
+
+// Order matches the .ui menu so the action group's tab order is stable.
+// SortMode::ArtworkFirst/ArtworkLast/CollectionAsc/CollectionDesc are
+// list-view-only and intentionally absent — syncSortActions leaves the
+// previously-checked menu entry alone when sortMode is one of those.
+constexpr SortActionEntry kSortActions[] = {
+    {&Ui_MainWindow::actionSortNameAsc, SortMode::NameAscending},
+    {&Ui_MainWindow::actionSortNameDesc, SortMode::NameDescending},
+    {&Ui_MainWindow::actionSortDateDesc, SortMode::DateDescending},
+    {&Ui_MainWindow::actionSortDateAsc, SortMode::DateAscending},
+    {&Ui_MainWindow::actionSortSizeDesc, SortMode::SizeDescending},
+    {&Ui_MainWindow::actionSortSizeAsc, SortMode::SizeAscending},
+    {&Ui_MainWindow::actionSortRandom, SortMode::Random},
+};
+
+struct LayoutActionEntry {
+  QAction *Ui_MainWindow::*action;
+  ViewType viewType;
+};
+
+constexpr LayoutActionEntry kLayoutActions[] = {
+    {&Ui_MainWindow::actionLayoutGrid, ViewType::Grid},
+    {&Ui_MainWindow::actionLayoutList, ViewType::List},
+    {&Ui_MainWindow::actionLayoutCoverFlow, ViewType::CoverFlow},
+    {&Ui_MainWindow::actionLayoutHorizontal, ViewType::Horizontal},
+};
+
+} // namespace
+
 MenuController::MenuController(QObject *parent) : QObject(parent) {}
 
 MenuController::~MenuController() = default;
@@ -209,7 +251,9 @@ void MenuController::setupActionRefresh() {
 void MenuController::setupSortActions() {
   if (!m_ctx.ui) return;
 
-  // Create action group for mutually exclusive sort options
+  // Mutually-exclusive group for the sort-mode entries. The
+  // excludeSubfoldersFromSort toggle below intentionally stays outside
+  // the group (it's an independent boolean, not a sort-mode option).
   m_sortActionGroup = new QActionGroup(this);
   m_sortActionGroup->setExclusive(true);
 
@@ -222,12 +266,15 @@ void MenuController::setupSortActions() {
     }
   };
 
-  if (m_ctx.ui->actionSortNameAsc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortNameAsc);
-    connect(m_ctx.ui->actionSortNameAsc, &QAction::triggered, [this, reloadIfNeeded]() {
+  for (const auto &entry : kSortActions) {
+    QAction *action = m_ctx.ui->*entry.action;
+    if (!action) continue;
+    m_sortActionGroup->addAction(action);
+    const SortMode mode = entry.mode;
+    connect(action, &QAction::triggered, this, [this, mode, reloadIfNeeded]() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::NameAscending;
+          settings->sortMode = mode;
           if (m_ctx.getSettingsManager) {
             if (auto *mgr = m_ctx.getSettingsManager()) {
               mgr->saveGeneralSettings(*settings);
@@ -239,111 +286,10 @@ void MenuController::setupSortActions() {
     });
   }
 
-  if (m_ctx.ui->actionSortNameDesc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortNameDesc);
-    connect(m_ctx.ui->actionSortNameDesc, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::NameDescending;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  if (m_ctx.ui->actionSortDateDesc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortDateDesc);
-    connect(m_ctx.ui->actionSortDateDesc, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::DateDescending;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  if (m_ctx.ui->actionSortDateAsc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortDateAsc);
-    connect(m_ctx.ui->actionSortDateAsc, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::DateAscending;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  if (m_ctx.ui->actionSortSizeDesc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortSizeDesc);
-    connect(m_ctx.ui->actionSortSizeDesc, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::SizeDescending;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  if (m_ctx.ui->actionSortSizeAsc) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortSizeAsc);
-    connect(m_ctx.ui->actionSortSizeAsc, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::SizeAscending;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  if (m_ctx.ui->actionSortRandom) {
-    m_sortActionGroup->addAction(m_ctx.ui->actionSortRandom);
-    connect(m_ctx.ui->actionSortRandom, &QAction::triggered, [this, reloadIfNeeded]() {
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = SortMode::Random;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
-          reloadIfNeeded();
-        }
-      }
-    });
-  }
-
-  // Exclude subfolders option (not part of action group - it's a toggle)
+  // Exclude subfolders is an independent toggle, not a member of the
+  // sort-mode group.
   if (m_ctx.ui->actionSortSubfolders) {
-    connect(m_ctx.ui->actionSortSubfolders, &QAction::triggered,
+    connect(m_ctx.ui->actionSortSubfolders, &QAction::triggered, this,
             [this, reloadIfNeeded](bool checked) {
               if (m_ctx.getGeneralSettings) {
                 if (auto *settings = m_ctx.getGeneralSettings()) {
@@ -359,7 +305,6 @@ void MenuController::setupSortActions() {
             });
   }
 
-  // Sync initial checked states
   syncSortActions();
 }
 
@@ -369,33 +314,15 @@ void MenuController::syncSortActions() {
   auto *settings = m_ctx.getGeneralSettings();
   if (!settings) return;
 
-  switch (settings->sortMode) {
-  case SortMode::NameAscending:
-    if (m_ctx.ui->actionSortNameAsc) m_ctx.ui->actionSortNameAsc->setChecked(true);
-    break;
-  case SortMode::NameDescending:
-    if (m_ctx.ui->actionSortNameDesc) m_ctx.ui->actionSortNameDesc->setChecked(true);
-    break;
-  case SortMode::ArtworkFirst:
-  case SortMode::ArtworkLast:
-  case SortMode::CollectionAscending:
-  case SortMode::CollectionDescending:
-    // These sort modes are list-view only, no menu action to check
-    break;
-  case SortMode::DateDescending:
-    if (m_ctx.ui->actionSortDateDesc) m_ctx.ui->actionSortDateDesc->setChecked(true);
-    break;
-  case SortMode::DateAscending:
-    if (m_ctx.ui->actionSortDateAsc) m_ctx.ui->actionSortDateAsc->setChecked(true);
-    break;
-  case SortMode::SizeDescending:
-    if (m_ctx.ui->actionSortSizeDesc) m_ctx.ui->actionSortSizeDesc->setChecked(true);
-    break;
-  case SortMode::SizeAscending:
-    if (m_ctx.ui->actionSortSizeAsc) m_ctx.ui->actionSortSizeAsc->setChecked(true);
-    break;
-  case SortMode::Random:
-    if (m_ctx.ui->actionSortRandom) m_ctx.ui->actionSortRandom->setChecked(true);
+  // Walk the table for an exact mode match. List-view-only modes
+  // (ArtworkFirst/ArtworkLast/CollectionAsc/CollectionDesc) have no
+  // entry, so the loop body is skipped and the previously-checked
+  // menu action remains checked — matching the prior switch's behavior.
+  for (const auto &entry : kSortActions) {
+    if (settings->sortMode != entry.mode) continue;
+    if (QAction *action = m_ctx.ui->*entry.action) {
+      action->setChecked(true);
+    }
     break;
   }
   if (m_ctx.ui->actionSortSubfolders) {
@@ -888,22 +815,17 @@ void MenuController::setupLayoutActions() {
   m_layoutActionGroup = new QActionGroup(this);
   m_layoutActionGroup->setExclusive(true);
 
-  auto wire = [this](QAction *action, ViewType viewType) {
-    if (!action) return;
+  for (const auto &entry : kLayoutActions) {
+    QAction *action = m_ctx.ui->*entry.action;
+    if (!action) continue;
     m_layoutActionGroup->addAction(action);
     action->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(action);
-    connect(action, &QAction::triggered, [this, viewType]() {
-      if (m_ctx.onSetViewType) {
-        m_ctx.onSetViewType(viewType);
-      }
+    const ViewType viewType = entry.viewType;
+    connect(action, &QAction::triggered, this, [this, viewType]() {
+      if (m_ctx.onSetViewType) m_ctx.onSetViewType(viewType);
     });
-  };
-
-  wire(m_ctx.ui->actionLayoutGrid, ViewType::Grid);
-  wire(m_ctx.ui->actionLayoutList, ViewType::List);
-  wire(m_ctx.ui->actionLayoutCoverFlow, ViewType::CoverFlow);
-  wire(m_ctx.ui->actionLayoutHorizontal, ViewType::Horizontal);
+  }
 
   // Initial check — caller (MainWindow::createMenuBar) wires the view-type
   // sync on collection switch + setViewType() so subsequent changes flow
@@ -915,17 +837,10 @@ void MenuController::setupLayoutActions() {
 
 void MenuController::syncLayoutActions(ViewType viewType) {
   if (!m_ctx.ui) return;
-  if (m_ctx.ui->actionLayoutGrid) {
-    m_ctx.ui->actionLayoutGrid->setChecked(viewType == ViewType::Grid);
-  }
-  if (m_ctx.ui->actionLayoutList) {
-    m_ctx.ui->actionLayoutList->setChecked(viewType == ViewType::List);
-  }
-  if (m_ctx.ui->actionLayoutCoverFlow) {
-    m_ctx.ui->actionLayoutCoverFlow->setChecked(viewType == ViewType::CoverFlow);
-  }
-  if (m_ctx.ui->actionLayoutHorizontal) {
-    m_ctx.ui->actionLayoutHorizontal->setChecked(viewType == ViewType::Horizontal);
+  for (const auto &entry : kLayoutActions) {
+    if (QAction *action = m_ctx.ui->*entry.action) {
+      action->setChecked(viewType == entry.viewType);
+    }
   }
 }
 
@@ -945,8 +860,8 @@ void MenuController::setupActionDetailsPaneOrientation() {
       auto *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
       const int idx = m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
       if (!collections || idx < 0 || idx >= collections->size()) return;
-      if ((*collections)[idx].sidebarPosition == pos) return;
-      (*collections)[idx].sidebarPosition = pos;
+      if ((*collections)[idx].sidebar.sidebarPosition == pos) return;
+      (*collections)[idx].sidebar.sidebarPosition = pos;
       if (m_ctx.getSettingsManager) {
         if (auto *sm = m_ctx.getSettingsManager()) {
           sm->saveCollections(*collections);
@@ -999,7 +914,7 @@ void MenuController::setupActionDetailsPaneOrientation() {
     auto *collections = m_ctx.getCollections();
     const int idx = m_ctx.getCurrentCollectionIndex();
     if (collections && idx >= 0 && idx < collections->size()) {
-      syncOrientationActions((*collections)[idx].sidebarPosition);
+      syncOrientationActions((*collections)[idx].sidebar.sidebarPosition);
     }
   }
 }

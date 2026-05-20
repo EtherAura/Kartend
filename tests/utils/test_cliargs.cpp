@@ -15,6 +15,10 @@ private slots:
   void unknownOption_doesNotAbort();
   void emptyValue_returnsEmptyOverride();
   void importKart_capturesPathAndDest();
+  void importKart_expandsTilde();
+  void importKart_rejectsShellMetachars();
+  void importKart_rejectsNullByte();
+  void to_rejectsShellMetachars();
   void exportKart_capturesNameAndOut();
   void onConflict_overwriteRecognized();
   void onConflict_mergeRecognized();
@@ -73,6 +77,53 @@ void TestCliArgs::importKart_capturesPathAndDest() {
        QStringLiteral("--to"), QStringLiteral("/home/user/karts")});
   QCOMPARE(opts.importKartPath, QStringLiteral("/tmp/x.kart"));
   QCOMPARE(opts.importDestDir, QStringLiteral("/home/user/karts"));
+  QVERIFY(!opts.pathValidationError.isError());
+}
+
+void TestCliArgs::importKart_expandsTilde() {
+  // Tilde expansion runs at the CLI seam (PathUtils::expandPathWithoutExistenceCheck)
+  // so KartReader receives an absolute path — its own validation rejects
+  // non-absolute paths and would fail without this seam doing the work.
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--import-kart"),
+       QStringLiteral("~/incoming/x.kart"), QStringLiteral("--to"), QStringLiteral("~/karts")});
+  QVERIFY(!opts.pathValidationError.isError());
+  QVERIFY(!opts.importKartPath.startsWith('~'));
+  QVERIFY(!opts.importDestDir.startsWith('~'));
+  QVERIFY(opts.importKartPath.startsWith('/'));
+  QVERIFY(opts.importDestDir.startsWith('/'));
+}
+
+void TestCliArgs::importKart_rejectsShellMetachars() {
+  // ; | ` $ < > are rejected by validatePathSecurity — these are the
+  // primary command-injection vectors. The raw value is preserved in the
+  // struct so the caller can include it in the error message.
+  const auto opts = CliArgs::parseStartupArguments({QStringLiteral("kartend"),
+                                                    QStringLiteral("--import-kart"),
+                                                    QStringLiteral("/tmp/x.kart; rm -rf /")});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestCliArgs::importKart_rejectsNullByte() {
+  // Null bytes truncate strings at the C-API boundary and can route the
+  // path past validation checks — must be rejected at the seam.
+  QString badPath = QStringLiteral("/tmp/x.kart");
+  badPath.append(QChar('\0'));
+  badPath.append(QStringLiteral("/etc/passwd"));
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--import-kart"), badPath});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestCliArgs::to_rejectsShellMetachars() {
+  // Same shell-metachar gate applies to the destination dir.
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--import-kart"), QStringLiteral("/tmp/x.kart"),
+       QStringLiteral("--to"), QStringLiteral("/tmp/dest`whoami`")});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
 }
 
 void TestCliArgs::exportKart_capturesNameAndOut() {

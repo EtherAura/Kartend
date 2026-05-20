@@ -16,6 +16,7 @@ class QHBoxLayout;
 class QVBoxLayout;
 class QScrollArea;
 class DetailsPane;
+class IDetailsPane;
 class ItemWidget;
 class SettingsManager;
 class ArtworkManager;
@@ -48,7 +49,7 @@ using ItemArtworkLinksDialogRunner =
 struct DetailsPaneManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  DetailsPane *sidebar = nullptr;
+  IDetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QHBoxLayout *mainLayout = nullptr;
   /// outer vertical layout (`itemsPageLayout`) the details pane
@@ -66,7 +67,7 @@ struct DetailsPaneManagerSetup {
   /// (Kartend-n8kh). Null in headless contexts; the call site guards.
   ItemArtworkLinksDialogRunner runArtworkLinksDialog;
 
-  SETUP_GETTER_DECL(DetailsPane *, Sidebar)
+  SETUP_GETTER_DECL(IDetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QScrollArea *, ScrollArea)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
@@ -108,7 +109,7 @@ public:
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
   [[nodiscard]] bool isSidebarVisible() const override;
-  [[nodiscard]] DetailsPane *sidebarWidget() const override { return m_DetailsPane; }
+  [[nodiscard]] IDetailsPane *sidebarWidget() const override;
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }

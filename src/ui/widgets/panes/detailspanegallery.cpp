@@ -97,7 +97,7 @@ void DetailsPane::showMainPreviewForEntry(const GalleryEntry &entry) {
   // pass the parent dir + completeBaseName to avoid re-implementing
   // the extension-cycle here.
   schedulePreviewVideo(QString()); // cancels any pending video start
-  if (m_videoPreview) m_videoPreview->stop();
+  if (m_videoPlayback.videoPreview) m_videoPlayback.videoPreview->stop();
   showArtworkOnly();
   const QFileInfo info(entry.path);
   loadArtwork(info.completeBaseName(), info.absolutePath());
@@ -108,7 +108,7 @@ void DetailsPane::cycleMainPreview(int direction) {
   const auto &entries = m_galleryView->entries();
   if (entries.size() < 2) return;
   // Locate the currently-displayed entry. Match on file path —
-  // m_primaryArtworkPath tracks the static tile; m_pendingVideoPath
+  // m_primaryArtworkPath tracks the static tile; m_videoPlayback.pendingVideoPath
   // tracks the video tile. If neither matches anything in the
   // gallery (e.g. the current display is the flat-root mirror at
   // {artwork}/{base}.png while the gallery contains only typed
@@ -117,7 +117,7 @@ void DetailsPane::cycleMainPreview(int direction) {
   int currentIndex = -1;
   for (int i = 0; i < entries.size(); ++i) {
     if (entries[i].path == m_primaryArtworkPath ||
-        (entries[i].isVideo && entries[i].path == m_pendingVideoPath)) {
+        (entries[i].isVideo && entries[i].path == m_videoPlayback.pendingVideoPath)) {
       currentIndex = i;
       break;
     }

@@ -39,7 +39,6 @@
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
-#include "mainwindow.h"
 #include "pathutils.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -89,10 +88,10 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // Insert a preview video widget into the artwork pane, sized to match the
   // artwork display. Hidden by default; shown only when a preview video is
   // found for the current selection.
-  m_videoPreview = new VideoPreviewWidget(this);
-  m_videoPreview->setFixedSize(UIConstants::Metadata::ARTWORK_SIZE,
+  m_videoPlayback.videoPreview = new VideoPreviewWidget(this);
+  m_videoPlayback.videoPreview->setFixedSize(UIConstants::Metadata::ARTWORK_SIZE,
                                UIConstants::Metadata::ARTWORK_SIZE);
-  m_videoPreview->hide();
+  m_videoPlayback.videoPreview->hide();
   if (auto *artworkParentLayout =
           qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
     // Force-centre both the artwork QLabel and the video preview in
@@ -105,9 +104,9 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
     artworkParentLayout->setAlignment(ui->artworkDisplay, Qt::AlignHCenter);
     int idx = artworkParentLayout->indexOf(ui->artworkDisplay);
     if (idx >= 0) {
-      artworkParentLayout->insertWidget(idx + 1, m_videoPreview, 0, Qt::AlignHCenter);
+      artworkParentLayout->insertWidget(idx + 1, m_videoPlayback.videoPreview, 0, Qt::AlignHCenter);
     } else {
-      artworkParentLayout->addWidget(m_videoPreview, 0, Qt::AlignHCenter);
+      artworkParentLayout->addWidget(m_videoPlayback.videoPreview, 0, Qt::AlignHCenter);
     }
   }
 
@@ -118,9 +117,9 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // the focused widget's defaults so e.g. Escape, Tab, alphanumeric
   // search bindings keep working from elsewhere.
   ui->artworkDisplay->setFocusPolicy(Qt::StrongFocus);
-  m_videoPreview->setFocusPolicy(Qt::StrongFocus);
+  m_videoPlayback.videoPreview->setFocusPolicy(Qt::StrongFocus);
   ui->artworkDisplay->installEventFilter(this);
-  m_videoPreview->installEventFilter(this);
+  m_videoPlayback.videoPreview->installEventFilter(this);
 
   setupTabBar();
 
@@ -156,11 +155,11 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // Debounce timer: avoid loading a video for every transient selection
   // change while the user is scrolling. Single-shot, restarted on each new
   // selection that has a video.
-  m_videoStartTimer = new QTimer(this);
-  m_videoStartTimer->setSingleShot(true);
-  m_videoStartTimer->setInterval(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
-  connect(m_videoStartTimer, &QTimer::timeout, this, [this]() {
-    if (m_pendingVideoPath.isEmpty() || !m_videoPreview) {
+  m_videoPlayback.videoStartTimer = new QTimer(this);
+  m_videoPlayback.videoStartTimer->setSingleShot(true);
+  m_videoPlayback.videoStartTimer->setInterval(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
+  connect(m_videoPlayback.videoStartTimer, &QTimer::timeout, this, [this]() {
+    if (m_videoPlayback.pendingVideoPath.isEmpty() || !m_videoPlayback.videoPreview) {
       return;
     }
     // Video preview is item-only chrome — File / Collection tabs hide
@@ -176,8 +175,8 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
     // scroll. Re-arm the timer with a short interval and re-check on
     // next fire — once the animation truly settles, the predicate
     // returns false and we proceed (Kartend-9q8d round 6).
-    if (m_scrollIdlePredicate && !m_scrollIdlePredicate()) {
-      m_videoStartTimer->start(50);
+    if (m_videoPlayback.scrollIdlePredicate && !m_videoPlayback.scrollIdlePredicate()) {
+      m_videoPlayback.videoStartTimer->start(50);
       return;
     }
     // In vertical dock the video replaces the artwork (cramped narrow panel
@@ -188,8 +187,8 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
     if (!horizontal) {
       ui->artworkDisplay->hide();
     }
-    m_videoPreview->show();
-    m_videoPreview->playVideo(m_pendingVideoPath);
+    m_videoPlayback.videoPreview->show();
+    m_videoPlayback.videoPreview->playVideo(m_videoPlayback.pendingVideoPath);
     if (horizontal) {
       updateHorizontalView();
     }
@@ -199,7 +198,7 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // (~2.5s on a slow filesystem — Kartend-jxp5) lands in startup instead
   // of the user's first-click critical path. Section is hidden until
   // setEntries populates it; prewarming has no UI consequence beyond the
-  // up-front allocation. Safe to call after m_videoPreview is constructed
+  // up-front allocation. Safe to call after m_videoPlayback.videoPreview is constructed
   // because ensureSection's insertion-index calculation reads it as the
   // anchor for placing the gallery container below the video tile.
   if (m_galleryView) {
@@ -312,9 +311,9 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // re-plays — a glitchy ping-pong the user sees as "video stops
   // playing". When the path is unchanged AND the widget is currently
   // showing the same video, we leave the playback alone entirely.
-  const QString currentVideoPath = m_videoPreview ? m_videoPreview->currentVideoPath() : QString();
+  const QString currentVideoPath = m_videoPlayback.videoPreview ? m_videoPlayback.videoPreview->currentVideoPath() : QString();
   const bool videoUnchanged = !videoPath.isEmpty() && videoPath == currentVideoPath &&
-                              m_videoPreview && m_videoPreview->isVisible();
+                              m_videoPlayback.videoPreview && m_videoPlayback.videoPreview->isVisible();
   if (!videoUnchanged) {
     {
       QElapsedTimer t;
@@ -417,11 +416,11 @@ void DetailsPane::setArtworkSectionVisible(bool visible) {
   // (manager refreshes, post-scrape updates), and we hit this code
   // path on each one — without the video-aware branch the artwork
   // re-appears over the video on every refresh.
-  const bool videoPlaying = m_videoPreview && m_videoPreview->isVisible() &&
-                            !m_videoPreview->currentVideoPath().isEmpty();
+  const bool videoPlaying = m_videoPlayback.videoPreview && m_videoPlayback.videoPreview->isVisible() &&
+                            !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
   ui->artworkDisplay->setVisible(visible && !videoPlaying);
-  if (m_videoPreview && !visible) {
-    m_videoPreview->hide();
+  if (m_videoPlayback.videoPreview && !visible) {
+    m_videoPlayback.videoPreview->hide();
   }
 }
 
@@ -727,8 +726,8 @@ void DetailsPane::applyDockOrientation() {
     // contentLayout (it gets hidden along with scrollArea) — the user wants
     // the primary artwork rendered as a gallery thumb next to the video,
     // not as a separate big preview tile.
-    if (m_hPreviewLayout && m_videoPreview && m_hPreviewLayout->indexOf(m_videoPreview) == -1) {
-      m_hPreviewLayout->addWidget(m_videoPreview);
+    if (m_hPreviewLayout && m_videoPlayback.videoPreview && m_hPreviewLayout->indexOf(m_videoPlayback.videoPreview) == -1) {
+      m_hPreviewLayout->addWidget(m_videoPlayback.videoPreview);
     }
     if (ui->scrollArea) ui->scrollArea->hide();
     if (m_horizontalView) m_horizontalView->show();
@@ -739,9 +738,9 @@ void DetailsPane::applyDockOrientation() {
     // Restore the video preview to its .ui-derived slot in contentLayout
     // (immediately after artworkDisplay).
     if (auto *cl = qobject_cast<QBoxLayout *>(ui->contentWidget->layout())) {
-      if (m_videoPreview && ui->artworkDisplay && cl->indexOf(m_videoPreview) == -1) {
+      if (m_videoPlayback.videoPreview && ui->artworkDisplay && cl->indexOf(m_videoPlayback.videoPreview) == -1) {
         const int artIdx = cl->indexOf(ui->artworkDisplay);
-        cl->insertWidget(artIdx >= 0 ? artIdx + 1 : -1, m_videoPreview);
+        cl->insertWidget(artIdx >= 0 ? artIdx + 1 : -1, m_videoPlayback.videoPreview);
       }
     }
     if (ui->scrollArea) {
@@ -763,9 +762,9 @@ void DetailsPane::applyPreviewSize() {
   // in the hidden vertical scrollArea so its size is irrelevant here.
   const bool horizontal = CollectionUtils::isDetailsPaneHorizontal(m_position);
   if (horizontal) {
-    if (m_horizontalView && m_videoPreview) {
+    if (m_horizontalView && m_videoPlayback.videoPreview) {
       const int previewSize = horizontalPreviewSize();
-      m_videoPreview->setFixedSize(previewSize, previewSize);
+      m_videoPlayback.videoPreview->setFixedSize(previewSize, previewSize);
     }
     return;
   }
@@ -791,8 +790,8 @@ void DetailsPane::applyPreviewSize() {
 
   // Video has no known aspect ratio until the first frame loads, so it
   // takes the same tile and the sink letterboxes internally.
-  if (m_videoPreview) {
-    m_videoPreview->setFixedSize(width, height);
+  if (m_videoPlayback.videoPreview) {
+    m_videoPlayback.videoPreview->setFixedSize(width, height);
   }
   // Vertical dock: scale gallery thumbs alongside the preview.
   applyGalleryThumbSize();
@@ -835,7 +834,7 @@ void DetailsPane::applyContentAlignment() {
   if (!contentLayout) {
     return;
   }
-  const QList<QWidget *> centered = {ui->artworkDisplay, m_videoPreview};
+  const QList<QWidget *> centered = {ui->artworkDisplay, m_videoPlayback.videoPreview};
   for (QWidget *w : centered) {
     if (w && contentLayout->indexOf(w) >= 0) {
       contentLayout->setAlignment(w, Qt::AlignHCenter);
@@ -847,14 +846,14 @@ void DetailsPane::pausePreviewVideo() {
   // Cancel any debounced start so a delayed playVideo() doesn't fire under
   // the overlay. Soft-pause via hide() — the widget's hideEvent pauses the
   // QMediaPlayer but keeps the loaded source so resumePreviewVideo() can
-  // pick up at the same playback position. m_pendingVideoPath is preserved
+  // pick up at the same playback position. m_videoPlayback.pendingVideoPath is preserved
   // for the same reason: the resume path uses it when the prior schedule
   // was caught mid-debounce (path set but not yet loaded into the widget).
-  if (m_videoStartTimer) {
-    m_videoStartTimer->stop();
+  if (m_videoPlayback.videoStartTimer) {
+    m_videoPlayback.videoStartTimer->stop();
   }
-  if (m_videoPreview) {
-    m_videoPreview->hide();
+  if (m_videoPlayback.videoPreview) {
+    m_videoPlayback.videoPreview->hide();
   }
   // Restore the static artwork display so the sidebar isn't a black square
   // while the overlay is on top.
@@ -862,10 +861,10 @@ void DetailsPane::pausePreviewVideo() {
 }
 
 void DetailsPane::resumePreviewVideo() {
-  if (!m_videoPreview) {
+  if (!m_videoPlayback.videoPreview) {
     return;
   }
-  if (m_videoPreview->hasLoadedSource()) {
+  if (m_videoPlayback.videoPreview->hasLoadedSource()) {
     // showEvent inside VideoPreviewWidget calls QMediaPlayer::play() — and
     // the player was left in PausedState by hideEvent, so play() resumes
     // from the same position rather than restarting. Hide the static
@@ -875,19 +874,19 @@ void DetailsPane::resumePreviewVideo() {
     if (!CollectionUtils::isDetailsPaneHorizontal(m_position)) {
       ui->artworkDisplay->hide();
     }
-    m_videoPreview->show();
-  } else if (!m_pendingVideoPath.isEmpty() && m_videoStartTimer) {
+    m_videoPlayback.videoPreview->show();
+  } else if (!m_videoPlayback.pendingVideoPath.isEmpty() && m_videoPlayback.videoStartTimer) {
     // The pause caught us mid-debounce. Re-arm the timer so the original
     // play schedule fires again on the now-visible widget.
-    m_videoStartTimer->start();
+    m_videoPlayback.videoStartTimer->start();
   }
 }
 
 bool DetailsPane::togglePreviewVideoPause() {
-  if (!m_videoPreview || !m_videoPreview->hasLoadedSource()) {
+  if (!m_videoPlayback.videoPreview || !m_videoPlayback.videoPreview->hasLoadedSource()) {
     return false;
   }
-  m_videoPreview->togglePauseResume();
+  m_videoPlayback.videoPreview->togglePauseResume();
   return true;
 }
 
@@ -1047,7 +1046,7 @@ void DetailsPane::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
 // instead. Called whenever selection changes (before the debounce timer
 // resolves) and when metadata is cleared.
 void DetailsPane::showArtworkOnly() {
-  if (m_videoPreview) {
+  if (m_videoPlayback.videoPreview) {
     // Skip the stop()+hide() when there's nothing to stop. Pre-fix the
     // unconditional QMediaPlayer::stop() blocked the GUI thread for
     // ~85-100ms per selection on items where the player had been left in
@@ -1057,10 +1056,10 @@ void DetailsPane::showArtworkOnly() {
     // currentVideoPath means the player has something to tear down;
     // otherwise the call is a no-op anyway.
     const bool needsStop =
-        m_videoPreview->isVisible() || !m_videoPreview->currentVideoPath().isEmpty();
+        m_videoPlayback.videoPreview->isVisible() || !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
     if (needsStop) {
-      m_videoPreview->stop();
-      m_videoPreview->hide();
+      m_videoPlayback.videoPreview->stop();
+      m_videoPlayback.videoPreview->hide();
     }
   }
   ui->artworkDisplay->show();
@@ -1069,27 +1068,27 @@ void DetailsPane::showArtworkOnly() {
 // Schedule preview video playback after the debounce interval. Passing an
 // empty path cancels any pending playback.
 void DetailsPane::schedulePreviewVideo(const QString &videoPath) {
-  m_pendingVideoPath = videoPath;
-  if (!m_videoStartTimer) {
+  m_videoPlayback.pendingVideoPath = videoPath;
+  if (!m_videoPlayback.videoStartTimer) {
     return;
   }
-  m_videoStartTimer->stop();
+  m_videoPlayback.videoStartTimer->stop();
   if (!videoPath.isEmpty()) {
     // Explicit interval — the timer callback may shorten the next
     // re-arm to 50ms when a scroll-active deferral happens
     // (Kartend-9q8d round 6). Without specifying the interval here,
     // schedulePreviewVideo would inherit the deferral interval and
     // start firing every 50ms instead of waiting the full debounce.
-    m_videoStartTimer->start(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
+    m_videoPlayback.videoStartTimer->start(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
   }
 }
 
 void DetailsPane::setScrollIdlePredicate(std::function<bool()> predicate) {
-  m_scrollIdlePredicate = std::move(predicate);
+  m_videoPlayback.scrollIdlePredicate = std::move(predicate);
 }
 
 bool DetailsPane::isScrollIdle() const {
-  return !m_scrollIdlePredicate || m_scrollIdlePredicate();
+  return !m_videoPlayback.scrollIdlePredicate || m_videoPlayback.scrollIdlePredicate();
 }
 
 // Lazily construct the Details section. Appended once to the bottom of the

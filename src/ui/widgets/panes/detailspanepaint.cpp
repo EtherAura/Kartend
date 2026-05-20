@@ -32,8 +32,8 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // T/B dock. Calling setActiveTab first would run that visibility logic
   // against the previous orientation and the user would see ghost headers
   // on the first paint after a position change.
-  m_widthLocked = collection.sidebarWidthLocked;
-  m_position = collection.sidebarPosition;
+  m_widthLocked = collection.sidebar.sidebarWidthLocked;
+  m_position = collection.sidebar.sidebarPosition;
   if (m_resizeGrip) {
     m_resizeGrip->setLocked(m_widthLocked);
     m_resizeGrip->setPosition(m_position);
@@ -42,7 +42,7 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // to match the active dock edge. Done before setActiveTab so the wrappers
   // and chrome state are in place when applyTabVisibility runs.
   applyDockOrientation();
-  setActiveTab(collection.sidebarActiveTab);
+  setActiveTab(collection.sidebar.sidebarActiveTab);
   // Mouse tracking is required so we can change the cursor over the grip
   // strip without waiting for a click.
   setMouseTracking(!m_widthLocked);
@@ -82,13 +82,13 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
       installFilter(w);
     }
   }
-  m_bgType = collection.sidebarBackgroundType;
-  m_bgColor = QColor(collection.sidebarBackgroundColor);
-  m_bgPattern = collection.sidebarPattern;
-  m_patternIntensity = std::clamp(collection.sidebarPatternIntensity, 0, 100);
-  m_patternColor = QColor(collection.sidebarPatternColor);
-  if (ExtensionUtils::isDecodableImagePath(collection.sidebarBackgroundImage)) {
-    m_bgImage = QPixmap(collection.sidebarBackgroundImage);
+  m_bgType = collection.sidebar.sidebarBackgroundType;
+  m_bgColor = QColor(collection.sidebar.sidebarBackgroundColor);
+  m_bgPattern = collection.sidebar.sidebarPattern;
+  m_patternIntensity = std::clamp(collection.sidebar.sidebarPatternIntensity, 0, 100);
+  m_patternColor = QColor(collection.sidebar.sidebarPatternColor);
+  if (ExtensionUtils::isDecodableImagePath(collection.sidebar.sidebarBackgroundImage)) {
+    m_bgImage = QPixmap(collection.sidebar.sidebarBackgroundImage);
   } else {
     // Empty or non-image path — never hand it to QPixmap's autodetect,
     // which would route a .pdf to the abort()-prone PDF image plugin.
@@ -116,15 +116,15 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // them up without re-styling each label.
   if (ui->contentWidget) {
     QPalette pal = ui->contentWidget->palette();
-    if (!collection.sidebarTextColor.isEmpty()) {
-      const QColor textColor(collection.sidebarTextColor);
+    if (!collection.sidebar.sidebarTextColor.isEmpty()) {
+      const QColor textColor(collection.sidebar.sidebarTextColor);
       if (textColor.isValid()) {
         pal.setColor(QPalette::WindowText, textColor);
         pal.setColor(QPalette::Text, textColor);
       }
     }
-    if (!collection.sidebarAccentColor.isEmpty()) {
-      const QColor accent(collection.sidebarAccentColor);
+    if (!collection.sidebar.sidebarAccentColor.isEmpty()) {
+      const QColor accent(collection.sidebar.sidebarAccentColor);
       if (accent.isValid()) {
         pal.setColor(QPalette::Highlight, accent);
       }
@@ -135,7 +135,7 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // per-collection sidebar font override. Layered on top of the
   // designer-set baseline so reverting (empty family + 0 size) restores the
   // original .ui look without us walking detailspane.ui at runtime.
-  applySidebarFont(collection.sidebarFontFamily, collection.sidebarFontPointSize);
+  applySidebarFont(collection.sidebar.sidebarFontFamily, collection.sidebar.sidebarFontPointSize);
 
   // bubble backgrounds for readability over patterned bg.
   // The bubble color is RGB-only; the user-controlled opacity is layered
@@ -157,14 +157,14 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // *and* readability: a Highlight-colored header on top of a brighter
   // Highlight-derived bubble made the windowtext text disappear on dark
   // themes. A darker Mid keeps light text legible.
-  QColor sectionFallback = QColor(collection.sidebarBackgroundColor);
+  QColor sectionFallback = QColor(collection.sidebar.sidebarBackgroundColor);
   if (!sectionFallback.isValid()) sectionFallback = palette().color(QPalette::Mid);
   const QColor headerFallback = sectionFallback.darker(115);
 
-  const QColor header = composeBubble(collection.sidebarHeaderBgColor,
-                                      collection.sidebarHeaderBgOpacity, headerFallback);
-  const QColor section = composeBubble(collection.sidebarSectionBgColor,
-                                       collection.sidebarSectionBgOpacity, sectionFallback);
+  const QColor header = composeBubble(collection.sidebar.sidebarHeaderBgColor,
+                                      collection.sidebar.sidebarHeaderBgOpacity, headerFallback);
+  const QColor section = composeBubble(collection.sidebar.sidebarSectionBgColor,
+                                       collection.sidebar.sidebarSectionBgOpacity, sectionFallback);
   applyBubbleStyles(header.alpha() == 0 ? QString() : header.name(QColor::HexArgb),
                     section.alpha() == 0 ? QString() : section.name(QColor::HexArgb));
 

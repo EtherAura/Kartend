@@ -16,9 +16,9 @@
 
 #include "animationmanager.h"
 #include "collectionutils.h"
-#include "detailspane.h"
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
+#include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "interactionstateholder.h"
 #include "iselectionmanager.h"
@@ -49,9 +49,13 @@ bool WheelEventHandler::eventBelongsToSidebar() const {
   if (!detailsPaneMgr()) {
     return false;
   }
-  QWidget *sidebar = detailsPaneMgr()->sidebarWidget();
-  return sidebar && sidebar->isVisible() &&
-         sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()));
+  IDetailsPane *sidebar = detailsPaneMgr()->sidebarWidget();
+  if (!sidebar) {
+    return false;
+  }
+  const QWidget *widget = sidebar->asWidget();
+  return widget && widget->isVisible() &&
+         widget->rect().contains(widget->mapFromGlobal(QCursor::pos()));
 }
 
 bool WheelEventHandler::canProceed() const {
@@ -67,8 +71,8 @@ int WheelEventHandler::computeTargetScroll(int selectedIndex, const CollectionCo
   // paths must agree on itemsPerRow / itemHeight / verticalSpacing.
   int gridWidth = CollectionUtils::effectiveGridWidth(
       collection, scrollMgr() ? scrollMgr()->sidebarShrinkingActive() : false);
-  int itemHeight = collection.itemHeight;
-  int vSpacing = collection.verticalSpacing;
+  int itemHeight = collection.gridLayout.itemHeight;
+  int vSpacing = collection.gridLayout.verticalSpacing;
   int headerOffset = 0;
   if (scrollMgr()) {
     const auto &metrics = scrollMgr()->getMetrics();
@@ -237,9 +241,11 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
     }
   }
 
-  // Defer virtual view update one event-loop tick so the scroll position
-  // settles before recalculating visible items.
   if (scrollMgr()) {
+    // Defer the virtual-view update one event-loop tick so the scrollbar's
+    // position (mutated synchronously above by startWheelScrollAnimation /
+    // the manual setValue path) settles before we recompute which items are
+    // visible. Running it inline samples a transient mid-animation value.
     QTimer::singleShot(0, this, [this]() {
       if (scrollMgr()) {
         scrollMgr()->updateVirtualView();
@@ -279,7 +285,7 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   // The per-column step in Horizontal mode is the *effective*
   // items-per-column from the live metrics (which already honor
   // horizontalGridHeight's fallback to gridWidth). Reading
-  // collection.gridWidth directly was wrong when the user configured a
+  // collection.gridLayout.gridWidth directly was wrong when the user configured a
   // separate horizontal height — the wheel would jump by gridWidth items
   // even though each column actually contained horizontalGridHeight items,
   // drifting the row index across columns and looking like a random

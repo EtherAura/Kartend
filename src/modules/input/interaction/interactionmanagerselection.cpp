@@ -32,7 +32,7 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -235,7 +235,7 @@ void InteractionManager::scheduleScrollbarRecovery() {
   if (!CollectionUtils::isValidIndex(idx, m_collections)) {
     return;
   }
-  if ((*m_collections)[idx].hideVerticalScrollbar) {
+  if ((*m_collections)[idx].gridLayout.hideVerticalScrollbar) {
     return;
   }
 
@@ -259,10 +259,16 @@ void InteractionManager::scheduleScrollbarRecovery() {
   };
 
   attempt();
-  // Retry scrollbar recovery at increasing intervals - handles race conditions
-  // where the scrollbar maximum isn't set immediately after collection load
+  // Three staggered retries handle a race: QScrollArea sometimes finishes
+  // virtual setup AFTER the synchronous call above. ATTEMPT_1 catches the
+  // common case; ATTEMPT_2 / ATTEMPT_3 cover progressively slower collection
+  // loads (populous libraries on cold caches). The virtualScrollSetupComplete
+  // signal below is the deterministic path — these timers are a belt for the
+  // case where the signal fires while we're still mid-construction.
   QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_1_MS, this, attempt);
+  // Mid-delay retry — see above.
   QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_2_MS, this, attempt);
+  // Longest-delay retry — see above.
   QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_3_MS, this, attempt);
 
   if (!m_scrollbarRecoveryConn) {

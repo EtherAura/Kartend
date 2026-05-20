@@ -21,7 +21,7 @@
 // closures (InteractionManagerSetup::runSmartPlaylistDialog /
 // runCustomFieldsDialog) so the data layer doesn't need the ui/ dialog
 // headers for the symbols. The runners themselves live in MainWindow.
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "idatabasemanager.h"
 #include "idetailspanemanager.h"
 #include "imainwindow.h"
@@ -243,21 +243,21 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // Only meaningful when the owning collection has more than one
       // launcher — pinning a single-launcher collection to "launcher 0"
       // would be a no-op masquerading as a configuration choice.
-      if (owning.launcherCount() > 1) {
+      if (owning.launcher.launcherCount() > 1) {
         QAction *setLauncherAction = menu.addAction(tr("Always launch with..."));
-        const int launcherCount = owning.launcherCount();
+        const int launcherCount = owning.launcher.launcherCount();
         const QString collectionName = owning.name;
         QStringList launcherNames;
         launcherNames.reserve(launcherCount);
         for (int i = 0; i < launcherCount; ++i) {
-          launcherNames << owning.launcherDisplayName(i);
+          launcherNames << owning.launcher.launcherDisplayName(i);
         }
         const int currentOverride =
             uuid.isEmpty() ? -1 : databaseMgr()->loadItemMetadata(uuid, filePath).launcherIndex;
         const int defaultIndex =
             currentOverride >= 0 && currentOverride < launcherCount
                 ? currentOverride
-                : std::clamp(owning.defaultLauncherIndex, 0, launcherCount - 1);
+                : std::clamp(owning.launcher.defaultLauncherIndex, 0, launcherCount - 1);
         QObject::connect(setLauncherAction, &QAction::triggered, this,
                          [this, filePath, collectionName, launcherNames, defaultIndex]() {
                            // The chooser dialog lives in the UI layer; route
@@ -705,7 +705,7 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
   // Clamp incoming overrides into the visible launcher range so a stale UI
   // pick can never pin past the end. -1 stays -1 to clear.
   metadata.launcherIndex =
-      launcherIndex < 0 ? -1 : std::clamp(launcherIndex, 0, owning.launcherCount() - 1);
+      launcherIndex < 0 ? -1 : std::clamp(launcherIndex, 0, owning.launcher.launcherCount() - 1);
   metadata.source = QStringLiteral("user");
   if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;

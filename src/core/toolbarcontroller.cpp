@@ -213,10 +213,10 @@ void ToolbarController::refreshFilterToolbar() {
         }
         CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
         const bool checked = action->isChecked();
-        if (c.titleExclusionEnabled == checked) {
+        if (c.filter.titleExclusionEnabled == checked) {
           return;
         }
-        c.titleExclusionEnabled = checked;
+        c.filter.titleExclusionEnabled = checked;
         if (m_mainWindow->getSettingsManager()) {
           m_mainWindow->getSettingsManager()->saveCollections(m_mainWindow->m_collections);
         }
@@ -294,7 +294,7 @@ void ToolbarController::refreshFilterToolbar() {
   if (m_mainWindow->currentCollectionIndex >= 0 &&
       m_mainWindow->currentCollectionIndex < m_mainWindow->m_collections.size()) {
     const CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
-    toggleOn = c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty();
+    toggleOn = c.filter.titleExclusionEnabled && !c.filter.titleExclusionPatterns.isEmpty();
   }
   {
     QSignalBlocker blocker(toggleAction);
@@ -333,7 +333,7 @@ void ToolbarController::showTitleFilterEditor() {
   layout->addWidget(label);
 
   auto *editor = new QPlainTextEdit(&dialog);
-  editor->setPlainText(c.titleExclusionPatterns.join(QLatin1Char('\n')));
+  editor->setPlainText(c.filter.titleExclusionPatterns.join(QLatin1Char('\n')));
   editor->setPlaceholderText(tr("\\s*\\(USA\\)$"));
   layout->addWidget(editor, 1);
 
@@ -361,15 +361,15 @@ void ToolbarController::showTitleFilterEditor() {
       parsed.append(trimmed);
     }
   }
-  if (parsed == c.titleExclusionPatterns) {
+  if (parsed == c.filter.titleExclusionPatterns) {
     return; // Nothing actually changed; skip the reload.
   }
-  c.titleExclusionPatterns = parsed;
+  c.filter.titleExclusionPatterns = parsed;
   // Auto-enable when the user adds the first pattern from an empty list, so
   // applying immediately does the visible thing. Honor the existing toggle
   // otherwise so a user who explicitly disabled cleanup keeps it off.
-  if (!parsed.isEmpty() && !c.titleExclusionEnabled) {
-    c.titleExclusionEnabled = true;
+  if (!parsed.isEmpty() && !c.filter.titleExclusionEnabled) {
+    c.filter.titleExclusionEnabled = true;
   }
   if (m_mainWindow->getSettingsManager()) {
     m_mainWindow->getSettingsManager()->saveCollections(m_mainWindow->m_collections);

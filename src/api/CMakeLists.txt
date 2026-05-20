@@ -1,16 +1,19 @@
-# src/api/ — neutral header-only role-interface layer.
+# src/api/ — neutral role-interface layer.
 #
-# These abstract manager interfaces (i*.h) carry no translation units. They
-# depend only on Qt headers, src/utils/ headers, and forward declarations, so
-# any module may #include them without creating a module->module library edge.
-# Listed under target_sources purely so IDEs and the build graph see them.
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+# These abstract manager interfaces (i*.h) carry no translation units of
+# their own; AUTOMOC produces moc_*.cpp for each QObject-based interface
+# (IScrollManager today, possibly more later) and those go into kartend_api's
+# object files. They depend only on Qt headers, src/utils/ headers, and
+# forward declarations, so any module may #include them without creating a
+# module->module library edge.
+target_sources(kartend_api PRIVATE
   ianimationmanager.h
   iartworkmanager.h
   icachemanager.h
   idatabasemanager.h
   idetailpagemanager.h
   idetailpageoverlay.h
+  idetailspane.h
   idetailspanemanager.h
   iinteractionmanager.h
   ikeyboardmanager.h

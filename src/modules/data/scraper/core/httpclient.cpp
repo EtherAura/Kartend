@@ -177,6 +177,10 @@ void HttpClient::drainHost(const QString &host) {
           m_drainScheduled.insert(host, true);
           qCDebug(lcScrapeTimings) << "PACE" << host << "wait" << wait << "ms"
                                    << "queue=" << qit->size() << "inflight=" << inFlight;
+          // `wait` is the computed per-host pacing interval (server rate-limit
+          // backoff). Single scheduled drain per host enforces the gap; the
+          // drainScheduled flag (set just above, cleared on fire) is what
+          // collapses bursty enqueues into one timer instead of N stacked ones.
           QTimer::singleShot(static_cast<int>(wait), this, [this, host]() {
             m_drainScheduled.insert(host, false);
             drainHost(host);

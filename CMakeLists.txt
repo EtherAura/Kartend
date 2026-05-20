@@ -168,40 +168,57 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# All compilation of Kartend's source tree happens through this OBJECT library
-# so it can be reused by both the main executable and the integration-test
-# harness (see tests/integration/CMakeLists.txt). All `target_sources(...)`
-# calls under src/*/CMakeLists.txt reference ${KARTEND_LIB_TARGET}.
+# Aggregator INTERFACE library that pulls every per-area OBJECT lib into the
+# main executable + integration test harness. The per-area libs (kartend_utils,
+# kartend_api, kartend_widgets, kartend_data, kartend_input, kartend_media,
+# kartend_behavior, kartend_ui, kartend_core) are declared in
+# src/CMakeLists.txt with a PUBLIC target_link_libraries DAG that enforces
+# downward-only edges at the library level. Replaces the prior monolithic
+# OBJECT library that hid module boundaries behind a single target.
 set(KARTEND_LIB_TARGET kartend_lib)
-add_library(${KARTEND_LIB_TARGET} OBJECT)
-# OBJECT lib is consumed by both the PIE executable and the test harness, so
-# its objects must be position-independent.
-set_target_properties(${KARTEND_LIB_TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+add_library(${KARTEND_LIB_TARGET} INTERFACE)
 
 add_subdirectory(src)
 
+# Convenience handle for the per-area OBJECT libs declared in
+# src/CMakeLists.txt. Used by the blocks below to apply compile / link
+# options uniformly across every area.
+set(KARTEND_AREA_LIBS
+  kartend_utils
+  kartend_api
+  kartend_widgets
+  kartend_data
+  kartend_input
+  kartend_media
+  kartend_behavior
+  kartend_ui
+  kartend_core
+)
+
 add_executable(kartend ${SRC_DIR}/core/main.cpp)
 
-target_link_libraries(${KARTEND_LIB_TARGET}
-  PUBLIC
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-    Qt6::Sql
-    Qt6::Concurrent
-    Qt6::Multimedia
-    Qt6::MultimediaWidgets
-    Qt6::Network
+# Link every per-area OBJECT lib directly so their .o files end up in the
+# executable. OBJECT libraries do NOT propagate through INTERFACE_LINK_-
+# LIBRARIES — ${KARTEND_LIB_TARGET} aggregates them for documentation /
+# usage-requirement plumbing, but the actual .o pull-in must be explicit
+# here (and in the integration-test binary; see tests/integration/CMakeLists.txt).
+target_link_libraries(kartend PRIVATE
+  ${KARTEND_LIB_TARGET}
+  ${KARTEND_AREA_LIBS}
 )
-target_link_libraries(kartend PRIVATE ${KARTEND_LIB_TARGET})
 
 set(KARTEND_TRANSLATION_INSTALL_SUBDIR "${APP_NAME}/translations")
 set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
 
 # Re-extract source strings via:
 #   cmake --build <build> --target update_translations
+# Each per-area OBJECT lib owns its own sources, so SOURCE_TARGETS must
+# enumerate every area lib (not just the INTERFACE aggregator, which has no
+# sources of its own) for lupdate to scan all tr() calls.
 qt_add_translations(kartend
-  SOURCE_TARGETS ${KARTEND_LIB_TARGET} kartend
+  SOURCE_TARGETS
+    ${KARTEND_AREA_LIBS}
+    kartend
   TS_FILES translations/kartend_en.ts
   QM_FILES_OUTPUT_VARIABLE KARTEND_TRANSLATION_QM_FILES
   QM_OUTPUT_DIRECTORY "${KARTEND_TRANSLATION_BUILD_DIR}"
@@ -211,26 +228,37 @@ target_compile_definitions(kartend PRIVATE
   APP_BUILD_TRANSLATIONS_DIR="${KARTEND_TRANSLATION_BUILD_DIR}"
 )
 
+# Optional gamepad backend — pushed onto kartend_utils PUBLIC so the headers
+# and KARTEND_HAS_* compile defines propagate to every per-area lib through
+# the same path as the core Qt comps. Lifting them to a single per-area lib
+# would compile-fail neighbours whose headers reference GamepadManager types.
 if (Qt6Gamepad_FOUND)
-  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC Qt6::Gamepad)
-  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_QT_GAMEPAD=1)
+  target_link_libraries(kartend_utils PUBLIC Qt6::Gamepad)
+  target_compile_definitions(kartend_utils PUBLIC KARTEND_HAS_QT_GAMEPAD=1)
 elseif(TARGET PkgConfig::SDL2)
-  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC PkgConfig::SDL2)
-  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_SDL2_GAMEPAD=1)
+  target_link_libraries(kartend_utils PUBLIC PkgConfig::SDL2)
+  target_compile_definitions(kartend_utils PUBLIC KARTEND_HAS_SDL2_GAMEPAD=1)
   message(STATUS "Qt6::Gamepad not found; using SDL2 gamepad backend")
 else()
   message(STATUS "No gamepad backend found (Qt6::Gamepad or SDL2); building without gamepad support")
 endif()
 
 if (TARGET PkgConfig::ZSTD)
-  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC PkgConfig::ZSTD)
-  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_ZSTD=1)
+  # zstd is consumed by KartWriter / KartReader (src/modules/data/kart/) but
+  # KARTEND_HAS_ZSTD is read from #ifdef gates in lower layers too — keep
+  # both on kartend_utils PUBLIC so the propagation path matches the other
+  # optional backends above.
+  target_link_libraries(kartend_utils PUBLIC PkgConfig::ZSTD)
+  target_compile_definitions(kartend_utils PUBLIC KARTEND_HAS_ZSTD=1)
   message(STATUS "zstd found; Kart compression will use zstd")
 else()
   message(STATUS "zstd not found; Kart compression will use zlib (qCompress)")
 endif()
 
-target_compile_definitions(${KARTEND_LIB_TARGET}
+# APP_* defines are read from every layer (logging, error reporting,
+# update checks, AboutDialog). Push them onto kartend_utils PUBLIC so they
+# propagate to every per-area lib through the link DAG.
+target_compile_definitions(kartend_utils
   PUBLIC
     APP_ID="${KARTEND_APP_ID}"
     APP_NAME="kartend"
@@ -240,72 +268,22 @@ target_compile_definitions(${KARTEND_LIB_TARGET}
     BUILD_DATE="${BUILD_DATE}"
 )
 
-target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
-  ${CMAKE_CURRENT_BINARY_DIR}
-  ${SRC_DIR}
-  ${SRC_DIR}/api
-  ${SRC_DIR}/core
-  ${SRC_DIR}/modules/behavior/application
-  ${SRC_DIR}/modules/data/cache
-  ${SRC_DIR}/modules/data/database
-  ${SRC_DIR}/modules/data/dat
-  ${SRC_DIR}/modules/data/kart
-  ${SRC_DIR}/modules/data/playlist
-  ${SRC_DIR}/modules/data/query
-  ${SRC_DIR}/modules/data/restore
-  ${SRC_DIR}/modules/data/scraper/core
-  ${SRC_DIR}/modules/data/scraper/parsers
-  ${SRC_DIR}/modules/data/scraper/providers
-  ${SRC_DIR}/modules/data/session
-  ${SRC_DIR}/modules/data/settings
-  ${SRC_DIR}/modules/input/animation
-  ${SRC_DIR}/modules/input/attract
-  ${SRC_DIR}/modules/input/event
-  ${SRC_DIR}/modules/input/filter
-  ${SRC_DIR}/modules/input/gamepad
-  ${SRC_DIR}/modules/input/interaction
-  ${SRC_DIR}/modules/input/keyboard
-  ${SRC_DIR}/modules/input/launch
-  ${SRC_DIR}/modules/input/mouse
-  ${SRC_DIR}/modules/input/navigation
-  ${SRC_DIR}/modules/input/overlay
-  ${SRC_DIR}/modules/input/scroll
-  ${SRC_DIR}/modules/input/search
-  ${SRC_DIR}/modules/input/selection
-  ${SRC_DIR}/modules/input/viewport
-  ${SRC_DIR}/modules/input/widgetpool
-  ${SRC_DIR}/modules/media/artwork
-  ${SRC_DIR}/modules/media/detailpage
-  ${SRC_DIR}/modules/media/detailspane
-  ${SRC_DIR}/ui
-  ${SRC_DIR}/ui/widgets/overlays
-  ${SRC_DIR}/ui/widgets/panes
-  ${SRC_DIR}/widgets/items
-  ${SRC_DIR}/widgets/media
-  ${SRC_DIR}/widgets/overlays
-  ${SRC_DIR}/ui/dialogs
-  ${SRC_DIR}/ui/dialogs/settings
-  ${SRC_DIR}/ui/dialogs/collection
-  ${SRC_DIR}/ui/dialogs/launcher
-  ${SRC_DIR}/ui/dialogs/scraper
-  ${SRC_DIR}/ui/dialogs/kart
-  ${SRC_DIR}/utils/app
-  ${SRC_DIR}/utils/db
-  ${SRC_DIR}/utils/fs
-  ${SRC_DIR}/utils/text
-  ${SRC_DIR}/utils/threading
-  ${SRC_DIR}/utils/view
-)
-
-target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic)
+# Warning flags applied uniformly across every area OBJECT lib (PRIVATE
+# because warnings shouldn't leak through INTERFACE_COMPILE_OPTIONS to
+# external consumers like Qt's autogen units).
+foreach(_area ${KARTEND_AREA_LIBS})
+  target_compile_options(${_area} PRIVATE -Wall -Wextra -Wpedantic)
+endforeach()
 
 # Keep GCC-only intent with Clang analogue on RISC-V
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -mno-direct-extern-access)
-  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -fno-direct-access-external-data)
-  endif()
+  foreach(_area ${KARTEND_AREA_LIBS})
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      target_compile_options(${_area} PRIVATE -mno-direct-extern-access)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+      target_compile_options(${_area} PRIVATE -fno-direct-access-external-data)
+    endif()
+  endforeach()
 endif()
 
 # Release flags split into:
@@ -363,19 +341,25 @@ if (KARTEND_PORTABLE_RELEASE)
   )
 endif()
 
-target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
-  $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
-  $<$<CONFIG:Release>:${RELEASE_PERF_COMPILE_OPTS}>
-)
+# Hardening (non-Debug) + release perf options applied to every per-area
+# OBJECT lib so the generated .o files participate in LTO and pick up the
+# same security flags as the main exe link.
+foreach(_area ${KARTEND_AREA_LIBS})
+  target_compile_options(${_area} PRIVATE
+    $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
+    $<$<CONFIG:Release>:${RELEASE_PERF_COMPILE_OPTS}>
+  )
+endforeach()
 target_link_options(kartend PRIVATE
   $<$<NOT:$<CONFIG:Debug>>:${HARDENING_LINK_OPTS}>
   $<$<CONFIG:Release>:${RELEASE_PERF_LINK_OPTS}>
 )
 
-# LTO objects in the OBJECT library are unreadable to a non-LTO link step, so
-# every consumer of kartend_lib (the main exe AND the integration test binary)
-# must link with the matching LTO and linker flags. Surface the minimum set as
-# INTERFACE link options so they propagate automatically.
+# LTO objects in the per-area OBJECT libs are unreadable to a non-LTO link
+# step, so every consumer (the main exe AND the integration test binary)
+# must link with the matching LTO and linker flags. Surface the minimum set
+# as INTERFACE_LINK_OPTIONS on the aggregator so they propagate automatically
+# to anything that links ${KARTEND_LIB_TARGET}.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_link_options(${KARTEND_LIB_TARGET} INTERFACE
     $<$<CONFIG:Release>:-flto=auto>
@@ -387,21 +371,25 @@ else()
   )
 endif()
 
-# PGO: applied directly to targets (must come AFTER target_compile_options
+# PGO: applied to each area lib (must come AFTER target_compile_options
 # above used genex substitution — applying via separate target_*_options calls
 # accumulates rather than relying on dead list(APPEND) text substitution).
 if (KARTEND_USE_PGO)
   if (KARTEND_PGO_GENERATE)
     message(STATUS "PGO: Generating profile data in ${KARTEND_PGO_PROFILE_DIR}")
-    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
-      $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
+    foreach(_area ${KARTEND_AREA_LIBS})
+      target_compile_options(${_area} PRIVATE
+        $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
+    endforeach()
     target_link_options(kartend PRIVATE
       $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
   elseif (KARTEND_PGO_USE)
     message(STATUS "PGO: Using profile data from ${KARTEND_PGO_PROFILE_DIR}")
-    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
-      $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>
-      $<$<CONFIG:Release>:-fprofile-correction>)
+    foreach(_area ${KARTEND_AREA_LIBS})
+      target_compile_options(${_area} PRIVATE
+        $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>
+        $<$<CONFIG:Release>:-fprofile-correction>)
+    endforeach()
     target_link_options(kartend PRIVATE
       $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>)
   endif()
@@ -415,7 +403,9 @@ endif()
 # packagers' jobs harder. Flatpak and AppImage builders also strip on
 # their own. Local installers can pass --strip themselves if desired.
 
-target_compile_definitions(${KARTEND_LIB_TARGET} PRIVATE $<$<CONFIG:Release>:NDEBUG>)
+foreach(_area ${KARTEND_AREA_LIBS})
+  target_compile_definitions(${_area} PRIVATE $<$<CONFIG:Release>:NDEBUG>)
+endforeach()
 
 # Debug-only linker map file output. Opt-in via -DKARTEND_LINKER_MAP=ON; the
 # map is written to the build directory so sandboxed/chroot builders
@@ -455,9 +445,11 @@ if (NOT TARGET uninstall)
     VERBATIM)
 endif()
 
-# KARTEND_MAINTENANCE adds -Werror
+# KARTEND_MAINTENANCE adds -Werror to every area lib's compile step.
 if (KARTEND_MAINTENANCE)
-  target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Werror)
+  foreach(_area ${KARTEND_AREA_LIBS})
+    target_compile_options(${_area} PRIVATE -Werror)
+  endforeach()
 endif()
 
 # Tests (optional; declared at top with other options)

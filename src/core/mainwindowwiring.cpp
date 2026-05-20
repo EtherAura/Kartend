@@ -5,6 +5,36 @@
 // QObject::connect() call uses a member-function pointer (no inline lambdas)
 // so the manager graph can be read top-to-bottom and grep'd mechanically.
 //
+// The slot handlers that those connections target live in companion TUs
+// extracted by responsibility:
+//
+//   * mainwindow_dbevents.cpp     — DatabaseManager scan/count handlers
+//                                    (releaseStartupOverlaySuppressionIfIdle,
+//                                    refreshTitleCountsIfActive, onScan*,
+//                                    onCollectionScanCompleted*,
+//                                    refreshCollectionSummaryOnScanCompleted,
+//                                    refreshFilterToolbarOnItemsLoaded)
+//   * mainwindow_scrollevents.cpp — ScrollManager view-mode / column-resize /
+//                                    CoverFlow event handlers
+//                                    (onSortModeChangeRequested,
+//                                    onSelectItemByIndex,
+//                                    onCoverFlow*, onArtworkPreviewVisibilityChanged,
+//                                    onList*ColumnWidthChanged)
+//   * mainwindow_scraper.cpp      — scraper-service lifecycle entry points
+//                                    (openScraperDialog,
+//                                    promptResumePendingScrapeIfAny) and
+//                                    marquee shims (applyMarqueeSettings,
+//                                    updateMarqueeArtwork)
+//
+// This TU keeps:
+//   - the connect*() tables (the flat manager graph)
+//   - the small artwork / sidebar / selection-driven slot handlers that
+//     are too small to justify their own file and naturally read alongside
+//     their wiring
+//   - updateScrollManagerSidebarShrinking + refreshFilterToolbar +
+//     connectFilterToolbar — the wiring-adjacent setup helpers that
+//     existing call sites still expect to find in this TU.
+//
 // Manager graph (sender → receiver edges):
 //
 //   DatabaseManager → NavigationManager
@@ -15,7 +45,7 @@
 //     errorOccurred             → onMediaLibraryError
 //   DatabaseManager → ScrollManager
 //     visualIndexForPathLoaded  → onVisualIndexForPathLoaded
-//   DatabaseManager → MainWindow (UI/title/overlay state)
+//   DatabaseManager → MainWindow (UI/title/overlay state — handlers in mainwindow_dbevents.cpp)
 //     itemCountLoaded           → releaseStartupOverlaySuppressionIfIdle
 //     cachedCountsUpdated       → refreshTitleCountsIfActive
 //     itemsLoaded               → refreshFilterToolbarOnItemsLoaded
@@ -38,7 +68,7 @@
 //     requestItemsRange         → fetchItemsRange
 //   ScrollManager → InteractionManager
 //     artworkPreviewLaunchRequested → onArtworkPreviewLaunchRequested
-//   ScrollManager → MainWindow
+//   ScrollManager → MainWindow (handlers in mainwindow_scrollevents.cpp)
 //     sortModeChangeRequested   → onSortModeChangeRequested
 //     selectItemByIndex         → onSelectItemByIndex
 //     coverFlowActiveChanged    → onCoverFlowActiveChanged
@@ -64,34 +94,22 @@
 //
 //   QScrollBar (item area V/H) → NavigationManager
 //     valueChanged              → onViewportChanged
-#include <limits>
 
 #include <QAction>
 #include <QApplication>
-#include <QFileInfo>
 #include <QScrollBar>
 #include <QTimer>
-#include <QToolButton>
-
-#include <QMessageBox>
 
 #include "artworkmanager.h"
-#include "artworkutils.h"
-#include "batchscraperunner.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
-#include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
-#include "metadatalookupprovider.h"
-#include "metadataproviderregistry.h"
 #include "navigationmanager.h"
-#include "pathutils.h"
-#include "scraperesultdialog.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
@@ -100,238 +118,11 @@
 #include "uiconstants.h"
 
 // =====================================================================
-// Slot handlers — extracted from inline lambdas. Each handler captures
-// the exact behavior of the lambda it replaced (state mutations, early
-// returns, conditional checks). Order roughly matches the connect() order
-// in the section below. Names are descriptive rather than mirroring the
-// signal name verbatim where the slot is more than a passive forward.
+// Small slot handlers that live alongside their connect()s — too small
+// to justify their own TU. Larger responsibility-segmented handlers live
+// in mainwindow_dbevents.cpp / mainwindow_scrollevents.cpp /
+// mainwindow_scraper.cpp.
 // =====================================================================
-
-void MainWindow::releaseStartupOverlaySuppressionIfIdle(int /*count*/) {
-  // If the initial load did not start a scan, we can re-enable scan overlays
-  // immediately. If a startup scan is in-flight, keep overlays suppressed
-  // until it completes.
-  if (m_suppressStartupScanOverlays && m_startupActiveScanCount == 0) {
-    m_suppressStartupScanOverlays = false;
-  }
-}
-
-void MainWindow::refreshTitleCountsIfActive() {
-  // Cached counts are now recomputed asynchronously; refresh the title once
-  // the update completes so the user sees up-to-date totals.
-  if (!QApplication::closingDown()) {
-    refreshTitleCounts();
-  }
-}
-
-void MainWindow::refreshFilterToolbarOnItemsLoaded(const QStringList & /*paths*/,
-                                                   const QHash<QString, QString> & /*names*/) {
-  // Refresh the consolidated filter popup each time a collection's items
-  // finish loading. NavigationManager updates currentCollectionIndex through
-  // a raw pointer (no Qt signal), so this is the most reliable post-switch
-  // hook available — by the time itemsLoaded fires, the index points at the
-  // collection the user is now viewing, and the popup's title-pattern toggle
-  // needs to mirror that collection's flag.
-  refreshFilterToolbar();
-}
-
-void MainWindow::onScanProgress(int current, int total, const QString &name) {
-  // Update loading overlay with scan progress during initial collection
-  // loading.
-  if (m_suppressStartupScanOverlays) {
-    // Keep the UI interactive on startup; progress is still visible via the
-    // title bar set by scanStarting.
-    return;
-  }
-  if (m_loadingOverlay) {
-    if (m_loadingOverlay->isActive()) {
-      m_loadingOverlay->setMessage(QString("Scanning %1...").arg(name));
-      m_loadingOverlay->setProgress(current, total);
-    } else {
-      m_loadingOverlay->showWithProgress(QString("Scanning %1...").arg(name), current, total);
-    }
-  }
-}
-
-void MainWindow::onScanStarting(const QString &name, int estimatedItems) {
-  Q_UNUSED(estimatedItems)
-  // Track active scans so overlay persists until all complete (e.g., when
-  // showAllSubcollectionItems triggers multiple scans).
-  ++m_activeScanCount;
-
-  if (m_suppressStartupScanOverlays) {
-    ++m_startupActiveScanCount;
-  }
-  if (!m_suppressStartupScanOverlays) {
-    if (m_loadingOverlay && !m_loadingOverlay->isActive()) {
-      m_loadingOverlay->show(QString("Scanning %1...").arg(name));
-    }
-  }
-  // Show "Scanning..." in title bar instead of "0 items"
-  setWindowTitle(QString("%1 (Scanning...)").arg(name));
-}
-
-void MainWindow::onCollectionScanCompletedStartup(const QString & /*uuid*/) {
-  if (!m_suppressStartupScanOverlays) {
-    return;
-  }
-  if (m_startupActiveScanCount > 0) {
-    --m_startupActiveScanCount;
-  }
-  if (m_startupActiveScanCount == 0) {
-    m_suppressStartupScanOverlays = false;
-  }
-}
-
-void MainWindow::onCollectionScanCompletedOverlay(const QString & /*uuid*/) {
-  // Hide scan overlay once ALL scans in a batch have completed. When
-  // showAllSubcollectionItems triggers scans of many descendants, we only
-  // hide the overlay when the last one finishes.
-  if (m_activeScanCount > 0) {
-    --m_activeScanCount;
-  }
-  // Only hide overlay and reload when all scans are complete.
-  if (m_activeScanCount != 0) {
-    return;
-  }
-  if (m_suppressStartupScanOverlays) {
-    return;
-  }
-  if (m_loadingOverlay && m_loadingOverlay->isActive()) {
-    m_loadingOverlay->hide();
-  }
-  // When showAllSubcollectionItems is enabled and all descendant scans have
-  // finished, reload the collection to get accurate counts. NavigationManager
-  // skips intermediate reloads while the overlay is active, so we trigger the
-  // final reload here after hiding it.
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size() ||
-      !m_collections[currentCollectionIndex].showAllSubcollectionItems) {
-    return;
-  }
-  // Use a longer delay (150ms) to ensure the scan worker's commit is visible
-  // to the query worker before we request counts.
-  QTimer::singleShot(150, this, [this]() {
-    if (getNavigationManager()) {
-      getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-    }
-  });
-}
-
-void MainWindow::onScanItemsProgress(int itemsProcessed, int totalItems) {
-  // Update progress during item scan/save.
-  if (m_suppressStartupScanOverlays) {
-    return;
-  }
-  if (!m_loadingOverlay || !m_loadingOverlay->isActive()) {
-    return;
-  }
-  if (totalItems > 0) {
-    // Indexing phase - we know the total
-    m_loadingOverlay->setMessage(
-        QString("Indexing %1 of %2 items...").arg(itemsProcessed).arg(totalItems));
-    m_loadingOverlay->setProgress(itemsProcessed, totalItems);
-  } else {
-    // Scanning phase - total unknown, show count found so far
-    m_loadingOverlay->setMessage(QString("Scanning... found %1 items").arg(itemsProcessed));
-    // Show indeterminate progress (spinner continues)
-    m_loadingOverlay->setProgress(0, 0);
-  }
-}
-
-void MainWindow::refreshCollectionSummaryOnScanCompleted(const QString & /*uuid*/) {
-  if (auto *dpm = getDetailsPaneManager()) {
-    dpm->refreshCollectionSummary();
-  }
-}
-
-void MainWindow::onSortModeChangeRequested(SortMode sortMode) {
-  // List view header column click triggers sort mode change.
-  if (!getNavigationManager()) {
-    return;
-  }
-  // Capture currently selected file path to restore after reload.
-  if (getInteractionManager() && getScrollManager()) {
-    QString selectedPath = getInteractionManager()->selectedFilePath();
-    if (!selectedPath.isEmpty()) {
-      getScrollManager()->setPendingSelectionRestoreByPath(selectedPath);
-    }
-  }
-  m_generalSettings.sortMode = sortMode;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
-  }
-  getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-}
-
-void MainWindow::onSelectItemByIndex(int index) {
-  // Restore selection by index after sort change finds the item.
-  if (!getInteractionManager()) {
-    return;
-  }
-  getInteractionManager()->selectItemByIndex(index, true);
-  // Instantly scroll to make the item visible (no animation).
-  getInteractionManager()->applyImmediateViewportPositioningForSelection(index);
-}
-
-void MainWindow::onCoverFlowActiveChanged(bool active) {
-  // Yield sidebar viewport space when entering CoverFlow, restore the
-  // persisted per-collection state when leaving.
-  if (auto *dpm = getDetailsPaneManager()) {
-    dpm->setExternallyHidden(active);
-  }
-}
-
-void MainWindow::onArtworkPreviewVisibilityChanged(bool visible) {
-  // Bug #7: lower the sidebar while the artwork preview overlay is showing
-  // so the overlay (parented to the top-level window) stays on top. Restored
-  // on hide.
-  if (auto *dpm = getDetailsPaneManager()) {
-    dpm->setOverlayActive(visible);
-  }
-}
-
-void MainWindow::onCoverFlowItemActivated(int index) {
-  // Cover-flow activates a card → land selection on it then route through
-  // the existing launch path. Subcollection / virtual-folder activations are
-  // handled by ScrollManager itself via subcollectionEntered /
-  // virtualFolderEntered above so they don't reach this slot. The owning
-  // collection comes from DatabaseManager — the launcher / core / params are
-  // configured per-collection and using currentCollectionIndex would mis-launch
-  // any item inherited from a subcollection in showAllSubcollectionItems mode
-  // (surfaces as "no launcher configured").
-  if (!getInteractionManager() || !getScrollManager()) {
-    return;
-  }
-  getInteractionManager()->selectItemByIndex(index, true);
-  const QString filePath = getScrollManager()->filePathForVisualIndex(index);
-  if (filePath.isEmpty()) {
-    return;
-  }
-  int ownerIdx = currentCollectionIndex;
-  if (getDatabaseManager()) {
-    const int detected = getDatabaseManager()->getCollectionIndexForFile(filePath);
-    if (detected >= 0) {
-      ownerIdx = detected;
-    }
-  }
-  getInteractionManager()->launchItemWithCollection(filePath, ownerIdx);
-}
-
-void MainWindow::onListColumnWidthChanged(int width) {
-  // Persist list column width when user resizes.
-  m_generalSettings.listCollectionColumnWidth = width;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
-  }
-}
-
-void MainWindow::onListArtworkColumnWidthChanged(int width) {
-  // Persist list artwork column width when user resizes.
-  m_generalSettings.listArtworkColumnWidth = width;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
-  }
-}
 
 void MainWindow::onArtworkViewportUpdateRequested() {
   if (!QApplication::closingDown() && getArtworkManager()) {
@@ -365,269 +156,6 @@ void MainWindow::onInteractionSelectionChanged(int /*index*/) {
       m_marqueeController->requestArtworkRefresh();
     }
   }
-}
-
-namespace {
-
-/// Resolve the metadata-lookup provider for a collection scrape. An
-/// explicit `CollectionConfig::scraperProviderId` override wins; with no
-/// override (or one that doesn't resolve to a lookup-capable provider)
-/// the first provider whose category matches the collection `type` is
-/// used. Ownership of the chosen provider is released out of @p registry
-/// into the returned shared_ptr; returns null when nothing usable matches.
-std::shared_ptr<MetadataLookupProvider>
-pickLookupProvider(std::vector<std::unique_ptr<MetadataProvider>> &registry,
-                   const CollectionConfig &cfg) {
-  // Claim a provider out of the registry: verify it does metadata
-  // lookups, release its unique_ptr, hand back a shared_ptr. Returns
-  // null (registry untouched) when the provider can't do lookups.
-  auto claim = [&registry](MetadataProvider *p) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!p || !p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
-      return nullptr;
-    }
-    auto *typed = dynamic_cast<MetadataLookupProvider *>(p);
-    if (!typed) return nullptr;
-    for (auto &up : registry) {
-      if (up.get() == p) {
-        up.release();
-        break;
-      }
-    }
-    return std::shared_ptr<MetadataLookupProvider>(typed);
-  };
-
-  // Explicit per-collection override takes precedence.
-  const QString overrideId = cfg.scraperProviderId.trimmed();
-  if (!overrideId.isEmpty()) {
-    for (auto &up : registry) {
-      if (up && up->id() == overrideId) {
-        if (auto provider = claim(up.get())) return provider;
-        break; // ids are unique — a non-lookup match falls through to type
-      }
-    }
-  }
-
-  // Fall back to the first category match for the collection type.
-  const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
-  for (auto &up : registry) {
-    if (up && applicable.contains(up.get())) {
-      if (auto provider = claim(up.get())) return provider;
-    }
-  }
-  return nullptr;
-}
-
-} // namespace
-
-void MainWindow::applyMarqueeSettings() {
-  if (m_marqueeController) {
-    m_marqueeController->applyMarqueeSettings();
-  }
-}
-
-void MainWindow::updateMarqueeArtwork() {
-  if (m_marqueeController) {
-    m_marqueeController->updateMarqueeArtwork();
-  }
-}
-
-void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
-  if (!getDatabaseManager()) {
-    QMessageBox::warning(this, tr("Scraper"), tr("Database is not ready."));
-    return;
-  }
-
-  // Single reused dialog instance. The dialog's closeEvent override
-  // hides instead of destroying when Unified mode is active, so we
-  // keep the widget tree across opens. First call constructs;
-  // subsequent calls just rebind context + raise.
-  if (!m_scraperDialog) {
-    m_scraperDialog = new ScrapeResultDialog(/*provider=*/nullptr, /*candidates=*/{}, this);
-    m_scraperDialog->setWindowFlag(Qt::Window, true);
-    // Unified flow is non-modal — the user must be able to keep
-    // using the main window while a scrape runs in the background.
-    m_scraperDialog->setModal(false);
-  }
-  auto *dialog = m_scraperDialog;
-
-  ScrapeResultDialog::ScraperContext sctx;
-  sctx.collections = &m_collections;
-  sctx.databaseManager = getDatabaseManager();
-  sctx.generalSettings = &m_generalSettings;
-  // Provider builder: per-collection-index lookup that hands the
-  // dialog a fresh shared_ptr<MetadataLookupProvider>. Each call
-  // rebuilds the registry with the live accessor closures so SS
-  // sees current credentials + the right systemeid override.
-  sctx.providerBuilder = [this](int idx) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
-    auto registry = MetadataProviderRegistry::builtIn(
-        [this]() -> const GeneralSettings * { return &m_generalSettings; },
-        [this, idx]() -> const CollectionConfig * {
-          if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
-          return &m_collections[idx];
-        });
-    return pickLookupProvider(registry, m_collections[idx]);
-  };
-  // applyResult: post-Apply persistence hook for the unified
-  // interactive flow. Mirrors the existing single-item right-click
-  // path's Scraper::applyScrapedItem call so metadata + media writes
-  // hit disk identically.
-  sctx.applyResult = [this](int collectionIndex, const QString &filePath,
-                            const ScrapeResultDialog::Result &result) {
-    if (!CollectionUtils::isValidIndex(collectionIndex, &m_collections)) return;
-    if (!getDatabaseManager()) return;
-    const CollectionConfig &cfg = m_collections[collectionIndex];
-    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
-    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
-    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
-    const QString baseName = QFileInfo(filePath).completeBaseName();
-    QList<Scraper::PendingMediaWrite> writes;
-    writes.reserve(result.downloads.size());
-    for (const auto &d : result.downloads) {
-      Scraper::PendingMediaWrite w;
-      w.asset = d.asset;
-      w.bytes = d.bytes;
-      writes.append(w);
-    }
-    const Scraper::RescrapeMode rescrapeMode =
-        static_cast<Scraper::RescrapeMode>(m_generalSettings.scraperOptions.rescrapeMode);
-    (void)Scraper::applyScrapedItem(getDatabaseManager(), uuid, filePath, artworkDir, baseName,
-                                    result.item, writes, rescrapeMode);
-  };
-  dialog->setScraperContext(sctx);
-  // Hand the long-lived service to the dialog. The service was
-  // constructed in MainWindow's ctor; we configure it here with the
-  // same builder so a resume on next launch can still build
-  // providers, then bind to the dialog. The dialog reads
-  // m_service->isActive() in startUnifiedScrape and lands directly
-  // in the Live view when there's already a run in progress.
-  Scraper::ScraperService::Context srvCtx;
-  srvCtx.databaseManager = getDatabaseManager();
-  srvCtx.generalSettings = &m_generalSettings;
-  srvCtx.collections = &m_collections;
-  srvCtx.providerBuilder = sctx.providerBuilder;
-  m_scraperService->setContext(srvCtx);
-  dialog->setScraperService(m_scraperService.get());
-
-  // Post-completion housekeeping: refresh the active grid + sidebar +
-  // artwork cache once the scrape ends, then surface a summary box.
-  // UniqueConnection prevents the lambda from being attached multiple
-  // times if the user opens the dialog repeatedly — without it, one
-  // scrape-finish would pop N message boxes.
-  static bool s_unifiedFinishedConnected = false;
-  if (!s_unifiedFinishedConnected) {
-    s_unifiedFinishedConnected = true;
-    QObject::connect(
-        dialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
-        [this](int scraped, int skipped, int errors, const QStringList &firstFailures) {
-          if (getDetailsPaneManager() && getScrollManager() && getInteractionManager()) {
-            const int sel = getInteractionManager()->currentSelectedIndex();
-            if (sel >= 0) {
-              ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-              getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
-            }
-          }
-          ArtworkUtils::clearDirectoryCache();
-          if (getNavigationManager() &&
-              CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) {
-            getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-          }
-          QString text = tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nErrors: %3")
-                             .arg(scraped)
-                             .arg(skipped)
-                             .arg(errors);
-          if (!firstFailures.isEmpty()) {
-            text += QStringLiteral("\n\n") +
-                    tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
-          }
-          QMessageBox::information(this, tr("Scraper"), text);
-        });
-  }
-
-  dialog->startUnifiedScrape(preCollectionIndex, preItemPath);
-  dialog->show();
-  dialog->raise();
-  dialog->activateWindow();
-}
-
-void MainWindow::promptResumePendingScrapeIfAny() {
-  if (!m_scraperService) return;
-  auto pending = m_scraperService->loadPendingState(/*consumeOnLoad=*/false);
-  if (!pending.isValid()) return;
-  // Wire the service context first so a resume (silent or accepted)
-  // can build providers + persist progress. Same context as
-  // openScraperDialog — kept in sync because both paths run on
-  // MainWindow's live closures.
-  Scraper::ScraperService::Context srvCtx;
-  srvCtx.databaseManager = getDatabaseManager();
-  srvCtx.generalSettings = &m_generalSettings;
-  srvCtx.collections = &m_collections;
-  srvCtx.providerBuilder = [this](int idx) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
-    auto registry = MetadataProviderRegistry::builtIn(
-        [this]() -> const GeneralSettings * { return &m_generalSettings; },
-        [this, idx]() -> const CollectionConfig * {
-          if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
-          return &m_collections[idx];
-        });
-    return pickLookupProvider(registry, m_collections[idx]);
-  };
-  m_scraperService->setContext(srvCtx);
-
-  // Auto-resume is gated by GeneralSettings::ScraperOptions::scrapeAutoResume
-  // (Kartend-1uvp). Off by default — first-time users see the modal Resume /
-  // Discard prompt below and learn the recovery path. Power users running
-  // unattended overnight batches flip it on so a crash + relaunch self-heals
-  // without a dialog blocking the resume.
-  const bool autoResume = m_generalSettings.scraperOptions.scrapeAutoResume;
-  if (autoResume) {
-    m_scraperService->loadPendingState(/*consumeOnLoad=*/true); // delete file
-    m_scraperService->resumeFromState(pending);
-    // Also pop the Scraper window so the user has the Live view +
-    // Close / Cancel buttons available without hunting for the menu.
-    openScraperDialog();
-    return;
-  }
-  const int remaining = pending.totalRemaining();
-  const QString started =
-      QDateTime::fromMSecsSinceEpoch(pending.startedAtUnixMs).toString(Qt::TextDate);
-  // Non-blocking prompt — using open() + buttonClicked instead of
-  // exec() keeps the event loop spinning so the collection grid can
-  // finish painting / loading while the user reads the prompt.
-  // exec() would freeze startup behind the modal, which on large
-  // scrape jobs is exactly when the user wants the grid visible
-  // first.
-  auto *box = new QMessageBox(this);
-  box->setAttribute(Qt::WA_DeleteOnClose);
-  box->setWindowTitle(tr("Resume scrape?"));
-  box->setIcon(QMessageBox::Question);
-  box->setText(tr("An interrupted scrape from %1 was found.").arg(started));
-  box->setInformativeText(tr("Scraped so far: %1\nSkipped: %2\nErrors: %3\n"
-                             "Remaining items: %4")
-                              .arg(pending.summarySoFar.scraped)
-                              .arg(pending.summarySoFar.skipped)
-                              .arg(pending.summarySoFar.errors)
-                              .arg(remaining));
-  auto *resumeBtn = box->addButton(tr("Resume"), QMessageBox::AcceptRole);
-  auto *discardBtn = box->addButton(tr("Discard"), QMessageBox::DestructiveRole);
-  box->addButton(tr("Keep for later"), QMessageBox::RejectRole);
-  box->setDefaultButton(resumeBtn);
-  // Capture pending by value — the state struct is cheap enough and
-  // we already paid for the parse. Avoids re-parsing the file in the
-  // Resume branch.
-  connect(box, &QMessageBox::buttonClicked, this,
-          [this, box, resumeBtn, discardBtn, pending](QAbstractButton *clicked) {
-            if (clicked == resumeBtn) {
-              m_scraperService->discardPendingState();
-              m_scraperService->resumeFromState(pending);
-              openScraperDialog();
-            } else if (clicked == discardBtn) {
-              m_scraperService->discardPendingState();
-            }
-            // "Keep for later" leaves the file in place — next launch re-prompts.
-            box->deleteLater();
-          });
-  box->open();
 }
 
 void MainWindow::onSidebarVisibilityChanged(bool visible) {
@@ -807,7 +335,7 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
   const CollectionConfig &collection = m_collections[idx];
   // Overlay mode never shrinks the grid (the sidebar floats over content), so
   // the alt gridWidth only applies in Expand mode while the sidebar is hidden.
-  if (collection.sidebarMode != DetailsPaneMode::Expand) {
+  if (collection.sidebar.sidebarMode != DetailsPaneMode::Expand) {
     getScrollManager()->setSidebarShrinkingActive(false);
     return;
   }
@@ -822,7 +350,7 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
   // along that axis, so the user's "more items" value isn't a hidden-only
   // arrangement, it's the only correct one for that combo.
   const bool paneIsHorizontalDock =
-      CollectionUtils::isDetailsPaneHorizontal(collection.sidebarPosition);
+      CollectionUtils::isDetailsPaneHorizontal(collection.sidebar.sidebarPosition);
   const bool relevantAxisIsHorizontal = (collection.viewType != ViewType::Horizontal);
   const bool paneAffectsRelevantAxis =
       relevantAxisIsHorizontal ? !paneIsHorizontalDock : paneIsHorizontalDock;

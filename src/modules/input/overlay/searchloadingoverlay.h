@@ -7,6 +7,7 @@
 #include <QPropertyAnimation>
 #include <QWidget>
 class QTimer;
+class OverlayLayerManager;
 
 /**
  * @brief Manages a subtle loading overlay shown during search operations.
@@ -39,6 +40,11 @@ public:
   /// Update overlay geometry to match parent
   void updateGeometry();
 
+  /// Wire the centralized z-order coordinator. The owned overlay widget is
+  /// registered with the manager at the SearchLoading layer the first time
+  /// it's created (ensureOverlay()).
+  void setLayerManager(OverlayLayerManager *manager);
+
 private:
   void ensureOverlay();
   void startPulseAnimation();
@@ -51,6 +57,7 @@ private:
   QPointer<QPropertyAnimation> m_pulseAnimation;
   QTimer *m_pulseTimer = nullptr;
   bool m_pulseDimming = true;
+  OverlayLayerManager *m_layerManager = nullptr;
 };
 
 #endif // SEARCHLOADINGOVERLAY_H

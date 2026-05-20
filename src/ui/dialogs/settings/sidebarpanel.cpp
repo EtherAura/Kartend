@@ -63,31 +63,31 @@ void SidebarPanel::load() {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
-  ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
-  ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
-  ui->sidebarHeightSpinBox->setValue(config.sidebarHeight);
-  ui->sidebarWidthLockedCheckBox->setChecked(config.sidebarWidthLocked);
+  ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarMode));
+  ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarPosition));
+  ui->sidebarWidthSpinBox->setValue(config.sidebar.sidebarWidth);
+  ui->sidebarHeightSpinBox->setValue(config.sidebar.sidebarHeight);
+  ui->sidebarWidthLockedCheckBox->setChecked(config.sidebar.sidebarWidthLocked);
   ui->sidebarBackgroundTypeComboBox->setCurrentIndex(
-      static_cast<int>(config.sidebarBackgroundType));
-  if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
-    ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundImage);
+      static_cast<int>(config.sidebar.sidebarBackgroundType));
+  if (config.sidebar.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
+    ui->sidebarBackgroundValueEdit->setText(config.sidebar.sidebarBackgroundImage);
   } else {
-    ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundColor);
+    ui->sidebarBackgroundValueEdit->setText(config.sidebar.sidebarBackgroundColor);
   }
-  ui->sidebarPatternIntensitySpinBox->setValue(config.sidebarPatternIntensity);
-  ui->sidebarPatternColorEdit->setText(config.sidebarPatternColor);
-  ui->sidebarTextColorEdit->setText(config.sidebarTextColor);
-  ui->sidebarAccentColorEdit->setText(config.sidebarAccentColor);
-  ui->sidebarHeaderBgEdit->setText(config.sidebarHeaderBgColor);
-  ui->sidebarSectionBgEdit->setText(config.sidebarSectionBgColor);
-  ui->sidebarHeaderBgOpacitySpinBox->setValue(config.sidebarHeaderBgOpacity);
-  ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
-  ui->sidebarFontFamilyEdit->setText(config.sidebarFontFamily);
-  ui->sidebarFontSizeSpinBox->setValue(config.sidebarFontPointSize);
-  ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebarActiveTab));
-  ui->hideHorizontalScrollbarCheckBox->setChecked(config.hideHorizontalScrollbar);
-  ui->hideVerticalScrollbarCheckBox->setChecked(config.hideVerticalScrollbar);
+  ui->sidebarPatternIntensitySpinBox->setValue(config.sidebar.sidebarPatternIntensity);
+  ui->sidebarPatternColorEdit->setText(config.sidebar.sidebarPatternColor);
+  ui->sidebarTextColorEdit->setText(config.sidebar.sidebarTextColor);
+  ui->sidebarAccentColorEdit->setText(config.sidebar.sidebarAccentColor);
+  ui->sidebarHeaderBgEdit->setText(config.sidebar.sidebarHeaderBgColor);
+  ui->sidebarSectionBgEdit->setText(config.sidebar.sidebarSectionBgColor);
+  ui->sidebarHeaderBgOpacitySpinBox->setValue(config.sidebar.sidebarHeaderBgOpacity);
+  ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebar.sidebarSectionBgOpacity);
+  ui->sidebarFontFamilyEdit->setText(config.sidebar.sidebarFontFamily);
+  ui->sidebarFontSizeSpinBox->setValue(config.sidebar.sidebarFontPointSize);
+  ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarActiveTab));
+  ui->hideHorizontalScrollbarCheckBox->setChecked(config.gridLayout.hideHorizontalScrollbar);
+  ui->hideVerticalScrollbarCheckBox->setChecked(config.gridLayout.hideVerticalScrollbar);
   ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
 }
 
@@ -121,38 +121,38 @@ void SidebarPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.sidebarMode = static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
-  config.sidebarPosition =
+  config.sidebar.sidebarMode = static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
+  config.sidebar.sidebarPosition =
       static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
-  config.sidebarWidth = ui->sidebarWidthSpinBox->value();
-  config.sidebarHeight = ui->sidebarHeightSpinBox->value();
-  config.sidebarWidthLocked = ui->sidebarWidthLockedCheckBox->isChecked();
-  config.sidebarBackgroundType =
+  config.sidebar.sidebarWidth = ui->sidebarWidthSpinBox->value();
+  config.sidebar.sidebarHeight = ui->sidebarHeightSpinBox->value();
+  config.sidebar.sidebarWidthLocked = ui->sidebarWidthLockedCheckBox->isChecked();
+  config.sidebar.sidebarBackgroundType =
       static_cast<DetailsPaneBackgroundType>(ui->sidebarBackgroundTypeComboBox->currentIndex());
   const QString bgValue = ui->sidebarBackgroundValueEdit->text().trimmed();
-  if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
-    config.sidebarBackgroundImage = bgValue;
-    config.sidebarBackgroundColor.clear();
+  if (config.sidebar.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
+    config.sidebar.sidebarBackgroundImage = bgValue;
+    config.sidebar.sidebarBackgroundColor.clear();
   } else {
     // Pattern mode shares the bg-color slot with Color mode; the pattern
     // stroke color comes from sidebarPatternColorEdit.
-    config.sidebarBackgroundColor = bgValue;
-    config.sidebarBackgroundImage.clear();
+    config.sidebar.sidebarBackgroundColor = bgValue;
+    config.sidebar.sidebarBackgroundImage.clear();
   }
-  config.sidebarPatternIntensity = ui->sidebarPatternIntensitySpinBox->value();
-  config.sidebarPatternColor = ui->sidebarPatternColorEdit->text().trimmed();
-  config.sidebarTextColor = ui->sidebarTextColorEdit->text().trimmed();
-  config.sidebarAccentColor = ui->sidebarAccentColorEdit->text().trimmed();
-  config.sidebarHeaderBgColor = ui->sidebarHeaderBgEdit->text().trimmed();
-  config.sidebarSectionBgColor = ui->sidebarSectionBgEdit->text().trimmed();
-  config.sidebarHeaderBgOpacity = ui->sidebarHeaderBgOpacitySpinBox->value();
-  config.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
-  config.sidebarFontFamily = ui->sidebarFontFamilyEdit->text().trimmed();
-  config.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
-  config.sidebarActiveTab =
+  config.sidebar.sidebarPatternIntensity = ui->sidebarPatternIntensitySpinBox->value();
+  config.sidebar.sidebarPatternColor = ui->sidebarPatternColorEdit->text().trimmed();
+  config.sidebar.sidebarTextColor = ui->sidebarTextColorEdit->text().trimmed();
+  config.sidebar.sidebarAccentColor = ui->sidebarAccentColorEdit->text().trimmed();
+  config.sidebar.sidebarHeaderBgColor = ui->sidebarHeaderBgEdit->text().trimmed();
+  config.sidebar.sidebarSectionBgColor = ui->sidebarSectionBgEdit->text().trimmed();
+  config.sidebar.sidebarHeaderBgOpacity = ui->sidebarHeaderBgOpacitySpinBox->value();
+  config.sidebar.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
+  config.sidebar.sidebarFontFamily = ui->sidebarFontFamilyEdit->text().trimmed();
+  config.sidebar.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
+  config.sidebar.sidebarActiveTab =
       static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
-  config.hideHorizontalScrollbar = ui->hideHorizontalScrollbarCheckBox->isChecked();
-  config.hideVerticalScrollbar = ui->hideVerticalScrollbarCheckBox->isChecked();
+  config.gridLayout.hideHorizontalScrollbar = ui->hideHorizontalScrollbarCheckBox->isChecked();
+  config.gridLayout.hideVerticalScrollbar = ui->hideVerticalScrollbarCheckBox->isChecked();
 }
 
 bool SidebarPanel::hasChanges() const {
@@ -160,34 +160,34 @@ bool SidebarPanel::hasChanges() const {
   const CollectionConfig &o = *m_model->originalCollection;
   // Background value compares against image OR color depending on the type
   // — same dual-purpose semantics as save().
-  const QString bgOrig = o.sidebarBackgroundType == DetailsPaneBackgroundType::Image
-                             ? o.sidebarBackgroundImage
-                             : o.sidebarBackgroundColor;
+  const QString bgOrig = o.sidebar.sidebarBackgroundType == DetailsPaneBackgroundType::Image
+                             ? o.sidebar.sidebarBackgroundImage
+                             : o.sidebar.sidebarBackgroundColor;
   if (ui->sidebarBackgroundValueEdit->text().trimmed() != bgOrig) return true;
 
-  if (ui->sidebarModeComboBox->currentIndex() != static_cast<int>(o.sidebarMode)) return true;
-  if (ui->sidebarPositionComboBox->currentIndex() != static_cast<int>(o.sidebarPosition))
+  if (ui->sidebarModeComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarMode)) return true;
+  if (ui->sidebarPositionComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarPosition))
     return true;
-  if (ui->sidebarWidthSpinBox->value() != o.sidebarWidth) return true;
-  if (ui->sidebarHeightSpinBox->value() != o.sidebarHeight) return true;
-  if (ui->sidebarWidthLockedCheckBox->isChecked() != o.sidebarWidthLocked) return true;
+  if (ui->sidebarWidthSpinBox->value() != o.sidebar.sidebarWidth) return true;
+  if (ui->sidebarHeightSpinBox->value() != o.sidebar.sidebarHeight) return true;
+  if (ui->sidebarWidthLockedCheckBox->isChecked() != o.sidebar.sidebarWidthLocked) return true;
   if (ui->sidebarBackgroundTypeComboBox->currentIndex() !=
-      static_cast<int>(o.sidebarBackgroundType))
+      static_cast<int>(o.sidebar.sidebarBackgroundType))
     return true;
-  if (ui->sidebarPatternIntensitySpinBox->value() != o.sidebarPatternIntensity) return true;
-  if (ui->sidebarPatternColorEdit->text().trimmed() != o.sidebarPatternColor) return true;
-  if (ui->sidebarTextColorEdit->text().trimmed() != o.sidebarTextColor) return true;
-  if (ui->sidebarAccentColorEdit->text().trimmed() != o.sidebarAccentColor) return true;
-  if (ui->sidebarHeaderBgEdit->text().trimmed() != o.sidebarHeaderBgColor) return true;
-  if (ui->sidebarSectionBgEdit->text().trimmed() != o.sidebarSectionBgColor) return true;
-  if (ui->sidebarHeaderBgOpacitySpinBox->value() != o.sidebarHeaderBgOpacity) return true;
-  if (ui->sidebarSectionBgOpacitySpinBox->value() != o.sidebarSectionBgOpacity) return true;
-  if (ui->sidebarFontFamilyEdit->text().trimmed() != o.sidebarFontFamily) return true;
-  if (ui->sidebarFontSizeSpinBox->value() != o.sidebarFontPointSize) return true;
-  if (ui->sidebarActiveTabComboBox->currentIndex() != static_cast<int>(o.sidebarActiveTab))
+  if (ui->sidebarPatternIntensitySpinBox->value() != o.sidebar.sidebarPatternIntensity) return true;
+  if (ui->sidebarPatternColorEdit->text().trimmed() != o.sidebar.sidebarPatternColor) return true;
+  if (ui->sidebarTextColorEdit->text().trimmed() != o.sidebar.sidebarTextColor) return true;
+  if (ui->sidebarAccentColorEdit->text().trimmed() != o.sidebar.sidebarAccentColor) return true;
+  if (ui->sidebarHeaderBgEdit->text().trimmed() != o.sidebar.sidebarHeaderBgColor) return true;
+  if (ui->sidebarSectionBgEdit->text().trimmed() != o.sidebar.sidebarSectionBgColor) return true;
+  if (ui->sidebarHeaderBgOpacitySpinBox->value() != o.sidebar.sidebarHeaderBgOpacity) return true;
+  if (ui->sidebarSectionBgOpacitySpinBox->value() != o.sidebar.sidebarSectionBgOpacity) return true;
+  if (ui->sidebarFontFamilyEdit->text().trimmed() != o.sidebar.sidebarFontFamily) return true;
+  if (ui->sidebarFontSizeSpinBox->value() != o.sidebar.sidebarFontPointSize) return true;
+  if (ui->sidebarActiveTabComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarActiveTab))
     return true;
-  if (ui->hideHorizontalScrollbarCheckBox->isChecked() != o.hideHorizontalScrollbar) return true;
-  if (ui->hideVerticalScrollbarCheckBox->isChecked() != o.hideVerticalScrollbar) return true;
+  if (ui->hideHorizontalScrollbarCheckBox->isChecked() != o.gridLayout.hideHorizontalScrollbar) return true;
+  if (ui->hideVerticalScrollbarCheckBox->isChecked() != o.gridLayout.hideVerticalScrollbar) return true;
   return false;
 }
 

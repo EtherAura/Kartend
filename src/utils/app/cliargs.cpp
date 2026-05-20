@@ -1,5 +1,6 @@
 #include "cliargs.h"
 
+#include "pathutils.h"
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -59,14 +60,32 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
   parser.parse(arguments);
 
   StartupOptions options;
+
+  // Route --import-kart and --to through the CLI-seam path sanitizer so a
+  // tilde gets expanded and shell metachars / NUL bytes get rejected
+  // before MainWindow touches the values. On failure the raw value stays
+  // in place and the error is stashed in pathValidationError — main.cpp
+  // surfaces a single clear stderr line and exits non-zero. Existence is
+  // NOT checked here; KartReader produces a more specific "Cannot open
+  // Kart file" error than we could synthesize.
+  auto sanitizeCliPath = [&options](const QString &raw,
+                                    const QString &optionName) -> QString {
+    auto result = PathUtils::expandAndValidateCliPath(raw, optionName);
+    if (result.isError() && !options.pathValidationError.isError()) {
+      options.pathValidationError = result.error();
+    }
+    return result.isOk() ? result.value() : raw;
+  };
+
   if (parser.isSet(collectionOption)) {
     options.collectionOverride = parser.value(collectionOption).trimmed();
   }
   if (parser.isSet(importKartOption)) {
-    options.importKartPath = parser.value(importKartOption);
+    options.importKartPath =
+        sanitizeCliPath(parser.value(importKartOption), QStringLiteral("import-kart"));
   }
   if (parser.isSet(toOption)) {
-    options.importDestDir = parser.value(toOption);
+    options.importDestDir = sanitizeCliPath(parser.value(toOption), QStringLiteral("to"));
   }
   if (parser.isSet(exportKartOption)) {
     options.exportCollectionName = parser.value(exportKartOption);

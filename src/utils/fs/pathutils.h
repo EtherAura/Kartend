@@ -36,6 +36,18 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 /// Returns success if path is safe, or an error context describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
+/// CLI-seam path sanitizer: expands ~/%collection% (without requiring the
+/// result to exist) then runs validatePathSecurity. Used by both
+/// CliArgs::parseStartupArguments (unit-testable parse() path) and
+/// src/core/main.cpp (production process() path) so --import-kart / --to /
+/// other path options get identical pre-flight checks. Does NOT verify
+/// existence — downstream KartReader / KartWriter produces a more specific
+/// "Cannot open file" error than anything we could synthesize here.
+/// `optionName` is woven into the error message ("--import-kart is empty
+/// after expansion") so users see which flag they mistyped.
+[[nodiscard]] ErrorUtils::Result<QString> expandAndValidateCliPath(const QString &raw,
+                                                                   const QString &optionName);
+
 // Flushes the parent directory's metadata to disk so that a recently-renamed
 // or newly-created file survives a crash or power loss. POSIX-only; no-op on
 // other platforms (NTFS journals directory metadata, no portable equivalent).

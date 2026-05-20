@@ -42,7 +42,14 @@ void ScannedItemsTable::clear() {
     return;
   }
   QSqlQuery q(m_db);
-  q.exec("DELETE FROM scanned_items");
+  if (!q.exec("DELETE FROM scanned_items")) {
+    // A silent failure here lets insertBatch() upsert on top of stale rows —
+    // the rescan then commits duplicates / orphans / a partial merge.
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to clear scanned_items staging table",
+                                               "ScannedItemsTable::clear")
+                             .withDetails(q.lastError().text()));
+  }
 }
 
 void ScannedItemsTable::insertBatch(const QStringList &paths,

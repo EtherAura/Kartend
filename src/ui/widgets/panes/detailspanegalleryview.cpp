@@ -181,7 +181,7 @@ void DetailsPaneGalleryView::ensureSection() {
           qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
     if (artworkParentLayout == contentLayout) {
       const int videoIdx =
-          m_host->m_videoPreview ? contentLayout->indexOf(m_host->m_videoPreview) : -1;
+          m_host->m_videoPlayback.videoPreview ? contentLayout->indexOf(m_host->m_videoPlayback.videoPreview) : -1;
       const int artIdx = contentLayout->indexOf(ui->artworkDisplay);
       const int anchor = videoIdx >= 0 ? videoIdx : artIdx;
       if (anchor >= 0) {
@@ -370,11 +370,15 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
       *fire = [selfGuard, videoPath, host, fire]() {
         if (!selfGuard) return;
         if (host && !host->isScrollIdle()) {
+          // Re-arm the recursive retry chain in 50ms while a scroll is
+          // mid-glide — see the block comment above for the full rationale.
           QTimer::singleShot(50, selfGuard.data(), *fire);
           return;
         }
         VideoThumbnailExtractor::instance()->requestFrame(videoPath);
       };
+      // Kick off the chain on the next event-loop tick so this thumbnail
+      // request doesn't stall the gallery-rebuild loop that constructed it.
       QTimer::singleShot(0, this, *fire);
     } else {
       // Async image-thumb load. QPointer guards against the next

@@ -1,5 +1,7 @@
 // Provides a subtle loading overlay during search operations.
 #include "searchloadingoverlay.h"
+
+#include "overlaylayermanager.h"
 #include "uiconstants.h"
 #include <QGraphicsOpacityEffect>
 #include <QLabel>
@@ -63,6 +65,15 @@ void SearchLoadingOverlay::setParentWidget(QWidget *parent) {
   }
 }
 
+void SearchLoadingOverlay::setLayerManager(OverlayLayerManager *manager) {
+  m_layerManager = manager;
+  // If the overlay already exists, register it now so the next show() sees
+  // its layer assignment. Otherwise ensureOverlay() handles registration.
+  if (m_layerManager && m_overlay) {
+    m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SearchLoading);
+  }
+}
+
 void SearchLoadingOverlay::ensureOverlay() {
   if (m_overlay || !m_parentWidget) {
     return;
@@ -94,6 +105,9 @@ void SearchLoadingOverlay::ensureOverlay() {
 
   m_overlay->setLayout(layout);
   m_overlay->hide();
+  if (m_layerManager) {
+    m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SearchLoading);
+  }
 }
 
 void SearchLoadingOverlay::show() {
@@ -103,7 +117,11 @@ void SearchLoadingOverlay::show() {
   }
 
   updateGeometry();
-  m_overlay->raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(m_overlay);
+  } else {
+    m_overlay->raise();
+  }
   m_overlay->show();
 
   // Fade in

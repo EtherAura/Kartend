@@ -4,13 +4,15 @@
 # (ApplicationManager, NavigationManager, ScrollManager, InteractionManager
 # and friends) because they pull in the full MainWindow widget graph and
 # cross-manager wiring. Instead, those tests run inside this single shared
-# integration binary, which links the ${KARTEND_LIB_TARGET} OBJECT library
-# directly so it sees every TU and AUTOMOC/AUTOUIC artifact already generated
-# for the main executable.
+# integration binary, which links the ${KARTEND_LIB_TARGET} INTERFACE
+# aggregator (which transitively pulls every kartend_<area> OBJECT lib) so
+# it sees every TU and AUTOMOC/AUTOUIC artifact already generated for the
+# main executable.
 #
 # Add new test source files to INTEGRATION_TEST_SOURCES below. All tests share
 # one binary because per-test executables would each pay the ~140-TU link cost
-# of the full kartend_lib closure.
+# of the full kartend_lib closure (which is now a thin aggregator wrapping
+# nine per-area OBJECT libs declared in src/CMakeLists.txt).
 
 set(INTEGRATION_TEST_SOURCES
   test_main.cpp
@@ -54,15 +56,25 @@ add_executable(test_integration
 target_link_libraries(test_integration
   PRIVATE
     ${KARTEND_LIB_TARGET}
+    # OBJECT libs don't propagate through INTERFACE_LINK_LIBRARIES on the
+    # aggregator, so list every per-area lib directly to pull in their .o
+    # files (matches the executable's link line in the top-level CMakeLists).
+    ${KARTEND_AREA_LIBS}
     Qt6::Test
 )
 
 # AUTOUIC generates ui_*.h headers next to the consuming target's autogen
-# directory (e.g. kartend_lib_autogen/include/ui_itemwidget.h). Many MainWindow
-# transitive includes pull in those headers (itemwidget.h, mainwindow.h, etc.),
-# so the test binary needs visibility of the kartend_lib autogen include path.
+# directory. With the per-area OBJECT lib split, each area that owns a
+# matching .ui file produces its own autogen include path: kartend_widgets
+# for itemwidget.ui, kartend_core for mainwindow.ui, kartend_ui for every
+# settings panel .ui under src/ui/dialogs/settings/, and detailspane.ui under
+# src/ui/widgets/panes/. The integration test pulls headers (itemwidget.h,
+# mainwindow.h, settingsdialog.h, detailspane.h) that #include those
+# generated ui_*.h files, so all four autogen include dirs are needed.
 target_include_directories(test_integration PRIVATE
-  ${CMAKE_BINARY_DIR}/${KARTEND_LIB_TARGET}_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_widgets_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

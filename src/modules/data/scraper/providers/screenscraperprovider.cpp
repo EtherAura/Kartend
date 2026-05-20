@@ -26,9 +26,7 @@
 #include "datlookup.h"
 #include "httpclient.h"
 #include "romhasher.h"
-#include "screenscrapermediatypecache.h"
 #include "screenscraperparser.h"
-#include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
 
 namespace {
@@ -45,8 +43,6 @@ constexpr const char *SS_HOST = "api.screenscraper.fr";
 // dialog dispatched them in parallel.
 constexpr const char *SS_MEDIA_HOST = "neoclone.screenscraper.fr";
 constexpr const char *SS_JEUINFOS = "https://api.screenscraper.fr/api2/jeuInfos.php";
-constexpr const char *SS_SYSTEMES_LISTE = "https://api.screenscraper.fr/api2/systemesListe.php";
-constexpr const char *SS_MEDIAS_JEU_LISTE = "https://api.screenscraper.fr/api2/mediasJeuListe.php";
 // API-host pacing for jeuInfos.php. Fixed (one call per scrape, not
 // the bottleneck). Media-host pacing is *dynamic* and pulled from
 // GeneralSettings.scraperOptions on every fetch so the user can dial
@@ -176,7 +172,9 @@ ErrorUtils::ErrorContext mapScreenScraperHttpError(const ErrorUtils::ErrorContex
 ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAccessor,
                                              CollectionAccessor collectionAccessor)
     : m_settingsAccessor(std::move(settingsAccessor)),
-      m_collectionAccessor(std::move(collectionAccessor)) {
+      m_collectionAccessor(std::move(collectionAccessor)),
+      m_catalog(Scraper::HttpClient::instance(), userAgent(),
+                [this]() { return currentCredentials(); }, &mapScreenScraperHttpError) {
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
 }
 
@@ -208,8 +206,8 @@ int ScreenScraperProvider::resolveSystemId(
   if (!m_collectionAccessor) return 0;
   const CollectionConfig *cfg = m_collectionAccessor();
   if (!cfg) return 0;
-  if (cfg->screenscraperSystemId >= 0) {
-    return cfg->screenscraperSystemId;
+  if (cfg->scraperOverrides.screenscraperSystemId >= 0) {
+    return cfg->scraperOverrides.screenscraperSystemId;
   }
   // Autodetect runs over the runtime-fetched catalog. When the
   // catalog is empty (offline / fetch failed / no creds) autodetect
@@ -222,158 +220,10 @@ int ScreenScraperProvider::resolveSystemId(
   return 0;
 }
 
-void ScreenScraperProvider::ensureSystemsCatalog(const Credentials &creds,
-                                                 SystemsReadyCallback callback) const {
-  if (!callback) return;
-  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
-
-  // Disk-cache hit (fresh) → callback immediately, no network. Stale
-  // disk hit also returns the on-disk copy AND kicks off a background
-  // refresh — we don't want to block the user's scrape on a fresh
-  // catalog when the on-disk one is good enough.
-  if (!cachePath.isEmpty() && !ScreenScraperSystemCache::isCacheStale(cachePath)) {
-    auto loaded = ScreenScraperSystemCache::loadCachedSystems(cachePath);
-    if (loaded.isOk()) {
-      callback(loaded.value());
-      return;
-    }
-  }
-  // Cache missing or stale — fetch fresh. If we have on-disk data
-  // we'll still serve the user from it on a fetch failure (degrade
-  // rather than error), so try a load first as a fallback ready
-  // value.
-  QList<ScreenScraperSystems::System> staleFallback;
-  if (!cachePath.isEmpty()) {
-    auto staleLoad = ScreenScraperSystemCache::loadCachedSystems(cachePath);
-    if (staleLoad.isOk()) {
-      staleFallback = staleLoad.value();
-    }
-  }
-
-  // Network fetch needs dev credentials. SS rejects every API request
-  // without a valid dev_id + dev_password (regular SS.fr account login
-  // alone is not enough — it only acts as a per-account rate-limit
-  // boost on TOP of dev creds). Without dev creds, fall back to
-  // whatever the disk had (possibly empty).
-  if (creds.devId.isEmpty() || creds.devPassword.isEmpty()) {
-    callback(staleFallback);
-    return;
-  }
-  const bool hasUser = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
-
-  QUrl url(QString::fromLatin1(SS_SYSTEMES_LISTE));
-  QUrlQuery q;
-  q.addQueryItem(QStringLiteral("devid"), creds.devId);
-  q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
-  // ssid/sspassword optional — adds the user's per-account rate
-  // limit on top of the dev tier when both are configured.
-  if (hasUser) {
-    q.addQueryItem(QStringLiteral("ssid"), creds.userId);
-    q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
-  }
-  url.setQuery(q);
-
-  Scraper::HttpClient::instance()->get(
-      url, userAgent(),
-      [callback = std::move(callback), cachePath,
-       staleFallback](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          // Surface a structured warning when the systems-catalog fetch
-          // fails — the catch-all `callback(staleFallback)` lets the
-          // scrape proceed with whatever the disk cache had, but the
-          // log line tells the user *why* the live refresh fell back.
-          auto remapped = mapScreenScraperHttpError(response.error());
-          ErrorUtils::logError(remapped);
-          callback(staleFallback);
-          return;
-        }
-        auto parsed = ScreenScraperSystemCache::parseSystemsResponse(response.value());
-        if (parsed.isError() || parsed.value().isEmpty()) {
-          callback(staleFallback);
-          return;
-        }
-        if (!cachePath.isEmpty()) {
-          // Best-effort: cache write failure is logged inside saveSystems
-          // and falls back to in-memory-only — the lookup still proceeds.
-          (void)ScreenScraperSystemCache::saveSystems(cachePath, parsed.value());
-        }
-        callback(parsed.value());
-      });
-}
-
-void ScreenScraperProvider::ensureMediaTypeCatalog() const {
-  // Hot path: catalog already in memory. The map is the projection
-  // we hand to the parser; non-empty means we've populated it from
-  // either disk cache or a fresh fetch, so callers can move on.
-  if (!m_mediaTypeLabels.isEmpty()) return;
-  const QString cachePath = ScreenScraperMediaTypeCache::defaultCachePath();
-  // Disk-cache hit (fresh) → populate in memory and return. Stale
-  // disk hit also populates from disk AND kicks off a background
-  // refresh — same degrade-rather-than-block policy as
-  // ensureSystemsCatalog.
-  if (!cachePath.isEmpty()) {
-    auto loaded = ScreenScraperMediaTypeCache::loadCachedMediaTypes(cachePath);
-    if (loaded.isOk() && !loaded.value().isEmpty()) {
-      for (const auto &mt : loaded.value()) {
-        if (!mt.type.isEmpty() && !mt.displayName.isEmpty()) {
-          m_mediaTypeLabels.insert(mt.type, mt.displayName);
-        }
-      }
-      // If still fresh, no network needed.
-      if (!ScreenScraperMediaTypeCache::isCacheStale(cachePath)) return;
-    }
-  }
-  // Stale or missing — fire a background fetch. We never block the
-  // scrape on this; subsequent scrapes will see the refreshed labels
-  // once the fetch lands. Needs dev creds (SS rejects unauthenticated
-  // catalog fetches the same way it rejects systemesListe).
-  Credentials creds = currentCredentials();
-  if (creds.devId.isEmpty() || creds.devPassword.isEmpty()) return;
-
-  QUrl url(QString::fromLatin1(SS_MEDIAS_JEU_LISTE));
-  QUrlQuery q;
-  q.addQueryItem(QStringLiteral("devid"), creds.devId);
-  q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
-  if (!creds.userId.isEmpty() && !creds.userPassword.isEmpty()) {
-    q.addQueryItem(QStringLiteral("ssid"), creds.userId);
-    q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
-  }
-  url.setQuery(q);
-
-  // Use a mutable-this lambda to write back the populated map. The
-  // provider's lifetime is tied to the registry — when the registry
-  // releases it, any in-flight fetch's callback would run on a freed
-  // `this`. The HttpClient callback is fired on the main thread and
-  // the registry tear-down is also main-thread, so the race is
-  // serialised; `ensureMediaTypeCatalog` is best-effort and we accept
-  // the small UAF window as the practical tradeoff for not adding a
-  // QPointer-style guard to a non-QObject provider.
-  Scraper::HttpClient::instance()->get(
-      url, userAgent(), [this, cachePath](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          // Quiet log path — fetching the catalog is a polish
-          // refresh, not load-bearing for a scrape. The fallback
-          // behavior (raw SS tags as labels) is documented and
-          // acceptable when SS is having a bad day.
-          ErrorUtils::logError(mapScreenScraperHttpError(response.error()));
-          return;
-        }
-        auto parsed = ScreenScraperMediaTypeCache::parseMediaTypesResponse(response.value());
-        if (parsed.isError() || parsed.value().isEmpty()) return;
-        for (const auto &mt : parsed.value()) {
-          if (!mt.type.isEmpty() && !mt.displayName.isEmpty()) {
-            m_mediaTypeLabels.insert(mt.type, mt.displayName);
-          }
-        }
-        if (!cachePath.isEmpty()) {
-          (void)ScreenScraperMediaTypeCache::saveMediaTypes(cachePath, parsed.value());
-        }
-      });
-}
+// ensureSystemsCatalog + ensureMediaTypeCatalog moved to
+// ScreenScraperCatalogManager — see screenscrapercatalogmanager.{h,cpp}.
+// The provider now forwards via m_catalog and reads back labels through
+// m_catalog.mediaTypeLabels() in buildParseOptions.
 
 QUrl ScreenScraperProvider::searchUrl(const QString &query) const {
   if (query.trimmed().isEmpty()) return {};
@@ -425,7 +275,7 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
   bool wantInnerHash = true;
   if (m_collectionAccessor) {
     if (const CollectionConfig *cfg = m_collectionAccessor()) {
-      wantInnerHash = cfg->screenscraperHashArchive;
+      wantInnerHash = cfg->scraperOverrides.screenscraperHashArchive;
     }
   }
 
@@ -466,38 +316,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   }
   const bool hasUser = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
 
-  // DAT-file lookup. The collection's `datFilePaths` is a priority-
-  // ordered list — we walk it top-to-bottom, take the first hash
-  // hit, and use that DAT's canonical romName as the SS `romnom`
-  // search query. SS recognises canonical names far more reliably
-  // than messy library names (region tags out of order, language
-  // abbreviations, dump tool prefixes, etc.). Backed by an on-disk
-  // sqlite cache (DatCache) so cold-start lookup against a 100MB
-  // MAME XML doesn't re-parse the XML every run. Failures degrade
-  // silently per-entry: a missing / malformed / no-hit DAT just
-  // moves to the next path in the list.
-  QString datCanonicalName;
-  if (m_collectionAccessor) {
-    if (const CollectionConfig *cfg = m_collectionAccessor()) {
-      if (!cfg->datFilePaths.isEmpty() && (!hashes.md5.isEmpty() || !hashes.sha1.isEmpty())) {
-        if (!m_datCache) {
-          m_datCache.emplace(DatCache::defaultPath());
-        }
-        if (m_datCache->isOpen()) {
-          for (const QString &datPath : cfg->datFilePaths) {
-            if (datPath.isEmpty()) continue;
-            auto source = m_datCache->openOrIngest(datPath);
-            if (source.isError()) continue;
-            if (auto rec =
-                    m_datCache->lookup(source.value(), hashes.md5, hashes.sha1, hashes.crc)) {
-              datCanonicalName = rec->romName;
-              break;
-            }
-          }
-        }
-      }
-    }
-  }
+  const QString datCanonicalName = findDatCanonicalName(hashes);
 
   // Kick the media-type catalog refresh ahead of the lookup so a
   // first-run scrape lands without raw `bezel-16-9` style labels in
@@ -505,7 +324,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // jeuInfos.php fetch, so the worst case is the very first scrape
   // still shows raw tags and subsequent scrapes show the friendly
   // labels.
-  ensureMediaTypeCatalog();
+  m_catalog.ensureMediaTypeCatalog();
 
   // Two-step async chain: ensure the systems catalog is loaded
   // (cached or freshly fetched), then resolve systemeid from it
@@ -513,9 +332,9 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // extra roundtrip the first time the user scrapes (and every
   // CACHE_TTL_DAYS afterward); subsequent scrapes hit the disk
   // cache and skip straight to the real query.
-  ensureSystemsCatalog(creds, [this, trimmed, creds, hashes, datCanonicalName, hasUser,
-                               callback = std::move(callback)](
-                                  QList<ScreenScraperSystems::System> systems) {
+  m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
+                                  callback = std::move(callback)](
+                                     QList<ScreenScraperSystems::System> systems) {
     const QString romnom =
         !datCanonicalName.isEmpty() ? datCanonicalName : QFileInfo(trimmed).fileName();
     const int systemeid = resolveSystemId(systems);
@@ -545,143 +364,165 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
                                           "so SS can match by hash.")));
       return;
     }
-    QUrl url(QString::fromLatin1(SS_JEUINFOS));
-    QUrlQuery q;
-    q.addQueryItem(QStringLiteral("devid"), creds.devId);
-    q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
-    q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-    q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
-    q.addQueryItem(QStringLiteral("romnom"), romnom);
-    q.addQueryItem(QStringLiteral("systemeid"), QString::number(systemeid));
-    if (!hashes.md5.isEmpty()) {
-      q.addQueryItem(QStringLiteral("md5"), hashes.md5);
-    }
-    if (!hashes.sha1.isEmpty()) {
-      q.addQueryItem(QStringLiteral("sha1"), hashes.sha1);
-    }
-    if (!hashes.crc.isEmpty()) {
-      q.addQueryItem(QStringLiteral("crc"), hashes.crc);
-    }
-    if (hashes.size > 0) {
-      q.addQueryItem(QStringLiteral("romtaille"), QString::number(hashes.size));
-    }
-    if (hasUser) {
-      q.addQueryItem(QStringLiteral("ssid"), creds.userId);
-      q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
-    }
-    url.setQuery(q);
+    const QUrl url = buildJeuInfosUrl(creds, romnom, systemeid, hashes, hasUser);
 
     Scraper::HttpClient::instance()->get(
-        url, userAgent(), [this, callback](ErrorUtils::Result<QByteArray> response) {
-          if (response.isError()) {
-            callback(mapScreenScraperHttpError(response.error()));
-            return;
-          }
-          // SS returns HTTP 200 with a plain-text French error body
-          // ("Erreur de login : Verifier vos identifiants developpeur !"
-          //  / "Erreur API : Acces non autorise !" / etc.) when auth or
-          // quota fails. The JSON parser would surface these as opaque
-          // "invalid response" errors — surface the real SS message
-          // instead so the user sees what actually went wrong.
-          const QByteArray bytes = response.value();
-          // Diagnostic: when KARTEND_SCRAPER_DUMP_JSON is set, write
-          // each raw jeuInfos.php response to disk so the exact SS
-          // payload shape (region keys, media tags, …) can be
-          // inspected. Off by default; the file path is logged so it
-          // is easy to find.
-          if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
-            const QString dumpDir =
-                QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
-                    .filePath(QStringLiteral("scraper-dump"));
-            if (QDir().mkpath(dumpDir)) {
-              const QString dumpPath = QDir(dumpDir).filePath(
-                  QStringLiteral("jeuInfos-%1.json").arg(QDateTime::currentMSecsSinceEpoch()));
-              QFile dumpFile(dumpPath);
-              if (dumpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                dumpFile.write(bytes);
-                dumpFile.close();
-                qWarning("[scraper-dump] wrote raw jeuInfos response to %s",
-                         qUtf8Printable(dumpPath));
-              }
-            }
-          }
-          const QString trimmedHead = QString::fromUtf8(bytes.left(64)).trimmed();
-          if (!trimmedHead.startsWith('{') && trimmedHead.startsWith(QLatin1String("Erreur"))) {
-            callback(ErrorUtils::ErrorContext::error(
-                         ErrorUtils::ErrorCode::InvalidArgument,
-                         QStringLiteral("ScreenScraper rejected the request"),
-                         "ScreenScraperProvider")
-                         .withDetails(QString::fromUtf8(bytes).trimmed()));
-            return;
-          }
-          // Refresh the cached quota from this response's `ssuser`
-          // block before parsing the game data. Runs on the "no
-          // match" path too (SS still reports the counters there),
-          // so the dialog's live readout stays current even for a
-          // collection full of unmatched ROMs.
-          updateQuotaFromResponse(bytes);
-          // Parse twice: once for the candidate list (what the dialog
-          // shows) and once for the full ScrapedItem (cached so
-          // fetchDetail() can return it without a second roundtrip).
-          // The detail parse honors the user's mediaMaxDimension so
-          // image URLs get server-side downscaling when configured.
-          ScreenScraperParser::ParseOptions parseOpts;
-          if (m_settingsAccessor) {
-            if (const GeneralSettings *settings = m_settingsAccessor()) {
-              parseOpts.mediaMaxDim = settings->scraperOptions.mediaMaxDimension;
-              // JPG output is gated on the user's preset preference —
-              // only the Fastest preset honors it (where the bandwidth
-              // win outweighs the quality loss). The setting's value
-              // is checked here instead of just-the-preset so a Custom
-              // user can opt in deliberately.
-              parseOpts.preferJpg = settings->scraperOptions.preferJpgOutput;
-              // Fallback region for region-keyed fields when the
-              // matched ROM's own region has no entry. Each item still
-              // honours its own region first inside the parser.
-              parseOpts.preferredRegion = settings->scraperOptions.preferredScraperRegion;
-            }
-          }
-          // Free-text fields (description, genres, ...) follow the
-          // application UI language so they read consistently with the
-          // rest of Kartend. The app loads translations off the system
-          // locale (see main.cpp), so derive the language tag the same
-          // way rather than from a separate setting.
-          parseOpts.preferredLanguage = QLocale().name().section(QLatin1Char('_'), 0, 0);
-          parseOpts.mediaTypeLabels = m_mediaTypeLabels;
-          auto cands = ScreenScraperParser::parseSearchResponse(bytes);
-          if (cands.isOk() && !cands.value().isEmpty()) {
-            auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
-            if (detail.isOk()) {
-              m_lastDetailId = cands.value().first().providerSpecificId;
-              m_lastDetail = detail.value();
-            }
-          }
-          callback(cands);
+        url, userAgent(),
+        [this, callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) mutable {
+          handleJeuInfosResponse(std::move(response), std::move(callback));
         });
   });
 }
 
-void ScreenScraperProvider::updateQuotaFromResponse(const QByteArray &json) {
-  // SS reports the per-account request counters inside the `ssuser`
-  // block of every jeuInfos.php reply. Pull it once per item — free,
-  // since the bytes are already in hand — so the dialog's live quota
-  // readout tracks without a dedicated ssuserInfos.php round-trip.
-  const auto info = ScreenScraperParser::extractUserInfo(json);
-  if (!info) return; // Anonymous tier / no block — keep the prior snapshot.
-  m_lastQuota.valid = true;
-  m_lastQuota.dailyUsed = info->requestsToday;
-  m_lastQuota.dailyMax = info->maxRequestsPerDay;
-  m_lastQuota.koUsed = info->requestsKoToday;
-  m_lastQuota.koMax = info->maxRequestsKoPerDay;
-  // SS rolls the per-day counters at 00:00 UTC. Compute the next such
-  // boundary so the dialog can show the user when their quota frees up.
-  // currentDateTimeUtc() + setTime + addDays uses only long-stable QDateTime
-  // API — avoids the QTimeZone::UTC initialization enum, which is Qt 6.5+ and
-  // breaks the build against the Qt 6.4 the CI runners ship.
-  QDateTime resetUtc = QDateTime::currentDateTimeUtc();
-  resetUtc.setTime(QTime(0, 0));
-  m_lastQuota.resetAtUtc = resetUtc.addDays(1);
+void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
+                                                   LookupCallback callback) {
+  if (response.isError()) {
+    callback(mapScreenScraperHttpError(response.error()));
+    return;
+  }
+  // SS returns HTTP 200 with a plain-text French error body
+  // ("Erreur de login : Verifier vos identifiants developpeur !"
+  //  / "Erreur API : Acces non autorise !" / etc.) when auth or
+  // quota fails. The JSON parser would surface these as opaque
+  // "invalid response" errors — surface the real SS message
+  // instead so the user sees what actually went wrong.
+  const QByteArray bytes = response.value();
+  // Diagnostic: when KARTEND_SCRAPER_DUMP_JSON is set, write each raw
+  // jeuInfos.php response to disk so the exact SS payload shape (region
+  // keys, media tags, …) can be inspected. Off by default; the file
+  // path is logged so it is easy to find.
+  if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
+    const QString dumpDir =
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+            .filePath(QStringLiteral("scraper-dump"));
+    if (QDir().mkpath(dumpDir)) {
+      const QString dumpPath = QDir(dumpDir).filePath(
+          QStringLiteral("jeuInfos-%1.json").arg(QDateTime::currentMSecsSinceEpoch()));
+      QFile dumpFile(dumpPath);
+      if (dumpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        dumpFile.write(bytes);
+        dumpFile.close();
+        qWarning("[scraper-dump] wrote raw jeuInfos response to %s", qUtf8Printable(dumpPath));
+      }
+    }
+  }
+  const QString trimmedHead = QString::fromUtf8(bytes.left(64)).trimmed();
+  if (!trimmedHead.startsWith('{') && trimmedHead.startsWith(QLatin1String("Erreur"))) {
+    callback(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                             QStringLiteral("ScreenScraper rejected the request"),
+                                             "ScreenScraperProvider")
+                 .withDetails(QString::fromUtf8(bytes).trimmed()));
+    return;
+  }
+  // Refresh the cached quota from this response's `ssuser` block before
+  // parsing the game data. Runs on the "no match" path too (SS still
+  // reports the counters there), so the dialog's live readout stays
+  // current even for a collection full of unmatched items.
+  m_quota.updateFromResponse(bytes);
+  // Parse twice: once for the candidate list (what the dialog shows)
+  // and once for the full ScrapedItem (cached so fetchDetail() can
+  // return it without a second roundtrip).
+  const auto parseOpts = buildParseOptions();
+  auto cands = ScreenScraperParser::parseSearchResponse(bytes);
+  if (cands.isOk() && !cands.value().isEmpty()) {
+    auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
+    if (detail.isOk()) {
+      m_lastDetailId = cands.value().first().providerSpecificId;
+      m_lastDetail = detail.value();
+    }
+  }
+  callback(cands);
 }
+
+QString ScreenScraperProvider::findDatCanonicalName(const RomHasher::Result &hashes) {
+  // The collection's `datFilePaths` is a priority-ordered list — we walk
+  // it top-to-bottom, take the first hash hit, and use that DAT's
+  // canonical romName as the SS `romnom` search query. SS recognises
+  // canonical names far more reliably than messy library names (region
+  // tags out of order, language abbreviations, dump tool prefixes, etc.).
+  // Backed by an on-disk sqlite cache (DatCache) so cold-start lookup
+  // against a 100MB MAME XML doesn't re-parse the XML every run. Failures
+  // degrade silently per-entry: a missing / malformed / no-hit DAT just
+  // moves to the next path in the list.
+  if (!m_collectionAccessor) return QString();
+  const CollectionConfig *cfg = m_collectionAccessor();
+  if (!cfg || cfg->scraperOverrides.datFilePaths.isEmpty()) return QString();
+  if (hashes.md5.isEmpty() && hashes.sha1.isEmpty()) return QString();
+  if (!m_datCache) {
+    m_datCache.emplace(DatCache::defaultPath());
+  }
+  if (!m_datCache->isOpen()) return QString();
+  for (const QString &datPath : cfg->scraperOverrides.datFilePaths) {
+    if (datPath.isEmpty()) continue;
+    auto source = m_datCache->openOrIngest(datPath);
+    if (source.isError()) continue;
+    if (auto rec = m_datCache->lookup(source.value(), hashes.md5, hashes.sha1, hashes.crc)) {
+      return rec->romName;
+    }
+  }
+  return QString();
+}
+
+QUrl ScreenScraperProvider::buildJeuInfosUrl(const Credentials &creds, const QString &romnom,
+                                             int systemeid, const RomHasher::Result &hashes,
+                                             bool hasUser) const {
+  QUrl url(QString::fromLatin1(SS_JEUINFOS));
+  QUrlQuery q;
+  q.addQueryItem(QStringLiteral("devid"), creds.devId);
+  q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
+  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
+  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+  q.addQueryItem(QStringLiteral("romnom"), romnom);
+  q.addQueryItem(QStringLiteral("systemeid"), QString::number(systemeid));
+  if (!hashes.md5.isEmpty()) {
+    q.addQueryItem(QStringLiteral("md5"), hashes.md5);
+  }
+  if (!hashes.sha1.isEmpty()) {
+    q.addQueryItem(QStringLiteral("sha1"), hashes.sha1);
+  }
+  if (!hashes.crc.isEmpty()) {
+    q.addQueryItem(QStringLiteral("crc"), hashes.crc);
+  }
+  if (hashes.size > 0) {
+    q.addQueryItem(QStringLiteral("romtaille"), QString::number(hashes.size));
+  }
+  if (hasUser) {
+    q.addQueryItem(QStringLiteral("ssid"), creds.userId);
+    q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
+  }
+  url.setQuery(q);
+  return url;
+}
+
+ScreenScraperParser::ParseOptions ScreenScraperProvider::buildParseOptions() const {
+  ScreenScraperParser::ParseOptions parseOpts;
+  if (m_settingsAccessor) {
+    if (const GeneralSettings *settings = m_settingsAccessor()) {
+      // mediaMaxDim drives server-side image downscaling on SS — the parser
+      // appends it to media URLs when set.
+      parseOpts.mediaMaxDim = settings->scraperOptions.mediaMaxDimension;
+      // JPG output is gated on the user's preset preference — only the
+      // Fastest preset honors it (where the bandwidth win outweighs the
+      // quality loss). The setting's value is checked here instead of
+      // just-the-preset so a Custom user can opt in deliberately.
+      parseOpts.preferJpg = settings->scraperOptions.preferJpgOutput;
+      // Fallback region for region-keyed fields when the matched item's
+      // own region has no entry. Each item still honours its own region
+      // first inside the parser.
+      parseOpts.preferredRegion = settings->scraperOptions.preferredScraperRegion;
+    }
+  }
+  // Free-text fields (description, genres, ...) follow the application UI
+  // language so they read consistently with the rest of Kartend. The app
+  // loads translations off the system locale (see main.cpp), so derive the
+  // language tag the same way rather than from a separate setting.
+  parseOpts.preferredLanguage = QLocale().name().section(QLatin1Char('_'), 0, 0);
+  parseOpts.mediaTypeLabels = m_catalog.mediaTypeLabels();
+  return parseOpts;
+}
+
+// updateQuotaFromResponse moved to ScreenScraperQuotaManager —
+// see screenscraperquotamanager.{h,cpp}.
 
 void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
                                         DetailCallback callback) {
@@ -701,70 +542,8 @@ void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidat
 }
 
 void ScreenScraperProvider::fetchHealthStatus(HealthCallback callback) {
-  if (!callback) return;
-  const GeneralSettings *settings = m_settingsAccessor ? m_settingsAccessor() : nullptr;
-  // Whether the caller has user creds wired up — drives whether the
-  // `closeforleecher` flag should refuse the scrape (anonymous tier
-  // is the leecher tier in SS parlance) vs just warn.
-  bool hasUserCreds = false;
-  if (settings) {
-    const auto blob = settings->scraperCredentials.value(QStringLiteral("screenscraper"));
-    hasUserCreds = !blob.value(QStringLiteral("user_id")).isEmpty() &&
-                   !blob.value(QStringLiteral("user_password")).isEmpty();
-  }
-  ScreenScraperProviderHelpers::fetchInfraInfo(
-      settings, [callback = std::move(callback),
-                 hasUserCreds](ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
-        if (r.isError()) {
-          // Probe failure is non-fatal — the actual scrape will hit
-          // the same error path and report it via mapScreenScraperHttpError.
-          // Stay silent in the dialog rather than fearmongering on a
-          // transient blip.
-          callback(HealthStatus{});
-          return;
-        }
-        const auto &info = r.value();
-        HealthStatus out;
-        // Refuse anonymous scrapes when SS has shut its API to the
-        // leecher tier. Member scrapes still go through (SS allows
-        // them on a separate path).
-        if (info.closedForLeechers && !hasUserCreds) {
-          out.refuseScrape = true;
-          out.humanStatus = QObject::tr(
-              "ScreenScraper has closed its API to anonymous traffic right now. "
-              "Sign in with member credentials under Settings → Scrapers → ScreenScraper, "
-              "or try again later.");
-          callback(out);
-          return;
-        }
-        if (info.closedForNonMembers && !hasUserCreds) {
-          out.refuseScrape = true;
-          out.humanStatus =
-              QObject::tr("ScreenScraper has closed its API to non-members right now "
-                          "(server overloaded). Sign in with member credentials, or try "
-                          "again later.");
-          callback(out);
-          return;
-        }
-        // Surface load info when any of the CPU figures are
-        // alarming or scraper count is high. Threshold is intentionally
-        // loose — we want to nudge the user about slow scrapes, not
-        // pepper them with infra trivia on a quiet day.
-        const int peakCpu = std::max({info.cpu1Percent, info.cpu2Percent, info.cpu3Percent});
-        if (peakCpu >= 70 || info.activeScrapers >= 200) {
-          QStringList parts;
-          if (peakCpu > 0) {
-            parts << QObject::tr("CPU %1%").arg(peakCpu);
-          }
-          if (info.activeScrapers > 0) {
-            parts << QObject::tr("%1 active scrapers").arg(info.activeScrapers);
-          }
-          out.humanStatus = QObject::tr("ScreenScraper is busy right now (%1) — "
-                                        "expect slower downloads.")
-                                .arg(parts.join(QStringLiteral(", ")));
-        }
-        callback(out);
-      });
+  ScreenScraperProviderHelpers::fetchHealthStatus(
+      m_settingsAccessor ? m_settingsAccessor() : nullptr, std::move(callback));
 }
 
 void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
@@ -881,6 +660,74 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
           return;
         }
         callback(ScreenScraperParser::parseInfraInfoResponse(response.value()));
+      });
+}
+
+void fetchHealthStatus(const GeneralSettings *settings,
+                       MetadataLookupProvider::HealthCallback callback) {
+  if (!callback) return;
+  // Whether the caller has user creds wired up — drives whether the
+  // `closeforleecher` flag should refuse the scrape (anonymous tier is
+  // the leecher tier in SS parlance) vs just warn.
+  bool hasUserCreds = false;
+  if (settings) {
+    const auto blob = settings->scraperCredentials.value(QStringLiteral("screenscraper"));
+    hasUserCreds = !blob.value(QStringLiteral("user_id")).isEmpty() &&
+                   !blob.value(QStringLiteral("user_password")).isEmpty();
+  }
+  fetchInfraInfo(
+      settings, [callback = std::move(callback),
+                 hasUserCreds](ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
+        using HealthStatus = MetadataLookupProvider::HealthStatus;
+        if (r.isError()) {
+          // Probe failure is non-fatal — the actual scrape will hit the
+          // same error path and report it via mapScreenScraperHttpError.
+          // Stay silent in the dialog rather than fearmongering on a
+          // transient blip.
+          callback(HealthStatus{});
+          return;
+        }
+        const auto &info = r.value();
+        HealthStatus out;
+        // Refuse anonymous scrapes when SS has shut its API to the
+        // leecher tier. Member scrapes still go through (SS allows them
+        // on a separate path).
+        if (info.closedForLeechers && !hasUserCreds) {
+          out.refuseScrape = true;
+          out.humanStatus = QObject::tr(
+              "ScreenScraper has closed its API to anonymous traffic right now. "
+              "Sign in with member credentials under Settings → Scrapers → ScreenScraper, "
+              "or try again later.");
+          callback(out);
+          return;
+        }
+        if (info.closedForNonMembers && !hasUserCreds) {
+          out.refuseScrape = true;
+          out.humanStatus =
+              QObject::tr("ScreenScraper has closed its API to non-members right now "
+                          "(server overloaded). Sign in with member credentials, or try "
+                          "again later.");
+          callback(out);
+          return;
+        }
+        // Surface load info when any of the CPU figures are alarming or
+        // scraper count is high. Threshold is intentionally loose — we
+        // want to nudge the user about slow scrapes, not pepper them
+        // with infra trivia on a quiet day.
+        const int peakCpu = std::max({info.cpu1Percent, info.cpu2Percent, info.cpu3Percent});
+        if (peakCpu >= 70 || info.activeScrapers >= 200) {
+          QStringList parts;
+          if (peakCpu > 0) {
+            parts << QObject::tr("CPU %1%").arg(peakCpu);
+          }
+          if (info.activeScrapers > 0) {
+            parts << QObject::tr("%1 active scrapers").arg(info.activeScrapers);
+          }
+          out.humanStatus = QObject::tr("ScreenScraper is busy right now (%1) — "
+                                        "expect slower downloads.")
+                                .arg(parts.join(QStringLiteral(", ")));
+        }
+        callback(out);
       });
 }
 

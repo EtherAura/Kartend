@@ -13,6 +13,7 @@
 #include <QVBoxLayout>
 
 #include "collectionutils.h"
+#include "errordialog.h"
 #include "isettingsmanager.h"
 
 ScraperCredentialsDialog::ScraperCredentialsDialog(GeneralSettings *generalSettings,
@@ -147,7 +148,13 @@ void ScraperCredentialsDialog::onSave() {
       m_generalSettings->scraperCredentials.remove(QStringLiteral("screenscraper"));
     }
     if (m_settingsManager) {
-      m_settingsManager->saveGeneralSettings(*m_generalSettings);
+      // Logout silently leaving credentials on disk would defeat the purpose
+      // — surface the disk-write failure so the user knows their password is
+      // still persisted.
+      if (auto result = m_settingsManager->saveGeneralSettings(*m_generalSettings);
+          result.isError()) {
+        ErrorDialog::showError(this, result.error());
+      }
     }
   }
   accept();

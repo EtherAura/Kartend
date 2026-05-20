@@ -100,6 +100,21 @@ auto SettingsUtils::getConfigPath() -> QString {
   return appConfigDir.absoluteFilePath("kartend.cfg");
 }
 
+auto SettingsUtils::tightenConfigPermissions() -> void {
+  const QString path = getConfigPath();
+  if (!QFile::exists(path)) {
+    return;
+  }
+  if (!QFile::setPermissions(path,
+                             QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+    ErrorUtils::logError(ErrorUtils::ErrorContext::info(
+                             ErrorUtils::ErrorCode::FileWriteError,
+                             "Failed to tighten kartend.cfg permissions to 0600",
+                             "SettingsUtils::tightenConfigPermissions")
+                             .withDetails(QString("Path: %1").arg(path)));
+  }
+}
+
 auto SettingsUtils::expandConfigVariables(const QString &input, const QString &collectionName)
     -> QString {
   return PathUtils::validateAndExpandPath(input, collectionName);
@@ -112,7 +127,7 @@ void SettingsUtils::applyHorizontalScrollbarSetting(QScrollArea *itemScrollArea,
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.hideHorizontalScrollbar) {
+  if (collection.gridLayout.hideHorizontalScrollbar) {
     itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   } else {
     itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -125,7 +140,7 @@ void SettingsUtils::applyVerticalScrollbarSetting(QScrollArea *itemScrollArea, i
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.hideVerticalScrollbar) {
+  if (collection.gridLayout.hideVerticalScrollbar) {
     itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   } else {
     itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -261,5 +276,8 @@ auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Resul
                                            "SettingsUtils::importConfig")
         .withDetails(QString("Destination: %1").arg(livePath));
   }
+  // Imported file's permissions inherit from the source; clamp to 0600
+  // so cleartext scraper credentials don't leak via an over-permissive import.
+  tightenConfigPermissions();
   return ErrorUtils::Result<void>::success();
 }

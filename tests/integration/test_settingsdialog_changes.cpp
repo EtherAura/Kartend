@@ -15,14 +15,14 @@ namespace {
 QList<CollectionConfig> singleCollection() {
   CollectionConfig c;
   c.name = QStringLiteral("Edit Target");
-  c.gridWidth = 5;
-  c.itemWidth = 200;
-  c.itemHeight = 300;
-  c.fontSize = 12;
-  c.cornerRadius = 4;
+  c.gridLayout.gridWidth = 5;
+  c.gridLayout.itemWidth = 200;
+  c.gridLayout.itemHeight = 300;
+  c.gridLayout.fontSize = 12;
+  c.gridLayout.cornerRadius = 4;
   c.hideTitles = false;
-  c.includeContentSubfolders = false;
-  c.launcherPath = QStringLiteral("/usr/bin/example");
+  c.folderBrowsing.includeContentSubfolders = false;
+  c.launcher.launcherPath = QStringLiteral("/usr/bin/example");
   c.viewType = ViewType::Grid;
   return {c};
 }

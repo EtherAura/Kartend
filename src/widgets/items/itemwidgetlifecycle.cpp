@@ -125,6 +125,10 @@ void ItemWidget::setItemName(const QString &name) {
   // up to the current name.
   if (nameChanged && s_showTitleInPlaceholder) {
     QPointer<ItemWidget> ptr = this;
+    // Defer the placeholder re-render one event-loop tick: setItemDimensions's
+    // "same dimensions" early return skipped onArtworkChanged synchronously,
+    // and triggering it from inside configureBaseWidget recurses through the
+    // widget-pool reuse path. singleShot(0) breaks the reentrancy.
     QTimer::singleShot(0, this, [ptr]() {
       if (ptr) {
         ptr->onArtworkChanged();

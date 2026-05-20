@@ -1,8 +1,10 @@
 // Manages the selection overlay widget and its glide animation
 #include "selectionoverlaymanager.h"
+
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "overlayhelpers.h"
+#include "overlaylayermanager.h"
 #include "uiconstants.h"
 #include <QColor>
 #include <QPropertyAnimation>
@@ -32,6 +34,16 @@ void SelectionOverlayManager::setInteractionState(InteractionStateHolder *state)
   m_state = state;
 }
 
+void SelectionOverlayManager::setLayerManager(OverlayLayerManager *manager) {
+  m_layerManager = manager;
+  // If the overlay already exists, register it now so the next bringToFront
+  // sees its layer assignment.
+  if (m_layerManager && m_overlay) {
+    m_layerManager->registerOverlay(m_overlay,
+                                    OverlayLayerManager::Layer::SelectionHighlight);
+  }
+}
+
 void SelectionOverlayManager::setForceVisible(bool force) {
   if (m_forceVisible == force) {
     return;
@@ -49,6 +61,15 @@ void SelectionOverlayManager::ensureOverlay() {
     m_overlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_overlay->setAttribute(Qt::WA_NoSystemBackground, true);
     updateOverlayStyle();
+    // Hand the freshly-created overlay to the central z-order coordinator
+    // so it participates in the documented layer order. Late-bound: a
+    // setLayerManager() call before ensureOverlay() runs leaves m_overlay
+    // null; setLayerManager handles that case by re-registering once the
+    // widget exists.
+    if (m_layerManager) {
+      m_layerManager->registerOverlay(m_overlay,
+                                      OverlayLayerManager::Layer::SelectionHighlight);
+    }
   }
 }
 
@@ -114,7 +135,11 @@ void SelectionOverlayManager::showAtWidget(ItemWidget *widget) {
 
   m_overlay->setGeometry(rect);
   m_overlay->show();
-  m_overlay->raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(m_overlay);
+  } else {
+    m_overlay->raise();
+  }
 }
 
 void SelectionOverlayManager::showAtRect(const QRect &rect) {
@@ -131,7 +156,11 @@ void SelectionOverlayManager::showAtRect(const QRect &rect) {
 
   m_overlay->setGeometry(rect);
   m_overlay->show();
-  m_overlay->raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(m_overlay);
+  } else {
+    m_overlay->raise();
+  }
 }
 
 void SelectionOverlayManager::hide() {
@@ -141,7 +170,12 @@ void SelectionOverlayManager::hide() {
 }
 
 void SelectionOverlayManager::raise() {
-  if (m_overlay) {
+  if (!m_overlay) {
+    return;
+  }
+  if (m_layerManager) {
+    m_layerManager->bringToFront(m_overlay);
+  } else {
     m_overlay->raise();
   }
 }
@@ -171,7 +205,11 @@ void SelectionOverlayManager::animateTo(const QRect &targetRect, const QRect &st
 
   // Show and raise overlay
   m_overlay->show();
-  m_overlay->raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(m_overlay);
+  } else {
+    m_overlay->raise();
+  }
 
   // Set GlideAnimating property
   if (m_state) {

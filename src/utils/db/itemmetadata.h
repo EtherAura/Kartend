@@ -43,7 +43,7 @@ struct ItemMetadata {
   QString manualPath;
   /// Optional per-item launcher override. When >= 0, indexes
   /// into the owning collection's unified launcher list (0 = primary, 1..N =
-  /// additionalLaunchers[0..N-1]) and bypasses the multi-launcher chooser at
+  /// launcher.additionalLaunchers[0..N-1]) and bypasses the multi-launcher chooser at
   /// launch. Negative means "no override" — fall through to the chooser /
   /// collection default.
   int launcherIndex = -1;

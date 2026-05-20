@@ -43,9 +43,9 @@ void NavigationManager::filterItems(const QString &searchText) {
                                .arg(idx)
                                .arg(searchText)
                                .arg(context.config.mediaDirectory)
-                               .arg(context.config.includeContentSubfolders)
-                               .arg(context.config.showAllSubfolderItems)
-                               .arg(context.config.currentSubfolder);
+                               .arg(context.config.folderBrowsing.includeContentSubfolders)
+                               .arg(context.config.folderBrowsing.showAllSubfolderItems)
+                               .arg(context.config.folderBrowsing.currentSubfolder);
   requestItemCountForContext(context, searchText);
 }
 

@@ -14,6 +14,11 @@ class SettingsUtils {
 public:
   [[nodiscard]] static auto getConfigPath() -> QString;
   [[nodiscard]] static auto getFormat() -> QSettings::Format;
+  /// Restrict kartend.cfg to user-only read+write (0600). The INI carries
+  /// scraper credentials in cleartext under [Scrapers]; default umask on
+  /// most Linux setups leaves it world-readable. Call after every QSettings
+  /// sync that touches kartend.cfg.
+  static auto tightenConfigPermissions() -> void;
   [[nodiscard]] static auto expandConfigVariables(const QString &input,
                                                   const QString &collectionName) -> QString;
   static auto applyHorizontalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,

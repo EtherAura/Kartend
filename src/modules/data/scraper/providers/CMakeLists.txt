@@ -1,9 +1,11 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+target_sources(kartend_data PRIVATE
   metadataproviderregistry.cpp
   musicbrainzprovider.cpp
   openlibraryprovider.cpp
+  screenscrapercatalogmanager.cpp
   screenscraperprovider.cpp
   screenscrapermediatypecache.cpp
+  screenscraperquotamanager.cpp
   screenscrapersystemcache.cpp
   screenscrapersystems.cpp
   tmdbprovider.cpp
@@ -13,8 +15,10 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   metadataproviderregistry.h
   musicbrainzprovider.h
   openlibraryprovider.h
+  screenscrapercatalogmanager.h
   screenscraperprovider.h
   screenscrapermediatypecache.h
+  screenscraperquotamanager.h
   screenscrapersystemcache.h
   screenscrapersystems.h
   tmdbprovider.h

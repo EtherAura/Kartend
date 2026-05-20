@@ -33,10 +33,10 @@ void AppearanceEffectsPanel::load() {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  SettingsFormBinding::loadInto(ui->wallpaperParallaxCheckBox, config.wallpaperParallax);
-  SettingsFormBinding::loadInto(ui->parallaxStrengthSpinBox, config.parallaxStrength);
-  SettingsFormBinding::loadInto(ui->toolbarBackdropBlurCheckBox, config.toolbarBackdropBlur);
-  SettingsFormBinding::loadInto(ui->backdropBlurRadiusSpinBox, config.backdropBlurRadius);
+  SettingsFormBinding::loadInto(ui->wallpaperParallaxCheckBox, config.background.wallpaperParallax);
+  SettingsFormBinding::loadInto(ui->parallaxStrengthSpinBox, config.background.parallaxStrength);
+  SettingsFormBinding::loadInto(ui->toolbarBackdropBlurCheckBox, config.background.toolbarBackdropBlur);
+  SettingsFormBinding::loadInto(ui->backdropBlurRadiusSpinBox, config.background.backdropBlurRadius);
 }
 
 void AppearanceEffectsPanel::clear() {
@@ -52,18 +52,18 @@ void AppearanceEffectsPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
-  config.parallaxStrength = ui->parallaxStrengthSpinBox->value();
-  config.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
-  config.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
+  config.background.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
+  config.background.parallaxStrength = ui->parallaxStrengthSpinBox->value();
+  config.background.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
+  config.background.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
 }
 
 bool AppearanceEffectsPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->wallpaperParallaxCheckBox->isChecked() != o.wallpaperParallax) return true;
-  if (ui->parallaxStrengthSpinBox->value() != o.parallaxStrength) return true;
-  if (ui->toolbarBackdropBlurCheckBox->isChecked() != o.toolbarBackdropBlur) return true;
-  if (ui->backdropBlurRadiusSpinBox->value() != o.backdropBlurRadius) return true;
+  if (ui->wallpaperParallaxCheckBox->isChecked() != o.background.wallpaperParallax) return true;
+  if (ui->parallaxStrengthSpinBox->value() != o.background.parallaxStrength) return true;
+  if (ui->toolbarBackdropBlurCheckBox->isChecked() != o.background.toolbarBackdropBlur) return true;
+  if (ui->backdropBlurRadiusSpinBox->value() != o.background.backdropBlurRadius) return true;
   return false;
 }

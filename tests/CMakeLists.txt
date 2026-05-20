@@ -174,6 +174,7 @@ add_executable(test_extensionutils
 )
 target_link_libraries(test_extensionutils
   Qt6::Core
+  Qt6::Gui
   Qt6::Test
 )
 add_test(NAME ExtensionUtils COMMAND test_extensionutils)
@@ -665,6 +666,7 @@ target_include_directories(test_databasemanager PRIVATE
 )
 target_link_libraries(test_databasemanager
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Concurrent
   Qt6::Widgets
@@ -734,10 +736,13 @@ add_executable(test_stringutils utils/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
 
-# CliArgs tests (--collection startup override)
+# CliArgs tests (--collection startup override + --import-kart/--to
+# path sanitization). pathutils.cpp is compiled in because cliargs.cpp
+# routes --import-kart / --to through PathUtils::expandAndValidateCliPath.
 add_executable(test_cliargs
   utils/test_cliargs.cpp
   ${SRC_DIR}/utils/app/cliargs.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_cliargs Qt6::Core Qt6::Test)
@@ -763,14 +768,16 @@ target_include_directories(test_titlefilter PRIVATE
 target_link_libraries(test_titlefilter Qt6::Core Qt6::Widgets Qt6::Test)
 add_test(NAME TitleFilter COMMAND test_titlefilter)
 
-# CollectionUtils tests (enum conversions, validation, UUID)
-add_executable(test_collectionutils
-  utils/test_collectionutils.cpp
+# CollectionUtils tests — split by concern into three sibling binaries so
+# CTest's per-binary output names the failing concern (enum conversion vs
+# tree walk vs cycle detection) and so future additions live in their
+# cohesive home rather than accreting into a single mega-file.
+set(_kartend_collectionutils_test_sources
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
-target_include_directories(test_collectionutils PRIVATE
+set(_kartend_collectionutils_test_includes
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -779,8 +786,39 @@ target_include_directories(test_collectionutils PRIVATE
   ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
-target_link_libraries(test_collectionutils Qt6::Core Qt6::Widgets Qt6::Test)
-add_test(NAME CollectionUtils COMMAND test_collectionutils)
+
+# alignment + viewtype + index validation + categorization + identity + context
+add_executable(test_collectionutils_alignment
+  utils/test_collectionutils_alignment.cpp
+  ${_kartend_collectionutils_test_sources}
+)
+target_include_directories(test_collectionutils_alignment PRIVATE
+  ${_kartend_collectionutils_test_includes}
+)
+target_link_libraries(test_collectionutils_alignment Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME CollectionUtilsAlignment COMMAND test_collectionutils_alignment)
+
+# ancestorIndexChain + hierarchyCache + descendant walks + applyCollectionRemoval
+add_executable(test_collectionutils_ancestry
+  utils/test_collectionutils_ancestry.cpp
+  ${_kartend_collectionutils_test_sources}
+)
+target_include_directories(test_collectionutils_ancestry PRIVATE
+  ${_kartend_collectionutils_test_includes}
+)
+target_link_libraries(test_collectionutils_ancestry Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME CollectionUtilsAncestry COMMAND test_collectionutils_ancestry)
+
+# wouldCreateCircularReference (corrupt-data + degenerate-cycle handling)
+add_executable(test_collectionutils_cycles
+  utils/test_collectionutils_cycles.cpp
+  ${_kartend_collectionutils_test_sources}
+)
+target_include_directories(test_collectionutils_cycles PRIVATE
+  ${_kartend_collectionutils_test_includes}
+)
+target_link_libraries(test_collectionutils_cycles Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME CollectionUtilsCycles COMMAND test_collectionutils_cycles)
 
 # ScrapeJobGrouping tests (shell-parent scrape routing — Kartend-7dng)
 add_executable(test_scrapejobgrouping
@@ -934,6 +972,7 @@ target_include_directories(test_itemartwork PRIVATE
 )
 target_link_libraries(test_itemartwork
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Test
 )
@@ -969,6 +1008,7 @@ target_include_directories(test_scrapepersistence PRIVATE
 )
 target_link_libraries(test_scrapepersistence
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Test
 )
@@ -1010,6 +1050,7 @@ target_include_directories(test_scrapepersistence_direct PRIVATE
 )
 target_link_libraries(test_scrapepersistence_direct
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Test
 )
@@ -1082,6 +1123,7 @@ target_include_directories(test_batchscraperunner_integration PRIVATE
 )
 target_link_libraries(test_batchscraperunner_integration
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Concurrent
   Qt6::Widgets
@@ -1205,9 +1247,11 @@ add_executable(test_metadataproviderregistry
   ${SRC_DIR}/modules/data/scraper/providers/musicbrainzprovider.cpp
   ${SRC_DIR}/modules/data/scraper/parsers/openlibraryparser.cpp
   ${SRC_DIR}/modules/data/scraper/providers/openlibraryprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/providers/screenscrapercatalogmanager.cpp
   ${SRC_DIR}/modules/data/scraper/providers/screenscrapermediatypecache.cpp
   ${SRC_DIR}/modules/data/scraper/parsers/screenscraperparser.cpp
   ${SRC_DIR}/modules/data/scraper/providers/screenscraperprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/providers/screenscraperquotamanager.cpp
   ${SRC_DIR}/modules/data/scraper/providers/screenscrapersystemcache.cpp
   ${SRC_DIR}/modules/data/scraper/providers/screenscrapersystems.cpp
   ${SRC_DIR}/modules/data/scraper/parsers/tmdbparser.cpp
@@ -1323,6 +1367,7 @@ target_include_directories(test_batchscraperunner PRIVATE
 )
 target_link_libraries(test_batchscraperunner
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Widgets
   Qt6::Test
@@ -1359,6 +1404,7 @@ target_include_directories(test_scraperservice_resume PRIVATE
 )
 target_link_libraries(test_scraperservice_resume
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Widgets
   Qt6::Test
@@ -1919,6 +1965,7 @@ target_include_directories(test_detailpagehelpers PRIVATE
 )
 target_link_libraries(test_detailpagehelpers
   Qt6::Core
+  Qt6::Gui
   Qt6::Sql
   Qt6::Test
 )

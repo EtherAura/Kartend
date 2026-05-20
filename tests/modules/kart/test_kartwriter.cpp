@@ -17,7 +17,7 @@ KartWriter::WriterParams makeMinimalParams(const QString &mediaSrc, const QStrin
   p.name = "Writer Test";
   p.version = "1.0";
   p.collectionConfig.name = "Genesis";
-  p.collectionConfig.gridWidth = 4;
+  p.collectionConfig.gridLayout.gridWidth = 4;
   KartWriter::ItemSource it;
   it.mediaAbs = mediaSrc;
   it.manifestItem.mediaPath = "media/" + mediaName;

@@ -139,8 +139,8 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName, QStrin
     // - Collection uses virtual folders (includeContentSubfolders &&
     // !showAllSubfolderItems)
     // - Search is active (suppressVirtualFolders is set during search)
-    if (m_context.suppressVirtualFolders && m_context.config.includeContentSubfolders &&
-        !m_context.config.showAllSubfolderItems) {
+    if (m_context.suppressVirtualFolders && m_context.config.folderBrowsing.includeContentSubfolders &&
+        !m_context.config.folderBrowsing.showAllSubfolderItems) {
       const QString &mediaDir = m_context.config.mediaDirectory;
       if (!mediaDir.isEmpty()) {
         QDir mediaDirObj(mediaDir);
@@ -238,7 +238,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   // 2. artworkDirectory equals mediaDirectory (artwork is co-located with
   // media)
   const QString &mediaDir = m_context.config.mediaDirectory;
-  bool shouldMirrorSubfolders = m_context.config.includeArtworkSubfolders ||
+  bool shouldMirrorSubfolders = m_context.config.folderBrowsing.includeArtworkSubfolders ||
                                 (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
 
   if (shouldMirrorSubfolders && !mediaDir.isEmpty()) {

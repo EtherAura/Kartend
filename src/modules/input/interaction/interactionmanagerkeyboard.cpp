@@ -31,7 +31,7 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -252,7 +252,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
     const CollectionConfig &cfg = (*m_collections)[collIndex];
 
     // First check if we're in a virtual subfolder - go back one level
-    if (!cfg.currentSubfolder.isEmpty()) {
+    if (!cfg.folderBrowsing.currentSubfolder.isEmpty()) {
       if (navMgr()) {
         navMgr()->goBackFromVirtualFolder();
       }

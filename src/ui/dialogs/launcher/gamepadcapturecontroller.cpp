@@ -1,8 +1,8 @@
 #include "gamepadcapturecontroller.h"
 
 #include "gamepadmanager.h"
+#include "imainwindow.h"
 #include "interactionmanager.h"
-#include "mainwindow.h"
 #include "settingsdialog.h"
 
 #include <QCheckBox>
@@ -12,7 +12,7 @@
 
 namespace {
 GamepadManager *resolveGamepadManager(QObject *parent) {
-  auto *mainWindow = qobject_cast<MainWindow *>(parent);
+  auto *mainWindow = dynamic_cast<IMainWindow *>(parent);
   if (!mainWindow || !mainWindow->getInteractionManager() ||
       !mainWindow->getInteractionManager()->gamepadManager()) {
     return nullptr;

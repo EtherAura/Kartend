@@ -36,7 +36,6 @@
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
-#include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
@@ -85,10 +84,10 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       row.name = treeName;
     }
   }
-  row.additionalLaunchers = m_workingAdditionalLaunchers;
+  row.launcher.additionalLaunchers = m_workingAdditionalLaunchers;
   row.additionalParentNames = m_workingAdditionalParentNames;
   if (ui->launcherPanel->defaultLauncherComboBox()->count() > 0) {
-    row.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
+    row.launcher.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
   }
   return row;
 }
@@ -127,19 +126,19 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   // launcher fields (path / core / params / name / extract / extracted-ext)
   // delegate to LauncherTabPanel::hasChanges; the additional-launchers list
   // and default-launcher combo state still live on the dialog.
-  const bool additionalChanged = m_workingAdditionalLaunchers != o.additionalLaunchers;
+  const bool additionalChanged = m_workingAdditionalLaunchers != o.launcher.additionalLaunchers;
   const bool defaultLauncherChanged =
       ui->launcherPanel->defaultLauncherComboBox()->count() > 0 &&
-      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() != o.defaultLauncherIndex;
+      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() != o.launcher.defaultLauncherIndex;
   // type comparison is handled inside ConfigurationPanel::hasChanges below.
   const bool hSpacingChanged =
       ui->appearanceLayoutPanel->horizontalSpacingSpinBox() &&
       spacingUiToInternal(ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->value()) !=
-          o.horizontalSpacing;
+          o.gridLayout.horizontalSpacing;
   const bool vSpacingChanged =
       ui->appearanceLayoutPanel->verticalSpacingSpinBox() &&
       spacingUiToInternal(ui->appearanceLayoutPanel->verticalSpacingSpinBox()->value()) !=
-          o.verticalSpacing;
+          o.gridLayout.verticalSpacing;
 
   return additionalChanged || defaultLauncherChanged || hSpacingChanged || vSpacingChanged ||
          ui->sidebarPanel->hasChanges() || ui->configurationPanel->hasChanges() ||

@@ -84,7 +84,7 @@ void NavigationManager::onVirtualFolderEntered(const QString &folderPath) {
   CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
 
   // If the folder didn't actually change, avoid an unnecessary reload.
-  if (config.currentSubfolder == folderPath) {
+  if (config.folderBrowsing.currentSubfolder == folderPath) {
     return;
   }
 
@@ -94,7 +94,7 @@ void NavigationManager::onVirtualFolderEntered(const QString &folderPath) {
     m_itemScrollArea->verticalScrollBar()->setValue(0);
   }
 
-  config.currentSubfolder = folderPath;
+  config.folderBrowsing.currentSubfolder = folderPath;
 
   // Reload the collection to show the new folder contents
   safeReloadCollection(*m_currentCollectionIndex);
@@ -117,7 +117,7 @@ void NavigationManager::goBackFromVirtualFolder() {
 
   CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
 
-  if (config.currentSubfolder.isEmpty()) {
+  if (config.folderBrowsing.currentSubfolder.isEmpty()) {
     // Already at root, nothing to go back to
     return;
   }
@@ -129,7 +129,7 @@ void NavigationManager::goBackFromVirtualFolder() {
   }
 
   // Go up one level
-  config.currentSubfolder = NavigationHelpers::parentSubfolderPath(config.currentSubfolder);
+  config.folderBrowsing.currentSubfolder = NavigationHelpers::parentSubfolderPath(config.folderBrowsing.currentSubfolder);
 
   // Reload to show parent folder
   safeReloadCollection(*m_currentCollectionIndex);
@@ -143,14 +143,14 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     if (parsed.collectionIndex < (*m_collections).size()) {
       // Clear current subfolder before navigating to parent
       if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
-        (*m_collections)[*m_currentCollectionIndex].currentSubfolder.clear();
+        (*m_collections)[*m_currentCollectionIndex].folderBrowsing.currentSubfolder.clear();
       }
       goBackToCollections();
     }
   } else if (parsed.kind == Kind::Subfolder) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
-      if (config.currentSubfolder != parsed.subfolderPath) {
+      if (config.folderBrowsing.currentSubfolder != parsed.subfolderPath) {
         if (interactionMgr()) {
           interactionMgr()->saveCurrentSelection();
         }
@@ -162,13 +162,13 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
           m_itemScrollArea->verticalScrollBar()->setValue(0);
         }
       }
-      config.currentSubfolder = parsed.subfolderPath;
+      config.folderBrowsing.currentSubfolder = parsed.subfolderPath;
       safeReloadCollection(*m_currentCollectionIndex);
     }
   } else if (parsed.kind == Kind::Root) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
-      if (!config.currentSubfolder.isEmpty()) {
+      if (!config.folderBrowsing.currentSubfolder.isEmpty()) {
         if (interactionMgr()) {
           interactionMgr()->saveCurrentSelection();
         }
@@ -180,7 +180,7 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
           m_itemScrollArea->verticalScrollBar()->setValue(0);
         }
       }
-      config.currentSubfolder.clear();
+      config.folderBrowsing.currentSubfolder.clear();
       safeReloadCollection(*m_currentCollectionIndex);
     }
   }

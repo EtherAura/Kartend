@@ -42,14 +42,14 @@ QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
 int countVirtualFolders(const CollectionConfig &config) {
   // Only count virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!config.includeContentSubfolders || config.showAllSubfolderItems) {
+  if (!config.folderBrowsing.includeContentSubfolders || config.folderBrowsing.showAllSubfolderItems) {
     return 0;
   }
 
   // Determine the effective directory to scan
   QString scanDir = config.mediaDirectory;
-  if (!config.currentSubfolder.isEmpty()) {
-    scanDir = QDir(scanDir).absoluteFilePath(config.currentSubfolder);
+  if (!config.folderBrowsing.currentSubfolder.isEmpty()) {
+    scanDir = QDir(scanDir).absoluteFilePath(config.folderBrowsing.currentSubfolder);
   }
 
   QDir dir(scanDir);
@@ -59,7 +59,7 @@ int countVirtualFolders(const CollectionConfig &config) {
 
   // Count subdirectories, optionally including hidden folders
   QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
-  if (config.showHiddenFolders) {
+  if (config.folderBrowsing.showHiddenFolders) {
     filters |= QDir::Hidden;
   }
   return dir.entryList(filters).size();
@@ -157,7 +157,7 @@ QList<int> ancestorIndexChain(const CollectionConfig &collection,
 QString selectionSessionKeyFor(const CollectionConfig &collection,
                                const QList<CollectionConfig> &collections) {
   const QString base = hierarchicalNameFor(collection, collections);
-  QString subfolder = QDir::cleanPath(collection.currentSubfolder.trimmed());
+  QString subfolder = QDir::cleanPath(collection.folderBrowsing.currentSubfolder.trimmed());
   if (subfolder.isEmpty() || subfolder == ".") {
     return base;
   }

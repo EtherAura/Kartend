@@ -43,6 +43,9 @@ void MainWindow::setupInitialTimers() {
   // the legacy empty-collections prompt remains as the backstop for power
   // users who later delete every collection.
   if (!m_generalSettings.firstRunComplete) {
+    // singleShot(0) defers the wizard to the next event-loop iteration so
+    // MainWindow's constructor finishes (and the window appears) before the
+    // modal pops — otherwise the wizard parents to a not-yet-shown widget.
     QTimer::singleShot(0, this, [this]() {
       showFirstRunWizard();
       // After the wizard the user may still have an empty library (Skip
@@ -85,7 +88,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
     // Create the first collection with the given name
     CollectionConfig newCollection;
     newCollection.name = name.trimmed();
-    newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+    newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
     newCollection.parentCollectionIndex = -1;
     newCollection.isSubcollection = false;
     m_collections.append(newCollection);

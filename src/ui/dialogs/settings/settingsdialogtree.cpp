@@ -20,7 +20,6 @@
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "isettingsmanager.h"
-#include "mainwindow.h"
 #include "settingsdialog.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
@@ -173,23 +172,23 @@ void SettingsDialog::addCollection() {
   CollectionConfig newCollection;
   newCollection.name = name;
   newCollection.type = dialog.collectionType();
-  newCollection.scraperProviderId = dialog.scraperProviderId();
-  newCollection.screenscraperSystemId = dialog.screenscraperSystemId();
-  newCollection.launcherPath = dialog.launcherPath();
-  newCollection.corePath = dialog.corePath();
-  newCollection.launchParameters = "";
+  newCollection.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
+  newCollection.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
+  newCollection.launcher.launcherPath = dialog.launcherPath();
+  newCollection.launcher.corePath = dialog.corePath();
+  newCollection.launcher.launchParameters = "";
   newCollection.mediaDirectory = dialog.contentPath();
   newCollection.artworkDirectory = dialog.artworkDirectory();
   newCollection.videoDirectory = "";
   newCollection.manualDirectory = "";
   newCollection.extensions = QStringList();
-  newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
-  newCollection.sidebarVisible = false;
+  newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+  newCollection.sidebar.sidebarVisible = false;
   newCollection.parentCollectionIndex = -1;
   newCollection.isSubcollection = false;
   newCollection.showAllSubcollectionItems = false;
   newCollection.horizontalAlignment = HorizontalAlignment::Center;
-  newCollection.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  newCollection.gridLayout.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   newCollection.hideTitles = false;
   newCollection.hideSubcollectionTitles = false;
 
@@ -201,18 +200,18 @@ void SettingsDialog::addCollection() {
     const CollectionConfig &parent = m_workingCollections[parentIdx];
     newCollection.parentCollectionIndex = parentIdx;
     newCollection.isSubcollection = true;
-    newCollection.gridWidth = parent.gridWidth;
-    newCollection.horizontalGridHeight = parent.horizontalGridHeight;
-    newCollection.gridWidthSidebarHidden = parent.gridWidthSidebarHidden;
-    newCollection.horizontalGridHeightSidebarHidden = parent.horizontalGridHeightSidebarHidden;
-    newCollection.horizontalSpacing = parent.horizontalSpacing;
-    newCollection.verticalSpacing = parent.verticalSpacing;
-    newCollection.itemWidth = parent.itemWidth;
-    newCollection.itemHeight = parent.itemHeight;
-    newCollection.fontSize = parent.fontSize;
-    newCollection.hideHorizontalScrollbar = parent.hideHorizontalScrollbar;
-    newCollection.hideVerticalScrollbar = parent.hideVerticalScrollbar;
-    newCollection.sidebarMode = parent.sidebarMode;
+    newCollection.gridLayout.gridWidth = parent.gridLayout.gridWidth;
+    newCollection.gridLayout.horizontalGridHeight = parent.gridLayout.horizontalGridHeight;
+    newCollection.gridLayout.gridWidthSidebarHidden = parent.gridLayout.gridWidthSidebarHidden;
+    newCollection.gridLayout.horizontalGridHeightSidebarHidden = parent.gridLayout.horizontalGridHeightSidebarHidden;
+    newCollection.gridLayout.horizontalSpacing = parent.gridLayout.horizontalSpacing;
+    newCollection.gridLayout.verticalSpacing = parent.gridLayout.verticalSpacing;
+    newCollection.gridLayout.itemWidth = parent.gridLayout.itemWidth;
+    newCollection.gridLayout.itemHeight = parent.gridLayout.itemHeight;
+    newCollection.gridLayout.fontSize = parent.gridLayout.fontSize;
+    newCollection.gridLayout.hideHorizontalScrollbar = parent.gridLayout.hideHorizontalScrollbar;
+    newCollection.gridLayout.hideVerticalScrollbar = parent.gridLayout.hideVerticalScrollbar;
+    newCollection.sidebar.sidebarMode = parent.sidebar.sidebarMode;
     newCollection.viewType = parent.viewType;
     newCollection.showAllSubcollectionItems = parent.showAllSubcollectionItems;
     newCollection.horizontalAlignment = parent.horizontalAlignment;
@@ -279,13 +278,13 @@ void SettingsDialog::ensureRootCollectionExists() {
     CollectionConfig newCollection;
     newCollection.name = dialog.collectionName();
     newCollection.type = dialog.collectionType();
-    newCollection.scraperProviderId = dialog.scraperProviderId();
-    newCollection.screenscraperSystemId = dialog.screenscraperSystemId();
+    newCollection.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
+    newCollection.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
     newCollection.mediaDirectory = dialog.contentPath();
     newCollection.artworkDirectory = dialog.artworkDirectory();
-    newCollection.launcherPath = dialog.launcherPath();
-    newCollection.corePath = dialog.corePath();
-    newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+    newCollection.launcher.launcherPath = dialog.launcherPath();
+    newCollection.launcher.corePath = dialog.corePath();
+    newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
     newCollection.parentCollectionIndex = -1;
     newCollection.isSubcollection = false;
 
@@ -366,55 +365,56 @@ namespace {
 void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst,
                                    ApplySettingsDialog::FieldCategories categories) {
   if (categories.testFlag(ApplySettingsDialog::GridLayout)) {
-    dst.gridWidth = src.gridWidth;
-    dst.horizontalGridHeight = src.horizontalGridHeight;
-    dst.gridWidthSidebarHidden = src.gridWidthSidebarHidden;
-    dst.horizontalGridHeightSidebarHidden = src.horizontalGridHeightSidebarHidden;
-    dst.horizontalSpacing = src.horizontalSpacing;
-    dst.verticalSpacing = src.verticalSpacing;
-    dst.itemWidth = src.itemWidth;
-    dst.itemHeight = src.itemHeight;
-    dst.cornerRadius = src.cornerRadius;
+    dst.gridLayout.gridWidth = src.gridLayout.gridWidth;
+    dst.gridLayout.horizontalGridHeight = src.gridLayout.horizontalGridHeight;
+    dst.gridLayout.gridWidthSidebarHidden = src.gridLayout.gridWidthSidebarHidden;
+    dst.gridLayout.horizontalGridHeightSidebarHidden =
+        src.gridLayout.horizontalGridHeightSidebarHidden;
+    dst.gridLayout.horizontalSpacing = src.gridLayout.horizontalSpacing;
+    dst.gridLayout.verticalSpacing = src.gridLayout.verticalSpacing;
+    dst.gridLayout.itemWidth = src.gridLayout.itemWidth;
+    dst.gridLayout.itemHeight = src.gridLayout.itemHeight;
+    dst.gridLayout.cornerRadius = src.gridLayout.cornerRadius;
     dst.horizontalAlignment = src.horizontalAlignment;
     dst.viewType = src.viewType;
   }
   if (categories.testFlag(ApplySettingsDialog::ItemText)) {
-    dst.fontSize = src.fontSize;
+    dst.gridLayout.fontSize = src.gridLayout.fontSize;
     dst.customFontFamily = src.customFontFamily;
   }
   if (categories.testFlag(ApplySettingsDialog::Visibility)) {
     dst.hideTitles = src.hideTitles;
     dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
-    dst.hideHorizontalScrollbar = src.hideHorizontalScrollbar;
-    dst.hideVerticalScrollbar = src.hideVerticalScrollbar;
-    dst.sidebarMode = src.sidebarMode;
+    dst.gridLayout.hideHorizontalScrollbar = src.gridLayout.hideHorizontalScrollbar;
+    dst.gridLayout.hideVerticalScrollbar = src.gridLayout.hideVerticalScrollbar;
+    dst.sidebar.sidebarMode = src.sidebar.sidebarMode;
   }
   if (categories.testFlag(ApplySettingsDialog::Colors)) {
-    dst.backgroundType = src.backgroundType;
-    dst.backgroundColor = src.backgroundColor;
-    dst.backgroundImage = src.backgroundImage;
-    dst.backgroundVideo = src.backgroundVideo;
-    dst.primaryColor = src.primaryColor;
-    dst.tileColor = src.tileColor;
-    dst.selectionColor = src.selectionColor;
+    dst.background.backgroundType = src.background.backgroundType;
+    dst.background.backgroundColor = src.background.backgroundColor;
+    dst.background.backgroundImage = src.background.backgroundImage;
+    dst.background.backgroundVideo = src.background.backgroundVideo;
+    dst.background.primaryColor = src.background.primaryColor;
+    dst.background.tileColor = src.background.tileColor;
+    dst.background.selectionColor = src.background.selectionColor;
     // / qbp3 / y25g / eq8r: header logo + vignette + parallax
     // + backdrop blur ride along with the Colors category since they're
     // presented in the same dialog area and users intuitively expect
     // "apply theme" to cover them too.
-    dst.headerLogoImage = src.headerLogoImage;
-    dst.headerLogoPosition = src.headerLogoPosition;
-    dst.vignetteEnabled = src.vignetteEnabled;
-    dst.vignetteIntensity = src.vignetteIntensity;
-    dst.wallpaperParallax = src.wallpaperParallax;
-    dst.parallaxStrength = src.parallaxStrength;
-    dst.toolbarBackdropBlur = src.toolbarBackdropBlur;
-    dst.backdropBlurRadius = src.backdropBlurRadius;
+    dst.background.headerLogoImage = src.background.headerLogoImage;
+    dst.background.headerLogoPosition = src.background.headerLogoPosition;
+    dst.background.vignetteEnabled = src.background.vignetteEnabled;
+    dst.background.vignetteIntensity = src.background.vignetteIntensity;
+    dst.background.wallpaperParallax = src.background.wallpaperParallax;
+    dst.background.parallaxStrength = src.background.parallaxStrength;
+    dst.background.toolbarBackdropBlur = src.background.toolbarBackdropBlur;
+    dst.background.backdropBlurRadius = src.background.backdropBlurRadius;
   }
   if (categories.testFlag(ApplySettingsDialog::ListView)) {
-    dst.listFontSize = src.listFontSize;
-    dst.listRowHeight = src.listRowHeight;
-    dst.listRowColor = src.listRowColor;
-    dst.listAltRowColor = src.listAltRowColor;
+    dst.listView.listFontSize = src.listView.listFontSize;
+    dst.listView.listRowHeight = src.listView.listRowHeight;
+    dst.listView.listRowColor = src.listView.listRowColor;
+    dst.listView.listAltRowColor = src.listView.listAltRowColor;
   }
   dst.clampValues();
 }
@@ -532,7 +532,7 @@ void SettingsDialog::duplicateCollection() {
   copy.name = name;
   copy.parentCollectionIndex = parentIdx;
   copy.isSubcollection = (parentIdx >= 0);
-  copy.currentSubfolder.clear();
+  copy.folderBrowsing.currentSubfolder.clear();
   copy.isPlaylist = false;
   copy.playlistId.clear();
   copy.playlistReservedKind.clear();

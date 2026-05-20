@@ -49,12 +49,12 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // lazy-created on first need and hidden (with decoder released) whenever
   // the active collection doesn't use video.
   const bool wantsVideo =
-      (collection.backgroundType == BackgroundType::Video) && !collection.backgroundVideo.isEmpty();
+      (collection.background.backgroundType == BackgroundType::Video) && !collection.background.backgroundVideo.isEmpty();
   if (wantsVideo) {
     if (!m_backgroundVideo) {
       m_backgroundVideo = new BackgroundVideoWidget(viewport);
     }
-    m_backgroundVideo->setVideoPath(collection.backgroundVideo);
+    m_backgroundVideo->setVideoPath(collection.background.backgroundVideo);
     // Lower so the scroll widget (and item grid) renders on top. show()
     // before lower() avoids a one-frame flash where it'd come up raised.
     m_backgroundVideo->show();
@@ -72,7 +72,7 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // title block from the right-side controls — i.e. roughly mid-toolbar.
   auto *toolbarLayout =
       m_itemsTopBar ? qobject_cast<QHBoxLayout *>(m_itemsTopBar->layout()) : nullptr;
-  const bool wantsLogo = !collection.headerLogoImage.isEmpty() && toolbarLayout;
+  const bool wantsLogo = !collection.background.headerLogoImage.isEmpty() && toolbarLayout;
   if (wantsLogo) {
     if (!m_headerLogo) {
       m_headerLogo = new HeaderLogoOverlay(m_itemsTopBar);
@@ -82,7 +82,7 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     toolbarLayout->removeWidget(m_headerLogo);
 
     int insertIndex = 0;
-    switch (collection.headerLogoPosition) {
+    switch (collection.background.headerLogoPosition) {
     case HeaderLogoPosition::TopLeft:
       insertIndex = 0;
       break;
@@ -105,7 +105,7 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     }
     }
     toolbarLayout->insertWidget(insertIndex, m_headerLogo);
-    m_headerLogo->setLogo(collection.headerLogoImage, collection.headerLogoPosition);
+    m_headerLogo->setLogo(collection.background.headerLogoImage, collection.background.headerLogoPosition);
     m_headerLogo->show();
   } else if (m_headerLogo) {
     if (toolbarLayout) {
@@ -118,12 +118,12 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // vignette overlay. Layered above the items grid (so it
   // darkens grid edges) but below the header logo (so the logo stays
   // bright in a corner if the user picks TopLeft/TopRight).
-  const bool wantsVignette = collection.vignetteEnabled && collection.vignetteIntensity > 0;
+  const bool wantsVignette = collection.background.vignetteEnabled && collection.background.vignetteIntensity > 0;
   if (wantsVignette) {
     if (!m_vignette) {
       m_vignette = new VignetteOverlay(viewport);
     }
-    m_vignette->setIntensity(collection.vignetteIntensity);
+    m_vignette->setIntensity(collection.background.vignetteIntensity);
     m_vignette->show();
   } else if (m_vignette) {
     m_vignette->hide();
@@ -144,16 +144,16 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // frames every paint is too expensive without GPU shaders, so the
   // toggle is treated as a no-op for video bgs. Parented to m_itemsTopBar
   // and lowered behind the toolbar's button widgets so they render on top.
-  const bool wantsBlur = collection.toolbarBackdropBlur && m_itemsTopBar &&
-                         collection.backgroundType == BackgroundType::Image &&
-                         !collection.backgroundImage.isEmpty();
+  const bool wantsBlur = collection.background.toolbarBackdropBlur && m_itemsTopBar &&
+                         collection.background.backgroundType == BackgroundType::Image &&
+                         !collection.background.backgroundImage.isEmpty();
   if (wantsBlur) {
     if (!m_toolbarBlur) {
       m_toolbarBlur = new BackdropBlurOverlay(m_itemsTopBar);
     }
-    QPixmap source(collection.backgroundImage);
+    QPixmap source(collection.background.backgroundImage);
     if (!source.isNull()) {
-      m_toolbarBlur->setSource(source, collection.backdropBlurRadius);
+      m_toolbarBlur->setSource(source, collection.background.backdropBlurRadius);
       m_toolbarBlur->show();
       m_toolbarBlur->lower();
     } else if (m_toolbarBlur) {
@@ -182,18 +182,18 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     // through. ItemWidgets paint their own pixmaps so they stay opaque
     // where they need to be.
     styleSheet = QStringLiteral("QWidget { background-color: transparent; }");
-  } else if (collection.backgroundType == BackgroundType::Image &&
-             !collection.backgroundImage.isEmpty()) {
+  } else if (collection.background.backgroundType == BackgroundType::Image &&
+             !collection.background.backgroundImage.isEmpty()) {
     // Background image mode. Parallax adjusts the vertical
     // position by `scrollValue * strength / 100` — strength 0 keeps the bg
     // locked (fully static), strength 100 makes it move at content speed.
-    QString imagePath = collection.backgroundImage;
+    QString imagePath = collection.background.backgroundImage;
     imagePath.replace("\\", "/");
     int parallaxOffset = 0;
-    if (collection.wallpaperParallax && collection.parallaxStrength > 0 && m_itemScrollArea &&
+    if (collection.background.wallpaperParallax && collection.background.parallaxStrength > 0 && m_itemScrollArea &&
         m_itemScrollArea->verticalScrollBar()) {
       const int v = m_itemScrollArea->verticalScrollBar()->value();
-      parallaxOffset = (v * collection.parallaxStrength) / 100;
+      parallaxOffset = (v * collection.background.parallaxStrength) / 100;
     }
     styleSheet = QString("QWidget { "
                          "background-image: url(\"%1\"); "
@@ -203,9 +203,9 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
                          "}")
                      .arg(imagePath)
                      .arg(parallaxOffset);
-  } else if (!collection.backgroundColor.isEmpty()) {
+  } else if (!collection.background.backgroundColor.isEmpty()) {
     // Background color mode
-    styleSheet = QString("QWidget { background-color: %1; }").arg(collection.backgroundColor);
+    styleSheet = QString("QWidget { background-color: %1; }").arg(collection.background.backgroundColor);
   } else {
     // Clear any custom background (use system default)
     styleSheet.clear();
@@ -220,28 +220,28 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   }
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
-  ItemWidget::setPrimaryColor(collection.primaryColor);
-  ItemWidget::setTileColor(collection.tileColor);
-  ItemWidget::setSelectionColor(collection.selectionColor);
-  ItemWidget::setListRowColor(collection.listRowColor);
-  ItemWidget::setListAltRowColor(collection.listAltRowColor);
+  ItemWidget::setPrimaryColor(collection.background.primaryColor);
+  ItemWidget::setTileColor(collection.background.tileColor);
+  ItemWidget::setSelectionColor(collection.background.selectionColor);
+  ItemWidget::setListRowColor(collection.listView.listRowColor);
+  ItemWidget::setListAltRowColor(collection.listView.listAltRowColor);
   ItemWidget::setCustomFontFamily(collection.customFontFamily);
 
   bool hasPrimaryColor =
-      !collection.primaryColor.isEmpty() && QColor::isValidColorName(collection.primaryColor);
+      !collection.background.primaryColor.isEmpty() && QColor::isValidColorName(collection.background.primaryColor);
 
   // when toolbar backdrop blur is active over an image bg,
   // skip the primary-color fill — it would paint a flat color over the
   // blurred wallpaper child and defeat the effect.
-  const bool blurActive = collection.toolbarBackdropBlur &&
-                          collection.backgroundType == BackgroundType::Image &&
-                          !collection.backgroundImage.isEmpty();
+  const bool blurActive = collection.background.toolbarBackdropBlur &&
+                          collection.background.backgroundType == BackgroundType::Image &&
+                          !collection.background.backgroundImage.isEmpty();
   // Apply primary color to toolbar/top bar (exact color, not tinted)
   if (m_itemsTopBar) {
     QString toolbarStyle;
     if (hasPrimaryColor && !blurActive) {
       toolbarStyle =
-          QString("QWidget#itemsTopBar { background-color: %1; }").arg(collection.primaryColor);
+          QString("QWidget#itemsTopBar { background-color: %1; }").arg(collection.background.primaryColor);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
@@ -254,7 +254,7 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
                              "QMenuBar::item { background-color: transparent; }"
                              "QMenuBar::item:selected { background-color: "
                              "rgba(255,255,255,0.2); }")
-                         .arg(collection.primaryColor);
+                         .arg(collection.background.primaryColor);
     }
     m_menubar->setStyleSheet(menubarStyle);
   }
@@ -264,7 +264,7 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
     QString searchBarStyle;
     if (hasPrimaryColor) {
       // Tint the primary color slightly for the search bar background
-      QColor baseColor(collection.primaryColor);
+      QColor baseColor(collection.background.primaryColor);
       QColor bgColor = baseColor.lighter(130);
       searchBarStyle = QString("QLineEdit { background-color: %1; border: 1px "
                                "solid %2; border-radius: 4px; padding: 4px; }"
@@ -292,8 +292,8 @@ void CollectionBackgroundController::onItemsScrolled() {
     return;
   }
   const CollectionConfig &c = (*m_collections)[idx];
-  if (!c.wallpaperParallax || c.parallaxStrength <= 0 ||
-      c.backgroundType != BackgroundType::Image || c.backgroundImage.isEmpty()) {
+  if (!c.background.wallpaperParallax || c.background.parallaxStrength <= 0 ||
+      c.background.backgroundType != BackgroundType::Image || c.background.backgroundImage.isEmpty()) {
     return;
   }
 
@@ -324,14 +324,14 @@ void CollectionBackgroundController::applyParallaxOffset() {
     return;
   }
   const CollectionConfig &c = (*m_collections)[idx];
-  if (c.backgroundType != BackgroundType::Image || c.backgroundImage.isEmpty()) {
+  if (c.background.backgroundType != BackgroundType::Image || c.background.backgroundImage.isEmpty()) {
     return;
   }
-  const int strength = c.wallpaperParallax ? qBound(0, c.parallaxStrength, 100) : 0;
+  const int strength = c.background.wallpaperParallax ? qBound(0, c.background.parallaxStrength, 100) : 0;
   const int v = m_itemScrollArea->verticalScrollBar()->value();
   const int offset = (v * strength) / 100;
 
-  QString imagePath = c.backgroundImage;
+  QString imagePath = c.background.backgroundImage;
   imagePath.replace("\\", "/");
   const QString styleSheet = QString("QWidget { "
                                      "background-image: url(\"%1\"); "

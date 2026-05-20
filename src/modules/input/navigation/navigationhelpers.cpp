@@ -37,7 +37,7 @@ auto lookupRememberedSelectionIndex(int collectionIndex, const QList<CollectionC
   }
 
   const CollectionConfig &cfg = collections[collectionIndex];
-  const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
+  const bool subfolderActive = !cfg.folderBrowsing.currentSubfolder.trimmed().isEmpty();
 
   int selIdx = -1;
   if (subfolderActive) {

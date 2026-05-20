@@ -36,9 +36,9 @@ void AppearanceToolbarPanel::load() {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  SettingsFormBinding::loadInto(ui->headerLogoEdit, config.headerLogoImage);
+  SettingsFormBinding::loadInto(ui->headerLogoEdit, config.background.headerLogoImage);
   SettingsFormBinding::loadIntoIndex(ui->headerLogoPositionComboBox,
-                                     static_cast<int>(config.headerLogoPosition));
+                                     static_cast<int>(config.background.headerLogoPosition));
 }
 
 void AppearanceToolbarPanel::clear() {
@@ -52,16 +52,16 @@ void AppearanceToolbarPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.headerLogoImage = ui->headerLogoEdit->text().trimmed();
-  config.headerLogoPosition =
+  config.background.headerLogoImage = ui->headerLogoEdit->text().trimmed();
+  config.background.headerLogoPosition =
       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
 }
 
 bool AppearanceToolbarPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->headerLogoEdit->text().trimmed() != o.headerLogoImage) return true;
-  if (ui->headerLogoPositionComboBox->currentIndex() != static_cast<int>(o.headerLogoPosition))
+  if (ui->headerLogoEdit->text().trimmed() != o.background.headerLogoImage) return true;
+  if (ui->headerLogoPositionComboBox->currentIndex() != static_cast<int>(o.background.headerLogoPosition))
     return true;
   return false;
 }

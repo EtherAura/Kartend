@@ -98,6 +98,7 @@ private slots:
   void testExtractToHandlesZlibEntries();
   void testExtractToRefusesPathTraversal();
   void testExtractToRefusesAbsolutePaths();
+  void testExtractToRefusesSymlinkEscape();
   void testExtractToEmitsProgress();
   void testExtractToCanCancel();
 };
@@ -241,6 +242,42 @@ void TestKartReader::testExtractToRefusesAbsolutePaths() {
   auto result = ex.extractTo(f.fileName(), dest.path());
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRefusesSymlinkEscape() {
+  // Regression: a parent dir inside destAbs is a symlink pointing outside
+  // destAbs. isPathSafe accepts the relative entry textually (no '..', not
+  // absolute), and a startsWith(destAbs + '/') check passes because the
+  // cleaned path still lives under destAbs lexically. Only resolving the
+  // symlink chain via canonicalFilePath catches the escape.
+  QByteArray data("x");
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("inner/escapee.bin", data, KartFormat::Flag_Media,
+                                      KartFormat::Compression_None)}),
+                f);
+
+  QTemporaryDir dest;
+  QTemporaryDir outside;
+  QVERIFY(dest.isValid());
+  QVERIFY(outside.isValid());
+
+  // Pre-create dest/inner as a symlink to outside/. After the canonical
+  // resolve, dest/inner/escapee.bin lands at outside/escapee.bin, which is
+  // not a child of dest's canonical path.
+  const QString linkPath = QDir(dest.path()).absoluteFilePath("inner");
+  QVERIFY(QFile::link(outside.path(), linkPath));
+
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  // Reused error code (no symlink-specific code today) — sender matches
+  // the textual traversal/absolute checks above for consistency.
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+
+  // Verify the would-be target outside the dest dir was NOT written.
+  const QString shouldNotExist = QDir(outside.path()).absoluteFilePath("escapee.bin");
+  QVERIFY2(!QFile::exists(shouldNotExist), qPrintable(shouldNotExist));
 }
 
 void TestKartReader::testExtractToEmitsProgress() {

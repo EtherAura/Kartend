@@ -24,6 +24,7 @@
 #include "kartreader.h"
 #include "kartwriter.h"
 #include "mainwindow.h"
+#include "pathutils.h"
 #include "settingsmanager.h"
 
 #include <QSqlDatabase>
@@ -138,9 +139,31 @@ auto main(int argc, char *argv[]) -> int {
     }
 
     if (parser.isSet(importKartOption)) {
-      const QString src = parser.value(importKartOption);
-      const QString dest =
-          parser.isSet(toOption) ? parser.value(toOption) : (QDir::homePath() + "/imported-kart");
+      // CLI-seam validation: same shell-metachar / NUL / blank-after-expansion
+      // checks CliArgs::parseStartupArguments runs on its parse() path —
+      // applied here on the production process() path so a bad --import-kart
+      // / --to is rejected before KartManager touches the filesystem.
+      auto srcResult = PathUtils::expandAndValidateCliPath(parser.value(importKartOption),
+                                                           QStringLiteral("import-kart"));
+      if (srcResult.isError()) {
+        fprintf(stderr, "kart import: %s\n", qPrintable(srcResult.error().message));
+        if (!srcResult.error().details.isEmpty()) {
+          fprintf(stderr, "  details: %s\n", qPrintable(srcResult.error().details));
+        }
+        return 2;
+      }
+      const QString src = srcResult.value();
+      const QString rawDest = parser.isSet(toOption) ? parser.value(toOption)
+                                                     : (QDir::homePath() + "/imported-kart");
+      auto destResult = PathUtils::expandAndValidateCliPath(rawDest, QStringLiteral("to"));
+      if (destResult.isError()) {
+        fprintf(stderr, "kart import: %s\n", qPrintable(destResult.error().message));
+        if (!destResult.error().details.isEmpty()) {
+          fprintf(stderr, "  details: %s\n", qPrintable(destResult.error().details));
+        }
+        return 2;
+      }
+      const QString dest = destResult.value();
       kart::MergeChoice headlessChoice = kart::MergeChoice::Skip;
       if (parser.isSet(onConflictOption)) {
         const QString v = parser.value(onConflictOption).toLower();
@@ -270,6 +293,8 @@ auto main(int argc, char *argv[]) -> int {
     smokeTestMode = ok && smokeMs > 0;
   }
   if (smokeTestMode) {
+    // Smoke-test exit timer: triggers graceful app quit after smokeMs so the
+    // sanitizer CI job exercises full destructor sequencing (no quick_exit).
     QTimer::singleShot(smokeMs, &app, &QCoreApplication::quit);
   }
 

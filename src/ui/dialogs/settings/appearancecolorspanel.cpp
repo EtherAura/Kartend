@@ -110,25 +110,25 @@ void AppearanceColorsPanel::load() {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  if (config.backgroundType == BackgroundType::Video) {
+  if (config.background.backgroundType == BackgroundType::Video) {
     ui->backgroundVideoRadio->setChecked(true);
-    ui->backgroundValueEdit->setText(config.backgroundVideo);
-  } else if (config.backgroundType == BackgroundType::Image) {
+    ui->backgroundValueEdit->setText(config.background.backgroundVideo);
+  } else if (config.background.backgroundType == BackgroundType::Image) {
     ui->backgroundImageRadio->setChecked(true);
-    ui->backgroundValueEdit->setText(config.backgroundImage);
+    ui->backgroundValueEdit->setText(config.background.backgroundImage);
   } else {
     ui->backgroundColorRadio->setChecked(true);
-    ui->backgroundValueEdit->setText(config.backgroundColor);
+    ui->backgroundValueEdit->setText(config.background.backgroundColor);
   }
   updateBackgroundButtonForType();
 
-  ui->primaryColorEdit->setText(config.primaryColor);
-  ui->tileColorEdit->setText(config.tileColor);
-  ui->selectionColorEdit->setText(config.selectionColor);
-  ui->listRowColorEdit->setText(config.listRowColor);
-  ui->listAltRowColorEdit->setText(config.listAltRowColor);
-  ui->vignetteEnabledCheckBox->setChecked(config.vignetteEnabled);
-  ui->vignetteIntensitySpinBox->setValue(config.vignetteIntensity);
+  ui->primaryColorEdit->setText(config.background.primaryColor);
+  ui->tileColorEdit->setText(config.background.tileColor);
+  ui->selectionColorEdit->setText(config.background.selectionColor);
+  ui->listRowColorEdit->setText(config.listView.listRowColor);
+  ui->listAltRowColorEdit->setText(config.listView.listAltRowColor);
+  ui->vignetteEnabledCheckBox->setChecked(config.background.vignetteEnabled);
+  ui->vignetteIntensitySpinBox->setValue(config.background.vignetteIntensity);
 }
 
 void AppearanceColorsPanel::clear() {
@@ -151,37 +151,37 @@ void AppearanceColorsPanel::save() const {
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   if (ui->backgroundVideoRadio->isChecked()) {
-    config.backgroundType = BackgroundType::Video;
+    config.background.backgroundType = BackgroundType::Video;
   } else if (ui->backgroundImageRadio->isChecked()) {
-    config.backgroundType = BackgroundType::Image;
+    config.background.backgroundType = BackgroundType::Image;
   } else {
-    config.backgroundType = BackgroundType::Color;
+    config.background.backgroundType = BackgroundType::Color;
   }
 
   const QString value = ui->backgroundValueEdit->text().trimmed();
   // Only the field matching the active type holds a value; the other two
   // are cleared so an old value can't bleed back when the user toggles.
-  if (config.backgroundType == BackgroundType::Video) {
-    config.backgroundVideo = value;
-    config.backgroundColor.clear();
-    config.backgroundImage.clear();
-  } else if (config.backgroundType == BackgroundType::Image) {
-    config.backgroundImage = value;
-    config.backgroundColor.clear();
-    config.backgroundVideo.clear();
+  if (config.background.backgroundType == BackgroundType::Video) {
+    config.background.backgroundVideo = value;
+    config.background.backgroundColor.clear();
+    config.background.backgroundImage.clear();
+  } else if (config.background.backgroundType == BackgroundType::Image) {
+    config.background.backgroundImage = value;
+    config.background.backgroundColor.clear();
+    config.background.backgroundVideo.clear();
   } else {
-    config.backgroundColor = value;
-    config.backgroundImage.clear();
-    config.backgroundVideo.clear();
+    config.background.backgroundColor = value;
+    config.background.backgroundImage.clear();
+    config.background.backgroundVideo.clear();
   }
 
-  config.primaryColor = ui->primaryColorEdit->text().trimmed();
-  config.tileColor = ui->tileColorEdit->text().trimmed();
-  config.selectionColor = ui->selectionColorEdit->text().trimmed();
-  config.listRowColor = ui->listRowColorEdit->text().trimmed();
-  config.listAltRowColor = ui->listAltRowColorEdit->text().trimmed();
-  config.vignetteEnabled = ui->vignetteEnabledCheckBox->isChecked();
-  config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
+  config.background.primaryColor = ui->primaryColorEdit->text().trimmed();
+  config.background.tileColor = ui->tileColorEdit->text().trimmed();
+  config.background.selectionColor = ui->selectionColorEdit->text().trimmed();
+  config.listView.listRowColor = ui->listRowColorEdit->text().trimmed();
+  config.listView.listAltRowColor = ui->listAltRowColorEdit->text().trimmed();
+  config.background.vignetteEnabled = ui->vignetteEnabledCheckBox->isChecked();
+  config.background.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
 }
 
 bool AppearanceColorsPanel::hasChanges() const {
@@ -193,24 +193,24 @@ bool AppearanceColorsPanel::hasChanges() const {
   } else if (ui->backgroundImageRadio->isChecked()) {
     currentType = BackgroundType::Image;
   }
-  if (currentType != o.backgroundType) return true;
+  if (currentType != o.background.backgroundType) return true;
 
   const QString currentValue = ui->backgroundValueEdit->text().trimmed();
   if (currentType == BackgroundType::Video) {
-    if (currentValue != o.backgroundVideo) return true;
+    if (currentValue != o.background.backgroundVideo) return true;
   } else if (currentType == BackgroundType::Image) {
-    if (currentValue != o.backgroundImage) return true;
+    if (currentValue != o.background.backgroundImage) return true;
   } else {
-    if (currentValue != o.backgroundColor) return true;
+    if (currentValue != o.background.backgroundColor) return true;
   }
 
-  if (ui->primaryColorEdit->text().trimmed() != o.primaryColor) return true;
-  if (ui->tileColorEdit->text().trimmed() != o.tileColor) return true;
-  if (ui->selectionColorEdit->text().trimmed() != o.selectionColor) return true;
-  if (ui->listRowColorEdit->text().trimmed() != o.listRowColor) return true;
-  if (ui->listAltRowColorEdit->text().trimmed() != o.listAltRowColor) return true;
-  if (ui->vignetteEnabledCheckBox->isChecked() != o.vignetteEnabled) return true;
-  if (ui->vignetteIntensitySpinBox->value() != o.vignetteIntensity) return true;
+  if (ui->primaryColorEdit->text().trimmed() != o.background.primaryColor) return true;
+  if (ui->tileColorEdit->text().trimmed() != o.background.tileColor) return true;
+  if (ui->selectionColorEdit->text().trimmed() != o.background.selectionColor) return true;
+  if (ui->listRowColorEdit->text().trimmed() != o.listView.listRowColor) return true;
+  if (ui->listAltRowColorEdit->text().trimmed() != o.listView.listAltRowColor) return true;
+  if (ui->vignetteEnabledCheckBox->isChecked() != o.background.vignetteEnabled) return true;
+  if (ui->vignetteIntensitySpinBox->value() != o.background.vignetteIntensity) return true;
   return false;
 }
 

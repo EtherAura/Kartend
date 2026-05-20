@@ -116,9 +116,9 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
   // modes
-  int gridWidth = collection.gridWidth;
-  int itemHeight = collection.itemHeight;
-  int vSpacing = collection.verticalSpacing;
+  int gridWidth = collection.gridLayout.gridWidth;
+  int itemHeight = collection.gridLayout.itemHeight;
+  int vSpacing = collection.gridLayout.verticalSpacing;
 
   if (scrollMgr()) {
     const auto &metrics = scrollMgr()->getMetrics();
@@ -327,26 +327,26 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int viewportWidth = viewport.width();
   int viewportHeight = viewport.height();
-  int gridWidth = collection.gridWidth;
+  int gridWidth = collection.gridLayout.gridWidth;
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
   int hSpacing =
-      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.horizontalSpacing;
+      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.gridLayout.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
-  int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
-                                      collection.verticalSpacing, margins);
+  int itemX = GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
+  int itemY = GridUtils::computeItemY(index, gridWidth, collection.gridLayout.itemHeight,
+                                      collection.gridLayout.verticalSpacing, margins);
 
   // Calculate target scroll position in logical space (center the item)
-  int logicalTargetY = itemY + (collection.itemHeight / 2) - (viewportHeight / 2);
+  int logicalTargetY = itemY + (collection.gridLayout.itemHeight / 2) - (viewportHeight / 2);
   logicalTargetY = qMax(0, logicalTargetY);
 
   // Convert logical scroll target to widget scroll position for clipped grids
   int targetY = toWidgetScrollY(logicalTargetY);
   targetY = qBound(0, targetY, vScrollBar->maximum());
 
-  int targetX = GridUtils::computeCenterTarget(itemX, collection.itemWidth, viewportWidth,
+  int targetX = GridUtils::computeCenterTarget(itemX, collection.gridLayout.itemWidth, viewportWidth,
                                                hScrollBar->maximum());
   vScrollBar->setValue(targetY);
   hScrollBar->setValue(targetX);

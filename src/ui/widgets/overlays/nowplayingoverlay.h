@@ -9,6 +9,8 @@ class QLabel;
 class QPropertyAnimation;
 QT_END_NAMESPACE
 
+class OverlayLayerManager;
+
 /**
  * @brief Full-window "Now Playing" overlay shown while a runtime-tracked
  * child process is running.
@@ -28,6 +30,10 @@ public:
   void hideOverlay();
   [[nodiscard]] bool isActive() const { return m_active; }
 
+  /// See OverlayLayerManager. Routes showOverlay()'s raise() through the
+  /// central z-order coordinator when installed.
+  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+
 protected:
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
@@ -44,6 +50,7 @@ private:
   QLabel *m_hintLabel = nullptr;
   QPropertyAnimation *m_fadeAnimation = nullptr;
   bool m_active = false;
+  OverlayLayerManager *m_layerManager = nullptr;
 };
 
 #endif // NOWPLAYINGOVERLAY_H

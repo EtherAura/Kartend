@@ -371,9 +371,9 @@ void TestLaunchManager::testParseParameters_rejectsNewlines() {
 void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters() {
   CollectionConfig config;
   config.name = "TestCollection";
-  config.launcherPath = "echo";
-  config.corePath = "--SHOULD-NOT-BE-USED";
-  config.launchParameters = "--fullscreen --scale 2";
+  config.launcher.launcherPath = "echo";
+  config.launcher.corePath = "--SHOULD-NOT-BE-USED";
+  config.launcher.launchParameters = "--fullscreen --scale 2";
 
   const QString filePath = "/tmp/testfile.bin";
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
@@ -386,9 +386,9 @@ void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters
 void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   CollectionConfig config;
   config.name = "TestCollection";
-  config.launcherPath = "retroarch";
-  config.corePath = "/tmp/core.so";
-  config.launchParameters = "--should-be-ignored";
+  config.launcher.launcherPath = "retroarch";
+  config.launcher.corePath = "/tmp/core.so";
+  config.launcher.launchParameters = "--should-be-ignored";
 
   const QString filePath = "/tmp/testfile.bin";
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
@@ -400,8 +400,8 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
 void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
   CollectionConfig config;
   config.name = "Sega - Mega Drive - Genesis";
-  config.launcherPath = "retroarch";
-  config.corePath = "/tmp/genesis_plus_gx_libretro.so";
+  config.launcher.launcherPath = "retroarch";
+  config.launcher.corePath = "/tmp/genesis_plus_gx_libretro.so";
 
   const QString filePath =
       "/mnt/Games/Arcade/Collections/Sega - Mega Drive - Genesis/ROMs/"
@@ -419,55 +419,55 @@ void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
 
 void TestLaunchManager::testLauncherCount_singlePrimary() {
   CollectionConfig config;
-  config.launcherPath = "echo";
-  QCOMPARE(config.launcherCount(), 1);
+  config.launcher.launcherPath = "echo";
+  QCOMPARE(config.launcher.launcherCount(), 1);
 }
 
 void TestLaunchManager::testLauncherCount_withAdditional() {
   CollectionConfig config;
-  config.launcherPath = "echo";
-  config.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
-  config.additionalLaunchers.append(LauncherConfig{"VBA-M", "/usr/bin/vbam", "", ""});
-  QCOMPARE(config.launcherCount(), 3);
+  config.launcher.launcherPath = "echo";
+  config.launcher.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
+  config.launcher.additionalLaunchers.append(LauncherConfig{"VBA-M", "/usr/bin/vbam", "", ""});
+  QCOMPARE(config.launcher.launcherCount(), 3);
 }
 
 void TestLaunchManager::testLauncherAt_returnsAdditionalEntry() {
   CollectionConfig config;
   config.name = "GBA";
-  config.launcherName = "RetroArch";
-  config.launcherPath = "/usr/bin/retroarch";
-  config.corePath = "/cores/mgba.so";
-  config.launchParameters = "-fullscreen";
-  config.additionalLaunchers.append(
+  config.launcher.launcherName = "RetroArch";
+  config.launcher.launcherPath = "/usr/bin/retroarch";
+  config.launcher.corePath = "/cores/mgba.so";
+  config.launcher.launchParameters = "-fullscreen";
+  config.launcher.additionalLaunchers.append(
       LauncherConfig{"mGBA Standalone", "/usr/bin/mgba", "", "--audio-buffers=2048"});
 
-  LauncherConfig primary = config.launcherAt(0);
+  LauncherConfig primary = config.launcher.launcherAt(0);
   QCOMPARE(primary.name, QString("RetroArch"));
   QCOMPARE(primary.launcherPath, QString("/usr/bin/retroarch"));
   QCOMPARE(primary.corePath, QString("/cores/mgba.so"));
   QCOMPARE(primary.launchParameters, QString("-fullscreen"));
 
-  LauncherConfig additional = config.launcherAt(1);
+  LauncherConfig additional = config.launcher.launcherAt(1);
   QCOMPARE(additional.name, QString("mGBA Standalone"));
   QCOMPARE(additional.launcherPath, QString("/usr/bin/mgba"));
   QCOMPARE(additional.launchParameters, QString("--audio-buffers=2048"));
 
   // Out-of-range falls through to an empty config (caller checks isEmpty()).
-  LauncherConfig outOfRange = config.launcherAt(99);
+  LauncherConfig outOfRange = config.launcher.launcherAt(99);
   QVERIFY(outOfRange.launcherPath.isEmpty());
 }
 
 void TestLaunchManager::testLauncherDisplayName_fallsBackToBasename() {
   CollectionConfig config;
-  config.launcherPath = "/usr/local/bin/retroarch";
+  config.launcher.launcherPath = "/usr/local/bin/retroarch";
   // No explicit launcherName → display name should be the basename.
-  QCOMPARE(config.launcherDisplayName(0), QString("retroarch"));
+  QCOMPARE(config.launcher.launcherDisplayName(0), QString("retroarch"));
 
-  config.launcherName = "RA + GBA";
-  QCOMPARE(config.launcherDisplayName(0), QString("RA + GBA"));
+  config.launcher.launcherName = "RA + GBA";
+  QCOMPARE(config.launcher.launcherDisplayName(0), QString("RA + GBA"));
 
-  config.additionalLaunchers.append(LauncherConfig{"", "/opt/mgba/mgba-qt", "", ""});
-  QCOMPARE(config.launcherDisplayName(1), QString("mgba-qt"));
+  config.launcher.additionalLaunchers.append(LauncherConfig{"", "/opt/mgba/mgba-qt", "", ""});
+  QCOMPARE(config.launcher.launcherDisplayName(1), QString("mgba-qt"));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_explicitLauncherConfig() {
@@ -484,20 +484,20 @@ void TestLaunchManager::testBuildLaunchCommand_explicitLauncherConfig() {
 
 void TestLaunchManager::testClampValues_clampsDefaultLauncherIndex() {
   CollectionConfig config;
-  config.launcherPath = "echo";
-  config.defaultLauncherIndex = 7;
+  config.launcher.launcherPath = "echo";
+  config.launcher.defaultLauncherIndex = 7;
   config.clampValues();
   // With 1 launcher, valid range is [0, 0] — anything else clamps down.
-  QCOMPARE(config.defaultLauncherIndex, 0);
+  QCOMPARE(config.launcher.defaultLauncherIndex, 0);
 
-  config.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
-  config.defaultLauncherIndex = 5;
+  config.launcher.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
+  config.launcher.defaultLauncherIndex = 5;
   config.clampValues();
-  QCOMPARE(config.defaultLauncherIndex, 1);
+  QCOMPARE(config.launcher.defaultLauncherIndex, 1);
 
-  config.defaultLauncherIndex = -3;
+  config.launcher.defaultLauncherIndex = -3;
   config.clampValues();
-  QCOMPARE(config.defaultLauncherIndex, 0);
+  QCOMPARE(config.launcher.defaultLauncherIndex, 0);
 }
 
 // ---------------------------------------------------------------------------

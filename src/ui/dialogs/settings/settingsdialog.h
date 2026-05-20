@@ -4,6 +4,7 @@
 #include "applysettingsdialog.h"
 #include "collectionremover.h"
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "isettingsdialog.h"
 #include "settingsmodel.h"
 #include <memory>
@@ -211,7 +212,12 @@ private:
   void onExtractArchivesToggled(bool checked);
   void updateGridWidthLimits();
   void loadGeneralSettingsToUI();
-  void saveGeneralSettingsFromUI();
+  // Mirrors the dialog's working m_generalSettings onto MainWindow's struct,
+  // applies live side effects (PixmapCache resize, VideoThumbnailExtractor
+  // timeout, ItemWidget tint, etc.) and persists via SettingsManager. Returns
+  // the persistence Result so accept() / handleSaveCollection can show an
+  // ErrorDialog and keep the dialog open when the on-disk write fails.
+  [[nodiscard]] ErrorUtils::Result<void> saveGeneralSettingsFromUI();
   void performRecursiveImport(const QString &baseDir, bool isContentDir);
   void ensureRootCollectionExists() override;
   // The 7-step removal pipeline lives on CollectionRemover now.

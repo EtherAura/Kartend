@@ -52,7 +52,7 @@ bool DetailsPane::eventFilter(QObject *watched, QEvent *event) {
   // preview between scraped artwork types. Constrained to these two
   // widgets so it doesn't shadow the grid's arrow navigation.
   if (event->type() == QEvent::KeyPress &&
-      (watched == ui->artworkDisplay || watched == m_videoPreview)) {
+      (watched == ui->artworkDisplay || watched == m_videoPlayback.videoPreview)) {
     auto *keyEvent = static_cast<QKeyEvent *>(event);
     if (keyEvent->key() == Qt::Key_Left) {
       cycleMainPreview(-1);

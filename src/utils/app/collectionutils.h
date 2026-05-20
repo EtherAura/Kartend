@@ -201,11 +201,11 @@ struct LauncherPreset {
 };
 
 /// one entry in a collection's launcher list. The legacy primary
-/// launcher (CollectionConfig::launcherPath/corePath/launchParameters) is
-/// always present as launcher index 0; entries in
-/// CollectionConfig::additionalLaunchers occupy indices 1..N. `name` is a
-/// user-visible label shown in the launcher chooser; empty falls back to the
-/// executable basename.
+/// launcher (CollectionConfig::launcher.launcherPath/corePath/launchParameters)
+/// is always present as launcher index 0; entries in
+/// CollectionConfig::launcher.additionalLaunchers occupy indices 1..N. `name`
+/// is a user-visible label shown in the launcher chooser; empty falls back to
+/// the executable basename.
 ///
 /// when `presetId` matches a registered LauncherPreset id, the
 /// preset's fields override the inline launcher fields at resolution time.
@@ -248,14 +248,38 @@ namespace LauncherUtils {
 
 } // namespace LauncherUtils
 
-struct CollectionConfig {
-  QString name;
-  /// Free-form category/type tag. Empty for an untagged
-  /// collection — subcollections inherit the nearest non-empty ancestor type
-  /// for filter purposes (see CollectionUtils::effectiveCollectionType). The
-  /// value is just a user-chosen label like "Games" / "Movies" / "Music"; the
-  /// app does not interpret it semantically.
-  QString type;
+/// Per-collection title-cleanup filter. First sub-struct extracted from the
+/// CollectionConfig god-struct (Kartend-r4x5 cluster: filter) — owns the
+/// pattern list + the toolbar-driven master toggle that gates pattern
+/// application without dropping the user's saved patterns.
+///
+/// Operator== is value semantics (compare each field). Persistence keys
+/// remain `titleExclusionPatterns` / `titleExclusionEnabled` on the parent
+/// collection so existing kartend.cfg files round-trip unchanged.
+struct CollectionFilterPreferences {
+  /// Regex patterns stripped from displayed item titles; processed in
+  /// order via QString::remove().
+  QStringList titleExclusionPatterns;
+  /// Master switch — when false the patterns persist but are not applied.
+  bool titleExclusionEnabled = true;
+
+  bool operator==(const CollectionFilterPreferences &other) const {
+    return titleExclusionPatterns == other.titleExclusionPatterns &&
+           titleExclusionEnabled == other.titleExclusionEnabled;
+  }
+  bool operator!=(const CollectionFilterPreferences &other) const { return !(*this == other); }
+};
+
+/// Per-collection launcher cluster. Owns the primary launcher's
+/// path/core/parameters/name, the chooser dialog's pre-selected index, and
+/// the extras list. Extracted from the CollectionConfig god-struct as the
+/// second cluster split (Kartend-r4x5 follow-up: launcher). Members keep
+/// their legacy names so existing kartend.cfg INI keys (`launcherPath`,
+/// `corePath`, `launchParameters`, `launcherName`, `additionalLaunchers/*`,
+/// `defaultLauncherIndex`) and kart-manifest JSON keys (`launcher_path`,
+/// `core_path`, `launch_parameters`, `launcher_name`,
+/// `additional_launchers`, `default_launcher_index`) round-trip unchanged.
+struct LauncherProfile {
   QString launcherPath;
   QString corePath;
   QString launchParameters;
@@ -263,93 +287,95 @@ struct CollectionConfig {
   /// chooser dialog falls back to the executable basename.
   QString launcherName;
   /// Extra launchers beyond the primary, indexed at 1..N in launcher views.
-
   QList<LauncherConfig> additionalLaunchers;
   /// Index into the unified launcher view (0 = primary, 1..N =
   /// additionalLaunchers[0..N-1]). The chooser dialog pre-selects this entry
   /// when launcherCount() > 1; for single-launcher collections it is
   /// effectively ignored.
   int defaultLauncherIndex = 0;
-  QString mediaDirectory;
-  QString artworkDirectory;
-  QString videoDirectory;
-  /// Directory that holds per-item manual files (PDF, EPUB, TXT, etc.).
-  /// Files are matched by completeBaseName(), parallel to artworkDirectory
-  /// and videoDirectory. Optional; when empty no manual is auto-discovered.
-  /// Per-item overrides live in `item_metadata.manual_path`.
-  QString manualDirectory;
-  QString placeholderArtwork;
-  QString collectionIcon;
-  QStringList extensions;
-  /// User-defined custom artwork type ids beyond the standard set
-  /// Each entry is a free-form string the user picks; the
-  /// sidebar uses it both as the artwork_type id stored in `item_artwork` and
-  /// as the gallery thumbnail label until a friendly-name registry is added.
-  /// Auto-discovery does NOT apply to custom types — they only resolve via a
-  /// per-item manual override.
-  QStringList customArtworkTypes;
-  int gridWidth = 4;
-  /// per-collection items-per-column for the Horizontal view
-  /// mode. 0 means "fall back to gridWidth" so existing collections that
-  /// upgrade and try Horizontal mode still get a sensible default. Floored
-  /// to MIN_WIDTH for any non-zero value at save time — no upper cap, so
-  /// extra-wide layouts on 4K/8K displays are permitted.
-  int horizontalGridHeight = 0;
-  /// alternate items-per-row applied when the sidebar is hidden
-  /// AND the active sidebar mode actually shrinks the grid (Expand). 0 means
-  /// "inherit gridWidth" so existing collections behave unchanged. Overlay mode
-  /// always uses gridWidth regardless of sidebar visibility, since the floating
-  /// sidebar doesn't reduce the grid's available area.
-  int gridWidthSidebarHidden = 0;
-  /// alternate items-per-column for Horizontal view, applied when
-  /// the sidebar is hidden in Expand mode. 0 means "inherit horizontalGridHeight"
-  /// (which itself falls back to gridWidth when 0).
-  int horizontalGridHeightSidebarHidden = 0;
-  /// alternate vertical-axis grid override applied when a
-  /// Top/Bottom-docked details pane hides in Expand mode. Reserved for views
-  /// that have a meaningful items-per-column dimension (e.g. Horizontal); 0
-  /// means "no override" so existing layouts are unaffected. Sibling to
-  /// gridWidthSidebarHidden but for the vertical-shrink case. Persisted but
-  /// not yet consumed by the layout calculator — exposed here so callers can
-  /// round-trip the value through INI and the kart manifest.
-  int gridHeightSidebarHidden = 0;
+
+  // ─── Launcher list helpers ───────────────────────────────────
+  /// Total number of launchers visible to the user: 1 primary + N additional.
+  [[nodiscard]] int launcherCount() const { return 1 + additionalLaunchers.size(); }
+
+  /// Returns the launcher at the unified index. Index 0 is the primary
+  /// (synthesized from the legacy fields); index 1..N maps to
+  /// additionalLaunchers[0..N-1]. Out-of-range indices return an empty config.
+  [[nodiscard]] LauncherConfig launcherAt(int index) const {
+    if (index == 0) {
+      // Qualify with this-> so the compiler doesn't confuse the legacy fields
+      // with the same-named members on LauncherConfig during aggregate init.
+      // The trailing empty string is the presetId — the primary launcher
+      // slot itself never references a preset.
+      return LauncherConfig{this->launcherName, this->launcherPath, this->corePath,
+                            this->launchParameters, QString{}};
+    }
+    const int additionalIndex = index - 1;
+    if (additionalIndex < 0 || additionalIndex >= this->additionalLaunchers.size()) {
+      return LauncherConfig{};
+    }
+    return this->additionalLaunchers[additionalIndex];
+  }
+
+  /// Friendly display name for a launcher entry. Falls back to the executable
+  /// basename when the user-supplied name is empty, and to a numbered label
+  /// when the launcher path itself is also empty.
+  [[nodiscard]] QString launcherDisplayName(int index) const {
+    LauncherConfig launcher = launcherAt(index);
+    if (!launcher.name.trimmed().isEmpty()) {
+      return launcher.name.trimmed();
+    }
+    if (!launcher.launcherPath.trimmed().isEmpty()) {
+      QString basename = launcher.launcherPath.trimmed();
+      int slash = basename.lastIndexOf(QLatin1Char('/'));
+      if (slash >= 0) {
+        basename = basename.mid(slash + 1);
+      }
+      return basename;
+    }
+    return QString::number(index + 1);
+  }
+
+  bool operator==(const LauncherProfile &other) const {
+    return launcherPath == other.launcherPath && corePath == other.corePath &&
+           launchParameters == other.launchParameters && launcherName == other.launcherName &&
+           additionalLaunchers == other.additionalLaunchers &&
+           defaultLauncherIndex == other.defaultLauncherIndex;
+  }
+  bool operator!=(const LauncherProfile &other) const { return !(*this == other); }
+};
+
+/// Per-collection sidebar (details-pane) look. Extracted from the
+/// CollectionConfig god-struct (Kartend-r4x5 follow-up: sidebar appearance).
+/// Owns visibility, dock mode/position, background + pattern, text/accent
+/// colors, header/section bubble color+opacity, width/height + lock,
+/// active tab, and the per-collection font override. Members keep their
+/// legacy names so existing kartend.cfg INI keys and kart-manifest JSON
+/// keys (`sidebarMode`, `sidebarPosition`, `sidebarBackgroundColor`,
+/// `sidebar_font_family`, …) round-trip unchanged. Accessed as
+/// `cfg.sidebar.sidebarMode` — the `sidebar` prefix on member names is
+/// preserved to match the persistence keys + the launcher/filter cluster
+/// pattern (CollectionFilterPreferences::titleExclusionPatterns,
+/// LauncherProfile::launcherPath).
+struct SidebarAppearance {
   bool sidebarVisible = false;
-  int parentCollectionIndex = -1;
-  bool isSubcollection = false;
-  [[nodiscard]] bool hasParent() const { return parentCollectionIndex >= 0; }
-  bool showAllSubcollectionItems = false;
-  bool hideTitles = false;
-  bool hideSubcollectionTitles = false;
-  /// Per-collection regex patterns stripped from displayed item titles
-  /// One pattern per entry; processed in order via
-  /// QString::remove(). Common use is dropping region tags like `\s*\(USA\)`
-  /// or revision tags like `\s*\[!\]` so only the canonical title shows in
-  /// the grid/list. Patterns are stored verbatim (no escaping) — the user
-  /// types regex syntax directly in the toolbar popup. Invalid patterns are
-  /// skipped at compile time rather than aborting the whole list.
-  QStringList titleExclusionPatterns;
-  /// Master switch for the exclusion list. When false the
-  /// patterns persist but are not applied — lets the user toggle the cleanup
-  /// from the toolbar without losing their pattern list.
-  bool titleExclusionEnabled = true;
-  HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   DetailsPaneMode sidebarMode = DetailsPaneMode::Overlay;
   /// sidebar enhancements. Position controls left/right placement;
-  /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay mode
-  /// it swaps the X anchor in positionSidebarOverlay().
+  /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay
+  /// mode it swaps the X anchor in positionSidebarOverlay().
   DetailsPanePosition sidebarPosition = DetailsPanePosition::Right;
   /// Background rendering mode for the sidebar. Color and Image mirror the
   /// main-view background pattern. Pattern fills with `sidebarBackgroundColor`
-  /// (or system Window when blank) and overlays the chosen procedural pattern
-  /// tinted with `sidebarPatternColor`.
+  /// (or system Window when blank) and overlays the chosen procedural
+  /// pattern tinted with `sidebarPatternColor`.
   DetailsPaneBackgroundType sidebarBackgroundType = DetailsPaneBackgroundType::Color;
   QString sidebarBackgroundColor; // hex; blank falls back to palette(Window)
   QString sidebarBackgroundImage; // path; sanitized via validatePathSecurity on save
   DetailsPanePattern sidebarPattern = DetailsPanePattern::Crosshatch;
   /// 0–100 % opacity multiplier applied to pattern strokes.
   /// Lower values fade the lines into the bg without changing color; users
-  /// who add new DetailsPanePattern variants later get a single intensity knob
-  /// for free. 50 matches the original sidebar dimming.
+  /// who add new DetailsPanePattern variants later get a single intensity
+  /// knob for free. 50 matches the original sidebar dimming.
   int sidebarPatternIntensity = 50;
   QString sidebarPatternColor; // hex tint overlay painted on top of the pattern
   QString sidebarTextColor;    // hex; blank falls back to palette(WindowText)
@@ -373,24 +399,79 @@ struct CollectionConfig {
   /// cannot drag the inner edge to resize.
   int sidebarWidth = UIConstants::DetailsPane::FIXED_WIDTH;
   /// preferred pane height when docked Top or Bottom. Floored at
-  /// MIN_HEIGHT at apply time; no upper bound. Defaults to FIXED_HEIGHT so a
-  /// fresh switch to Top/Bottom dock has a sensible size.
+  /// MIN_HEIGHT at apply time; no upper bound. Defaults to FIXED_HEIGHT so
+  /// a fresh switch to Top/Bottom dock has a sensible size.
   int sidebarHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
-  /// name kept as `sidebarWidthLocked` to preserve the existing
-  /// INI key, but semantically locks BOTH width drag (L/R) and height drag
-  /// (T/B). When true the user cannot drag the inner edge to resize.
+  /// name kept as `sidebarWidthLocked` to preserve the existing INI key,
+  /// but semantically locks BOTH width drag (L/R) and height drag (T/B).
+  /// When true the user cannot drag the inner edge to resize.
   bool sidebarWidthLocked = true;
   /// Which built-in sidebar tab is active. Persisted per collection so users
   /// can keep one collection on the Collection summary tab while another
   /// stays on the per-Item view.
   DetailsPaneTab sidebarActiveTab = DetailsPaneTab::Item;
-  ViewType viewType = ViewType::Grid; // Grid (default) or List view
-  /// when true, media items whose artwork lookup returns no
-  /// match are hidden from the items page. Subcollections and virtual folders
-  /// are unaffected. The filter combines with the active search /
-  /// subcollection filter as an additional predicate, so search results are
-  /// also pruned to items that have artwork.
-  bool hideMissingArtwork = false;
+  /// Per-collection override for the metadata sidebar's text. Empty family /
+  /// 0 size = inherit from the application font (which itself respects
+  /// GeneralSettings::globalUiFontFamily).
+  QString sidebarFontFamily;
+  int sidebarFontPointSize = 0;
+
+  bool operator==(const SidebarAppearance &other) const {
+    return sidebarVisible == other.sidebarVisible && sidebarMode == other.sidebarMode &&
+           sidebarPosition == other.sidebarPosition &&
+           sidebarBackgroundType == other.sidebarBackgroundType &&
+           sidebarBackgroundColor == other.sidebarBackgroundColor &&
+           sidebarBackgroundImage == other.sidebarBackgroundImage &&
+           sidebarPattern == other.sidebarPattern &&
+           sidebarPatternIntensity == other.sidebarPatternIntensity &&
+           sidebarPatternColor == other.sidebarPatternColor &&
+           sidebarTextColor == other.sidebarTextColor &&
+           sidebarAccentColor == other.sidebarAccentColor &&
+           sidebarHeaderBgColor == other.sidebarHeaderBgColor &&
+           sidebarSectionBgColor == other.sidebarSectionBgColor &&
+           sidebarHeaderBgOpacity == other.sidebarHeaderBgOpacity &&
+           sidebarSectionBgOpacity == other.sidebarSectionBgOpacity &&
+           sidebarWidth == other.sidebarWidth && sidebarHeight == other.sidebarHeight &&
+           sidebarWidthLocked == other.sidebarWidthLocked &&
+           sidebarActiveTab == other.sidebarActiveTab &&
+           sidebarFontFamily == other.sidebarFontFamily &&
+           sidebarFontPointSize == other.sidebarFontPointSize;
+  }
+  bool operator!=(const SidebarAppearance &other) const { return !(*this == other); }
+};
+
+/// Per-collection grid / item-layout cluster. Extracted from CollectionConfig
+/// (Kartend-r4x5 follow-up: grid+layout). Owns the items-per-row / per-column
+/// fields (including the sidebar-hidden alternates), grid spacing, item box
+/// dimensions + font + corner radius, and the scrollbar-hide toggles. Members
+/// keep their legacy names so existing INI + kart-manifest keys round-trip
+/// unchanged; access as `cfg.gridLayout.itemWidth` etc.
+struct GridLayoutPreferences {
+  int gridWidth = 4;
+  /// per-collection items-per-column for the Horizontal view
+  /// mode. 0 means "fall back to gridWidth" so existing collections that
+  /// upgrade and try Horizontal mode still get a sensible default. Floored
+  /// to MIN_WIDTH for any non-zero value at save time — no upper cap, so
+  /// extra-wide layouts on 4K/8K displays are permitted.
+  int horizontalGridHeight = 0;
+  /// alternate items-per-row applied when the sidebar is hidden
+  /// AND the active sidebar mode actually shrinks the grid (Expand). 0 means
+  /// "inherit gridWidth" so existing collections behave unchanged. Overlay
+  /// mode always uses gridWidth regardless of sidebar visibility, since the
+  /// floating sidebar doesn't reduce the grid's available area.
+  int gridWidthSidebarHidden = 0;
+  /// alternate items-per-column for Horizontal view, applied when
+  /// the sidebar is hidden in Expand mode. 0 means "inherit
+  /// horizontalGridHeight" (which itself falls back to gridWidth when 0).
+  int horizontalGridHeightSidebarHidden = 0;
+  /// alternate vertical-axis grid override applied when a
+  /// Top/Bottom-docked details pane hides in Expand mode. Reserved for views
+  /// that have a meaningful items-per-column dimension (e.g. Horizontal); 0
+  /// means "no override" so existing layouts are unaffected. Sibling to
+  /// gridWidthSidebarHidden but for the vertical-shrink case. Persisted but
+  /// not yet consumed by the layout calculator — exposed here so callers can
+  /// round-trip the value through INI and the kart manifest.
+  int gridHeightSidebarHidden = 0;
   int horizontalSpacing = UIConstants::Grid::SPACING;
   int verticalSpacing = 20;
   bool hideHorizontalScrollbar = false;
@@ -400,7 +481,30 @@ struct CollectionConfig {
   int fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   int cornerRadius = UIConstants::Item::DEFAULT_CORNER_RADIUS;
 
-  // Background settings
+  bool operator==(const GridLayoutPreferences &other) const {
+    return gridWidth == other.gridWidth && horizontalGridHeight == other.horizontalGridHeight &&
+           gridWidthSidebarHidden == other.gridWidthSidebarHidden &&
+           horizontalGridHeightSidebarHidden == other.horizontalGridHeightSidebarHidden &&
+           gridHeightSidebarHidden == other.gridHeightSidebarHidden &&
+           horizontalSpacing == other.horizontalSpacing &&
+           verticalSpacing == other.verticalSpacing &&
+           hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
+           hideVerticalScrollbar == other.hideVerticalScrollbar && itemWidth == other.itemWidth &&
+           itemHeight == other.itemHeight && fontSize == other.fontSize &&
+           cornerRadius == other.cornerRadius;
+  }
+  bool operator!=(const GridLayoutPreferences &other) const { return !(*this == other); }
+};
+
+/// Per-collection view background / wallpaper cluster. Extracted from
+/// CollectionConfig (Kartend-r4x5 follow-up: view+background). Owns the
+/// items-page background (color/image/video), the primary/tile/selection
+/// palette, the header logo (image + position), the vignette overlay
+/// (toggle + intensity), the wallpaper-parallax controls, and the toolbar
+/// backdrop-blur knobs. Members keep their legacy names so existing INI +
+/// kart-manifest keys round-trip unchanged; access as
+/// `cfg.background.backgroundColor` etc.
+struct CollectionBackground {
   BackgroundType backgroundType = BackgroundType::Color;
   QString backgroundColor; // Background color (hex like #1a1a2e)
   QString backgroundImage; // Background image path
@@ -446,9 +550,226 @@ struct CollectionConfig {
   bool toolbarBackdropBlur = false;
   int backdropBlurRadius = 12;
 
-  // Archive extraction for cores that don't support zipped content
-  bool extractArchives = false; // Extract archives to temp dir before launch
-  QString extractedExtension;   // File extension to launch from extracted archive
+  bool operator==(const CollectionBackground &other) const {
+    return backgroundType == other.backgroundType && backgroundColor == other.backgroundColor &&
+           backgroundImage == other.backgroundImage && backgroundVideo == other.backgroundVideo &&
+           primaryColor == other.primaryColor && tileColor == other.tileColor &&
+           selectionColor == other.selectionColor && headerLogoImage == other.headerLogoImage &&
+           headerLogoPosition == other.headerLogoPosition &&
+           vignetteEnabled == other.vignetteEnabled &&
+           vignetteIntensity == other.vignetteIntensity &&
+           wallpaperParallax == other.wallpaperParallax &&
+           parallaxStrength == other.parallaxStrength &&
+           toolbarBackdropBlur == other.toolbarBackdropBlur &&
+           backdropBlurRadius == other.backdropBlurRadius;
+  }
+  bool operator!=(const CollectionBackground &other) const { return !(*this == other); }
+};
+
+/// Archive-extraction toggles. Originally flat fields on CollectionConfig;
+/// bundled into a focused sub-struct so the cluster's intent (run native
+/// binaries that don't grok zipped content) is obvious from one accessor.
+/// INI keys + kart-manifest JSON keys (`extractArchives`,
+/// `extractedExtension`) round-trip unchanged.
+struct ArchiveOptions {
+  /// Extract archives to a temp dir before launch; cleaned up post-exit.
+  bool extractArchives = false;
+  /// Extension to launch from the extracted archive when the archive
+  /// itself isn't directly launchable.
+  QString extractedExtension;
+
+  bool operator==(const ArchiveOptions &other) const {
+    return extractArchives == other.extractArchives &&
+           extractedExtension == other.extractedExtension;
+  }
+  bool operator!=(const ArchiveOptions &other) const { return !(*this == other); }
+};
+
+/// Virtual-folder browsing options + the runtime cursor for the currently
+/// active subfolder. Currently-active subfolder lives here so the cluster
+/// owns one cohesive piece of state — the persisted toggles and the
+/// runtime cursor are accessed together by the navigation/scroll paths.
+/// INI keys + kart-manifest JSON keys round-trip unchanged.
+struct FolderBrowsingOptions {
+  /// Show subfolders under mediaDirectory as virtual navigable folders.
+  bool includeContentSubfolders = false;
+  /// Match artwork from subfolders of artworkDirectory.
+  bool includeArtworkSubfolders = false;
+  /// Mix subfolder items with parent (like showAllSubcollectionItems).
+  bool showAllSubfolderItems = false;
+  /// Hide titles on virtual folder widgets.
+  bool hideSubfolderTitles = false;
+  /// Show hidden folders (names starting with a dot).
+  bool showHiddenFolders = false;
+
+  /// Runtime-only: current virtual subfolder path (relative to
+  /// mediaDirectory). NOT persisted — reset to empty on collection load.
+  QString currentSubfolder;
+
+  bool operator==(const FolderBrowsingOptions &other) const {
+    return includeContentSubfolders == other.includeContentSubfolders &&
+           includeArtworkSubfolders == other.includeArtworkSubfolders &&
+           showAllSubfolderItems == other.showAllSubfolderItems &&
+           hideSubfolderTitles == other.hideSubfolderTitles &&
+           showHiddenFolders == other.showHiddenFolders &&
+           currentSubfolder == other.currentSubfolder;
+  }
+  bool operator!=(const FolderBrowsingOptions &other) const { return !(*this == other); }
+};
+
+/// List-view appearance overrides. Only consulted when
+/// `cfg.viewType == ViewType::List`. INI keys + kart-manifest JSON keys
+/// (`listFontSize`, `listRowHeight`, `listRowColor`, `listAltRowColor`)
+/// round-trip unchanged.
+struct ListViewOptions {
+  /// Font size for list view text.
+  int listFontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  /// Row height in list view (pixels).
+  int listRowHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT;
+  /// Primary row color (if blank, uses system Base).
+  QString listRowColor;
+  /// Alternate row color (if blank, uses system AlternateBase).
+  QString listAltRowColor;
+
+  bool operator==(const ListViewOptions &other) const {
+    return listFontSize == other.listFontSize && listRowHeight == other.listRowHeight &&
+           listRowColor == other.listRowColor && listAltRowColor == other.listAltRowColor;
+  }
+  bool operator!=(const ListViewOptions &other) const { return !(*this == other); }
+};
+
+/// Per-collection scraper / DAT overrides. Pinning a scraper provider,
+/// overriding ScreenScraper's system id, and the DAT-file priority list
+/// all live here. Originally flat fields on CollectionConfig; bundled
+/// here so the scrape-side providers can take a `const ScraperOverrides &`
+/// instead of reaching into the whole CollectionConfig. INI keys +
+/// kart-manifest JSON keys round-trip unchanged.
+struct ScraperOverrides {
+  /// ScreenScraper.fr systemeid override. -1 = unset; the SS provider
+  /// then runs its autodetect heuristic.
+  int screenscraperSystemId = -1;
+  /// When true and the scraped item is an archive (.zip / .7z / etc.),
+  /// the SS provider extracts the archive and hashes the inner ROM
+  /// rather than the outer archive bytes.
+  bool screenscraperHashArchive = true;
+  /// Paths to DAT files (No-Intro / Redump / TOSEC Logiqx, or MAME
+  /// listxml) used for offline ROM ID. Walked in list order on every
+  /// scrape — the first hash hit wins.
+  QStringList datFilePaths;
+  /// Metadata-scraper provider override for this collection. Empty
+  /// means "automatic" — the scrape resolves a provider by matching the
+  /// collection `type`. A non-empty value pins that exact scraper.
+  QString scraperProviderId;
+
+  bool operator==(const ScraperOverrides &other) const {
+    return screenscraperSystemId == other.screenscraperSystemId &&
+           screenscraperHashArchive == other.screenscraperHashArchive &&
+           datFilePaths == other.datFilePaths && scraperProviderId == other.scraperProviderId;
+  }
+  bool operator!=(const ScraperOverrides &other) const { return !(*this == other); }
+};
+
+struct CollectionConfig {
+  QString name;
+  /// Free-form category/type tag. Empty for an untagged
+  /// collection — subcollections inherit the nearest non-empty ancestor type
+  /// for filter purposes (see CollectionUtils::effectiveCollectionType). The
+  /// value is just a user-chosen label like "Games" / "Movies" / "Music"; the
+  /// app does not interpret it semantically.
+  QString type;
+  /// Launcher cluster — primary launcher (path/core/parameters/name),
+  /// additional launchers, and the chooser dialog's pre-selected index.
+  /// Bundled into a focused sub-struct (Kartend-r4x5 follow-up: launcher):
+  /// members are accessed via `cfg.launcher.launcherPath` /
+  /// `cfg.launcher.additionalLaunchers` / etc. so the same INI keys
+  /// (`launcherPath`, `corePath`, `launchParameters`, `launcherName`,
+  /// `additionalLaunchers/*`, `defaultLauncherIndex`) and kart-manifest
+  /// JSON keys round-trip unchanged.
+  LauncherProfile launcher;
+  QString mediaDirectory;
+  QString artworkDirectory;
+  QString videoDirectory;
+  /// Directory that holds per-item manual files (PDF, EPUB, TXT, etc.).
+  /// Files are matched by completeBaseName(), parallel to artworkDirectory
+  /// and videoDirectory. Optional; when empty no manual is auto-discovered.
+  /// Per-item overrides live in `item_metadata.manual_path`.
+  QString manualDirectory;
+  QString placeholderArtwork;
+  QString collectionIcon;
+  QStringList extensions;
+  /// User-defined custom artwork type ids beyond the standard set
+  /// Each entry is a free-form string the user picks; the
+  /// sidebar uses it both as the artwork_type id stored in `item_artwork` and
+  /// as the gallery thumbnail label until a friendly-name registry is added.
+  /// Auto-discovery does NOT apply to custom types — they only resolve via a
+  /// per-item manual override.
+  QStringList customArtworkTypes;
+  /// Grid + item-layout cluster — items-per-row/-column (with sidebar-hidden
+  /// alternates), spacing, item box dimensions + font + corner radius, and
+  /// the scrollbar-hide toggles. Bundled into a focused sub-struct
+  /// (Kartend-r4x5 follow-up: grid+layout): access as
+  /// `cfg.gridLayout.gridWidth` / `cfg.gridLayout.itemWidth` etc. INI keys +
+  /// kart-manifest JSON keys round-trip unchanged.
+  GridLayoutPreferences gridLayout;
+  int parentCollectionIndex = -1;
+  bool isSubcollection = false;
+  [[nodiscard]] bool hasParent() const { return parentCollectionIndex >= 0; }
+  bool showAllSubcollectionItems = false;
+  bool hideTitles = false;
+  bool hideSubcollectionTitles = false;
+  /// Title-cleanup filter — per-collection regex patterns plus a master
+  /// toggle that lets the user pause the cleanup from the toolbar without
+  /// dropping the pattern list. Bundled into a focused sub-struct as the
+  /// first step of the CollectionConfig god-struct split: members are
+  /// accessed via `cfg.filter.titleExclusionPatterns` /
+  /// `cfg.filter.titleExclusionEnabled` so the same INI keys
+  /// (`titleExclusionPatterns/*` and `titleExclusionEnabled`) round-trip
+  /// without a config-format change.
+  ///
+  /// titleExclusionPatterns: regex patterns stripped from displayed item
+  /// titles, processed in order via QString::remove(). Common use is
+  /// dropping region tags like `\s*\(USA\)` or revision tags like
+  /// `\s*\[!\]` so only the canonical title shows in the grid/list.
+  /// Patterns are stored verbatim (no escaping) — the user types regex
+  /// syntax directly in the toolbar popup. Invalid patterns are skipped
+  /// at compile time rather than aborting the whole list.
+  ///
+  /// titleExclusionEnabled: master switch for the exclusion list. When
+  /// false the patterns persist but are not applied — lets the user
+  /// toggle the cleanup from the toolbar without losing their pattern
+  /// list.
+  CollectionFilterPreferences filter;
+  HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
+  /// Sidebar (details-pane) appearance cluster — visibility, dock mode /
+  /// position, background + pattern, text/accent colors, header/section
+  /// bubble color+opacity, width/height + lock, active tab, and the
+  /// per-collection font override. Bundled into a focused sub-struct
+  /// (Kartend-r4x5 follow-up: sidebar appearance): members accessed as
+  /// `cfg.sidebar.sidebarMode` etc. so the same INI keys + kart-manifest
+  /// JSON keys (`sidebarMode`, `sidebarPosition`, `sidebarBackgroundColor`,
+  /// `sidebar_font_family`, …) round-trip unchanged.
+  SidebarAppearance sidebar;
+  ViewType viewType = ViewType::Grid; // Grid (default) or List view
+  /// when true, media items whose artwork lookup returns no
+  /// match are hidden from the items page. Subcollections and virtual folders
+  /// are unaffected. The filter combines with the active search /
+  /// subcollection filter as an additional predicate, so search results are
+  /// also pruned to items that have artwork.
+  bool hideMissingArtwork = false;
+
+  /// View background / wallpaper cluster — items-page background
+  /// (color/image/video), primary/tile/selection palette, header logo,
+  /// vignette overlay, wallpaper-parallax controls, and toolbar
+  /// backdrop-blur knobs. Bundled into a focused sub-struct (Kartend-r4x5
+  /// follow-up: view+background): access as `cfg.background.backgroundColor`
+  /// etc. INI keys + kart-manifest JSON keys round-trip unchanged.
+  CollectionBackground background;
+
+  /// Archive-extraction cluster — toggles for cores that don't grok zipped
+  /// content. Access as `cfg.archive.extractArchives` /
+  /// `cfg.archive.extractedExtension`. INI keys (`extractArchives`,
+  /// `extractedExtension`) round-trip unchanged.
+  ArchiveOptions archive;
 
   // Expand mode: two-stage activation. When enabled, the first activation
   // (double-click or Enter) on a selected item shows the artwork preview
@@ -456,37 +777,25 @@ struct CollectionConfig {
   // launches it. Selection change resets the expanded state.
   bool expandMode = false;
 
-  // Folder browsing options
-  bool includeContentSubfolders = false; // Show subfolders as virtual navigable folders
-  bool includeArtworkSubfolders = false; // Match artwork from subfolders
-  bool showAllSubfolderItems =
-      false; // Mix subfolder items with parent (like showAllSubcollectionItems)
-  bool hideSubfolderTitles = false; // Hide titles on virtual folder widgets
-  bool showHiddenFolders = false;   // Show hidden folders (starting with dot)
+  /// Virtual-folder browsing cluster — the persisted "treat subfolders as
+  /// virtual navigable folders" toggles plus the runtime currentSubfolder
+  /// cursor. Access as `cfg.folderBrowsing.includeContentSubfolders` /
+  /// `cfg.folderBrowsing.currentSubfolder`. INI keys round-trip unchanged.
+  FolderBrowsingOptions folderBrowsing;
 
-  // Virtual subfolder tracking (runtime only, not persisted)
-  QString currentSubfolder; // Current virtual subfolder path (relative to
-                            // mediaDirectory)
-
-  // List mode settings
-  int listFontSize = UIConstants::Item::DEFAULT_FONT_SIZE;       // Font size for list view text
-  int listRowHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT; // Row height in list view
-  QString listRowColor;    // Primary row color (if blank, uses system Base)
-  QString listAltRowColor; // Alternate row color (if blank, uses system
-                           // AlternateBase)
+  /// List-view appearance overrides. Only consulted when
+  /// `viewType == ViewType::List`. Access as `cfg.listView.listFontSize` etc.
+  ListViewOptions listView;
 
   // Text appearance settings (per-collection)
   QString customFontFamily; // Custom font family (empty = system default)
 
   // ─── Sidebar font ───────────────────────────────────────────
-  // Per-collection override for the metadata sidebar's text. Empty family /
-  // 0 size = inherit from the application font (which itself respects
-  // GeneralSettings::globalUiFontFamily). Stored alongside the rest of the
-  // sidebarXxx appearance fields so a collection's sidebar look is fully
+  // Per-collection override for the metadata sidebar's text now lives on
+  // the SidebarAppearance sub-struct (`cfg.sidebar.sidebarFontFamily` /
+  // `cfg.sidebar.sidebarFontPointSize`). The font fields were folded into
+  // the sidebar cluster to keep a collection's sidebar look fully
   // self-contained.
-  // ───────────────────────────────────────────────────────────────────────────
-  QString sidebarFontFamily;
-  int sidebarFontPointSize = 0;
 
   // ─── Playlist support ───────────────────────────────────────
   // Runtime-only marker for synthesized "virtual collection" entries backed by
@@ -498,41 +807,14 @@ struct CollectionConfig {
   bool isPlaylist = false;
   QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
 
-  /// ScreenScraper.fr systemeid override. -1 = unset; the SS provider
-  /// then runs its autodetect heuristic over the collection's
-  /// extensions / name / type to pick a best-guess id at scrape time.
-  /// Set explicitly when autodetect picks the wrong system. Stored
-  /// per-collection in kartend.cfg.
-  int screenscraperSystemId = -1;
-  /// When true and the scraped item is an archive (.zip / .7z / etc.),
-  /// the SS provider extracts the archive to a temp dir and hashes the
-  /// inner ROM rather than the outer archive bytes. SS's hash database
-  /// indexes inner-ROM hashes (the cartridge dump itself), so this
-  /// dramatically improves match accuracy for users who keep their
-  /// libraries zipped. Off → hash the archive itself (fine for SS-
-  /// known archive variants, useless otherwise — falls back to the
-  /// filename match). Default on. Stored per-collection in kartend.cfg.
-  bool screenscraperHashArchive = true;
-  /// Paths to DAT files (No-Intro / Redump / TOSEC Logiqx, or MAME
-  /// listxml) used for offline ROM ID. Walked in list order on every
-  /// scrape — the first hash hit wins, so the user can put the most
-  /// authoritative catalogue at the top and lower-quality fallbacks
-  /// later. Empty list = no DAT lookup. Stored per-collection in
-  /// kartend.cfg as an INI array under `datFilePaths/`. Legacy
-  /// configs with the single-key `datFilePath=...` shape are
-  /// upgraded to a one-element list at load time.
-  QStringList datFilePaths;
-  /// Metadata-scraper provider override for this collection. Empty means
-  /// "automatic" — the scrape resolves a provider by matching the
-  /// collection `type` against each provider's category (see
-  /// MetadataProviderRegistry::forCategory). A non-empty value is a
-  /// provider id ("tmdb", "screenscraper", "musicbrainz", "openlibrary")
-  /// that pins that exact scraper regardless of type. The collection-
-  /// creation dialog seeds this from the chosen media type and lets the
-  /// user override it — the override path is what makes a custom-typed
-  /// collection scrapable when category autodetection resolves nothing.
-  /// Stored per-collection in kartend.cfg.
-  QString scraperProviderId;
+  /// Scraper / DAT override cluster — pinning a scraper provider,
+  /// overriding ScreenScraper's system id, hash-archive policy, and the
+  /// DAT-file priority list. Access as
+  /// `cfg.scraperOverrides.screenscraperSystemId` /
+  /// `cfg.scraperOverrides.datFilePaths` / etc. INI keys + kart-manifest
+  /// JSON keys (`screenscraperSystemId`, `screenscraperHashArchive`,
+  /// `datFilePaths`, `scraperProviderId`) round-trip unchanged.
+  ScraperOverrides scraperOverrides;
   /// Marks the synthesized config as a smart playlist (filter-driven).
   /// Set during MainWindow::resyncPlaylistCollections from the
   /// PlaylistRow.isSmart flag. UI surfaces (right-click menu, sidebar
@@ -559,120 +841,26 @@ struct CollectionConfig {
   QString playlistReservedKind;
 
   bool operator==(const CollectionConfig &other) const {
-    return name == other.name && type == other.type && launcherPath == other.launcherPath &&
-           corePath == other.corePath && launchParameters == other.launchParameters &&
-           launcherName == other.launcherName && additionalLaunchers == other.additionalLaunchers &&
-           defaultLauncherIndex == other.defaultLauncherIndex &&
+    return name == other.name && type == other.type && launcher == other.launcher &&
            mediaDirectory == other.mediaDirectory && artworkDirectory == other.artworkDirectory &&
            videoDirectory == other.videoDirectory && manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
-           customArtworkTypes == other.customArtworkTypes && gridWidth == other.gridWidth &&
-           horizontalGridHeight == other.horizontalGridHeight &&
-           gridWidthSidebarHidden == other.gridWidthSidebarHidden &&
-           horizontalGridHeightSidebarHidden == other.horizontalGridHeightSidebarHidden &&
-           gridHeightSidebarHidden == other.gridHeightSidebarHidden &&
-           sidebarVisible == other.sidebarVisible &&
+           customArtworkTypes == other.customArtworkTypes && gridLayout == other.gridLayout &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
            showAllSubcollectionItems == other.showAllSubcollectionItems &&
            hideTitles == other.hideTitles &&
-           hideSubcollectionTitles == other.hideSubcollectionTitles &&
-           titleExclusionPatterns == other.titleExclusionPatterns &&
-           titleExclusionEnabled == other.titleExclusionEnabled &&
-           horizontalAlignment == other.horizontalAlignment && sidebarMode == other.sidebarMode &&
-           sidebarPosition == other.sidebarPosition &&
-           sidebarBackgroundType == other.sidebarBackgroundType &&
-           sidebarBackgroundColor == other.sidebarBackgroundColor &&
-           sidebarBackgroundImage == other.sidebarBackgroundImage &&
-           sidebarPattern == other.sidebarPattern &&
-           sidebarPatternIntensity == other.sidebarPatternIntensity &&
-           sidebarPatternColor == other.sidebarPatternColor &&
-           sidebarTextColor == other.sidebarTextColor &&
-           sidebarAccentColor == other.sidebarAccentColor &&
-           sidebarHeaderBgColor == other.sidebarHeaderBgColor &&
-           sidebarSectionBgColor == other.sidebarSectionBgColor &&
-           sidebarHeaderBgOpacity == other.sidebarHeaderBgOpacity &&
-           sidebarSectionBgOpacity == other.sidebarSectionBgOpacity &&
-           sidebarWidth == other.sidebarWidth && sidebarHeight == other.sidebarHeight &&
-           sidebarWidthLocked == other.sidebarWidthLocked &&
-           sidebarActiveTab == other.sidebarActiveTab && viewType == other.viewType &&
-           horizontalSpacing == other.horizontalSpacing &&
-           verticalSpacing == other.verticalSpacing &&
-           hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
-           hideVerticalScrollbar == other.hideVerticalScrollbar && itemWidth == other.itemWidth &&
-           itemHeight == other.itemHeight && fontSize == other.fontSize &&
-           cornerRadius == other.cornerRadius && backgroundType == other.backgroundType &&
-           backgroundColor == other.backgroundColor && backgroundImage == other.backgroundImage &&
-           backgroundVideo == other.backgroundVideo && primaryColor == other.primaryColor &&
-           tileColor == other.tileColor && selectionColor == other.selectionColor &&
-           headerLogoImage == other.headerLogoImage &&
-           headerLogoPosition == other.headerLogoPosition &&
-           vignetteEnabled == other.vignetteEnabled &&
-           vignetteIntensity == other.vignetteIntensity &&
-           wallpaperParallax == other.wallpaperParallax &&
-           parallaxStrength == other.parallaxStrength &&
-           toolbarBackdropBlur == other.toolbarBackdropBlur &&
-           backdropBlurRadius == other.backdropBlurRadius &&
-           extractArchives == other.extractArchives &&
-           extractedExtension == other.extractedExtension && expandMode == other.expandMode &&
-           includeContentSubfolders == other.includeContentSubfolders &&
-           includeArtworkSubfolders == other.includeArtworkSubfolders &&
-           showAllSubfolderItems == other.showAllSubfolderItems &&
-           hideSubfolderTitles == other.hideSubfolderTitles &&
-           showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
-           listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
-           listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
-           sidebarFontFamily == other.sidebarFontFamily &&
-           sidebarFontPointSize == other.sidebarFontPointSize && isPlaylist == other.isPlaylist &&
+           hideSubcollectionTitles == other.hideSubcollectionTitles && filter == other.filter &&
+           horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
+           viewType == other.viewType && background == other.background &&
+           archive == other.archive && expandMode == other.expandMode &&
+           folderBrowsing == other.folderBrowsing && listView == other.listView &&
+           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
            playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
-           screenscraperSystemId == other.screenscraperSystemId &&
-           screenscraperHashArchive == other.screenscraperHashArchive &&
-           datFilePaths == other.datFilePaths && scraperProviderId == other.scraperProviderId &&
+           scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;
-  }
-
-  // ─── Launcher list helpers ───────────────────────────────────
-  /// Total number of launchers visible to the user: 1 primary + N additional.
-  [[nodiscard]] int launcherCount() const { return 1 + additionalLaunchers.size(); }
-
-  /// Returns the launcher at the unified index. Index 0 is the primary
-  /// (synthesized from the legacy fields); index 1..N maps to
-  /// additionalLaunchers[0..N-1]. Out-of-range indices return an empty config.
-  [[nodiscard]] LauncherConfig launcherAt(int index) const {
-    if (index == 0) {
-      // Qualify with this-> so the compiler doesn't confuse the legacy fields
-      // with the same-named members on LauncherConfig during aggregate init.
-      // The trailing empty string is the presetId — the
-      // primary launcher slot itself never references a preset.
-      return LauncherConfig{this->launcherName, this->launcherPath, this->corePath,
-                            this->launchParameters, QString{}};
-    }
-    const int additionalIndex = index - 1;
-    if (additionalIndex < 0 || additionalIndex >= this->additionalLaunchers.size()) {
-      return LauncherConfig{};
-    }
-    return this->additionalLaunchers[additionalIndex];
-  }
-
-  /// Friendly display name for a launcher entry. Falls back to the executable
-  /// basename when the user-supplied name is empty, and to a numbered label
-  /// when the launcher path itself is also empty.
-  [[nodiscard]] QString launcherDisplayName(int index) const {
-    LauncherConfig launcher = launcherAt(index);
-    if (!launcher.name.trimmed().isEmpty()) {
-      return launcher.name.trimmed();
-    }
-    if (!launcher.launcherPath.trimmed().isEmpty()) {
-      QString basename = launcher.launcherPath.trimmed();
-      int slash = basename.lastIndexOf(QLatin1Char('/'));
-      if (slash >= 0) {
-        basename = basename.mid(slash + 1);
-      }
-      return basename;
-    }
-    return QString::number(index + 1);
   }
 
   // Validation methods
@@ -693,51 +881,60 @@ struct CollectionConfig {
     // so a hand-edit or kart-import can't pin a non-zero value at 0
     // columns. The 0-sentinel ("inherit primary") stays untouched for the
     // alt fields.
-    gridWidth = std::max(gridWidth, UIConstants::Grid::MIN_WIDTH);
-    if (horizontalGridHeight != 0) {
-      horizontalGridHeight = std::max(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH);
+    gridLayout.gridWidth = std::max(gridLayout.gridWidth, UIConstants::Grid::MIN_WIDTH);
+    if (gridLayout.horizontalGridHeight != 0) {
+      gridLayout.horizontalGridHeight =
+          std::max(gridLayout.horizontalGridHeight, UIConstants::Grid::MIN_WIDTH);
     }
-    if (gridWidthSidebarHidden != 0) {
-      gridWidthSidebarHidden = std::max(gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH);
+    if (gridLayout.gridWidthSidebarHidden != 0) {
+      gridLayout.gridWidthSidebarHidden =
+          std::max(gridLayout.gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
-    if (horizontalGridHeightSidebarHidden != 0) {
-      horizontalGridHeightSidebarHidden =
-          std::max(horizontalGridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
+    if (gridLayout.horizontalGridHeightSidebarHidden != 0) {
+      gridLayout.horizontalGridHeightSidebarHidden =
+          std::max(gridLayout.horizontalGridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
-    if (gridHeightSidebarHidden != 0) {
-      gridHeightSidebarHidden = std::max(gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
+    if (gridLayout.gridHeightSidebarHidden != 0) {
+      gridLayout.gridHeightSidebarHidden =
+          std::max(gridLayout.gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
-    itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
-    itemHeight =
-        std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
-    fontSize =
-        std::clamp(fontSize, UIConstants::Item::MIN_FONT_SIZE, UIConstants::Item::MAX_FONT_SIZE);
-    cornerRadius = std::clamp(cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS,
-                              UIConstants::Item::MAX_CORNER_RADIUS);
+    gridLayout.itemWidth =
+        std::clamp(gridLayout.itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
+    gridLayout.itemHeight = std::clamp(gridLayout.itemHeight, UIConstants::Item::MIN_HEIGHT,
+                                       UIConstants::Item::MAX_HEIGHT);
+    gridLayout.fontSize = std::clamp(gridLayout.fontSize, UIConstants::Item::MIN_FONT_SIZE,
+                                     UIConstants::Item::MAX_FONT_SIZE);
+    gridLayout.cornerRadius = std::clamp(gridLayout.cornerRadius,
+                                         UIConstants::Item::MIN_CORNER_RADIUS,
+                                         UIConstants::Item::MAX_CORNER_RADIUS);
     // Spacing can be negative for overlap effects
-    horizontalSpacing = std::clamp(horizontalSpacing, -100, 200);
-    verticalSpacing = std::clamp(verticalSpacing, -100, 200);
+    gridLayout.horizontalSpacing = std::clamp(gridLayout.horizontalSpacing, -100, 200);
+    gridLayout.verticalSpacing = std::clamp(gridLayout.verticalSpacing, -100, 200);
     // List mode settings
-    listFontSize = std::clamp(listFontSize, UIConstants::Item::MIN_FONT_SIZE,
-                              UIConstants::Item::MAX_FONT_SIZE);
-    listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
-                               UIConstants::ListView::MAX_ROW_HEIGHT);
-    sidebarWidth = std::max(sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    listView.listFontSize = std::clamp(listView.listFontSize, UIConstants::Item::MIN_FONT_SIZE,
+                                       UIConstants::Item::MAX_FONT_SIZE);
+    listView.listRowHeight =
+        std::clamp(listView.listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
+                   UIConstants::ListView::MAX_ROW_HEIGHT);
+    sidebar.sidebarWidth =
+        std::max(sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
     // floor pane height; same no-upper-bound treatment as width.
-    sidebarHeight = std::max(sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    sidebar.sidebarHeight =
+        std::max(sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
     // corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
-    vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);
+    background.vignetteIntensity = std::clamp(background.vignetteIntensity, 0, 100);
     // parallax strength percent.
-    parallaxStrength = std::clamp(parallaxStrength, 0, 100);
+    background.parallaxStrength = std::clamp(background.parallaxStrength, 0, 100);
     // backdrop blur radius. 4 is a barely-perceptible blur;
     // anything above 32 is heavy enough that the source becomes unreadable.
-    backdropBlurRadius = std::clamp(backdropBlurRadius, 4, 32);
+    background.backdropBlurRadius = std::clamp(background.backdropBlurRadius, 4, 32);
     // keep the default-launcher pointer inside the visible list
     // so a stale config (or a deletion that out-paced the index) can never
     // refer past the end. 0 is always valid because the primary slot exists
     // even when its launcherPath is empty.
-    defaultLauncherIndex = std::clamp(defaultLauncherIndex, 0, launcherCount() - 1);
+    launcher.defaultLauncherIndex =
+        std::clamp(launcher.defaultLauncherIndex, 0, launcher.launcherCount() - 1);
   }
 };
 
@@ -788,7 +985,7 @@ namespace CollectionUtils {
   if (!isValidIndex(indexPtr, collections)) {
     return UIConstants::Grid::DEFAULT_WIDTH;
   }
-  return (*collections)[*indexPtr].gridWidth;
+  return (*collections)[*indexPtr].gridLayout.gridWidth;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -803,18 +1000,18 @@ namespace CollectionUtils {
 
 [[nodiscard]] inline int effectiveGridWidth(const CollectionConfig &config,
                                             bool sidebarShrinkingActive) {
-  if (sidebarShrinkingActive && config.gridWidthSidebarHidden > 0) {
-    return config.gridWidthSidebarHidden;
+  if (sidebarShrinkingActive && config.gridLayout.gridWidthSidebarHidden > 0) {
+    return config.gridLayout.gridWidthSidebarHidden;
   }
-  return config.gridWidth;
+  return config.gridLayout.gridWidth;
 }
 
 [[nodiscard]] inline int effectiveHorizontalGridHeight(const CollectionConfig &config,
                                                        bool sidebarShrinkingActive) {
-  if (sidebarShrinkingActive && config.horizontalGridHeightSidebarHidden > 0) {
-    return config.horizontalGridHeightSidebarHidden;
+  if (sidebarShrinkingActive && config.gridLayout.horizontalGridHeightSidebarHidden > 0) {
+    return config.gridLayout.horizontalGridHeightSidebarHidden;
   }
-  return config.horizontalGridHeight;
+  return config.gridLayout.horizontalGridHeight;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

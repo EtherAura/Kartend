@@ -128,7 +128,7 @@ void QueryManager::loadItems(const CollectionContext &context,
   QStringList filePaths = loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps);
 
   // Apply subfolder filtering
-  const QString &subfolder = ctx.config.currentSubfolder;
+  const QString &subfolder = ctx.config.folderBrowsing.currentSubfolder;
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose path starts with subfolder/
     const QString prefix = subfolder + "/";
@@ -139,7 +139,7 @@ void QueryManager::loadItems(const CollectionContext &context,
       }
     }
     filePaths = filtered;
-  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems) {
+  } else if (ctx.config.folderBrowsing.includeContentSubfolders && !ctx.config.folderBrowsing.showAllSubfolderItems) {
     // At root with subfolders enabled but NOT showing all items - exclude items
     // in subfolders
     QStringList filtered;
@@ -213,7 +213,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         loadOrScanCollection(mainCtx.currentIndex, mainCtx.config, timestamps);
 
     // Apply subfolder filtering for the main collection
-    const QString &subfolder = mainCtx.config.currentSubfolder;
+    const QString &subfolder = mainCtx.config.folderBrowsing.currentSubfolder;
     if (!subfolder.isEmpty()) {
       // In a subfolder - show only items whose path starts with subfolder/
       const QString prefix = subfolder + "/";
@@ -224,7 +224,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         }
       }
       mainFilePaths = filtered;
-    } else if (mainCtx.config.includeContentSubfolders && !mainCtx.config.showAllSubfolderItems) {
+    } else if (mainCtx.config.folderBrowsing.includeContentSubfolders && !mainCtx.config.folderBrowsing.showAllSubfolderItems) {
       // At root with subfolders enabled but NOT showing all items - exclude
       // items in subfolders
       QStringList filtered;

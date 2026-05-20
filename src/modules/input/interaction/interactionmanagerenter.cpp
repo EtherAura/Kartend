@@ -110,9 +110,11 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subC
         m_itemsPage->setFocus();
       }
     } else {
-      // Delay horizontal centering until after subcollection navigation
-      // animations complete and layout is stable
       constexpr int kHorizontalCenterDelayMs = 600;
+      // Delay horizontal centering until after the subcollection navigation
+      // animation completes and the layout has settled — centering against an
+      // in-flight scroll fights the animation and leaves the viewport
+      // visibly off by the animation's last few frames.
       QTimer::singleShot(kHorizontalCenterDelayMs, this, [this]() {
         if (!QApplication::closingDown() && scrollMgr()) {
           scrollMgr()->centerHorizontalScrollbar(*m_currentCollectionIndex, *m_collections);
@@ -173,8 +175,8 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> 
     return false;
   }
   int logicalItemY =
-      GridUtils::computeItemY(selection, gridWidth, collection.itemHeight,
-                              collection.verticalSpacing, UIConstants::Grid::MARGINS);
+      GridUtils::computeItemY(selection, gridWidth, collection.gridLayout.itemHeight,
+                              collection.gridLayout.verticalSpacing, UIConstants::Grid::MARGINS);
 
   // Convert widget scroll position to logical for visibility check in clipped
   // grids
@@ -186,7 +188,7 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> 
     }
   }
   const int logicalVisibleBottom = logicalVisibleTop + viewportH;
-  return (logicalItemY + collection.itemHeight) <= logicalVisibleTop ||
+  return (logicalItemY + collection.gridLayout.itemHeight) <= logicalVisibleTop ||
          logicalItemY >= logicalVisibleBottom;
 }
 

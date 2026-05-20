@@ -44,12 +44,13 @@
 #include "gamepadcapturecontroller.h"
 #include "gamepadmanager.h"
 #include "generalsettingspanel.h"
+#include "errordialog.h"
+#include "imainwindow.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
 #include "launchertabpanel.h"
-#include "mainwindow.h"
 #include "marqueepanel.h"
 #include "pathutils.h"
 #include "scrapercredentialspanel.h"
@@ -170,11 +171,15 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
           [this](const QString &c) {
-            auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+            auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
             if (!mainWindow || !mainWindow->getSettingsManager()) return;
-            mainWindow->m_generalSettings.titleBaseColor = c;
-            mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+            mainWindow->generalSettings().titleBaseColor = c;
+            auto result =
+                mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
+            if (result.isError()) {
+              ErrorDialog::showError(this, result.error());
+            }
           });
 
   // Application-font panel: live-save semantics — panel mutates the
@@ -185,13 +190,17 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
     // QObject::parent() — explicit because the enclosing constructor's
     // own `parent` argument is in scope and shadows the member function.
-    auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+    auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
     if (!mainWindow || !mainWindow->getSettingsManager()) {
       return;
     }
-    mainWindow->m_generalSettings = m_generalSettings;
-    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-    MainWindow::applyGlobalUiFont(mainWindow->m_generalSettings);
+    mainWindow->generalSettings() = m_generalSettings;
+    auto result =
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
+    mainWindow->applyGlobalUiFontFromSettings();
+    if (result.isError()) {
+      ErrorDialog::showError(this, result.error());
+    }
   });
 
   // Splash (boot + resume-focus) panel: same live-save shape as FontsPanel
@@ -199,12 +208,16 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // so persisting is sufficient.
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
-    auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+    auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
     if (!mainWindow || !mainWindow->getSettingsManager()) {
       return;
     }
-    mainWindow->m_generalSettings = m_generalSettings;
-    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+    mainWindow->generalSettings() = m_generalSettings;
+    auto result =
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
+    if (result.isError()) {
+      ErrorDialog::showError(this, result.error());
+    }
   });
 
   // Attract-mode panel: deferred-save — panel keeps m_generalSettings live;
@@ -364,7 +377,14 @@ void SettingsDialog::accept() {
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
-  saveGeneralSettingsFromUI();
+  // Surface QSettings disk-write failures (full disk, EROFS, permission
+  // refusal) to the user instead of letting the dialog close over a stale
+  // on-disk config. The user can correct the underlying problem and click
+  // OK again without losing any in-dialog edits.
+  if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+    ErrorDialog::showError(this, result.error());
+    return;
+  }
 
   // Prompt user to rescan if database-affecting changes were saved
   if (!m_rescanRequired.isEmpty()) {

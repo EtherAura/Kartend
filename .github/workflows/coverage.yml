@@ -13,6 +13,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Cancel duplicate coverage runs on rapid pushes to feature branches —
+  # coverage builds aren't cheap and a superseded SHA's report is
+  # immediately stale. Main keeps its runs because the badge endpoint
+  # would otherwise flicker between pass states across cancels.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   coverage:
     runs-on: ubuntu-24.04

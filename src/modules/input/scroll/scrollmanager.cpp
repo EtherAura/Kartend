@@ -320,7 +320,7 @@ void ScrollManager::updateViewType(ViewType viewType) {
     // configureHorizontalScrollbar in VirtualContainerManager will pin it
     // off again on overflow. Force it back on here when entering Horizontal.
     if (viewType == ViewType::Horizontal) {
-      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.hideHorizontalScrollbar
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.gridLayout.hideHorizontalScrollbar
                                                           ? Qt::ScrollBarAlwaysOff
                                                           : Qt::ScrollBarAsNeeded);
     }
@@ -340,9 +340,9 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
   // we're shrinking, treat the alt as "newly configured" and store there
   // instead of overwriting the primary — that way Ctrl+/- while sidebar is
   // hidden specializes the alt the moment the user diverges from the primary.
-  int &target = (m_sidebarShrinkingActive && m_context.config.gridWidthSidebarHidden > 0)
-                    ? m_context.config.gridWidthSidebarHidden
-                    : m_context.config.gridWidth;
+  int &target = (m_sidebarShrinkingActive && m_context.config.gridLayout.gridWidthSidebarHidden > 0)
+                    ? m_context.config.gridLayout.gridWidthSidebarHidden
+                    : m_context.config.gridLayout.gridWidth;
   if (target == newGridWidth) {
     return;
   }
@@ -365,9 +365,9 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
 
 void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
   // same active-field routing as updateGridWidth.
-  int &target = (m_sidebarShrinkingActive && m_context.config.horizontalGridHeightSidebarHidden > 0)
-                    ? m_context.config.horizontalGridHeightSidebarHidden
-                    : m_context.config.horizontalGridHeight;
+  int &target = (m_sidebarShrinkingActive && m_context.config.gridLayout.horizontalGridHeightSidebarHidden > 0)
+                    ? m_context.config.gridLayout.horizontalGridHeightSidebarHidden
+                    : m_context.config.gridLayout.horizontalGridHeight;
   if (target == newHorizontalGridHeight) {
     return;
   }
@@ -396,7 +396,7 @@ void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
 // Updates active widgets for current viewport and triggers artwork updates
 // unless suppression is enforced without selection allowance
 auto ScrollManager::getEffectiveHorizontalSpacing() const -> int {
-  return m_context.config.horizontalSpacing;
+  return m_context.config.gridLayout.horizontalSpacing;
 }
 
 auto ScrollManager::getFirstVisibleRow() const -> int {

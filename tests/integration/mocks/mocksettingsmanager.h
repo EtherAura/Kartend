@@ -20,10 +20,14 @@ public:
   using ISettingsManager::ISettingsManager;
 
   void loadCollections(QList<CollectionConfig> &) override {}
-  void saveCollections(const QList<CollectionConfig> &) override {}
+  ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &) override {
+    return ErrorUtils::Result<void>::success();
+  }
   void openSettingsDialog(const SettingsDialogContext &) override {}
   void loadGeneralSettings(GeneralSettings &) override {}
-  void saveGeneralSettings(const GeneralSettings &) override {}
+  ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &) override {
+    return ErrorUtils::Result<void>::success();
+  }
 
   void setLastSelectedItem(int collectionIndex, int itemIndex) override {
     m_lastSelected.insert(collectionIndex, itemIndex);

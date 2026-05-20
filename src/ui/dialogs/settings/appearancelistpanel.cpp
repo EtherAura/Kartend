@@ -28,8 +28,8 @@ void AppearanceListPanel::load() {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  SettingsFormBinding::loadInto(ui->listFontSizeSpinBox, config.listFontSize);
-  SettingsFormBinding::loadInto(ui->listRowHeightSpinBox, config.listRowHeight);
+  SettingsFormBinding::loadInto(ui->listFontSizeSpinBox, config.listView.listFontSize);
+  SettingsFormBinding::loadInto(ui->listRowHeightSpinBox, config.listView.listRowHeight);
 }
 
 void AppearanceListPanel::clear() {
@@ -43,13 +43,13 @@ void AppearanceListPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.listFontSize = ui->listFontSizeSpinBox->value();
-  config.listRowHeight = ui->listRowHeightSpinBox->value();
+  config.listView.listFontSize = ui->listFontSizeSpinBox->value();
+  config.listView.listRowHeight = ui->listRowHeightSpinBox->value();
 }
 
 bool AppearanceListPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
-  return ui->listFontSizeSpinBox->value() != o.listFontSize ||
-         ui->listRowHeightSpinBox->value() != o.listRowHeight;
+  return ui->listFontSizeSpinBox->value() != o.listView.listFontSize ||
+         ui->listRowHeightSpinBox->value() != o.listView.listRowHeight;
 }

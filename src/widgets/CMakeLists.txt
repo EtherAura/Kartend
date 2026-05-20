@@ -10,10 +10,10 @@
 # settings lookup happens above this layer (in the input/media modules,
 # typically the *Manager that drives the widget).
 #
-# Today everything still links into the single KARTEND_LIB_TARGET OBJECT
-# library; the per-module library split (Kartend-hchk) will land later
-# and turn this directory into its own STATIC library with
-# target_link_libraries declaring the allowed upward edges.
+# This directory contributes to the kartend_widgets OBJECT library declared
+# in src/CMakeLists.txt. Layering enforced via PUBLIC target_link_libraries:
+# kartend_widgets links kartend_utils + kartend_api, so widgets can reach
+# those layers but nothing upstream of widgets.
 add_subdirectory(items)
 add_subdirectory(media)
 add_subdirectory(overlays)

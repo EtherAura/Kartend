@@ -346,7 +346,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
 
   if (mutableVersion < 8) {
     // v8: Per-item launcher override. Stores a unified
-    // launcher index (0 = primary, 1..N = additionalLaunchers[0..N-1]) so an
+    // launcher index (0 = primary, 1..N = launcher.additionalLaunchers[0..N-1]) so an
     // item can pin a specific launcher and skip the multi-launcher chooser
     // dialog. NULL means "no override" — fall through to the chooser /
     // collection default. Lives on item_metadata to share the same

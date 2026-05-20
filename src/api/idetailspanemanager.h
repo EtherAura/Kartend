@@ -3,8 +3,8 @@
 
 #include <QString>
 
+class IDetailsPane;
 class ItemWidget;
-class DetailsPane;
 
 /**
  * @brief Sibling-facing interface to the details / metadata side pane.
@@ -44,7 +44,7 @@ public:
   virtual void applySidebarStateForCollection(int collectionIndex) = 0;
   virtual void updateSidebarLayout(int currentCollectionIndex) = 0;
   [[nodiscard]] virtual bool isSidebarVisible() const = 0;
-  [[nodiscard]] virtual DetailsPane *sidebarWidget() const = 0;
+  [[nodiscard]] virtual IDetailsPane *sidebarWidget() const = 0;
   [[nodiscard]] virtual const ItemContext &currentItemContext() const = 0;
 };
 

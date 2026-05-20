@@ -93,9 +93,9 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex=" << context.currentIndex
                         << "offset=" << offset << "limit=" << limit << "filter='" << trimmedFilter
-                        << "' includeSubfolders=" << context.config.includeContentSubfolders
-                        << " showAllSubfolderItems=" << context.config.showAllSubfolderItems
-                        << " currentSubfolder='" << context.config.currentSubfolder << "'";
+                        << "' includeSubfolders=" << context.config.folderBrowsing.includeContentSubfolders
+                        << " showAllSubfolderItems=" << context.config.folderBrowsing.showAllSubfolderItems
+                        << " currentSubfolder='" << context.config.folderBrowsing.currentSubfolder << "'";
   QElapsedTimer rangeTimer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     rangeTimer.start();
@@ -307,11 +307,11 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // items.path now absolute, a "no slash" test on path would never match a
   // root-level item. COALESCE(rel_path, path) is a defensive fallback for any
   // row left with a NULL rel_path before the v13 reconcile runs.
-  const QString &subfolder = ctx.config.currentSubfolder;
+  const QString &subfolder = ctx.config.folderBrowsing.currentSubfolder;
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose rel_path starts with subfolder/
     sql += " AND COALESCE(rel_path, path) LIKE ?";
-  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems &&
+  } else if (ctx.config.folderBrowsing.includeContentSubfolders && !ctx.config.folderBrowsing.showAllSubfolderItems &&
              trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.

@@ -10,6 +10,7 @@ class QPushButton;
 class QWheelEvent;
 QT_END_NAMESPACE
 
+class OverlayLayerManager;
 class VideoPreviewWidget;
 
 /**
@@ -83,6 +84,10 @@ public:
   /// callers leave it empty since they don't have an associated file).
   [[nodiscard]] QString currentFilePath() const { return m_currentFilePath; }
 
+  /// See OverlayLayerManager. Routes displayPixmap / displayVideo raise()
+  /// through the central z-order coordinator when installed.
+  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+
 signals:
   /// Emitted when the user activates (Enter / double-click) while the
   /// overlay is visible. Used by expand-mode to launch the previewed item
@@ -137,6 +142,7 @@ private:
   /// (e.g. opened via the old sidebar gallery click path that didn't
   /// supply entries). Cycle wraps modulo m_galleryEntries.size().
   int m_galleryIndex = -1;
+  OverlayLayerManager *m_layerManager = nullptr;
 
   void setupUI();
   void ensureVideoPreview();

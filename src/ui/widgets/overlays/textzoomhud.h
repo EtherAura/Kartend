@@ -9,6 +9,8 @@ class QPropertyAnimation;
 class QTimer;
 QT_END_NAMESPACE
 
+class OverlayLayerManager;
+
 /// Transient on-screen indicator that surfaces the current text-zoom percent
 /// for ~1s on each Ctrl+/-/0 press. Mirrors browser/IDE zoom HUDs so the user
 /// has an immediate visual confirmation and a current-value reference.
@@ -24,6 +26,10 @@ public:
   /// Ctrl++ burst keeps the HUD continuously visible until the user stops.
   void showZoom(int percent);
 
+  /// See OverlayLayerManager. Routes showZoom()'s raise() through the
+  /// central z-order coordinator when installed.
+  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+
 protected:
   bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -34,6 +40,7 @@ private:
   QLabel *m_label = nullptr;
   QPropertyAnimation *m_fadeAnimation = nullptr;
   QTimer *m_holdTimer = nullptr;
+  OverlayLayerManager *m_layerManager = nullptr;
 };
 
 #endif // TEXTZOOMHUD_H

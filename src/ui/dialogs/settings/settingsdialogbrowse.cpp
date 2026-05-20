@@ -35,7 +35,6 @@
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
-#include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
@@ -176,7 +175,7 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
     }
 
     // Clear the virtual subfolder state
-    newCollection.currentSubfolder.clear();
+    newCollection.folderBrowsing.currentSubfolder.clear();
 
     m_workingCollections.append(newCollection);
     collections.append(newCollection);

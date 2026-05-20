@@ -113,8 +113,8 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
   }
 
   // Launcher validation (optional but validate if present)
-  if (!config.launcherPath.isEmpty()) {
-    QString launcherPath = config.launcherPath;
+  if (!config.launcher.launcherPath.isEmpty()) {
+    QString launcherPath = config.launcher.launcherPath;
     bool launcherValid = false;
 
     // Check if it's an absolute or relative path
@@ -145,10 +145,10 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
   }
 
   // Numeric range validation (additional checks beyond clampValues)
-  if (config.gridWidth < 1) {
+  if (config.gridLayout.gridWidth < 1) {
     result.addWarning(prefix + "gridWidth less than 1, will be clamped");
   }
-  if (config.itemWidth < 50 || config.itemHeight < 50) {
+  if (config.gridLayout.itemWidth < 50 || config.gridLayout.itemHeight < 50) {
     result.addWarning(prefix + "very small item dimensions may cause display issues");
   }
 

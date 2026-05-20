@@ -108,7 +108,7 @@ public:
     if (config.viewType == ViewType::List) {
       return UIConstants::ListView::DEFAULT_ROW_HEIGHT + UIConstants::ListView::ROW_SPACING;
     }
-    return config.itemHeight + config.verticalSpacing;
+    return config.gridLayout.itemHeight + config.gridLayout.verticalSpacing;
   }
 
   /**
@@ -117,7 +117,7 @@ public:
    * @return Width of one column including horizontal spacing.
    */
   [[nodiscard]] static int getColumnWidth(const CollectionConfig &config) {
-    return config.itemWidth + config.horizontalSpacing;
+    return config.gridLayout.itemWidth + config.gridLayout.horizontalSpacing;
   }
 
   // ─────────────────────────────────────────────────────────────────────────

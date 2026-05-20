@@ -5,14 +5,14 @@
 #include "errorutils.h"
 #include "metadatalookupprovider.h"
 #include "romhasher.h"
-#include "screenscrapermediatypecache.h"
+#include "screenscrapercatalogmanager.h"
 #include "screenscraperparser.h"
+#include "screenscraperquotamanager.h"
 #include "screenscrapersystems.h"
 
 #include <functional>
 #include <optional>
 
-#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -41,6 +41,16 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback);
 using InfraInfoCallback =
     std::function<void(ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo>)>;
 void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback);
+
+/// Probe ssinfraInfos.php and project the response into a HealthStatus
+/// (refuseScrape + humanStatus). Honors `closeforleecher` /
+/// `closeforexternalscrapers` for anonymous-only callers. Extracted
+/// from ScreenScraperProvider::fetchHealthStatus so the pure
+/// transformation (InfraInfo → HealthStatus) can be tested without a
+/// network mock. Returns an empty HealthStatus on probe failure —
+/// transient blips shouldn't surface in the dialog.
+void fetchHealthStatus(const GeneralSettings *settings,
+                       MetadataLookupProvider::HealthCallback callback);
 
 } // namespace ScreenScraperProviderHelpers
 
@@ -93,9 +103,10 @@ public:
   /// Most recent per-account quota snapshot, parsed from the `ssuser`
   /// block every jeuInfos.php lookup response carries. Stays invalid
   /// (`valid == false`) until the first lookup completes — the batch
-  /// driver checks that flag before surfacing the readout. See
-  /// `m_lastQuota` for the storage and `updateQuotaFromResponse`.
-  [[nodiscard]] Scraper::QuotaStatus quotaStatus() const override { return m_lastQuota; }
+  /// driver checks that flag before surfacing the readout. State lives
+  /// on m_quota (ScreenScraperQuotaManager); see
+  /// screenscraperquotamanager.{h,cpp} for the parse step.
+  [[nodiscard]] Scraper::QuotaStatus quotaStatus() const override { return m_quota.status(); }
   /// Polls SS's `ssinfraInfos.php` and projects the response into
   /// the provider-agnostic HealthStatus shape the dialog consumes.
   /// Honors `closeforleecher` for anonymous-only callers — the
@@ -118,36 +129,52 @@ private:
   void runLookupAfterHash(const QString &query, const RomHasher::Result &hashes,
                           LookupCallback callback);
 
-  /// Refresh `m_lastQuota` from a raw jeuInfos.php response body. SS
-  /// embeds the account's `ssuser` block (request counters + quotas)
-  /// in every lookup reply, so this runs once per item with no extra
-  /// network cost. A response with no parseable `ssuser` block (e.g.
-  /// an anonymous-tier scrape) leaves the previous snapshot intact.
-  void updateQuotaFromResponse(const QByteArray &json);
+  /// HTTP-response tail of runLookupAfterHash. Lifted out of the
+  /// deeply-nested HttpClient::get lambda so the lookup chain stops
+  /// being a 200-line single function. Handles: transport-level
+  /// errors via mapScreenScraperHttpError; SS's plain-text "Erreur"
+  /// body (HTTP 200 + French error message on auth/quota failure);
+  /// optional KARTEND_SCRAPER_DUMP_JSON diagnostic dump; quota
+  /// refresh; and the search/detail parse-and-cache step that feeds
+  /// fetchDetail() without a second roundtrip.
+  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, LookupCallback callback);
+
+  /// Snapshot the user's current scraper preferences (image cap, JPG
+  /// preference, preferred region, UI language) into a parser
+  /// ParseOptions struct. Extracted from handleJeuInfosResponse so the
+  /// option-derivation can be unit-tested independently of the network
+  /// path. Picks up m_mediaTypeLabels for friendly media-tag rendering.
+  [[nodiscard]] ScreenScraperParser::ParseOptions buildParseOptions() const;
+
+  /// Resolve the active collection's DAT-canonical name for the given
+  /// hashes. Walks `datFilePaths` top-to-bottom, takes the first
+  /// matching record, returns its canonical romName. Empty string when
+  /// no collection / no DAT configured / no hash match — caller falls
+  /// back to the messy filename. Extracted from runLookupAfterHash so
+  /// the cache-driven DAT walk is independently testable.
+  [[nodiscard]] QString findDatCanonicalName(const RomHasher::Result &hashes);
 
   /// Returns ("dev_id", "dev_password", "ssid", "ss_password") tuple
   /// or empties when not configured. The lookup short-circuits with
   /// a "not configured" error when devid or devpassword are blank;
-  /// user creds are optional.
-  struct Credentials {
-    QString devId;
-    QString devPassword;
-    QString userId;
-    QString userPassword;
-  };
+  /// user creds are optional. The struct itself is owned by
+  /// ScreenScraperCatalogManager (the catalog dance needs the same
+  /// shape); the alias keeps the rest of the provider's call sites —
+  /// buildJeuInfosUrl, the URL builders — unchanged.
+  using Credentials = ScreenScraperCatalogManager::Credentials;
   [[nodiscard]] Credentials currentCredentials() const;
+
+  /// Build the jeuInfos.php URL from credentials + resolved system id
+  /// + hash result. Extracted from runLookupAfterHash so the SS query
+  /// shape can be regression-tested without hitting the network.
+  [[nodiscard]] QUrl buildJeuInfosUrl(const Credentials &creds, const QString &romnom,
+                                      int systemeid, const RomHasher::Result &hashes,
+                                      bool hasUser) const;
   /// Resolves systemeid for the current scrape. Picks the explicit
   /// override on the collection when set; otherwise runs autodetect
   /// against the supplied catalog; otherwise returns 0 (SS's "any
   /// system" sentinel).
   [[nodiscard]] int resolveSystemId(const QList<ScreenScraperSystems::System> &systems) const;
-  /// Ensure the systems catalog is loaded — from the disk cache when
-  /// fresh, otherwise via a network fetch of systemesListe.php. The
-  /// callback fires (on the main thread) once the catalog is ready;
-  /// returns an empty list on hard failure so the scrape can still
-  /// proceed with systemeid=0.
-  using SystemsReadyCallback = std::function<void(QList<ScreenScraperSystems::System>)>;
-  void ensureSystemsCatalog(const Credentials &creds, SystemsReadyCallback callback) const;
 
   GeneralSettingsAccessor m_settingsAccessor;
   CollectionAccessor m_collectionAccessor;
@@ -162,23 +189,20 @@ private:
   mutable Scraper::ScrapedItem m_lastDetail;
 
   /// Live per-account quota, refreshed from the `ssuser` block of
-  /// every jeuInfos.php response by `updateQuotaFromResponse`.
-  /// `quotaStatus()` returns this; it stays invalid until the first
-  /// lookup response with an `ssuser` block lands.
-  Scraper::QuotaStatus m_lastQuota;
+  /// every jeuInfos.php response by m_quota.updateFromResponse().
+  /// quotaStatus() forwards to m_quota.status(); it stays invalid
+  /// until the first lookup response with an `ssuser` block lands.
+  ScreenScraperQuotaManager m_quota;
 
-  /// Cached SS media-type catalog (`mediasJeuListe.php`). Populated
-  /// lazily — the first scrape kicks off a background fetch via
-  /// `ensureMediaTypeCatalog`. The cached map flows into the parser's
-  /// ParseOptions so unknown SS tags get friendly labels in the
-  /// scrape-result dialog without a Kartend release. Lookup is
-  /// canonical-tag → label so the parser only needs the projection.
-  mutable QHash<QString, QString> m_mediaTypeLabels;
-  /// Triggers a background refresh of the catalog when the on-disk
-  /// cache is missing or stale. Cheap (single GET, parsed once per
-  /// 30 days). Kicks off after the first credentials become
-  /// available; scrapes never block on it.
-  void ensureMediaTypeCatalog() const;
+  /// Owns the systemesListe + mediasJeuListe catalog dance — disk
+  /// cache load, conditional refetch, parse, persist. The provider
+  /// forwards ensure*Catalog calls to it and reads back
+  /// `mediaTypeLabels()` for the parser's ParseOptions. State (the
+  /// media-type QHash) lives entirely in the manager; the network and
+  /// error-mapping collaborators are injected so the manager is
+  /// testable without a live SS API. See
+  /// screenscrapercatalogmanager.{h,cpp}.
+  ScreenScraperCatalogManager m_catalog;
 
   /// Lazily-opened on-disk DAT cache. Initialised the first time a
   /// scrape needs DAT lookup so a user who never configures a DAT

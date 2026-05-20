@@ -14,16 +14,16 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
 
   if (isListMode) {
     // List mode: full width items, custom or default row height, 1 item per row
-    metrics.itemWidth = config.itemWidth;      // Will be set to viewport width by caller
-    metrics.itemHeight = config.listRowHeight; // Use custom row height from config
+    metrics.itemWidth = config.gridLayout.itemWidth;      // Will be set to viewport width by caller
+    metrics.itemHeight = config.listView.listRowHeight; // Use custom row height from config
     metrics.itemsPerRow = 1;                   // List is always single column
     metrics.horizontalSpacing = 0;
     metrics.verticalSpacing = UIConstants::ListView::ROW_SPACING;
     metrics.headerOffset = UIConstants::ListView::HEADER_HEIGHT;
   } else {
     // Grid / Horizontal / CoverFlow: use collection config
-    metrics.itemWidth = config.itemWidth;
-    metrics.itemHeight = config.itemHeight;
+    metrics.itemWidth = config.gridLayout.itemWidth;
+    metrics.itemHeight = config.gridLayout.itemHeight;
     // in Horizontal mode the fixed dimension is items-per-column,
     // controlled by horizontalGridHeight (falling back to gridWidth when 0 so
     // existing collections that flip to Horizontal mode without configuring
@@ -39,8 +39,8 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
       metrics.itemsPerRow =
           qMax(1, CollectionUtils::effectiveGridWidth(config, sidebarShrinkingActive));
     }
-    metrics.horizontalSpacing = config.horizontalSpacing;
-    metrics.verticalSpacing = config.verticalSpacing;
+    metrics.horizontalSpacing = config.gridLayout.horizontalSpacing;
+    metrics.verticalSpacing = config.gridLayout.verticalSpacing;
     metrics.headerOffset = 0;
   }
 

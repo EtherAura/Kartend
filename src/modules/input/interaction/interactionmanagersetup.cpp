@@ -32,7 +32,7 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

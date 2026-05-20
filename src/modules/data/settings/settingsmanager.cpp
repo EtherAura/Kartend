@@ -342,7 +342,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 }
 
 // Saves general settings (no legacy last_selected.dat persistence)
-void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
+ErrorUtils::Result<void>
+SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.selectItemOnHover = settings.selectItemOnHover;
@@ -652,14 +653,27 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
 
   s.sync();
 
+  ErrorUtils::ErrorContext err;
   if (s.status() != QSettings::NoError) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                                           "Failed to persist general settings",
-                                                           "SettingsManager::saveGeneralSettings")
-                             .withDetails(QString("Path: %1, Status: %2")
-                                              .arg(SettingsUtils::getConfigPath())
-                                              .arg(static_cast<int>(s.status()))));
+    err = ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                            "Failed to persist general settings",
+                                            "SettingsManager::saveGeneralSettings")
+              .withDetails(QString("Path: %1, Status: %2")
+                               .arg(SettingsUtils::getConfigPath())
+                               .arg(static_cast<int>(s.status())));
+    ErrorUtils::logError(err);
   }
+
+  // Cleartext scraper credentials live in [Scrapers]; clamp the INI to 0600
+  // so the per-user config dir doesn't leak them to other local accounts.
+  // Runs regardless of sync status — even a partial write may have created
+  // or touched the file.
+  SettingsUtils::tightenConfigPermissions();
+
+  if (err.isError()) {
+    return err;
+  }
+  return ErrorUtils::Result<void>::success();
 }
 
 // Updates a single collection's last selected item (in-memory only; persistent
@@ -681,7 +695,7 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
   if ((mainWindow) && collectionIndex >= 0 && collectionIndex < mainWindow->collections().size()) {
     const QList<CollectionConfig> &mwCollections = mainWindow->collections();
     const CollectionConfig &cfg = mwCollections[collectionIndex];
-    const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
+    const bool subfolderActive = !cfg.folderBrowsing.currentSubfolder.trimmed().isEmpty();
     QString hierarchicalName = CollectionUtils::hierarchicalNameFor(cfg, mwCollections);
     int persistentIndex = -1;
     if (session) {

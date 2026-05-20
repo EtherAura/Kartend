@@ -208,8 +208,51 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
 
     const QString destPath = dest.absoluteFilePath(relPath);
     const QString cleaned = QDir::cleanPath(destPath);
-    if (!cleaned.startsWith(destAbs + '/') && cleaned != destAbs) {
-      return readError("Entry path escapes destination directory", relPath);
+
+    // Resolve symlinks along the entry path before deciding it's safe.
+    // isPathSafe catches '..' / absolute relPaths textually, but a parent
+    // directory that's a symlink pointing outside destAbs slips past
+    // startsWith() — cleaned still looks like a child of destAbs. Walk up
+    // until we hit an existing ancestor, canonicalize it (collapses any
+    // symlink in the chain), then re-attach the not-yet-created tail.
+    // QDir::relativeFilePath on canonical paths rejects the escape that
+    // startsWith() can't see.
+    const QString destCanonical = QFileInfo(destAbs).canonicalFilePath();
+    if (destCanonical.isEmpty()) {
+      return readError("Cannot canonicalize destination directory", destAbs);
+    }
+
+    QString entryCanonical;
+    {
+      QString probe = cleaned;
+      QString tail;
+      while (true) {
+        const QFileInfo probeFi(probe);
+        if (probeFi.exists()) {
+          const QString resolved = probeFi.canonicalFilePath();
+          if (resolved.isEmpty()) {
+            return readError("Cannot canonicalize ancestor of entry path", probe);
+          }
+          entryCanonical = tail.isEmpty() ? resolved : QDir(resolved).absoluteFilePath(tail);
+          break;
+        }
+        const int sep = probe.lastIndexOf('/');
+        if (sep <= 0) {
+          // Walked off the front without finding an existing ancestor —
+          // nothing in the chain to resolve a symlink through; the
+          // already-cleaned absolute path is the best we have.
+          entryCanonical = cleaned;
+          break;
+        }
+        const QString seg = probe.mid(sep + 1);
+        tail = tail.isEmpty() ? seg : seg + '/' + tail;
+        probe = probe.left(sep);
+      }
+    }
+
+    const QString rel = QDir(destCanonical).relativeFilePath(entryCanonical);
+    if (rel == QLatin1String("..") || rel.startsWith(QLatin1String("../"))) {
+      return readError("Entry path escapes destination directory (canonical)", relPath);
     }
 
     const auto algo = static_cast<KartFormat::Compression>(compRes.value());

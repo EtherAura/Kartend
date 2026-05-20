@@ -13,7 +13,7 @@
 #include <QSignalBlocker>
 
 void SettingsDialog::loadAdditionalLaunchersToUI(const CollectionConfig &config) {
-  m_workingAdditionalLaunchers = config.additionalLaunchers;
+  m_workingAdditionalLaunchers = config.launcher.additionalLaunchers;
 
   if (ui->launcherPanel->additionalLaunchersList()) {
     QSignalBlocker blocker(ui->launcherPanel->additionalLaunchersList());
@@ -26,7 +26,7 @@ void SettingsDialog::loadAdditionalLaunchersToUI(const CollectionConfig &config)
     }
   }
 
-  rebuildDefaultLauncherCombo(config.defaultLauncherIndex);
+  rebuildDefaultLauncherCombo(config.launcher.defaultLauncherIndex);
   updateAdditionalLauncherButtonsState();
 }
 
@@ -105,8 +105,8 @@ void SettingsDialog::onAddAdditionalLauncher() {
                                  ? ui->launcherPanel->defaultLauncherComboBox()->currentIndex()
                                  : 0;
   CollectionConfig snapshot;
-  snapshot.additionalLaunchers = m_workingAdditionalLaunchers;
-  snapshot.defaultLauncherIndex = currentDefault;
+  snapshot.launcher.additionalLaunchers = m_workingAdditionalLaunchers;
+  snapshot.launcher.defaultLauncherIndex = currentDefault;
   loadAdditionalLaunchersToUI(snapshot);
   if (ui->launcherPanel->additionalLaunchersList()) {
     ui->launcherPanel->additionalLaunchersList()->setCurrentRow(
@@ -134,8 +134,8 @@ void SettingsDialog::onEditAdditionalLauncher() {
                                  ? ui->launcherPanel->defaultLauncherComboBox()->currentIndex()
                                  : 0;
   CollectionConfig snapshot;
-  snapshot.additionalLaunchers = m_workingAdditionalLaunchers;
-  snapshot.defaultLauncherIndex = currentDefault;
+  snapshot.launcher.additionalLaunchers = m_workingAdditionalLaunchers;
+  snapshot.launcher.defaultLauncherIndex = currentDefault;
   loadAdditionalLaunchersToUI(snapshot);
   ui->launcherPanel->additionalLaunchersList()->setCurrentRow(row);
   checkForChanges();
@@ -163,8 +163,8 @@ void SettingsDialog::onRemoveAdditionalLauncher() {
     currentDefault -= 1;
   }
   CollectionConfig snapshot;
-  snapshot.additionalLaunchers = m_workingAdditionalLaunchers;
-  snapshot.defaultLauncherIndex = currentDefault;
+  snapshot.launcher.additionalLaunchers = m_workingAdditionalLaunchers;
+  snapshot.launcher.defaultLauncherIndex = currentDefault;
   loadAdditionalLaunchersToUI(snapshot);
   if (!m_workingAdditionalLaunchers.isEmpty()) {
     const int lastRow = static_cast<int>(m_workingAdditionalLaunchers.size()) - 1;

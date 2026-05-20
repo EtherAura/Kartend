@@ -87,13 +87,13 @@ void TestQueryManagerCrossCollectionCount::duplicateNamedFilesCountSeparately() 
   CollectionConfig collA;
   collA.name = QStringLiteral("CrossA");
   collA.mediaDirectory = subAPath;
-  collA.includeContentSubfolders = false;
+  collA.folderBrowsing.includeContentSubfolders = false;
   collA.extensions = {QStringLiteral("bin")};
 
   CollectionConfig collB;
   collB.name = QStringLiteral("CrossB");
   collB.mediaDirectory = subBPath;
-  collB.includeContentSubfolders = false;
+  collB.folderBrowsing.includeContentSubfolders = false;
   collB.extensions = {QStringLiteral("bin")};
 
   QList<CollectionConfig> allCollections{collA, collB};

@@ -115,26 +115,31 @@ void createTables(QSqlDatabase &db) {
 void createIndexes(QSqlDatabase &db) {
   QSqlQuery idx(db);
 
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
-  idx.exec();
+  // Each index is independently optional from SQLite's POV but load-bearing
+  // for query planner performance — fetchItemsRange and the UUID-based
+  // lookups collapse to full table scans if any of these silently fails to
+  // create (disk full, locked DB, EROFS on the data dir).
+  const auto runIndex = [&idx](const char *sql) {
+    idx.prepare(QString::fromUtf8(sql));
+    if (!idx.exec()) {
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to create database index",
+                                       "DatabaseSchema::createIndexes")
+                     .withDetails(QStringLiteral("Statement: %1; Error: %2")
+                                      .arg(QString::fromUtf8(sql), idx.lastError().text()));
+      ErrorUtils::logError(err);
+    }
+  };
 
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON items(collection_uuid)");
-  idx.exec();
-
-  idx.prepare(
+  runIndex("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
+  runIndex("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON items(collection_uuid)");
+  runIndex(
       "CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON items(collection_uuid, path)");
-  idx.exec();
-
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE NOCASE)");
-  idx.exec();
-
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON "
-              "items(collection_uuid, name COLLATE NOCASE)");
-  idx.exec();
-
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_covering ON "
-              "items(collection_uuid, name COLLATE NOCASE, path)");
-  idx.exec();
+  runIndex("CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE NOCASE)");
+  runIndex("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON "
+           "items(collection_uuid, name COLLATE NOCASE)");
+  runIndex("CREATE INDEX IF NOT EXISTS idx_items_covering ON "
+           "items(collection_uuid, name COLLATE NOCASE, path)");
 }
 
 } // namespace DatabaseSchema

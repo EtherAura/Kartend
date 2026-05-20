@@ -1,6 +1,6 @@
 // Sibling TU: collection-selected / items-loaded flow for NavigationManager.
 #include "artworkutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "emptystatewidget.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -218,9 +218,11 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
     databaseMgr()->updateCachedCounts((*m_collections));
   }
 
-  // After a rescan, delay title refresh to allow main thread database to see
-  // the new data committed by the worker thread (SQLite WAL read visibility)
   if (wasRescan) {
+    // After a rescan, delay the title-count refresh so the main thread's
+    // SQLite connection observes the worker thread's WAL commits — querying
+    // immediately on this thread can return stale row counts because the
+    // shared-cache read-visibility window hasn't advanced yet.
     QTimer::singleShot(100, this, [this]() {
       if (m_refreshTitleCounts) m_refreshTitleCounts();
     });

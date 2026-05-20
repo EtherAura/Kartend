@@ -20,6 +20,8 @@ class QVBoxLayout;
 class QScrollArea;
 QT_END_NAMESPACE
 
+class OverlayLayerManager;
+
 /**
  * @brief Full-window detail page for the currently selected item.
  *
@@ -50,6 +52,10 @@ public:
   void showWith(const Payload &payload) override;
   void hideOverlay() override;
   [[nodiscard]] bool isActive() const override { return m_active; }
+
+  /// See OverlayLayerManager. Routes showWith()'s raise() through the
+  /// central z-order coordinator when installed.
+  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
 
 signals:
   /// Fires when the overlay opens (true) or closes (false). DetailsPaneManager
@@ -106,6 +112,7 @@ private:
   Payload m_payload;
   int m_currentArtworkIndex = 0;
   bool m_active = false;
+  OverlayLayerManager *m_layerManager = nullptr;
 };
 
 #endif // DETAILPAGEOVERLAY_H

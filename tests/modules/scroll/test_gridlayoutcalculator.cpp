@@ -60,11 +60,11 @@ private:
 
 void TestGridLayoutCalculator::initTestCase() {
   // Setup a standard test configuration
-  m_config.gridWidth = 4;
-  m_config.itemWidth = 200;
-  m_config.itemHeight = 280;
-  m_config.horizontalSpacing = 10;
-  m_config.verticalSpacing = 10;
+  m_config.gridLayout.gridWidth = 4;
+  m_config.gridLayout.itemWidth = 200;
+  m_config.gridLayout.itemHeight = 280;
+  m_config.gridLayout.horizontalSpacing = 10;
+  m_config.gridLayout.verticalSpacing = 10;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ void TestGridLayoutCalculator::testCalculateMetrics_basicGrid() {
 
 void TestGridLayoutCalculator::testCalculateMetrics_singleColumn() {
   CollectionConfig singleCol = m_config;
-  singleCol.gridWidth = 1;
+  singleCol.gridLayout.gridWidth = 1;
 
   GridMetrics metrics = GridLayoutCalculator::calculateMetrics(singleCol, 10);
 
@@ -268,7 +268,7 @@ void TestGridLayoutCalculator::testGetVisibleRowRange_emptyMetrics() {
 void TestGridLayoutCalculator::testHorizontal_calculateMetrics_dimensionsAreTransposed() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 3; // items per column
+  cfg.gridLayout.gridWidth = 3; // items per column
 
   GridMetrics metrics = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/10);
 
@@ -290,7 +290,7 @@ void TestGridLayoutCalculator::testHorizontal_calculateMetrics_dimensionsAreTran
 void TestGridLayoutCalculator::testHorizontal_getItemPosition_columnMajor() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 3;
+  cfg.gridLayout.gridWidth = 3;
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/9);
 
@@ -313,7 +313,7 @@ void TestGridLayoutCalculator::testHorizontal_getItemPosition_columnMajor() {
 void TestGridLayoutCalculator::testHorizontal_getVisibleRowRange_isColumnRange() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 3;
+  cfg.gridLayout.gridWidth = 3;
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
   // Viewport ~600 wide; with itemWidth=200 + hSpacing=10 → 210 col stride →
@@ -332,7 +332,7 @@ void TestGridLayoutCalculator::testHorizontal_getVisibleRowRange_isColumnRange()
 void TestGridLayoutCalculator::testHorizontal_calculateCenterScrollTarget_centersAlongX() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 3;
+  cfg.gridLayout.gridWidth = 3;
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
   const int colStride = m.itemWidth + m.horizontalSpacing;
@@ -347,7 +347,7 @@ void TestGridLayoutCalculator::testHorizontal_calculateCenterScrollTarget_center
 void TestGridLayoutCalculator::testHorizontal_indexAtPosition_columnMajor() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 3;
+  cfg.gridLayout.gridWidth = 3;
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
   // A point inside the third item's slot (col 0, row 2).
@@ -363,8 +363,8 @@ void TestGridLayoutCalculator::testHorizontal_indexAtPosition_columnMajor() {
 void TestGridLayoutCalculator::testHorizontal_horizontalGridHeightOverridesGridWidth() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 4;
-  cfg.horizontalGridHeight = 6; // explicit override
+  cfg.gridLayout.gridWidth = 4;
+  cfg.gridLayout.horizontalGridHeight = 6; // explicit override
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/12);
 
@@ -376,8 +376,8 @@ void TestGridLayoutCalculator::testHorizontal_horizontalGridHeightOverridesGridW
 void TestGridLayoutCalculator::testHorizontal_horizontalGridHeightZeroFallsBackToGridWidth() {
   CollectionConfig cfg = m_config;
   cfg.viewType = ViewType::Horizontal;
-  cfg.gridWidth = 4;
-  cfg.horizontalGridHeight = 0; // sentinel: inherit gridWidth
+  cfg.gridLayout.gridWidth = 4;
+  cfg.gridLayout.horizontalGridHeight = 0; // sentinel: inherit gridWidth
 
   GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/12);
 

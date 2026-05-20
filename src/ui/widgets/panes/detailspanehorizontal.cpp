@@ -46,7 +46,7 @@ void DetailsPane::setupHorizontalView() {
   outer->setSpacing(16);
   outer->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-  // Preview tile: holds m_videoPreview, reparented in via applyDockOrientation.
+  // Preview tile: holds m_videoPlayback.videoPreview, reparented in via applyDockOrientation.
   // Sits at the far left.
   m_hPreviewArea = new QWidget(m_horizontalView);
   m_hPreviewLayout = new QHBoxLayout(m_hPreviewArea);
@@ -227,7 +227,7 @@ void DetailsPane::updateHorizontalView() {
   if (!m_horizontalView) return;
   // only run when actually in horizontal dock. If the user
   // toggled to T/B then back to L/R, m_horizontalView still exists (hidden)
-  // — and previously this method was overriding m_videoPreview's size to
+  // — and previously this method was overriding m_videoPlayback.videoPreview's size to
   // horizontalPreviewSize(), which broke vertical-mode video playback
   // because the widget was sized for the wrong axis.
   if (!CollectionUtils::isDetailsPaneHorizontal(m_position)) return;
@@ -275,21 +275,21 @@ void DetailsPane::updateHorizontalView() {
 
   // Live video preview tile — Item-tab only.
   const int previewSize = horizontalPreviewSize();
-  if (m_videoPreview) {
-    m_videoPreview->setFixedSize(previewSize, previewSize);
-    const bool hasVideo = !m_pendingVideoPath.isEmpty();
+  if (m_videoPlayback.videoPreview) {
+    m_videoPlayback.videoPreview->setFixedSize(previewSize, previewSize);
+    const bool hasVideo = !m_videoPlayback.pendingVideoPath.isEmpty();
     if (hasVideo && isItemTab) {
-      const bool wasHidden = !m_videoPreview->isVisible();
-      m_videoPreview->show();
+      const bool wasHidden = !m_videoPlayback.videoPreview->isVisible();
+      m_videoPlayback.videoPreview->show();
       if (wasHidden) {
-        m_videoPreview->playVideo(m_pendingVideoPath);
+        m_videoPlayback.videoPreview->playVideo(m_videoPlayback.pendingVideoPath);
       }
     } else {
-      m_videoPreview->hide();
+      m_videoPlayback.videoPreview->hide();
     }
   }
   if (m_hPreviewArea) {
-    const bool hasVideo = m_videoPreview && !m_pendingVideoPath.isEmpty();
+    const bool hasVideo = m_videoPlayback.videoPreview && !m_videoPlayback.pendingVideoPath.isEmpty();
     m_hPreviewArea->setVisible(isItemTab && hasVideo);
   }
   // Gallery thumbs are item-only too. Hide the host on other tabs;

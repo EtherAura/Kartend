@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "errordialog.h"
 #include "idatabasemanager.h"
 #include "isettingsmanager.h"
 #include "pathutils.h"
@@ -586,7 +587,13 @@ void StatisticsDialog::onHistoryDisableToggled(bool checked) {
   if (m_generalSettings) {
     m_generalSettings->historyEnabled = checked;
     if (m_settingsManager) {
-      m_settingsManager->saveGeneralSettings(*m_generalSettings);
+      // If the disk write fails the toggle still flips in-memory (which is the
+      // documented behaviour without a SettingsManager); surface the failure so
+      // the user knows the change won't survive restart.
+      if (auto result = m_settingsManager->saveGeneralSettings(*m_generalSettings);
+          result.isError()) {
+        ErrorDialog::showError(this, result.error());
+      }
     }
   }
   if (m_historyDisabledNote) {

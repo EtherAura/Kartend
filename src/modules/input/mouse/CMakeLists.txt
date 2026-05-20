@@ -1,4 +1,4 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+target_sources(kartend_input PRIVATE
   mousehelpers.cpp
   mousemanager.cpp
   mousemanager.h

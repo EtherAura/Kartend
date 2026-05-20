@@ -138,13 +138,13 @@ void CoverFlowController::applyConfig() {
     return;
   }
   const auto &cfg = m_context->config;
-  m_widget->setCornerRadius(cfg.cornerRadius);
-  m_widget->setTileColor(cfg.tileColor);
-  m_widget->setSelectionColor(cfg.selectionColor);
-  m_widget->setBackgroundColor(cfg.backgroundColor);
+  m_widget->setCornerRadius(cfg.gridLayout.cornerRadius);
+  m_widget->setTileColor(cfg.background.tileColor);
+  m_widget->setSelectionColor(cfg.background.selectionColor);
+  m_widget->setBackgroundColor(cfg.background.backgroundColor);
   m_widget->setHideTitles(cfg.hideTitles);
   // scale the cover-flow caption alongside grid/list items.
-  m_widget->setFontSize(TextZoom::zoomedFontSize(cfg.fontSize));
+  m_widget->setFontSize(TextZoom::zoomedFontSize(cfg.gridLayout.fontSize));
   m_widget->setFontFamily(cfg.customFontFamily);
 }
 
@@ -179,7 +179,7 @@ void CoverFlowController::applyVisibility() {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     } else {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(
-          m_context && m_context->config.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
+          m_context && m_context->config.gridLayout.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
                                                                  : Qt::ScrollBarAsNeeded);
     }
   }
@@ -268,7 +268,7 @@ static QString resolveCardArtworkPath(const QString &fullPath, const CollectionC
   }
   const QString &mediaDir = context.config.mediaDirectory;
   const bool shouldMirror =
-      context.config.includeArtworkSubfolders ||
+      context.config.folderBrowsing.includeArtworkSubfolders ||
       (!mediaDir.isEmpty() && QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
   if (shouldMirror && !mediaDir.isEmpty()) {
     QDir mediaDirObj(mediaDir);

@@ -1,6 +1,8 @@
 // Semi-transparent loading overlay with spinner animation and progress bar.
 #include "loadingoverlay.h"
 
+#include "overlaylayermanager.h"
+
 #include <QApplication>
 #include <QGraphicsOpacityEffect>
 #include <QPainter>
@@ -160,7 +162,11 @@ void LoadingOverlay::show(const QString &message) {
   m_fadeAnimation->start();
 
   QWidget::show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 
@@ -186,7 +192,11 @@ void LoadingOverlay::showWithProgress(const QString &message, int current, int t
   m_fadeAnimation->start();
 
   QWidget::show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 

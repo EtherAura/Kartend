@@ -34,11 +34,11 @@
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
+#include "imainwindow.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
-#include "mainwindow.h"
 #include "marqueepanel.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -140,23 +140,23 @@ void SettingsDialog::saveCollectionFromUI(int index) {
     rollback();
     return;
   }
-  if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
+  if (!validatePath(collection.launcher.launcherPath, tr("Launcher Path"))) {
     rollback();
     return;
   }
-  if (!validatePath(collection.corePath, tr("Core Path"))) {
+  if (!validatePath(collection.launcher.corePath, tr("Core Path"))) {
     rollback();
     return;
   }
-  if (!validatePath(collection.backgroundImage, tr("Background Image"))) {
+  if (!validatePath(collection.background.backgroundImage, tr("Background Image"))) {
     rollback();
     return;
   }
-  if (!validatePath(collection.backgroundVideo, tr("Background Video"))) {
+  if (!validatePath(collection.background.backgroundVideo, tr("Background Video"))) {
     rollback();
     return;
   }
-  if (!validatePath(collection.headerLogoImage, tr("Header Logo"))) {
+  if (!validatePath(collection.background.headerLogoImage, tr("Header Logo"))) {
     rollback();
     return;
   }
@@ -343,9 +343,9 @@ void SettingsDialog::onGridWidthChanged(int value) {
 }
 
 void SettingsDialog::loadGeneralSettingsToUI() {
-  auto *mainWindow = qobject_cast<MainWindow *>(parent());
+  auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
   if (mainWindow) {
-    m_generalSettings = mainWindow->m_generalSettings;
+    m_generalSettings = mainWindow->generalSettings();
   }
   // Splash / Fonts / Attract / general "General" sub-tab fields are all
   // owned by their respective panels — refresh them from the working copy.
@@ -364,9 +364,10 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // Populate the panel's startup-collection combo with the live collection
   // names so the user can pick one.
   if (mainWindow) {
+    const auto &mwCollections = mainWindow->collections();
     QStringList names;
-    names.reserve(mainWindow->m_collections.size());
-    for (const CollectionConfig &cfg : std::as_const(mainWindow->m_collections)) {
+    names.reserve(mwCollections.size());
+    for (const CollectionConfig &cfg : std::as_const(mwCollections)) {
       names.append(cfg.name);
     }
     ui->generalSettingsPanel->setStartupCollections(names, m_generalSettings.startupCollection);
@@ -391,116 +392,105 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
 }
 
-void SettingsDialog::saveGeneralSettingsFromUI() {
-  auto *mainWindow = qobject_cast<MainWindow *>(parent());
+ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
+  auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
   if ((mainWindow) && (mainWindow->getSettingsManager())) {
+    GeneralSettings &mwSettings = mainWindow->generalSettings();
     // Splash / GeneralSettings fields owned by their respective panels —
     // already in m_generalSettings; mirror the whole struct's relevant
     // fields to mainWindow below. Side-effect application (PixmapCache /
     // VideoThumbnailExtractor) still runs here so the change is visible
     // while the dialog is open.
-    mainWindow->m_generalSettings.bootSplashEnabled = m_generalSettings.bootSplashEnabled;
-    mainWindow->m_generalSettings.resumeFocusSplashEnabled =
-        m_generalSettings.resumeFocusSplashEnabled;
-    mainWindow->m_generalSettings.bootSplashTitle = m_generalSettings.bootSplashTitle;
-    mainWindow->m_generalSettings.bootSplashSubtitle = m_generalSettings.bootSplashSubtitle;
-    mainWindow->m_generalSettings.resumeFocusSplashTitle = m_generalSettings.resumeFocusSplashTitle;
-    mainWindow->m_generalSettings.resumeFocusSplashSubtitle =
-        m_generalSettings.resumeFocusSplashSubtitle;
+    mwSettings.bootSplashEnabled = m_generalSettings.bootSplashEnabled;
+    mwSettings.resumeFocusSplashEnabled = m_generalSettings.resumeFocusSplashEnabled;
+    mwSettings.bootSplashTitle = m_generalSettings.bootSplashTitle;
+    mwSettings.bootSplashSubtitle = m_generalSettings.bootSplashSubtitle;
+    mwSettings.resumeFocusSplashTitle = m_generalSettings.resumeFocusSplashTitle;
+    mwSettings.resumeFocusSplashSubtitle = m_generalSettings.resumeFocusSplashSubtitle;
 
     // Startup
-    mainWindow->m_generalSettings.startupCollection = m_generalSettings.startupCollection;
-    mainWindow->m_generalSettings.useHomeView = m_generalSettings.useHomeView;
-    mainWindow->m_generalSettings.homeViewLabel = m_generalSettings.homeViewLabel;
-    mainWindow->m_generalSettings.homeViewIcon = m_generalSettings.homeViewIcon;
-    mainWindow->m_generalSettings.startupVideoEnabled = m_generalSettings.startupVideoEnabled;
-    mainWindow->m_generalSettings.startupVideoPath = m_generalSettings.startupVideoPath;
+    mwSettings.startupCollection = m_generalSettings.startupCollection;
+    mwSettings.useHomeView = m_generalSettings.useHomeView;
+    mwSettings.homeViewLabel = m_generalSettings.homeViewLabel;
+    mwSettings.homeViewIcon = m_generalSettings.homeViewIcon;
+    mwSettings.startupVideoEnabled = m_generalSettings.startupVideoEnabled;
+    mwSettings.startupVideoPath = m_generalSettings.startupVideoPath;
     // Selection & Display
-    mainWindow->m_generalSettings.rememberSelection = m_generalSettings.rememberSelection;
-    mainWindow->m_generalSettings.wrapNavigation = m_generalSettings.wrapNavigation;
-    mainWindow->m_generalSettings.selectItemOnHover = m_generalSettings.selectItemOnHover;
-    mainWindow->m_generalSettings.showTitleInPlaceholder = m_generalSettings.showTitleInPlaceholder;
+    mwSettings.rememberSelection = m_generalSettings.rememberSelection;
+    mwSettings.wrapNavigation = m_generalSettings.wrapNavigation;
+    mwSettings.selectItemOnHover = m_generalSettings.selectItemOnHover;
+    mwSettings.showTitleInPlaceholder = m_generalSettings.showTitleInPlaceholder;
     // Input & Scroll Timing
-    mainWindow->m_generalSettings.mouseWheelRows = m_generalSettings.mouseWheelRows;
-    mainWindow->m_generalSettings.scrollVelocityMultiplier =
-        m_generalSettings.scrollVelocityMultiplier;
-    mainWindow->m_generalSettings.scrollAnimationDurationMs =
-        m_generalSettings.scrollAnimationDurationMs;
-    mainWindow->m_generalSettings.clickHoldDelayMs = m_generalSettings.clickHoldDelayMs;
-    mainWindow->m_generalSettings.clickHoldRepeatIntervalMs =
-        m_generalSettings.clickHoldRepeatIntervalMs;
-    mainWindow->m_generalSettings.listClickHoldRepeatIntervalMs =
-        m_generalSettings.listClickHoldRepeatIntervalMs;
-    mainWindow->m_generalSettings.keyboardRepeatIntervalMs =
-        m_generalSettings.keyboardRepeatIntervalMs;
-    mainWindow->m_generalSettings.keyboardRepeatDelayMs = m_generalSettings.keyboardRepeatDelayMs;
-    mainWindow->m_generalSettings.listKeyboardRepeatIntervalMs =
-        m_generalSettings.listKeyboardRepeatIntervalMs;
+    mwSettings.mouseWheelRows = m_generalSettings.mouseWheelRows;
+    mwSettings.scrollVelocityMultiplier = m_generalSettings.scrollVelocityMultiplier;
+    mwSettings.scrollAnimationDurationMs = m_generalSettings.scrollAnimationDurationMs;
+    mwSettings.clickHoldDelayMs = m_generalSettings.clickHoldDelayMs;
+    mwSettings.clickHoldRepeatIntervalMs = m_generalSettings.clickHoldRepeatIntervalMs;
+    mwSettings.listClickHoldRepeatIntervalMs = m_generalSettings.listClickHoldRepeatIntervalMs;
+    mwSettings.keyboardRepeatIntervalMs = m_generalSettings.keyboardRepeatIntervalMs;
+    mwSettings.keyboardRepeatDelayMs = m_generalSettings.keyboardRepeatDelayMs;
+    mwSettings.listKeyboardRepeatIntervalMs = m_generalSettings.listKeyboardRepeatIntervalMs;
     // Performance & History (with live-apply side effects)
-    mainWindow->m_generalSettings.pixmapCacheSizeMB = m_generalSettings.pixmapCacheSizeMB;
+    mwSettings.pixmapCacheSizeMB = m_generalSettings.pixmapCacheSizeMB;
     QPixmapCache::setCacheLimit(m_generalSettings.pixmapCacheSizeMB * 1024);
-    mainWindow->m_generalSettings.runtimeDetectionEnabled =
-        m_generalSettings.runtimeDetectionEnabled;
-    mainWindow->m_generalSettings.historyEnabled = m_generalSettings.historyEnabled;
-    mainWindow->m_generalSettings.historyMaxEntries = m_generalSettings.historyMaxEntries;
-    mainWindow->m_generalSettings.videoThumbnailExtractionTimeoutMs =
+    mwSettings.runtimeDetectionEnabled = m_generalSettings.runtimeDetectionEnabled;
+    mwSettings.historyEnabled = m_generalSettings.historyEnabled;
+    mwSettings.historyMaxEntries = m_generalSettings.historyMaxEntries;
+    mwSettings.videoThumbnailExtractionTimeoutMs =
         m_generalSettings.videoThumbnailExtractionTimeoutMs;
     VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
         m_generalSettings.videoThumbnailExtractionTimeoutMs);
     // Attract-mode fields owned by AttractPanel — already in
     // m_generalSettings (the panel's settings pointer); copy to mainWindow.
-    mainWindow->m_generalSettings.attractModeEnabled = m_generalSettings.attractModeEnabled;
-    mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
-        m_generalSettings.attractModeIdleTimeoutSec;
-    mainWindow->m_generalSettings.attractModeAutoScrollEnabled =
-        m_generalSettings.attractModeAutoScrollEnabled;
-    mainWindow->m_generalSettings.attractModeScrollSpeed = m_generalSettings.attractModeScrollSpeed;
-    mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled =
+    mwSettings.attractModeEnabled = m_generalSettings.attractModeEnabled;
+    mwSettings.attractModeIdleTimeoutSec = m_generalSettings.attractModeIdleTimeoutSec;
+    mwSettings.attractModeAutoScrollEnabled = m_generalSettings.attractModeAutoScrollEnabled;
+    mwSettings.attractModeScrollSpeed = m_generalSettings.attractModeScrollSpeed;
+    mwSettings.attractModeAdvanceSelectionEnabled =
         m_generalSettings.attractModeAdvanceSelectionEnabled;
-    mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+    mwSettings.attractModeAdvanceSelectionIntervalSec =
         m_generalSettings.attractModeAdvanceSelectionIntervalSec;
-    mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
+    mwSettings.attractModeAdvanceSelectionRandom =
         m_generalSettings.attractModeAdvanceSelectionRandom;
     // Marquee fields owned by MarqueePanel — copy struct + ping
     // MainWindow's marquee lifecycle so the window appears / disappears /
     // moves to a new screen / switches mode without an app restart.
-    mainWindow->m_generalSettings.marqueeEnabled = m_generalSettings.marqueeEnabled;
-    mainWindow->m_generalSettings.marqueeScreenName = m_generalSettings.marqueeScreenName;
-    mainWindow->m_generalSettings.marqueeMode = m_generalSettings.marqueeMode;
+    mwSettings.marqueeEnabled = m_generalSettings.marqueeEnabled;
+    mwSettings.marqueeScreenName = m_generalSettings.marqueeScreenName;
+    mwSettings.marqueeMode = m_generalSettings.marqueeMode;
     mainWindow->applyMarqueeSettings();
     // Title-tint fields: AppearanceColorsPanel keeps m_generalSettings live;
     // copy struct fields to mainWindow and apply ItemWidget side effects.
-    mainWindow->m_generalSettings.titleTintSaturation = m_generalSettings.titleTintSaturation;
+    mwSettings.titleTintSaturation = m_generalSettings.titleTintSaturation;
     ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
-    mainWindow->m_generalSettings.titleTintLightness = m_generalSettings.titleTintLightness;
+    mwSettings.titleTintLightness = m_generalSettings.titleTintLightness;
     ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
-    mainWindow->m_generalSettings.titleBaseColor = m_generalSettings.titleBaseColor;
+    mwSettings.titleBaseColor = m_generalSettings.titleBaseColor;
     ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
 
     // Keyboard / Gamepad / Mouse fields owned by ControlsPanel — already
     // in m_generalSettings via writeBack(); copy to mainWindow's struct.
-    mainWindow->m_generalSettings.keyNavUp = m_generalSettings.keyNavUp;
-    mainWindow->m_generalSettings.keyNavDown = m_generalSettings.keyNavDown;
-    mainWindow->m_generalSettings.keyNavLeft = m_generalSettings.keyNavLeft;
-    mainWindow->m_generalSettings.keyNavRight = m_generalSettings.keyNavRight;
-    mainWindow->m_generalSettings.keyConfirm = m_generalSettings.keyConfirm;
-    mainWindow->m_generalSettings.keyBack = m_generalSettings.keyBack;
-    mainWindow->m_generalSettings.keySearch = m_generalSettings.keySearch;
-    mainWindow->m_generalSettings.keyHomeView = m_generalSettings.keyHomeView;
-    mainWindow->m_generalSettings.gamepadUseDpad = m_generalSettings.gamepadUseDpad;
-    mainWindow->m_generalSettings.gamepadUseLeftStick = m_generalSettings.gamepadUseLeftStick;
-    mainWindow->m_generalSettings.gamepadConfirmButton = m_generalSettings.gamepadConfirmButton;
-    mainWindow->m_generalSettings.gamepadBackButton = m_generalSettings.gamepadBackButton;
-    mainWindow->m_generalSettings.gamepadToggleSidebarButton =
-        m_generalSettings.gamepadToggleSidebarButton;
-    mainWindow->m_generalSettings.artworkCycleModifier = m_generalSettings.artworkCycleModifier;
+    mwSettings.keyNavUp = m_generalSettings.keyNavUp;
+    mwSettings.keyNavDown = m_generalSettings.keyNavDown;
+    mwSettings.keyNavLeft = m_generalSettings.keyNavLeft;
+    mwSettings.keyNavRight = m_generalSettings.keyNavRight;
+    mwSettings.keyConfirm = m_generalSettings.keyConfirm;
+    mwSettings.keyBack = m_generalSettings.keyBack;
+    mwSettings.keySearch = m_generalSettings.keySearch;
+    mwSettings.keyHomeView = m_generalSettings.keyHomeView;
+    mwSettings.gamepadUseDpad = m_generalSettings.gamepadUseDpad;
+    mwSettings.gamepadUseLeftStick = m_generalSettings.gamepadUseLeftStick;
+    mwSettings.gamepadConfirmButton = m_generalSettings.gamepadConfirmButton;
+    mwSettings.gamepadBackButton = m_generalSettings.gamepadBackButton;
+    mwSettings.gamepadToggleSidebarButton = m_generalSettings.gamepadToggleSidebarButton;
+    mwSettings.artworkCycleModifier = m_generalSettings.artworkCycleModifier;
     // launcher presets live on the dialog's m_generalSettings
     // (mutated directly by the Launchers tab) — copy them onto the main
     // window's settings before persisting so the saved snapshot includes
     // any preset add/edit/remove the user just performed.
-    mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
+    mwSettings.launcherPresets = m_generalSettings.launcherPresets;
 
     // Scraper performance + behavior options owned by ScraperSettingsPanel
     // (writes straight into m_model.generalSettings, which is &m_generalSettings).
@@ -508,44 +498,35 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // propagate to mainWindow's GeneralSettings, so they look reverted
     // the next time the dialog opens — same pattern as all the other
     // panel-owned fields above.
-    mainWindow->m_generalSettings.scraperOptions = m_generalSettings.scraperOptions;
+    mwSettings.scraperOptions = m_generalSettings.scraperOptions;
     // ScraperCredentialsPanel writes into m_generalSettings.scraperCredentials
     // (same deferred pattern). The whole map gets copied across so removed
     // / added providers are reflected in mainWindow's struct before the
     // SettingsManager save flushes them to disk.
-    mainWindow->m_generalSettings.scraperCredentials = m_generalSettings.scraperCredentials;
+    mwSettings.scraperCredentials = m_generalSettings.scraperCredentials;
 
     // Toolbar customization fields owned by ToolbarPanel — already in
     // m_generalSettings via writeBack(); copy to mainWindow's struct.
-    mainWindow->m_generalSettings.toolbarShowGridViewButton =
-        m_generalSettings.toolbarShowGridViewButton;
-    mainWindow->m_generalSettings.toolbarShowListViewButton =
-        m_generalSettings.toolbarShowListViewButton;
-    mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
-        m_generalSettings.toolbarShowCoverFlowViewButton;
-    mainWindow->m_generalSettings.toolbarShowHorizontalViewButton =
-        m_generalSettings.toolbarShowHorizontalViewButton;
-    mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
+    mwSettings.toolbarShowGridViewButton = m_generalSettings.toolbarShowGridViewButton;
+    mwSettings.toolbarShowListViewButton = m_generalSettings.toolbarShowListViewButton;
+    mwSettings.toolbarShowCoverFlowViewButton = m_generalSettings.toolbarShowCoverFlowViewButton;
+    mwSettings.toolbarShowHorizontalViewButton = m_generalSettings.toolbarShowHorizontalViewButton;
+    mwSettings.toolbarShowHideSubcollectionsButton =
         m_generalSettings.toolbarShowHideSubcollectionsButton;
-    mainWindow->m_generalSettings.toolbarShowTypeFilter = m_generalSettings.toolbarShowTypeFilter;
-    mainWindow->m_generalSettings.toolbarShowTitleFilter = m_generalSettings.toolbarShowTitleFilter;
-    mainWindow->m_generalSettings.toolbarShowSearchModeButton =
-        m_generalSettings.toolbarShowSearchModeButton;
-    mainWindow->m_generalSettings.toolbarShowSearchBar = m_generalSettings.toolbarShowSearchBar;
-    mainWindow->m_generalSettings.toolbarGridViewButtonText =
-        m_generalSettings.toolbarGridViewButtonText;
-    mainWindow->m_generalSettings.toolbarListViewButtonText =
-        m_generalSettings.toolbarListViewButtonText;
-    mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
-        m_generalSettings.toolbarCoverFlowViewButtonText;
-    mainWindow->m_generalSettings.toolbarHorizontalViewButtonText =
-        m_generalSettings.toolbarHorizontalViewButtonText;
-    mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
+    mwSettings.toolbarShowTypeFilter = m_generalSettings.toolbarShowTypeFilter;
+    mwSettings.toolbarShowTitleFilter = m_generalSettings.toolbarShowTitleFilter;
+    mwSettings.toolbarShowSearchModeButton = m_generalSettings.toolbarShowSearchModeButton;
+    mwSettings.toolbarShowSearchBar = m_generalSettings.toolbarShowSearchBar;
+    mwSettings.toolbarGridViewButtonText = m_generalSettings.toolbarGridViewButtonText;
+    mwSettings.toolbarListViewButtonText = m_generalSettings.toolbarListViewButtonText;
+    mwSettings.toolbarCoverFlowViewButtonText = m_generalSettings.toolbarCoverFlowViewButtonText;
+    mwSettings.toolbarHorizontalViewButtonText = m_generalSettings.toolbarHorizontalViewButtonText;
+    mwSettings.toolbarHideSubcollectionsButtonText =
         m_generalSettings.toolbarHideSubcollectionsButtonText;
-    mainWindow->m_generalSettings.toolbarTitleFilterText = m_generalSettings.toolbarTitleFilterText;
+    mwSettings.toolbarTitleFilterText = m_generalSettings.toolbarTitleFilterText;
 
-    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-    m_generalSettings = mainWindow->m_generalSettings;
+    auto saveResult = mainWindow->getSettingsManager()->saveGeneralSettings(mwSettings);
+    m_generalSettings = mwSettings;
 
     // Apply showTitleInPlaceholder to ItemWidget + repaint visible widgets,
     // since this used to be a live-apply side-effect and the panel pattern
@@ -588,5 +569,8 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         }
       }
     }
+
+    return saveResult;
   }
+  return ErrorUtils::Result<void>::success();
 }

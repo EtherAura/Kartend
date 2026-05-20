@@ -1,6 +1,9 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+target_sources(kartend_core PRIVATE
   gridwidthdebouncer.cpp
   mainwindow.cpp
+  mainwindow_dbevents.cpp
+  mainwindow_scraper.cpp
+  mainwindow_scrollevents.cpp
   mainwindowsetup.cpp
   mainwindowtimers.cpp
   mainwindowtoolbar.cpp

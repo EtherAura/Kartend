@@ -38,7 +38,7 @@ struct LaunchManagerSetup {
 
   /// Resolves the per-item launcher override. Called before
   /// the multi-launcher chooser dialog appears. Returns the unified launcher
-  /// index (0 = primary, 1..N = additionalLaunchers[0..N-1]) when an override
+  /// index (0 = primary, 1..N = launcher.additionalLaunchers[0..N-1]) when an override
   /// is set, or a negative value to fall through to the chooser / collection
   /// default. Indirection mirrors `onLaunched` so LaunchManager doesn't take
   /// a hard link-time dependency on DatabaseManager.
@@ -111,7 +111,7 @@ public:
   /// participate in the multi-launcher flow.
   [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
   buildLaunchCommand(const CollectionConfig &collection, const QString &filePath) {
-    return buildLaunchCommand(collection.launcherAt(0), collection.name, filePath);
+    return buildLaunchCommand(collection.launcher.launcherAt(0), collection.name, filePath);
   }
 
   /// Parses command-line parameters handling quoted strings

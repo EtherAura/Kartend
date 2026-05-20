@@ -137,6 +137,21 @@ Result<void> validatePathSecurity(const QString &path) {
   return Result<void>::success();
 }
 
+Result<QString> expandAndValidateCliPath(const QString &raw, const QString &optionName) {
+  const QString expanded = expandPathWithoutExistenceCheck(raw);
+  if (expanded.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               QString("--%1 is empty after expansion").arg(optionName),
+                               "PathUtils::expandAndValidateCliPath")
+        .withDetails(QString("Raw value: '%1'").arg(raw));
+  }
+  auto security = validatePathSecurity(expanded);
+  if (security.isError()) {
+    return security.error();
+  }
+  return expanded;
+}
+
 bool syncDirectory(const QString &dirPath) {
 #if defined(Q_OS_UNIX)
   if (dirPath.isEmpty()) {

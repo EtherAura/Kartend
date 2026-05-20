@@ -14,6 +14,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Cancel duplicate runs on rapid pushes to feature branches — the
+  # sanitizer matrix is expensive enough that letting superseded SHAs
+  # finish is pure waste. Main/release pipelines (refs/heads/main) keep
+  # their runs so a force-cancel doesn't blank out the green checkmark
+  # CDN consumers (badges, release process) depend on.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -409,6 +418,18 @@ jobs:
         # Fails if the foundation layer (src/utils/) reaches upward into
         # src/modules|ui|core. Cheap, build-independent guardrail.
         run: python3 .scripts/check-layering.py
+
+      - name: Check QTimer::singleShot 'why' comments
+        # Project rule: every QTimer::singleShot call must carry a preceding
+        # comment explaining WHY the delay exists (event-loop defer, layout
+        # settle, reentrancy break, ...). Build-independent grep, <1s.
+        run: python3 .scripts/check-singleshot-comments.py
+
+      - name: Check src/modules ↔ tests/modules mapping
+        # Catches drift between src/modules/<group>/<feature>/ and
+        # tests/modules/<feature>/. Integration-only features are
+        # allowlisted in the script. Build-independent, <1s.
+        run: python3 .scripts/check-test-mapping.py
 
       - name: Run maintenance build script
         run: |

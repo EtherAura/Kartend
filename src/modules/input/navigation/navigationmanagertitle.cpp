@@ -73,7 +73,7 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   QString linkColorHex = linkColor.name();
 
   // Check if we're in a subfolder - if so, make the collection name clickable
-  bool inSubfolder = !config.currentSubfolder.isEmpty();
+  bool inSubfolder = !config.folderBrowsing.currentSubfolder.isEmpty();
 
   if (config.isSubcollection) {
     const QList<int> ancestors = CollectionUtils::ancestorIndexChain(config, *m_collections);
@@ -119,7 +119,7 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
 
   // Show subfolder path if we're navigated into a virtual folder
   if (subfolderLabel) {
-    const QString &subfolder = config.currentSubfolder;
+    const QString &subfolder = config.folderBrowsing.currentSubfolder;
     if (!subfolder.isEmpty()) {
       // Connect subfolder label linkActivated if not already connected
       static bool subfolderLinkConnected = false;

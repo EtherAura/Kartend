@@ -93,6 +93,10 @@ void VideoThumbnailExtractor::requestFrame(const QString &videoPath) {
 
   if (m_cache.contains(videoPath)) {
     const QPixmap pix = m_cache.value(videoPath);
+    // Emit asynchronously even on a cache hit so callers see the same
+    // sync/async signal contract as a miss — otherwise a slot connected
+    // with AutoConnection that mutates the gallery (e.g. adds another tile)
+    // would reenter requestFrame() before this stack frame unwinds.
     QTimer::singleShot(0, this, [this, videoPath, pix]() { emit frameReady(videoPath, pix); });
     return;
   }
@@ -186,6 +190,10 @@ void VideoThumbnailExtractor::finishCurrent(const QPixmap &pixmap) {
   emit frameReady(path, pixmap);
 
   if (!m_queue.isEmpty()) {
+    // Yield between items so the event loop drains frameReady connections
+    // (gallery-tile repaints) before we tear down the QMediaPlayer for the
+    // next extraction — back-to-back synchronous extraction starved the UI
+    // thread of paint events on populous galleries.
     QTimer::singleShot(0, this, [this]() { processNext(); });
   }
 }

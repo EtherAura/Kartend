@@ -52,6 +52,7 @@
 #include "menucontroller.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
+#include "overlaylayermanager.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
@@ -89,6 +90,11 @@ MainWindow::MainWindow(QWidget *parent)
   m_appManager->initialize(&m_appContext);
   m_scraperService = std::make_unique<Scraper::ScraperService>(this);
   m_marqueeController = std::make_unique<MarqueeController>(this);
+  // Constructed before setupUI() so each overlay's setLayerManager() call
+  // inside setupUI() / setupArtworkManager() / setupSidebar() can register
+  // against a live instance. The manager owns no widgets — overlays remain
+  // parented to centralwidget as before.
+  m_overlayLayerManager = std::make_unique<OverlayLayerManager>(this);
 
   ui->setupUi(this);
   setupUI();
@@ -347,7 +353,7 @@ void MainWindow::refreshTitleCounts() {
   };
 
   // Check if we're in a subfolder
-  const QString &subfolder = m_collections[cur].currentSubfolder;
+  const QString &subfolder = m_collections[cur].folderBrowsing.currentSubfolder;
   if (!subfolder.isEmpty() && getScrollManager()) {
     // In a subfolder: show "SubfolderName (subfolderCount/collectionCount
     // Items)"
@@ -755,7 +761,7 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     // collection switch.
     if (m_menuController) {
       m_menuController->syncLayoutActions(viewType);
-      m_menuController->syncOrientationActions(m_collections[collectionIndex].sidebarPosition);
+      m_menuController->syncOrientationActions(m_collections[collectionIndex].sidebar.sidebarPosition);
     }
   }
   // Sync the consolidated filter popup so the per-collection title-pattern

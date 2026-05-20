@@ -196,7 +196,7 @@ void ConfigurationPanel::load() {
     // unrecognised stored id (hand-edit, or a provider dropped in a
     // later build) also falls back to Automatic.
     QSignalBlocker blocker(ui->scraperProviderComboBox);
-    const int idx = ui->scraperProviderComboBox->findData(config.scraperProviderId);
+    const int idx = ui->scraperProviderComboBox->findData(config.scraperOverrides.scraperProviderId);
     ui->scraperProviderComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
   }
   SettingsFormBinding::loadInto(ui->mediaDirLineEdit, config.mediaDirectory);
@@ -206,16 +206,16 @@ void ConfigurationPanel::load() {
                                 config.showAllSubcollectionItems);
   m_screenscraperSystems =
       populateSystemsCombo(ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
-                           config.screenscraperSystemId);
+                           config.scraperOverrides.screenscraperSystemId);
   // A collection that already pins a concrete system counts as
   // manually set — don't let an autodetect on a later type/extension
   // edit override the user's explicit choice. Auto-detect (-1) stays
   // open to autodetect.
-  m_systemManuallySet = config.screenscraperSystemId != -1;
+  m_systemManuallySet = config.scraperOverrides.screenscraperSystemId != -1;
   SettingsFormBinding::loadInto(ui->screenscraperHashArchiveCheckBox,
-                                config.screenscraperHashArchive);
+                                config.scraperOverrides.screenscraperHashArchive);
   ui->datFilesListWidget->clear();
-  ui->datFilesListWidget->addItems(config.datFilePaths);
+  ui->datFilesListWidget->addItems(config.scraperOverrides.datFilePaths);
 }
 
 void ConfigurationPanel::autodetectScreenscraperSystem() {
@@ -272,7 +272,7 @@ void ConfigurationPanel::save() const {
   config.type = ui->collectionTypeComboBox->currentText().trimmed();
   // Scraper override: empty id (Automatic) means resolve by type at
   // scrape time; a concrete id pins that provider.
-  config.scraperProviderId = ui->scraperProviderComboBox->currentData().toString();
+  config.scraperOverrides.scraperProviderId = ui->scraperProviderComboBox->currentData().toString();
   // Media dir preserves exact text (no trim) — matches legacy behavior.
   config.mediaDirectory = ui->mediaDirLineEdit->text();
   config.extensions = ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
@@ -282,14 +282,14 @@ void ConfigurationPanel::save() const {
   // currentData().toInt() returns 0 for an empty combo, so guard with
   // the index check — clear() leaves the combo empty until load() runs.
   if (ui->screenscraperSystemComboBox->currentIndex() >= 0) {
-    config.screenscraperSystemId = ui->screenscraperSystemComboBox->currentData().toInt();
+    config.scraperOverrides.screenscraperSystemId = ui->screenscraperSystemComboBox->currentData().toInt();
   }
-  config.screenscraperHashArchive = ui->screenscraperHashArchiveCheckBox->isChecked();
-  config.datFilePaths.clear();
-  config.datFilePaths.reserve(ui->datFilesListWidget->count());
+  config.scraperOverrides.screenscraperHashArchive = ui->screenscraperHashArchiveCheckBox->isChecked();
+  config.scraperOverrides.datFilePaths.clear();
+  config.scraperOverrides.datFilePaths.reserve(ui->datFilesListWidget->count());
   for (int i = 0; i < ui->datFilesListWidget->count(); ++i) {
     const QString path = ui->datFilesListWidget->item(i)->text();
-    if (!path.isEmpty()) config.datFilePaths.append(path);
+    if (!path.isEmpty()) config.scraperOverrides.datFilePaths.append(path);
   }
 }
 
@@ -297,7 +297,7 @@ bool ConfigurationPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
   if (ui->collectionTypeComboBox->currentText().trimmed() != o.type) return true;
-  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperProviderId) return true;
+  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperOverrides.scraperProviderId) return true;
   if (ui->mediaDirLineEdit->text() != o.mediaDirectory) return true;
   if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;
   if (ui->showAllSubcollectionItemsCheckBox->isChecked() != o.showAllSubcollectionItems)
@@ -308,10 +308,10 @@ bool ConfigurationPanel::hasChanges() const {
       ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
   if (parsed != o.extensions) return true;
   if (ui->screenscraperSystemComboBox->currentIndex() >= 0 &&
-      ui->screenscraperSystemComboBox->currentData().toInt() != o.screenscraperSystemId) {
+      ui->screenscraperSystemComboBox->currentData().toInt() != o.scraperOverrides.screenscraperSystemId) {
     return true;
   }
-  if (ui->screenscraperHashArchiveCheckBox->isChecked() != o.screenscraperHashArchive) {
+  if (ui->screenscraperHashArchiveCheckBox->isChecked() != o.scraperOverrides.screenscraperHashArchive) {
     return true;
   }
   // Compare against the rebuilt list so duplicate-drop / empty-trim
@@ -323,7 +323,7 @@ bool ConfigurationPanel::hasChanges() const {
     const QString path = ui->datFilesListWidget->item(i)->text();
     if (!path.isEmpty()) current.append(path);
   }
-  if (current != o.datFilePaths) {
+  if (current != o.scraperOverrides.datFilePaths) {
     return true;
   }
   return false;

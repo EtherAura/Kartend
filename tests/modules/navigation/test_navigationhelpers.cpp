@@ -201,7 +201,7 @@ void TestNavigationHelpers::lookupUsesSubfolderKeyWhenSubfolderActive() {
   // We verify the helper at least asks for one key (the subfolder one) and
   // does NOT fall back to the bare name.
   CollectionConfig cfg = makeCollection("Movies");
-  cfg.currentSubfolder = "Action";
+  cfg.folderBrowsing.currentSubfolder = "Action";
   QList<CollectionConfig> cs = {cfg};
   bool sawBareName = false;
   bool sawAnyKey = false;

@@ -21,7 +21,9 @@
 /// other two.
 ///
 /// Not thread-safe. The DatabaseManager methods that consult it all run
-/// on the main thread (see DatabaseManager class doc).
+/// on the main thread (see DatabaseManager class doc). Every public method
+/// asserts QThread::currentThread() == qApp->thread() in debug builds so
+/// the rule is enforced instead of just documented.
 class ItemMetadataCache {
 public:
   static constexpr int DEFAULT_CAPACITY = 256;

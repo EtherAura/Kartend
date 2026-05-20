@@ -1,3 +1,4 @@
+#include <QImageReader>
 #include <QTest>
 
 #include "extensionutils.h"
@@ -13,6 +14,8 @@ private slots:
   void nonImagePathsAreRejected();
   void pdfManualIsRejected();
   void extensionMatchIsCaseInsensitive();
+  void webpIsAlwaysDecodable();
+  void avifTracksRuntimePluginSupport();
 };
 
 void TestExtensionUtils::imagePathsAreDecodable() {
@@ -51,6 +54,26 @@ void TestExtensionUtils::extensionMatchIsCaseInsensitive() {
   // Dotted base names: only the final suffix decides.
   QVERIFY(ExtensionUtils::isDecodableImagePath(QStringLiteral("My.Game.v1.2.jpg")));
   QVERIFY(!ExtensionUtils::isDecodableImagePath(QStringLiteral("My.png.manual.pdf")));
+}
+
+void TestExtensionUtils::webpIsAlwaysDecodable() {
+  // qt6-imageformats is a hard dep in our packaging, so webp is admitted
+  // unconditionally. Modern scrapers (ScreenScraper, IGDB, TheGamesDB)
+  // routinely return webp for thumbs.
+  QVERIFY(ExtensionUtils::isDecodableImagePath(QStringLiteral("cover.webp")));
+  QVERIFY(ExtensionUtils::isDecodableImagePath(QStringLiteral("art.WEBP")));
+}
+
+void TestExtensionUtils::avifTracksRuntimePluginSupport() {
+  // avif is gated on QImageReader's reported plugin set — the unit
+  // contract is: the extension is admitted iff Qt actually has a decoder
+  // for it. This test pins that contract so a regression that
+  // unconditionally admits avif (or unconditionally rejects it) fails.
+  const auto formats = QImageReader::supportedImageFormats();
+  const bool hasAvif = formats.contains(QByteArrayLiteral("avif")) ||
+                       formats.contains(QByteArrayLiteral("AVIF"));
+  const bool admitted = ExtensionUtils::isDecodableImagePath(QStringLiteral("cover.avif"));
+  QCOMPARE(admitted, hasAvif);
 }
 
 QTEST_MAIN(TestExtensionUtils)

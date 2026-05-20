@@ -90,6 +90,8 @@ void deleteLaterTimer(QTimer *&timer);
 template <typename T, typename Func>
 void singleShotGuarded(int delayMs, T *target, Func &&callback) {
   QPointer<T> guard(target);
+  // Delay is caller-supplied — this helper exists purely to make the
+  // QPointer lifetime guard the default, not to choose the interval itself.
   QTimer::singleShot(delayMs, target, [guard, cb = std::forward<Func>(callback)]() {
     if (guard) {
       cb();

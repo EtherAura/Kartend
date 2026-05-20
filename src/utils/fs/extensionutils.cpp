@@ -1,6 +1,8 @@
 // Categorizes file extensions by media type (ROM, disc image, archive, etc.).
 #include "extensionutils.h"
+#include <QByteArray>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QSet>
 #include <QString>
 
@@ -43,11 +45,25 @@ auto ExtensionUtils::parseUserExtensionList(const QString &text) -> QStringList 
 }
 
 // Returns a canonical list of lowercase image extensions without dots or
-// wildcards
+// wildcards. webp is unconditional — qt6-imageformats is a hard dep and
+// ships libqwebp. avif is gated on QImageReader's reported plugin set so
+// a runner without libqavif doesn't admit undecodable paths into the
+// allowlist (degrades to null-QImage rather than crashing, but cleaner to
+// reject at the seam). The result is cached in the static — first call
+// pays the QImageReader::supportedImageFormats() cost, subsequent calls
+// return the cached list. All 13 test targets that compile this file
+// link Qt6::Gui so QImageReader resolves at link time.
 auto ExtensionUtils::imageBaseExtensions() -> const QStringList & {
-  static const QStringList exts = {QStringLiteral("png"), QStringLiteral("jpg"),
-                                   QStringLiteral("jpeg"), QStringLiteral("bmp"),
-                                   QStringLiteral("gif")};
+  static const QStringList exts = []() {
+    QStringList base = {QStringLiteral("png"),  QStringLiteral("jpg"), QStringLiteral("jpeg"),
+                        QStringLiteral("bmp"),  QStringLiteral("gif"), QStringLiteral("webp")};
+    const auto formats = QImageReader::supportedImageFormats();
+    if (formats.contains(QByteArrayLiteral("avif")) ||
+        formats.contains(QByteArrayLiteral("AVIF"))) {
+      base.append(QStringLiteral("avif"));
+    }
+    return base;
+  }();
   return exts;
 }
 

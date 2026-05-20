@@ -53,9 +53,9 @@ CollectionConfig makeLeaf(const QString &name, const QString &mediaDir = {}) {
   c.name = name;
   c.mediaDirectory = mediaDir;
   c.parentCollectionIndex = -1;
-  c.gridWidth = 5;
-  c.itemWidth = 200;
-  c.itemHeight = 300;
+  c.gridLayout.gridWidth = 5;
+  c.gridLayout.itemWidth = 200;
+  c.gridLayout.itemHeight = 300;
   return c;
 }
 
@@ -194,8 +194,8 @@ void TestConfigValidation::validateCollection_invalidParentIndexIsError() {
 
 void TestConfigValidation::validateCollection_smallItemDimensionsWarn() {
   CollectionConfig c = makeLeaf(QStringLiteral("Test"));
-  c.itemWidth = 30;
-  c.itemHeight = 30;
+  c.gridLayout.itemWidth = 30;
+  c.gridLayout.itemHeight = 30;
   const auto r = ConfigValidation::validateCollection(c, 0, /*isContainer=*/true);
   bool found = false;
   for (const QString &w : r.warnings) {
@@ -209,7 +209,7 @@ void TestConfigValidation::validateCollection_smallItemDimensionsWarn() {
 
 void TestConfigValidation::validateCollection_zeroGridWidthWarns() {
   CollectionConfig c = makeLeaf(QStringLiteral("Test"));
-  c.gridWidth = 0;
+  c.gridLayout.gridWidth = 0;
   const auto r = ConfigValidation::validateCollection(c, 0, /*isContainer=*/true);
   bool found = false;
   for (const QString &w : r.warnings) {

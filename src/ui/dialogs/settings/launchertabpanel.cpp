@@ -64,12 +64,12 @@ void LauncherTabPanel::load() {
   // changed in General settings since the panel was constructed.
   populateCoreCombo();
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  SettingsFormBinding::loadInto(ui->launcherLineEdit, config.launcherPath);
-  SettingsFormBinding::loadInto(ui->coreLineEdit, config.corePath);
-  SettingsFormBinding::loadInto(ui->launchParamsLineEdit, config.launchParameters);
-  SettingsFormBinding::loadInto(ui->launcherNameLineEdit, config.launcherName);
-  SettingsFormBinding::loadInto(ui->extractArchivesCheckBox, config.extractArchives);
-  SettingsFormBinding::loadInto(ui->extractedExtensionLineEdit, config.extractedExtension);
+  SettingsFormBinding::loadInto(ui->launcherLineEdit, config.launcher.launcherPath);
+  SettingsFormBinding::loadInto(ui->coreLineEdit, config.launcher.corePath);
+  SettingsFormBinding::loadInto(ui->launchParamsLineEdit, config.launcher.launchParameters);
+  SettingsFormBinding::loadInto(ui->launcherNameLineEdit, config.launcher.launcherName);
+  SettingsFormBinding::loadInto(ui->extractArchivesCheckBox, config.archive.extractArchives);
+  SettingsFormBinding::loadInto(ui->extractedExtensionLineEdit, config.archive.extractedExtension);
   updateExtractedExtensionVisibility();
 }
 
@@ -92,24 +92,24 @@ void LauncherTabPanel::save() const {
   // launcherPath / corePath / launchParameters preserve exact text (no
   // trim) — paths might legitimately contain trailing spaces in obscure
   // setups.
-  config.launcherPath = ui->launcherLineEdit->text();
-  config.corePath = ui->coreLineEdit->text();
-  config.launchParameters = ui->launchParamsLineEdit->text();
+  config.launcher.launcherPath = ui->launcherLineEdit->text();
+  config.launcher.corePath = ui->coreLineEdit->text();
+  config.launcher.launchParameters = ui->launchParamsLineEdit->text();
   // launcherName is the display label, trim whitespace.
-  config.launcherName = ui->launcherNameLineEdit->text().trimmed();
-  config.extractArchives = ui->extractArchivesCheckBox->isChecked();
-  config.extractedExtension = ui->extractedExtensionLineEdit->text();
+  config.launcher.launcherName = ui->launcherNameLineEdit->text().trimmed();
+  config.archive.extractArchives = ui->extractArchivesCheckBox->isChecked();
+  config.archive.extractedExtension = ui->extractedExtensionLineEdit->text();
 }
 
 bool LauncherTabPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->launcherLineEdit->text() != o.launcherPath) return true;
-  if (ui->coreLineEdit->text() != o.corePath) return true;
-  if (ui->launchParamsLineEdit->text() != o.launchParameters) return true;
-  if (ui->launcherNameLineEdit->text().trimmed() != o.launcherName) return true;
-  if (ui->extractArchivesCheckBox->isChecked() != o.extractArchives) return true;
-  if (ui->extractedExtensionLineEdit->text() != o.extractedExtension) return true;
+  if (ui->launcherLineEdit->text() != o.launcher.launcherPath) return true;
+  if (ui->coreLineEdit->text() != o.launcher.corePath) return true;
+  if (ui->launchParamsLineEdit->text() != o.launcher.launchParameters) return true;
+  if (ui->launcherNameLineEdit->text().trimmed() != o.launcher.launcherName) return true;
+  if (ui->extractArchivesCheckBox->isChecked() != o.archive.extractArchives) return true;
+  if (ui->extractedExtensionLineEdit->text() != o.archive.extractedExtension) return true;
   return false;
 }
 

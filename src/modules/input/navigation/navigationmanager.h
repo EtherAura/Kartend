@@ -31,7 +31,7 @@ class IScrollManager;
 class IDatabaseManager;
 class ISessionManager;
 class IArtworkManager;
-class DetailsPane;
+class IDetailsPane;
 class SelectionRestoreManager;
 class LoadingOverlay;
 class EmptyStateWidget;
@@ -50,7 +50,7 @@ struct NavigationManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  DetailsPane *sidebar = nullptr;
+  IDetailsPane *sidebar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
@@ -79,7 +79,7 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
   SETUP_GETTER_INLINE_UI_SAME(EmptyStateWidget *, LoadingLabel, loadingLabel)
   SETUP_GETTER_INLINE_UI_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
-  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(IDetailsPane *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
   SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
   SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
@@ -201,7 +201,7 @@ private:
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
 
-  DetailsPane *m_MetadataSidebar = nullptr;
+  IDetailsPane *m_MetadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   GeneralSettings *m_generalSettings = nullptr;

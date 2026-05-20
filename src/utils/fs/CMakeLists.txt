@@ -1,4 +1,4 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
+target_sources(kartend_utils PRIVATE
   configvalidation.cpp
   extensionutils.cpp
   launcherprobe.cpp

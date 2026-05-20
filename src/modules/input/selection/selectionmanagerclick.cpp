@@ -13,7 +13,7 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "ianimationmanager.h"
 #include "iartworkmanager.h"
 #include "idetailspanemanager.h"
@@ -162,9 +162,12 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
   if (scrollMgr()) {
     scrollMgr()->updateSelectionForIndex(start);
   }
-  // Animate horizontal selection by stepping through intermediate indices -
-  // each hop scheduled at fixed intervals creates smooth left/right movement
+  // Animate horizontal selection by stepping through intermediate indices —
+  // each hop is scheduled at i * kPerHopMs so they fire serially without
+  // overlapping (the lambda guards against stale generations via `gen`).
   for (int i = 1; i <= steps; ++i) {
+    // Staggered fire time: hop i lands at i * kPerHopMs, producing visually
+    // smooth left/right travel that's resilient to a missed frame.
     QTimer::singleShot(i * kPerHopMs, this, [this, gen, i, start, target]() {
       if (!state() || state()->horizAnimGen() != gen) {
         return;
@@ -368,9 +371,10 @@ void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex, i
     }
   };
 
-  // Schedule sidebar updates at multiple delays to handle asynchronous
-  // widget materialization and metadata loading race conditions
   if (initialDelayMs > 0) {
+    // Initial deferred attempt: gives the widget pool a tick to materialize
+    // the target's ItemWidget before we read its metadata. Skipped (synchronous
+    // path) when the caller knows the widget is already live.
     QTimer::singleShot(initialDelayMs, this, updateSidebar);
   } else {
     updateSidebar();

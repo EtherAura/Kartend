@@ -1,6 +1,8 @@
 // Transient splash overlay shown on startup and when the main window regains focus.
 #include "splashoverlay.h"
 
+#include "overlaylayermanager.h"
+
 #include <QApplication>
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
@@ -145,7 +147,15 @@ void SplashOverlay::showSplash(Reason reason, const QString &titleOverride,
   m_fadeAnimation->start();
 
   QWidget::show();
-  raise();
+  // Route this widget's restack through the central layer manager when
+  // installed so all currently-visible overlays end up in their documented
+  // z-order. The inner card-widget raise is intra-overlay (sub-widget
+  // ordering within this overlay's own paint tree) so it stays direct.
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   if (m_cardWidget) {
     m_cardWidget->raise();
   }

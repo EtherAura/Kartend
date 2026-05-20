@@ -14,7 +14,7 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "ianimationmanager.h"
 #include "iartworkmanager.h"
 #include "idetailspanemanager.h"
@@ -43,7 +43,7 @@ Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager", QtWarningMsg)
   } while (0)
 
 // SelectionManagerSetup getter definitions (non-manager fields only).
-SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, DetailsPane *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, IDetailsPane *, Sidebar, sidebar)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)

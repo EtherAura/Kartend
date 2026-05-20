@@ -12,11 +12,11 @@
 #include "datcache.h"
 #include "datlookup.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QThread>
 
 namespace {
 
@@ -198,11 +198,19 @@ void TestDatCache::editedDatIsReIngestedOnMtimeChange() {
   QVERIFY(first.isOk());
   const qint64 firstId = first.value().id;
 
-  // Force a different mtime so the cache detects the edit. Some
-  // filesystems have second-resolution mtimes, so a 1.1s sleep is
-  // the simplest portable trigger.
-  QThread::msleep(1100);
-  writeDat(datPath(), kLogiqxDatEdited);
+  // Force a different mtime so the cache detects the edit. Re-writing
+  // the file in a QTRY loop until QFileInfo reports a fresh mtime is
+  // near-instant on msec-resolution filesystems (ext4 default, btrfs,
+  // APFS) — the very first write ticks the stamp. On coarser-resolution
+  // filesystems (FAT32 / old HFS+) we loop until the next-second tick
+  // (typically <1s, bounded by the QTRY timeout). Replaces a flat 1.1s
+  // sleep that paid worst-case latency on every CI run.
+  const QDateTime originalMtime = QFileInfo(datPath()).lastModified();
+  auto stampAdvanced = [&]() -> bool {
+    writeDat(datPath(), kLogiqxDatEdited);
+    return QFileInfo(datPath()).lastModified() != originalMtime;
+  };
+  QTRY_VERIFY_WITH_TIMEOUT(stampAdvanced(), 5000);
 
   auto reingest = store.openOrIngest(datPath());
   QVERIFY(reingest.isOk());

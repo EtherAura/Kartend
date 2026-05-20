@@ -332,9 +332,9 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
                                    "currentSubfolder='%5' includeDesc=%6 includeAll=%7")
                                .arg(m_itemsQueryContext.currentIndex)
                                .arg(m_itemsQueryFilter)
-                               .arg(m_itemsQueryContext.config.includeContentSubfolders)
-                               .arg(m_itemsQueryContext.config.showAllSubfolderItems)
-                               .arg(m_itemsQueryContext.config.currentSubfolder)
+                               .arg(m_itemsQueryContext.config.folderBrowsing.includeContentSubfolders)
+                               .arg(m_itemsQueryContext.config.folderBrowsing.showAllSubfolderItems)
+                               .arg(m_itemsQueryContext.config.folderBrowsing.currentSubfolder)
                                .arg(m_itemsQueryContext.queryIncludeDescendants)
                                .arg(m_itemsQueryContext.queryIncludeAllCollections);
 

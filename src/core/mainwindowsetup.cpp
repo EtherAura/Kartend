@@ -47,6 +47,7 @@
 #include "isettingsdialog.h"
 #include "isettingsmanager.h"
 #include "nowplayingoverlay.h"
+#include "overlaylayermanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsutils.h"
@@ -283,6 +284,34 @@ void MainWindow::setupUIReferences() {
   // on every Ctrl+/-/0 press. Parented to centralwidget so it floats above
   // all content and tracks parent resizes via its own eventFilter.
   m_textZoomHud = new TextZoomHud(ui->centralwidget);
+
+  // Hand every just-constructed overlay to the central z-order coordinator.
+  // The manager records each widget at its documented Layer and applies
+  // raise() across the registered set in z-order whenever any overlay
+  // requests bringToFront(this). Eliminates the prior bug class where two
+  // overlays raising themselves on the same frame left their relative
+  // order dependent on widget-tree creation luck. Manager-owned overlays
+  // (selection-glow widget owned by SelectionOverlayManager, search-loading
+  // widget owned by SearchLoadingOverlay) register themselves through their
+  // managers' setLayerManager() in connect-setup code below; the loose
+  // top-level overlays we just constructed are registered here directly.
+  if (m_overlayLayerManager) {
+    m_overlayLayerManager->registerOverlay(m_loadingOverlay,
+                                           OverlayLayerManager::Layer::Loading);
+    m_overlayLayerManager->registerOverlay(m_splashOverlay,
+                                           OverlayLayerManager::Layer::Splash);
+    m_overlayLayerManager->registerOverlay(m_nowPlayingOverlay,
+                                           OverlayLayerManager::Layer::NowPlaying);
+    m_overlayLayerManager->registerOverlay(m_detailPageOverlay,
+                                           OverlayLayerManager::Layer::DetailPage);
+    m_overlayLayerManager->registerOverlay(m_textZoomHud,
+                                           OverlayLayerManager::Layer::TextZoomHud);
+    m_loadingOverlay->setLayerManager(m_overlayLayerManager.get());
+    m_splashOverlay->setLayerManager(m_overlayLayerManager.get());
+    m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());
+    m_detailPageOverlay->setLayerManager(m_overlayLayerManager.get());
+    m_textZoomHud->setLayerManager(m_overlayLayerManager.get());
+  }
 }
 
 void MainWindow::initializeAppContext() {
@@ -306,6 +335,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.ui.sidebar = m_MetadataSidebar;
   m_appContext.ui.loadingLabel = ui->loadingLabel;
   m_appContext.ui.loadingOverlay = m_loadingOverlay;
+  m_appContext.ui.overlayLayerManager = m_overlayLayerManager.get();
 
   // Top-level managers — registered eagerly so ctx is fully populated before
   // any manager's setupReferences() runs.
@@ -415,8 +445,8 @@ void MainWindow::adjustGridWidth(int delta) {
   // primary gridWidth is. Sidebar shrinking state is cached on ScrollManager so
   // we don't have to recompute the predicate here.
   const bool useAltField = getScrollManager() && getScrollManager()->sidebarShrinkingActive() &&
-                           config.gridWidthSidebarHidden > 0;
-  int &activeField = useAltField ? config.gridWidthSidebarHidden : config.gridWidth;
+                           config.gridLayout.gridWidthSidebarHidden > 0;
+  int &activeField = useAltField ? config.gridLayout.gridWidthSidebarHidden : config.gridLayout.gridWidth;
 
   int newWidth = activeField + delta;
 

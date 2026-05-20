@@ -15,7 +15,9 @@
 #include <QWidget>
 
 #include "collectionutils.h"
+#include "idetailspane.h"
 #include "itemmetadata.h"
+#include "stateutils.h"
 #include "ui_detailspane.h"
 #include "usagestatsstore.h"
 
@@ -31,10 +33,10 @@ class QTabBar;
 class QTimer;
 QT_END_NAMESPACE
 
-class DetailsPane : public QWidget {
+class DetailsPane : public QWidget, public IDetailsPane {
   Q_OBJECT
   // The vertical-dock gallery row's helper reaches into ui->contentWidget /
-  // ui->artworkDisplay and m_videoPreview to build + anchor its section.
+  // ui->artworkDisplay and m_videoPlayback.videoPreview to build + anchor its section.
   // Tightly coupled by design; the helper exists to group the gallery's
   // setup/rebuild state cohesively.
   friend class DetailsPaneGalleryView;
@@ -94,11 +96,13 @@ public:
   /// thumbnail (with a placeholder play icon while extraction runs) and
   /// open the video preview overlay on click. Pass an empty list to hide
   /// the section.
-  struct GalleryEntry {
-    QString label;
-    QString path;
-    bool isVideo = false;
-  };
+  /// Per-item gallery entry alias — the canonical shape lives in
+  /// `src/api/idetailspane.h` so module consumers can mirror the pane's
+  /// gallery without pulling in this concrete widget header. Kept as a
+  /// member alias so the swarm of existing `DetailsPane::GalleryEntry`
+  /// references (DetailsPaneGalleryView, the horizontal-dock helper, etc.)
+  /// keep compiling.
+  using GalleryEntry = DetailsPaneGalleryEntry;
   void setArtworkGallery(const QList<GalleryEntry> &entries);
   /// Swap the main artwork preview tile to a specific gallery entry.
   /// Used by the gallery-thumb click handler so the user can flip the
@@ -120,7 +124,7 @@ public:
   /// ArtworkPreviewOverlay to mirror the sidebar gallery in its own strip
   /// without re-running the DB → resolve cycle. Empty list when no item
   /// is selected or when the item has no resolvable artwork.
-  [[nodiscard]] QList<GalleryEntry> currentGalleryEntries() const;
+  [[nodiscard]] QList<DetailsPaneGalleryEntry> currentGalleryEntries() const override;
   /// Controls whether the gallery section's edit affordance is shown
   /// Independent of `setArtworkGallery` so the "Edit links…"
   /// button stays available for items with no current artwork — that is the
@@ -146,7 +150,9 @@ public:
   /// summary is rendered immediately if the sidebar is currently in the
   /// no-selection state; otherwise it is held until the user deselects.
   void setCollectionSummary(const CollectionSummary &summary);
-  void clearMetadata();
+  void clearMetadata() override;
+  [[nodiscard]] QWidget *asWidget() override { return this; }
+  [[nodiscard]] const QWidget *asWidget() const override { return this; }
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
   /// bug #5: silences the sidebar's preview video and cancels any
   /// pending start so it doesn't keep playing while a fullscreen overlay
@@ -309,12 +315,12 @@ private:
   /// thumb building, and the click-to-preview overlay. Owned, not borrowed.
   DetailsPaneGalleryView *m_galleryView = nullptr;
   Ui::DetailsPane *ui;
-  VideoPreviewWidget *m_videoPreview = nullptr;
-  QTimer *m_videoStartTimer = nullptr;
-  QString m_pendingVideoPath;
-  /// Optional predicate consulted by m_videoStartTimer's callback before
-  /// firing playVideo. See setScrollIdlePredicate() for rationale.
-  std::function<bool()> m_scrollIdlePredicate;
+  /// Grouped video preview state: the widget, debounce timer, queued
+  /// path, and scroll-idle predicate. Migration step toward a future
+  /// VideoPlaybackController class — passing this by ref into helpers
+  /// keeps the call sites future-proof when extraction lands. See
+  /// stateutils.h for member docs.
+  VideoPlaybackState m_videoPlayback;
   /// original-resolution artwork pixmap kept so applyPreviewSize
   /// can re-render the centered/scaled artworkDisplay pixmap when the sidebar
   /// is resized, instead of re-reading the file from disk on every resize.

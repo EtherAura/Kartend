@@ -307,7 +307,7 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex, int gridWidth)
   int selectedRow = selectedItemIndex / gridWidth;
   int rowHeight = GridLayoutCalculator::getRowHeight(config);
   int selectedItemY =
-      UIConstants::Grid::MARGINS + (selectedRow * rowHeight) + (config.itemHeight / 2);
+      UIConstants::Grid::MARGINS + (selectedRow * rowHeight) + (config.gridLayout.itemHeight / 2);
 
   int scrollTop = vBar->value();
   int viewportHeight = m_itemScrollArea->viewport()->height();

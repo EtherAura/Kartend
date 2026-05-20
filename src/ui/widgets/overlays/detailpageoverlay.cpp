@@ -1,6 +1,8 @@
 // Full-window detail page overlay for the selected item.
 #include "detailpageoverlay.h"
 
+#include "overlaylayermanager.h"
+
 #include <QApplication>
 #include <QEvent>
 #include <QFileInfo>
@@ -266,7 +268,11 @@ void DetailPageOverlay::showWith(const Payload &payload) {
     updatePosition();
   }
   QWidget::show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   setFocus(Qt::OtherFocusReason);
   emit visibilityChanged(true);
 }

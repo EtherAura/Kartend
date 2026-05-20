@@ -79,6 +79,18 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
 
+  // Hand the centralized z-order coordinator down to the two helper
+  // managers that own overlay widgets (SelectionOverlayManager for the
+  // selection highlight, SearchLoadingOverlay for the search-loading
+  // spinner). Null is safe — each manager falls back to direct raise()
+  // when no layer manager is installed.
+  if (m_ctx && m_overlayManager) {
+    m_overlayManager->setLayerManager(m_ctx->ui.overlayLayerManager);
+  }
+  if (m_ctx && m_searchLoadingOverlay) {
+    m_searchLoadingOverlay->setLayerManager(m_ctx->ui.overlayLayerManager);
+  }
+
   // Apply persisted column widths from settings via display manager.
   if (m_selectionDisplay) {
     m_selectionDisplay->applyGeneralSettings(m_generalSettings);
@@ -208,8 +220,8 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
                                .arg(totalCount)
                                .arg(context.currentIndex)
                                .arg(context.config.mediaDirectory)
-                               .arg(context.config.includeContentSubfolders)
-                               .arg(context.config.showAllSubfolderItems)
+                               .arg(context.config.folderBrowsing.includeContentSubfolders)
+                               .arg(context.config.folderBrowsing.showAllSubfolderItems)
                                .arg(context.suppressVirtualFolders);
 
   initializeSubcollections();

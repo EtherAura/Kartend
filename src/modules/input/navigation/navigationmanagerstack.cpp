@@ -4,7 +4,7 @@
 #include "navigationmanager.h"
 
 #include "applicationcontext.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "iartworkmanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"

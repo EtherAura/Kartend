@@ -41,7 +41,7 @@ Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager", QtWarning
 
 // DetailsPaneManagerSetup getter definitions (non-manager fields only — sibling
 // managers are read directly from ctx at runtime).
-SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, DetailsPane *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, IDetailsPane *, Sidebar, sidebar)
 SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI(DetailsPaneManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
 SETUP_GETTER_DEF_COL_SAME(DetailsPaneManagerSetup, QList<CollectionConfig> *, Collections,
@@ -51,9 +51,13 @@ DetailsPaneManager::DetailsPaneManager(QObject *parent)
     : QObject(parent), m_DetailsPane(nullptr), m_itemsPage(nullptr),
       m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr), m_currentCollectionIndex(-1) {}
 
+IDetailsPane *DetailsPaneManager::sidebarWidget() const {
+  return m_DetailsPane;
+}
+
 void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   m_ctx = setup.ctx;
-  m_DetailsPane = setup.getSidebar();
+  m_DetailsPane = dynamic_cast<DetailsPane *>(setup.getSidebar());
   m_itemsPage = setup.getItemsPage();
   m_mainHorizontalLayout = setup.mainLayout;
   m_outerLayout = setup.outerLayout;
@@ -124,7 +128,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       if (m_collections && m_currentCollectionIndex >= 0 &&
           m_currentCollectionIndex < m_collections->size()) {
         isFixedMode =
-            (*m_collections)[m_currentCollectionIndex].sidebarMode == DetailsPaneMode::Expand;
+            (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode == DetailsPaneMode::Expand;
       }
       if (!isFixedMode) {
         positionSidebarOverlay();
@@ -135,7 +139,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
           m_currentCollectionIndex >= m_collections->size()) {
         return;
       }
-      (*m_collections)[m_currentCollectionIndex].sidebarWidth = width;
+      (*m_collections)[m_currentCollectionIndex].sidebar.sidebarWidth = width;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
         sm->saveCollections(*m_collections);
       }
@@ -151,7 +155,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       if (m_collections && m_currentCollectionIndex >= 0 &&
           m_currentCollectionIndex < m_collections->size()) {
         isFixedMode =
-            (*m_collections)[m_currentCollectionIndex].sidebarMode == DetailsPaneMode::Expand;
+            (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode == DetailsPaneMode::Expand;
       }
       if (!isFixedMode) {
         positionSidebarOverlay();
@@ -162,7 +166,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
           m_currentCollectionIndex >= m_collections->size()) {
         return;
       }
-      (*m_collections)[m_currentCollectionIndex].sidebarHeight = height;
+      (*m_collections)[m_currentCollectionIndex].sidebar.sidebarHeight = height;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
         sm->saveCollections(*m_collections);
       }
@@ -177,7 +181,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
           m_currentCollectionIndex >= m_collections->size()) {
         return;
       }
-      (*m_collections)[m_currentCollectionIndex].sidebarActiveTab = tab;
+      (*m_collections)[m_currentCollectionIndex].sidebar.sidebarActiveTab = tab;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
         sm->saveCollections(*m_collections);
       }
@@ -225,7 +229,7 @@ void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
 
   m_currentCollectionIndex = collectionIndex;
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
-  m_sidebarVisible = collection.sidebarVisible;
+  m_sidebarVisible = collection.sidebar.sidebarVisible;
 
   // apply per-collection appearance (bg type, colors, pattern).
   if (m_DetailsPane) {
@@ -239,13 +243,12 @@ void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
   updateSidebarLayout(collectionIndex);
   emit sidebarVisibilityChanged(m_sidebarVisible);
 
-  // Reposition overlay sidebar after layout is finalized - on startup, the
-  // viewport geometry may not be fully set when this is first called, causing
-  // the sidebar to overlap the scrollbar. Deferring ensures correct
-  // positioning.: only reposition for Overlay mode — Fixed mode
-  // is now in m_mainHorizontalLayout and absolute-positioning it would
-  // wreck the layout dock.
-  if (m_sidebarVisible && collection.sidebarMode != DetailsPaneMode::Expand) {
+  if (m_sidebarVisible && collection.sidebar.sidebarMode != DetailsPaneMode::Expand) {
+    // Defer overlay-sidebar repositioning ~50ms past layout finalization. On
+    // startup the viewport geometry isn't fully set when this fires, and an
+    // immediate position lands the sidebar overlapping the scrollbar. Only
+    // applies to Overlay mode — Fixed mode lives in m_mainHorizontalLayout
+    // and absolute-positioning it would wreck the layout dock.
     QTimer::singleShot(50, this, [this]() { positionSidebarOverlay(); });
   }
 }
@@ -321,9 +324,9 @@ void DetailsPaneManager::positionSidebarOverlay() {
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
     const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
-    position = collection.sidebarPosition;
-    desiredWidth = std::max(collection.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
-    desiredHeight = std::max(collection.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    position = collection.sidebar.sidebarPosition;
+    desiredWidth = std::max(collection.sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
   }
 
   QRect viewportRectInItems;
@@ -409,10 +412,10 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
   if (m_collections && currentCollectionIndex >= 0 &&
       currentCollectionIndex < m_collections->size()) {
     const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
-    isFixedMode = (collection.sidebarMode == DetailsPaneMode::Expand);
-    position = collection.sidebarPosition;
-    desiredWidth = std::max(collection.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
-    desiredHeight = std::max(collection.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    isFixedMode = (collection.sidebar.sidebarMode == DetailsPaneMode::Expand);
+    position = collection.sidebar.sidebarPosition;
+    desiredWidth = std::max(collection.sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
   }
 
   // tracking "in some layout" rather than just the horizontal
@@ -560,7 +563,7 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
   if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
-  (*m_collections)[collectionIndex].sidebarVisible = visible;
+  (*m_collections)[collectionIndex].sidebar.sidebarVisible = visible;
   if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
     sm->saveCollections(*m_collections);
   }

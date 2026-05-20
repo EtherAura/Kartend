@@ -113,8 +113,8 @@ int ViewportManager::computeVerticalCenterDuration(int distance, bool repeatActi
   int itemHeight = 0;
   int vSpacing = 0;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
-    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
+    itemHeight = (*m_collections)[*m_currentCollectionIndex].gridLayout.itemHeight;
+    vSpacing = (*m_collections)[*m_currentCollectionIndex].gridLayout.verticalSpacing;
   }
   int speedLevel = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
   return AnimationManager::computeVerticalCenterDuration(distance, itemHeight, vSpacing,

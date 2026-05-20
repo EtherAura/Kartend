@@ -21,10 +21,11 @@ public:
   // cache, sidebar summary) refresh after any save — not just
   // settings-dialog-driven ones. Non-const for that reason; the disk write
   // itself doesn't mutate SettingsManager state.
-  void saveCollections(const QList<CollectionConfig> &collections) override;
+  ErrorUtils::Result<void>
+  saveCollections(const QList<CollectionConfig> &collections) override;
   void openSettingsDialog(const SettingsDialogContext &context) override;
   void loadGeneralSettings(GeneralSettings &settings) override;
-  void saveGeneralSettings(const GeneralSettings &settings) override;
+  ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &settings) override;
   void setLastSelectedItem(int collectionIndex, int itemIndex) override;
   [[nodiscard]] int getLastSelectedItem(int collectionIndex) const override;
 

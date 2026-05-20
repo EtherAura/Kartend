@@ -290,29 +290,30 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
     const QString uuid = resolveCollectionUuid(collectionIndex);
     if (!uuid.isEmpty()) {
       const int overrideIndex = m_resolveLauncherOverride(uuid, filePath);
-      if (overrideIndex >= 0 && overrideIndex < collection.launcherCount()) {
+      if (overrideIndex >= 0 && overrideIndex < collection.launcher.launcherCount()) {
         resolvedLauncherIndex = overrideIndex;
       }
     }
   }
   if (resolvedLauncherIndex < 0) {
-    if (collection.launcherCount() > 1) {
+    if (collection.launcher.launcherCount() > 1) {
       QStringList launcherNames;
-      launcherNames.reserve(collection.launcherCount());
-      for (int i = 0; i < collection.launcherCount(); ++i) {
+      launcherNames.reserve(collection.launcher.launcherCount());
+      for (int i = 0; i < collection.launcher.launcherCount(); ++i) {
         // resolve preset references so the chooser shows the
         // preset's current name instead of a stale inline copy.
         const LauncherConfig effective = LauncherUtils::resolvePreset(
-            collection.launcherAt(i),
+            collection.launcher.launcherAt(i),
             m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
-        launcherNames << (effective.name.trimmed().isEmpty() ? collection.launcherDisplayName(i)
-                                                             : effective.name.trimmed());
+        launcherNames << (effective.name.trimmed().isEmpty()
+                              ? collection.launcher.launcherDisplayName(i)
+                              : effective.name.trimmed());
       }
       // The chooser dialog lives in the UI layer; the owner injects a
       // callback that shows it. With no callback wired, fall back to the
       // collection's configured default launcher.
-      const int defaultIndex =
-          std::clamp(collection.defaultLauncherIndex, 0, collection.launcherCount() - 1);
+      const int defaultIndex = std::clamp(collection.launcher.defaultLauncherIndex, 0,
+                                          collection.launcher.launcherCount() - 1);
       const int chosen = m_chooseLauncher
                              ? m_chooseLauncher(collection.name, launcherNames, defaultIndex)
                              : defaultIndex;
@@ -324,24 +325,24 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       resolvedLauncherIndex = 0;
     }
   }
-  if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcherCount()) {
+  if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcher.launcherCount()) {
     resolvedLauncherIndex = 0;
   }
   // resolve preset references at launch time. When the
   // entry's presetId names a registered preset, its fields override the
   // inline ones; otherwise the inline fields are used as-is.
   const LauncherConfig launcher = LauncherUtils::resolvePreset(
-      collection.launcherAt(resolvedLauncherIndex),
+      collection.launcher.launcherAt(resolvedLauncherIndex),
       m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
 
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;
 
-  if (collection.extractArchives && !collection.extractedExtension.isEmpty() &&
+  if (collection.archive.extractArchives && !collection.archive.extractedExtension.isEmpty() &&
       isArchiveFile(filePath)) {
     qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
 
-    auto extractResult = extractArchiveToTemp(filePath, collection.extractedExtension);
+    auto extractResult = extractArchiveToTemp(filePath, collection.archive.extractedExtension);
     if (extractResult.isError()) {
       ErrorUtils::logError(extractResult.error());
       QMessageBox::warning(nullptr, "Extraction Error",

@@ -105,7 +105,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
   // rescan
   QString currentSignature =
       collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  currentSignature += collection.includeContentSubfolders ? "|subfolders" : "";
+  currentSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
@@ -178,7 +178,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
   // subdirs). Skip deep check if collection has items in DB - trust cached data
   // on startup. Full validation happens when user navigates into subfolders or
   // forces refresh.
-  if (collection.includeContentSubfolders) {
+  if (collection.folderBrowsing.includeContentSubfolders) {
     // If we have items in the database, validate the stored directory signature
     // by checking a bounded set of sampled directories (cheap, avoids deep
     // scans).
@@ -263,7 +263,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
 
   // For non-recursive scans or small directories, use sequential scanning
   // Parallel scanning has overhead that only pays off with multiple directories
-  if (!collection.includeContentSubfolders) {
+  if (!collection.folderBrowsing.includeContentSubfolders) {
     if (dirSignatureOut) {
       *dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
     }
@@ -605,7 +605,7 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   };
 
   // ── Non-recursive scan: stream files directly ──────────────────────────
-  if (!collection.includeContentSubfolders) {
+  if (!collection.folderBrowsing.includeContentSubfolders) {
     dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
 
     constexpr int SCAN_PROGRESS_INTERVAL = 500;
@@ -1082,7 +1082,7 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
   // Include includeContentSubfolders in the signature to match needsRescan.
   QString extSignature =
       collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
+  extSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
@@ -1244,7 +1244,7 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
   // Include includeContentSubfolders in the signature to match needsRescan
   QString extSignature =
       collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
+  extSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);

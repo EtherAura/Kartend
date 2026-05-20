@@ -3,6 +3,8 @@
 // up indefinitely until hideOverlay() is invoked.
 #include "nowplayingoverlay.h"
 
+#include "overlaylayermanager.h"
+
 #include <QApplication>
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
@@ -124,7 +126,14 @@ void NowPlayingOverlay::showOverlay(const QString &displayName) {
   m_fadeAnimation->start();
 
   QWidget::show();
-  raise();
+  // Route through the centralized layer manager when installed; the
+  // intra-overlay card raise stays direct (sub-widget ordering inside
+  // this overlay's own paint tree).
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   if (m_cardWidget) {
     m_cardWidget->raise();
   }

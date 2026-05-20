@@ -47,7 +47,7 @@ class IDetailPageManager;
 class IScrollManager;
 class ISessionManager;
 class IArtworkManager;
-class DetailsPane;
+class IDetailsPane;
 
 /**
  * @brief Setup struct for InteractionManager dependencies.
@@ -92,7 +92,7 @@ struct InteractionManagerSetup {
   IArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  DetailsPane *sidebar = nullptr;
+  IDetailsPane *sidebar = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
@@ -128,7 +128,7 @@ struct InteractionManagerSetup {
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(IDetailsPane *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
@@ -223,7 +223,7 @@ public:
   void setItemManualPath(const QString &filePath, const QString &manualPath);
   // Sets or clears the per-item launcher override. Pass an
   // index into the owning collection's unified launcher list (0 = primary,
-  // 1..N = additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
+  // 1..N = launcher.additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
   // the override and re-enable the multi-launcher chooser at launch.
   void setItemLauncherOverride(const QString &filePath, int launcherIndex);
 

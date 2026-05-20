@@ -9,6 +9,7 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "errordialog.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idetailspanemanager.h"
@@ -34,11 +35,12 @@ namespace {
 // Compares fields that do not require a reload
 auto compareNonReloadFields(const CollectionConfig &configA, const CollectionConfig &configB,
                             bool &hasChanges) -> void {
-  if (configA.name != configB.name || configA.launcherPath != configB.launcherPath ||
-      configA.corePath != configB.corePath ||
-      configA.launchParameters != configB.launchParameters ||
-      configA.extractArchives != configB.extractArchives ||
-      configA.extractedExtension != configB.extractedExtension ||
+  if (configA.name != configB.name ||
+      configA.launcher.launcherPath != configB.launcher.launcherPath ||
+      configA.launcher.corePath != configB.launcher.corePath ||
+      configA.launcher.launchParameters != configB.launcher.launchParameters ||
+      configA.archive.extractArchives != configB.archive.extractArchives ||
+      configA.archive.extractedExtension != configB.archive.extractedExtension ||
       configA.expandMode != configB.expandMode ||
       configA.parentCollectionIndex != configB.parentCollectionIndex ||
       configA.isSubcollection != configB.isSubcollection ||
@@ -48,7 +50,7 @@ auto compareNonReloadFields(const CollectionConfig &configA, const CollectionCon
       // chosen edge took effect. applySidebarStateForCollection downstream
       // re-runs the layout swap so the pane reparents into the right Qt
       // layout immediately on save.
-      configA.sidebarPosition != configB.sidebarPosition) {
+      configA.sidebar.sidebarPosition != configB.sidebar.sidebarPosition) {
     hasChanges = true;
   }
 }
@@ -58,12 +60,12 @@ void compareReloadFields(const CollectionConfig &configA, const CollectionConfig
                          bool &hasChanges, bool &needsReload) {
   if (configA.mediaDirectory != configB.mediaDirectory ||
       configA.artworkDirectory != configB.artworkDirectory ||
-      configA.includeContentSubfolders != configB.includeContentSubfolders ||
-      configA.includeArtworkSubfolders != configB.includeArtworkSubfolders ||
+      configA.folderBrowsing.includeContentSubfolders != configB.folderBrowsing.includeContentSubfolders ||
+      configA.folderBrowsing.includeArtworkSubfolders != configB.folderBrowsing.includeArtworkSubfolders ||
       configA.showAllSubcollectionItems != configB.showAllSubcollectionItems ||
-      configA.showAllSubfolderItems != configB.showAllSubfolderItems ||
-      configA.hideSubfolderTitles != configB.hideSubfolderTitles ||
-      configA.showHiddenFolders != configB.showHiddenFolders ||
+      configA.folderBrowsing.showAllSubfolderItems != configB.folderBrowsing.showAllSubfolderItems ||
+      configA.folderBrowsing.hideSubfolderTitles != configB.folderBrowsing.hideSubfolderTitles ||
+      configA.folderBrowsing.showHiddenFolders != configB.folderBrowsing.showHiddenFolders ||
       configA.extensions != configB.extensions) {
     hasChanges = true;
     needsReload = true;
@@ -76,7 +78,7 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
                         bool &spacingChanged, bool &scrollbarChanged, bool &sidebarModeChanged,
                         bool &titleChanged, bool &fontSizeChanged, bool &hideTitlesChanged,
                         bool &appearanceChanged) {
-  if (configA.gridWidth != configB.gridWidth) {
+  if (configA.gridLayout.gridWidth != configB.gridLayout.gridWidth) {
     hasChanges = true;
     gridWidthChanged = true;
   }
@@ -84,17 +86,17 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     hasChanges = true;
     alignmentChanged = true;
   }
-  if (configA.horizontalSpacing != configB.horizontalSpacing ||
-      configA.verticalSpacing != configB.verticalSpacing) {
+  if (configA.gridLayout.horizontalSpacing != configB.gridLayout.horizontalSpacing ||
+      configA.gridLayout.verticalSpacing != configB.gridLayout.verticalSpacing) {
     hasChanges = true;
     spacingChanged = true;
   }
-  if (configA.itemWidth != configB.itemWidth || configA.itemHeight != configB.itemHeight) {
+  if (configA.gridLayout.itemWidth != configB.gridLayout.itemWidth || configA.gridLayout.itemHeight != configB.gridLayout.itemHeight) {
     hasChanges = true;
     spacingChanged = true;
   }
-  if (configA.fontSize != configB.fontSize || configA.listFontSize != configB.listFontSize ||
-      configA.cornerRadius != configB.cornerRadius) {
+  if (configA.gridLayout.fontSize != configB.gridLayout.fontSize || configA.listView.listFontSize != configB.listView.listFontSize ||
+      configA.gridLayout.cornerRadius != configB.gridLayout.cornerRadius) {
     hasChanges = true;
     fontSizeChanged = true;
   }
@@ -103,12 +105,12 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     hasChanges = true;
     hideTitlesChanged = true;
   }
-  if (configA.hideHorizontalScrollbar != configB.hideHorizontalScrollbar ||
-      configA.hideVerticalScrollbar != configB.hideVerticalScrollbar) {
+  if (configA.gridLayout.hideHorizontalScrollbar != configB.gridLayout.hideHorizontalScrollbar ||
+      configA.gridLayout.hideVerticalScrollbar != configB.gridLayout.hideVerticalScrollbar) {
     hasChanges = true;
     scrollbarChanged = true;
   }
-  if (configA.sidebarMode != configB.sidebarMode) {
+  if (configA.sidebar.sidebarMode != configB.sidebar.sidebarMode) {
     hasChanges = true;
     sidebarModeChanged = true;
   }
@@ -129,23 +131,23 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     titleChanged = true;
   }
   // Appearance changes (colors)
-  if (configA.primaryColor != configB.primaryColor || configA.tileColor != configB.tileColor ||
-      configA.selectionColor != configB.selectionColor ||
-      configA.backgroundColor != configB.backgroundColor ||
-      configA.backgroundImage != configB.backgroundImage ||
-      configA.backgroundVideo != configB.backgroundVideo ||
-      configA.backgroundType != configB.backgroundType ||
-      configA.listRowColor != configB.listRowColor ||
-      configA.listAltRowColor != configB.listAltRowColor ||
-      configA.listRowHeight != configB.listRowHeight ||
-      configA.headerLogoImage != configB.headerLogoImage ||
-      configA.headerLogoPosition != configB.headerLogoPosition ||
-      configA.vignetteEnabled != configB.vignetteEnabled ||
-      configA.vignetteIntensity != configB.vignetteIntensity ||
-      configA.wallpaperParallax != configB.wallpaperParallax ||
-      configA.parallaxStrength != configB.parallaxStrength ||
-      configA.toolbarBackdropBlur != configB.toolbarBackdropBlur ||
-      configA.backdropBlurRadius != configB.backdropBlurRadius) {
+  if (configA.background.primaryColor != configB.background.primaryColor || configA.background.tileColor != configB.background.tileColor ||
+      configA.background.selectionColor != configB.background.selectionColor ||
+      configA.background.backgroundColor != configB.background.backgroundColor ||
+      configA.background.backgroundImage != configB.background.backgroundImage ||
+      configA.background.backgroundVideo != configB.background.backgroundVideo ||
+      configA.background.backgroundType != configB.background.backgroundType ||
+      configA.listView.listRowColor != configB.listView.listRowColor ||
+      configA.listView.listAltRowColor != configB.listView.listAltRowColor ||
+      configA.listView.listRowHeight != configB.listView.listRowHeight ||
+      configA.background.headerLogoImage != configB.background.headerLogoImage ||
+      configA.background.headerLogoPosition != configB.background.headerLogoPosition ||
+      configA.background.vignetteEnabled != configB.background.vignetteEnabled ||
+      configA.background.vignetteIntensity != configB.background.vignetteIntensity ||
+      configA.background.wallpaperParallax != configB.background.wallpaperParallax ||
+      configA.background.parallaxStrength != configB.background.parallaxStrength ||
+      configA.background.toolbarBackdropBlur != configB.background.toolbarBackdropBlur ||
+      configA.background.backdropBlurRadius != configB.background.backdropBlurRadius) {
     hasChanges = true;
     appearanceChanged = true;
   }
@@ -234,7 +236,7 @@ void handleScrollBranch(IScrollManager *scrollManager, IArtworkManager *artworkM
     return;
   }
   if (gridWidthChanged) {
-    scrollManager->updateGridWidth(collections[viewingIndex].gridWidth);
+    scrollManager->updateGridWidth(collections[viewingIndex].gridLayout.gridWidth);
     scheduleGridWidthRefresh(scrollManager, artworkManager, viewingIndex, &collections);
     return;
   }
@@ -304,14 +306,22 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     return;
   }
 
-  auto onCollectionSaved = [this, &collections](const QList<CollectionConfig> &savedCollections) {
+  auto onCollectionSaved = [this, &collections,
+                            parent](const QList<CollectionConfig> &savedCollections) {
     collections = savedCollections;
-    saveCollections(collections);
+    // Persist + surface disk-write failures back through the open settings
+    // dialog. Without this the toolbar/tree-driven save buttons would lie
+    // about a successful save when QSettings::sync() returns a status error.
+    if (auto result = saveCollections(collections); result.isError()) {
+      ErrorDialog::showError(parent, result.error());
+    }
   };
 
-  // Defer rescan to allow the dialog to fully close first.
   auto onRescanRequired = [navigationManager](int collectionIndex) {
     if (navigationManager) {
+      // Defer rescan past the dialog's tear-down: forceRescanCollection
+      // grabs the database connection, and racing it against QDialog::done()
+      // queuing destroy events trips a reentrancy assertion under TSan.
       QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
                          [navigationManager, collectionIndex]() {
                            navigationManager->forceRescanCollection(collectionIndex);
@@ -390,7 +400,9 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   // saveCollections emits collectionsModified itself, so
   // an explicit emit here would double-fire and run rebuildHierarchyCache
   // twice for no benefit. Removed.
-  saveCollections(collections);
+  if (auto result = saveCollections(collections); result.isError()) {
+    ErrorDialog::showError(parent, result.error());
+  }
 
   // Drop items/collections rows that no live collection owns — orphans
   // from this session's renames/removals (and any left by older

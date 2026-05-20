@@ -18,7 +18,7 @@ class INavigationManager;
 class IAnimationManager;
 class IViewportManager;
 class IArtworkManager;
-class DetailsPane;
+class IDetailsPane;
 class InteractionStateHolder;
 class QWidget;
 class QScrollArea;
@@ -31,7 +31,7 @@ struct SelectionManagerSetup {
 
   // UI / collection-state references — sibling managers are read directly from
   // ctx at runtime, never duplicated here.
-  DetailsPane *sidebar = nullptr;
+  IDetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -40,7 +40,7 @@ struct SelectionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
   QLineEdit *searchBar = nullptr;
 
-  SETUP_GETTER_DECL(DetailsPane *, Sidebar)
+  SETUP_GETTER_DECL(IDetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -235,7 +235,7 @@ private:
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
 
-  DetailsPane *m_MetadataSidebar = nullptr;
+  IDetailsPane *m_MetadataSidebar = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QWidget *m_itemsPage = nullptr;

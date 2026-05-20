@@ -16,10 +16,11 @@ class QMenuBar;
 class QAction;
 QT_END_NAMESPACE
 
-class DetailsPane;
+class IDetailsPane;
 class InteractionStateHolder;
 class LoadingOverlay;
 class EmptyStateWidget;
+class OverlayLayerManager;
 
 // Forward declarations for managers
 class IScrollManager;
@@ -103,9 +104,16 @@ struct ApplicationContext {
     /// Search-mode toggle: a QAction added to the searchBar QLineEdit at
     /// LeadingPosition (no longer a standalone button).
     QAction *searchModeAction = nullptr;
-    DetailsPane *sidebar = nullptr;
+    IDetailsPane *sidebar = nullptr;
     EmptyStateWidget *loadingLabel = nullptr;
     LoadingOverlay *loadingOverlay = nullptr;
+    /// Centralized z-order coordinator for overlays. Lower-layer managers
+    /// that own an overlay widget (SelectionOverlayManager,
+    /// SearchLoadingOverlay) pick this up via ctx->ui.overlayLayerManager
+    /// and forward it through their own setLayerManager() to register their
+    /// owned widget. Optional — null means each overlay falls back to
+    /// direct QWidget::raise().
+    OverlayLayerManager *overlayLayerManager = nullptr;
   } ui;
 
   // ─────────────────────────────────────────────────────────────────────────

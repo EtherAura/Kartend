@@ -101,7 +101,7 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
     CollectionConfig coll;
     coll.name = dirName;
     coll.mediaDirectory = dirPath;
-    coll.includeContentSubfolders = false;
+    coll.folderBrowsing.includeContentSubfolders = false;
     coll.extensions = {QStringLiteral("bin")};
     allCollections.append(coll);
 

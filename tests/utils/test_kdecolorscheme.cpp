@@ -129,11 +129,11 @@ void TestKdeColorScheme::applyToCollection_mapsAllStandardSlots() {
 
   // Spot-check the three primary mappings — full mapping table is
   // documented in kdecolorscheme.cpp's applyToCollection().
-  QCOMPARE(cfg.backgroundColor, QColor(10, 20, 30).name());
-  QCOMPARE(cfg.primaryColor, QColor(15, 25, 35).name());
-  QCOMPARE(cfg.selectionColor, QColor(70, 140, 210).name());
-  QCOMPARE(cfg.tileColor, QColor(40, 50, 60).name());
-  QCOMPARE(cfg.sidebarTextColor, QColor(205, 215, 225).name());
+  QCOMPARE(cfg.background.backgroundColor, QColor(10, 20, 30).name());
+  QCOMPARE(cfg.background.primaryColor, QColor(15, 25, 35).name());
+  QCOMPARE(cfg.background.selectionColor, QColor(70, 140, 210).name());
+  QCOMPARE(cfg.background.tileColor, QColor(40, 50, 60).name());
+  QCOMPARE(cfg.sidebar.sidebarTextColor, QColor(205, 215, 225).name());
 }
 
 void TestKdeColorScheme::applyToCollection_leavesUnsetSlotsUntouched() {
@@ -150,15 +150,15 @@ void TestKdeColorScheme::applyToCollection_leavesUnsetSlotsUntouched() {
   QVERIFY(result.isOk());
 
   CollectionConfig cfg;
-  cfg.backgroundColor = QStringLiteral("#aabbcc"); // pre-existing value
-  cfg.selectionColor = QStringLiteral("#ddeeff");
+  cfg.background.backgroundColor = QStringLiteral("#aabbcc"); // pre-existing value
+  cfg.background.selectionColor = QStringLiteral("#ddeeff");
   KdeColorScheme::applyToCollection(result.value(), cfg);
 
   // primaryColor came from Window/BackgroundNormal — applied.
-  QCOMPARE(cfg.primaryColor, QColor(11, 22, 33).name());
+  QCOMPARE(cfg.background.primaryColor, QColor(11, 22, 33).name());
   // View-backed and Selection-backed fields stayed put.
-  QCOMPARE(cfg.backgroundColor, QStringLiteral("#aabbcc"));
-  QCOMPARE(cfg.selectionColor, QStringLiteral("#ddeeff"));
+  QCOMPARE(cfg.background.backgroundColor, QStringLiteral("#aabbcc"));
+  QCOMPARE(cfg.background.selectionColor, QStringLiteral("#ddeeff"));
 }
 
 void TestKdeColorScheme::applyToGeneralSettings_setsTitleBaseColorFromSelectionBackground() {

@@ -1,7 +1,13 @@
 #ifndef STATEUTILS_H
 #define STATEUTILS_H
 
+#include <functional>
+
 #include <QObject>
+#include <QString>
+
+class QTimer;
+class VideoPreviewWidget;
 
 /**
  * @brief Centralized selection restore state to replace scattered dynamic
@@ -204,6 +210,27 @@ struct SearchState {
   bool clearedByEscape = false;
 
   void reset() { clearedByEscape = false; }
+};
+
+/**
+ * @brief Centralized video preview playback state for DetailsPane.
+ *
+ * Groups the four scattered fields the pane needs to drive its
+ * VideoPreviewWidget: the widget itself (raw pointer; parented to the
+ * pane via Qt), the debounce timer that gates playVideo until scroll
+ * settles, the queued path waiting for that timer, and the optional
+ * scroll-idle predicate the timer consults before firing.
+ *
+ * Migration step toward a future VideoPlaybackController: the struct
+ * is meant to be passed by const-ref into helpers that read state and
+ * by ref into helpers that mutate it. Pointer ownership stays with
+ * DetailsPane (Qt parent-child); the struct just groups the references.
+ */
+struct VideoPlaybackState {
+  VideoPreviewWidget *videoPreview = nullptr;
+  QTimer *videoStartTimer = nullptr;
+  QString pendingVideoPath;
+  std::function<bool()> scrollIdlePredicate;
 };
 
 #endif // STATEUTILS_H

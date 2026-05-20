@@ -81,7 +81,7 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
   CollectionConfig collection;
   collection.name = QStringLiteral("TestCollection");
   collection.mediaDirectory = mediaDir.path();
-  collection.includeContentSubfolders = false;
+  collection.folderBrowsing.includeContentSubfolders = false;
   collection.extensions = {QStringLiteral("bin")};
 
   QList<CollectionConfig> allCollections;

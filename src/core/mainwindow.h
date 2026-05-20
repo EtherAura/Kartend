@@ -52,6 +52,7 @@ class MenuController;
 class MarqueeController;
 class TextZoomHud;
 class ISettingsDialog;
+class OverlayLayerManager;
 
 namespace kart {
 class KartManager;
@@ -94,6 +95,11 @@ public:
   [[nodiscard]] const QList<CollectionConfig> &collections() const override {
     return m_collections;
   }
+  [[nodiscard]] GeneralSettings &generalSettings() override { return m_generalSettings; }
+  [[nodiscard]] const GeneralSettings &generalSettings() const override {
+    return m_generalSettings;
+  }
+  void applyGlobalUiFontFromSettings() override { applyGlobalUiFont(m_generalSettings); }
   [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const {
     return m_hierarchyCache;
   }
@@ -106,11 +112,11 @@ public:
 
   // Delegated Getters
   [[nodiscard]] DetailsPaneManager *getDetailsPaneManager() const;
-  [[nodiscard]] ISettingsManager *getSettingsManager() const;
+  [[nodiscard]] ISettingsManager *getSettingsManager() const override;
   [[nodiscard]] IDatabaseManager *getDatabaseManager() const;
-  [[nodiscard]] ScrollManager *getScrollManager() const;
+  [[nodiscard]] ScrollManager *getScrollManager() const override;
   [[nodiscard]] NavigationManager *getNavigationManager() const;
-  [[nodiscard]] InteractionManager *getInteractionManager() const;
+  [[nodiscard]] InteractionManager *getInteractionManager() const override;
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] ArtworkManager *getArtworkManager() const;
   [[nodiscard]] kart::KartManager *getKartManager() const;
@@ -131,7 +137,7 @@ public:
   /// m_generalSettings to the items-page toolbar. Idempotent — invoked on
   /// startup and again after the user saves the Settings dialog.
   /// Delegates to the ToolbarController.
-  void applyToolbarCustomization();
+  void applyToolbarCustomization() override;
 
   /// Open the unified Scraper dialog. Caller is responsible for any
   /// pre-selection (right-click flow passes a collection + item; File
@@ -162,7 +168,7 @@ public:
   /// screen-name change, and pushes a fresh pixmap for the active mode.
   /// Idempotent — invoked at app startup and again after each Save in
   /// SettingsDialog so the user's edits take effect without a restart.
-  void applyMarqueeSettings();
+  void applyMarqueeSettings() override;
   /// Push the artwork relevant to the active marquee mode to the
   /// marquee window. No-op when the marquee is disabled / not created.
   /// Called whenever the selection or active collection changes.
@@ -238,6 +244,11 @@ protected:
 private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
+  /// Central z-order coordinator for every registered overlay. Constructed
+  /// before any overlay widget so each overlay's setLayerManager() call
+  /// during setupUI() registers against a live instance. Owns no widgets —
+  /// only references via QPointer.
+  std::unique_ptr<OverlayLayerManager> m_overlayLayerManager;
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;

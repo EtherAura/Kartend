@@ -149,14 +149,14 @@ void ScrollDataManager::initializeVirtualFolders(const CollectionContext &contex
 
   // Only show virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!context.config.includeContentSubfolders || context.config.showAllSubfolderItems) {
+  if (!context.config.folderBrowsing.includeContentSubfolders || context.config.folderBrowsing.showAllSubfolderItems) {
     return;
   }
 
   // Determine the effective directory to scan
   QString scanDir = context.config.mediaDirectory;
-  if (!context.config.currentSubfolder.isEmpty()) {
-    scanDir = QDir(scanDir).absoluteFilePath(context.config.currentSubfolder);
+  if (!context.config.folderBrowsing.currentSubfolder.isEmpty()) {
+    scanDir = QDir(scanDir).absoluteFilePath(context.config.folderBrowsing.currentSubfolder);
   }
 
   QDir dir(scanDir);
@@ -166,17 +166,17 @@ void ScrollDataManager::initializeVirtualFolders(const CollectionContext &contex
 
   // Get list of subdirectories, optionally including hidden folders
   QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
-  if (context.config.showHiddenFolders) {
+  if (context.config.folderBrowsing.showHiddenFolders) {
     filters |= QDir::Hidden;
   }
   // Get unsorted list first, then apply sort mode
   QStringList subdirs = dir.entryList(filters, QDir::Unsorted);
   for (const QString &subdir : subdirs) {
     // Store path relative to mediaDirectory for navigation
-    if (context.config.currentSubfolder.isEmpty()) {
+    if (context.config.folderBrowsing.currentSubfolder.isEmpty()) {
       m_virtualFolders.append(subdir);
     } else {
-      m_virtualFolders.append(context.config.currentSubfolder + "/" + subdir);
+      m_virtualFolders.append(context.config.folderBrowsing.currentSubfolder + "/" + subdir);
     }
   }
 

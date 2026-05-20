@@ -48,7 +48,7 @@ FirstRunWizard::FirstRunWizard(QWidget *parent) : QWizard(parent) {
     m_result.pickedConfig.mediaDirectory = field(FIELD_MEDIA_DIR).toString().trimmed();
     m_result.pickedConfig.parentCollectionIndex = -1;
     m_result.pickedConfig.isSubcollection = false;
-    m_result.pickedConfig.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+    m_result.pickedConfig.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   });
 }
 

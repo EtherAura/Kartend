@@ -67,6 +67,51 @@ suite which links all of its `TestXxx` classes into a single binary
 Binary and method counts drift fast — prefer `ctest --output-on-failure
 --test-dir build/ninja-release` for an authoritative list and pass count.
 
+### Module → Test Folder Mapping
+
+Every `src/modules/<group>/<feature>/` owns a matching
+`tests/modules/<feature>/` (group level dropped). The mapping is
+machine-checked by `.scripts/check-test-mapping.py` in the
+maintenance-check CI job — adding a new module without a test folder, or
+leaving a test folder behind after deleting a module, fails the lint.
+
+| Source folder | Test folder |
+|---|---|
+| `src/modules/behavior/application/` | *(integration-only — `tests/integration/test_applicationmanager_lifecycle.cpp`)* |
+| `src/modules/data/cache/` | `tests/modules/cache/` |
+| `src/modules/data/dat/` | `tests/modules/dat/` |
+| `src/modules/data/database/` | `tests/modules/database/` |
+| `src/modules/data/kart/` | `tests/modules/kart/` |
+| `src/modules/data/playlist/` | `tests/modules/playlist/` |
+| `src/modules/data/query/` | `tests/modules/query/` |
+| `src/modules/data/restore/` | `tests/modules/restore/` |
+| `src/modules/data/scraper/` | `tests/modules/scraper/` |
+| `src/modules/data/session/` | `tests/modules/session/` |
+| `src/modules/data/settings/` | `tests/modules/settings/` |
+| `src/modules/input/animation/` | `tests/modules/animation/` |
+| `src/modules/input/attract/` | `tests/modules/attract/` |
+| `src/modules/input/event/` | `tests/modules/event/` |
+| `src/modules/input/filter/` | `tests/modules/filter/` |
+| `src/modules/input/gamepad/` | `tests/modules/gamepad/` |
+| `src/modules/input/interaction/` | `tests/modules/interaction/` |
+| `src/modules/input/keyboard/` | `tests/modules/keyboard/` |
+| `src/modules/input/launch/` | `tests/modules/launch/` |
+| `src/modules/input/mouse/` | `tests/modules/mouse/` |
+| `src/modules/input/navigation/` | `tests/modules/navigation/` |
+| `src/modules/input/overlay/` | `tests/modules/overlay/` |
+| `src/modules/input/scroll/` | `tests/modules/scroll/` |
+| `src/modules/input/search/` | `tests/modules/search/` |
+| `src/modules/input/selection/` | `tests/modules/selection/` |
+| `src/modules/input/viewport/` | `tests/modules/viewport/` |
+| `src/modules/input/widgetpool/` | `tests/modules/widgetpool/` |
+| `src/modules/media/artwork/` | `tests/modules/artwork/` |
+| `src/modules/media/detailpage/` | `tests/modules/detailpage/` |
+| `src/modules/media/detailspane/` | *(integration-only — `tests/integration/test_eventmanager_detailspane.cpp`, `test_detailspane_coverflow.cpp`)* |
+
+Integration-only features (no `tests/modules/<feature>/`) are listed in
+`INTEGRATION_ONLY` inside `check-test-mapping.py`; new additions there
+need a comment pointing to the integration test that covers them.
+
 ## Adding New Tests
 
 1. Create the test file mirroring the source location. A test for a

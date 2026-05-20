@@ -133,7 +133,7 @@ void MarqueeController::updateMarqueeArtwork() {
       }
     }
     if (videoPath.isEmpty()) {
-      videoPath = (*m_collections)[collectionIndex].backgroundVideo;
+      videoPath = (*m_collections)[collectionIndex].background.backgroundVideo;
     }
     m_marqueeWindow->setVideo(videoPath);
     return;

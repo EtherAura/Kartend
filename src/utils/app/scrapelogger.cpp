@@ -57,6 +57,15 @@ const char *levelTag(QtMsgType type) {
   return "?????";
 }
 
+// Locks the log down to 0600. Even with URL-query redaction, the log can
+// still accumulate response fragments + the user's collection structure
+// next to the cleartext credentials in kartend.cfg — both live in the
+// same per-user config dir.
+void restrictLogPermissionsLocked(QFile *file) {
+  if (!file) return;
+  file->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+}
+
 // Caller must hold g_mutex. Closes the live file, shifts it to
 // `scrape.log.old` (replacing any prior generation), reopens a fresh
 // empty log. On reopen failure g_logFile is cleared so the handler
@@ -68,11 +77,15 @@ void rotateLocked() {
   const QString oldPath = path + QStringLiteral(".old");
   QFile::remove(oldPath);
   QFile::rename(path, oldPath);
+  // Tighten the rotated copy too — it carries the same sensitive context.
+  QFile::setPermissions(oldPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
   g_bytesThisGeneration = 0;
   if (!g_logFile->open(QIODevice::WriteOnly | QIODevice::Append)) {
     delete g_logFile;
     g_logFile = nullptr;
+    return;
   }
+  restrictLogPermissionsLocked(g_logFile);
 }
 
 void scrapeMessageHandler(QtMsgType type, const QMessageLogContext &context,
@@ -136,6 +149,7 @@ void setEnabled(bool enabled) {
       return;
     }
     g_logFile = file;
+    restrictLogPermissionsLocked(g_logFile);
     g_bytesThisGeneration = g_logFile->size();
     if (!g_handlerInstalled) {
       g_chainedHandler = qInstallMessageHandler(scrapeMessageHandler);

@@ -255,18 +255,18 @@ void applyToCollection(const Scheme &scheme, CollectionConfig &config) {
   // "sidebar header" colors, so we reuse the closest semantic match.
   // Users who don't like the auto-mapping can still tweak any single
   // field via the regular color picker after applying.
-  assignIfPresent(config.backgroundColor, scheme, "View", "BackgroundNormal");
-  assignIfPresent(config.primaryColor, scheme, "Window", "BackgroundNormal");
-  assignIfPresent(config.tileColor, scheme, "View", "BackgroundAlternate");
-  assignIfPresent(config.selectionColor, scheme, "Selection", "BackgroundNormal");
-  assignIfPresent(config.listRowColor, scheme, "View", "BackgroundNormal");
-  assignIfPresent(config.listAltRowColor, scheme, "View", "BackgroundAlternate");
-  assignIfPresent(config.sidebarBackgroundColor, scheme, "Window", "BackgroundAlternate");
-  assignIfPresent(config.sidebarTextColor, scheme, "Window", "ForegroundNormal");
-  assignIfPresent(config.sidebarAccentColor, scheme, "Selection", "BackgroundNormal");
-  assignIfPresent(config.sidebarPatternColor, scheme, "Window", "BackgroundNormal");
-  assignIfPresent(config.sidebarHeaderBgColor, scheme, "Window", "BackgroundAlternate");
-  assignIfPresent(config.sidebarSectionBgColor, scheme, "View", "BackgroundAlternate");
+  assignIfPresent(config.background.backgroundColor, scheme, "View", "BackgroundNormal");
+  assignIfPresent(config.background.primaryColor, scheme, "Window", "BackgroundNormal");
+  assignIfPresent(config.background.tileColor, scheme, "View", "BackgroundAlternate");
+  assignIfPresent(config.background.selectionColor, scheme, "Selection", "BackgroundNormal");
+  assignIfPresent(config.listView.listRowColor, scheme, "View", "BackgroundNormal");
+  assignIfPresent(config.listView.listAltRowColor, scheme, "View", "BackgroundAlternate");
+  assignIfPresent(config.sidebar.sidebarBackgroundColor, scheme, "Window", "BackgroundAlternate");
+  assignIfPresent(config.sidebar.sidebarTextColor, scheme, "Window", "ForegroundNormal");
+  assignIfPresent(config.sidebar.sidebarAccentColor, scheme, "Selection", "BackgroundNormal");
+  assignIfPresent(config.sidebar.sidebarPatternColor, scheme, "Window", "BackgroundNormal");
+  assignIfPresent(config.sidebar.sidebarHeaderBgColor, scheme, "Window", "BackgroundAlternate");
+  assignIfPresent(config.sidebar.sidebarSectionBgColor, scheme, "View", "BackgroundAlternate");
 }
 
 void applyToGeneralSettings(const Scheme &scheme, GeneralSettings &settings) {

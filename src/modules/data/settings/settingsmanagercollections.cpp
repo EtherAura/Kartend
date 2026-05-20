@@ -160,17 +160,17 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     // sidebar/toolbar filter resolves an empty type by walking up the parent
     // chain via CollectionUtils::effectiveCollectionType.
     config.type = settings.value("type").toString().trimmed();
-    config.launcherPath =
+    config.launcher.launcherPath =
         sanitizeLoadedPath(settings.value("launcherPath").toString(), "launcherPath", config.name);
-    config.corePath =
+    config.launcher.corePath =
         sanitizeLoadedPath(settings.value("corePath").toString(), "corePath", config.name);
-    config.launchParameters = settings.value("launchParameters").toString();
-    config.launcherName = settings.value("launcherName").toString();
+    config.launcher.launchParameters = settings.value("launchParameters").toString();
+    config.launcher.launcherName = settings.value("launcherName").toString();
     // additional launchers are stored as a QSettings array under
     // "additionalLaunchers". When the key is absent (legacy configs), the
     // collection just has the primary launcher and the array stays empty.
     const int additionalCount = settings.beginReadArray("additionalLaunchers");
-    config.additionalLaunchers.reserve(additionalCount);
+    config.launcher.additionalLaunchers.reserve(additionalCount);
     for (int i = 0; i < additionalCount; ++i) {
       settings.setArrayIndex(i);
       LauncherConfig launcher;
@@ -184,7 +184,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       launcher.launchParameters = settings.value("launchParameters").toString();
       // optional reference to a global preset.
       launcher.presetId = settings.value("presetId").toString();
-      config.additionalLaunchers.append(launcher);
+      config.launcher.additionalLaunchers.append(launcher);
     }
     settings.endArray();
     // alias parents — names of additional collections this
@@ -200,7 +200,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       }
     }
     settings.endArray();
-    config.defaultLauncherIndex = settings.value("defaultLauncherIndex", 0).toInt();
+    config.launcher.defaultLauncherIndex = settings.value("defaultLauncherIndex", 0).toInt();
     config.mediaDirectory = sanitizeLoadedPath(settings.value("mediaDirectory").toString(),
                                                "mediaDirectory", config.name);
     config.artworkDirectory = sanitizeLoadedPath(settings.value("artworkDirectory").toString(),
@@ -215,13 +215,13 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.manualDirectory.clear();
     config.placeholderArtwork = sanitizeLoadedPath(settings.value("placeholderArtwork").toString(),
                                                    "placeholderArtwork", config.name);
-    config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
-    config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
-    config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
-    config.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
-    config.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
-    config.extractArchives = settings.value("extractArchives", false).toBool();
-    config.extractedExtension = settings.value("extractedExtension").toString();
+    config.folderBrowsing.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
+    config.folderBrowsing.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
+    config.folderBrowsing.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
+    config.folderBrowsing.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
+    config.folderBrowsing.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
+    config.archive.extractArchives = settings.value("extractArchives", false).toBool();
+    config.archive.extractedExtension = settings.value("extractedExtension").toString();
     config.expandMode = settings.value("expandMode", false).toBool();
     config.collectionIcon = settings.value("collectionIcon").toString();
 
@@ -253,11 +253,11 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.customArtworkTypes = cleanedCustomTypes;
 
     // ScreenScraper systemeid override; -1 = autodetect at scrape time.
-    config.screenscraperSystemId = settings.value("screenscraperSystemId", -1).toInt();
+    config.scraperOverrides.screenscraperSystemId = settings.value("screenscraperSystemId", -1).toInt();
     // Hash inner ROM in archives. Default true — better SS match accuracy.
-    config.screenscraperHashArchive = settings.value("screenscraperHashArchive", true).toBool();
+    config.scraperOverrides.screenscraperHashArchive = settings.value("screenscraperHashArchive", true).toBool();
     // Per-collection scraper override; empty = automatic (resolve by type).
-    config.scraperProviderId = settings.value("scraperProviderId").toString().trimmed();
+    config.scraperOverrides.scraperProviderId = settings.value("scraperProviderId").toString().trimmed();
     // datFilePaths is persisted as a QSettings array so individual
     // entries can contain commas / brackets without delimiter
     // escaping. Legacy configs (pre-multi-DAT) shipped a single
@@ -265,68 +265,68 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     // key has a value, upgrade it to a one-entry list so the user
     // doesn't lose their existing DAT on first launch after upgrade.
     const int datPathCount = settings.beginReadArray("datFilePaths");
-    config.datFilePaths.clear();
-    config.datFilePaths.reserve(datPathCount);
+    config.scraperOverrides.datFilePaths.clear();
+    config.scraperOverrides.datFilePaths.reserve(datPathCount);
     for (int i = 0; i < datPathCount; ++i) {
       settings.setArrayIndex(i);
       const QString path = settings.value("path").toString();
-      if (!path.isEmpty()) config.datFilePaths.append(path);
+      if (!path.isEmpty()) config.scraperOverrides.datFilePaths.append(path);
     }
     settings.endArray();
-    if (config.datFilePaths.isEmpty()) {
+    if (config.scraperOverrides.datFilePaths.isEmpty()) {
       const QString legacy = settings.value("datFilePath").toString();
-      if (!legacy.isEmpty()) config.datFilePaths.append(legacy);
+      if (!legacy.isEmpty()) config.scraperOverrides.datFilePaths.append(legacy);
     }
 
-    config.gridWidth = settings.value("gridWidth", 4).toInt();
-    config.horizontalGridHeight = settings.value("horizontalGridHeight", 0).toInt();
-    config.gridWidthSidebarHidden = settings.value("gridWidthSidebarHidden", 0).toInt();
-    config.horizontalGridHeightSidebarHidden =
+    config.gridLayout.gridWidth = settings.value("gridWidth", 4).toInt();
+    config.gridLayout.horizontalGridHeight = settings.value("horizontalGridHeight", 0).toInt();
+    config.gridLayout.gridWidthSidebarHidden = settings.value("gridWidthSidebarHidden", 0).toInt();
+    config.gridLayout.horizontalGridHeightSidebarHidden =
         settings.value("horizontalGridHeightSidebarHidden", 0).toInt();
     // alt items-per-column when a Top/Bottom-docked details pane
     // hides in Expand mode. 0 means "inherit gridWidth" — preserves existing
     // behavior for collections that haven't opted in.
-    config.gridHeightSidebarHidden = settings.value("gridHeightSidebarHidden", 0).toInt();
-    config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
+    config.gridLayout.gridHeightSidebarHidden = settings.value("gridHeightSidebarHidden", 0).toInt();
+    config.sidebar.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
         settings.value("horizontalAlignment", "center").toString());
-    config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
+    config.sidebar.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
                              ? DetailsPaneMode::Expand
                              : DetailsPaneMode::Overlay;
     // sidebar enhancements.
-    config.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(
+    config.sidebar.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(
         settings.value("sidebarPosition", "right").toString());
-    config.sidebarBackgroundType = CollectionUtils::stringToDetailsPaneBackgroundType(
+    config.sidebar.sidebarBackgroundType = CollectionUtils::stringToDetailsPaneBackgroundType(
         settings.value("sidebarBackgroundType", "color").toString());
-    config.sidebarBackgroundColor = settings.value("sidebarBackgroundColor").toString();
-    config.sidebarBackgroundImage = sanitizeLoadedPath(
+    config.sidebar.sidebarBackgroundColor = settings.value("sidebarBackgroundColor").toString();
+    config.sidebar.sidebarBackgroundImage = sanitizeLoadedPath(
         settings.value("sidebarBackgroundImage").toString(), "sidebarBackgroundImage", config.name);
-    config.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(
+    config.sidebar.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(
         settings.value("sidebarPattern", "crosshatch").toString());
-    config.sidebarPatternIntensity = settings.value("sidebarPatternIntensity", 50).toInt();
-    config.sidebarPatternColor = settings.value("sidebarPatternColor").toString();
-    config.sidebarTextColor = settings.value("sidebarTextColor").toString();
-    config.sidebarAccentColor = settings.value("sidebarAccentColor").toString();
-    config.sidebarHeaderBgColor = settings.value("sidebarHeaderBgColor").toString();
-    config.sidebarSectionBgColor = settings.value("sidebarSectionBgColor").toString();
-    config.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
-    config.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
-    config.sidebarWidth =
+    config.sidebar.sidebarPatternIntensity = settings.value("sidebarPatternIntensity", 50).toInt();
+    config.sidebar.sidebarPatternColor = settings.value("sidebarPatternColor").toString();
+    config.sidebar.sidebarTextColor = settings.value("sidebarTextColor").toString();
+    config.sidebar.sidebarAccentColor = settings.value("sidebarAccentColor").toString();
+    config.sidebar.sidebarHeaderBgColor = settings.value("sidebarHeaderBgColor").toString();
+    config.sidebar.sidebarSectionBgColor = settings.value("sidebarSectionBgColor").toString();
+    config.sidebar.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
+    config.sidebar.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
+    config.sidebar.sidebarWidth =
         settings.value("sidebarWidth", UIConstants::DetailsPane::FIXED_WIDTH).toInt();
     // pane height for Top/Bottom dock. Same persistence treatment
     // as sidebarWidth (no migration of older configs needed — the default is
     // applied when the key is absent).
-    config.sidebarHeight =
+    config.sidebar.sidebarHeight =
         settings.value("sidebarHeight", UIConstants::DetailsPane::FIXED_HEIGHT).toInt();
-    config.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
-    config.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(
+    config.sidebar.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
+    config.sidebar.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(
         settings.value("sidebarActiveTab", "item").toString());
     config.viewType =
         CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
     config.hideMissingArtwork = settings.value("hideMissingArtwork", false).toBool();
-    config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
-    config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
+    config.gridLayout.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
+    config.gridLayout.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
     config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
     // title-exclusion patterns are stored as a QSettings array so
@@ -334,75 +334,75 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     // delimiter escaping concerns. titleExclusionEnabled defaults to true so a
     // user adding patterns sees them apply immediately.
     const int titleExcludeCount = settings.beginReadArray("titleExclusionPatterns");
-    config.titleExclusionPatterns.reserve(titleExcludeCount);
+    config.filter.titleExclusionPatterns.reserve(titleExcludeCount);
     for (int i = 0; i < titleExcludeCount; ++i) {
       settings.setArrayIndex(i);
       const QString pattern = settings.value("pattern").toString();
       if (!pattern.isEmpty()) {
-        config.titleExclusionPatterns.append(pattern);
+        config.filter.titleExclusionPatterns.append(pattern);
       }
     }
     settings.endArray();
-    config.titleExclusionEnabled = settings.value("titleExclusionEnabled", true).toBool();
-    config.horizontalSpacing =
+    config.filter.titleExclusionEnabled = settings.value("titleExclusionEnabled", true).toBool();
+    config.gridLayout.horizontalSpacing =
         settings.value("horizontalSpacing", UIConstants::Grid::SPACING).toInt();
-    config.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
-    config.itemWidth = settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
-    config.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
-    config.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
-    config.cornerRadius =
+    config.gridLayout.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
+    config.gridLayout.itemWidth = settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
+    config.gridLayout.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
+    config.gridLayout.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
+    config.gridLayout.cornerRadius =
         settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS).toInt();
 
     // Background settings
     QString bgType = settings.value("backgroundType", "color").toString().toLower();
     if (bgType == "image") {
-      config.backgroundType = BackgroundType::Image;
+      config.background.backgroundType = BackgroundType::Image;
     } else if (bgType == "video") {
-      config.backgroundType = BackgroundType::Video;
+      config.background.backgroundType = BackgroundType::Video;
     } else {
-      config.backgroundType = BackgroundType::Color;
+      config.background.backgroundType = BackgroundType::Color;
     }
-    config.backgroundColor = settings.value("backgroundColor").toString();
-    config.backgroundImage = sanitizeLoadedPath(settings.value("backgroundImage").toString(),
+    config.background.backgroundColor = settings.value("backgroundColor").toString();
+    config.background.backgroundImage = sanitizeLoadedPath(settings.value("backgroundImage").toString(),
                                                 "backgroundImage", config.name);
-    config.backgroundVideo = sanitizeLoadedPath(settings.value("backgroundVideo").toString(),
+    config.background.backgroundVideo = sanitizeLoadedPath(settings.value("backgroundVideo").toString(),
                                                 "backgroundVideo", config.name);
-    config.primaryColor = settings.value("primaryColor").toString();
-    config.tileColor = settings.value("tileColor").toString();
-    config.selectionColor = settings.value("selectionColor").toString();
+    config.background.primaryColor = settings.value("primaryColor").toString();
+    config.background.tileColor = settings.value("tileColor").toString();
+    config.background.selectionColor = settings.value("selectionColor").toString();
 
     // header logo
-    config.headerLogoImage = sanitizeLoadedPath(settings.value("headerLogoImage").toString(),
+    config.background.headerLogoImage = sanitizeLoadedPath(settings.value("headerLogoImage").toString(),
                                                 "headerLogoImage", config.name);
-    config.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
+    config.background.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
         settings.value("headerLogoPosition", "topcenter").toString());
 
     // vignette
-    config.vignetteEnabled = settings.value("vignetteEnabled", false).toBool();
-    config.vignetteIntensity = settings.value("vignetteIntensity", 60).toInt();
+    config.background.vignetteEnabled = settings.value("vignetteEnabled", false).toBool();
+    config.background.vignetteIntensity = settings.value("vignetteIntensity", 60).toInt();
 
     // wallpaper parallax
-    config.wallpaperParallax = settings.value("wallpaperParallax", false).toBool();
-    config.parallaxStrength = settings.value("parallaxStrength", 30).toInt();
+    config.background.wallpaperParallax = settings.value("wallpaperParallax", false).toBool();
+    config.background.parallaxStrength = settings.value("parallaxStrength", 30).toInt();
 
     // toolbar backdrop blur
-    config.toolbarBackdropBlur = settings.value("toolbarBackdropBlur", false).toBool();
-    config.backdropBlurRadius = settings.value("backdropBlurRadius", 12).toInt();
+    config.background.toolbarBackdropBlur = settings.value("toolbarBackdropBlur", false).toBool();
+    config.background.backdropBlurRadius = settings.value("backdropBlurRadius", 12).toInt();
 
     // List mode settings
-    config.listFontSize =
+    config.listView.listFontSize =
         settings.value("listFontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
-    config.listRowHeight =
+    config.listView.listRowHeight =
         settings.value("listRowHeight", UIConstants::ListView::DEFAULT_ROW_HEIGHT).toInt();
-    config.listRowColor = settings.value("listRowColor").toString();
-    config.listAltRowColor = settings.value("listAltRowColor").toString();
+    config.listView.listRowColor = settings.value("listRowColor").toString();
+    config.listView.listAltRowColor = settings.value("listAltRowColor").toString();
 
     // Text appearance settings (per-collection)
     config.customFontFamily = settings.value("customFontFamily").toString();
 
     // sidebar font override.
-    config.sidebarFontFamily = settings.value("sidebarFontFamily").toString();
-    config.sidebarFontPointSize = settings.value("sidebarFontPointSize", 0).toInt();
+    config.sidebar.sidebarFontFamily = settings.value("sidebarFontFamily").toString();
+    config.sidebar.sidebarFontPointSize = settings.value("sidebarFontPointSize", 0).toInt();
 
     // Validate and clamp numeric values to acceptable ranges
     config.clampValues();
@@ -429,7 +429,8 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 // filter, hierarchy cache, sidebar summary) refresh consistently — fixes
 // where right-click / kart-import / inline edits saved without
 // firing a refresh, leaving the toolbar dropdown stale until restart.
-void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
+ErrorUtils::Result<void>
+SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   // Perf trace (gated on KARTEND_PERF_TRACE=1) — saveCollections is called
   // from many UI events (sidebar drag commits, tab switches, kart imports,
   // toolbar filter toggles); the worry is that on a populous library the
@@ -533,17 +534,18 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     // (whitespace already trimmed at load) so a hand-edit round-trips.
     settings.setValue("type", c.type);
     settings.setValue("launcherPath",
-                      sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
-    settings.setValue("corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
-    settings.setValue("launchParameters", c.launchParameters);
-    settings.setValue("launcherName", c.launcherName);
+                      sanitizePersistedPath(c.launcher.launcherPath, "launcherPath", sectionName));
+    settings.setValue("corePath",
+                      sanitizePersistedPath(c.launcher.corePath, "corePath", sectionName));
+    settings.setValue("launchParameters", c.launcher.launchParameters);
+    settings.setValue("launcherName", c.launcher.launcherName);
     // persist the additional-launcher list as a QSettings array.
     // beginWriteArray clears any existing entries with the same prefix, so
     // launchers removed via the dialog don't linger in the INI.
-    settings.beginWriteArray("additionalLaunchers", c.additionalLaunchers.size());
-    for (int i = 0; i < c.additionalLaunchers.size(); ++i) {
+    settings.beginWriteArray("additionalLaunchers", c.launcher.additionalLaunchers.size());
+    for (int i = 0; i < c.launcher.additionalLaunchers.size(); ++i) {
       settings.setArrayIndex(i);
-      const LauncherConfig &launcher = c.additionalLaunchers[i];
+      const LauncherConfig &launcher = c.launcher.additionalLaunchers[i];
       settings.setValue("name", launcher.name);
       const QString launcherFieldId = QString("additionalLaunchers[%1].launcherPath").arg(i);
       const QString coreFieldId = QString("additionalLaunchers[%1].corePath").arg(i);
@@ -564,7 +566,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
       settings.setValue("name", c.additionalParentNames[i]);
     }
     settings.endArray();
-    settings.setValue("defaultLauncherIndex", c.defaultLauncherIndex);
+    settings.setValue("defaultLauncherIndex", c.launcher.defaultLauncherIndex);
     settings.setValue("mediaDirectory",
                       sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
     settings.setValue("artworkDirectory",
@@ -579,13 +581,13 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue(
         "placeholderArtwork",
         sanitizePersistedPath(c.placeholderArtwork, "placeholderArtwork", sectionName));
-    settings.setValue("includeContentSubfolders", c.includeContentSubfolders);
-    settings.setValue("includeArtworkSubfolders", c.includeArtworkSubfolders);
-    settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
-    settings.setValue("hideSubfolderTitles", c.hideSubfolderTitles);
-    settings.setValue("showHiddenFolders", c.showHiddenFolders);
-    settings.setValue("extractArchives", c.extractArchives);
-    settings.setValue("extractedExtension", c.extractedExtension);
+    settings.setValue("includeContentSubfolders", c.folderBrowsing.includeContentSubfolders);
+    settings.setValue("includeArtworkSubfolders", c.folderBrowsing.includeArtworkSubfolders);
+    settings.setValue("showAllSubfolderItems", c.folderBrowsing.showAllSubfolderItems);
+    settings.setValue("hideSubfolderTitles", c.folderBrowsing.hideSubfolderTitles);
+    settings.setValue("showHiddenFolders", c.folderBrowsing.showHiddenFolders);
+    settings.setValue("extractArchives", c.archive.extractArchives);
+    settings.setValue("extractedExtension", c.archive.extractedExtension);
     settings.setValue("expandMode", c.expandMode);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
@@ -593,130 +595,136 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     // ScreenScraper systemeid override (round-trips even when -1 so the
     // distinction between "I haven't decided yet" and "autodetect" is
     // explicit on disk for users hand-editing the file).
-    settings.setValue("screenscraperSystemId", c.screenscraperSystemId);
-    settings.setValue("screenscraperHashArchive", c.screenscraperHashArchive);
+    settings.setValue("screenscraperSystemId", c.scraperOverrides.screenscraperSystemId);
+    settings.setValue("screenscraperHashArchive", c.scraperOverrides.screenscraperHashArchive);
     // Per-collection scraper override; empty = automatic (resolve by type).
-    settings.setValue("scraperProviderId", c.scraperProviderId);
+    settings.setValue("scraperProviderId", c.scraperOverrides.scraperProviderId);
     // Persist datFilePaths via beginWriteArray so removed entries
     // disappear cleanly from the INI. Also drop any stale single-key
     // `datFilePath=` left behind by a pre-upgrade config — keeping
     // both around would confuse hand-editors and round-tripping.
     settings.remove(QStringLiteral("datFilePath"));
-    settings.beginWriteArray("datFilePaths", c.datFilePaths.size());
-    for (int i = 0; i < c.datFilePaths.size(); ++i) {
+    settings.beginWriteArray("datFilePaths", c.scraperOverrides.datFilePaths.size());
+    for (int i = 0; i < c.scraperOverrides.datFilePaths.size(); ++i) {
       settings.setArrayIndex(i);
-      settings.setValue("path", c.datFilePaths[i]);
+      settings.setValue("path", c.scraperOverrides.datFilePaths[i]);
     }
     settings.endArray();
-    settings.setValue("gridWidth", c.gridWidth);
-    settings.setValue("horizontalGridHeight", c.horizontalGridHeight);
-    settings.setValue("gridWidthSidebarHidden", c.gridWidthSidebarHidden);
-    settings.setValue("horizontalGridHeightSidebarHidden", c.horizontalGridHeightSidebarHidden);
-    settings.setValue("gridHeightSidebarHidden", c.gridHeightSidebarHidden);
-    settings.setValue("sidebarVisible", c.sidebarVisible);
+    settings.setValue("gridWidth", c.gridLayout.gridWidth);
+    settings.setValue("horizontalGridHeight", c.gridLayout.horizontalGridHeight);
+    settings.setValue("gridWidthSidebarHidden", c.gridLayout.gridWidthSidebarHidden);
+    settings.setValue("horizontalGridHeightSidebarHidden", c.gridLayout.horizontalGridHeightSidebarHidden);
+    settings.setValue("gridHeightSidebarHidden", c.gridLayout.gridHeightSidebarHidden);
+    settings.setValue("sidebarVisible", c.sidebar.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment",
                       CollectionUtils::alignmentToString(c.horizontalAlignment));
     settings.setValue("sidebarMode",
-                      (c.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
+                      (c.sidebar.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
     // sidebar enhancements.
     settings.setValue("sidebarPosition",
-                      CollectionUtils::detailsPanePositionToString(c.sidebarPosition));
+                      CollectionUtils::detailsPanePositionToString(c.sidebar.sidebarPosition));
     settings.setValue("sidebarBackgroundType",
-                      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebarBackgroundType));
-    settings.setValue("sidebarBackgroundColor", c.sidebarBackgroundColor);
+                      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebar.sidebarBackgroundType));
+    settings.setValue("sidebarBackgroundColor", c.sidebar.sidebarBackgroundColor);
     settings.setValue(
         "sidebarBackgroundImage",
-        sanitizePersistedPath(c.sidebarBackgroundImage, "sidebarBackgroundImage", sectionName));
+        sanitizePersistedPath(c.sidebar.sidebarBackgroundImage, "sidebarBackgroundImage", sectionName));
     settings.setValue("sidebarPattern",
-                      CollectionUtils::detailsPanePatternToString(c.sidebarPattern));
-    settings.setValue("sidebarPatternIntensity", c.sidebarPatternIntensity);
-    settings.setValue("sidebarPatternColor", c.sidebarPatternColor);
-    settings.setValue("sidebarTextColor", c.sidebarTextColor);
-    settings.setValue("sidebarAccentColor", c.sidebarAccentColor);
-    settings.setValue("sidebarHeaderBgColor", c.sidebarHeaderBgColor);
-    settings.setValue("sidebarSectionBgColor", c.sidebarSectionBgColor);
-    settings.setValue("sidebarHeaderBgOpacity", c.sidebarHeaderBgOpacity);
-    settings.setValue("sidebarSectionBgOpacity", c.sidebarSectionBgOpacity);
-    settings.setValue("sidebarWidth", c.sidebarWidth);
-    settings.setValue("sidebarHeight", c.sidebarHeight);
-    settings.setValue("sidebarWidthLocked", c.sidebarWidthLocked);
+                      CollectionUtils::detailsPanePatternToString(c.sidebar.sidebarPattern));
+    settings.setValue("sidebarPatternIntensity", c.sidebar.sidebarPatternIntensity);
+    settings.setValue("sidebarPatternColor", c.sidebar.sidebarPatternColor);
+    settings.setValue("sidebarTextColor", c.sidebar.sidebarTextColor);
+    settings.setValue("sidebarAccentColor", c.sidebar.sidebarAccentColor);
+    settings.setValue("sidebarHeaderBgColor", c.sidebar.sidebarHeaderBgColor);
+    settings.setValue("sidebarSectionBgColor", c.sidebar.sidebarSectionBgColor);
+    settings.setValue("sidebarHeaderBgOpacity", c.sidebar.sidebarHeaderBgOpacity);
+    settings.setValue("sidebarSectionBgOpacity", c.sidebar.sidebarSectionBgOpacity);
+    settings.setValue("sidebarWidth", c.sidebar.sidebarWidth);
+    settings.setValue("sidebarHeight", c.sidebar.sidebarHeight);
+    settings.setValue("sidebarWidthLocked", c.sidebar.sidebarWidthLocked);
     settings.setValue("sidebarActiveTab",
-                      CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab));
+                      CollectionUtils::detailsPaneTabToString(c.sidebar.sidebarActiveTab));
     settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
     settings.setValue("hideMissingArtwork", c.hideMissingArtwork);
-    settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
-    settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
+    settings.setValue("hideHorizontalScrollbar", c.gridLayout.hideHorizontalScrollbar);
+    settings.setValue("hideVerticalScrollbar", c.gridLayout.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
     settings.setValue("hideSubcollectionTitles", c.hideSubcollectionTitles);
     // persist the title-exclusion list via beginWriteArray so
     // patterns removed by the user disappear from the INI cleanly.
-    settings.beginWriteArray("titleExclusionPatterns", c.titleExclusionPatterns.size());
-    for (int i = 0; i < c.titleExclusionPatterns.size(); ++i) {
+    settings.beginWriteArray("titleExclusionPatterns", c.filter.titleExclusionPatterns.size());
+    for (int i = 0; i < c.filter.titleExclusionPatterns.size(); ++i) {
       settings.setArrayIndex(i);
-      settings.setValue("pattern", c.titleExclusionPatterns[i]);
+      settings.setValue("pattern", c.filter.titleExclusionPatterns[i]);
     }
     settings.endArray();
-    settings.setValue("titleExclusionEnabled", c.titleExclusionEnabled);
-    settings.setValue("horizontalSpacing", c.horizontalSpacing);
-    settings.setValue("verticalSpacing", c.verticalSpacing);
-    settings.setValue("itemWidth", c.itemWidth);
-    settings.setValue("itemHeight", c.itemHeight);
-    settings.setValue("fontSize", c.fontSize);
-    settings.setValue("cornerRadius", c.cornerRadius);
+    settings.setValue("titleExclusionEnabled", c.filter.titleExclusionEnabled);
+    settings.setValue("horizontalSpacing", c.gridLayout.horizontalSpacing);
+    settings.setValue("verticalSpacing", c.gridLayout.verticalSpacing);
+    settings.setValue("itemWidth", c.gridLayout.itemWidth);
+    settings.setValue("itemHeight", c.gridLayout.itemHeight);
+    settings.setValue("fontSize", c.gridLayout.fontSize);
+    settings.setValue("cornerRadius", c.gridLayout.cornerRadius);
     QString bgTypeStr = "color";
-    if (c.backgroundType == BackgroundType::Image) {
+    if (c.background.backgroundType == BackgroundType::Image) {
       bgTypeStr = "image";
-    } else if (c.backgroundType == BackgroundType::Video) {
+    } else if (c.background.backgroundType == BackgroundType::Video) {
       bgTypeStr = "video";
     }
     settings.setValue("backgroundType", bgTypeStr);
-    settings.setValue("backgroundColor", c.backgroundColor);
+    settings.setValue("backgroundColor", c.background.backgroundColor);
     settings.setValue("backgroundImage",
-                      sanitizePersistedPath(c.backgroundImage, "backgroundImage", sectionName));
+                      sanitizePersistedPath(c.background.backgroundImage, "backgroundImage", sectionName));
     settings.setValue("backgroundVideo",
-                      sanitizePersistedPath(c.backgroundVideo, "backgroundVideo", sectionName));
-    settings.setValue("primaryColor", c.primaryColor);
-    settings.setValue("tileColor", c.tileColor);
-    settings.setValue("selectionColor", c.selectionColor);
+                      sanitizePersistedPath(c.background.backgroundVideo, "backgroundVideo", sectionName));
+    settings.setValue("primaryColor", c.background.primaryColor);
+    settings.setValue("tileColor", c.background.tileColor);
+    settings.setValue("selectionColor", c.background.selectionColor);
     // header logo
     settings.setValue("headerLogoImage",
-                      sanitizePersistedPath(c.headerLogoImage, "headerLogoImage", sectionName));
+                      sanitizePersistedPath(c.background.headerLogoImage, "headerLogoImage", sectionName));
     settings.setValue("headerLogoPosition",
-                      CollectionUtils::headerLogoPositionToString(c.headerLogoPosition));
+                      CollectionUtils::headerLogoPositionToString(c.background.headerLogoPosition));
     // vignette
-    settings.setValue("vignetteEnabled", c.vignetteEnabled);
-    settings.setValue("vignetteIntensity", c.vignetteIntensity);
+    settings.setValue("vignetteEnabled", c.background.vignetteEnabled);
+    settings.setValue("vignetteIntensity", c.background.vignetteIntensity);
     // wallpaper parallax
-    settings.setValue("wallpaperParallax", c.wallpaperParallax);
-    settings.setValue("parallaxStrength", c.parallaxStrength);
+    settings.setValue("wallpaperParallax", c.background.wallpaperParallax);
+    settings.setValue("parallaxStrength", c.background.parallaxStrength);
     // toolbar backdrop blur
-    settings.setValue("toolbarBackdropBlur", c.toolbarBackdropBlur);
-    settings.setValue("backdropBlurRadius", c.backdropBlurRadius);
+    settings.setValue("toolbarBackdropBlur", c.background.toolbarBackdropBlur);
+    settings.setValue("backdropBlurRadius", c.background.backdropBlurRadius);
 
     // List mode settings
-    settings.setValue("listFontSize", c.listFontSize);
-    settings.setValue("listRowHeight", c.listRowHeight);
-    settings.setValue("listRowColor", c.listRowColor);
-    settings.setValue("listAltRowColor", c.listAltRowColor);
+    settings.setValue("listFontSize", c.listView.listFontSize);
+    settings.setValue("listRowHeight", c.listView.listRowHeight);
+    settings.setValue("listRowColor", c.listView.listRowColor);
+    settings.setValue("listAltRowColor", c.listView.listAltRowColor);
 
     // Text appearance settings (per-collection)
     settings.setValue("customFontFamily", c.customFontFamily);
     // sidebar font override
-    settings.setValue("sidebarFontFamily", c.sidebarFontFamily);
-    settings.setValue("sidebarFontPointSize", c.sidebarFontPointSize);
+    settings.setValue("sidebarFontFamily", c.sidebar.sidebarFontFamily);
+    settings.setValue("sidebarFontPointSize", c.sidebar.sidebarFontPointSize);
     settings.endGroup();
   }
   settings.sync();
 
+  ErrorUtils::ErrorContext err;
   if (settings.status() != QSettings::NoError) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                                           "Failed to persist settings",
-                                                           "SettingsManager::saveCollections")
-                             .withDetails(QString("Path: %1, Status: %2")
-                                              .arg(SettingsUtils::getConfigPath())
-                                              .arg(static_cast<int>(settings.status()))));
+    err = ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                            "Failed to persist settings",
+                                            "SettingsManager::saveCollections")
+              .withDetails(QString("Path: %1, Status: %2")
+                               .arg(SettingsUtils::getConfigPath())
+                               .arg(static_cast<int>(settings.status())));
+    ErrorUtils::logError(err);
   }
+
+  // Cleartext scraper credentials share this INI; clamp it to 0600 after
+  // every save site that may have touched it.
+  SettingsUtils::tightenConfigPermissions();
 
   // keep the registry in sync with the just-persisted list. The
   // toolbar popup calls saveCollections() after edits and then triggers a
@@ -746,4 +754,9 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
         << " playlists=" << playlistCount << ")"
         << " path=" << SettingsUtils::getConfigPath();
   }
+
+  if (err.isError()) {
+    return err;
+  }
+  return ErrorUtils::Result<void>::success();
 }

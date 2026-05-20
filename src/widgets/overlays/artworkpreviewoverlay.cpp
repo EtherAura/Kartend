@@ -1,7 +1,9 @@
 // Artwork / video preview overlay (+).
 #include "artworkpreviewoverlay.h"
+
 #include "artworkutils.h"
 #include "extensionutils.h"
+#include "overlaylayermanager.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
 #include "videoutils.h"
@@ -183,7 +185,11 @@ void ArtworkPreviewOverlay::displayPixmap(const QPixmap &pixmap) {
   centerContent();
 
   show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   activateWindow();
   setFocus(Qt::PopupFocusReason);
 }
@@ -212,7 +218,11 @@ void ArtworkPreviewOverlay::displayVideo(const QString &absoluteVideoPath) {
   centerContent();
 
   show();
-  raise();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
   activateWindow();
   setFocus(Qt::PopupFocusReason);
 }

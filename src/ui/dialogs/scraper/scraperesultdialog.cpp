@@ -4,6 +4,8 @@
 // touch this file.
 #include "scraperesultdialog.h"
 
+#include "mediatypecheckboxbuilder.h"
+
 #include <limits>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -677,95 +679,12 @@ void ScrapeResultDialog::buildUnifiedPanel() {
   root->addWidget(splitter, 1);
 
   // ── Middle: media types ─────────────────────────────────────────
-  m_mediaTypesGroup = new QGroupBox(tr("What to scrape"), m_unifiedPage);
-  auto *mediaVBox = new QVBoxLayout(m_mediaTypesGroup);
-
-  auto *mediaButtonsRow = new QHBoxLayout;
-  auto *mediaSelectAll = new QPushButton(tr("Select all"), m_mediaTypesGroup);
-  auto *mediaSelectNone = new QPushButton(tr("Select none"), m_mediaTypesGroup);
-  mediaButtonsRow->addWidget(mediaSelectAll);
-  mediaButtonsRow->addWidget(mediaSelectNone);
-  mediaButtonsRow->addStretch(1);
-  mediaVBox->addLayout(mediaButtonsRow);
-
-  auto *mediaGrid = new QGridLayout;
-  // Curated list. The leading `_metadata` is a synthetic key that
-  // gates the textual ScrapedItem fields (title / description / etc.)
-  // rather than a MediaAsset::type — handled specially when building
-  // the BatchScrapeRunner filter and at applyResult time.
-  //
-  // Every other key must equal a MediaAsset::type in lowercase: the
-  // runner matches each asset's `type.toLower()` against the filter
-  // set, and that set is built by lowercasing these keys. Parser
-  // aliases are already collapsed (box-2D → front, sstitle → title,
-  // manuel → manual, ss/screenshot → screenshot); every other entry
-  // keeps its raw ScreenScraper tag, lowercased.
-  struct MediaTypeEntry {
-    const char *key;
-    const char *label;
-    bool defaultOn;
-  };
-  static constexpr MediaTypeEntry kMediaTypes[] = {
-      {"_metadata", "Metadata (title, description, …)", true},
-      {"front", "Front cover", true},
-      {"box-2d-back", "Back cover", false},
-      {"box-2d-side", "Box spine", false},
-      {"box-3d", "Box (3D)", false},
-      {"box-texture", "Box texture", false},
-      {"support-2d", "Cart / disc label", false},
-      {"support-3d", "Cart / disc (3D)", false},
-      {"support-texture", "Cart / disc texture", false},
-      {"screenshot", "Screenshot", false},
-      {"title", "Title screen", false},
-      {"fanart", "Fanart", false},
-      {"background", "Background", false},
-      {"steamgrid", "Steam grid", false},
-      {"wheel", "Wheel / logo", false},
-      {"wheel-carbon", "Wheel (carbon)", false},
-      {"wheel-steel", "Wheel (steel)", false},
-      {"marquee", "Marquee", false},
-      {"screenmarquee", "Screen marquee", false},
-      {"screenmarqueesmall", "Screen marquee (small)", false},
-      {"bezel-16-9", "Bezel (16:9)", false},
-      {"bezel-4-3", "Bezel (4:3)", false},
-      {"mixrbv1", "Mix (RBV1)", false},
-      {"mixrbv2", "Mix (RBV2)", false},
-      {"figurine", "Figurine", false},
-      {"pictoliste", "Pictogram (list)", false},
-      {"pictocouleur", "Pictogram (colour)", false},
-      {"pictomonochrome", "Pictogram (mono)", false},
-      {"map", "Map", false},
-      {"manual", "Manual", false},
-      {"video", "Video", false},
-      {"video-normalized", "Video (normalized)", false},
-  };
-  int row = 0;
-  int col = 0;
-  constexpr int kColumns = 3;
-  for (const auto &mt : kMediaTypes) {
-    auto *check = new QCheckBox(tr(mt.label), m_mediaTypesGroup);
-    check->setChecked(mt.defaultOn);
-    mediaGrid->addWidget(check, row, col);
-    m_mediaTypeChecks.insert(QString::fromLatin1(mt.key), check);
-    if (++col >= kColumns) {
-      col = 0;
-      ++row;
-    }
-  }
-  mediaVBox->addLayout(mediaGrid);
-  // Bulk-toggle every checkbox in the media-types group, including
-  // the synthetic _metadata entry. Captured by value so the lambda
-  // survives the local layout pointers going out of scope.
-  connect(mediaSelectAll, &QPushButton::clicked, this, [this]() {
-    for (auto it = m_mediaTypeChecks.constBegin(); it != m_mediaTypeChecks.constEnd(); ++it) {
-      it.value()->setChecked(true);
-    }
-  });
-  connect(mediaSelectNone, &QPushButton::clicked, this, [this]() {
-    for (auto it = m_mediaTypeChecks.constBegin(); it != m_mediaTypeChecks.constEnd(); ++it) {
-      it.value()->setChecked(false);
-    }
-  });
+  // MediaTypeCheckboxBuilder owns the curated SS media-type table,
+  // the 3-column grid layout, and the Select-all/none bulk-toggle
+  // wiring. The dialog keeps `m_mediaTypeChecks` because the filter
+  // derivation later in onApply / auto-mode reads back the per-type
+  // checked state.
+  m_mediaTypesGroup = MediaTypeCheckboxBuilder::build(m_unifiedPage, m_mediaTypeChecks);
   root->addWidget(m_mediaTypesGroup);
 
   // ── Mode toggle ─────────────────────────────────────────────────

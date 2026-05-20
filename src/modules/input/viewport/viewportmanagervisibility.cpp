@@ -46,7 +46,7 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   }
 
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
-  int gridWidth = collection.gridWidth;
+  int gridWidth = collection.gridLayout.gridWidth;
   if (gridWidth <= 0) {
     return;
   }
@@ -57,9 +57,9 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   }
 
   int hSpacing =
-      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.horizontalSpacing;
+      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.gridLayout.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
+  int itemX = GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
 
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int curX = hScrollBar->value();
@@ -68,9 +68,9 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
 
   if (itemX < curX + margins) {
     targetX = qMax(0, itemX - margins);
-  } else if (itemX + collection.itemWidth > curX + viewportWidth - margins) {
+  } else if (itemX + collection.gridLayout.itemWidth > curX + viewportWidth - margins) {
     targetX = qMax(
-        0, qMin(itemX + collection.itemWidth - viewportWidth + margins, hScrollBar->maximum()));
+        0, qMin(itemX + collection.gridLayout.itemWidth - viewportWidth + margins, hScrollBar->maximum()));
   }
 
   if (targetX == curX) {
@@ -119,11 +119,11 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
   // modes
-  int gridWidth = collection.gridWidth;
-  int itemHeight = collection.itemHeight;
-  int itemWidth = collection.itemWidth;
-  int vSpacing = collection.verticalSpacing;
-  int hSpacing = collection.horizontalSpacing;
+  int gridWidth = collection.gridLayout.gridWidth;
+  int itemHeight = collection.gridLayout.itemHeight;
+  int itemWidth = collection.gridLayout.itemWidth;
+  int vSpacing = collection.gridLayout.verticalSpacing;
+  int hSpacing = collection.gridLayout.horizontalSpacing;
 
   if (scrollMgr()) {
     const auto &metrics = scrollMgr()->getMetrics();
@@ -263,8 +263,8 @@ void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startV
   int itemHeight = 0;
   int vSpacing = 0;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
-    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
+    itemHeight = (*m_collections)[*m_currentCollectionIndex].gridLayout.itemHeight;
+    vSpacing = (*m_collections)[*m_currentCollectionIndex].gridLayout.verticalSpacing;
   }
 
   animMgr()->startEnsureVisibleVAnim(vScrollBar, startVal, endVal, itemHeight, vSpacing,
@@ -277,7 +277,7 @@ void ViewportManager::ensureVerticalScrollbarPolicy() {
     return;
   }
   int idx = *m_currentCollectionIndex;
-  if (!(*m_collections)[idx].hideVerticalScrollbar) {
+  if (!(*m_collections)[idx].gridLayout.hideVerticalScrollbar) {
     m_itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   }
 }
@@ -330,10 +330,10 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
     } else {
       // Fallback to collection config for grid mode
       const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
-      if (collection.gridWidth > 0) {
-        gridWidth = collection.gridWidth;
+      if (collection.gridLayout.gridWidth > 0) {
+        gridWidth = collection.gridLayout.gridWidth;
         rowHeight = GridLayoutCalculator::getRowHeight(collection);
-        itemHeight = collection.itemHeight;
+        itemHeight = collection.gridLayout.itemHeight;
       }
     }
 
@@ -376,7 +376,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
         const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
         int colWidth = GridLayoutCalculator::getColumnWidth(collection);
         int itemX = UIConstants::Grid::MARGINS + (col * colWidth);
-        int targetX = itemX + (collection.itemWidth / 2) - (viewportW / 2);
+        int targetX = itemX + (collection.gridLayout.itemWidth / 2) - (viewportW / 2);
         targetX = qBound(0, targetX, qMax(0, targetX));
         horizontalScrollBar->setValue(targetX);
       }

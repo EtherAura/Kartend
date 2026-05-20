@@ -119,7 +119,7 @@ void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
   CollectionConfig collection;
   collection.name = QStringLiteral("AbsPathCollection");
   collection.mediaDirectory = mediaDir.path();
-  collection.includeContentSubfolders = true; // so the nested file is scanned
+  collection.folderBrowsing.includeContentSubfolders = true; // so the nested file is scanned
   collection.extensions = {QStringLiteral("bin")};
 
   QList<CollectionConfig> allCollections;
@@ -227,7 +227,7 @@ void TestQueryManagerAbsPath::reconcileAbsolutizesExistingRowsPreservingStats() 
   CollectionConfig collection;
   collection.name = QStringLiteral("ReconcileCollection");
   collection.mediaDirectory = mediaDir.path();
-  collection.includeContentSubfolders = false;
+  collection.folderBrowsing.includeContentSubfolders = false;
   collection.extensions = {QStringLiteral("bin")};
 
   QList<CollectionConfig> allCollections;

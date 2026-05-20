@@ -33,8 +33,8 @@ CollectionConfig makeConfig(const QString &name, const QStringList &patterns,
                             bool enabled = true) {
   CollectionConfig c;
   c.name = name;
-  c.titleExclusionPatterns = patterns;
-  c.titleExclusionEnabled = enabled;
+  c.filter.titleExclusionPatterns = patterns;
+  c.filter.titleExclusionEnabled = enabled;
   return c;
 }
 

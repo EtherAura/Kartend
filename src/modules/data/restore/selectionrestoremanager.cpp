@@ -77,7 +77,7 @@ auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) cons
   }
 
   const CollectionConfig &cfg = (*m_collections)[collectionIndex];
-  const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
+  const bool subfolderActive = !cfg.folderBrowsing.currentSubfolder.trimmed().isEmpty();
 
   QString hierarchicalName = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
   int selIdx = -1;
@@ -271,9 +271,12 @@ void SelectionRestoreManager::scheduleSelectionRestoreVerification(int collectio
                                                                    int token) {
   auto restoreLambda = createSelectionRestoreLambda(collectionIndex, selIdx, token);
 
-  // Schedule early verification attempts to ensure selection is restored
-  // even if initial restore was blocked by layout settling
+  // Two staggered verification attempts so the selection sticks even when
+  // the first attempt landed mid layout-settle. VERIFY_1_MS catches the
+  // common fast path; the longer VERIFY_2_MS retry below covers slow
+  // virtual-view materialization on populous collections.
   QTimer::singleShot(UIConstants::Selection::RESTORE_EARLY_VERIFY_1_MS, this, restoreLambda);
+  // Longer fallback retry — see above.
   QTimer::singleShot(UIConstants::Selection::RESTORE_EARLY_VERIFY_2_MS, this, restoreLambda);
 }
 
@@ -293,9 +296,10 @@ void SelectionRestoreManager::handleSubcollectionRestore(int collectionIndex) {
 
   int token = ++state()->selectionRestore().restoreToken;
 
-  // Delay restore to allow filter application and widget materialization -
-  // subcollection filter needs time to update virtual view before selection
   QPointer<SelectionRestoreManager> guard(this);
+  // Delay restore to allow filter application and widget materialization —
+  // the subcollection filter needs time to update the virtual view before
+  // selection lands, otherwise the target index has no widget yet.
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                      [guard, selIdx, collectionIndex, token]() {
                        if (!guard || !guard->interactionMgr() || !guard->state() ||

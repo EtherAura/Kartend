@@ -32,12 +32,12 @@
 #include "appearancelayoutpanel.h"
 #include "collectiontreewidget.h"
 #include "configurationpanel.h"
+#include "errordialog.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
-#include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
@@ -57,7 +57,13 @@ void SettingsDialog::setupBasicUIConnections() {
         ui->appearanceLayoutPanel->gridWidthSpinBox()) {
       handleSaveCollection(currentCollectionIndex);
     } else {
-      saveGeneralSettingsFromUI();
+      // No collection-side save here — only the general-settings path. Surface
+      // disk-write failures so the persistent save icon doesn't lie about a
+      // successful save when /config can't be written.
+      if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+        ErrorDialog::showError(this, result.error());
+        return;
+      }
       m_originalGeneralSettings = m_generalSettings;
       m_collectionSaved = true;
       updateSaveButtonStyle();
@@ -70,7 +76,7 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   bool isActive =
       (editedIndex == originalCurrentCollectionIndex && originalCurrentCollectionIndex >= 0 &&
        originalCurrentCollectionIndex < collections.size());
-  bool gridWidthChangedFlag = (newGridWidth != originalCollection.gridWidth);
+  bool gridWidthChangedFlag = (newGridWidth != originalCollection.gridLayout.gridWidth);
   if (isActive && gridWidthChangedFlag) {
     m_gridWidthChangedForActiveCollection = true;
     m_newGridWidthForActiveCollection = newGridWidth;
@@ -90,12 +96,12 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
                               : originalCollection.extensions.join(", ");
   bool newIncludeSubfolders = ui->subfoldersPanel
                                   ? ui->subfoldersPanel->isContentSubfoldersIncluded()
-                                  : originalCollection.includeContentSubfolders;
+                                  : originalCollection.folderBrowsing.includeContentSubfolders;
 
   bool databaseFieldsChanged =
       (newName != originalCollection.name) || (newMediaDir != originalCollection.mediaDirectory) ||
       (newExtensions != originalCollection.extensions.join(", ")) ||
-      (newIncludeSubfolders != originalCollection.includeContentSubfolders);
+      (newIncludeSubfolders != originalCollection.folderBrowsing.includeContentSubfolders);
 
   if (databaseFieldsChanged) {
     m_rescanRequired.insert(editedIndex);
@@ -124,8 +130,13 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
     propagateAppearanceToIndicesSilently(targets);
   }
 
-  // Also save general settings (e.g., titleTintSaturation, titleTintLightness)
-  saveGeneralSettingsFromUI();
+  // Also save general settings (e.g., titleTintSaturation, titleTintLightness).
+  // Disk failures here are reported via ErrorDialog but don't abort the save
+  // flow — the per-collection save has already emitted collectionSaved and
+  // adjusted in-memory state.
+  if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+    ErrorDialog::showError(this, result.error());
+  }
   m_originalGeneralSettings = m_generalSettings;
 
   m_collectionSaved = true;

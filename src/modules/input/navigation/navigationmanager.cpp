@@ -3,7 +3,7 @@
 #include "navigationmanager.h"
 #include "artworkutils.h"
 #include "collectionbackgroundcontroller.h"
-#include "detailspane.h"
+#include "idetailspane.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
 #include "idetailspanemanager.h"
@@ -325,9 +325,9 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
       // When showAllSubfolderItems is true, also check subdirectories for files
       // This handles cases where the root mediaDirectory has no files but
       // subdirs do
-      if (!hasItems && collection.includeContentSubfolders && collection.showAllSubfolderItems) {
+      if (!hasItems && collection.folderBrowsing.includeContentSubfolders && collection.folderBrowsing.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
-        if (collection.showHiddenFolders) {
+        if (collection.folderBrowsing.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
         }
         QStringList subdirs = dir.entryList(dirFilters);
@@ -345,9 +345,9 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
       // Also check for virtual folders (subdirectories as navigable content)
       // when includeContentSubfolders is enabled and showAllSubfolderItems is
       // false
-      if (!hasItems && collection.includeContentSubfolders && !collection.showAllSubfolderItems) {
+      if (!hasItems && collection.folderBrowsing.includeContentSubfolders && !collection.folderBrowsing.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
-        if (collection.showHiddenFolders) {
+        if (collection.folderBrowsing.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
         }
         hasItems = !dir.entryList(dirFilters).isEmpty();

@@ -259,7 +259,7 @@ void VirtualScrollEngine::recreateLayout() {
   positionVirtualContainer();
   bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
   int fontSize =
-      isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
+      isListMode ? m_owner->m_context.config.listView.listFontSize : m_owner->m_context.config.gridLayout.fontSize;
   // scale before push so item titles match the active zoom.
   fontSize = TextZoom::zoomedFontSize(fontSize);
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
@@ -270,7 +270,7 @@ void VirtualScrollEngine::recreateLayout() {
     widget->setHideTitles(m_owner->m_context.config.hideTitles);
     widget->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
     widget->setFontSize(fontSize);
-    widget->setCornerRadius(m_owner->m_context.config.cornerRadius);
+    widget->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
     widget->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
     QPoint position = m_owner->getItemPosition(it.key());
     widget->setGeometry(position.x(), position.y(), m_owner->m_metrics.itemWidth,
@@ -504,13 +504,13 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     }
     bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
     int fontSize =
-        isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
+        isListMode ? m_owner->m_context.config.listView.listFontSize : m_owner->m_context.config.gridLayout.fontSize;
     // same as the bulk-update branch above.
     fontSize = TextZoom::zoomedFontSize(fontSize);
     existing->setHideTitles(m_owner->m_context.config.hideTitles);
     existing->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
     existing->setFontSize(fontSize);
-    existing->setCornerRadius(m_owner->m_context.config.cornerRadius);
+    existing->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
     existing->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
     QPoint position = m_owner->getItemPosition(visualIndex);
     existing->setGeometry(position.x(), position.y(), m_owner->m_metrics.itemWidth,
