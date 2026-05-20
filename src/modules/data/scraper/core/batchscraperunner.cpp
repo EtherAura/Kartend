@@ -225,7 +225,9 @@ void BatchScrapeRunner::filterAlreadyScraped() {
       for (const QString &f : files) {
         bases.insert(QFileInfo(f).completeBaseName().toLower());
       }
-      presentByType.insert(type, std::move(bases));
+      // operator[] returns T& so the assignment is a real move; QHash's
+      // (const Key&, const T&) insert overload would have copied.
+      presentByType[type] = std::move(bases);
     }
   }
   // `front` also mirrors to the flat artwork directory ({base}.<ext>)
@@ -258,29 +260,35 @@ void BatchScrapeRunner::filterAlreadyScraped() {
     bool hasTimestamp = false;
     QDateTime timestampUtc;
   };
-  auto metadataPresenceFor = [&](const QString &path,
-                                 const QString &baseName) -> MetaPresence {
+  auto metadataPresenceFor = [&](const QString &path, const QString &baseName) -> MetaPresence {
     MetaPresence out;
     if (dbCheckPossible) {
       const auto md = m_db->loadItemMetadata(m_collectionUuid, path);
       if (!md.source.isEmpty()) {
         out.present = true;
-        QDateTime ts = QDateTime::fromString(md.updatedAt, Qt::ISODate);
-        // toString(Qt::ISODate) writes UTC values without the "Z"
-        // suffix, so fromString() returns a LocalTime-spec datetime
-        // whose values are actually UTC. Re-label as UTC so the
-        // comparison against `cutoff` (UTC) lines up.
+        // ItemMetadataStore writes updated_at via
+        // QDateTime::currentDateTimeUtc().toString(Qt::ISODate), which
+        // emits UTC values without the "Z" suffix; fromString() on
+        // that returns a LocalTime-spec datetime carrying UTC values.
+        // Appending the "Z" before parsing makes ISODate tag the
+        // result as UTC directly — avoids the Qt 6.5-deprecated
+        // setTimeSpec(Qt::UTC) re-label while staying portable to
+        // CI's Qt 6.4.
+        QString tsStr = md.updatedAt;
+        if (!tsStr.isEmpty() && !tsStr.endsWith(QLatin1Char('Z'))) {
+          tsStr.append(QLatin1Char('Z'));
+        }
+        const QDateTime ts = QDateTime::fromString(tsStr, Qt::ISODate);
         if (ts.isValid()) {
-          ts.setTimeSpec(Qt::UTC);
           out.hasTimestamp = true;
           out.timestampUtc = ts;
         }
       }
     }
     if (!out.present && sidecarCheckPossible && !baseName.isEmpty()) {
-      const QString sidecar = QDir(m_artworkDir)
-                                  .filePath(QStringLiteral("metadata/") + baseName +
-                                            QStringLiteral(".json"));
+      const QString sidecar =
+          QDir(m_artworkDir)
+              .filePath(QStringLiteral("metadata/") + baseName + QStringLiteral(".json"));
       const QFileInfo fi(sidecar);
       if (fi.exists() && fi.isFile()) {
         out.present = true;

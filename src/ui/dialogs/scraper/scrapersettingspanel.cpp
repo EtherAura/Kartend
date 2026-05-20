@@ -333,9 +333,8 @@ void ScraperSettingsPanel::connectChangeSignals() {
     // pre-filter the queue (Skip, Fill missing). Hide them under
     // Overwrite / Update changed where every item already flows
     // through to the provider regardless.
-    const bool windowApplies =
-        mode == GeneralSettings::ScraperRescrapeMode::Skip ||
-        mode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+    const bool windowApplies = mode == GeneralSettings::ScraperRescrapeMode::Skip ||
+                               mode == GeneralSettings::ScraperRescrapeMode::FillMissing;
     if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
     if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
     writeModel();
@@ -486,9 +485,8 @@ void ScraperSettingsPanel::refresh() {
     m_skipRecentDaysSpin->setValue(qBound(0, opts.skipRecentScrapeDays, 365));
   }
   // Mirror the visibility rule from the rescrape-combo change handler.
-  const bool windowApplies =
-      opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::Skip ||
-      opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+  const bool windowApplies = opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::Skip ||
+                             opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::FillMissing;
   if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
   if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
   if (m_autoResumeCheck) {

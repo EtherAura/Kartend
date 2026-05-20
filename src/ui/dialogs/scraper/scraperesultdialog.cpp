@@ -2243,10 +2243,9 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
     if (it.value()->isChecked()) mediaFilter.insert(it.key().toLower());
   }
 
-  auto *runner = new Scraper::BatchScrapeRunner(m_scraperCtx.databaseManager, std::move(provider),
-                                                uuid, items, artworkDir, /*fetchPrimaryCover=*/true,
-                                                rescrapeMode, itemConcurrency, skipRecentDays,
-                                                this);
+  auto *runner = new Scraper::BatchScrapeRunner(
+      m_scraperCtx.databaseManager, std::move(provider), uuid, items, artworkDir,
+      /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, skipRecentDays, this);
   runner->setMediaTypeFilter(mediaFilter);
   runner->setWriteMetadata(writeMetadata);
   m_batchRunner = runner;

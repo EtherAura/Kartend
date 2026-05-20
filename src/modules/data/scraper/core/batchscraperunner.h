@@ -123,8 +123,7 @@ public:
                     QString collectionUuid, QStringList paths, QString artworkDir,
                     bool fetchPrimaryCover = true,
                     Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Overwrite,
-                    int itemConcurrency = 1, int skipRecentDays = 0,
-                    QObject *parent = nullptr);
+                    int itemConcurrency = 1, int skipRecentDays = 0, QObject *parent = nullptr);
   ~BatchScrapeRunner() override;
 
   /// Restrict the per-item media-fetch pass to these asset types
