@@ -65,8 +65,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets/items
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets/panes
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/widgets/items
 )
 
 # Qt6 required. 6.4 is the floor: project uses QTimeZone::utc() which was
@@ -278,10 +278,11 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/media/detailpage
   ${SRC_DIR}/modules/media/detailspane
   ${SRC_DIR}/ui
-  ${SRC_DIR}/ui/widgets/items
-  ${SRC_DIR}/ui/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
+  ${SRC_DIR}/widgets/items
+  ${SRC_DIR}/widgets/media
+  ${SRC_DIR}/widgets/overlays
   ${SRC_DIR}/ui/dialogs
   ${SRC_DIR}/ui/dialogs/settings
   ${SRC_DIR}/ui/dialogs/collection

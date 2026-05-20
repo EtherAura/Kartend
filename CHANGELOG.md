@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `.scripts/check-layering.py` now lints `src/widgets/` in addition to
+  `src/utils/`, failing the maintenance build if the neutral widget
+  layer reaches upward into `src/modules/`, `src/ui/`, or `src/core/`
+
 ### Changed
 
 - CI `install-deps` composite action now calls `apt-get install` directly
@@ -17,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runners starting 2026-09-16. Dropping the wrapper costs ~30–60 s per
   job on cache-hit runs but removes the only Node-20 transitive dep in
   Kartend's workflows
+- Shared chrome widgets (`ItemWidget`, `CoverFlowWidget`,
+  `ArtworkPreviewOverlay`, `VideoPreviewWidget`, `VideoThumbnailExtractor`,
+  plus the `ItemPlaceholderRenderer` helper) moved from
+  `src/ui/widgets/{items,media,overlays}/` to a new `src/widgets/` layer
+  that sits between `src/utils/` and `src/modules/`. Callers in
+  `src/modules/input/` and `src/modules/media/` no longer take an upward
+  dep on `src/ui/` to reach these widgets; the include statements
+  themselves are unchanged (CMake resolves them to the new path)
 
 ### Fixed
 

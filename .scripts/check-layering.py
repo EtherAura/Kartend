@@ -3,18 +3,26 @@
 
 Kartend's `src/` is organized into layers, but the build links everything
 into one OBJECT library, so the layering is not compiler-enforced. This
-script enforces the one invariant that must always hold:
+script enforces the invariants that must always hold:
 
-    src/utils/  is the foundation layer and MUST NOT depend on any
-    higher layer (src/modules/, src/ui/, src/core/).
+    src/utils/    is the foundation layer and MUST NOT depend on any
+                  higher layer (src/modules/, src/widgets/, src/ui/,
+                  src/core/).
 
-It maps every quoted `#include "x.h"` in `src/utils/` to the area its
-header actually lives in and fails if a utils file reaches upward.
+    src/widgets/  is the neutral chrome layer (Kartend-jvib) sitting
+                  between utils/ and modules/. The QWidgets in here
+                  must stay "dumb" — pixmaps, strings, Qt signals — so
+                  input/media can include them without a transitive
+                  upward dep on src/ui/ or src/core/. They MUST NOT
+                  include from src/modules/, src/ui/, or src/core/.
+
+It maps every quoted `#include "x.h"` in those directories to the area
+its header actually lives in and fails if a file reaches upward.
 
 This is the first guardrail for issue "module folders don't enforce
 layering" — the eventual fix is to split each top-level module into its
 own library with explicit `target_link_libraries`. Until then, this lint
-stops the foundation layer from silently accreting upward edges.
+stops the foundation/widgets layers from silently accreting upward edges.
 
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
 """
@@ -56,33 +64,48 @@ def main() -> int:
         return 2
 
     area = header_area_map()
-    upward = {"modules", "ui", "core"}
-    violations: list[str] = []
+    # What's "upward" depends on which layer we're checking:
+    #   utils/   — nothing above is reachable (utils is the floor)
+    #   widgets/ — modules/, ui/, core/ are above; utils/ + widgets/ are OK
+    # The eventual hchk split will make this CMake-enforced; until then the
+    # lint is the only guardrail.
+    layer_upward = {
+        "utils": {"modules", "widgets", "ui", "core"},
+        "widgets": {"modules", "ui", "core"},
+    }
+    violations: list[tuple[str, str, str, str]] = []  # (layer, file, include, target)
 
-    for path in sorted((SRC / "utils").rglob("*")):
-        if path.suffix not in (".cpp", ".h"):
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for inc in INCLUDE_RE.findall(text):
-            base = inc.rsplit("/", 1)[-1]
-            if base in ALLOWLIST:
+    for layer, upward in layer_upward.items():
+        for path in sorted((SRC / layer).rglob("*")):
+            if path.suffix not in (".cpp", ".h"):
                 continue
-            target = area.get(base)
-            if target in upward:
-                rel = path.relative_to(REPO)
-                violations.append(f"  {rel}  ->  {inc}  (in src/{target}/)")
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for inc in INCLUDE_RE.findall(text):
+                base = inc.rsplit("/", 1)[-1]
+                if base in ALLOWLIST:
+                    continue
+                target = area.get(base)
+                if target in upward:
+                    rel = str(path.relative_to(REPO))
+                    violations.append((layer, rel, inc, target))
 
     if violations:
-        print("check-layering: foundation layer (src/utils/) reaches upward:")
-        print("\n".join(violations))
+        by_layer: dict[str, list[str]] = {}
+        for layer, rel, inc, target in violations:
+            by_layer.setdefault(layer, []).append(f"  {rel}  ->  {inc}  (in src/{target}/)")
+        for layer, lines in by_layer.items():
+            print(f"check-layering: src/{layer}/ reaches upward:")
+            print("\n".join(lines))
         print(
-            "\nsrc/utils/ must not include from src/modules|ui|core. "
-            "Move the shared code down into src/utils/, or invert the "
-            "dependency."
+            "\nFix: move the shared header into a lower layer, or invert "
+            "the dependency (callbacks/signals instead of #include)."
         )
         return 1
 
-    print("check-layering: OK — src/utils/ stays within the foundation layer")
+    print(
+        "check-layering: OK — src/utils/ and src/widgets/ stay within "
+        "their layers"
+    )
     return 0
 
 

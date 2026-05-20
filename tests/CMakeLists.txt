@@ -212,19 +212,20 @@ set_tests_properties(PlaceholderWarmer PROPERTIES
 add_executable(test_widgetpoolmanager
   modules/widgetpool/test_widgetpoolmanager.cpp
   ${SRC_DIR}/modules/input/widgetpool/widgetpoolmanager.cpp
-  ${SRC_DIR}/ui/widgets/items/itemplaceholderrenderer.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetpaint.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetplaceholder.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetsetters.cpp
+  ${SRC_DIR}/widgets/items/itemplaceholderrenderer.cpp
+  ${SRC_DIR}/widgets/items/itemwidget.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetindicator.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetlifecycle.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetpaint.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetplaceholder.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetsetters.cpp
 )
 target_include_directories(test_widgetpoolmanager PRIVATE
   ${SRC_DIR}/modules/input/widgetpool
-  ${SRC_DIR}/ui/widgets/items
-  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/widgets/items
+  ${SRC_DIR}/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
 )
 target_link_libraries(test_widgetpoolmanager
@@ -241,9 +242,10 @@ add_executable(test_emptystatewidget
 )
 target_include_directories(test_emptystatewidget PRIVATE
   ${SRC_DIR}/modules/input/navigation
-  ${SRC_DIR}/ui/widgets/items
-  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/widgets/items
+  ${SRC_DIR}/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
 )
 target_link_libraries(test_emptystatewidget
@@ -261,15 +263,16 @@ add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
 # not actually started during the test.
 add_executable(test_coverflowwidget
   ui/widgets/test_coverflowwidget.cpp
-  ${SRC_DIR}/ui/widgets/items/coverflowwidget.cpp
-  ${SRC_DIR}/ui/widgets/media/videopreviewwidget.cpp
-  ${SRC_DIR}/ui/widgets/media/videothumbnailextractor.cpp
+  ${SRC_DIR}/widgets/items/coverflowwidget.cpp
+  ${SRC_DIR}/widgets/media/videopreviewwidget.cpp
+  ${SRC_DIR}/widgets/media/videothumbnailextractor.cpp
   ${SRC_DIR}/utils/fs/extensionutils.cpp
 )
 target_include_directories(test_coverflowwidget PRIVATE
-  ${SRC_DIR}/ui/widgets/items
-  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/widgets/items
+  ${SRC_DIR}/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
   ${SRC_DIR}/ui
 )
@@ -681,13 +684,13 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/data/cache/cachemanager.cpp
   ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/utils/app/interactionstateholder.cpp
-  ${SRC_DIR}/ui/widgets/items/itemplaceholderrenderer.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetpaint.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetplaceholder.cpp
-  ${SRC_DIR}/ui/widgets/items/itemwidgetsetters.cpp
+  ${SRC_DIR}/widgets/items/itemplaceholderrenderer.cpp
+  ${SRC_DIR}/widgets/items/itemwidget.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetindicator.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetlifecycle.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetpaint.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetplaceholder.cpp
+  ${SRC_DIR}/widgets/items/itemwidgetsetters.cpp
   ${SRC_DIR}/utils/view/artworkutils.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/fs/extensionutils.cpp
@@ -703,9 +706,10 @@ target_include_directories(test_artworkmanager PRIVATE
   ${SRC_DIR}/modules/media/artwork
   ${SRC_DIR}/modules/data/cache
   ${SRC_DIR}/modules/input/interaction
-  ${SRC_DIR}/ui/widgets/items
-  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/widgets/items
+  ${SRC_DIR}/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
