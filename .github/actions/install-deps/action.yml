@@ -23,6 +23,41 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Two preparation steps that real GHA's runner image already covers,
+    # but `act`'s catthehacker/ubuntu:full-24.04 image does not:
+    #
+    # 1. Refresh apt lists. The cache wrapper's pre-cache step does
+    #    `apt-cache show <pkg>` on every requested name; on GHA the
+    #    runner image ships a populated apt index, but full-24.04 ships
+    #    with the lists pruned, so a truly fresh `act` run fails with
+    #    "Unable to locate package clang" before the cache even checks.
+    #
+    # 2. Pre-create the dirs apt-fast resolves at startup. apt-fast
+    #    runs
+    #      DLDIR="$(realpath "${APTCACHE}/../apt-fast")"
+    #    where APTCACHE=/var/cache/apt/archives/ (the trailing slash
+    #    comes from `apt-config shell APTCACHE Dir::Cache::archives/d`).
+    #    `realpath` (no `-m`) refuses to canonicalize a path whose
+    #    components don't exist — BOTH `archives/` (for the `..`
+    #    traversal) AND `apt-fast/` (for the final component) need to
+    #    be on disk before apt-fast is even invoked. GHA runners ship
+    #    with both directories present; act's catthehacker image
+    #    doesn't have `/var/cache/apt/archives/` at all (it's created
+    #    lazily by `apt-get install`, never reached if apt-fast aborts
+    #    first). Without these mkdirs the local act run dies with
+    #    "realpath: /var/cache/apt/archives//../apt-fast: No such
+    #    file or directory" before downloading anything.
+    #
+    # Both are tiny no-ops on real CI (~5s update, mkdir on existing
+    # dirs) and let `act` bootstrap from a truly empty state.
+    - name: Update apt package index
+      shell: bash
+      run: sudo apt-get update -qq
+
+    - name: Pre-create apt-fast download directories
+      shell: bash
+      run: sudo mkdir -p /var/cache/apt/archives /var/cache/apt/apt-fast
+
     - name: Install apt packages (with cache)
       uses: awalsh128/cache-apt-pkgs-action@v1
       with:

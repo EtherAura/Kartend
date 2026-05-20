@@ -19,7 +19,25 @@
 #   .scripts/ci-local.sh tidy            # maintenance-check (clang-tidy/format/cppcheck)
 #   .scripts/ci-local.sh list            # show available jobs
 #   .scripts/ci-local.sh shell           # drop into an interactive runner container
+#   .scripts/ci-local.sh prune           # wipe the persistent act state (volumes + cache)
 #   .scripts/ci-local.sh -- <act args>   # raw passthrough, e.g. .scripts/ci-local.sh -- -j build --verbose
+#
+# Why prune exists:
+#   `act` creates one named Docker volume per job+matrix cell (e.g.
+#   `act-Build-and-Test-build-<hash>`) and REUSES it on subsequent runs.
+#   `actions/checkout@v6` is emulated as a plain `docker cp` of the host
+#   working tree into the container — files in the volume that no longer
+#   exist on host (e.g. a header that was renamed in a refactor) are NOT
+#   deleted by the cp, so the build sees BOTH the current source AND the
+#   stale leftover at the old path. That produced phantom CI failures
+#   (Kartend-fzuv: pre-bb23bb5 `src/modules/data/database/idatabasemanager.h`
+#   surviving inside the per-job volume long after the refactor moved it
+#   to `src/api/`). Every run with --reuse-the-default behaviour inherits
+#   the rot. Each regular subcommand here auto-prunes job volumes that
+#   match the matrix being run, so a `build:rel:gcc` invocation only
+#   wipes the gcc Release volume — fast, predictable, and leaves the
+#   actcache (apt-pkgs index, ccache tarballs) alone so warm runs stay
+#   warm. Use the `prune` subcommand for the nuclear option.
 set -euo pipefail
 
 ACT_MIN_VERSION="0.2.86"
@@ -73,12 +91,79 @@ info "using $ACT_BIN ($ACT_VERSION)"
 # but doesn't create it. Doing so here makes the first invocation clean.
 mkdir -p /tmp/act-artifacts
 
+# Wipe the act-managed Docker volume(s) for a job before running it. The
+# volume persists across runs (it's the workspace bind-mount target the
+# emulated `actions/checkout` cps INTO), so a renamed/deleted file from a
+# previous run is left lying around and the build resurrects it.
+#
+# `pattern` matches volume names with `docker volume ls --filter name=`,
+# which is a SUBSTRING match. The act naming convention is
+# `act-<workflow-name>-<job-name>[-<matrix-cell>]-<hash>` plus a paired
+# `*-env` volume. Passing `act-Build-and-Test-build-` matches every
+# `build` matrix cell; pass a longer prefix to scope tighter. Empty
+# pattern intentionally matches every act-managed volume (the `prune`
+# subcommand's nuclear case) — we never blank-default this in the
+# regular flow.
+#
+# act-toolcache is the cross-job tool cache (setup-* actions) and never
+# holds workspace files; preserved across all prune modes so warm runs
+# don't re-download Node/Python/etc. each time.
+prune_act_volumes() {
+  local pattern="$1"
+  if [ -z "$pattern" ]; then
+    err "internal: prune_act_volumes called without a pattern"
+    return 2
+  fi
+  local volumes
+  volumes="$(docker volume ls -q --filter "name=$pattern" 2>/dev/null \
+    | grep -v '^act-toolcache$' || true)"
+  if [ -z "$volumes" ]; then
+    return 0
+  fi
+  # A leftover container from a previous run can be holding the volume,
+  # which makes `docker volume rm` refuse. Containers share the volume's
+  # name prefix, so the same `--filter name=` matches the ones we need to
+  # tear down first. Real GHA workers don't have this case — each runner
+  # is a fresh VM — so this teardown is purely an act-side concern.
+  local containers
+  containers="$(docker ps -aq --filter "name=$pattern" 2>/dev/null || true)"
+  if [ -n "$containers" ]; then
+    echo "$containers" | xargs -r docker rm -f >/dev/null
+  fi
+  info "pruning stale act volumes (pattern=$pattern):"
+  echo "$volumes" | sed 's/^/  /' >&2
+  echo "$volumes" | xargs -r docker volume rm >/dev/null
+}
+
+# Map a subcommand to the volume-name pattern act will use for its jobs.
+# Tight matching keeps unrelated jobs warm across a focused re-run.
+volume_pattern_for() {
+  case "$1" in
+    build:rel:gcc|build:rel:clang|build:dbg:gcc|build:dbg:clang|build) echo "act-Build-and-Test-build-" ;;
+    no-zstd)                                                            echo "act-Build-and-Test-build-no-zstd-" ;;
+    asan|sanitizers)                                                    echo "act-Build-and-Test-sanitizers-" ;;
+    tsan|thread-sanitizer)                                              echo "act-Build-and-Test-thread-sanitizer-" ;;
+    coverage|cov)                                                       echo "act-Build-and-Test-coverage-" ;;
+    tidy|maintenance|maintenance-check)                                 echo "act-Build-and-Test-maintenance-check-" ;;
+    all|"")                                                             echo "act-Build-and-Test-" ;;
+    *)                                                                  echo "" ;;
+  esac
+}
+
 ARG="${1:-all}"
 shift || true
 
 case "$ARG" in
   list|--list|-l)
     exec "$ACT_BIN" -l
+    ;;
+
+  prune)
+    # Nuclear: remove every act-managed job volume (keeps act-toolcache).
+    # Leaves ~/.cache/actcache alone so apt-pkgs / ccache snapshots survive.
+    prune_act_volumes "act-Build-and-Test-"
+    info "prune complete; ~/.cache/actcache preserved"
+    exit 0
     ;;
 
   shell|sh)
@@ -96,29 +181,37 @@ case "$ARG" in
     ;;
 
   build)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build "$@"
     ;;
 
   build:rel:gcc)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build --matrix build_type:Release --matrix compiler:gcc "$@"
     ;;
   build:rel:clang)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build --matrix build_type:Release --matrix compiler:clang "$@"
     ;;
   build:dbg:gcc)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build --matrix build_type:Debug --matrix compiler:gcc "$@"
     ;;
   build:dbg:clang)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build --matrix build_type:Debug --matrix compiler:clang "$@"
     ;;
 
   no-zstd)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j build-no-zstd "$@"
     ;;
   asan|sanitizers)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j sanitizers "$@"
     ;;
   tsan|thread-sanitizer)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j thread-sanitizer "$@"
     ;;
   coverage|cov)
@@ -126,14 +219,17 @@ case "$ARG" in
     info "      with a 'mime_type' protobuf error. The coverage *measurement*"
     info "      will succeed; only the upload step at the end will fail."
     info "      That step works correctly on real GitHub Actions."
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j coverage "$@"
     ;;
   tidy|maintenance|maintenance-check)
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j maintenance-check "$@"
     ;;
 
   all|"")
     info "running every job sequentially (~1-1.5 hr first time, faster on cache hits)"
+    prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" --concurrent-jobs 1 "$@"
     ;;
 
