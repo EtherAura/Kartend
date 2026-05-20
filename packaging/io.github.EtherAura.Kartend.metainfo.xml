@@ -37,6 +37,47 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.8" date="2026-05-20">
+      <description>
+        <p>
+          Scrape budget gets a live readout: the scrape window now shows
+          your ScreenScraper "requests today" count alongside the time
+          the quota resets, and once the daily request or failed-lookup
+          quota is reported exhausted the run stops on its own instead
+          of burning the rest of the queue.
+        </p>
+        <p>
+          Skip and Fill missing rescrape modes pre-filter the queue
+          before any provider request fires: Skip drops items whose
+          metadata is already present (database row or sidecar JSON on
+          disk, so kart imports and older builds without a DB row are
+          caught too); Fill missing drops items whose ticked checkboxes
+          (metadata plus each selected media type) are all already on
+          disk. A new "Refresh items scraped before" spinbox in scraper
+          settings lets you mark items as eligible for refresh after a
+          chosen number of days (default 30; 0 always skips covered
+          items).
+        </p>
+        <p>
+          Settings dialog redesigned with a sidebar layout: categories
+          live in a navigation list down the left side next to the
+          collection tree and a new search box, replacing the previous
+          nested rows of tabs. Draggable dividers resize the rail and
+          split its height between the tree and the category list, and
+          the dialog remembers its size and divider positions between
+          runs.
+        </p>
+        <p>
+          Reliability and security: PDF manuals no longer crash large
+          scrapes (non-image files are kept out of the image decoder);
+          the scrape window's collection label updates as each
+          collection is reached even when its items all fail; the
+          scrape error list is scrollable and keeps far more detail;
+          scrape logging masks ScreenScraper credentials in any URL
+          written to scrape.log.
+        </p>
+      </description>
+    </release>
     <release version="0.0.7" date="2026-05-17"/>
     <release version="0.0.6" date="2026-05-11">
       <description>

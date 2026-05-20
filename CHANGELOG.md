@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+### Deprecated
+
+### Security
+
+## [0.0.8] - 2026-05-20
+
+### Added
+
 - **Scraping now shows your ScreenScraper request quota and stops
   automatically when the daily limit is reached.** The scrape window
   displays a live "requests today" count with the time the quota

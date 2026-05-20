@@ -1,7 +1,7 @@
 # Maintainer: EtherAura <https://github.com/EtherAura>
 
 pkgname=kartend
-pkgver=0.0.7
+pkgver=0.0.8
 pkgrel=1
 pkgdesc='Qt6 KDE frontend for organizing and launching multimedia collections'
 arch=('x86_64')
