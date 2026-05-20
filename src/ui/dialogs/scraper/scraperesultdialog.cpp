@@ -54,6 +54,7 @@ Q_LOGGING_CATEGORY(lcDialogTimings, "kartend.scrape.timings", QtWarningMsg)
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "extensionutils.h"
 #include "idatabasemanager.h"
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
@@ -1156,6 +1157,17 @@ void ScrapeResultDialog::appendThumbAsync(const QString &path) {
   // are dropped harmlessly. Each completion appends one row and
   // auto-scrolls; out-of-order completion across concurrent items
   // is fine since the strip just shows "most recently completed".
+  //
+  // ScraperService::itemScraped reports every media path it just
+  // wrote — covers, screenshots, AND the manual `.pdf`. Feeding a
+  // PDF to QImage routes through Qt's libqpdf imageformats plugin,
+  // which is PDFium-backed and calls abort() on some inputs; the
+  // SIGTRAP took down kartend at the 1681/1878 mark of a 3 h scrape
+  // (Kartend-wquq). Gate on the same helper artworkloaddispatcher
+  // already uses so non-image media silently skip the thumb strip.
+  if (!ExtensionUtils::isDecodableImagePath(path)) {
+    return;
+  }
   auto *watcher = new QFutureWatcher<QPair<QString, QImage>>(this);
   connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher]() {
     watcher->deleteLater();
@@ -1380,6 +1392,12 @@ void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QStrin
     QListWidgetItem *restoreLast = nullptr;
     for (const QString &p : m_service->recentMediaPaths()) {
       if (p.isEmpty()) continue;
+      // Same PDFium-abort guard as appendThumbAsync — recentMediaPaths
+      // mirrors what itemScraped emits, so it includes the manual
+      // `.pdf` for every game. QPixmap here runs on the MAIN UI
+      // thread; a SIGTRAP here would crash the dialog before the user
+      // could even close it.
+      if (!ExtensionUtils::isDecodableImagePath(p)) continue;
       QPixmap pm(p);
       if (pm.isNull()) continue;
       auto *row = new QListWidgetItem(

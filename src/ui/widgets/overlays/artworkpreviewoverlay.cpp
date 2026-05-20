@@ -1,6 +1,7 @@
 // Artwork / video preview overlay (+).
 #include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
+#include "extensionutils.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
 #include "videoutils.h"
@@ -73,6 +74,14 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
     return;
   }
 
+  // Gate before QPixmap — Qt's libqpdf imageformats plugin is PDFium-
+  // backed and abort()s on some inputs, killing the main thread
+  // (Kartend-wquq). findArtworkForFile scans the artwork directory and
+  // can return a manual `.pdf` when no image variant exists; without
+  // this guard a click here crashes the whole app.
+  if (!ExtensionUtils::isDecodableImagePath(artworkPath)) {
+    return;
+  }
   QPixmap artwork(artworkPath);
   if (artwork.isNull()) {
     return;
@@ -88,6 +97,11 @@ void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath
   // No m_currentFilePath assignment: the gallery click site doesn't have a
   // media file path to associate, and launchRequested fires with an empty
   // path so listeners fall back to the current selection.
+  // Same PDFium-abort gate as showArtworkForFile — this entry point
+  // receives raw gallery-click paths that could be a `.pdf` manual.
+  if (!ExtensionUtils::isDecodableImagePath(absoluteArtworkPath)) {
+    return;
+  }
   QPixmap artwork(absoluteArtworkPath);
   if (artwork.isNull()) {
     return;
@@ -127,7 +141,7 @@ bool ArtworkPreviewOverlay::showMediaForFile(const QString &filePath,
   if (!artworkDirectory.isEmpty()) {
     const QString artworkPath =
         ArtworkUtils::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDirectory);
-    if (!artworkPath.isEmpty()) {
+    if (!artworkPath.isEmpty() && ExtensionUtils::isDecodableImagePath(artworkPath)) {
       QPixmap artwork(artworkPath);
       if (!artwork.isNull()) {
         m_currentArtworkPath = artworkPath;

@@ -7,6 +7,7 @@
 
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
+#include "extensionutils.h"
 #include "ui_detailspane.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -270,6 +271,16 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
   QElapsedTimer perfLoopTimer;
   if (perfTrace) perfLoopTimer.start();
   for (const DetailsPane::GalleryEntry &entry : m_entries) {
+    // Gallery entries can include non-image media surfaced through the
+    // custom-artwork-link path (e.g. a `.pdf` manual stored under a
+    // user-defined type). QImage(path) on the decode worker below
+    // routes a `.pdf` to Qt's libqpdf imageformats plugin, which is
+    // PDFium-backed and abort()s — taking down the whole process
+    // (Kartend-wquq). Skip the tile entirely so a non-image entry
+    // never reaches QImage. Videos take a separate branch below.
+    if (!entry.isVideo && !ExtensionUtils::isDecodableImagePath(entry.path)) {
+      continue;
+    }
     QPixmap initialPixmap;
     if (entry.isVideo) {
       // Prefer a cached extracted frame; otherwise show a placeholder and

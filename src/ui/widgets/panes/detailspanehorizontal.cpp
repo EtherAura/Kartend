@@ -21,6 +21,7 @@
 #include "collectionutils.h"
 #include "detailspane.h"
 #include "detailspanegalleryview.h"
+#include "extensionutils.h"
 #include "ui_detailspane.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -153,6 +154,12 @@ void DetailsPane::rebuildHorizontalGallery() {
   }
   for (const GalleryEntry &entry : m_galleryView->entries()) {
     if (entry.isVideo) continue; // Live preview tile handles video.
+    // Non-image entries (e.g. a `.pdf` manual surfaced via a custom
+    // artwork-link row) must NEVER reach QImage(path) below — Qt's
+    // libqpdf imageformats plugin is PDFium-backed and abort()s on
+    // some inputs, crashing the whole process (Kartend-wquq). Same
+    // gate the worker-side artworkloaddispatcher already uses.
+    if (!ExtensionUtils::isDecodableImagePath(entry.path)) continue;
     // Path-keyed cache to avoid re-decoding on every selection change.
     // On hit: set the icon synchronously (fast path).
     // On miss: create the button with an empty icon, kick off async
