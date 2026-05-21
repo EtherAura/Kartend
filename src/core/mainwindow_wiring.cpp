@@ -14,12 +14,14 @@
 //                                    onCollectionScanCompleted*,
 //                                    refreshCollectionSummaryOnScanCompleted,
 //                                    refreshFilterToolbarOnItemsLoaded)
-//   * mainwindow_scrollevents.cpp — ScrollManager view-mode / column-resize /
+//   * ScrollEventsController      — ScrollManager view-mode / column-resize /
 //                                    CoverFlow event handlers
 //                                    (onSortModeChangeRequested,
 //                                    onSelectItemByIndex,
 //                                    onCoverFlow*, onArtworkPreviewVisibilityChanged,
-//                                    onList*ColumnWidthChanged)
+//                                    onList*ColumnWidthChanged).
+//                                    Extracted from MainWindow per Kartend-hzef;
+//                                    lives in scrolleventscontroller.{h,cpp}.
 //   * mainwindow_scraper.cpp      — scraper-service lifecycle entry points
 //                                    (openScraperDialog,
 //                                    promptResumePendingScrapeIfAny) and
@@ -68,7 +70,7 @@
 //     requestItemsRange         → fetchItemsRange
 //   ScrollManager → InteractionManager
 //     artworkPreviewLaunchRequested → onArtworkPreviewLaunchRequested
-//   ScrollManager → MainWindow (handlers in mainwindow_scrollevents.cpp)
+//   ScrollManager → ScrollEventsController (Kartend-hzef extraction)
 //     sortModeChangeRequested   → onSortModeChangeRequested
 //     selectItemByIndex         → onSelectItemByIndex
 //     coverFlowActiveChanged    → onCoverFlowActiveChanged
@@ -76,6 +78,7 @@
 //     coverFlowItemActivated    → onCoverFlowItemActivated
 //     listColumnWidthChanged    → onListColumnWidthChanged
 //     listArtworkColumnWidthChanged → onListArtworkColumnWidthChanged
+//   ScrollManager → MainWindow
 //     filterChanged             → onScrollFilterChanged
 //
 //   ArtworkManager::TimerCoordinator → MainWindow
@@ -111,12 +114,14 @@
 //    new edges can't smuggle behaviour into the wiring file.
 //
 // 3. **Slot bodies live elsewhere when they outgrow one screen.** The
-//    extracted TUs (mainwindow_dbevents.cpp, mainwindow_scrollevents.cpp,
-//    mainwindow_scraper.cpp) own the larger responsibility-segmented
-//    handlers; the small wiring-adjacent slots that read naturally next
-//    to their connect() stay here. When a new slot would push this TU's
-//    inline-handler section over ~150 LOC, extract a sibling TU keyed by
-//    its emitter (e.g. mainwindow_artworkevents.cpp).
+//    extracted TUs (mainwindow_dbevents.cpp, mainwindow_scraper.cpp) and
+//    the extracted Controllers (ScrollEventsController per Kartend-hzef)
+//    own the larger responsibility-segmented handlers; the small
+//    wiring-adjacent slots that read naturally next to their connect()
+//    stay here. When a new slot would push this TU's inline-handler
+//    section over ~150 LOC, extract a sibling TU keyed by its emitter
+//    (e.g. mainwindow_artworkevents.cpp) or — preferred for new work —
+//    a sibling Controller class under src/core/.
 //
 // 4. **Growth ceiling: ~800 LOC.** Above that, split the connect() tables
 //    by emitter family:
@@ -144,6 +149,7 @@
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "navigationmanager.h"
+#include "scrolleventscontroller.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
@@ -154,8 +160,8 @@
 // =====================================================================
 // Small slot handlers that live alongside their connect()s — too small
 // to justify their own TU. Larger responsibility-segmented handlers live
-// in mainwindow_dbevents.cpp / mainwindow_scrollevents.cpp /
-// mainwindow_scraper.cpp.
+// in mainwindow_dbevents.cpp / mainwindow_scraper.cpp or in extracted
+// Controllers under src/core/ (see ScrollEventsController).
 // =====================================================================
 
 void MainWindow::onArtworkViewportUpdateRequested() {
@@ -310,21 +316,35 @@ void MainWindow::connectScrollManager() {
                      &InteractionManager::onArtworkPreviewLaunchRequested);
   }
 
-  // ScrollManager → MainWindow
-  QObject::connect(scroll, &ScrollManager::sortModeChangeRequested, this,
-                   &MainWindow::onSortModeChangeRequested);
-  QObject::connect(scroll, &ScrollManager::selectItemByIndex, this,
-                   &MainWindow::onSelectItemByIndex);
-  QObject::connect(scroll, &ScrollManager::coverFlowActiveChanged, this,
-                   &MainWindow::onCoverFlowActiveChanged);
-  QObject::connect(scroll, &ScrollManager::artworkPreviewVisibilityChanged, this,
-                   &MainWindow::onArtworkPreviewVisibilityChanged);
-  QObject::connect(scroll, &ScrollManager::coverFlowItemActivated, this,
-                   &MainWindow::onCoverFlowItemActivated);
-  QObject::connect(scroll, &ScrollManager::listColumnWidthChanged, this,
-                   &MainWindow::onListColumnWidthChanged);
-  QObject::connect(scroll, &ScrollManager::listArtworkColumnWidthChanged, this,
-                   &MainWindow::onListArtworkColumnWidthChanged);
+  // ScrollManager → ScrollEventsController (extracted from MainWindow,
+  // Kartend-hzef). Context is wired here because every manager pointer
+  // the controller needs is already resolved above.
+  ScrollEventsControllerContext sec;
+  sec.getNavigationManager = [this]() { return getNavigationManager(); };
+  sec.getInteractionManager = [this]() { return getInteractionManager(); };
+  sec.getScrollManager = [this]() { return getScrollManager(); };
+  sec.getSettingsManager = [this]() { return getSettingsManager(); };
+  sec.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
+  sec.getDatabaseManager = [this]() { return getDatabaseManager(); };
+  sec.getGeneralSettings = [this]() { return &m_generalSettings; };
+  sec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  m_scrollEventsController->setContext(sec);
+
+  auto *secCtl = m_scrollEventsController.get();
+  QObject::connect(scroll, &ScrollManager::sortModeChangeRequested, secCtl,
+                   &ScrollEventsController::onSortModeChangeRequested);
+  QObject::connect(scroll, &ScrollManager::selectItemByIndex, secCtl,
+                   &ScrollEventsController::onSelectItemByIndex);
+  QObject::connect(scroll, &ScrollManager::coverFlowActiveChanged, secCtl,
+                   &ScrollEventsController::onCoverFlowActiveChanged);
+  QObject::connect(scroll, &ScrollManager::artworkPreviewVisibilityChanged, secCtl,
+                   &ScrollEventsController::onArtworkPreviewVisibilityChanged);
+  QObject::connect(scroll, &ScrollManager::coverFlowItemActivated, secCtl,
+                   &ScrollEventsController::onCoverFlowItemActivated);
+  QObject::connect(scroll, &ScrollManager::listColumnWidthChanged, secCtl,
+                   &ScrollEventsController::onListColumnWidthChanged);
+  QObject::connect(scroll, &ScrollManager::listArtworkColumnWidthChanged, secCtl,
+                   &ScrollEventsController::onListArtworkColumnWidthChanged);
   QObject::connect(scroll, &ScrollManager::filterChanged, this, &MainWindow::onScrollFilterChanged);
 
   // ArtworkManager::TimerCoordinator → MainWindow

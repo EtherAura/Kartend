@@ -74,6 +74,7 @@ src/
 | `main.cpp` | Application entry point that initializes Qt and displays the main window. |
 | `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. |
 | `marqueecontroller` | Drives the secondary-monitor marquee / topper window — owns the MarqueeWindow and the artwork-refresh debounce timer (extracted from MainWindow). |
+| `scrolleventscontroller` | Owns MainWindow's reactions to ScrollManager view-mode / column-resize / CoverFlow activation signals (sort-mode change, list-column-width persist, CoverFlow item-launch, sidebar-yield for CoverFlow / artwork-preview overlay). Replaces the prior `mainwindow_scrollevents.cpp` partial (Kartend-hzef). |
 
 ## Modules (`src/modules/`)
 

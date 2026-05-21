@@ -50,6 +50,7 @@
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
+#include "scrolleventscontroller.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
 #include "overlaylayermanager.h"
@@ -90,6 +91,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_appManager->initialize(&m_appContext);
   m_scraperService = std::make_unique<Scraper::ScraperService>(this);
   m_marqueeController = std::make_unique<MarqueeController>(this);
+  m_scrollEventsController = std::make_unique<ScrollEventsController>(this);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
   // against a live instance. The manager owns no widgets — overlays remain

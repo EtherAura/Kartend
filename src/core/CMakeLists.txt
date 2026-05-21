@@ -3,18 +3,19 @@ target_sources(kartend_core PRIVATE
   mainwindow.cpp
   mainwindow_dbevents.cpp
   mainwindow_scraper.cpp
-  mainwindow_scrollevents.cpp
   mainwindow_setup.cpp
   mainwindow_timers.cpp
   mainwindow_toolbar.cpp
   mainwindow_wiring.cpp
   marqueecontroller.cpp
   menucontroller.cpp
+  scrolleventscontroller.cpp
   toolbarcontroller.cpp
   gridwidthdebouncer.h
   mainwindow.h
   marqueecontroller.h
   menucontroller.h
+  scrolleventscontroller.h
   toolbarcontroller.h
   mainwindow.ui
 )

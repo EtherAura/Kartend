@@ -50,6 +50,7 @@ class DetailPageOverlay;
 class DetailPageManager;
 class MenuController;
 class MarqueeController;
+class ScrollEventsController;
 class TextZoomHud;
 class ISettingsDialog;
 class OverlayLayerManager;
@@ -266,6 +267,10 @@ private:
   /// artwork-refresh debounce timer. applyMarqueeSettings() and
   /// updateMarqueeArtwork() delegate straight to it.
   std::unique_ptr<MarqueeController> m_marqueeController;
+  /// Owns MainWindow's reactions to ScrollManager view-mode / column-resize
+  /// / CoverFlow activation signals. Replaces the mainwindow_scrollevents.cpp
+  /// partial (Kartend-hzef).
+  std::unique_ptr<ScrollEventsController> m_scrollEventsController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -351,14 +356,9 @@ private:
   void onCollectionScanCompletedOverlay(const QString &uuid);
   void onScanItemsProgress(int itemsProcessed, int totalItems);
   void refreshCollectionSummaryOnScanCompleted(const QString &uuid);
-  // ScrollManager edges
-  void onSortModeChangeRequested(SortMode sortMode);
-  void onSelectItemByIndex(int index);
-  void onCoverFlowActiveChanged(bool active);
-  void onArtworkPreviewVisibilityChanged(bool visible);
-  void onCoverFlowItemActivated(int index);
-  void onListColumnWidthChanged(int width);
-  void onListArtworkColumnWidthChanged(int width);
+  // ScrollManager edges — most are owned by m_scrollEventsController; only
+  // the filter-changed slot still has MainWindow-side responsibilities and
+  // stays here for now.
   void onScrollFilterChanged(int visible, int total);
   // ArtworkManager TimerCoordinator edges
   void onArtworkViewportUpdateRequested();
