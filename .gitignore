@@ -55,6 +55,13 @@ CMakeLists.txt.user*
 __pycache__/
 *.pyc
 
+# Python virtualenvs (canonical path is .scripts/.venv/; .scripts/venv/ is
+# the legacy path some setups still use). Both also self-protect via the
+# inner .gitignore Python writes inside the venv directory, but listing
+# them here is defense in depth.
+.venv/
+venv/
+
 # Logs and crash dumps
 *.log
 /core

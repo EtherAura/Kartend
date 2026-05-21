@@ -20,12 +20,12 @@ Combination Capacity:
     Easily supports 1 million+ unique filenames.
 
 Usage:
-    # Setup venv first:
-    cd scripts
+    # Setup venv first (matches docs/seed-data.md):
+    cd .scripts
     python -m venv .venv
-    source venv/bin/activate.fish  # or activate.sh for bash
+    source .venv/bin/activate.fish  # or .venv/bin/activate for bash
     pip install -r requirements.txt
-    
+
     # Then run:
     python generate_seed_data.py [--count N] [--output-dir DIR]
     
@@ -46,9 +46,9 @@ try:
     from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     print("Required dependencies not found. Setup a venv first:")
-    print("  cd scripts")
-    print("  python -m venv venv")
-    print("  source venv/bin/activate.fish  # or activate for bash")
+    print("  cd .scripts")
+    print("  python -m venv .venv")
+    print("  source .venv/bin/activate.fish  # or .venv/bin/activate for bash")
     print("  pip install -r requirements.txt")
     exit(1)
 
