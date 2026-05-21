@@ -33,8 +33,10 @@ class QTreeWidgetItem;
 class QWidget;
 QT_END_NAMESPACE
 
+class BatchScrapeProgressView;
 class IDatabaseManager;
 class MetadataLookupProvider;
+class SingleItemScrapeView;
 struct GeneralSettings;
 
 /// Unified scraper dialog. Replaces the old per-item-only ScrapeResultDialog
@@ -164,7 +166,7 @@ public:
 
   /// Summary captured from the BatchScrapeRunner's `finished` signal.
   /// Only meaningful after exec() returns in batch mode.
-  [[nodiscard]] Scraper::BatchScrapeRunner::Summary batchSummary() const { return m_batchSummary; }
+  [[nodiscard]] Scraper::BatchScrapeRunner::Summary batchSummary() const;
 
 signals:
   /// Emitted after a unified-flow scrape completes (auto or
@@ -203,9 +205,7 @@ private:
   enum class UnifiedPhase { Setup, AutoRunning, InteractiveLookingUp, InteractivePicking, Done };
 
   void buildUi();
-  void buildBatchPanel();
   void buildUnifiedPanel();
-  void populateMediaCheckboxes(const Scraper::ScrapedItem &item);
   void downloadNextSelectedMedia();
   /// Format the elapsed/ETA strings shared by both modes. `etaMs` is
   /// the projected milliseconds remaining; pass <= 0 to display "—".
@@ -214,7 +214,6 @@ private:
   /// the "items done / total · rate · ETA" formatting so the two modes
   /// stay visually consistent.
   void updateSingleItemProgress(int completed);
-  void updateBatchProgress(int done, int total, const QString &currentName);
 
   // ── Unified flow helpers ────────────────────────────────────────
   void populateCollectionTree();
@@ -254,30 +253,16 @@ private:
   // Loading state for the currently-selected candidate.
   int m_currentRow = -1;
   Scraper::ScrapedItem m_currentDetail;
-  // Per-media-row checkbox + asset pairing for the active detail.
-  QList<QPair<QCheckBox *, Scraper::MediaAsset>> m_mediaRows;
 
-  QListWidget *m_candidateList = nullptr;
-  QStackedWidget *m_detailStack = nullptr; // 0 = empty, 1 = loading, 2 = detail
-  QLabel *m_emptyLabel = nullptr;
-  QLabel *m_loadingLabel = nullptr;
-  QTextBrowser *m_detailText = nullptr;
-  QListWidget *m_mediaList = nullptr;
   QPushButton *m_applyButton = nullptr;
   QPushButton *m_scrapeButton = nullptr;
-  QLabel *m_statusLabel = nullptr; // mid-Apply progress message
   /// Outer mode-swap: page 0 hosts the existing single-item splitter
   /// (candidate / detail / media); page 1 hosts the batch-progress
   /// panel; page 2 hosts the unified-setup panel.
   QStackedWidget *m_modeStack = nullptr;
-  QWidget *m_singleItemPage = nullptr;
-  QWidget *m_batchPage = nullptr;
+  SingleItemScrapeView *m_singleItemView = nullptr;
+  BatchScrapeProgressView *m_batchView = nullptr;
   QWidget *m_unifiedPage = nullptr;
-  QLabel *m_batchHeaderLabel = nullptr;
-  QLabel *m_batchCurrentLabel = nullptr;
-  QProgressBar *m_batchProgressBar = nullptr;
-  QLabel *m_batchTimingLabel = nullptr;
-  QLabel *m_batchCountsLabel = nullptr;
 
   // ── Unified-page widgets ────────────────────────────────────────
   QTreeWidget *m_collectionTree = nullptr;
@@ -402,8 +387,9 @@ private:
   /// Provider-supplied health/load message surfaced before Apply.
   /// Populated from MetadataLookupProvider::fetchHealthStatus on
   /// dialog construction; hidden when empty so providers without a
-  /// health endpoint don't reserve dead screen space.
-  QLabel *m_healthLabel = nullptr;
+  /// health endpoint don't reserve dead screen space. Owned by
+  /// m_singleItemView; this flag tracks whether Apply should stay
+  /// disabled regardless of candidate selection.
   /// True when the provider reported an upstream-closed condition
   /// the user can't fix from here (SS leecher tier closed, etc.).
   /// Apply stays disabled even after a candidate is selected.
@@ -441,12 +427,6 @@ private:
   /// the dialog's exec() because the caller wires deletion to the
   /// runner's `finished` signal after the dialog handles it.
   Scraper::BatchScrapeRunner *m_batchRunner = nullptr;
-  Scraper::BatchScrapeRunner::Summary m_batchSummary;
-  /// Wall-clock anchor for batch ETA. Set when setBatchRunner is
-  /// called (which is "just before exec/start").
-  qint64 m_batchStartMs = 0;
-  int m_batchTotalItems = 0;
-  QString m_batchCollectionName;
 
   // ── Unified-flow state ──────────────────────────────────────────
   ScraperContext m_scraperCtx;

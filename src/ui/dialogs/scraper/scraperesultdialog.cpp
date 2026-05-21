@@ -5,6 +5,8 @@
 #include "scraperesultdialog.h"
 
 #include "mediatypecheckboxbuilder.h"
+#include "result/batchprogressview.h"
+#include "result/singleitemview.h"
 
 #include <limits>
 #include <QCheckBox>
@@ -137,10 +139,6 @@ private:
   int m_vSpace;
 };
 
-constexpr int STACK_EMPTY = 0;
-constexpr int STACK_LOADING = 1;
-constexpr int STACK_DETAIL = 2;
-
 QString renderDetailHtml(const Scraper::ScrapedItem &item) {
   // Keep the markup minimal — no inline styles, palette-aware via Qt's
   // text rendering. Field rows skipped when empty so the panel stays
@@ -189,7 +187,7 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
   buildUi();
 
   for (const auto &c : m_candidates) {
-    auto *item = new QListWidgetItem(m_candidateList);
+    auto *item = new QListWidgetItem(m_singleItemView->candidateList());
     QString label = c.displayName;
     if (!c.subtitle.isEmpty()) {
       label += QStringLiteral("\n  ") + c.subtitle;
@@ -200,7 +198,7 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
     item->setText(label);
   }
   if (!m_candidates.isEmpty()) {
-    m_candidateList->setCurrentRow(0);
+    m_singleItemView->candidateList()->setCurrentRow(0);
   }
   // ScreenScraper's jeuInfos.php returns exactly one matched game per
   // request — the candidate list ends up with one entry and the user
@@ -209,8 +207,8 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
   // checkboxes. Multi-candidate providers (MusicBrainz / OpenLibrary
   // / TMDB) keep the list since picking between candidates is the
   // whole point of their search response.
-  if (m_candidateList && m_candidates.size() <= 1) {
-    m_candidateList->hide();
+  if (m_singleItemView->candidateList() && m_candidates.size() <= 1) {
+    m_singleItemView->candidateList()->hide();
   }
 
   // Provider health probe — fired once on dialog open. Default
@@ -222,8 +220,8 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
     m_provider->fetchHealthStatus([guard](MetadataLookupProvider::HealthStatus status) {
       if (guard.isNull()) return;
       if (status.humanStatus.isEmpty() && !status.refuseScrape) return;
-      guard->m_healthLabel->setText(status.humanStatus);
-      guard->m_healthLabel->show();
+      guard->m_singleItemView->healthLabel()->setText(status.humanStatus);
+      guard->m_singleItemView->healthLabel()->show();
       if (status.refuseScrape) {
         guard->m_healthBlocksApply = true;
         // Even when a candidate gets selected later,
@@ -443,80 +441,17 @@ void ScrapeResultDialog::buildUi() {
   // the single-item state.
   m_modeStack = new QStackedWidget(this);
 
-  // ── Single-item page (existing layout) ──────────────────────────
-  m_singleItemPage = new QWidget(m_modeStack);
-  auto *singleLayout = new QVBoxLayout(m_singleItemPage);
-  singleLayout->setContentsMargins(0, 0, 0, 0);
-
-  auto *splitter = new QSplitter(Qt::Horizontal, m_singleItemPage);
-
-  m_candidateList = new QListWidget(splitter);
-  m_candidateList->setMinimumWidth(220);
-  connect(m_candidateList, &QListWidget::currentRowChanged, this,
+  // ── Single-item page ────────────────────────────────────────────
+  m_singleItemView = new SingleItemScrapeView(m_modeStack);
+  m_modeStack->addWidget(m_singleItemView);
+  connect(m_singleItemView, &SingleItemScrapeView::candidateRowChanged, this,
           &ScrapeResultDialog::onCandidateSelected);
-  splitter->addWidget(m_candidateList);
-
-  auto *rightContainer = new QWidget(splitter);
-  auto *rightLayout = new QVBoxLayout(rightContainer);
-  rightLayout->setContentsMargins(0, 0, 0, 0);
-
-  m_detailStack = new QStackedWidget(rightContainer);
-  m_emptyLabel = new QLabel(tr("Pick a candidate from the list."), rightContainer);
-  m_emptyLabel->setAlignment(Qt::AlignCenter);
-  m_emptyLabel->setStyleSheet("color: palette(mid);");
-  m_loadingLabel = new QLabel(tr("Loading details…"), rightContainer);
-  m_loadingLabel->setAlignment(Qt::AlignCenter);
-  m_loadingLabel->setStyleSheet("color: palette(mid);");
-  auto *detailContainer = new QWidget(rightContainer);
-  auto *detailLayout = new QVBoxLayout(detailContainer);
-  detailLayout->setContentsMargins(0, 0, 0, 0);
-  m_detailText = new QTextBrowser(detailContainer);
-  m_detailText->setOpenExternalLinks(true);
-  detailLayout->addWidget(m_detailText, 1);
-  auto *mediaHeader = new QLabel(tr("Media to download:"), detailContainer);
-  mediaHeader->setStyleSheet("font-weight: bold;");
-  detailLayout->addWidget(mediaHeader);
-  m_mediaList = new QListWidget(detailContainer);
-  m_mediaList->setSelectionMode(QAbstractItemView::NoSelection);
-  m_mediaList->setMaximumHeight(140);
-  detailLayout->addWidget(m_mediaList);
-
-  m_detailStack->insertWidget(STACK_EMPTY, m_emptyLabel);
-  m_detailStack->insertWidget(STACK_LOADING, m_loadingLabel);
-  m_detailStack->insertWidget(STACK_DETAIL, detailContainer);
-  rightLayout->addWidget(m_detailStack, 1);
-
-  m_healthLabel = new QLabel(rightContainer);
-  m_healthLabel->setWordWrap(true);
-  // Hidden until the provider's health probe lands (or stays hidden
-  // forever for providers that have no probe). Yellow-ish accent so
-  // the line reads as a heads-up — not buried in the same italic
-  // grey the download-progress line uses.
-  m_healthLabel->setStyleSheet(
-      "color: palette(highlight); padding: 4px; background: palette(alternate-base);");
-  m_healthLabel->hide();
-  rightLayout->addWidget(m_healthLabel);
-
-  m_statusLabel = new QLabel(rightContainer);
-  // palette(mid) ran too dim on dark themes — the live "Downloaded N
-  // of M (X.X MiB/s)" readout fades into the dialog background while
-  // the download is in flight, which is the moment the user actually
-  // wants to read it. palette(windowtext) keeps it at the same
-  // contrast as the rest of the dialog text; the italic still
-  // differentiates it from the description body.
-  m_statusLabel->setStyleSheet("color: palette(windowtext); font-style: italic;");
-  rightLayout->addWidget(m_statusLabel);
-
-  splitter->addWidget(rightContainer);
-  splitter->setStretchFactor(0, 0);
-  splitter->setStretchFactor(1, 1);
-  singleLayout->addWidget(splitter, 1);
-
-  m_modeStack->addWidget(m_singleItemPage);
 
   // ── Batch progress page ─────────────────────────────────────────
-  buildBatchPanel();
-  m_modeStack->addWidget(m_batchPage);
+  m_batchView = new BatchScrapeProgressView(m_modeStack);
+  m_modeStack->addWidget(m_batchView);
+  connect(m_batchView, &BatchScrapeProgressView::finished, this,
+          [this](Scraper::BatchScrapeRunner::Summary) { accept(); });
 
   // ── Unified setup page ──────────────────────────────────────────
   buildUnifiedPanel();
@@ -571,40 +506,6 @@ void ScrapeResultDialog::buildUi() {
   });
   connect(m_applyButton, &QPushButton::clicked, this, &ScrapeResultDialog::onApply);
   root->addWidget(buttons);
-}
-
-void ScrapeResultDialog::buildBatchPanel() {
-  m_batchPage = new QWidget(m_modeStack);
-  auto *layout = new QVBoxLayout(m_batchPage);
-  layout->setContentsMargins(20, 20, 20, 20);
-  layout->setSpacing(12);
-
-  m_batchHeaderLabel = new QLabel(m_batchPage);
-  QFont headerFont = m_batchHeaderLabel->font();
-  headerFont.setPointSizeF(headerFont.pointSizeF() * 1.2);
-  headerFont.setBold(true);
-  m_batchHeaderLabel->setFont(headerFont);
-  m_batchHeaderLabel->setWordWrap(true);
-  layout->addWidget(m_batchHeaderLabel);
-
-  m_batchCurrentLabel = new QLabel(m_batchPage);
-  m_batchCurrentLabel->setWordWrap(true);
-  layout->addWidget(m_batchCurrentLabel);
-
-  m_batchProgressBar = new QProgressBar(m_batchPage);
-  m_batchProgressBar->setRange(0, 100);
-  m_batchProgressBar->setValue(0);
-  m_batchProgressBar->setTextVisible(true);
-  layout->addWidget(m_batchProgressBar);
-
-  m_batchTimingLabel = new QLabel(m_batchPage);
-  m_batchTimingLabel->setWordWrap(true);
-  layout->addWidget(m_batchTimingLabel);
-
-  m_batchCountsLabel = new QLabel(m_batchPage);
-  layout->addWidget(m_batchCountsLabel);
-
-  layout->addStretch(1);
 }
 
 void ScrapeResultDialog::buildUnifiedPanel() {
@@ -1764,7 +1665,7 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
             m_detailCache.clear();
             m_currentRow = -1;
             m_currentDetail = Scraper::ScrapedItem();
-            m_mediaRows.clear();
+            m_singleItemView->clearMediaRows();
             // Populate the candidate combo; block signals during the
             // refill so the first-row change doesn't trigger a stray
             // detail fetch before we explicitly call it below.
@@ -2293,25 +2194,25 @@ void ScrapeResultDialog::interactiveOnLookupResult(
   m_detailCache.clear();
   m_currentRow = -1;
   m_currentDetail = Scraper::ScrapedItem();
-  m_mediaRows.clear();
-  m_candidateList->clear();
+  m_singleItemView->clearMediaRows();
+  m_singleItemView->candidateList()->clear();
   for (const auto &c : m_candidates) {
-    auto *item = new QListWidgetItem(m_candidateList);
+    auto *item = new QListWidgetItem(m_singleItemView->candidateList());
     QString label = c.displayName;
     if (!c.subtitle.isEmpty()) label += QStringLiteral("\n  ") + c.subtitle;
     if (c.matchScore >= 0) label += QStringLiteral("  (%1)").arg(c.matchScore);
     item->setText(label);
   }
-  if (m_candidateList && m_candidates.size() <= 1) {
-    m_candidateList->hide();
+  if (m_singleItemView->candidateList() && m_candidates.size() <= 1) {
+    m_singleItemView->candidateList()->hide();
   } else {
-    m_candidateList->show();
+    m_singleItemView->candidateList()->show();
   }
-  m_modeStack->setCurrentWidget(m_singleItemPage);
+  m_modeStack->setCurrentWidget(m_singleItemView);
   m_applyButton->show();
   m_applyButton->setEnabled(false);
   if (m_scrapeButton) m_scrapeButton->hide();
-  if (!m_candidates.isEmpty()) m_candidateList->setCurrentRow(0);
+  if (!m_candidates.isEmpty()) m_singleItemView->candidateList()->setCurrentRow(0);
 }
 
 void ScrapeResultDialog::interactiveOnApplied() {
@@ -2413,7 +2314,7 @@ void ScrapeResultDialog::interactiveOnSkipped() {
 void ScrapeResultDialog::onCandidateSelected(int row) {
   m_currentRow = row;
   if (row < 0 || row >= m_candidates.size()) {
-    m_detailStack->setCurrentIndex(STACK_EMPTY);
+    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Empty);
     m_applyButton->setEnabled(false);
     return;
   }
@@ -2421,14 +2322,14 @@ void ScrapeResultDialog::onCandidateSelected(int row) {
   // Cache hit — re-render without an HTTP roundtrip.
   if (m_detailCache.contains(row)) {
     m_currentDetail = m_detailCache.value(row);
-    m_detailText->setHtml(renderDetailHtml(m_currentDetail));
-    populateMediaCheckboxes(m_currentDetail);
-    m_detailStack->setCurrentIndex(STACK_DETAIL);
+    m_singleItemView->detailText()->setHtml(renderDetailHtml(m_currentDetail));
+    m_singleItemView->populateMediaCheckboxes(m_currentDetail);
+    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
     m_applyButton->setEnabled(!m_healthBlocksApply);
     return;
   }
 
-  m_detailStack->setCurrentIndex(STACK_LOADING);
+  m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Loading);
   m_applyButton->setEnabled(false);
 
   if (!m_provider) {
@@ -2443,46 +2344,21 @@ void ScrapeResultDialog::onCandidateSelected(int row) {
       return;
     }
     if (result.isError()) {
-      m_detailText->setHtml(QStringLiteral("<p style='color:red'>%1</p>")
+      m_singleItemView->detailText()->setHtml(QStringLiteral("<p style='color:red'>%1</p>")
                                 .arg(result.error().message.toHtmlEscaped()));
-      m_mediaList->clear();
-      m_mediaRows.clear();
-      m_detailStack->setCurrentIndex(STACK_DETAIL);
+      m_singleItemView->mediaList()->clear();
+      m_singleItemView->clearMediaRows();
+      m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
       m_applyButton->setEnabled(false);
       return;
     }
     m_currentDetail = result.value();
     m_detailCache.insert(row, m_currentDetail);
-    m_detailText->setHtml(renderDetailHtml(m_currentDetail));
-    populateMediaCheckboxes(m_currentDetail);
-    m_detailStack->setCurrentIndex(STACK_DETAIL);
+    m_singleItemView->detailText()->setHtml(renderDetailHtml(m_currentDetail));
+    m_singleItemView->populateMediaCheckboxes(m_currentDetail);
+    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
     m_applyButton->setEnabled(!m_healthBlocksApply);
   });
-}
-
-void ScrapeResultDialog::populateMediaCheckboxes(const Scraper::ScrapedItem &item) {
-  m_mediaList->clear();
-  m_mediaRows.clear();
-  for (const auto &asset : item.media) {
-    auto *itemWidget = new QListWidgetItem(m_mediaList);
-    QString label = asset.label.isEmpty() ? asset.type : asset.label;
-    // Append a scope hint so users understand that group/company-scoped
-    // checkboxes affect a *family* of games (theme background applied
-    // to every Final Fantasy entry, publisher logo applied to every
-    // Capcom title) rather than this single one. Without it, scraping
-    // a game with a busy theme can land 30 MB of "background" art the
-    // user assumed was per-game.
-    if (asset.scope == Scraper::MediaScope::Group) {
-      label += QStringLiteral(" — ") + tr("theme/family (shared)");
-    } else if (asset.scope == Scraper::MediaScope::Company) {
-      label += QStringLiteral(" — ") + tr("publisher (shared)");
-    }
-    auto *checkbox = new QCheckBox(label, m_mediaList);
-    checkbox->setChecked(true); // Pre-check everything; user unchecks what they don't want.
-    m_mediaList->setItemWidget(itemWidget, checkbox);
-    itemWidget->setSizeHint(checkbox->sizeHint());
-    m_mediaRows.append({checkbox, asset});
-  }
 }
 
 void ScrapeResultDialog::onApply() {
@@ -2519,7 +2395,7 @@ void ScrapeResultDialog::onApply() {
     }
   } else {
     // Legacy single-item / batch path — checkbox-driven media list.
-    for (const auto &row : m_mediaRows) {
+    for (const auto &row : m_singleItemView->mediaRows()) {
       if (row.first->isChecked()) {
         selected.append(row.second);
       }
@@ -2532,12 +2408,12 @@ void ScrapeResultDialog::onApply() {
   }
 
   m_applyButton->setEnabled(false);
-  m_candidateList->setEnabled(false);
+  m_singleItemView->candidateList()->setEnabled(false);
   m_downloadsTotal = selected.size();
   m_downloadsPending = selected.size();
   m_downloadedBytes = 0;
   m_downloadStartMs = QDateTime::currentMSecsSinceEpoch();
-  m_statusLabel->setText(tr("Downloading %1 media items…").arg(m_downloadsTotal));
+  m_singleItemView->statusLabel()->setText(tr("Downloading %1 media items…").arg(m_downloadsTotal));
 
   // Trace the dispatch + each completion so we can tell where time
   // goes during interactive scrape: dialog-side dispatch loop, HttpClient
@@ -2707,7 +2583,7 @@ void ScrapeResultDialog::updateSingleItemProgress(int completed) {
                                              double(m_downloadsTotal - completed));
     etaStr = formatDuration(etaMs);
   }
-  m_statusLabel->setText(tr("Downloaded %1 of %2 (%3) · ETA %4")
+  m_singleItemView->statusLabel()->setText(tr("Downloaded %1 of %2 (%3) · ETA %4")
                              .arg(completed)
                              .arg(m_downloadsTotal)
                              .arg(rateStr)
@@ -2718,61 +2594,18 @@ void ScrapeResultDialog::setBatchRunner(Scraper::BatchScrapeRunner *runner,
                                         const QString &collectionName, int totalItems) {
   m_mode = Mode::Batch;
   m_batchRunner = runner;
-  m_batchCollectionName = collectionName;
-  m_batchTotalItems = std::max(1, totalItems);
-  m_batchStartMs = QDateTime::currentMSecsSinceEpoch();
   // Flip to the batch page; the single-item splitter stays alive but
   // hidden. Apply is meaningless in batch mode — the runner drives
   // every per-item decision — so we hide it. Cancel keeps its slot in
   // the button row and forwards to runner->cancel() via the lambda in
-  // buildUi.
-  if (m_modeStack) m_modeStack->setCurrentWidget(m_batchPage);
+  // buildUi. The BatchScrapeProgressView observes the runner's signals
+  // and emits its own `finished` signal, which the host accepts via
+  // the connect set up in buildUi.
+  if (m_modeStack) m_modeStack->setCurrentWidget(m_batchView);
   if (m_applyButton) m_applyButton->hide();
-
-  m_batchHeaderLabel->setText(tr("Batch scraping '%1'…").arg(collectionName));
-  m_batchCurrentLabel->setText(tr("Preparing…"));
-  m_batchProgressBar->setRange(0, m_batchTotalItems);
-  m_batchProgressBar->setValue(0);
-  m_batchTimingLabel->setText(tr("Elapsed 0s · ETA —"));
-  m_batchCountsLabel->setText(tr("Scraped 0  ·  Skipped 0  ·  Errors 0"));
-
-  if (!runner) return;
-  connect(runner, &Scraper::BatchScrapeRunner::progress, this,
-          &ScrapeResultDialog::updateBatchProgress);
-  connect(runner, &Scraper::BatchScrapeRunner::finished, this,
-          [this](const Scraper::BatchScrapeRunner::Summary &s) {
-            m_batchSummary = s;
-            // Snap the bar to full on completion so the user sees a
-            // finished state for a moment before the dialog closes.
-            m_batchProgressBar->setValue(m_batchTotalItems);
-            m_batchCurrentLabel->setText(tr("Finished."));
-            const qint64 elapsedMs =
-                std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_batchStartMs);
-            m_batchTimingLabel->setText(tr("Elapsed %1 · ETA —").arg(formatDuration(elapsedMs)));
-            m_batchCountsLabel->setText(tr("Scraped %1  ·  Skipped %2  ·  Errors %3")
-                                            .arg(s.scraped)
-                                            .arg(s.skipped)
-                                            .arg(s.errors));
-            accept();
-          });
+  m_batchView->setRunner(runner, collectionName, totalItems);
 }
 
-void ScrapeResultDialog::updateBatchProgress(int done, int total, const QString &currentName) {
-  if (total > 0 && total != m_batchProgressBar->maximum()) {
-    m_batchProgressBar->setRange(0, total);
-    m_batchTotalItems = total;
-  }
-  m_batchProgressBar->setValue(done);
-  m_batchCurrentLabel->setText(currentName.isEmpty() ? tr("Scraping…")
-                                                     : tr("Now scraping: %1").arg(currentName));
-
-  const qint64 elapsedMs =
-      std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_batchStartMs);
-  QString etaStr = QStringLiteral("—");
-  if (done > 0 && total > done) {
-    const qint64 etaMs =
-        static_cast<qint64>((double(elapsedMs) / double(done)) * double(total - done));
-    etaStr = formatDuration(etaMs);
-  }
-  m_batchTimingLabel->setText(tr("Elapsed %1 · ETA %2").arg(formatDuration(elapsedMs), etaStr));
+Scraper::BatchScrapeRunner::Summary ScrapeResultDialog::batchSummary() const {
+  return m_batchView ? m_batchView->summary() : Scraper::BatchScrapeRunner::Summary{};
 }
