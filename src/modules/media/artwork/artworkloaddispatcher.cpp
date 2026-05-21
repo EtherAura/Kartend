@@ -24,7 +24,6 @@
 #include <QtConcurrent>
 #include <QThread>
 #include <QThreadPool>
-#include <QTimer>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
@@ -68,13 +67,24 @@ auto loadAndProcessImage(const QString &path, qreal dpr) -> QImage {
   return img;
 }
 
+// True when the dispatcher has been asked to cancel since this task was
+// dispatched. The captured generation freezes "what was current at
+// dispatch time"; the counter holds the live value. Any cancelAll() or
+// destruction bumps the counter, which makes this predicate flip to
+// true on the worker's next call.
+inline bool isCancelledForGeneration(const std::atomic<quint64> &counter, quint64 capturedGen) {
+  return counter.load(std::memory_order_acquire) != capturedGen;
+}
+
 QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
-                                                const std::atomic<bool> &cancelled,
+                                                const std::atomic<quint64> &generationCounter,
+                                                quint64 capturedGeneration,
                                                 CacheManager *cacheManager, qreal dpr) {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
   for (const ArtworkInfo &info : batch) {
-    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() ||
+        isCancelledForGeneration(generationCounter, capturedGeneration)) {
       break;
     }
     if (info.mediaItem.isNull()) {
@@ -89,7 +99,8 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
     if (!loadedFromDiskCache) {
       img = loadAndProcessImage(info.artworkPath, dpr);
     }
-    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() ||
+        isCancelledForGeneration(generationCounter, capturedGeneration)) {
       break;
     }
     if (img.isNull()) {
@@ -104,12 +115,14 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
 }
 
 QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
-                                                     const std::atomic<bool> &cancelled,
+                                                     const std::atomic<quint64> &generationCounter,
+                                                     quint64 capturedGeneration,
                                                      CacheManager *cacheManager, qreal dpr) {
   QList<ArtworkPrecacheResult> results;
   results.reserve(paths.size());
   for (const QString &artworkPath : paths) {
-    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() ||
+        isCancelledForGeneration(generationCounter, capturedGeneration)) {
       break;
     }
     bool loadedFromDiskCache = false;
@@ -121,7 +134,8 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
     if (!loadedFromDiskCache) {
       img = loadAndProcessImage(artworkPath, dpr);
     }
-    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() ||
+        isCancelledForGeneration(generationCounter, capturedGeneration)) {
       break;
     }
     if (img.isNull()) {
@@ -137,7 +151,7 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
 
 ArtworkLoadDispatcher::ArtworkLoadDispatcher(CacheManager *cacheManager, QObject *parent)
     : QObject(parent), m_cacheManager(cacheManager),
-      m_cancellationToken(std::make_shared<std::atomic<bool>>(false)) {
+      m_currentGeneration(std::make_shared<std::atomic<quint64>>(0)) {
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
@@ -148,8 +162,10 @@ ArtworkLoadDispatcher::ArtworkLoadDispatcher(CacheManager *cacheManager, QObject
 }
 
 ArtworkLoadDispatcher::~ArtworkLoadDispatcher() {
-  if (m_cancellationToken) {
-    m_cancellationToken->store(true, std::memory_order_release);
+  // Bump the generation so every in-flight task observes its captured
+  // generation no longer matches and bails on the next check.
+  if (m_currentGeneration) {
+    m_currentGeneration->fetch_add(1, std::memory_order_acq_rel);
   }
 
   // Bounded-wait teardown so a slow decode doesn't block process exit.
@@ -178,7 +194,15 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
   }
 
   CacheManager *const cacheManager = m_cacheManager;
-  const auto cancelFlag = m_cancellationToken;
+  const auto generationCounter = m_currentGeneration;
+  // Snapshot the live generation at dispatch time. cancelAll() bumps the
+  // counter atomically; this captures the value *now*, so this task only
+  // bails if a *future* cancelAll() (or destruction) moves the counter
+  // past it. New dispatches after a cancelAll see the post-bump value
+  // and run to completion without the prior 50ms-timer race (Kartend-uxo0).
+  const quint64 generation = generationCounter
+                                 ? generationCounter->load(std::memory_order_acquire)
+                                 : quint64{0};
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = batch.size();
   auto handler = std::move(onComplete);
@@ -189,16 +213,20 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
                         : qreal{1.0};
 
   QFuture<void> future = QtConcurrent::run(m_threadPool, [batch = std::move(batch), highPriority,
-                                                          cancelFlag, batchItemCount, appReceiver,
+                                                          generationCounter, generation,
+                                                          batchItemCount, appReceiver,
                                                           cacheManager, handler, dpr]() {
-    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || !generationCounter ||
+        isCancelledForGeneration(*generationCounter, generation)) {
       return;
     }
     QElapsedTimer timer;
     timer.start();
-    QList<ArtworkInfo::Result> results = processBatchOnWorker(batch, *cancelFlag, cacheManager, dpr);
+    QList<ArtworkInfo::Result> results =
+        processBatchOnWorker(batch, *generationCounter, generation, cacheManager, dpr);
     const qint64 elapsedMs = timer.elapsed();
-    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || !generationCounter ||
+        isCancelledForGeneration(*generationCounter, generation)) {
       return;
     }
     if (!appReceiver) {
@@ -206,9 +234,10 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
     }
     QMetaObject::invokeMethod(
         appReceiver,
-        [results, highPriority, batchItemCount, elapsedMs, cancelFlag, handler]() {
-          if (QApplication::closingDown() || !cancelFlag ||
-              cancelFlag->load(std::memory_order_relaxed)) {
+        [results, highPriority, batchItemCount, elapsedMs, generationCounter, generation,
+         handler]() {
+          if (QApplication::closingDown() || !generationCounter ||
+              isCancelledForGeneration(*generationCounter, generation)) {
             return;
           }
           if (handler) {
@@ -230,7 +259,10 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
   }
 
   CacheManager *const cacheManager = m_cacheManager;
-  const auto cancelFlag = m_cancellationToken;
+  const auto generationCounter = m_currentGeneration;
+  const quint64 generation = generationCounter
+                                 ? generationCounter->load(std::memory_order_acquire)
+                                 : quint64{0};
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = paths.size();
   auto handler = std::move(onComplete);
@@ -239,18 +271,21 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
                         ? QGuiApplication::primaryScreen()->devicePixelRatio()
                         : qreal{1.0};
 
-  QFuture<void> future = QtConcurrent::run(m_threadPool, [paths = std::move(paths), cancelFlag,
+  QFuture<void> future = QtConcurrent::run(m_threadPool, [paths = std::move(paths),
+                                                          generationCounter, generation,
                                                           batchItemCount, appReceiver, cacheManager,
                                                           handler, dpr]() {
-    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || !generationCounter ||
+        isCancelledForGeneration(*generationCounter, generation)) {
       return;
     }
     QElapsedTimer timer;
     timer.start();
     QList<ArtworkPrecacheResult> results =
-        processPrecacheOnWorker(paths, *cancelFlag, cacheManager, dpr);
+        processPrecacheOnWorker(paths, *generationCounter, generation, cacheManager, dpr);
     const qint64 elapsedMs = timer.elapsed();
-    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || !generationCounter ||
+        isCancelledForGeneration(*generationCounter, generation)) {
       return;
     }
     if (!appReceiver) {
@@ -258,9 +293,9 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
     }
     QMetaObject::invokeMethod(
         appReceiver,
-        [paths, results, batchItemCount, elapsedMs, cancelFlag, handler]() {
-          if (QApplication::closingDown() || !cancelFlag ||
-              cancelFlag->load(std::memory_order_relaxed)) {
+        [paths, results, batchItemCount, elapsedMs, generationCounter, generation, handler]() {
+          if (QApplication::closingDown() || !generationCounter ||
+              isCancelledForGeneration(*generationCounter, generation)) {
             return;
           }
           if (handler) {
@@ -276,15 +311,17 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
 }
 
 void ArtworkLoadDispatcher::cancelAll() {
-  if (m_cancellationToken) {
-    m_cancellationToken->store(true, std::memory_order_relaxed);
+  // Atomic bump of the generation counter. In-flight tasks captured a
+  // smaller generation value at dispatch time and will observe the
+  // mismatch on their next check (no race window — dispatches after this
+  // call read the post-bump value and run normally). Replaces a prior
+  // token-swap design where a 50ms QTimer regenerated the cancellation
+  // shared_ptr; back-to-back cancelAll calls within that window left
+  // freshly-dispatched batches holding a still-cancelled token and
+  // stalled the UI artwork pipeline (Kartend-uxo0).
+  if (m_currentGeneration) {
+    m_currentGeneration->fetch_add(1, std::memory_order_acq_rel);
   }
-  // Regenerate the token so future dispatches see a fresh flag while
-  // in-flight tasks observe the OLD (permanently-cancelled) flag. Delay
-  // chosen to be larger than typical thread-scheduling latency so the
-  // existing tasks have a chance to notice cancellation.
-  QTimer::singleShot(
-      50, this, [this]() { m_cancellationToken = std::make_shared<std::atomic<bool>>(false); });
 }
 
 int ArtworkLoadDispatcher::runningFutureCount() const {

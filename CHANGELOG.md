@@ -79,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Settings → General now propagates to both caches via a single
   `IMainWindow::applyPixmapCacheBudget` entry point, applied both at
   startup wiring and on settings save
+- Arrow-key navigation between sibling collections no longer briefly
+  stalls all artwork rendering. `ArtworkLoadDispatcher::cancelAll`
+  previously flipped its cancellation token and then scheduled a 50 ms
+  `QTimer` to regenerate it; any new dispatch that landed inside that
+  window captured the still-cancelled token and bailed immediately,
+  visibly freezing thumbnails on rapid navigation. The token-swap is
+  replaced by a monotonic generation counter — `cancelAll` is now an
+  atomic increment with no race window, and new dispatches read the
+  current generation at dispatch time
 
 ### Removed
 
