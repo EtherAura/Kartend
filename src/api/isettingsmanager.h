@@ -62,8 +62,7 @@ public:
   // surface the error via ErrorDialog and keep the dialog open; non-dialog
   // callers (timers, controllers, kart imports) discard the result — the
   // implementation still logs internally.
-  virtual ErrorUtils::Result<void>
-  saveCollections(const QList<CollectionConfig> &collections) = 0;
+  virtual ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &collections) = 0;
   virtual void openSettingsDialog(const SettingsDialogContext &context) = 0;
   virtual void loadGeneralSettings(GeneralSettings &settings) = 0;
   virtual ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &settings) = 0;

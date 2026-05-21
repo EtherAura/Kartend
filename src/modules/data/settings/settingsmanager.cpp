@@ -342,8 +342,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 }
 
 // Saves general settings (no legacy last_selected.dat persistence)
-ErrorUtils::Result<void>
-SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
+ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.selectItemOnHover = settings.selectItemOnHover;

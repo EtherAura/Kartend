@@ -13,9 +13,9 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "idetailspane.h"
 #include "ianimationmanager.h"
 #include "iartworkmanager.h"
+#include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "imousemanager.h"
 #include "inavigationmanager.h"

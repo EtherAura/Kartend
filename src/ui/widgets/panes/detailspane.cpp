@@ -90,7 +90,7 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // found for the current selection.
   m_videoPlayback.videoPreview = new VideoPreviewWidget(this);
   m_videoPlayback.videoPreview->setFixedSize(UIConstants::Metadata::ARTWORK_SIZE,
-                               UIConstants::Metadata::ARTWORK_SIZE);
+                                             UIConstants::Metadata::ARTWORK_SIZE);
   m_videoPlayback.videoPreview->hide();
   if (auto *artworkParentLayout =
           qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
@@ -311,9 +311,11 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // re-plays — a glitchy ping-pong the user sees as "video stops
   // playing". When the path is unchanged AND the widget is currently
   // showing the same video, we leave the playback alone entirely.
-  const QString currentVideoPath = m_videoPlayback.videoPreview ? m_videoPlayback.videoPreview->currentVideoPath() : QString();
+  const QString currentVideoPath =
+      m_videoPlayback.videoPreview ? m_videoPlayback.videoPreview->currentVideoPath() : QString();
   const bool videoUnchanged = !videoPath.isEmpty() && videoPath == currentVideoPath &&
-                              m_videoPlayback.videoPreview && m_videoPlayback.videoPreview->isVisible();
+                              m_videoPlayback.videoPreview &&
+                              m_videoPlayback.videoPreview->isVisible();
   if (!videoUnchanged) {
     {
       QElapsedTimer t;
@@ -416,7 +418,8 @@ void DetailsPane::setArtworkSectionVisible(bool visible) {
   // (manager refreshes, post-scrape updates), and we hit this code
   // path on each one — without the video-aware branch the artwork
   // re-appears over the video on every refresh.
-  const bool videoPlaying = m_videoPlayback.videoPreview && m_videoPlayback.videoPreview->isVisible() &&
+  const bool videoPlaying = m_videoPlayback.videoPreview &&
+                            m_videoPlayback.videoPreview->isVisible() &&
                             !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
   ui->artworkDisplay->setVisible(visible && !videoPlaying);
   if (m_videoPlayback.videoPreview && !visible) {
@@ -726,7 +729,8 @@ void DetailsPane::applyDockOrientation() {
     // contentLayout (it gets hidden along with scrollArea) — the user wants
     // the primary artwork rendered as a gallery thumb next to the video,
     // not as a separate big preview tile.
-    if (m_hPreviewLayout && m_videoPlayback.videoPreview && m_hPreviewLayout->indexOf(m_videoPlayback.videoPreview) == -1) {
+    if (m_hPreviewLayout && m_videoPlayback.videoPreview &&
+        m_hPreviewLayout->indexOf(m_videoPlayback.videoPreview) == -1) {
       m_hPreviewLayout->addWidget(m_videoPlayback.videoPreview);
     }
     if (ui->scrollArea) ui->scrollArea->hide();
@@ -738,7 +742,8 @@ void DetailsPane::applyDockOrientation() {
     // Restore the video preview to its .ui-derived slot in contentLayout
     // (immediately after artworkDisplay).
     if (auto *cl = qobject_cast<QBoxLayout *>(ui->contentWidget->layout())) {
-      if (m_videoPlayback.videoPreview && ui->artworkDisplay && cl->indexOf(m_videoPlayback.videoPreview) == -1) {
+      if (m_videoPlayback.videoPreview && ui->artworkDisplay &&
+          cl->indexOf(m_videoPlayback.videoPreview) == -1) {
         const int artIdx = cl->indexOf(ui->artworkDisplay);
         cl->insertWidget(artIdx >= 0 ? artIdx + 1 : -1, m_videoPlayback.videoPreview);
       }
@@ -1055,8 +1060,8 @@ void DetailsPane::showArtworkOnly() {
     // this as a per-click stutter (Kartend-2c7c). isVisible OR a non-empty
     // currentVideoPath means the player has something to tear down;
     // otherwise the call is a no-op anyway.
-    const bool needsStop =
-        m_videoPlayback.videoPreview->isVisible() || !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
+    const bool needsStop = m_videoPlayback.videoPreview->isVisible() ||
+                           !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
     if (needsStop) {
       m_videoPlayback.videoPreview->stop();
       m_videoPlayback.videoPreview->hide();

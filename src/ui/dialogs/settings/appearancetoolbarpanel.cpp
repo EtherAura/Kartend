@@ -61,7 +61,8 @@ bool AppearanceToolbarPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
   if (ui->headerLogoEdit->text().trimmed() != o.background.headerLogoImage) return true;
-  if (ui->headerLogoPositionComboBox->currentIndex() != static_cast<int>(o.background.headerLogoPosition))
+  if (ui->headerLogoPositionComboBox->currentIndex() !=
+      static_cast<int>(o.background.headerLogoPosition))
     return true;
   return false;
 }

@@ -296,16 +296,13 @@ void MainWindow::setupUIReferences() {
   // managers' setLayerManager() in connect-setup code below; the loose
   // top-level overlays we just constructed are registered here directly.
   if (m_overlayLayerManager) {
-    m_overlayLayerManager->registerOverlay(m_loadingOverlay,
-                                           OverlayLayerManager::Layer::Loading);
-    m_overlayLayerManager->registerOverlay(m_splashOverlay,
-                                           OverlayLayerManager::Layer::Splash);
+    m_overlayLayerManager->registerOverlay(m_loadingOverlay, OverlayLayerManager::Layer::Loading);
+    m_overlayLayerManager->registerOverlay(m_splashOverlay, OverlayLayerManager::Layer::Splash);
     m_overlayLayerManager->registerOverlay(m_nowPlayingOverlay,
                                            OverlayLayerManager::Layer::NowPlaying);
     m_overlayLayerManager->registerOverlay(m_detailPageOverlay,
                                            OverlayLayerManager::Layer::DetailPage);
-    m_overlayLayerManager->registerOverlay(m_textZoomHud,
-                                           OverlayLayerManager::Layer::TextZoomHud);
+    m_overlayLayerManager->registerOverlay(m_textZoomHud, OverlayLayerManager::Layer::TextZoomHud);
     m_loadingOverlay->setLayerManager(m_overlayLayerManager.get());
     m_splashOverlay->setLayerManager(m_overlayLayerManager.get());
     m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());
@@ -446,7 +443,8 @@ void MainWindow::adjustGridWidth(int delta) {
   // we don't have to recompute the predicate here.
   const bool useAltField = getScrollManager() && getScrollManager()->sidebarShrinkingActive() &&
                            config.gridLayout.gridWidthSidebarHidden > 0;
-  int &activeField = useAltField ? config.gridLayout.gridWidthSidebarHidden : config.gridLayout.gridWidth;
+  int &activeField =
+      useAltField ? config.gridLayout.gridWidthSidebarHidden : config.gridLayout.gridWidth;
 
   int newWidth = activeField + delta;
 

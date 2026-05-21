@@ -14,9 +14,9 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
 
   if (isListMode) {
     // List mode: full width items, custom or default row height, 1 item per row
-    metrics.itemWidth = config.gridLayout.itemWidth;      // Will be set to viewport width by caller
+    metrics.itemWidth = config.gridLayout.itemWidth;    // Will be set to viewport width by caller
     metrics.itemHeight = config.listView.listRowHeight; // Use custom row height from config
-    metrics.itemsPerRow = 1;                   // List is always single column
+    metrics.itemsPerRow = 1;                            // List is always single column
     metrics.horizontalSpacing = 0;
     metrics.verticalSpacing = UIConstants::ListView::ROW_SPACING;
     metrics.headerOffset = UIConstants::ListView::HEADER_HEIGHT;

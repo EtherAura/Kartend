@@ -139,7 +139,8 @@ void QueryManager::loadItems(const CollectionContext &context,
       }
     }
     filePaths = filtered;
-  } else if (ctx.config.folderBrowsing.includeContentSubfolders && !ctx.config.folderBrowsing.showAllSubfolderItems) {
+  } else if (ctx.config.folderBrowsing.includeContentSubfolders &&
+             !ctx.config.folderBrowsing.showAllSubfolderItems) {
     // At root with subfolders enabled but NOT showing all items - exclude items
     // in subfolders
     QStringList filtered;
@@ -224,7 +225,8 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         }
       }
       mainFilePaths = filtered;
-    } else if (mainCtx.config.folderBrowsing.includeContentSubfolders && !mainCtx.config.folderBrowsing.showAllSubfolderItems) {
+    } else if (mainCtx.config.folderBrowsing.includeContentSubfolders &&
+               !mainCtx.config.folderBrowsing.showAllSubfolderItems) {
       // At root with subfolders enabled but NOT showing all items - exclude
       // items in subfolders
       QStringList filtered;

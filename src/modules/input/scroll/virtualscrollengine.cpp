@@ -258,8 +258,8 @@ void VirtualScrollEngine::recreateLayout() {
   calculateVirtualMetrics();
   positionVirtualContainer();
   bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
-  int fontSize =
-      isListMode ? m_owner->m_context.config.listView.listFontSize : m_owner->m_context.config.gridLayout.fontSize;
+  int fontSize = isListMode ? m_owner->m_context.config.listView.listFontSize
+                            : m_owner->m_context.config.gridLayout.fontSize;
   // scale before push so item titles match the active zoom.
   fontSize = TextZoom::zoomedFontSize(fontSize);
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
@@ -503,8 +503,8 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
       existing->show();
     }
     bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
-    int fontSize =
-        isListMode ? m_owner->m_context.config.listView.listFontSize : m_owner->m_context.config.gridLayout.fontSize;
+    int fontSize = isListMode ? m_owner->m_context.config.listView.listFontSize
+                              : m_owner->m_context.config.gridLayout.fontSize;
     // same as the bulk-update branch above.
     fontSize = TextZoom::zoomedFontSize(fontSize);
     existing->setHideTitles(m_owner->m_context.config.hideTitles);

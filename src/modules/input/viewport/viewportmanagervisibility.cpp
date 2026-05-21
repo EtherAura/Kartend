@@ -56,10 +56,11 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  int hSpacing =
-      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.gridLayout.horizontalSpacing;
+  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
+                               : collection.gridLayout.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
+  int itemX =
+      GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
 
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int curX = hScrollBar->value();
@@ -69,8 +70,8 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   if (itemX < curX + margins) {
     targetX = qMax(0, itemX - margins);
   } else if (itemX + collection.gridLayout.itemWidth > curX + viewportWidth - margins) {
-    targetX = qMax(
-        0, qMin(itemX + collection.gridLayout.itemWidth - viewportWidth + margins, hScrollBar->maximum()));
+    targetX = qMax(0, qMin(itemX + collection.gridLayout.itemWidth - viewportWidth + margins,
+                           hScrollBar->maximum()));
   }
 
   if (targetX == curX) {

@@ -68,8 +68,7 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
   // surfaces a single clear stderr line and exits non-zero. Existence is
   // NOT checked here; KartReader produces a more specific "Cannot open
   // Kart file" error than we could synthesize.
-  auto sanitizeCliPath = [&options](const QString &raw,
-                                    const QString &optionName) -> QString {
+  auto sanitizeCliPath = [&options](const QString &raw, const QString &optionName) -> QString {
     auto result = PathUtils::expandAndValidateCliPath(raw, optionName);
     if (result.isError() && !options.pathValidationError.isError()) {
       options.pathValidationError = result.error();

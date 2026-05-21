@@ -203,7 +203,8 @@ void SettingsDialog::addCollection() {
     newCollection.gridLayout.gridWidth = parent.gridLayout.gridWidth;
     newCollection.gridLayout.horizontalGridHeight = parent.gridLayout.horizontalGridHeight;
     newCollection.gridLayout.gridWidthSidebarHidden = parent.gridLayout.gridWidthSidebarHidden;
-    newCollection.gridLayout.horizontalGridHeightSidebarHidden = parent.gridLayout.horizontalGridHeightSidebarHidden;
+    newCollection.gridLayout.horizontalGridHeightSidebarHidden =
+        parent.gridLayout.horizontalGridHeightSidebarHidden;
     newCollection.gridLayout.horizontalSpacing = parent.gridLayout.horizontalSpacing;
     newCollection.gridLayout.verticalSpacing = parent.gridLayout.verticalSpacing;
     newCollection.gridLayout.itemWidth = parent.gridLayout.itemWidth;

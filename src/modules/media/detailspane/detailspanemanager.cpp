@@ -127,8 +127,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       bool isFixedMode = false;
       if (m_collections && m_currentCollectionIndex >= 0 &&
           m_currentCollectionIndex < m_collections->size()) {
-        isFixedMode =
-            (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode == DetailsPaneMode::Expand;
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode ==
+                      DetailsPaneMode::Expand;
       }
       if (!isFixedMode) {
         positionSidebarOverlay();
@@ -154,8 +154,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       bool isFixedMode = false;
       if (m_collections && m_currentCollectionIndex >= 0 &&
           m_currentCollectionIndex < m_collections->size()) {
-        isFixedMode =
-            (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode == DetailsPaneMode::Expand;
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebar.sidebarMode ==
+                      DetailsPaneMode::Expand;
       }
       if (!isFixedMode) {
         positionSidebarOverlay();
@@ -326,7 +326,8 @@ void DetailsPaneManager::positionSidebarOverlay() {
     const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
     position = collection.sidebar.sidebarPosition;
     desiredWidth = std::max(collection.sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
-    desiredHeight = std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    desiredHeight =
+        std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
   }
 
   QRect viewportRectInItems;
@@ -415,7 +416,8 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
     isFixedMode = (collection.sidebar.sidebarMode == DetailsPaneMode::Expand);
     position = collection.sidebar.sidebarPosition;
     desiredWidth = std::max(collection.sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
-    desiredHeight = std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    desiredHeight =
+        std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
   }
 
   // tracking "in some layout" rather than just the horizontal

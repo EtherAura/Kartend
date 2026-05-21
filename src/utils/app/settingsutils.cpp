@@ -105,13 +105,12 @@ auto SettingsUtils::tightenConfigPermissions() -> void {
   if (!QFile::exists(path)) {
     return;
   }
-  if (!QFile::setPermissions(path,
-                             QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::info(
-                             ErrorUtils::ErrorCode::FileWriteError,
-                             "Failed to tighten kartend.cfg permissions to 0600",
-                             "SettingsUtils::tightenConfigPermissions")
-                             .withDetails(QString("Path: %1").arg(path)));
+  if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::info(ErrorUtils::ErrorCode::FileWriteError,
+                                       "Failed to tighten kartend.cfg permissions to 0600",
+                                       "SettingsUtils::tightenConfigPermissions")
+            .withDetails(QString("Path: %1").arg(path)));
   }
 }
 

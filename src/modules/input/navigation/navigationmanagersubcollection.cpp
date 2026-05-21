@@ -129,7 +129,8 @@ void NavigationManager::goBackFromVirtualFolder() {
   }
 
   // Go up one level
-  config.folderBrowsing.currentSubfolder = NavigationHelpers::parentSubfolderPath(config.folderBrowsing.currentSubfolder);
+  config.folderBrowsing.currentSubfolder =
+      NavigationHelpers::parentSubfolderPath(config.folderBrowsing.currentSubfolder);
 
   // Reload to show parent folder
   safeReloadCollection(*m_currentCollectionIndex);

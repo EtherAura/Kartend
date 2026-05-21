@@ -93,9 +93,12 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex=" << context.currentIndex
                         << "offset=" << offset << "limit=" << limit << "filter='" << trimmedFilter
-                        << "' includeSubfolders=" << context.config.folderBrowsing.includeContentSubfolders
-                        << " showAllSubfolderItems=" << context.config.folderBrowsing.showAllSubfolderItems
-                        << " currentSubfolder='" << context.config.folderBrowsing.currentSubfolder << "'";
+                        << "' includeSubfolders="
+                        << context.config.folderBrowsing.includeContentSubfolders
+                        << " showAllSubfolderItems="
+                        << context.config.folderBrowsing.showAllSubfolderItems
+                        << " currentSubfolder='" << context.config.folderBrowsing.currentSubfolder
+                        << "'";
   QElapsedTimer rangeTimer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     rangeTimer.start();
@@ -311,8 +314,8 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose rel_path starts with subfolder/
     sql += " AND COALESCE(rel_path, path) LIKE ?";
-  } else if (ctx.config.folderBrowsing.includeContentSubfolders && !ctx.config.folderBrowsing.showAllSubfolderItems &&
-             trimmedFilter.isEmpty()) {
+  } else if (ctx.config.folderBrowsing.includeContentSubfolders &&
+             !ctx.config.folderBrowsing.showAllSubfolderItems && trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //

@@ -327,16 +327,17 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
   // range requests can use the exact same filter string.
   m_itemsQueryFilter = filter.trimmed();
 
-  qCDebug(lcSearchDiag) << QString("requestItemCountForContext: collIndex=%1 filter='%2' "
-                                   "includeSubfolders=%3 showAllSubfolderItems=%4 "
-                                   "currentSubfolder='%5' includeDesc=%6 includeAll=%7")
-                               .arg(m_itemsQueryContext.currentIndex)
-                               .arg(m_itemsQueryFilter)
-                               .arg(m_itemsQueryContext.config.folderBrowsing.includeContentSubfolders)
-                               .arg(m_itemsQueryContext.config.folderBrowsing.showAllSubfolderItems)
-                               .arg(m_itemsQueryContext.config.folderBrowsing.currentSubfolder)
-                               .arg(m_itemsQueryContext.queryIncludeDescendants)
-                               .arg(m_itemsQueryContext.queryIncludeAllCollections);
+  qCDebug(lcSearchDiag)
+      << QString("requestItemCountForContext: collIndex=%1 filter='%2' "
+                 "includeSubfolders=%3 showAllSubfolderItems=%4 "
+                 "currentSubfolder='%5' includeDesc=%6 includeAll=%7")
+             .arg(m_itemsQueryContext.currentIndex)
+             .arg(m_itemsQueryFilter)
+             .arg(m_itemsQueryContext.config.folderBrowsing.includeContentSubfolders)
+             .arg(m_itemsQueryContext.config.folderBrowsing.showAllSubfolderItems)
+             .arg(m_itemsQueryContext.config.folderBrowsing.currentSubfolder)
+             .arg(m_itemsQueryContext.queryIncludeDescendants)
+             .arg(m_itemsQueryContext.queryIncludeAllCollections);
 
   ++m_itemCountRequestToken;
   qCWarning(lcScanFlow) << "requestItemCountForContext: newToken=" << m_itemCountRequestToken

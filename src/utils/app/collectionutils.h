@@ -898,15 +898,15 @@ struct CollectionConfig {
       gridLayout.gridHeightSidebarHidden =
           std::max(gridLayout.gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
-    gridLayout.itemWidth =
-        std::clamp(gridLayout.itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
+    gridLayout.itemWidth = std::clamp(gridLayout.itemWidth, UIConstants::Item::MIN_WIDTH,
+                                      UIConstants::Item::MAX_WIDTH);
     gridLayout.itemHeight = std::clamp(gridLayout.itemHeight, UIConstants::Item::MIN_HEIGHT,
                                        UIConstants::Item::MAX_HEIGHT);
     gridLayout.fontSize = std::clamp(gridLayout.fontSize, UIConstants::Item::MIN_FONT_SIZE,
                                      UIConstants::Item::MAX_FONT_SIZE);
-    gridLayout.cornerRadius = std::clamp(gridLayout.cornerRadius,
-                                         UIConstants::Item::MIN_CORNER_RADIUS,
-                                         UIConstants::Item::MAX_CORNER_RADIUS);
+    gridLayout.cornerRadius =
+        std::clamp(gridLayout.cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS,
+                   UIConstants::Item::MAX_CORNER_RADIUS);
     // Spacing can be negative for overlap effects
     gridLayout.horizontalSpacing = std::clamp(gridLayout.horizontalSpacing, -100, 200);
     gridLayout.verticalSpacing = std::clamp(gridLayout.verticalSpacing, -100, 200);
@@ -916,11 +916,9 @@ struct CollectionConfig {
     listView.listRowHeight =
         std::clamp(listView.listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                    UIConstants::ListView::MAX_ROW_HEIGHT);
-    sidebar.sidebarWidth =
-        std::max(sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    sidebar.sidebarWidth = std::max(sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
     // floor pane height; same no-upper-bound treatment as width.
-    sidebar.sidebarHeight =
-        std::max(sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+    sidebar.sidebarHeight = std::max(sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
     // corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
     background.vignetteIntensity = std::clamp(background.vignetteIntensity, 0, 100);

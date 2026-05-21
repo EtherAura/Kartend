@@ -34,8 +34,8 @@ struct ItemArtworkLinksInput {
   QString itemTitle;
   QStringList standardTypes;
   QStringList customTypes;
-  QHash<QString, QString> overrides;          // artworkType -> manualPath
-  QHash<QString, QString> autoResolvedPaths;  // artworkType -> resolved path
+  QHash<QString, QString> overrides;         // artworkType -> manualPath
+  QHash<QString, QString> autoResolvedPaths; // artworkType -> resolved path
   QString browseStartDir;
 };
 

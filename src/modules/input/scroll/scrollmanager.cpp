@@ -320,9 +320,9 @@ void ScrollManager::updateViewType(ViewType viewType) {
     // configureHorizontalScrollbar in VirtualContainerManager will pin it
     // off again on overflow. Force it back on here when entering Horizontal.
     if (viewType == ViewType::Horizontal) {
-      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.gridLayout.hideHorizontalScrollbar
-                                                          ? Qt::ScrollBarAlwaysOff
-                                                          : Qt::ScrollBarAsNeeded);
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(
+          m_context.config.gridLayout.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
+                                                              : Qt::ScrollBarAsNeeded);
     }
   }
 
@@ -365,7 +365,8 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
 
 void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
   // same active-field routing as updateGridWidth.
-  int &target = (m_sidebarShrinkingActive && m_context.config.gridLayout.horizontalGridHeightSidebarHidden > 0)
+  int &target = (m_sidebarShrinkingActive &&
+                 m_context.config.gridLayout.horizontalGridHeightSidebarHidden > 0)
                     ? m_context.config.gridLayout.horizontalGridHeightSidebarHidden
                     : m_context.config.gridLayout.horizontalGridHeight;
   if (target == newHorizontalGridHeight) {

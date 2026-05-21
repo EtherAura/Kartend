@@ -55,8 +55,8 @@ auto ExtensionUtils::parseUserExtensionList(const QString &text) -> QStringList 
 // link Qt6::Gui so QImageReader resolves at link time.
 auto ExtensionUtils::imageBaseExtensions() -> const QStringList & {
   static const QStringList exts = []() {
-    QStringList base = {QStringLiteral("png"),  QStringLiteral("jpg"), QStringLiteral("jpeg"),
-                        QStringLiteral("bmp"),  QStringLiteral("gif"), QStringLiteral("webp")};
+    QStringList base = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+                        QStringLiteral("bmp"), QStringLiteral("gif"), QStringLiteral("webp")};
     const auto formats = QImageReader::supportedImageFormats();
     if (formats.contains(QByteArrayLiteral("avif")) ||
         formats.contains(QByteArrayLiteral("AVIF"))) {

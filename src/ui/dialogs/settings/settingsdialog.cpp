@@ -39,12 +39,12 @@
 #include "collectiontreewidget.h"
 #include "configurationpanel.h"
 #include "controlspanel.h"
+#include "errordialog.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
 #include "gamepadmanager.h"
 #include "generalsettingspanel.h"
-#include "errordialog.h"
 #include "imainwindow.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
@@ -174,8 +174,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
             auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
             if (!mainWindow || !mainWindow->getSettingsManager()) return;
             mainWindow->generalSettings().titleBaseColor = c;
-            auto result =
-                mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
+            auto result = mainWindow->getSettingsManager()->saveGeneralSettings(
+                mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
             if (result.isError()) {
               ErrorDialog::showError(this, result.error());

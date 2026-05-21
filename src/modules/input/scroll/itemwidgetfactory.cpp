@@ -73,7 +73,8 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   // Use list-specific font size in list mode, grid font size otherwise.
   // layer the runtime text-zoom multiplier on top so item
   // titles scale alongside menus/dialogs/sidebar.
-  int fontSize = isListMode ? m_context.config.listView.listFontSize : m_context.config.gridLayout.fontSize;
+  int fontSize =
+      isListMode ? m_context.config.listView.listFontSize : m_context.config.gridLayout.fontSize;
   widget->setFontSize(TextZoom::zoomedFontSize(fontSize));
 
   widget->setCornerRadius(m_context.config.gridLayout.cornerRadius);
@@ -157,7 +158,8 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
     displayName = folderPath.mid(lastSlash + 1);
   }
 
-  widget->setAsVirtualFolder(folderPath, displayName, m_context.config.folderBrowsing.hideSubfolderTitles);
+  widget->setAsVirtualFolder(folderPath, displayName,
+                             m_context.config.folderBrowsing.hideSubfolderTitles);
 
   // Try to find artwork for the virtual folder using the folder name
   // Artwork is searched in the current collection's artwork directory

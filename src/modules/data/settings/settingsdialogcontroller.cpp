@@ -60,10 +60,13 @@ void compareReloadFields(const CollectionConfig &configA, const CollectionConfig
                          bool &hasChanges, bool &needsReload) {
   if (configA.mediaDirectory != configB.mediaDirectory ||
       configA.artworkDirectory != configB.artworkDirectory ||
-      configA.folderBrowsing.includeContentSubfolders != configB.folderBrowsing.includeContentSubfolders ||
-      configA.folderBrowsing.includeArtworkSubfolders != configB.folderBrowsing.includeArtworkSubfolders ||
+      configA.folderBrowsing.includeContentSubfolders !=
+          configB.folderBrowsing.includeContentSubfolders ||
+      configA.folderBrowsing.includeArtworkSubfolders !=
+          configB.folderBrowsing.includeArtworkSubfolders ||
       configA.showAllSubcollectionItems != configB.showAllSubcollectionItems ||
-      configA.folderBrowsing.showAllSubfolderItems != configB.folderBrowsing.showAllSubfolderItems ||
+      configA.folderBrowsing.showAllSubfolderItems !=
+          configB.folderBrowsing.showAllSubfolderItems ||
       configA.folderBrowsing.hideSubfolderTitles != configB.folderBrowsing.hideSubfolderTitles ||
       configA.folderBrowsing.showHiddenFolders != configB.folderBrowsing.showHiddenFolders ||
       configA.extensions != configB.extensions) {
@@ -91,11 +94,13 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     hasChanges = true;
     spacingChanged = true;
   }
-  if (configA.gridLayout.itemWidth != configB.gridLayout.itemWidth || configA.gridLayout.itemHeight != configB.gridLayout.itemHeight) {
+  if (configA.gridLayout.itemWidth != configB.gridLayout.itemWidth ||
+      configA.gridLayout.itemHeight != configB.gridLayout.itemHeight) {
     hasChanges = true;
     spacingChanged = true;
   }
-  if (configA.gridLayout.fontSize != configB.gridLayout.fontSize || configA.listView.listFontSize != configB.listView.listFontSize ||
+  if (configA.gridLayout.fontSize != configB.gridLayout.fontSize ||
+      configA.listView.listFontSize != configB.listView.listFontSize ||
       configA.gridLayout.cornerRadius != configB.gridLayout.cornerRadius) {
     hasChanges = true;
     fontSizeChanged = true;
@@ -131,7 +136,8 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     titleChanged = true;
   }
   // Appearance changes (colors)
-  if (configA.background.primaryColor != configB.background.primaryColor || configA.background.tileColor != configB.background.tileColor ||
+  if (configA.background.primaryColor != configB.background.primaryColor ||
+      configA.background.tileColor != configB.background.tileColor ||
       configA.background.selectionColor != configB.background.selectionColor ||
       configA.background.backgroundColor != configB.background.backgroundColor ||
       configA.background.backgroundImage != configB.background.backgroundImage ||

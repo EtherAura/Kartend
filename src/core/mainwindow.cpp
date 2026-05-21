@@ -439,10 +439,9 @@ void MainWindow::setupManagerConnections() {
   // upward input -> ui edge. The dialogs now run via these closures
   // supplied here in the UI layer; InteractionManager just invokes
   // them and reads the result.
-  setup.runSmartPlaylistDialog =
-      [this](const QString &initialName,
-             const std::optional<SmartFilter::Filter> &initialFilter)
-          -> std::optional<SmartPlaylistEdit> {
+  setup.runSmartPlaylistDialog = [this](const QString &initialName,
+                                        const std::optional<SmartFilter::Filter> &initialFilter)
+      -> std::optional<SmartPlaylistEdit> {
     CreateSmartPlaylistDialog dialog(this);
     if (!initialName.isEmpty()) {
       dialog.setInitialName(initialName);
@@ -458,10 +457,9 @@ void MainWindow::setupManagerConnections() {
     out.filter = dialog.filter();
     return out;
   };
-  setup.runCustomFieldsDialog =
-      [this](const QString &itemTitle,
-             const ItemMetadataStore::CustomFieldList &initial)
-          -> std::optional<ItemMetadataStore::CustomFieldList> {
+  setup.runCustomFieldsDialog = [this](const QString &itemTitle,
+                                       const ItemMetadataStore::CustomFieldList &initial)
+      -> std::optional<ItemMetadataStore::CustomFieldList> {
     CustomFieldsDialog dialog(this);
     dialog.setItemTitle(itemTitle);
     dialog.setFields(initial);
@@ -761,7 +759,8 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     // collection switch.
     if (m_menuController) {
       m_menuController->syncLayoutActions(viewType);
-      m_menuController->syncOrientationActions(m_collections[collectionIndex].sidebar.sidebarPosition);
+      m_menuController->syncOrientationActions(
+          m_collections[collectionIndex].sidebar.sidebarPosition);
     }
   }
   // Sync the consolidated filter popup so the per-collection title-pattern

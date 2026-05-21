@@ -48,8 +48,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // the QSS path because Qt stylesheets can't render video. The widget is
   // lazy-created on first need and hidden (with decoder released) whenever
   // the active collection doesn't use video.
-  const bool wantsVideo =
-      (collection.background.backgroundType == BackgroundType::Video) && !collection.background.backgroundVideo.isEmpty();
+  const bool wantsVideo = (collection.background.backgroundType == BackgroundType::Video) &&
+                          !collection.background.backgroundVideo.isEmpty();
   if (wantsVideo) {
     if (!m_backgroundVideo) {
       m_backgroundVideo = new BackgroundVideoWidget(viewport);
@@ -105,7 +105,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     }
     }
     toolbarLayout->insertWidget(insertIndex, m_headerLogo);
-    m_headerLogo->setLogo(collection.background.headerLogoImage, collection.background.headerLogoPosition);
+    m_headerLogo->setLogo(collection.background.headerLogoImage,
+                          collection.background.headerLogoPosition);
     m_headerLogo->show();
   } else if (m_headerLogo) {
     if (toolbarLayout) {
@@ -118,7 +119,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // vignette overlay. Layered above the items grid (so it
   // darkens grid edges) but below the header logo (so the logo stays
   // bright in a corner if the user picks TopLeft/TopRight).
-  const bool wantsVignette = collection.background.vignetteEnabled && collection.background.vignetteIntensity > 0;
+  const bool wantsVignette =
+      collection.background.vignetteEnabled && collection.background.vignetteIntensity > 0;
   if (wantsVignette) {
     if (!m_vignette) {
       m_vignette = new VignetteOverlay(viewport);
@@ -190,8 +192,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     QString imagePath = collection.background.backgroundImage;
     imagePath.replace("\\", "/");
     int parallaxOffset = 0;
-    if (collection.background.wallpaperParallax && collection.background.parallaxStrength > 0 && m_itemScrollArea &&
-        m_itemScrollArea->verticalScrollBar()) {
+    if (collection.background.wallpaperParallax && collection.background.parallaxStrength > 0 &&
+        m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
       const int v = m_itemScrollArea->verticalScrollBar()->value();
       parallaxOffset = (v * collection.background.parallaxStrength) / 100;
     }
@@ -205,7 +207,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
                      .arg(parallaxOffset);
   } else if (!collection.background.backgroundColor.isEmpty()) {
     // Background color mode
-    styleSheet = QString("QWidget { background-color: %1; }").arg(collection.background.backgroundColor);
+    styleSheet =
+        QString("QWidget { background-color: %1; }").arg(collection.background.backgroundColor);
   } else {
     // Clear any custom background (use system default)
     styleSheet.clear();
@@ -227,8 +230,8 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   ItemWidget::setListAltRowColor(collection.listView.listAltRowColor);
   ItemWidget::setCustomFontFamily(collection.customFontFamily);
 
-  bool hasPrimaryColor =
-      !collection.background.primaryColor.isEmpty() && QColor::isValidColorName(collection.background.primaryColor);
+  bool hasPrimaryColor = !collection.background.primaryColor.isEmpty() &&
+                         QColor::isValidColorName(collection.background.primaryColor);
 
   // when toolbar backdrop blur is active over an image bg,
   // skip the primary-color fill — it would paint a flat color over the
@@ -240,8 +243,8 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   if (m_itemsTopBar) {
     QString toolbarStyle;
     if (hasPrimaryColor && !blurActive) {
-      toolbarStyle =
-          QString("QWidget#itemsTopBar { background-color: %1; }").arg(collection.background.primaryColor);
+      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }")
+                         .arg(collection.background.primaryColor);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
@@ -293,7 +296,8 @@ void CollectionBackgroundController::onItemsScrolled() {
   }
   const CollectionConfig &c = (*m_collections)[idx];
   if (!c.background.wallpaperParallax || c.background.parallaxStrength <= 0 ||
-      c.background.backgroundType != BackgroundType::Image || c.background.backgroundImage.isEmpty()) {
+      c.background.backgroundType != BackgroundType::Image ||
+      c.background.backgroundImage.isEmpty()) {
     return;
   }
 
@@ -324,10 +328,12 @@ void CollectionBackgroundController::applyParallaxOffset() {
     return;
   }
   const CollectionConfig &c = (*m_collections)[idx];
-  if (c.background.backgroundType != BackgroundType::Image || c.background.backgroundImage.isEmpty()) {
+  if (c.background.backgroundType != BackgroundType::Image ||
+      c.background.backgroundImage.isEmpty()) {
     return;
   }
-  const int strength = c.background.wallpaperParallax ? qBound(0, c.background.parallaxStrength, 100) : 0;
+  const int strength =
+      c.background.wallpaperParallax ? qBound(0, c.background.parallaxStrength, 100) : 0;
   const int v = m_itemScrollArea->verticalScrollBar()->value();
   const int offset = (v * strength) / 100;
 

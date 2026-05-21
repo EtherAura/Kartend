@@ -153,8 +153,8 @@ auto main(int argc, char *argv[]) -> int {
         return 2;
       }
       const QString src = srcResult.value();
-      const QString rawDest = parser.isSet(toOption) ? parser.value(toOption)
-                                                     : (QDir::homePath() + "/imported-kart");
+      const QString rawDest =
+          parser.isSet(toOption) ? parser.value(toOption) : (QDir::homePath() + "/imported-kart");
       auto destResult = PathUtils::expandAndValidateCliPath(rawDest, QStringLiteral("to"));
       if (destResult.isError()) {
         fprintf(stderr, "kart import: %s\n", qPrintable(destResult.error().message));

@@ -1,9 +1,9 @@
 // Sibling TU: collection-selected / items-loaded flow for NavigationManager.
 #include "artworkutils.h"
-#include "idetailspane.h"
 #include "emptystatewidget.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
+#include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"

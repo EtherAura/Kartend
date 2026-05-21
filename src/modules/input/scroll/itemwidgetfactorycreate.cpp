@@ -139,7 +139,8 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName, QStrin
     // - Collection uses virtual folders (includeContentSubfolders &&
     // !showAllSubfolderItems)
     // - Search is active (suppressVirtualFolders is set during search)
-    if (m_context.suppressVirtualFolders && m_context.config.folderBrowsing.includeContentSubfolders &&
+    if (m_context.suppressVirtualFolders &&
+        m_context.config.folderBrowsing.includeContentSubfolders &&
         !m_context.config.folderBrowsing.showAllSubfolderItems) {
       const QString &mediaDir = m_context.config.mediaDirectory;
       if (!mediaDir.isEmpty()) {

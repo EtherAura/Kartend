@@ -331,10 +331,11 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
-  int hSpacing =
-      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.gridLayout.horizontalSpacing;
+  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
+                               : collection.gridLayout.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
+  int itemX =
+      GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
   int itemY = GridUtils::computeItemY(index, gridWidth, collection.gridLayout.itemHeight,
                                       collection.gridLayout.verticalSpacing, margins);
 
@@ -346,8 +347,8 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   int targetY = toWidgetScrollY(logicalTargetY);
   targetY = qBound(0, targetY, vScrollBar->maximum());
 
-  int targetX = GridUtils::computeCenterTarget(itemX, collection.gridLayout.itemWidth, viewportWidth,
-                                               hScrollBar->maximum());
+  int targetX = GridUtils::computeCenterTarget(itemX, collection.gridLayout.itemWidth,
+                                               viewportWidth, hScrollBar->maximum());
   vScrollBar->setValue(targetY);
   hScrollBar->setValue(targetX);
   if (scrollMgr()) {

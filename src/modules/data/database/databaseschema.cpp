@@ -122,11 +122,11 @@ void createIndexes(QSqlDatabase &db) {
   const auto runIndex = [&idx](const char *sql) {
     idx.prepare(QString::fromUtf8(sql));
     if (!idx.exec()) {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to create database index",
-                                       "DatabaseSchema::createIndexes")
-                     .withDetails(QStringLiteral("Statement: %1; Error: %2")
-                                      .arg(QString::fromUtf8(sql), idx.lastError().text()));
+      auto err =
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to create database index",
+                                "DatabaseSchema::createIndexes")
+              .withDetails(QStringLiteral("Statement: %1; Error: %2")
+                               .arg(QString::fromUtf8(sql), idx.lastError().text()));
       ErrorUtils::logError(err);
     }
   };

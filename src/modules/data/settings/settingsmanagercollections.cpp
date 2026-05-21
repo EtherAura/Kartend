@@ -215,10 +215,14 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.manualDirectory.clear();
     config.placeholderArtwork = sanitizeLoadedPath(settings.value("placeholderArtwork").toString(),
                                                    "placeholderArtwork", config.name);
-    config.folderBrowsing.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
-    config.folderBrowsing.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
-    config.folderBrowsing.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
-    config.folderBrowsing.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
+    config.folderBrowsing.includeContentSubfolders =
+        settings.value("includeContentSubfolders", false).toBool();
+    config.folderBrowsing.includeArtworkSubfolders =
+        settings.value("includeArtworkSubfolders", false).toBool();
+    config.folderBrowsing.showAllSubfolderItems =
+        settings.value("showAllSubfolderItems", false).toBool();
+    config.folderBrowsing.hideSubfolderTitles =
+        settings.value("hideSubfolderTitles", false).toBool();
     config.folderBrowsing.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
     config.archive.extractArchives = settings.value("extractArchives", false).toBool();
     config.archive.extractedExtension = settings.value("extractedExtension").toString();
@@ -253,11 +257,14 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.customArtworkTypes = cleanedCustomTypes;
 
     // ScreenScraper systemeid override; -1 = autodetect at scrape time.
-    config.scraperOverrides.screenscraperSystemId = settings.value("screenscraperSystemId", -1).toInt();
+    config.scraperOverrides.screenscraperSystemId =
+        settings.value("screenscraperSystemId", -1).toInt();
     // Hash inner ROM in archives. Default true — better SS match accuracy.
-    config.scraperOverrides.screenscraperHashArchive = settings.value("screenscraperHashArchive", true).toBool();
+    config.scraperOverrides.screenscraperHashArchive =
+        settings.value("screenscraperHashArchive", true).toBool();
     // Per-collection scraper override; empty = automatic (resolve by type).
-    config.scraperOverrides.scraperProviderId = settings.value("scraperProviderId").toString().trimmed();
+    config.scraperOverrides.scraperProviderId =
+        settings.value("scraperProviderId").toString().trimmed();
     // datFilePaths is persisted as a QSettings array so individual
     // entries can contain commas / brackets without delimiter
     // escaping. Legacy configs (pre-multi-DAT) shipped a single
@@ -286,14 +293,15 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     // alt items-per-column when a Top/Bottom-docked details pane
     // hides in Expand mode. 0 means "inherit gridWidth" — preserves existing
     // behavior for collections that haven't opted in.
-    config.gridLayout.gridHeightSidebarHidden = settings.value("gridHeightSidebarHidden", 0).toInt();
+    config.gridLayout.gridHeightSidebarHidden =
+        settings.value("gridHeightSidebarHidden", 0).toInt();
     config.sidebar.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
         settings.value("horizontalAlignment", "center").toString());
     config.sidebar.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
-                             ? DetailsPaneMode::Expand
-                             : DetailsPaneMode::Overlay;
+                                     ? DetailsPaneMode::Expand
+                                     : DetailsPaneMode::Overlay;
     // sidebar enhancements.
     config.sidebar.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(
         settings.value("sidebarPosition", "right").toString());
@@ -325,8 +333,10 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.viewType =
         CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
     config.hideMissingArtwork = settings.value("hideMissingArtwork", false).toBool();
-    config.gridLayout.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
-    config.gridLayout.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
+    config.gridLayout.hideHorizontalScrollbar =
+        settings.value("hideHorizontalScrollbar", false).toBool();
+    config.gridLayout.hideVerticalScrollbar =
+        settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
     config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
     // title-exclusion patterns are stored as a QSettings array so
@@ -347,9 +357,12 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.gridLayout.horizontalSpacing =
         settings.value("horizontalSpacing", UIConstants::Grid::SPACING).toInt();
     config.gridLayout.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
-    config.gridLayout.itemWidth = settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
-    config.gridLayout.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
-    config.gridLayout.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
+    config.gridLayout.itemWidth =
+        settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
+    config.gridLayout.itemHeight =
+        settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
+    config.gridLayout.fontSize =
+        settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
     config.gridLayout.cornerRadius =
         settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS).toInt();
 
@@ -363,17 +376,17 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       config.background.backgroundType = BackgroundType::Color;
     }
     config.background.backgroundColor = settings.value("backgroundColor").toString();
-    config.background.backgroundImage = sanitizeLoadedPath(settings.value("backgroundImage").toString(),
-                                                "backgroundImage", config.name);
-    config.background.backgroundVideo = sanitizeLoadedPath(settings.value("backgroundVideo").toString(),
-                                                "backgroundVideo", config.name);
+    config.background.backgroundImage = sanitizeLoadedPath(
+        settings.value("backgroundImage").toString(), "backgroundImage", config.name);
+    config.background.backgroundVideo = sanitizeLoadedPath(
+        settings.value("backgroundVideo").toString(), "backgroundVideo", config.name);
     config.background.primaryColor = settings.value("primaryColor").toString();
     config.background.tileColor = settings.value("tileColor").toString();
     config.background.selectionColor = settings.value("selectionColor").toString();
 
     // header logo
-    config.background.headerLogoImage = sanitizeLoadedPath(settings.value("headerLogoImage").toString(),
-                                                "headerLogoImage", config.name);
+    config.background.headerLogoImage = sanitizeLoadedPath(
+        settings.value("headerLogoImage").toString(), "headerLogoImage", config.name);
     config.background.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
         settings.value("headerLogoPosition", "topcenter").toString());
 
@@ -613,7 +626,8 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     settings.setValue("gridWidth", c.gridLayout.gridWidth);
     settings.setValue("horizontalGridHeight", c.gridLayout.horizontalGridHeight);
     settings.setValue("gridWidthSidebarHidden", c.gridLayout.gridWidthSidebarHidden);
-    settings.setValue("horizontalGridHeightSidebarHidden", c.gridLayout.horizontalGridHeightSidebarHidden);
+    settings.setValue("horizontalGridHeightSidebarHidden",
+                      c.gridLayout.horizontalGridHeightSidebarHidden);
     settings.setValue("gridHeightSidebarHidden", c.gridLayout.gridHeightSidebarHidden);
     settings.setValue("sidebarVisible", c.sidebar.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
@@ -624,12 +638,12 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     // sidebar enhancements.
     settings.setValue("sidebarPosition",
                       CollectionUtils::detailsPanePositionToString(c.sidebar.sidebarPosition));
-    settings.setValue("sidebarBackgroundType",
-                      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebar.sidebarBackgroundType));
+    settings.setValue("sidebarBackgroundType", CollectionUtils::detailsPaneBackgroundTypeToString(
+                                                   c.sidebar.sidebarBackgroundType));
     settings.setValue("sidebarBackgroundColor", c.sidebar.sidebarBackgroundColor);
-    settings.setValue(
-        "sidebarBackgroundImage",
-        sanitizePersistedPath(c.sidebar.sidebarBackgroundImage, "sidebarBackgroundImage", sectionName));
+    settings.setValue("sidebarBackgroundImage",
+                      sanitizePersistedPath(c.sidebar.sidebarBackgroundImage,
+                                            "sidebarBackgroundImage", sectionName));
     settings.setValue("sidebarPattern",
                       CollectionUtils::detailsPanePatternToString(c.sidebar.sidebarPattern));
     settings.setValue("sidebarPatternIntensity", c.sidebar.sidebarPatternIntensity);
@@ -674,16 +688,16 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     }
     settings.setValue("backgroundType", bgTypeStr);
     settings.setValue("backgroundColor", c.background.backgroundColor);
-    settings.setValue("backgroundImage",
-                      sanitizePersistedPath(c.background.backgroundImage, "backgroundImage", sectionName));
-    settings.setValue("backgroundVideo",
-                      sanitizePersistedPath(c.background.backgroundVideo, "backgroundVideo", sectionName));
+    settings.setValue("backgroundImage", sanitizePersistedPath(c.background.backgroundImage,
+                                                               "backgroundImage", sectionName));
+    settings.setValue("backgroundVideo", sanitizePersistedPath(c.background.backgroundVideo,
+                                                               "backgroundVideo", sectionName));
     settings.setValue("primaryColor", c.background.primaryColor);
     settings.setValue("tileColor", c.background.tileColor);
     settings.setValue("selectionColor", c.background.selectionColor);
     // header logo
-    settings.setValue("headerLogoImage",
-                      sanitizePersistedPath(c.background.headerLogoImage, "headerLogoImage", sectionName));
+    settings.setValue("headerLogoImage", sanitizePersistedPath(c.background.headerLogoImage,
+                                                               "headerLogoImage", sectionName));
     settings.setValue("headerLogoPosition",
                       CollectionUtils::headerLogoPositionToString(c.background.headerLogoPosition));
     // vignette

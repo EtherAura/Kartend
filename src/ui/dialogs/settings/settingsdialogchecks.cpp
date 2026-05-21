@@ -87,7 +87,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   row.launcher.additionalLaunchers = m_workingAdditionalLaunchers;
   row.additionalParentNames = m_workingAdditionalParentNames;
   if (ui->launcherPanel->defaultLauncherComboBox()->count() > 0) {
-    row.launcher.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
+    row.launcher.defaultLauncherIndex =
+        ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
   }
   return row;
 }
@@ -129,7 +130,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   const bool additionalChanged = m_workingAdditionalLaunchers != o.launcher.additionalLaunchers;
   const bool defaultLauncherChanged =
       ui->launcherPanel->defaultLauncherComboBox()->count() > 0 &&
-      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() != o.launcher.defaultLauncherIndex;
+      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() !=
+          o.launcher.defaultLauncherIndex;
   // type comparison is handled inside ConfigurationPanel::hasChanges below.
   const bool hSpacingChanged =
       ui->appearanceLayoutPanel->horizontalSpacingSpinBox() &&

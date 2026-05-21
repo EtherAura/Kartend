@@ -67,15 +67,13 @@ struct SmartPlaylistEdit {
 /// InteractionManager pop the dialog without #including its header — the
 /// UI layer supplies a closure that builds the dialog with the right
 /// parent and reads back the result.
-using SmartPlaylistDialogRunner =
-    std::function<std::optional<SmartPlaylistEdit>(const QString &initialName,
-                                                    const std::optional<SmartFilter::Filter> &initialFilter)>;
+using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
+    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter)>;
 
 /// Runs the modal CustomFieldsDialog seeded with the item's title and
 /// current custom fields. Returns the edited fields, or nullopt on cancel.
-using CustomFieldsDialogRunner =
-    std::function<std::optional<ItemMetadataStore::CustomFieldList>(
-        const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
+using CustomFieldsDialogRunner = std::function<std::optional<ItemMetadataStore::CustomFieldList>(
+    const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
 
 struct InteractionManagerSetup {
   // Optional: shared context for common fields

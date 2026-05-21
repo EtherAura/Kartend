@@ -35,8 +35,10 @@ void AppearanceEffectsPanel::load() {
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->wallpaperParallaxCheckBox, config.background.wallpaperParallax);
   SettingsFormBinding::loadInto(ui->parallaxStrengthSpinBox, config.background.parallaxStrength);
-  SettingsFormBinding::loadInto(ui->toolbarBackdropBlurCheckBox, config.background.toolbarBackdropBlur);
-  SettingsFormBinding::loadInto(ui->backdropBlurRadiusSpinBox, config.background.backdropBlurRadius);
+  SettingsFormBinding::loadInto(ui->toolbarBackdropBlurCheckBox,
+                                config.background.toolbarBackdropBlur);
+  SettingsFormBinding::loadInto(ui->backdropBlurRadiusSpinBox,
+                                config.background.backdropBlurRadius);
 }
 
 void AppearanceEffectsPanel::clear() {

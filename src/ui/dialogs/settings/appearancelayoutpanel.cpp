@@ -50,8 +50,10 @@ void AppearanceLayoutPanel::load() {
   SettingsFormBinding::loadIntoIndex(ui->horizontalAlignmentComboBox,
                                      static_cast<int>(config.horizontalAlignment));
   SettingsFormBinding::loadInto(ui->gridWidthSpinBox, config.gridLayout.gridWidth);
-  SettingsFormBinding::loadInto(ui->gridWidthSidebarHiddenSpinBox, config.gridLayout.gridWidthSidebarHidden);
-  SettingsFormBinding::loadInto(ui->horizontalGridHeightSpinBox, config.gridLayout.horizontalGridHeight);
+  SettingsFormBinding::loadInto(ui->gridWidthSidebarHiddenSpinBox,
+                                config.gridLayout.gridWidthSidebarHidden);
+  SettingsFormBinding::loadInto(ui->horizontalGridHeightSpinBox,
+                                config.gridLayout.horizontalGridHeight);
   SettingsFormBinding::loadInto(ui->horizontalGridHeightSidebarHiddenSpinBox,
                                 config.gridLayout.horizontalGridHeightSidebarHidden);
   SettingsFormBinding::loadInto(ui->horizontalSpacingSpinBox,
@@ -91,7 +93,8 @@ void AppearanceLayoutPanel::save() const {
   config.gridLayout.gridWidth = ui->gridWidthSpinBox->value();
   config.gridLayout.gridWidthSidebarHidden = ui->gridWidthSidebarHiddenSpinBox->value();
   config.gridLayout.horizontalGridHeight = ui->horizontalGridHeightSpinBox->value();
-  config.gridLayout.horizontalGridHeightSidebarHidden = ui->horizontalGridHeightSidebarHiddenSpinBox->value();
+  config.gridLayout.horizontalGridHeightSidebarHidden =
+      ui->horizontalGridHeightSidebarHiddenSpinBox->value();
   config.gridLayout.horizontalSpacing = spacingUiToInternal(ui->horizontalSpacingSpinBox->value());
   config.gridLayout.verticalSpacing = spacingUiToInternal(ui->verticalSpacingSpinBox->value());
   config.gridLayout.itemWidth = ui->itemWidthSpinBox->value();
@@ -107,13 +110,16 @@ bool AppearanceLayoutPanel::hasChanges() const {
   if (ui->horizontalAlignmentComboBox->currentIndex() != static_cast<int>(o.horizontalAlignment))
     return true;
   if (ui->gridWidthSpinBox->value() != o.gridLayout.gridWidth) return true;
-  if (ui->gridWidthSidebarHiddenSpinBox->value() != o.gridLayout.gridWidthSidebarHidden) return true;
+  if (ui->gridWidthSidebarHiddenSpinBox->value() != o.gridLayout.gridWidthSidebarHidden)
+    return true;
   if (ui->horizontalGridHeightSpinBox->value() != o.gridLayout.horizontalGridHeight) return true;
-  if (ui->horizontalGridHeightSidebarHiddenSpinBox->value() != o.gridLayout.horizontalGridHeightSidebarHidden)
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox->value() !=
+      o.gridLayout.horizontalGridHeightSidebarHidden)
     return true;
   if (spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.gridLayout.horizontalSpacing)
     return true;
-  if (spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.gridLayout.verticalSpacing) return true;
+  if (spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.gridLayout.verticalSpacing)
+    return true;
   if (ui->itemWidthSpinBox->value() != o.gridLayout.itemWidth) return true;
   if (ui->itemHeightSpinBox->value() != o.gridLayout.itemHeight) return true;
   if (ui->cornerRadiusSpinBox->value() != o.gridLayout.cornerRadius) return true;

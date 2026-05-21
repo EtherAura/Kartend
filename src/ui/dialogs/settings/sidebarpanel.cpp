@@ -121,7 +121,8 @@ void SidebarPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.sidebar.sidebarMode = static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
+  config.sidebar.sidebarMode =
+      static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
   config.sidebar.sidebarPosition =
       static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
   config.sidebar.sidebarWidth = ui->sidebarWidthSpinBox->value();
@@ -165,7 +166,8 @@ bool SidebarPanel::hasChanges() const {
                              : o.sidebar.sidebarBackgroundColor;
   if (ui->sidebarBackgroundValueEdit->text().trimmed() != bgOrig) return true;
 
-  if (ui->sidebarModeComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarMode)) return true;
+  if (ui->sidebarModeComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarMode))
+    return true;
   if (ui->sidebarPositionComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarPosition))
     return true;
   if (ui->sidebarWidthSpinBox->value() != o.sidebar.sidebarWidth) return true;
@@ -186,8 +188,10 @@ bool SidebarPanel::hasChanges() const {
   if (ui->sidebarFontSizeSpinBox->value() != o.sidebar.sidebarFontPointSize) return true;
   if (ui->sidebarActiveTabComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarActiveTab))
     return true;
-  if (ui->hideHorizontalScrollbarCheckBox->isChecked() != o.gridLayout.hideHorizontalScrollbar) return true;
-  if (ui->hideVerticalScrollbarCheckBox->isChecked() != o.gridLayout.hideVerticalScrollbar) return true;
+  if (ui->hideHorizontalScrollbarCheckBox->isChecked() != o.gridLayout.hideHorizontalScrollbar)
+    return true;
+  if (ui->hideVerticalScrollbarCheckBox->isChecked() != o.gridLayout.hideVerticalScrollbar)
+    return true;
   return false;
 }
 

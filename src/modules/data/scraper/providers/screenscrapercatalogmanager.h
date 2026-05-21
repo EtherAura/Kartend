@@ -55,14 +55,12 @@ public:
   /// "rate-limited", etc.). Kept injectable so the SS-specific status
   /// vocabulary stays in screenscraperprovider.cpp instead of being
   /// duplicated here. Falling back to identity is fine for tests.
-  using ErrorMapper =
-      std::function<ErrorUtils::ErrorContext(const ErrorUtils::ErrorContext &)>;
+  using ErrorMapper = std::function<ErrorUtils::ErrorContext(const ErrorUtils::ErrorContext &)>;
 
   using SystemsReadyCallback = std::function<void(QList<ScreenScraperSystems::System>)>;
 
   ScreenScraperCatalogManager(Scraper::HttpClient *httpClient, QString userAgent,
-                              CredentialsResolver credentialsResolver,
-                              ErrorMapper errorMapper);
+                              CredentialsResolver credentialsResolver, ErrorMapper errorMapper);
 
   /// Ensure the systems catalog is loaded — from the disk cache when
   /// fresh, otherwise via a network fetch of systemesListe.php. The
@@ -81,9 +79,7 @@ public:
   /// Empty until the first successful ensureMediaTypeCatalog round
   /// trip; the parser falls back to the raw canonical tag when an
   /// entry is missing.
-  [[nodiscard]] const QHash<QString, QString> &mediaTypeLabels() const {
-    return m_mediaTypeLabels;
-  }
+  [[nodiscard]] const QHash<QString, QString> &mediaTypeLabels() const { return m_mediaTypeLabels; }
 
 private:
   Scraper::HttpClient *m_httpClient;

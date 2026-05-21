@@ -180,7 +180,8 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["selection_color"] = c.background.selectionColor;
 
   o["header_logo_image"] = c.background.headerLogoImage;
-  o["header_logo_position"] = CollectionUtils::headerLogoPositionToString(c.background.headerLogoPosition);
+  o["header_logo_position"] =
+      CollectionUtils::headerLogoPositionToString(c.background.headerLogoPosition);
 
   o["vignette_enabled"] = c.background.vignetteEnabled;
   o["vignette_intensity"] = c.background.vignetteIntensity;
@@ -236,7 +237,8 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.gridLayout.gridWidth = o["grid_width"].toInt(4);
   c.gridLayout.horizontalGridHeight = o["horizontal_grid_height"].toInt(0);
   c.gridLayout.gridWidthSidebarHidden = o["grid_width_sidebar_hidden"].toInt(0);
-  c.gridLayout.horizontalGridHeightSidebarHidden = o["horizontal_grid_height_sidebar_hidden"].toInt(0);
+  c.gridLayout.horizontalGridHeightSidebarHidden =
+      o["horizontal_grid_height_sidebar_hidden"].toInt(0);
   c.gridLayout.gridHeightSidebarHidden = o["grid_height_sidebar_hidden"].toInt(0);
   c.sidebar.sidebarVisible = o["sidebar_visible"].toBool(false);
   c.parentCollectionIndex = o["parent_collection_index"].toInt(-1);
@@ -255,7 +257,8 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
       CollectionUtils::stringToDetailsPaneBackgroundType(o["sidebar_background_type"].toString());
   c.sidebar.sidebarBackgroundColor = o["sidebar_background_color"].toString();
   c.sidebar.sidebarBackgroundImage = o["sidebar_background_image"].toString();
-  c.sidebar.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(o["sidebar_pattern"].toString());
+  c.sidebar.sidebarPattern =
+      CollectionUtils::stringToDetailsPanePattern(o["sidebar_pattern"].toString());
   c.sidebar.sidebarPatternIntensity = o["sidebar_pattern_intensity"].toInt(50);
   c.sidebar.sidebarPatternColor = o["sidebar_pattern_color"].toString();
   c.sidebar.sidebarTextColor = o["sidebar_text_color"].toString();
@@ -267,7 +270,8 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.sidebar.sidebarWidth = o["sidebar_width"].toInt(UIConstants::DetailsPane::FIXED_WIDTH);
   c.sidebar.sidebarHeight = o["sidebar_height"].toInt(UIConstants::DetailsPane::FIXED_HEIGHT);
   c.sidebar.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
-  c.sidebar.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
+  c.sidebar.sidebarActiveTab =
+      CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
   c.sidebar.sidebarFontFamily = o["sidebar_font_family"].toString();
   c.sidebar.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
 

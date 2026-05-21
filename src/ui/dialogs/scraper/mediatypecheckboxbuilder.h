@@ -32,8 +32,7 @@ public:
   /// derivation; callers retain ownership of the returned widget and
   /// must reparent it via a layout. Passing a null `parent` is supported
   /// (the returned widget can be reparented later by the layout owner).
-  [[nodiscard]] static QGroupBox *build(QWidget *parent,
-                                        QHash<QString, QCheckBox *> &outChecks);
+  [[nodiscard]] static QGroupBox *build(QWidget *parent, QHash<QString, QCheckBox *> &outChecks);
 };
 
 #endif // MEDIATYPECHECKBOXBUILDER_H

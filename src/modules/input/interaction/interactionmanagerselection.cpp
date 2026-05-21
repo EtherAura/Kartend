@@ -32,10 +32,10 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
-#include "idetailspane.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
+#include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "inavigationmanager.h"
 #include "isessionmanager.h"

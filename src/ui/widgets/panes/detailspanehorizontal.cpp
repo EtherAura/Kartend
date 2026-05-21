@@ -289,7 +289,8 @@ void DetailsPane::updateHorizontalView() {
     }
   }
   if (m_hPreviewArea) {
-    const bool hasVideo = m_videoPlayback.videoPreview && !m_videoPlayback.pendingVideoPath.isEmpty();
+    const bool hasVideo =
+        m_videoPlayback.videoPreview && !m_videoPlayback.pendingVideoPath.isEmpty();
     m_hPreviewArea->setVisible(isItemTab && hasVideo);
   }
   // Gallery thumbs are item-only too. Hide the host on other tabs;

@@ -17,8 +17,7 @@ constexpr QChar kKeyDelim = QChar(0x1F);
 inline void assertMainThread() {
   Q_ASSERT_X(QCoreApplication::instance() == nullptr ||
                  QThread::currentThread() == QCoreApplication::instance()->thread(),
-             "ItemMetadataCache",
-             "ItemMetadataCache must only be accessed from the main thread");
+             "ItemMetadataCache", "ItemMetadataCache must only be accessed from the main thread");
 }
 } // namespace
 

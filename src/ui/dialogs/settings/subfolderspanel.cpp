@@ -39,9 +39,12 @@ void SubfoldersPanel::load() {
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->includeContentSubfoldersCheckBox,
                                 config.folderBrowsing.includeContentSubfolders);
-  SettingsFormBinding::loadInto(ui->showAllSubfolderItemsCheckBox, config.folderBrowsing.showAllSubfolderItems);
-  SettingsFormBinding::loadInto(ui->hideSubfolderTitlesCheckBox, config.folderBrowsing.hideSubfolderTitles);
-  SettingsFormBinding::loadInto(ui->showHiddenFoldersCheckBox, config.folderBrowsing.showHiddenFolders);
+  SettingsFormBinding::loadInto(ui->showAllSubfolderItemsCheckBox,
+                                config.folderBrowsing.showAllSubfolderItems);
+  SettingsFormBinding::loadInto(ui->hideSubfolderTitlesCheckBox,
+                                config.folderBrowsing.hideSubfolderTitles);
+  SettingsFormBinding::loadInto(ui->showHiddenFoldersCheckBox,
+                                config.folderBrowsing.showHiddenFolders);
   SettingsFormBinding::loadInto(ui->includeArtworkSubfoldersCheckBox,
                                 config.folderBrowsing.includeArtworkSubfolders);
   updateOptionsVisibility();
@@ -62,21 +65,25 @@ void SubfoldersPanel::save() const {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
-  config.folderBrowsing.includeContentSubfolders = ui->includeContentSubfoldersCheckBox->isChecked();
+  config.folderBrowsing.includeContentSubfolders =
+      ui->includeContentSubfoldersCheckBox->isChecked();
   config.folderBrowsing.showAllSubfolderItems = ui->showAllSubfolderItemsCheckBox->isChecked();
   config.folderBrowsing.hideSubfolderTitles = ui->hideSubfolderTitlesCheckBox->isChecked();
   config.folderBrowsing.showHiddenFolders = ui->showHiddenFoldersCheckBox->isChecked();
-  config.folderBrowsing.includeArtworkSubfolders = ui->includeArtworkSubfoldersCheckBox->isChecked();
+  config.folderBrowsing.includeArtworkSubfolders =
+      ui->includeArtworkSubfoldersCheckBox->isChecked();
 }
 
 bool SubfoldersPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
-  return ui->includeContentSubfoldersCheckBox->isChecked() != o.folderBrowsing.includeContentSubfolders ||
+  return ui->includeContentSubfoldersCheckBox->isChecked() !=
+             o.folderBrowsing.includeContentSubfolders ||
          ui->showAllSubfolderItemsCheckBox->isChecked() != o.folderBrowsing.showAllSubfolderItems ||
          ui->hideSubfolderTitlesCheckBox->isChecked() != o.folderBrowsing.hideSubfolderTitles ||
          ui->showHiddenFoldersCheckBox->isChecked() != o.folderBrowsing.showHiddenFolders ||
-         ui->includeArtworkSubfoldersCheckBox->isChecked() != o.folderBrowsing.includeArtworkSubfolders;
+         ui->includeArtworkSubfoldersCheckBox->isChecked() !=
+             o.folderBrowsing.includeArtworkSubfolders;
 }
 
 bool SubfoldersPanel::isContentSubfoldersIncluded() const {

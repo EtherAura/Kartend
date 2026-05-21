@@ -173,8 +173,9 @@ ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAcc
                                              CollectionAccessor collectionAccessor)
     : m_settingsAccessor(std::move(settingsAccessor)),
       m_collectionAccessor(std::move(collectionAccessor)),
-      m_catalog(Scraper::HttpClient::instance(), userAgent(),
-                [this]() { return currentCredentials(); }, &mapScreenScraperHttpError) {
+      m_catalog(
+          Scraper::HttpClient::instance(), userAgent(), [this]() { return currentCredentials(); },
+          &mapScreenScraperHttpError) {
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
 }
 
@@ -392,9 +393,8 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   // keys, media tags, …) can be inspected. Off by default; the file
   // path is logged so it is easy to find.
   if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
-    const QString dumpDir =
-        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
-            .filePath(QStringLiteral("scraper-dump"));
+    const QString dumpDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+                                .filePath(QStringLiteral("scraper-dump"));
     if (QDir().mkpath(dumpDir)) {
       const QString dumpPath = QDir(dumpDir).filePath(
           QStringLiteral("jeuInfos-%1.json").arg(QDateTime::currentMSecsSinceEpoch()));
@@ -675,60 +675,58 @@ void fetchHealthStatus(const GeneralSettings *settings,
     hasUserCreds = !blob.value(QStringLiteral("user_id")).isEmpty() &&
                    !blob.value(QStringLiteral("user_password")).isEmpty();
   }
-  fetchInfraInfo(
-      settings, [callback = std::move(callback),
-                 hasUserCreds](ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
-        using HealthStatus = MetadataLookupProvider::HealthStatus;
-        if (r.isError()) {
-          // Probe failure is non-fatal — the actual scrape will hit the
-          // same error path and report it via mapScreenScraperHttpError.
-          // Stay silent in the dialog rather than fearmongering on a
-          // transient blip.
-          callback(HealthStatus{});
-          return;
-        }
-        const auto &info = r.value();
-        HealthStatus out;
-        // Refuse anonymous scrapes when SS has shut its API to the
-        // leecher tier. Member scrapes still go through (SS allows them
-        // on a separate path).
-        if (info.closedForLeechers && !hasUserCreds) {
-          out.refuseScrape = true;
-          out.humanStatus = QObject::tr(
-              "ScreenScraper has closed its API to anonymous traffic right now. "
-              "Sign in with member credentials under Settings → Scrapers → ScreenScraper, "
-              "or try again later.");
-          callback(out);
-          return;
-        }
-        if (info.closedForNonMembers && !hasUserCreds) {
-          out.refuseScrape = true;
-          out.humanStatus =
-              QObject::tr("ScreenScraper has closed its API to non-members right now "
-                          "(server overloaded). Sign in with member credentials, or try "
-                          "again later.");
-          callback(out);
-          return;
-        }
-        // Surface load info when any of the CPU figures are alarming or
-        // scraper count is high. Threshold is intentionally loose — we
-        // want to nudge the user about slow scrapes, not pepper them
-        // with infra trivia on a quiet day.
-        const int peakCpu = std::max({info.cpu1Percent, info.cpu2Percent, info.cpu3Percent});
-        if (peakCpu >= 70 || info.activeScrapers >= 200) {
-          QStringList parts;
-          if (peakCpu > 0) {
-            parts << QObject::tr("CPU %1%").arg(peakCpu);
-          }
-          if (info.activeScrapers > 0) {
-            parts << QObject::tr("%1 active scrapers").arg(info.activeScrapers);
-          }
-          out.humanStatus = QObject::tr("ScreenScraper is busy right now (%1) — "
-                                        "expect slower downloads.")
-                                .arg(parts.join(QStringLiteral(", ")));
-        }
-        callback(out);
-      });
+  fetchInfraInfo(settings, [callback = std::move(callback), hasUserCreds](
+                               ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
+    using HealthStatus = MetadataLookupProvider::HealthStatus;
+    if (r.isError()) {
+      // Probe failure is non-fatal — the actual scrape will hit the
+      // same error path and report it via mapScreenScraperHttpError.
+      // Stay silent in the dialog rather than fearmongering on a
+      // transient blip.
+      callback(HealthStatus{});
+      return;
+    }
+    const auto &info = r.value();
+    HealthStatus out;
+    // Refuse anonymous scrapes when SS has shut its API to the
+    // leecher tier. Member scrapes still go through (SS allows them
+    // on a separate path).
+    if (info.closedForLeechers && !hasUserCreds) {
+      out.refuseScrape = true;
+      out.humanStatus =
+          QObject::tr("ScreenScraper has closed its API to anonymous traffic right now. "
+                      "Sign in with member credentials under Settings → Scrapers → ScreenScraper, "
+                      "or try again later.");
+      callback(out);
+      return;
+    }
+    if (info.closedForNonMembers && !hasUserCreds) {
+      out.refuseScrape = true;
+      out.humanStatus = QObject::tr("ScreenScraper has closed its API to non-members right now "
+                                    "(server overloaded). Sign in with member credentials, or try "
+                                    "again later.");
+      callback(out);
+      return;
+    }
+    // Surface load info when any of the CPU figures are alarming or
+    // scraper count is high. Threshold is intentionally loose — we
+    // want to nudge the user about slow scrapes, not pepper them
+    // with infra trivia on a quiet day.
+    const int peakCpu = std::max({info.cpu1Percent, info.cpu2Percent, info.cpu3Percent});
+    if (peakCpu >= 70 || info.activeScrapers >= 200) {
+      QStringList parts;
+      if (peakCpu > 0) {
+        parts << QObject::tr("CPU %1%").arg(peakCpu);
+      }
+      if (info.activeScrapers > 0) {
+        parts << QObject::tr("%1 active scrapers").arg(info.activeScrapers);
+      }
+      out.humanStatus = QObject::tr("ScreenScraper is busy right now (%1) — "
+                                    "expect slower downloads.")
+                            .arg(parts.join(QStringLiteral(", ")));
+    }
+    callback(out);
+  });
 }
 
 } // namespace ScreenScraperProviderHelpers

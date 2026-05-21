@@ -42,7 +42,8 @@ QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
 int countVirtualFolders(const CollectionConfig &config) {
   // Only count virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!config.folderBrowsing.includeContentSubfolders || config.folderBrowsing.showAllSubfolderItems) {
+  if (!config.folderBrowsing.includeContentSubfolders ||
+      config.folderBrowsing.showAllSubfolderItems) {
     return 0;
   }
 

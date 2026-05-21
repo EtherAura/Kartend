@@ -21,8 +21,8 @@
 // closures (InteractionManagerSetup::runSmartPlaylistDialog /
 // runCustomFieldsDialog) so the data layer doesn't need the ui/ dialog
 // headers for the symbols. The runners themselves live in MainWindow.
-#include "idetailspane.h"
 #include "idatabasemanager.h"
+#include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "imainwindow.h"
 #include "inavigationmanager.h"
@@ -618,8 +618,8 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   if (!m_runCustomFieldsDialog) {
     return;
   }
-  auto edited = m_runCustomFieldsDialog(itemName,
-                                         ItemMetadataStore::parseCustomFields(metadata.customFields));
+  auto edited = m_runCustomFieldsDialog(
+      itemName, ItemMetadataStore::parseCustomFields(metadata.customFields));
   if (!edited.has_value()) {
     return;
   }

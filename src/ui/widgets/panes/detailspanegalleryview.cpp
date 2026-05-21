@@ -180,8 +180,9 @@ void DetailsPaneGalleryView::ensureSection() {
   if (auto *artworkParentLayout =
           qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
     if (artworkParentLayout == contentLayout) {
-      const int videoIdx =
-          m_host->m_videoPlayback.videoPreview ? contentLayout->indexOf(m_host->m_videoPlayback.videoPreview) : -1;
+      const int videoIdx = m_host->m_videoPlayback.videoPreview
+                               ? contentLayout->indexOf(m_host->m_videoPlayback.videoPreview)
+                               : -1;
       const int artIdx = contentLayout->indexOf(ui->artworkDisplay);
       const int anchor = videoIdx >= 0 ? videoIdx : artIdx;
       if (anchor >= 0) {

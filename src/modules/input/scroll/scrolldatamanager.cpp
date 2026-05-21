@@ -149,7 +149,8 @@ void ScrollDataManager::initializeVirtualFolders(const CollectionContext &contex
 
   // Only show virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!context.config.folderBrowsing.includeContentSubfolders || context.config.folderBrowsing.showAllSubfolderItems) {
+  if (!context.config.folderBrowsing.includeContentSubfolders ||
+      context.config.folderBrowsing.showAllSubfolderItems) {
     return;
   }
 

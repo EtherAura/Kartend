@@ -33,9 +33,9 @@
 
 #include "collectionutils.h"
 #include "databasemanager.h"
-#include "idetailspane.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
+#include "idetailspane.h"
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"

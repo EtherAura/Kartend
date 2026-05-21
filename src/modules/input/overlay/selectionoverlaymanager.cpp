@@ -39,8 +39,7 @@ void SelectionOverlayManager::setLayerManager(OverlayLayerManager *manager) {
   // If the overlay already exists, register it now so the next bringToFront
   // sees its layer assignment.
   if (m_layerManager && m_overlay) {
-    m_layerManager->registerOverlay(m_overlay,
-                                    OverlayLayerManager::Layer::SelectionHighlight);
+    m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SelectionHighlight);
   }
 }
 
@@ -67,8 +66,7 @@ void SelectionOverlayManager::ensureOverlay() {
     // null; setLayerManager handles that case by re-registering once the
     // widget exists.
     if (m_layerManager) {
-      m_layerManager->registerOverlay(m_overlay,
-                                      OverlayLayerManager::Layer::SelectionHighlight);
+      m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SelectionHighlight);
     }
   }
 }

@@ -176,7 +176,8 @@ void ArtworkTabPanel::onExportPlaceholderPngs() {
   // larger libraries.
   QApplication::setOverrideCursor(Qt::WaitCursor);
   const auto result = PlaceholderWarmer::exportMissingPlaceholders(
-      cfg, liveArtworkDir, cfg.gridLayout.itemWidth, cfg.gridLayout.itemHeight, cfg.gridLayout.cornerRadius,
+      cfg, liveArtworkDir, cfg.gridLayout.itemWidth, cfg.gridLayout.itemHeight,
+      cfg.gridLayout.cornerRadius,
       [](int w, int h, int r) { return ItemWidget::buildPlaceholderTile(w, h, r); });
   QApplication::restoreOverrideCursor();
 

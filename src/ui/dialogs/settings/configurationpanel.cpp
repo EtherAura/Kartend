@@ -196,7 +196,8 @@ void ConfigurationPanel::load() {
     // unrecognised stored id (hand-edit, or a provider dropped in a
     // later build) also falls back to Automatic.
     QSignalBlocker blocker(ui->scraperProviderComboBox);
-    const int idx = ui->scraperProviderComboBox->findData(config.scraperOverrides.scraperProviderId);
+    const int idx =
+        ui->scraperProviderComboBox->findData(config.scraperOverrides.scraperProviderId);
     ui->scraperProviderComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
   }
   SettingsFormBinding::loadInto(ui->mediaDirLineEdit, config.mediaDirectory);
@@ -282,9 +283,11 @@ void ConfigurationPanel::save() const {
   // currentData().toInt() returns 0 for an empty combo, so guard with
   // the index check — clear() leaves the combo empty until load() runs.
   if (ui->screenscraperSystemComboBox->currentIndex() >= 0) {
-    config.scraperOverrides.screenscraperSystemId = ui->screenscraperSystemComboBox->currentData().toInt();
+    config.scraperOverrides.screenscraperSystemId =
+        ui->screenscraperSystemComboBox->currentData().toInt();
   }
-  config.scraperOverrides.screenscraperHashArchive = ui->screenscraperHashArchiveCheckBox->isChecked();
+  config.scraperOverrides.screenscraperHashArchive =
+      ui->screenscraperHashArchiveCheckBox->isChecked();
   config.scraperOverrides.datFilePaths.clear();
   config.scraperOverrides.datFilePaths.reserve(ui->datFilesListWidget->count());
   for (int i = 0; i < ui->datFilesListWidget->count(); ++i) {
@@ -297,7 +300,8 @@ bool ConfigurationPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
   if (ui->collectionTypeComboBox->currentText().trimmed() != o.type) return true;
-  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperOverrides.scraperProviderId) return true;
+  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperOverrides.scraperProviderId)
+    return true;
   if (ui->mediaDirLineEdit->text() != o.mediaDirectory) return true;
   if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;
   if (ui->showAllSubcollectionItemsCheckBox->isChecked() != o.showAllSubcollectionItems)
@@ -308,10 +312,12 @@ bool ConfigurationPanel::hasChanges() const {
       ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
   if (parsed != o.extensions) return true;
   if (ui->screenscraperSystemComboBox->currentIndex() >= 0 &&
-      ui->screenscraperSystemComboBox->currentData().toInt() != o.scraperOverrides.screenscraperSystemId) {
+      ui->screenscraperSystemComboBox->currentData().toInt() !=
+          o.scraperOverrides.screenscraperSystemId) {
     return true;
   }
-  if (ui->screenscraperHashArchiveCheckBox->isChecked() != o.scraperOverrides.screenscraperHashArchive) {
+  if (ui->screenscraperHashArchiveCheckBox->isChecked() !=
+      o.scraperOverrides.screenscraperHashArchive) {
     return true;
   }
   // Compare against the rebuilt list so duplicate-drop / empty-trim
