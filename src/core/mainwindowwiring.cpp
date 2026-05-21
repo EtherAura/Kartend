@@ -94,6 +94,40 @@
 //
 //   QScrollBar (item area V/H) → NavigationManager
 //     valueChanged              → onViewportChanged
+//
+// =====================================================================
+// Organizational contract (watch item — Kartend-dkgr).
+// =====================================================================
+//
+// 1. **Emitter-keyed**, not receiver-keyed. Each connect*() function below
+//    groups every outgoing connection from one sender. Adding a new edge
+//    means locating the sender's block, not the receiver's. The manager
+//    graph above mirrors this grouping so the file and the doc stay in
+//    sync mechanically.
+//
+// 2. **Member-function-pointer slots only.** No inline lambdas in this TU.
+//    Every connect() resolves to a named MainWindow::on*() / refresh*() /
+//    apply*() member so the manager graph above stays grep'able and so
+//    new edges can't smuggle behaviour into the wiring file.
+//
+// 3. **Slot bodies live elsewhere when they outgrow one screen.** The
+//    extracted TUs (mainwindow_dbevents.cpp, mainwindow_scrollevents.cpp,
+//    mainwindow_scraper.cpp) own the larger responsibility-segmented
+//    handlers; the small wiring-adjacent slots that read naturally next
+//    to their connect() stay here. When a new slot would push this TU's
+//    inline-handler section over ~150 LOC, extract a sibling TU keyed by
+//    its emitter (e.g. mainwindow_artworkevents.cpp).
+//
+// 4. **Growth ceiling: ~800 LOC.** Above that, split the connect() tables
+//    by emitter family:
+//       * mainwindow_wiring_data.cpp  — DatabaseManager, CacheManager,
+//         SessionManager, SettingsManager, PlaylistManager, KartManager,
+//         DetailPageManager emissions
+//       * mainwindow_wiring_input.cpp — NavigationManager, ScrollManager,
+//         InteractionManager, ArtworkManager::TimerCoordinator,
+//         DetailsPaneManager, ToolbarController emissions
+//    Keep the manager-graph doc in this preamble even after the split so
+//    there's still one place to read the full edge list.
 
 #include <QAction>
 #include <QApplication>
