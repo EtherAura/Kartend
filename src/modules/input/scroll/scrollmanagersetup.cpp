@@ -127,9 +127,11 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_scrollEventHandler->setIdleTimer(m_userScrollIdleTimer);
   }
 
-  // Configure item widget factory with dependencies
+  // Configure item widget factory with dependencies. Kartend-davi: route
+  // sibling-manager access through ctx instead of caching individual
+  // pointers in the factory.
   if (m_widgetFactory) {
-    m_widgetFactory->setArtworkManager(artwork);
+    m_widgetFactory->setApplicationContext(m_ctx);
     m_widgetFactory->setCollections(m_collections);
     m_widgetFactory->setCollectionColumnWidth(
         m_selectionDisplay ? m_selectionDisplay->collectionColumnWidth() : 150);
@@ -140,10 +142,11 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionDisplay->setWidgetFactory(m_widgetFactory.get());
   }
 
-  // Configure search loading overlay with scroll area viewport, and hand off
-  // the database pointer pulled from ctx.
+  // Configure search loading overlay with scroll area viewport. Kartend-davi:
+  // sibling-manager access flows through ctx instead of pushing
+  // IDatabaseManager pointers down explicitly.
   if (m_dataSource) {
-    m_dataSource->setDatabaseManager(db);
+    m_dataSource->setApplicationContext(m_ctx);
     if (m_mediaScrollArea) {
       m_dataSource->setSearchOverlayParent(m_mediaScrollArea->viewport());
     }
@@ -177,7 +180,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Data Accessors - delegate to ScrollDataManager
+// Data Accessors - delegate to ScrollDataStore
 // ─────────────────────────────────────────────────────────────────────────
 
 auto ScrollManager::getFilePaths() const -> const QStringList & {

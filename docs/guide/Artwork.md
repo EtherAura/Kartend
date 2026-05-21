@@ -298,8 +298,8 @@ Toggleable per-collection; combines with search and other filters.
 - Per-item manual links table: `item_artwork(collection_uuid, source_path,
   artwork_type, artwork_file)` in SQLite. See
   [src/utils/db/itemartwork.h](../../src/utils/db/itemartwork.h).
-- Sidebar gallery layout: `MetadataSidebar` in
-  [src/ui/widgets/](../../src/ui/widgets/). The gallery tabs are
+- Sidebar gallery layout: `DetailsPane` in
+  [src/ui/widgets/panes/](../../src/ui/widgets/panes/). The gallery tabs are
   constructed dynamically from the union of standard types found and
   the collection's `customArtworkTypes` list.
 - Cycle-on-middle-click: handled in `MouseManager::handleMiddleClick`

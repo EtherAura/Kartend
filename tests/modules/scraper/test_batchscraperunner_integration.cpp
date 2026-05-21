@@ -131,6 +131,9 @@ void TestBatchScrapeRunnerIntegration::
   m_session = std::make_unique<SessionManager>();
   auto ctx = makeCtx(m_session.get());
   auto db = std::make_unique<DatabaseManager>(&ctx);
+  // Kartend-m02z: BatchScrapeRunner reads DB through ctx; publish it now
+  // that DatabaseManager has been constructed.
+  ctx.managers.databaseManager = db.get();
 
   // ── Step 1: pre-seed the row with the OLD title via the public API.
   // saveItemMetadata invalidates the cache itself, so after this the
@@ -159,7 +162,7 @@ void TestBatchScrapeRunnerIntegration::
       KartendTest::makeStubMatch("1", QStringLiteral("NEW TITLE"));
 
   Scraper::BatchScrapeRunner runner(
-      db.get(), stub, uuid, QStringList{sourcePath},
+      &ctx, stub, uuid, QStringList{sourcePath},
       /*artworkDir=*/QString(), /*fetchPrimaryCover=*/false);
   runner.start();
   const auto summary = waitForFinish(&runner);
@@ -222,6 +225,9 @@ void TestBatchScrapeRunnerIntegration::
   m_session = std::make_unique<SessionManager>();
   auto ctx = makeCtx(m_session.get());
   auto db = std::make_unique<DatabaseManager>(&ctx);
+  // Kartend-m02z: BatchScrapeRunner reads DB through ctx; publish it now
+  // that DatabaseManager has been constructed.
+  ctx.managers.databaseManager = db.get();
 
   // Build a stub provider that returns success for every queued item.
   // The stub's QTimer::singleShot(0) per-callback cadence means many
@@ -243,7 +249,7 @@ void TestBatchScrapeRunnerIntegration::
   int finishedCount = 0;
   Scraper::BatchScrapeRunner::Summary captured;
   {
-    Scraper::BatchScrapeRunner runner(db.get(), stub, uuid, paths,
+    Scraper::BatchScrapeRunner runner(&ctx, stub, uuid, paths,
                                        /*artworkDir=*/QString(),
                                        /*fetchPrimaryCover=*/false,
                                        Scraper::RescrapeMode::Overwrite,

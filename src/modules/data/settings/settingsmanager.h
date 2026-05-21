@@ -12,6 +12,7 @@ struct ApplicationContext;
 
 class SettingsManager : public ISettingsManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SettingsManager)
 public:
   explicit SettingsManager(const ApplicationContext *ctx, QObject *parent = nullptr);
   ~SettingsManager() override;

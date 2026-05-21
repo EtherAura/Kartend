@@ -3,6 +3,7 @@
 
 #include "collectionutils.h"
 
+#include <QHash>
 #include <QObject>
 
 class MainWindow;
@@ -23,6 +24,7 @@ struct GeneralSettings;
 /// destruction order is well-defined.
 class ToolbarController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ToolbarController)
 
 public:
   struct Setup {
@@ -98,6 +100,15 @@ private:
   QAction *m_viewActionHorizontal = nullptr;
   /// Cleared every refresh() — null between rebuilds.
   QAction *m_titleFilterEnabledAction = nullptr;
+
+  /// Per-action role for the filter-menu QActions. Replaces the
+  /// QObject::setProperty("filterRole", ...) dynamic-property pattern
+  /// the InteractionStateHolder migration was supposed to eradicate
+  /// (Kartend-0zhz). Refilled on every rebuildFilterMenu(); cleared
+  /// at the start of that rebuild so dangling QAction* keys can't
+  /// outlive the parent QMenu.
+  enum class FilterRole { Type, TitleToggle, TitleEdit };
+  QHash<QAction *, FilterRole> m_filterRoles;
 };
 
 #endif // TOOLBARCONTROLLER_H

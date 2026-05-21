@@ -23,6 +23,7 @@
 #include <QString>
 #include <QWidget>
 
+class CoverFlowGalleryStrip;
 class QPaintEvent;
 class QResizeEvent;
 class QWheelEvent;
@@ -47,7 +48,13 @@ struct CoverFlowGalleryEntry {
 
 class CoverFlowWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CoverFlowWidget)
   Q_PROPERTY(qreal selectionPositionF READ selectionPositionF WRITE setSelectionPositionF)
+  // Gallery toolbar lives in coverflowgallerystrip.{h,cpp} (Kartend-y3ia
+  // step 1); friend so the strip can reach m_gallery / m_galleryActiveIndex
+  // / m_galleryThumbCache / palette() / selectionColorOrFallback() without
+  // a public accessor surface.
+  friend class CoverFlowGalleryStrip;
 
 public:
   explicit CoverFlowWidget(QWidget *parent = nullptr);
@@ -128,13 +135,10 @@ private:
   void updateVideoPreviewGeometry();
   void applyVideoPreviewState();
 
-  // Gallery toolbar: resolves thumbnail rects, paints the strip, and routes
-  // clicks. The "active" entry index drives which artwork (or video) shows
-  // on the centered card; -1 means "use the card's default artworkPath".
-  [[nodiscard]] QList<QRect> galleryThumbRects() const;
-  [[nodiscard]] int hitTestGallery(const QPoint &pt) const;
-  [[nodiscard]] QPixmap galleryThumbPixmap(int entryIdx, int size);
-  void paintGalleryToolbar(QPainter &painter);
+  // Gallery toolbar moved to CoverFlowGalleryStrip (Kartend-y3ia step 1).
+  // m_galleryStrip below is the owner; its public methods replace the
+  // four declarations that lived here.
+  CoverFlowGalleryStrip *m_galleryStrip = nullptr;
 
   QList<CoverFlowCardData> m_cards;
   int m_selectedIndex = 0;

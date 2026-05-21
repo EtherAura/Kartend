@@ -42,6 +42,7 @@ struct ScrollEventsControllerContext {
 
 class ScrollEventsController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrollEventsController)
 public:
   explicit ScrollEventsController(QObject *parent = nullptr);
   ~ScrollEventsController() override;

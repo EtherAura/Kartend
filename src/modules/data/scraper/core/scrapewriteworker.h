@@ -40,6 +40,7 @@ namespace Scraper {
 /// names per QSqlDatabase.
 class ScrapeWriteWorker : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrapeWriteWorker)
 public:
   explicit ScrapeWriteWorker(QString connectionName, QObject *parent = nullptr);
   ~ScrapeWriteWorker() override;

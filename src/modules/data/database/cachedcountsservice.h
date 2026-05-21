@@ -26,6 +26,7 @@ class ISessionManager;
 ///     fans the per-uuid totals out to SessionManager and emits updated().
 class CachedCountsService : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CachedCountsService)
 public:
   explicit CachedCountsService(ISessionManager *sessionManager, int debounceMs,
                                QObject *parent = nullptr);

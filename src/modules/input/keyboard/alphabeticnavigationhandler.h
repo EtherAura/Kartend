@@ -24,6 +24,7 @@ struct ApplicationContext;
  */
 class AlphabeticNavigationHandler : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AlphabeticNavigationHandler)
 
 public:
   explicit AlphabeticNavigationHandler(QObject *parent = nullptr);

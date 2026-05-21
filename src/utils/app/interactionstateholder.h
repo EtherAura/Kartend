@@ -54,6 +54,7 @@
  */
 class InteractionStateHolder : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(InteractionStateHolder)
 
 public:
   explicit InteractionStateHolder(QObject *parent = nullptr);

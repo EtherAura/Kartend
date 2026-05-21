@@ -1,6 +1,7 @@
 // Factory for creating and configuring ItemWidget instances.
 #include "itemwidgetfactory.h"
 
+#include "applicationcontext.h"
 #include "artworkutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -17,6 +18,14 @@
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
 ItemWidgetFactory::ItemWidgetFactory(QObject *parent) : QObject(parent) {}
+
+IArtworkManager *ItemWidgetFactory::artworkMgr() const {
+  return m_ctx ? m_ctx->artworkManager() : nullptr;
+}
+
+IDatabaseManager *ItemWidgetFactory::dbMgr() const {
+  return m_ctx ? m_ctx->databaseManager() : nullptr;
+}
 
 void ItemWidgetFactory::setMetrics(int itemWidth, int itemHeight) {
   m_itemWidth = itemWidth;
@@ -120,14 +129,14 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
 
   // Try to find artwork for the subcollection using the folder name
   // Artwork is searched in the current collection's artwork directory
-  if (!subcollectionName.isEmpty() && m_artworkManager) {
+  if (auto *art = artworkMgr(); art && !subcollectionName.isEmpty()) {
     QString artworkDir = m_context.config.artworkDirectory;
     const QString placeholderArtwork =
         resolvePlaceholderArtworkForCollection(subcollectionIndex).trimmed();
     if (!artworkDir.isEmpty()) {
       QString artworkPath = ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
       if (!artworkPath.isEmpty()) {
-        m_artworkManager->addPendingArtwork(widget, artworkPath);
+        art->addPendingArtwork(widget, artworkPath);
         // Set hasArtwork for list mode button
         if (m_context.config.viewType == ViewType::List) {
           widget->setHasArtwork(true);
@@ -163,14 +172,14 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
 
   // Try to find artwork for the virtual folder using the folder name
   // Artwork is searched in the current collection's artwork directory
-  if (!displayName.isEmpty() && m_artworkManager) {
+  if (auto *art = artworkMgr(); art && !displayName.isEmpty()) {
     QString artworkDir = m_context.config.artworkDirectory;
     const QString placeholderArtwork =
         resolvePlaceholderArtworkForCollection(m_context.currentIndex).trimmed();
     if (!artworkDir.isEmpty()) {
       QString artworkPath = ArtworkUtils::findArtworkForFile(displayName, artworkDir);
       if (!artworkPath.isEmpty()) {
-        m_artworkManager->addPendingArtwork(widget, artworkPath);
+        art->addPendingArtwork(widget, artworkPath);
       }
     }
     applyPlaceholderArtwork(widget, placeholderArtwork);

@@ -13,6 +13,7 @@ QT_END_NAMESPACE
 /// transparent so the items grid below stays interactive.
 class VignetteOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(VignetteOverlay)
 public:
   explicit VignetteOverlay(QWidget *parent = nullptr);
 

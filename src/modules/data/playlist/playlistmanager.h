@@ -27,6 +27,7 @@ struct CollectionConfig;
 /// CollectionConfig::isPlaylist.
 class PlaylistManager : public IPlaylistManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(PlaylistManager)
 public:
   explicit PlaylistManager(QObject *parent = nullptr);
   ~PlaylistManager() override;

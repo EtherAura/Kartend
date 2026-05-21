@@ -23,6 +23,7 @@ namespace TimerUtils {
  */
 class DebouncedTimer : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DebouncedTimer)
 public:
   explicit DebouncedTimer(int intervalMs, QObject *parent = nullptr);
   ~DebouncedTimer() override;
@@ -48,6 +49,7 @@ private:
  */
 class Coordinator : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(Coordinator)
 public:
   explicit Coordinator(QObject *parent = nullptr);
   ~Coordinator() override;

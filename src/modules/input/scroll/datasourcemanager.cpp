@@ -1,5 +1,5 @@
-// DataSourceManager: owns FilterManager, ScrollDataManager,
-// PreSearchStateManager, and SearchLoadingOverlay. Extracted from
+// DataSourceCoordinator: owns FilterManager, ScrollDataStore,
+// PreSearchStateCache, and SearchLoadingOverlay. Extracted from
 // ScrollManager.
 #include "datasourcemanager.h"
 
@@ -10,46 +10,46 @@
 
 #include <QWidget>
 
-DataSourceManager::DataSourceManager(QObject *parent)
+DataSourceCoordinator::DataSourceCoordinator(QObject *parent)
     : QObject(parent), m_filterManager(std::make_unique<FilterManager>(this)),
-      m_dataManager(std::make_unique<ScrollDataManager>(this)),
-      m_preSearchStateManager(std::make_unique<PreSearchStateManager>(this)),
+      m_dataManager(std::make_unique<ScrollDataStore>(this)),
+      m_preSearchStateManager(std::make_unique<PreSearchStateCache>(this)),
       m_searchLoadingOverlay(std::make_unique<SearchLoadingOverlay>(this)) {
   connect(m_filterManager.get(), &FilterManager::filterChanged, this,
-          &DataSourceManager::filterChanged);
+          &DataSourceCoordinator::filterChanged);
 }
 
-DataSourceManager::~DataSourceManager() = default;
+DataSourceCoordinator::~DataSourceCoordinator() = default;
 
-void DataSourceManager::setDatabaseManager(IDatabaseManager *manager) {
+void DataSourceCoordinator::setApplicationContext(const ApplicationContext *ctx) {
   if (m_filterManager) {
-    m_filterManager->setDatabaseManager(manager);
+    m_filterManager->setApplicationContext(ctx);
   }
 }
 
-void DataSourceManager::setSearchOverlayParent(QWidget *parent) {
+void DataSourceCoordinator::setSearchOverlayParent(QWidget *parent) {
   if (m_searchLoadingOverlay && parent) {
     m_searchLoadingOverlay->setParentWidget(parent);
   }
 }
 
-void DataSourceManager::showSearchLoadingOverlay() {
+void DataSourceCoordinator::showSearchLoadingOverlay() {
   if (m_searchLoadingOverlay) {
     m_searchLoadingOverlay->show();
   }
 }
 
-void DataSourceManager::hideSearchLoadingOverlay() {
+void DataSourceCoordinator::hideSearchLoadingOverlay() {
   if (m_searchLoadingOverlay) {
     m_searchLoadingOverlay->hide();
   }
 }
 
-bool DataSourceManager::hasPreSearchState() const {
+bool DataSourceCoordinator::hasPreSearchState() const {
   return m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
 }
 
-int DataSourceManager::getFilteredIndex(int visualIndex) const {
+int DataSourceCoordinator::getFilteredIndex(int visualIndex) const {
   if (!m_filterManager || !m_filterManager->isFiltered()) {
     return visualIndex;
   }

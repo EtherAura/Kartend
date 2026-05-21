@@ -44,7 +44,7 @@ Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
 NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent), m_stackManager(std::make_unique<NavigationStackManager>(this)),
       m_backgroundController(std::make_unique<CollectionBackgroundController>(this)),
-      m_selectionRestoreManager(std::make_unique<SelectionRestoreManager>(this)) {}
+      m_selectionRestoreManager(std::make_unique<SelectionRestoreCoordinator>(this)) {}
 
 NavigationManager::~NavigationManager() = default;
 
@@ -71,7 +71,7 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   m_isShuttingDown = setup.isShuttingDown;
   m_refreshTitleCounts = setup.refreshTitleCounts;
 
-  // Setup SelectionRestoreManager. Sibling managers come from ctx.
+  // Setup SelectionRestoreCoordinator. Sibling managers come from ctx.
   if (m_selectionRestoreManager) {
     SelectionRestoreManagerSetup restoreSetup;
     restoreSetup.ctx = setup.ctx;
@@ -102,7 +102,7 @@ void NavigationManager::prepareForShutdown() {
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
-  if (!parent()) {
+  if (!isAlive()) {
     return;
   }
 
@@ -153,7 +153,7 @@ auto NavigationManager::initializeNavigationState() -> void {
     }
   }
 
-  if ((parent()) && (interactionMgr())) {
+  if (isAlive() && interactionMgr()) {
     interactionMgr()->stopRepeat();
     if (!isStartupNavigation) {
       interactionMgr()->setNavigationInProgress(true);
@@ -201,7 +201,7 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
     m_isInitialStartupLoad = false;
   }
 
-  if ((parent()) && (interactionMgr())) {
+  if (isAlive() && interactionMgr()) {
     interactionMgr()->stopRepeat();
     // Only cancel pending restore when navigating FROM an existing collection
     // On initial startup (*m_currentCollectionIndex < 0), allow restore to
@@ -298,7 +298,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
     -> bool {
   hasSub = false;
   hasItems = false;
-  if ((!parent()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+  if ((!isAlive()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
 

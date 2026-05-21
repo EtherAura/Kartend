@@ -74,6 +74,7 @@ struct EventManagerSetup {
  */
 class EventManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(EventManager)
 
 public:
   explicit EventManager(QObject *parent = nullptr);

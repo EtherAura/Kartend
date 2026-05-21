@@ -21,6 +21,7 @@ class DebouncedTimer;
  */
 class ScrollEventHandler : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrollEventHandler)
 public:
   explicit ScrollEventHandler(QObject *parent = nullptr);
   ~ScrollEventHandler() override;

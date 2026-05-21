@@ -25,7 +25,7 @@ class IArtworkManager;
 class CoverFlowController;
 class WidgetPoolManager;
 class FilterManager;
-class DataSourceManager;
+class DataSourceCoordinator;
 class SelectionOverlayManager;
 class SearchLoadingOverlay;
 class VirtualContainerManager;
@@ -34,8 +34,8 @@ class ScrollEventHandler;
 class ItemWidgetFactory;
 class InteractionStateHolder;
 class ArrowKeyScrollHelper;
-class ScrollDataManager;
-class PreSearchStateManager;
+class ScrollDataStore;
+class PreSearchStateCache;
 class SelectionStateTracker;
 class SelectionDisplayManager;
 class ListHeaderWidget;
@@ -82,6 +82,7 @@ struct ScrollManagerSetup {
  */
 class ScrollManager : public IScrollManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrollManager)
   // Engine is a sibling helper that drives virtual-scrolling layout and
   // widget materialization. It accesses ScrollManager's state
   // directly via friendship; canonical state ownership remains here.
@@ -194,7 +195,7 @@ public:
   getCurrentViewportForCache(int &startIndex, int &totalItems, QStringList &filePaths,
                              QHash<QString, QString> &fileNames,
                              QHash<QString, QString> &artworkPaths) const override;
-  // Data accessors - delegate to ScrollDataManager
+  // Data accessors - delegate to ScrollDataStore
   [[nodiscard]] const QStringList &getFilePaths() const override;
   [[nodiscard]] const QHash<QString, QString> &getFileNames() const override;
   [[nodiscard]] int getSubcollectionCount() const override;
@@ -273,17 +274,17 @@ private:
   ItemWidget *acquireWidget();
   void releaseWidget(ItemWidget *widget);
 
-  // Data source manager: owns FilterManager + ScrollDataManager +
-  // PreSearchStateManager + SearchLoadingOverlay (extracted from
+  // Data source manager: owns FilterManager + ScrollDataStore +
+  // PreSearchStateCache + SearchLoadingOverlay (extracted from
   // ScrollManager,).
-  std::unique_ptr<DataSourceManager> m_dataSource;
+  std::unique_ptr<DataSourceCoordinator> m_dataSource;
 
   // Raw aliases into m_dataSource for the in-place filter/data update
   // logic that still lives in ScrollManager (scrollmanagerfilter.cpp).
   // Lifetime is tied to m_dataSource; never delete through these pointers.
   FilterManager *m_filterManager = nullptr;
-  ScrollDataManager *m_dataManager = nullptr;
-  PreSearchStateManager *m_preSearchStateManager = nullptr;
+  ScrollDataStore *m_dataManager = nullptr;
+  PreSearchStateCache *m_preSearchStateManager = nullptr;
   SearchLoadingOverlay *m_searchLoadingOverlay = nullptr;
 
   // Selection display manager owns overlay + state tracker + list header +
@@ -329,7 +330,7 @@ private:
 public:
   // Resolve a raw item index to the subcollection index that owns it, or -1
   // if the item is not part of a subcollection (or the data manager isn't
-  // wired). Encapsulates ScrollDataManager so callers don't need to reach
+  // wired). Encapsulates ScrollDataStore so callers don't need to reach
   // into ScrollManager's internals.
   [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const override;
 

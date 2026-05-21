@@ -44,23 +44,24 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
 
   m_activeDirection = newDirection;
 
+  auto *kb = keyboardMgr();
   if (newDirection == Direction::None) {
-    if (m_keyboardManager) {
-      m_keyboardManager->setPhysicalKeyDown(false);
-      m_keyboardManager->stopRepeat(false);
+    if (kb) {
+      kb->setPhysicalKeyDown(false);
+      kb->stopRepeat(false);
     }
     return;
   }
 
   // Changing direction should not trigger a recenter like a full release does.
-  if (m_keyboardManager) {
-    m_keyboardManager->setPhysicalKeyDown(false);
-    m_keyboardManager->stopRepeat(true);
+  if (kb) {
+    kb->setPhysicalKeyDown(false);
+    kb->stopRepeat(true);
   }
 
   // Start/restart keyboard repeat pipeline for held input.
-  if (m_keyboardManager) {
-    m_keyboardManager->setPhysicalKeyDown(true);
+  if (kb) {
+    kb->setPhysicalKeyDown(true);
   }
 
   const auto movement = GamepadHelpers::movementFor(newDirection);

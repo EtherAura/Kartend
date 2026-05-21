@@ -221,7 +221,7 @@ void MenuController::setupActionRefresh() {
 
   // Hard refresh (Ctrl+F5) - rescan the database
   if (m_ctx.ui->actionRefresh) {
-    connect(m_ctx.ui->actionRefresh, &QAction::triggered, [this]() {
+    connect(m_ctx.ui->actionRefresh, &QAction::triggered, this, [this]() {
       if (m_ctx.getNavigationManager && m_ctx.getCurrentCollectionIndex) {
         int idx = m_ctx.getCurrentCollectionIndex();
         if (auto *mgr = m_ctx.getNavigationManager(); mgr && idx >= 0) {
@@ -235,7 +235,7 @@ void MenuController::setupActionRefresh() {
 
   // Soft refresh (F5) - just reload the view without database rescan
   if (m_ctx.ui->actionSoftRefresh) {
-    connect(m_ctx.ui->actionSoftRefresh, &QAction::triggered, [this]() {
+    connect(m_ctx.ui->actionSoftRefresh, &QAction::triggered, this, [this]() {
       if (m_ctx.getNavigationManager && m_ctx.getCurrentCollectionIndex) {
         int idx = m_ctx.getCurrentCollectionIndex();
         if (auto *mgr = m_ctx.getNavigationManager(); mgr && idx >= 0) {
@@ -341,7 +341,7 @@ void MenuController::setupFullscreenAction() {
 
   insertFullscreenInViewMenu(m_fullscreenAction);
 
-  connect(m_fullscreenAction, &QAction::triggered, [this]() {
+  connect(m_fullscreenAction, &QAction::triggered, this, [this]() {
     bool entering = !m_ctx.mainWindow->isFullScreen();
     if (entering) {
       m_ctx.mainWindow->showFullScreen();
@@ -541,7 +541,7 @@ void MenuController::setupGridWidthActions() {
                                            QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal)});
   m_gridWidthIncreaseAction->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_gridWidthIncreaseAction);
-  connect(m_gridWidthIncreaseAction, &QAction::triggered, [this]() {
+  connect(m_gridWidthIncreaseAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onAdjustGridWidth) {
       m_ctx.onAdjustGridWidth(1);
     }
@@ -551,7 +551,7 @@ void MenuController::setupGridWidthActions() {
   m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Minus));
   m_gridWidthDecreaseAction->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_gridWidthDecreaseAction);
-  connect(m_gridWidthDecreaseAction, &QAction::triggered, [this]() {
+  connect(m_gridWidthDecreaseAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onAdjustGridWidth) {
       m_ctx.onAdjustGridWidth(-1);
     }
@@ -616,7 +616,7 @@ void MenuController::syncHamburgerVisibility() {
 // it. Uses ScrollManager::filePathForVisualIndex() — the same path Enter /
 // double-click resolve through — so the result is the absolute, resolved
 // path that DatabaseManager::getCollectionIndexForFile() can key off. The
-// raw ScrollDataManager::filePaths() list won't work here: those are the
+// raw ScrollDataStore::filePaths() list won't work here: those are the
 // relative entries from the items table, while the file→collection map is
 // indexed by the resolved absolute paths.
 void MenuController::setupActionOpenRandomItem() {
@@ -625,7 +625,7 @@ void MenuController::setupActionOpenRandomItem() {
   m_ctx.ui->actionOpenRandomItem->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_ctx.ui->actionOpenRandomItem);
 
-  connect(m_ctx.ui->actionOpenRandomItem, &QAction::triggered, [this]() {
+  connect(m_ctx.ui->actionOpenRandomItem, &QAction::triggered, this, [this]() {
     ScrollManager *scroll = m_ctx.getScrollManager ? m_ctx.getScrollManager() : nullptr;
     if (!scroll) return;
 

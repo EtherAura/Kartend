@@ -24,6 +24,7 @@ The build script (`.scripts/build.sh`) supports the following options:
 | `--format-apply` | Auto-apply clang-format fixes (requires `--maintenance`) |
 | `--tests` | Configure with `-DKARTEND_BUILD_TESTS=ON` |
 | `--run-tests` | Run `ctest` after a successful build (requires `--tests`) |
+| `--coverage` | gcov instrumentation (`-DKARTEND_ENABLE_COVERAGE=ON`). Implies `--debug` + `--tests`. Pair with `--run-tests`, then capture via `lcov --capture --directory <build_dir> -o coverage.info` and `genhtml coverage.info -o coverage-html/` to produce a browsable report. |
 | `--pgo` | Two-pass Profile-Guided Optimization build |
 | `--pgo-generate` | First PGO pass: generate profile data |
 | `--pgo-use` | Second PGO pass: optimize using collected profile |
@@ -55,7 +56,7 @@ Modes include: `release`, `debug`, `sanitize`, `maintenance`, `release-pgo`.
 - Incremental builds are the default (the script will not delete the build directory unless you pass `--clean`).
 - Unit tests are opt-in: tests are only configured/built when you pass `--tests`.
 - Reports and source archives are off by default; use `--reports` and/or `--archive` to opt in.
-- The script prunes other script-created build directories by default; use `--keep-builds` to keep multiple build dirs.
+- The script prunes other script-created build directories by default; use `--keep-builds` to keep multiple build dirs. "Script-created" means dirs that contain either the `.kartend-build-dir` marker file (left by the script on first prepare) OR a `CMakeCache.txt` (left by any CMake invocation). Hand-rolled scratch dirs under `build/` that contain neither are left alone. Stray `build/*.log` files are also swept on each run.
 
 ### Examples
 

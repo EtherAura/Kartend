@@ -19,6 +19,7 @@ struct SettingsModel;
 /// persists.
 class ScraperSettingsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScraperSettingsPanel)
 public:
   explicit ScraperSettingsPanel(QWidget *parent = nullptr);
   ~ScraperSettingsPanel() override;

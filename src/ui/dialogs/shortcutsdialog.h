@@ -18,6 +18,7 @@ QT_END_NAMESPACE
  */
 class ShortcutsDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ShortcutsDialog)
 public:
   explicit ShortcutsDialog(QWidget *parent = nullptr);
 

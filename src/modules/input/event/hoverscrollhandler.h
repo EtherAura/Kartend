@@ -38,6 +38,7 @@ class IViewportManager;
  */
 class HoverScrollHandler : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(HoverScrollHandler)
 public:
   explicit HoverScrollHandler(QObject *parent = nullptr);
   ~HoverScrollHandler() override;

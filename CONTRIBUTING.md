@@ -32,9 +32,9 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 - 2-space indentation, 100 column limit
 - Implicit boolean null checks (`if (!ptr)` not `if (ptr == nullptr)`)
 - All `QTimer::singleShot` calls must have a comment explaining the delay
-- UI constants go in `src/ui/uiconstants.h` — no magic numbers
+- UI constants go in the topical `src/ui/uiconstants/<area>.h` subheader (e.g. `grid.h`, `dialog.h`, `icons.h`) — no magic numbers
 - Use `[[nodiscard]]` on const getters and factory functions
-- See [.github/copilot-instructions.md](.github/copilot-instructions.md) for full conventions
+- See [docs/architecture.md](docs/architecture.md), [docs/building.md](docs/building.md), and the rules baked into `.clang-format` / `.clang-tidy` for full conventions
 
 ## Architecture
 

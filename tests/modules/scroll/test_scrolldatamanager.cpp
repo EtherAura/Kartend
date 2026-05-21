@@ -1,6 +1,6 @@
 /**
  * @file test_scrolldatamanager.cpp
- * @brief Tile-population tests for ScrollDataManager. Focused on the
+ * @brief Tile-population tests for ScrollDataStore. Focused on the
  *        synthetic Home view path (CollectionContext::isRootView) added in
  *        Kartend-83iu.
  */
@@ -55,7 +55,7 @@ void TestScrollDataManager::rootView_populatesTilesFromOverride() {
   ctx.subcollectionOverride = {0, 1, 3};
   ctx.suppressVirtualFolders = true;
 
-  ScrollDataManager sdm;
+  ScrollDataStore sdm;
   sdm.initializeSubcollections(ctx, &cs, /*hierarchyCache=*/nullptr);
 
   // After alphabetic sort (NameAscending default): Audio, Reference, Video → 1, 3, 0.
@@ -72,7 +72,7 @@ void TestScrollDataManager::rootView_emptyOverrideProducesNoTiles() {
   ctx.hasSubcollectionOverride = true;
   ctx.subcollectionOverride = {};
 
-  ScrollDataManager sdm;
+  ScrollDataStore sdm;
   sdm.initializeSubcollections(ctx, &cs, /*hierarchyCache=*/nullptr);
 
   QCOMPARE(sdm.subcollectionCount(), 0);
@@ -86,7 +86,7 @@ void TestScrollDataManager::rootView_currentIndexNegativeIsAccepted() {
   ctx.hasSubcollectionOverride = true;
   ctx.subcollectionOverride = {0};
 
-  ScrollDataManager sdm;
+  ScrollDataStore sdm;
   sdm.initializeSubcollections(ctx, &cs, /*hierarchyCache=*/nullptr);
 
   // The synthetic-root bypass lets currentIndex=-1 through; the override
@@ -103,7 +103,7 @@ void TestScrollDataManager::nonRootView_currentIndexNegativeIsRejected() {
   ctx.hasSubcollectionOverride = true;
   ctx.subcollectionOverride = {0, 1};
 
-  ScrollDataManager sdm;
+  ScrollDataStore sdm;
   sdm.initializeSubcollections(ctx, &cs, /*hierarchyCache=*/nullptr);
 
   QCOMPARE(sdm.subcollectionCount(), 0);
@@ -116,7 +116,7 @@ void TestScrollDataManager::rootView_virtualFoldersSuppressed() {
   ctx.currentIndex = -1;
   ctx.suppressVirtualFolders = true;
 
-  ScrollDataManager sdm;
+  ScrollDataStore sdm;
   sdm.initializeVirtualFolders(ctx);
 
   QCOMPARE(sdm.virtualFolderCount(), 0);

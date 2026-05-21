@@ -24,6 +24,7 @@ QT_END_NAMESPACE
 /// stay excluded — those still require an explicit per-collection edit.
 class ApplySettingsDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ApplySettingsDialog)
 public:
   /// Bitmask of curated field groups that callers may copy between
   /// collections. The grouping mirrors how the settings UI is organised so

@@ -35,7 +35,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
 
 // Re-define diagnostic logging macro (file-local in main TU).
 auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
-  if ((!parent()) || (!m_itemsPage)) {
+  if ((!isAlive()) || (!m_itemsPage)) {
     return;
   }
   auto *titleLabel = m_itemsPage->findChild<QLabel *>("itemsTitleLabel");
@@ -363,9 +363,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Also skip if there's a pending path-based restore (from sort change)
   bool pendingPathRestore = scrollMgr() && scrollMgr()->hasPendingSelectionRestoreByPath();
   if (selIdx >= 0 && interactionMgr() && !pendingRestore && !pendingPathRestore) {
-    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
-                             UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                             UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
 
   schedulePostLoadOperations();

@@ -14,7 +14,7 @@
 #include <QString>
 #include <QStringList>
 
-class CacheManager;
+class ICacheManager;
 class QThreadPool;
 
 /// Async batch dispatcher for the artwork pipeline. Owns the dedicated
@@ -42,6 +42,7 @@ class QThreadPool;
 ///     callback can fire after destruction.
 class ArtworkLoadDispatcher : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArtworkLoadDispatcher)
 
 public:
   using BatchHandler = std::function<void(const QList<ArtworkInfo::Result> &results,
@@ -50,8 +51,14 @@ public:
                                                   const QList<ArtworkPrecacheResult> &results,
                                                   int requestedCount, qint64 elapsedMs)>;
 
-  explicit ArtworkLoadDispatcher(CacheManager *cacheManager, QObject *parent = nullptr);
+  explicit ArtworkLoadDispatcher(ICacheManager *cacheManager, QObject *parent = nullptr);
   ~ArtworkLoadDispatcher() override;
+
+  /// Kartend-davi: ArtworkManager constructs the dispatcher before the
+  /// app context is wired (so cancellation paths stay non-null even before
+  /// setupReferences runs); the cache pointer is then bound here once
+  /// ctx becomes available.
+  void setCacheManager(ICacheManager *cacheManager) { m_cacheManager = cacheManager; }
 
   /// Dispatch a UI-batch decode. @p onComplete runs on the main thread once
   /// every result is decoded (or the batch is cancelled / app is closing).
@@ -74,7 +81,7 @@ public:
 private:
   void pruneFinishedFutures();
 
-  CacheManager *m_cacheManager;
+  ICacheManager *m_cacheManager;
   QThreadPool *m_threadPool = nullptr;
   mutable QMutex m_futureMutex;
   QList<QFuture<void>> m_futures;

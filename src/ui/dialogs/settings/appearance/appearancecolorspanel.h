@@ -22,6 +22,7 @@ struct SettingsModel;
 /// boxes are deferred-save like the rest of the dialog's per-collection state.
 class AppearanceColorsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceColorsPanel)
 public:
   explicit AppearanceColorsPanel(QWidget *parent = nullptr);
   ~AppearanceColorsPanel() override;

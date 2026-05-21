@@ -8,7 +8,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 /**
  * @brief Semi-transparent overlay widget showing loading state.
@@ -18,6 +18,7 @@ class OverlayLayerManager;
  */
 class LoadingOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LoadingOverlay)
   Q_PROPERTY(int spinnerAngle READ spinnerAngle WRITE setSpinnerAngle)
 
 public:
@@ -46,9 +47,9 @@ public:
   [[nodiscard]] int spinnerAngle() const { return m_spinnerAngle; }
   void setSpinnerAngle(int angle);
 
-  /// See OverlayLayerManager. Routes show() / showWithProgress() raise()
+  /// See OverlayZOrderRegistry. Routes show() / showWithProgress() raise()
   /// through the central z-order coordinator when installed.
-  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+  void setLayerManager(OverlayZOrderRegistry *manager) { m_layerManager = manager; }
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -75,7 +76,7 @@ private:
   bool m_active = false;
   bool m_showProgress = false;
   QColor m_accentColor;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 
 #endif // LOADINGOVERLAY_H

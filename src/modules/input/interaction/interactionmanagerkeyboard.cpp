@@ -273,8 +273,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
           sel = settingsMgr()->getLastSelectedItem(parent);
         }
         if (sel >= 0) {
-          navMgr()->scheduleSelectionRestore(sel, kRestoreAttempts, kRestoreIntervalMs,
-                                             kRestoreTimeoutMs);
+          navMgr()->scheduleSelectionRestore(sel, kRestoreTimeoutMs);
         }
       }
     } else {

@@ -15,6 +15,7 @@ struct CollectionConfig;
 // interface, so this is single-QObject-base multiple inheritance.
 class SessionManager : public QObject, public ISessionManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SessionManager)
 
 public:
   // Data-contract types are owned by ISessionManager; re-exported here so

@@ -82,6 +82,13 @@ QString CacheDiskStorage::metadataPath() {
 }
 
 void CacheDiskStorage::readTimestampsInto(QHash<QString, qint64> &outTimestamps) const {
+  // Bail before any disk I/O if the caller already cancelled. Same check
+  // repeats after the parse and inside the per-key loop so a long load on
+  // a slow disk (or a 50MB+ timestamps file) can short-circuit when
+  // shutdown signals via cancel() (Kartend-bu5n).
+  if (isCancelled()) {
+    return;
+  }
   QFile metadataFile(metadataPath());
   if (!metadataFile.open(QIODevice::ReadOnly)) {
     return;
@@ -89,9 +96,22 @@ void CacheDiskStorage::readTimestampsInto(QHash<QString, qint64> &outTimestamps)
 
   const QJsonDocument doc = QJsonDocument::fromJson(metadataFile.readAll());
   metadataFile.close();
+  if (isCancelled()) {
+    return;
+  }
   const QJsonObject root = doc.object();
   const QJsonObject timestamps = root["timestamps"].toObject();
+  int sinceCheck = 0;
   for (auto it = timestamps.begin(); it != timestamps.end(); ++it) {
+    // Polling cancellation every key would be expensive; sample every 1024
+    // entries — fine-grained enough that even a million-key file aborts in
+    // ~1ms once cancel is signalled.
+    if (++sinceCheck >= 1024) {
+      sinceCheck = 0;
+      if (isCancelled()) {
+        return;
+      }
+    }
     const QDateTime dateTime = QDateTime::fromString(it.value().toString(), Qt::ISODate);
     outTimestamps[it.key()] = dateTime.isValid() ? dateTime.toMSecsSinceEpoch() : 0;
   }

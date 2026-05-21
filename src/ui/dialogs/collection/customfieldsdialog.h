@@ -19,6 +19,7 @@ QT_END_NAMESPACE
 /// here, so partially-typed rows can survive a re-open without nagging.
 class CustomFieldsDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CustomFieldsDialog)
 public:
   explicit CustomFieldsDialog(QWidget *parent = nullptr);
 

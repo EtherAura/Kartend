@@ -3,8 +3,9 @@
 
 #include "collectionutils.h"
 
+#include <limits>
+
 #include <QObject>
-#include <QSet>
 #include <QString>
 
 class ScrollManager;
@@ -24,6 +25,7 @@ class ScrollManager;
  */
 class VirtualScrollEngine : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(VirtualScrollEngine)
 public:
   explicit VirtualScrollEngine(ScrollManager *owner);
   ~VirtualScrollEngine() override = default;
@@ -59,11 +61,30 @@ public:
 
 private:
   // Internal helpers (formerly private members of ScrollManager).
-  [[nodiscard]] QSet<int> calculateNeededIndices() const;
-  void removeUnneededWidgets(const QSet<int> &needed);
+  // Kartend-gro2: needed indices are a contiguous half-open range, so a struct
+  // beats QSet<int>'s hash-table allocation on the per-animation-frame hot path.
+  struct NeededRange {
+    int firstIndex = 0;
+    int lastIndex = -1; // inclusive; lastIndex < firstIndex means empty
+    [[nodiscard]] bool isEmpty() const { return lastIndex < firstIndex; }
+    [[nodiscard]] int size() const { return isEmpty() ? 0 : (lastIndex - firstIndex + 1); }
+    [[nodiscard]] bool contains(int idx) const {
+      return idx >= firstIndex && idx <= lastIndex;
+    }
+  };
+  [[nodiscard]] NeededRange calculateNeededIndices() const;
+  void removeUnneededWidgets(const NeededRange &needed);
   void updateArtworkIfAllowed();
 
   ScrollManager *m_owner = nullptr; // back-pointer; not owned
+
+  // Tracks the committedSelectedIndex value at the last overlay raise() call
+  // so updateVirtualView() can skip the raise on smooth-scroll animation
+  // frames where the selection hasn't changed (Kartend-eukc). QWidget::raise
+  // performs a full re-stacking + paint on the overlay and its siblings;
+  // skipping it ~60×/s during animation eliminates a hot path. Initialized
+  // to INT_MIN so the first call after construction always raises.
+  int m_lastRaisedSelectionIndex = std::numeric_limits<int>::min();
 };
 
 #endif // VIRTUALSCROLLENGINE_H

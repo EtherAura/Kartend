@@ -34,6 +34,7 @@ namespace Scraper {
 /// thin wrapper over Qt and not worth a separate fake.
 class HttpClient : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(HttpClient)
 public:
   /// Process-wide singleton. Lazily constructed on first call.
   /// Lifetime tied to QApplication; safe to call from any main-thread
@@ -60,8 +61,16 @@ public:
   /// more than this, the reply is aborted and the callback fires with
   /// ErrorCode::ResponseTooLarge. Pass <= 0 to disable the cap (not
   /// recommended for untrusted upstreams).
+  ///
+  /// @p expectedContentTypePrefix optionally constrains the response's
+  /// Content-Type header (case-insensitive starts-with match). Set to
+  /// e.g. "image/" on per-item media fetches so a misconfigured or
+  /// hostile upstream that returns HTML / JSON / executable bytes is
+  /// rejected before the body reaches the caller's decode path
+  /// (Kartend-9ryx). Empty (default) disables the check.
   void get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
-           qint64 maxResponseBytes = kDefaultMaxResponseBytes);
+           qint64 maxResponseBytes = kDefaultMaxResponseBytes,
+           const QString &expectedContentTypePrefix = QString());
 
   /// Configure the rate limit for a host. `intervalMs` is the minimum
   /// delay between consecutive request *starts* (not completions, so
@@ -86,6 +95,11 @@ private:
     QString userAgent;
     ResponseCallback callback;
     qint64 maxResponseBytes = kDefaultMaxResponseBytes;
+    /// See get(): non-empty -> the reply's Content-Type must
+    /// case-insensitively start with this string or the request fails
+    /// with ErrorCode::InvalidArgument before the body reaches the
+    /// caller (Kartend-9ryx).
+    QString expectedContentTypePrefix;
   };
 
   void enqueue(const QString &host, PendingRequest request);

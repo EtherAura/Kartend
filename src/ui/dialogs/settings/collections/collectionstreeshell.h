@@ -24,6 +24,7 @@ class QPushButton;
 /// is a passive container that exposes accessors for the host to wire up.
 class CollectionsTreeShell : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CollectionsTreeShell)
 public:
   explicit CollectionsTreeShell(QWidget *parent = nullptr);
   ~CollectionsTreeShell() override;

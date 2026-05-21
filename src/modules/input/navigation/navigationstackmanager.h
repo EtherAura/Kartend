@@ -17,6 +17,7 @@
  */
 class NavigationStackManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(NavigationStackManager)
 
 public:
   explicit NavigationStackManager(QObject *parent = nullptr) : QObject(parent) {}

@@ -7,7 +7,7 @@
 class QScrollArea;
 class QWidget;
 class CoverFlowWidget;
-class ScrollDataManager;
+class ScrollDataStore;
 class FilterManager;
 struct ApplicationContext;
 
@@ -27,7 +27,7 @@ struct CoverFlowControllerSetup {
   QWidget *gridContainer = nullptr;
   const CollectionContext *context = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
-  ScrollDataManager *dataManager = nullptr;
+  ScrollDataStore *dataManager = nullptr;
   FilterManager *filterManager = nullptr;
 };
 
@@ -47,6 +47,7 @@ struct CoverFlowControllerSetup {
  */
 class CoverFlowController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CoverFlowController)
 public:
   explicit CoverFlowController(QObject *parent = nullptr);
   ~CoverFlowController() override = default;
@@ -96,7 +97,7 @@ private:
   QWidget *m_gridContainer = nullptr;
   const CollectionContext *m_context = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
-  ScrollDataManager *m_dataManager = nullptr;
+  ScrollDataStore *m_dataManager = nullptr;
   FilterManager *m_filterManager = nullptr;
 
   // The carousel widget is parented to the items-page content widget, not to

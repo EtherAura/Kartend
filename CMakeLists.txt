@@ -281,8 +281,14 @@ target_compile_definitions(kartend_utils
 # Warning flags applied uniformly across every area OBJECT lib (PRIVATE
 # because warnings shouldn't leak through INTERFACE_COMPILE_OPTIONS to
 # external consumers like Qt's autogen units).
+# -Wshadow + -Wimplicit-fallthrough added in Kartend-bxfv as the first
+# pair of higher-floor warnings the codebase is already clean against.
+# Additional candidates (-Wcast-align, -Wformat=2, -Wnull-dereference,
+# -Wdouble-promotion, -Wold-style-cast, -Wnon-virtual-dtor) need their
+# own follow-up sweep before enabling.
 foreach(_area ${KARTEND_AREA_LIBS})
-  target_compile_options(${_area} PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(${_area} PRIVATE
+    -Wall -Wextra -Wpedantic -Wshadow -Wimplicit-fallthrough)
 endforeach()
 
 # Keep GCC-only intent with Clang analogue on RISC-V

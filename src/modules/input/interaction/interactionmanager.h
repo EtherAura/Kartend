@@ -157,6 +157,7 @@ struct InteractionManagerSetup {
  */
 class InteractionManager : public QObject, public IInteractionManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(InteractionManager)
 public:
   explicit InteractionManager(QObject *parent = nullptr);
   ~InteractionManager() override;
@@ -288,7 +289,7 @@ private:
 
   // Selection restore tokens (restoreToken / restorePending) live in
   // m_state.selectionRestore() — the canonical owner. NavigationManager and
-  // SelectionRestoreManager coordinate through the same struct.
+  // SelectionRestoreCoordinator coordinate through the same struct.
 
 signals:
   void selectionChanged(int index);

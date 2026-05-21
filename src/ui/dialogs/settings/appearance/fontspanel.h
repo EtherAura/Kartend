@@ -19,6 +19,7 @@ struct SettingsModel;
 /// "live save" semantics for these controls.
 class FontsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(FontsPanel)
 public:
   explicit FontsPanel(QWidget *parent = nullptr);
   ~FontsPanel() override;

@@ -63,6 +63,7 @@ struct MenuControllerContext {
 /// Extracted from MainWindow to reduce its responsibility count.
 class MenuController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MenuController)
 
 public:
   explicit MenuController(QObject *parent = nullptr);

@@ -27,6 +27,7 @@
  */
 class IDatabaseManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(IDatabaseManager)
 public:
   using QObject::QObject;
   ~IDatabaseManager() override = default;
@@ -72,6 +73,22 @@ public:
 
   [[nodiscard]] virtual ItemMetadataStore::ItemMetadata
   loadItemMetadata(const QString &collectionUuid, const QString &path) const = 0;
+  /// Batch counterpart to loadItemMetadata. Returns a (path -> metadata)
+  /// hash covering exactly @p paths. Paths without a row in item_metadata
+  /// map to an empty-but-keyed ItemMetadata (mirrors single-load behaviour).
+  /// Implementations may chunk internally to respect SQLite's
+  /// SQLITE_LIMIT_VARIABLE_NUMBER. The default implementation loops over
+  /// loadItemMetadata for correctness on mocks; the production override
+  /// in DatabaseManager issues batched WHERE-path-IN queries.
+  [[nodiscard]] virtual QHash<QString, ItemMetadataStore::ItemMetadata>
+  loadItemMetadataBatch(const QString &collectionUuid, const QStringList &paths) const {
+    QHash<QString, ItemMetadataStore::ItemMetadata> out;
+    out.reserve(paths.size());
+    for (const QString &path : paths) {
+      out.insert(path, loadItemMetadata(collectionUuid, path));
+    }
+    return out;
+  }
   virtual bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) = 0;
 
   /// Drop the per-item metadata-cache entry for (collectionUuid, path).

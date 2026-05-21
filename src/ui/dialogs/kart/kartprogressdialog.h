@@ -11,6 +11,7 @@ QT_END_NAMESPACE
 
 class KartProgressDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(KartProgressDialog)
 
 public:
   explicit KartProgressDialog(const QString &titleText, QWidget *parent = nullptr);

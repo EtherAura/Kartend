@@ -382,9 +382,10 @@ void ScrollManager::setupNormalVirtualScrolling() {
     return;
   }
 
-  // Configure widget factory with current context and metrics
+  // Configure widget factory with current context and metrics. Kartend-davi:
+  // ctx is bound once in setup; the factory's setDatabaseManager has been
+  // retired in favour of ctx-routed access.
   if (m_widgetFactory) {
-    m_widgetFactory->setDatabaseManager(m_ctx ? m_ctx->databaseManager() : nullptr);
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
     m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);

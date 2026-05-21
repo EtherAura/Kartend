@@ -16,6 +16,7 @@
 
 class IDatabaseManager;
 class QThread;
+struct ApplicationContext;
 
 namespace Scraper {
 
@@ -76,6 +77,7 @@ class ScrapeWriteWorker;
 /// bytes back to compare.
 class BatchScrapeRunner : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(BatchScrapeRunner)
 
 public:
   /// Aggregate counts emitted via `finished` so callers can summarise
@@ -119,7 +121,12 @@ public:
   /// always skip covered items (legacy), N > 0 = only skip items
   /// covered within the last N days (anything older flows back
   /// into the queue for refresh).
-  BatchScrapeRunner(IDatabaseManager *db, std::shared_ptr<MetadataLookupProvider> provider,
+  // Kartend-m02z: takes the full ApplicationContext instead of a snapshot
+  // of the DB pointer so the runner reads through ctx in dbMgr() and the
+  // pointer stays consistent with ApplicationContext::managers across the
+  // runner's lifetime.
+  BatchScrapeRunner(const ApplicationContext *ctx,
+                    std::shared_ptr<MetadataLookupProvider> provider,
                     QString collectionUuid, QStringList paths, QString artworkDir,
                     bool fetchPrimaryCover = true,
                     Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Overwrite,
@@ -278,7 +285,12 @@ private:
   /// the queue.
   void onWriteCompleted(quint64 requestId, bool ok);
 
-  IDatabaseManager *m_db = nullptr;
+  // Kartend-m02z: m_db field replaced with ctx-routed access. dbMgr() reads
+  // through m_ctx so future ApplicationContext::managers rebinds don't leave
+  // the runner pointing at a stale pointer.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] IDatabaseManager *dbMgr() const;
+
   std::shared_ptr<MetadataLookupProvider> m_provider;
   QString m_collectionUuid;
   QStringList m_paths;

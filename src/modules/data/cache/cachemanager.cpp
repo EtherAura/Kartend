@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace {
 
@@ -102,6 +103,12 @@ CacheManager::~CacheManager() {
                               << kShutdownDrainMs
                               << "ms during shutdown; abandoning pool to avoid blocking exit";
   }
+
+  // The async getCacheSize() walk captures `this`; wait for any in-flight
+  // walk before letting members go out of scope so the lambda can't touch
+  // freed memory (Kartend-bwcd). waitForFinished is a no-op on a
+  // default-constructed or already-finished future.
+  m_cacheSizeWalkFuture.waitForFinished();
 }
 
 auto CacheManager::snapshotTimestampsForShutdown() const -> QHash<QString, qint64> {
@@ -383,16 +390,44 @@ void CacheManager::clearCollectionCache(int collectionIndex) {
   dirtyArtwork.clear();
 }
 
-// Computes total size of cache directory on disk
-auto CacheManager::getCacheSize() -> qint64 {
-  QDir cacheDir(CacheDiskStorage::cacheDirectory());
-  qint64 totalSize = 0;
-  QDirIterator dirIt(cacheDir.absolutePath(), QDir::Files, QDirIterator::Subdirectories);
-  while (dirIt.hasNext()) {
-    dirIt.next();
-    totalSize += dirIt.fileInfo().size();
+// Returns the cached on-disk size and (when stale) dispatches a background
+// walk to refresh it. The previous implementation walked the cache
+// directory via QDirIterator on the GUI thread every CHECK_INTERVAL
+// artworks during scroll — O(N files) per call (Kartend-bwcd).
+qint64 CacheManager::getCacheSize() const {
+  constexpr qint64 STALE_AFTER_MS = 30000;
+  const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+
+  bool shouldDispatch = false;
+  qint64 result = 0;
+  {
+    QMutexLocker locker(&m_diskCacheSizeMutex);
+    result = m_cachedDiskCacheSize;
+    if (!m_diskWalkInFlight && (m_lastDiskWalkMs == 0 || nowMs - m_lastDiskWalkMs >= STALE_AFTER_MS)) {
+      m_diskWalkInFlight = true;
+      shouldDispatch = true;
+    }
   }
-  return totalSize;
+
+  if (shouldDispatch) {
+    // Capture `this` — ~CacheManager waits on m_cacheSizeWalkFuture so
+    // the lambda can't outlive the owning object.
+    m_cacheSizeWalkFuture = QtConcurrent::run([this]() {
+      const QString cacheDirPath = CacheDiskStorage::cacheDirectory();
+      qint64 totalSize = 0;
+      QDirIterator dirIt(cacheDirPath, QDir::Files, QDirIterator::Subdirectories);
+      while (dirIt.hasNext()) {
+        dirIt.next();
+        totalSize += dirIt.fileInfo().size();
+      }
+      QMutexLocker locker(&m_diskCacheSizeMutex);
+      m_cachedDiskCacheSize = totalSize;
+      m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();
+      m_diskWalkInFlight = false;
+    });
+  }
+
+  return result;
 }
 
 auto CacheManager::metrics() const -> CacheMetrics {

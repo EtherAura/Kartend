@@ -32,11 +32,12 @@ struct UnifiedItem {
  * previously scattered throughout ScrollManager, providing a cleaner separation
  * of concerns.
  */
-class ScrollDataManager : public QObject {
+class ScrollDataStore : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrollDataStore)
 public:
-  explicit ScrollDataManager(QObject *parent = nullptr);
-  ~ScrollDataManager() override = default;
+  explicit ScrollDataStore(QObject *parent = nullptr);
+  ~ScrollDataStore() override = default;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Initialization

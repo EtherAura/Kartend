@@ -67,6 +67,7 @@ struct LaunchCommand {
 /// Manages libretro cores, parameter parsing, and launch debouncing.
 class LaunchManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LaunchManager)
 public:
   explicit LaunchManager(QObject *parent = nullptr);
   ~LaunchManager() override = default;

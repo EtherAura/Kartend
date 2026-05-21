@@ -27,6 +27,7 @@ QT_END_NAMESPACE
  */
 class EmptyStateWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(EmptyStateWidget)
   Q_PROPERTY(int spinnerAngle READ spinnerAngle WRITE setSpinnerAngle)
 
 public:

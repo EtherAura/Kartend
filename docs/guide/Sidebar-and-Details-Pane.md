@@ -280,19 +280,19 @@ serif details pane.
 
 ## For developers
 
-- Sidebar UI: [src/ui/widgets/detailspane.ui](../../src/ui/widgets/) +
+- Sidebar UI: [src/ui/widgets/panes/detailspane.ui](../../src/ui/widgets/panes/) +
   [src/modules/media/detailspane/](../../src/modules/media/detailspane/)
   (`DetailsPaneManager`).
-- Visibility & external-hide flag: `SidebarManager` keeps both
+- Visibility & external-hide flag: `DetailsPaneManager` keeps both
   the persisted `sidebarVisible` and an in-memory "external hide"
   used by Cover Flow.
-- Tab model: `MetadataSidebar` builds Item / Collection / File widgets
+- Tab model: `DetailsPane` builds Item / Collection / File widgets
   on demand; `sidebarActiveTab` initial value persists per-collection.
 - Bubble rendering: custom `QFrame` subclasses with painted rounded
   rectangles, alpha applied via `QColor::setAlpha()`.
 - Resizing & locking: `sidebarWidthLocked` disables the splitter drag
   handle; the same flag controls height for top/bottom orientation.
-- Adding a new sidebar section: extend `MetadataSidebar` with a new
+- Adding a new sidebar section: extend `DetailsPane` with a new
   `QGroupBox` / `QFrame`, populate from `ItemMetadata` /
   `CollectionConfig`, and respect the `sidebarHeader*` / `sidebarSection*`
   styling keys.

@@ -23,6 +23,7 @@ QT_END_NAMESPACE
 /// audio, and uses a QLabel pipeline tuned for letterboxed previews).
 class BackgroundVideoWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(BackgroundVideoWidget)
 public:
   explicit BackgroundVideoWidget(QWidget *parent = nullptr);
   ~BackgroundVideoWidget() override;

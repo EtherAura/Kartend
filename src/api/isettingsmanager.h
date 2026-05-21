@@ -52,6 +52,7 @@ struct SettingsDialogContext {
  */
 class ISettingsManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ISettingsManager)
 public:
   using QObject::QObject;
   ~ISettingsManager() override = default;

@@ -16,6 +16,7 @@ struct SettingsModel;
 /// parallax + toolbar-backdrop-blur enable + strength/radius controls.
 class AppearanceEffectsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceEffectsPanel)
 public:
   explicit AppearanceEffectsPanel(QWidget *parent = nullptr);
   ~AppearanceEffectsPanel() override;

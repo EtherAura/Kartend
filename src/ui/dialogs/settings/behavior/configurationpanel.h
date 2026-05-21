@@ -31,6 +31,7 @@ struct SettingsModel;
 /// continues to own those slots/connections.
 class ConfigurationPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ConfigurationPanel)
 public:
   explicit ConfigurationPanel(QWidget *parent = nullptr);
   ~ConfigurationPanel() override;

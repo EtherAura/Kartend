@@ -18,6 +18,7 @@ struct SettingsModel;
 /// is expected to mirror to mainWindow + saveGeneralSettings on changed().
 class SplashPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SplashPanel)
 public:
   explicit SplashPanel(QWidget *parent = nullptr);
   ~SplashPanel() override;

@@ -25,6 +25,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include "applicationcontext.h"
 #include "idatabasemanager.h"
 #include "loggingcategories.h"
 #include "scrapepersistence.h"
@@ -47,12 +48,12 @@ constexpr int kWriteWorkerShutdownWaitMs = 2000;
 constexpr int kMaxReportedFailures = 1000;
 } // namespace
 
-BatchScrapeRunner::BatchScrapeRunner(IDatabaseManager *db,
+BatchScrapeRunner::BatchScrapeRunner(const ApplicationContext *ctx,
                                      std::shared_ptr<MetadataLookupProvider> provider,
                                      QString collectionUuid, QStringList paths, QString artworkDir,
                                      bool fetchPrimaryCover, Scraper::RescrapeMode rescrapeMode,
                                      int itemConcurrency, int skipRecentDays, QObject *parent)
-    : QObject(parent), m_db(db), m_provider(std::move(provider)),
+    : QObject(parent), m_ctx(ctx), m_provider(std::move(provider)),
       m_collectionUuid(std::move(collectionUuid)), m_paths(std::move(paths)),
       m_artworkDir(std::move(artworkDir)), m_fetchPrimaryCover(fetchPrimaryCover),
       m_rescrapeMode(rescrapeMode), m_itemConcurrency(std::max(1, itemConcurrency)),
@@ -60,6 +61,10 @@ BatchScrapeRunner::BatchScrapeRunner(IDatabaseManager *db,
 
 BatchScrapeRunner::~BatchScrapeRunner() {
   shutdownWriteWorker();
+}
+
+IDatabaseManager *BatchScrapeRunner::dbMgr() const {
+  return m_ctx ? m_ctx->databaseManager() : nullptr;
 }
 
 void BatchScrapeRunner::start() {
@@ -107,7 +112,7 @@ void BatchScrapeRunner::ensureWriteWorkerStarted() {
   // historically just no-op'd the save and treated it as success — we
   // preserve that by skipping the worker entirely. applyAndFinish has
   // a matching null-worker branch that runs the completion synchronously.
-  if (!m_db) return;
+  if (!dbMgr()) return;
   if (m_writeWorker) return;
 
   // Connection name keyed on the runner address so concurrent runners
@@ -184,7 +189,8 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   // No DB AND no artwork dir means nothing to check against — bail
   // before the loop so an empty test fixture (no DB, no artwork dir)
   // keeps every item, matching the legacy behaviour for those callers.
-  const bool dbCheckPossible = m_db && !m_collectionUuid.isEmpty();
+  auto *db = dbMgr();
+  const bool dbCheckPossible = db && !m_collectionUuid.isEmpty();
   const bool sidecarCheckPossible = !m_artworkDir.isEmpty();
   if (!dbCheckPossible && !sidecarCheckPossible) return;
 
@@ -252,6 +258,14 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   const bool hasWindow = m_skipRecentDays > 0;
   const QDateTime cutoff = hasWindow ? nowUtc.addDays(-m_skipRecentDays) : QDateTime();
 
+  // Batch-fetch metadata for every candidate path up front. Without this
+  // pre-flight, the per-item check below would issue one SELECT per path
+  // on the GUI thread — a 1000-item collection burned multiple seconds
+  // freezing the window before pump() even started.
+  const QHash<QString, ItemMetadataStore::ItemMetadata> metadataByPath =
+      dbCheckPossible ? db->loadItemMetadataBatch(m_collectionUuid, m_paths)
+                      : QHash<QString, ItemMetadataStore::ItemMetadata>{};
+
   // Helper: decide whether the metadata "slot" is covered for an item.
   // Returns one of three states so the caller can apply the time-window
   // gate consistently for both DB and on-disk evidence.
@@ -263,7 +277,7 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   auto metadataPresenceFor = [&](const QString &path, const QString &baseName) -> MetaPresence {
     MetaPresence out;
     if (dbCheckPossible) {
-      const auto md = m_db->loadItemMetadata(m_collectionUuid, path);
+      const auto md = metadataByPath.value(path);
       if (!md.source.isEmpty()) {
         out.present = true;
         // ItemMetadataStore writes updated_at via
@@ -640,7 +654,7 @@ void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
             // metadata-only callers pass nullptr. With no worker thread
             // we keep the legacy synchronous "treat as success" path so
             // existing tests keep passing.
-            if (!self->m_db || !self->m_writeWorker) {
+            if (!self->dbMgr() || !self->m_writeWorker) {
               ++self->m_summary.scraped;
               self->m_summary.mediaWritten += writeRes.mediaWritten;
               emit self->itemCompleted(self->m_summary.scraped + self->m_summary.skipped +
@@ -707,8 +721,8 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
   // Worker bypassed DatabaseManager's main-thread cache. Invalidate
   // the per-item slot here so the next sidebar refresh sees the
   // freshly-saved metadata instead of the pre-scrape cached row.
-  if (m_db) {
-    m_db->invalidateMetadataCacheItem(m_collectionUuid, pending.state->path);
+  if (auto *db = dbMgr()) {
+    db->invalidateMetadataCacheItem(m_collectionUuid, pending.state->path);
   }
 
   ++m_summary.scraped;

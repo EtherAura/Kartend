@@ -2,6 +2,7 @@
 
 #include "cachemanager.h"
 #include "extensionutils.h"
+#include "icachemanager.h"
 #include "loggingcategories.h"
 #include "threadpoolutils.h"
 #include "uiconstants/artwork.h"
@@ -79,7 +80,7 @@ inline bool isCancelledForGeneration(const std::atomic<quint64> &counter, quint6
 QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
                                                 const std::atomic<quint64> &generationCounter,
                                                 quint64 capturedGeneration,
-                                                CacheManager *cacheManager, qreal dpr) {
+                                                ICacheManager *cacheManager, qreal dpr) {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
   for (const ArtworkInfo &info : batch) {
@@ -108,6 +109,8 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
     }
     results.append(ArtworkInfo::Result{.widget = info.mediaItem,
                                        .artworkPath = info.artworkPath,
+                                       .artworkBaseName =
+                                           QFileInfo(info.artworkPath).completeBaseName(),
                                        .image = img,
                                        .loadedFromDiskCache = loadedFromDiskCache});
   }
@@ -117,7 +120,7 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
 QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
                                                      const std::atomic<quint64> &generationCounter,
                                                      quint64 capturedGeneration,
-                                                     CacheManager *cacheManager, qreal dpr) {
+                                                     ICacheManager *cacheManager, qreal dpr) {
   QList<ArtworkPrecacheResult> results;
   results.reserve(paths.size());
   for (const QString &artworkPath : paths) {
@@ -149,7 +152,7 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
 
 } // namespace
 
-ArtworkLoadDispatcher::ArtworkLoadDispatcher(CacheManager *cacheManager, QObject *parent)
+ArtworkLoadDispatcher::ArtworkLoadDispatcher(ICacheManager *cacheManager, QObject *parent)
     : QObject(parent), m_cacheManager(cacheManager),
       m_currentGeneration(std::make_shared<std::atomic<quint64>>(0)) {
   const int idealThreads = QThread::idealThreadCount();
@@ -193,7 +196,7 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
     return;
   }
 
-  CacheManager *const cacheManager = m_cacheManager;
+  ICacheManager *const cacheManager = m_cacheManager;
   const auto generationCounter = m_currentGeneration;
   // Snapshot the live generation at dispatch time. cancelAll() bumps the
   // counter atomically; this captures the value *now*, so this task only
@@ -258,7 +261,7 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
     return;
   }
 
-  CacheManager *const cacheManager = m_cacheManager;
+  ICacheManager *const cacheManager = m_cacheManager;
   const auto generationCounter = m_currentGeneration;
   const quint64 generation = generationCounter
                                  ? generationCounter->load(std::memory_order_acquire)
@@ -336,9 +339,7 @@ int ArtworkLoadDispatcher::runningFutureCount() const {
 }
 
 void ArtworkLoadDispatcher::pruneFinishedFutures() {
-  for (int i = m_futures.size() - 1; i >= 0; --i) {
-    if (m_futures[i].isFinished()) {
-      m_futures.removeAt(i);
-    }
-  }
+  // Kartend-gro2: std::erase_if avoids the O(N) shift per removeAt that the
+  // reverse-loop variant paid (removeAt still memmove's the tail down).
+  m_futures.removeIf([](const QFuture<void> &f) { return f.isFinished(); });
 }

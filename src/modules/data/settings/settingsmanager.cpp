@@ -19,9 +19,11 @@
 #include "timerutils.h"
 #include "uiconstants/attract.h"
 #include <algorithm>
+#include <QDateTime>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QLabel>
 #include <QPointer>
 #include <QScrollArea>
@@ -38,6 +40,13 @@ Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 #define debugLog(msg) qCDebug(lcSettingsManager) << msg
 
 namespace {
+// Stamped into [General/schemaVersion] on every save. Read on load to
+// detect INIs written by a build that knows fields this build doesn't
+// (warn) vs INIs that predate the sentinel (treat as legacy v0 — all
+// current keys load with their declared defaults where missing).
+// Future migration logic, when it lands, will branch on this value.
+constexpr int kSettingsSchemaVersion = 1;
+
 // Sentinel value stored in QSettings [Scrapers/<provider>/<field>] when
 // the real credential lives in the platform keychain. On load, finding
 // this sentinel triggers a keychain lookup; anything else is treated as
@@ -121,7 +130,27 @@ SettingsManager::~SettingsManager() = default;
 // Loads general settings (selection indices now resolved from persistent cache
 // separately)
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
-  QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+  const QString configPath = SettingsUtils::getConfigPath();
+  QSettings s(configPath, SettingsUtils::getFormat());
+
+  // QSettings exposes parse errors through status() — a torn/corrupted INI
+  // surfaces as FormatError here. Without this check, every s.value() below
+  // silently falls through to its default and the next save then overwrites
+  // the original (broken) file with defaults, destroying whatever the user
+  // had configured. Detect corruption now, log it, and snapshot the corrupt
+  // file under a timestamped sidecar so the next save can't erase the
+  // forensic copy. The save path itself is unchanged — the user can re-save
+  // intentionally; we just refuse to silently swallow corruption.
+  if (s.status() != QSettings::NoError && QFile::exists(configPath)) {
+    const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmssZ"));
+    const QString backupPath = configPath + QStringLiteral(".corrupt-") + stamp;
+    const bool copied = QFile::copy(configPath, backupPath);
+    qCWarning(lcSettingsManager)
+        << "Settings INI failed to parse (QSettings::status() ==" << static_cast<int>(s.status())
+        << "for" << configPath << "). Defaults will be loaded;"
+        << (copied ? "the corrupt file has been snapshotted to" : "FAILED to snapshot to") << backupPath
+        << "before the next save.";
+  }
 
   // Mirror saveCollections()/saveGeneralSettings() write-side path validation
   // on read so a hand-edited config can't sneak shell metacharacters or null
@@ -143,6 +172,18 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   };
 
   s.beginGroup("General");
+  // Pre-flight: detect future-versioned INIs so a stale build doesn't
+  // silently drop unknown fields without leaving a breadcrumb. v0
+  // (key missing) is the legacy path — load every current key with its
+  // declared default. Real migration switches will hang off this in a
+  // later schemaVersion bump.
+  const int loadedSchemaVersion = s.value("schemaVersion", 0).toInt();
+  if (loadedSchemaVersion > kSettingsSchemaVersion) {
+    qCWarning(lcSettingsManager)
+        << "Settings INI was written with schemaVersion" << loadedSchemaVersion
+        << "but this build only understands up to" << kSettingsSchemaVersion
+        << "— unknown keys will be ignored on load and overwritten on save.";
+  }
   settings.rememberSelection = s.value("rememberSelection", true).toBool();
   settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
   settings.selectItemOnHover = s.value("selectItemOnHover", false).toBool();
@@ -585,6 +626,10 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
   s.beginGroup("General");
+  // Stamp the schema sentinel first so any later partial-write failure
+  // still leaves the version marker visible to the next load (the
+  // QSaveFile work tracked separately will plug the partial-write hole).
+  s.setValue("schemaVersion", kSettingsSchemaVersion);
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
   s.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
@@ -801,6 +846,20 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
                                .arg(SettingsUtils::getConfigPath())
                                .arg(static_cast<int>(s.status())));
     ErrorUtils::logError(err);
+  }
+
+  // setAtomicSyncRequired(true) makes QSettings write the [General] /
+  // [Scrapers] sections to a temp file and atomically rename. The rename
+  // metadata still has to hit the disk's journal for that to survive a
+  // power loss — fsync the parent directory so the rename is durable.
+  // syncDirectory tolerates EINVAL filesystems (some tmpfs setups don't
+  // support directory fsync) by returning true, so this is safe to call
+  // unconditionally on every save.
+  const QString configPath = SettingsUtils::getConfigPath();
+  if (!PathUtils::syncDirectory(QFileInfo(configPath).path())) {
+    qCWarning(lcSettingsManager)
+        << "syncDirectory failed for" << QFileInfo(configPath).path()
+        << "— atomic rename completed but its durability across a power loss is no longer guaranteed.";
   }
 
   // Cleartext scraper credentials live in [Scrapers]; clamp the INI to 0600

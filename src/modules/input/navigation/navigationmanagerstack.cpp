@@ -136,7 +136,7 @@ auto NavigationManager::handleNavigationFallback() -> void {
 // Goes back to collections and cancels any active held-key repeats to avoid
 // stray timer callbacks
 void NavigationManager::goBackToCollections() {
-  if (!parent()) {
+  if (!isAlive()) {
     return;
   }
   // Synthetic Home view is the top of the navigation hierarchy — Back is a
@@ -144,7 +144,7 @@ void NavigationManager::goBackToCollections() {
   if (m_inRootView) {
     return;
   }
-  if ((parent()) && (interactionMgr())) {
+  if (isAlive() && interactionMgr()) {
     interactionMgr()->stopRepeat();
   }
 

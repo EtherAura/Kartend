@@ -9,7 +9,7 @@ class QLabel;
 class QPropertyAnimation;
 QT_END_NAMESPACE
 
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 /**
  * @brief Full-window "Now Playing" overlay shown while a runtime-tracked
@@ -22,6 +22,7 @@ class OverlayLayerManager;
  */
 class NowPlayingOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(NowPlayingOverlay)
 public:
   explicit NowPlayingOverlay(QWidget *parent = nullptr);
   ~NowPlayingOverlay() override;
@@ -30,9 +31,9 @@ public:
   void hideOverlay();
   [[nodiscard]] bool isActive() const { return m_active; }
 
-  /// See OverlayLayerManager. Routes showOverlay()'s raise() through the
+  /// See OverlayZOrderRegistry. Routes showOverlay()'s raise() through the
   /// central z-order coordinator when installed.
-  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+  void setLayerManager(OverlayZOrderRegistry *manager) { m_layerManager = manager; }
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -50,7 +51,7 @@ private:
   QLabel *m_hintLabel = nullptr;
   QPropertyAnimation *m_fadeAnimation = nullptr;
   bool m_active = false;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 
 #endif // NOWPLAYINGOVERLAY_H

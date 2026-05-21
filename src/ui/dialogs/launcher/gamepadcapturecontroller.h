@@ -23,6 +23,7 @@ class QString;
 /// across.
 class GamepadCaptureController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(GamepadCaptureController)
 
 public:
   enum class Target { None, Confirm, Back, ToggleSidebar };

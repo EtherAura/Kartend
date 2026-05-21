@@ -264,7 +264,7 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
 
 void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int launcherIndex) {
   if ((!m_collections) || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
-    QMessageBox::warning(nullptr, "Invalid Collection", "Invalid collection specified.");
+    QMessageBox::warning(nullptr, tr("Invalid Collection"), tr("Invalid collection specified."));
     return;
   }
 
@@ -362,9 +362,9 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       QMessageBox::warning(nullptr, "Invalid File Path",
                            QString("%1\n\nPath: %2").arg(msg, filePath));
     } else if (msg.contains("core", Qt::CaseInsensitive)) {
-      QMessageBox::warning(nullptr, "Invalid Core Path", QString("%1").arg(msg));
+      QMessageBox::warning(nullptr, tr("Invalid Core Path"), msg);
     } else {
-      QMessageBox::warning(nullptr, "Launch Error", QString("%1").arg(msg));
+      QMessageBox::warning(nullptr, tr("Launch Error"), msg);
     }
     return;
   }
@@ -391,8 +391,8 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   QFileInfo launcherCheck(launcherPath);
   if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
     QMessageBox::critical(
-        nullptr, "Launch Error",
-        QString("Launcher is no longer accessible or executable:\n%1").arg(launcherPath));
+        nullptr, tr("Launch Error"),
+        tr("Launcher is no longer accessible or executable:\n%1").arg(launcherPath));
     return;
   }
 
@@ -417,7 +417,12 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
     return;
   }
 
-  bool success = QProcess::startDetached(launcherPath, cmd.arguments);
+  // Some launchers (RetroArch on Windows-style install layouts, anything
+  // packaged as a portable directory) expect CWD == install dir so sibling
+  // DLLs / config files resolve. Without this, the child inherits Kartend's
+  // CWD (typically $HOME), which breaks those launchers (Kartend-bmvu).
+  const QString launcherDir = QFileInfo(launcherPath).absolutePath();
+  bool success = QProcess::startDetached(launcherPath, cmd.arguments, launcherDir);
 
   if (!success) {
     QString errorMsg = QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
@@ -426,7 +431,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
                            .arg(launcherPath)
                            .arg(cmd.arguments.join(" "));
 
-    QMessageBox::critical(nullptr, "Launch Error", errorMsg);
+    QMessageBox::critical(nullptr, tr("Launch Error"), errorMsg);
     return;
   }
 
@@ -442,8 +447,8 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // overlay state stays coherent.
   if (m_trackedChild) {
     QMessageBox::information(
-        nullptr, "Already Running",
-        QString("Another tracked item is currently running:\n%1").arg(m_trackedFilePath));
+        nullptr, tr("Already Running"),
+        tr("Another tracked item is currently running:\n%1").arg(m_trackedFilePath));
     return false;
   }
 
@@ -501,12 +506,15 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     // until the process is actually gone.
     if (error == QProcess::FailedToStart) {
       QMessageBox::critical(
-          nullptr, "Launch Error",
-          QString("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+          nullptr, tr("Launch Error"),
+          tr("Failed to start tracked launcher:\n%1").arg(child->errorString()));
       cleanup();
     }
   });
 
+  // See the detached-start path above: pin CWD to the launcher's own
+  // directory so sibling resources resolve the same way (Kartend-bmvu).
+  child->setWorkingDirectory(QFileInfo(launcherPath).absolutePath());
   child->start(launcherPath, cmd.arguments);
   // start() returns void; FailedToStart is reported via errorOccurred.
   return true;

@@ -31,6 +31,15 @@ constexpr const char *LOAD_ITEMS_BY_UUID =
 constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
     "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";
 
+// Added Kartend-o5mr — used to be ad-hoc prepares inside ScanService that
+// re-prepared on every call. Routing them through PreparedStatementCache
+// shares the prepared statement across the whole scan.
+constexpr const char *UPDATE_COLLECTION_EXT_SIGNATURE =
+    "UPDATE collections SET ext_signature = ? WHERE uuid = ?";
+constexpr const char *SELECT_STAGED_SCAN_RESULTS =
+    "SELECT rowid, path, rel_path, name, last_modified FROM scanned_items "
+    "WHERE rowid > ? ORDER BY rowid LIMIT ?";
+
 } // namespace QuerySQL
 
 #endif // QUERYMANAGERSQL_H

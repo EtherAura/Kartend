@@ -17,6 +17,7 @@ struct SettingsModel;
 /// mutation; deferred-save semantics — host wires changed→checkForChanges.
 class ToolbarPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ToolbarPanel)
 public:
   explicit ToolbarPanel(QWidget *parent = nullptr);
   ~ToolbarPanel() override;

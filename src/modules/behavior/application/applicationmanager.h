@@ -29,6 +29,7 @@ template <typename T> class QList;
 
 class ApplicationManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ApplicationManager)
 
 public:
   explicit ApplicationManager(QObject *parent = nullptr);

@@ -56,18 +56,20 @@ Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
   } while (0)
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
-  m_searchManager = std::make_unique<SearchManager>(this);
-  m_selectionManager = std::make_unique<SelectionManager>(this);
-  m_keyboardManager = std::make_unique<KeyboardManager>(this);
-  m_gamepadManager = std::make_unique<GamepadManager>(this);
-  m_arrowHandler = std::make_unique<ArrowNavigationHandler>(this);
-  m_alphabeticHandler = std::make_unique<AlphabeticNavigationHandler>(this);
-  m_animationManager = std::make_unique<AnimationManager>(this);
-  m_mouseManager = std::make_unique<MouseManager>(this);
-  m_launchManager = std::make_unique<LaunchManager>(this);
-  m_viewportManager = std::make_unique<ViewportManager>(this);
-  m_eventManager = std::make_unique<EventManager>(this);
-  m_attractManager = std::make_unique<AttractManager>(this);
+  // Sub-managers owned solely by their std::unique_ptr members (Kartend-d70s,
+  // re-attempted after Kartend-3v92).
+  m_searchManager = std::make_unique<SearchManager>(nullptr);
+  m_selectionManager = std::make_unique<SelectionManager>(nullptr);
+  m_keyboardManager = std::make_unique<KeyboardManager>(nullptr);
+  m_gamepadManager = std::make_unique<GamepadManager>(nullptr);
+  m_arrowHandler = std::make_unique<ArrowNavigationHandler>(nullptr);
+  m_alphabeticHandler = std::make_unique<AlphabeticNavigationHandler>(nullptr);
+  m_animationManager = std::make_unique<AnimationManager>(nullptr);
+  m_mouseManager = std::make_unique<MouseManager>(nullptr);
+  m_launchManager = std::make_unique<LaunchManager>(nullptr);
+  m_viewportManager = std::make_unique<ViewportManager>(nullptr);
+  m_eventManager = std::make_unique<EventManager>(nullptr);
+  m_attractManager = std::make_unique<AttractManager>(nullptr);
 
   m_viewportManager->setContinuousScrollActive(true);
 }

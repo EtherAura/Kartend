@@ -10,6 +10,7 @@
 #include <QStringList>
 
 class IDatabaseManager;
+struct ApplicationContext;
 
 /**
  * @brief Manages search filtering and subcollection filtering for the scroll
@@ -25,7 +26,7 @@ class IDatabaseManager;
  *
  * Usage:
  *   // Setup dependencies
- *   filterManager->setDatabaseManager(dbManager);
+ *   filterManager->setApplicationContext(ctx);
  *   filterManager->setCollections(&collections);
  *   filterManager->setSourceData(filePaths, fileNames, displayNames,
  * subcollections);
@@ -38,6 +39,7 @@ class IDatabaseManager;
  */
 class FilterManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(FilterManager)
 public:
   explicit FilterManager(QObject *parent = nullptr);
   ~FilterManager() override = default;
@@ -46,7 +48,10 @@ public:
   // Dependency injection
   // ─────────────────────────────────────────────────────────────────────────
 
-  void setDatabaseManager(IDatabaseManager *manager);
+  // Kartend-davi: ctx-routed access replaces the cached pointer; callers
+  // wire the context once instead of pushing a separate IDatabaseManager
+  // pointer that can drift out of sync with ApplicationContext::managers.
+  void setApplicationContext(const ApplicationContext *ctx);
   void setCollections(const QList<CollectionConfig> *collections);
   void setHierarchyCache(const CollectionHierarchyCache *cache);
 
@@ -148,7 +153,9 @@ private:
                                                     const QSet<int> &targetCollections) const;
 
   // Dependencies
-  IDatabaseManager *m_databaseManager = nullptr;
+  [[nodiscard]] IDatabaseManager *dbMgr() const;
+
+  const ApplicationContext *m_ctx = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
 

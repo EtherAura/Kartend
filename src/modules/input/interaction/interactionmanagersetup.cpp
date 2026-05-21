@@ -105,7 +105,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_gamepadManager) {
     GamepadManagerSetup gamepadSetup;
     gamepadSetup.ctx = setup.ctx;
-    gamepadSetup.keyboardManager = m_keyboardManager.get();
+    // Kartend-davi: gamepadSetup.keyboardManager was removed — read through
+    // ctx->keyboardManager() at the call site.
     gamepadSetup.generalSettings = m_generalSettings;
     gamepadSetup.isShuttingDown = m_isShuttingDown;
     m_gamepadManager->setupReferences(gamepadSetup);

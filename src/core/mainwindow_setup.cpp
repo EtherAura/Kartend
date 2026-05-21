@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QShowEvent>
 #include <QSize>
 #include <QTimer>
 #include <QToolButton>
@@ -93,27 +94,24 @@ void MainWindow::setupUI() {
   // Managers are initialized by ApplicationManager in the constructor
   getSessionManager()->initialize();
 
-  // Load settings
+  // Load settings (INI is small — keep eager).
   getSettingsManager()->loadCollections(m_collections);
 
-  // append synthesized playlist CollectionConfigs after INI
-  // collections so playlists nest into the hierarchy and appear as virtual
-  // collections. resyncPlaylistCollections also rebuilds the hierarchy cache,
-  // so we don't need a separate rebuild call here.
+  // Kartend-s241: full resyncPlaylistCollections is deferred to a post-
+  // showEvent QTimer below, because PlaylistManager::loadAll() hits SQLite
+  // on the GUI thread (~70ms typical, way worse on cold cache). The
+  // hierarchy cache MUST be populated synchronously here though — many
+  // downstream wiring paths and the integration-test fixture read
+  // m_appContext.hierarchyCache via the context, and they ran before the
+  // deferred resync would fire. Empty cache with no playlists is the
+  // correct startup state; the deferred call appends playlists + rebuilds.
   if (PlaylistManager *playlistManager = getPlaylistManager()) {
     playlistManager->initialize();
     QObject::connect(playlistManager, &PlaylistManager::playlistsChanged, this,
                      [this]() { resyncPlaylistCollections(); });
   }
-  resyncPlaylistCollections();
-
-  // One-shot reconcile at startup: drop items/collections rows left
-  // orphaned by past collection renames or removals so the Statistics
-  // totals line up with the live collections without needing a
-  // settings-save round trip.
-  if (getDatabaseManager()) {
-    getDatabaseManager()->purgeOrphanCollectionData(m_collections);
-  }
+  rebuildHierarchyCache();
+  QTimer::singleShot(0, this, [this]() { resyncPlaylistCollections(); });
 
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
@@ -211,6 +209,33 @@ void MainWindow::setupUI() {
   setupInitialTimers();
 }
 
+void MainWindow::showEvent(QShowEvent *event) {
+  QMainWindow::showEvent(event);
+
+  // One-shot reconcile at startup: drop items/collections rows left
+  // orphaned by past collection renames or removals so the Statistics
+  // totals line up with the live collections without needing a
+  // settings-save round trip. Deferred to QTimer::singleShot(0) inside
+  // showEvent so it lands after the first paint — purgeOrphanCollectionData
+  // iterates the items table and runs multiple seconds on large libraries,
+  // freezing an unpainted window if invoked synchronously from setupUI.
+  // Gating on showEvent keeps the work out of nested event loops opened
+  // by modal dialogs in test harnesses that never call show().
+  if (m_deferredStartupDone) {
+    return;
+  }
+  m_deferredStartupDone = true;
+
+  QTimer::singleShot(0, this, [this]() {
+    if (m_isShuttingDown || QApplication::closingDown()) {
+      return;
+    }
+    if (getDatabaseManager()) {
+      getDatabaseManager()->purgeOrphanCollectionData(m_collections);
+    }
+  });
+}
+
 void MainWindow::setupUIReferences() {
   setWindowTitle("Kartend");
 
@@ -299,13 +324,13 @@ void MainWindow::setupUIReferences() {
   // managers' setLayerManager() in connect-setup code below; the loose
   // top-level overlays we just constructed are registered here directly.
   if (m_overlayLayerManager) {
-    m_overlayLayerManager->registerOverlay(m_loadingOverlay, OverlayLayerManager::Layer::Loading);
-    m_overlayLayerManager->registerOverlay(m_splashOverlay, OverlayLayerManager::Layer::Splash);
+    m_overlayLayerManager->registerOverlay(m_loadingOverlay, OverlayZOrderRegistry::Layer::Loading);
+    m_overlayLayerManager->registerOverlay(m_splashOverlay, OverlayZOrderRegistry::Layer::Splash);
     m_overlayLayerManager->registerOverlay(m_nowPlayingOverlay,
-                                           OverlayLayerManager::Layer::NowPlaying);
+                                           OverlayZOrderRegistry::Layer::NowPlaying);
     m_overlayLayerManager->registerOverlay(m_detailPageOverlay,
-                                           OverlayLayerManager::Layer::DetailPage);
-    m_overlayLayerManager->registerOverlay(m_textZoomHud, OverlayLayerManager::Layer::TextZoomHud);
+                                           OverlayZOrderRegistry::Layer::DetailPage);
+    m_overlayLayerManager->registerOverlay(m_textZoomHud, OverlayZOrderRegistry::Layer::TextZoomHud);
     m_loadingOverlay->setLayerManager(m_overlayLayerManager.get());
     m_splashOverlay->setLayerManager(m_overlayLayerManager.get());
     m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());
@@ -627,15 +652,17 @@ void MainWindow::showFirstRunWizard() {
 }
 
 void MainWindow::setupArtworkManager() {
-  if (getArtworkManager()) {
-    getArtworkManager()->initializeCache();
-  }
+  if (!getArtworkManager()) return;
   ArtworkManager &artMgr = *getArtworkManager();
 
+  // Kartend-davi: setupReferences must precede initializeCache because the
+  // manager now reads its CacheManager through ctx instead of caching a
+  // raw pointer at construction.
   ArtworkManagerSetup setup;
   setup.ctx = &m_appContext;
-
   artMgr.setupReferences(setup);
+
+  artMgr.initializeCache();
 }
 
 void MainWindow::setupLastSelectedIndices() {

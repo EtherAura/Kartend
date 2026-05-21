@@ -32,6 +32,7 @@ QT_END_NAMESPACE
 /// Configuration tab.
 class CreateCollectionDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CreateCollectionDialog)
 public:
   explicit CreateCollectionDialog(QWidget *parent = nullptr);
   ~CreateCollectionDialog() override;

@@ -214,9 +214,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
 
   // Schedule selection restore
   if (selIdx >= 0 && interactionMgr()) {
-    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
-                             UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                             UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
 
   schedulePostLoadOperations();
@@ -399,9 +397,7 @@ void NavigationManager::onItemsLoaded(const QStringList &filePaths,
     }
     // Use scheduleSelectionRestore for all depths to ensure widgets are
     // materialized before selection restore attempts sidebar update
-    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
-                             UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                             UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
 
   schedulePostLoadOperations();

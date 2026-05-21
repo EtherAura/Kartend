@@ -19,6 +19,7 @@ QT_END_NAMESPACE
 /// CollectionConfig::parentCollectionIndex / isSubcollection.
 class CollectionTreeWidget : public QTreeWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CollectionTreeWidget)
 public:
   using CycleCheck = std::function<bool(int childIndex, int potentialParentIndex)>;
   using ItemToIndex = std::function<int(const QTreeWidgetItem *)>;

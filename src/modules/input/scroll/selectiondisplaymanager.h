@@ -50,6 +50,7 @@ enum class ListSortColumn;
  */
 class SelectionDisplayManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SelectionDisplayManager)
 public:
   explicit SelectionDisplayManager(QObject *parent = nullptr);
   ~SelectionDisplayManager() override;

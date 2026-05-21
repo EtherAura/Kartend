@@ -62,6 +62,7 @@ struct SelectionManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class SelectionManager : public QObject, public ISelectionManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SelectionManager)
 
 public:
   explicit SelectionManager(QObject *parent = nullptr);

@@ -39,8 +39,10 @@ public:
   virtual void filterItemsCurrentAndSubcollections(const QString &searchText) = 0;
   virtual void filterItemsAllCollections(const QString &searchText) = 0;
 
-  virtual void scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
-                                        int finalEnsureDelayMs) = 0;
+  // Kartend-plqg: maxAttempts + attemptDelayMs dropped — SelectionRestoreCoordinator
+  // ignored them (Q_UNUSED on receipt) so the callers' kRestoreAttempts /
+  // kRestoreIntervalMs constants were also dead.
+  virtual void scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs) = 0;
 };
 
 #endif // INAVIGATIONMANAGER_H

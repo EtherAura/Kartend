@@ -38,6 +38,7 @@ class TreeManager;
 
 class SettingsDialog : public QDialog, public CollectionRemoverHost, public ISettingsDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SettingsDialog)
 
 public:
   /// scope selector for Save actions in the settings dialog.

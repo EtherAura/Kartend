@@ -28,6 +28,7 @@ struct WidgetPoolMetrics {
 // Manages a pool of recycled ItemWidget instances for virtual scrolling
 class WidgetPoolManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(WidgetPoolManager)
 public:
   explicit WidgetPoolManager(QObject *parent = nullptr);
   ~WidgetPoolManager() override;

@@ -34,6 +34,7 @@ struct DetailPageManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class DetailPageManager : public QObject, public IDetailPageManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DetailPageManager)
 public:
   explicit DetailPageManager(QObject *parent = nullptr);
   ~DetailPageManager() override;

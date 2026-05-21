@@ -42,6 +42,7 @@ struct MarqueeControllerSetup {
  */
 class MarqueeController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MarqueeController)
 public:
   explicit MarqueeController(QObject *parent = nullptr);
   ~MarqueeController() override;

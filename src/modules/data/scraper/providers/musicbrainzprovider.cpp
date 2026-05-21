@@ -120,5 +120,10 @@ void MusicBrainzProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   }
   // Cover Art Archive doesn't require a User-Agent but accepting one
   // keeps the audit trail consistent with the MB API requests.
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback));
+  // Kartend-9ryx: pin the response to image/* — Cover Art Archive
+  // occasionally returns HTML error pages on 502/503 and we don't want
+  // the decoder seeing them.
+  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
+                                       QStringLiteral("image/"));
 }

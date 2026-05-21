@@ -30,6 +30,7 @@ class DebouncedTimer;
 /// guards.
 class GridWidthDebouncer : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(GridWidthDebouncer)
 
 public:
   using StageCallback = std::function<void()>;

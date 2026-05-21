@@ -91,6 +91,16 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestEnsureItemsFtsReady, m_scanWorker,
           &QueryManager::ensureItemsFtsReady);
 
+  // Kartend-fvye: route cancelScan through the same queued-signal
+  // pattern as the other request* signals, so the worker translates
+  // the atomic flip on its own thread instead of the GUI thread
+  // touching the worker directly. Future-proofs against a maintainer
+  // adding non-atomic cancellation state to QueryManager.
+  connect(this, &DatabaseManager::cancelScanRequested, m_worker,
+          &QueryManager::requestCancelScan);
+  connect(this, &DatabaseManager::cancelScanRequested, m_scanWorker,
+          &QueryManager::requestCancelScan);
+
   connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this,
           &DatabaseManager::onWorkerItemCountLoaded);
@@ -145,10 +155,23 @@ DatabaseManager::~DatabaseManager() {
   // ~QThread qFatal on a still-running thread. The OS will reclaim threads
   // and SQLite handles at process exit (we use std::quick_exit in main).
   constexpr int SHUTDOWN_WAIT_MS = 2000;
+  // The leak paths below (timed-out wait → forget the thread pointer) are
+  // safe in production because main.cpp std::quick_exits and the OS reaps
+  // the thread + its SQLite handle on process exit. They're NOT safe in
+  // tests, which run thousands of MainWindow ctor/dtor cycles inside one
+  // QApplication and would accumulate leaked threads. Surface a debug-only
+  // qFatal here so a regression that makes 2s actually insufficient
+  // (e.g. a deadlock in the worker) is caught immediately in CI rather
+  // than silently leaking. Release builds keep the leak-and-move-on
+  // semantics because qFatal mid-shutdown isn't useful to end users.
   if (m_workerThread) {
     m_workerThread->quit();
     if (m_workerThread->wait(SHUTDOWN_WAIT_MS)) {
       delete m_workerThread;
+    } else {
+      Q_ASSERT_X(false, "DatabaseManager::~DatabaseManager",
+                 "m_workerThread did not finish within SHUTDOWN_WAIT_MS — leaked. "
+                 "Likely a worker-side deadlock or a slot blocking on the GUI thread.");
     }
     m_workerThread = nullptr;
   }
@@ -156,6 +179,10 @@ DatabaseManager::~DatabaseManager() {
     m_scanThread->quit();
     if (m_scanThread->wait(SHUTDOWN_WAIT_MS)) {
       delete m_scanThread;
+    } else {
+      Q_ASSERT_X(false, "DatabaseManager::~DatabaseManager",
+                 "m_scanThread did not finish within SHUTDOWN_WAIT_MS — leaked. "
+                 "Likely a worker-side deadlock or a slot blocking on the GUI thread.");
     }
     m_scanThread = nullptr;
   }
@@ -245,12 +272,12 @@ void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
 }
 
 void DatabaseManager::cancelScan() {
-  if (m_worker) {
-    m_worker->requestCancelScan();
-  }
-  if (m_scanWorker) {
-    m_scanWorker->requestCancelScan();
-  }
+  // Kartend-fvye: queue the cancel through a Qt::QueuedConnection signal
+  // (wired in the ctor) so the workers translate the request on their
+  // own threads instead of the GUI thread touching worker-owned state.
+  // The destructor still calls requestCancelScan() directly because the
+  // worker event loop is being torn down anyway — see ~DatabaseManager.
+  emit cancelScanRequested();
 }
 
 // ─── Worker callbacks ─────────────────────────────────────────────────────────
@@ -574,6 +601,55 @@ ItemMetadataStore::ItemMetadata DatabaseManager::loadItemMetadata(const QString 
   }
   m_metadataCache.putMetadata(collectionUuid, path, result.value());
   return result.value();
+}
+
+QHash<QString, ItemMetadataStore::ItemMetadata>
+DatabaseManager::loadItemMetadataBatch(const QString &collectionUuid,
+                                        const QStringList &paths) const {
+  QHash<QString, ItemMetadataStore::ItemMetadata> out;
+  out.reserve(paths.size());
+
+  // Walk cache first so a warm BatchScrapeRunner pre-flight doesn't issue
+  // any SQL when the same paths were touched earlier in the session.
+  QStringList missingPaths;
+  missingPaths.reserve(paths.size());
+  for (const QString &path : paths) {
+    if (auto cached = m_metadataCache.tryGetMetadata(collectionUuid, path); cached) {
+      out.insert(path, *cached);
+    } else {
+      missingPaths.append(path);
+    }
+  }
+
+  if (missingPaths.isEmpty()) return out;
+
+  auto result =
+      ItemMetadataStore::loadBatch(const_cast<QSqlDatabase &>(m_db), collectionUuid, missingPaths);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    // Mirror single-load's graceful degradation: hand back empty stubs so
+    // the caller can keep iterating without nullopt checks.
+    for (const QString &p : missingPaths) {
+      ItemMetadataStore::ItemMetadata empty;
+      empty.collectionUuid = collectionUuid;
+      empty.path = p;
+      out.insert(p, empty);
+    }
+    return out;
+  }
+
+  // Merge in the freshly-loaded rows and back-populate the cache for any
+  // row that actually had data — empty stubs (no row in item_metadata)
+  // are intentionally NOT cached to match loadItemMetadata's policy.
+  const auto &loaded = result.value();
+  for (auto it = loaded.constBegin(); it != loaded.constEnd(); ++it) {
+    out.insert(it.key(), it.value());
+    if (!it.value().source.isEmpty()) {
+      m_metadataCache.putMetadata(collectionUuid, it.key(), it.value());
+    }
+  }
+
+  return out;
 }
 
 bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) {

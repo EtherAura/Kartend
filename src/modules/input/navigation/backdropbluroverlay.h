@@ -23,6 +23,7 @@ QT_END_NAMESPACE
 /// the wallpaper.
 class BackdropBlurOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(BackdropBlurOverlay)
 public:
   explicit BackdropBlurOverlay(QWidget *parent = nullptr);
 

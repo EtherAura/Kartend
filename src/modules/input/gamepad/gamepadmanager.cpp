@@ -1,4 +1,5 @@
 #include "gamepadmanager.h"
+#include "applicationcontext.h"
 #include "ikeyboardmanager.h"
 #include "uiconstants/gamepad.h"
 
@@ -15,10 +16,13 @@
 #endif
 
 // GamepadManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(GamepadManagerSetup, IKeyboardManager *, KeyboardManager, keyboardManager)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const GeneralSettings *, GeneralSettings,
                           generalSettings)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
+
+IKeyboardManager *GamepadManager::keyboardMgr() const {
+  return m_ctx ? m_ctx->keyboardManager() : nullptr;
+}
 
 GamepadManager::GamepadManager(QObject *parent) : QObject(parent) {
 #ifdef KARTEND_HAS_QT_GAMEPAD
@@ -64,7 +68,7 @@ GamepadManager::~GamepadManager() {
 }
 
 void GamepadManager::setupReferences(const GamepadManagerSetup &setup) {
-  m_keyboardManager = setup.getKeyboardManager();
+  m_ctx = setup.ctx;
   m_generalSettings = setup.getGeneralSettings();
   m_isShuttingDown = setup.getIsShuttingDown();
 
@@ -86,9 +90,9 @@ void GamepadManager::beginBindingCapture() {
 
   // Stop any in-flight direction/repeat so the capture doesn't trigger actions.
   applyActiveDirection(Direction::None);
-  if (m_keyboardManager) {
-    m_keyboardManager->setPhysicalKeyDown(false);
-    m_keyboardManager->stopRepeat(true);
+  if (auto *kb = keyboardMgr()) {
+    kb->setPhysicalKeyDown(false);
+    kb->stopRepeat(true);
   }
 }
 
@@ -129,9 +133,9 @@ void GamepadManager::detachController() {
   // emits a signal whose slot reaches sibling managers (m_arrowHandler) that
   // may already be destroyed in InteractionManager's reverse-declaration
   // teardown — calling it here would re-enter freed memory.
-  if (m_keyboardManager && !shuttingDown()) {
-    m_keyboardManager->setPhysicalKeyDown(false);
-    m_keyboardManager->stopRepeat(true);
+  if (auto *kb = keyboardMgr(); kb && !shuttingDown()) {
+    kb->setPhysicalKeyDown(false);
+    kb->stopRepeat(true);
   }
 
   m_activeDirection = Direction::None;

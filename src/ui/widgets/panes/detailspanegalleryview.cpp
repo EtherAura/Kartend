@@ -8,6 +8,7 @@
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
 #include "extensionutils.h"
+#include "imagedecodeutils.h"
 #include "ui_detailspane.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
@@ -414,7 +415,8 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
             targetIconSize, targetIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         buttonGuard->setIcon(QIcon(scaled));
       });
-      watcher->setFuture(QtConcurrent::run([path]() { return QImage(path); }));
+      watcher->setFuture(
+          QtConcurrent::run([path]() { return ImageDecodeUtils::loadCapped(path); }));
       if (perfTrace) perfDispatchMs += dispatchTimer.elapsed();
     }
 

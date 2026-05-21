@@ -24,6 +24,7 @@ struct SettingsModel;
 /// spacingInternalToUi conversions stay paired with the host's helpers.
 class AppearanceLayoutPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceLayoutPanel)
 public:
   explicit AppearanceLayoutPanel(QWidget *parent = nullptr);
   ~AppearanceLayoutPanel() override;

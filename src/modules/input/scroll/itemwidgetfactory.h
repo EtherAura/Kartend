@@ -12,6 +12,7 @@ class QWidget;
 class IArtworkManager;
 class IDatabaseManager;
 class WidgetPoolManager;
+struct ApplicationContext;
 
 /**
  * @brief Factory for creating and configuring ItemWidget instances.
@@ -22,14 +23,18 @@ class WidgetPoolManager;
  */
 class ItemWidgetFactory : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ItemWidgetFactory)
 public:
   explicit ItemWidgetFactory(QObject *parent = nullptr);
   ~ItemWidgetFactory() override = default;
 
   // Dependencies
   void setWidgetPool(WidgetPoolManager *pool) { m_widgetPool = pool; }
-  void setArtworkManager(IArtworkManager *manager) { m_artworkManager = manager; }
-  void setDatabaseManager(IDatabaseManager *manager) { m_databaseManager = manager; }
+  // Kartend-davi: instead of caching IArtworkManager / IDatabaseManager
+  // pointers as fields, the factory now reads them through the app
+  // context. Caller wires the context once; ApplicationContext::managers
+  // stays authoritative.
+  void setApplicationContext(const ApplicationContext *ctx) { m_ctx = ctx; }
   void setParentWidget(QWidget *parent) { m_parentWidget = parent; }
 
   // Context for widget creation
@@ -161,9 +166,11 @@ private:
   [[nodiscard]] QString resolvePlaceholderArtworkForCollection(int collectionIndex) const;
   void applyPlaceholderArtwork(ItemWidget *widget, const QString &placeholderArtwork) const;
 
+  [[nodiscard]] IArtworkManager *artworkMgr() const;
+  [[nodiscard]] IDatabaseManager *dbMgr() const;
+
   WidgetPoolManager *m_widgetPool = nullptr;
-  IArtworkManager *m_artworkManager = nullptr;
-  IDatabaseManager *m_databaseManager = nullptr;
+  const ApplicationContext *m_ctx = nullptr;
   QWidget *m_parentWidget = nullptr;
 
   CollectionContext m_context;

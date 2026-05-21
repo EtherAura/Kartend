@@ -17,6 +17,7 @@ struct SettingsModel;
 /// titles visibility checkboxes.
 class AppearanceTitlesPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceTitlesPanel)
 public:
   explicit AppearanceTitlesPanel(QWidget *parent = nullptr);
   ~AppearanceTitlesPanel() override;

@@ -10,6 +10,7 @@
  */
 
 #include "applicationcontext.h"
+#include "artworkloaddispatcher.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "cachemanager.h"
@@ -17,6 +18,7 @@
 #include "itemwidget.h"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QPixmap>
 #include <QPointer>
 #include <QStackedWidget>
@@ -58,6 +60,10 @@ private slots:
   void testCancelAllArtworkLoading_clearsPending();
   void testDestruct_withInFlightDispatch_doesNotCrash();
 
+  // ArtworkLoadDispatcher generation-counter regression coverage (Kartend-7rpq)
+  void testDispatcher_dispatchAfterCancelAllStillCompletes();
+  void testDispatcher_cancelMidFlightSuppressesHandler();
+
   // loadArtworkParallel ------------------------------------------------------
   void testLoadArtworkParallel_emptyListNoop();
   void testLoadArtworkParallel_withoutSetupReferences();
@@ -93,6 +99,10 @@ void TestArtworkManager::init() {
   m_cache = std::make_unique<CacheManager>();
   m_state = std::make_unique<InteractionStateHolder>();
   m_ctx = std::make_unique<ApplicationContext>();
+  // Kartend-davi: ArtworkManager now reads its cache pointer through ctx
+  // rather than a constructor arg; the test's ctx must publish the cache
+  // before any ArtworkManager exercises a cache call.
+  m_ctx->managers.cacheManager = m_cache.get();
   m_ctx->managers.interactionState = m_state.get();
 
   m_stacked = std::make_unique<QStackedWidget>();
@@ -238,19 +248,19 @@ void TestArtworkManager::testNextArtworkType_currentNotInList() {
 // ─── Construction / lifecycle ───────────────────────────────────────────────
 
 void TestArtworkManager::testConstruction_initialState() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   QVERIFY(!manager.isSilentLoadingActive());
   // Newly constructed: m_lastUserActivity initialized to "now", so not idle.
   QVERIFY(!manager.isUserIdle());
 }
 
 void TestArtworkManager::testHasArtworkForWidget_nullWidget() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   QVERIFY(!manager.hasArtworkForWidget(nullptr));
 }
 
 void TestArtworkManager::testHasArtworkForWidget_untrackedWidget() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   ItemWidget widget;
   QVERIFY(!manager.hasArtworkForWidget(&widget));
 }
@@ -258,7 +268,7 @@ void TestArtworkManager::testHasArtworkForWidget_untrackedWidget() {
 // ─── Cancellation ───────────────────────────────────────────────────────────
 
 void TestArtworkManager::testCancelAllArtworkLoading_idempotent() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   // Calling repeatedly on empty state must not crash.
   manager.cancelAllArtworkLoading();
   manager.cancelAllArtworkLoading();
@@ -267,7 +277,7 @@ void TestArtworkManager::testCancelAllArtworkLoading_idempotent() {
 }
 
 void TestArtworkManager::testCancelAllArtworkLoading_clearsPending() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   wireSetup(&manager);
 
   ItemWidget widget;
@@ -294,7 +304,7 @@ void TestArtworkManager::testDestruct_withInFlightDispatch_doesNotCrash() {
   onDisk.fill(Qt::magenta);
   QVERIFY(onDisk.save(artPath, "PNG"));
 
-  auto *manager = new ArtworkManager(m_cache.get());
+  auto *manager = new ArtworkManager();
   wireSetup(manager);
 
   QList<ItemWidget *> widgets;
@@ -318,10 +328,91 @@ void TestArtworkManager::testDestruct_withInFlightDispatch_doesNotCrash() {
   QVERIFY(true);
 }
 
+// ─── ArtworkLoadDispatcher generation-counter coverage (Kartend-7rpq) ───────
+
+void TestArtworkManager::testDispatcher_dispatchAfterCancelAllStillCompletes() {
+  // The Kartend-uxo0 regression: under the prior token-swap design, a
+  // dispatch issued immediately after cancelAll() captured the
+  // still-cancelled token and short-circuited inside the worker, so the
+  // handler never fired and the requesting widget stalled forever on a
+  // blank tile. The generation-counter rewrite reads the counter at
+  // dispatch time, so a post-cancelAll() dispatch picks up the bumped
+  // generation and runs to completion. Guard the regression here.
+  const QString artPath = m_tempDir.path() + "/dispatcher_postcancel.png";
+  QPixmap onDisk(64, 64);
+  onDisk.fill(Qt::cyan);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkLoadDispatcher dispatcher(m_cache.get());
+
+  // Pre-cancel: nothing is in flight so this is purely a generation bump.
+  dispatcher.cancelAll();
+
+  ItemWidget widget;
+  QList<ArtworkInfo> batch;
+  batch.append(ArtworkInfo{QPointer<ItemWidget>(&widget), artPath});
+
+  bool handlerCalled = false;
+  int seenResults = -1;
+  dispatcher.dispatchBatch(std::move(batch), /*highPriority=*/true,
+                            [&handlerCalled, &seenResults](
+                                const QList<ArtworkInfo::Result> &results, int /*requestedCount*/,
+                                qint64 /*elapsedMs*/, bool /*highPriority*/) {
+                              handlerCalled = true;
+                              seenResults = results.size();
+                            });
+
+  QTRY_VERIFY_WITH_TIMEOUT(handlerCalled, 5000);
+  QCOMPARE(seenResults, 1);
+}
+
+void TestArtworkManager::testDispatcher_cancelMidFlightSuppressesHandler() {
+  // cancelAll() invoked while a batch is on the worker pool must bump the
+  // generation so the worker's per-item cancellation check observes the
+  // mismatch and bails before invoking the handler. We dispatch a batch
+  // with several entries (so the worker spends time decoding), call
+  // cancelAll immediately, and then assert the handler does NOT fire within
+  // a generous timeout — the cancellation observation drops the queued
+  // QMetaObject::invokeMethod posting entirely.
+  const QString artPath = m_tempDir.path() + "/dispatcher_midflight.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::magenta);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkLoadDispatcher dispatcher(m_cache.get());
+
+  QList<ItemWidget *> widgets;
+  QList<ArtworkInfo> batch;
+  for (int i = 0; i < 8; ++i) {
+    auto *w = new ItemWidget();
+    widgets.append(w);
+    batch.append(ArtworkInfo{QPointer<ItemWidget>(w), artPath});
+  }
+
+  bool handlerCalled = false;
+  dispatcher.dispatchBatch(std::move(batch), /*highPriority=*/false,
+                            [&handlerCalled](const QList<ArtworkInfo::Result> &, int, qint64,
+                                             bool) { handlerCalled = true; });
+  dispatcher.cancelAll();
+
+  // Pump events for long enough that a non-cancelled batch would have
+  // delivered. If cancellation is honoured the handler never runs.
+  const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 500;
+  while (QDateTime::currentMSecsSinceEpoch() < deadline) {
+    QCoreApplication::processEvents();
+  }
+
+  QVERIFY2(!handlerCalled,
+           "cancelAll() before delivery must suppress the handler on the queued posting");
+
+  qDeleteAll(widgets);
+  QCoreApplication::processEvents();
+}
+
 // ─── loadArtworkParallel ────────────────────────────────────────────────────
 
 void TestArtworkManager::testLoadArtworkParallel_emptyListNoop() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   wireSetup(&manager);
   manager.loadArtworkParallel({}, /*highPriority=*/true);
   QVERIFY(true);
@@ -330,7 +421,7 @@ void TestArtworkManager::testLoadArtworkParallel_emptyListNoop() {
 void TestArtworkManager::testLoadArtworkParallel_withoutSetupReferences() {
   // Without setupReferences, shouldSkipArtworkLoading() returns true because
   // stackedWidget is nullptr — call must be a safe noop.
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   ItemWidget widget;
   ArtworkInfo info{QPointer<ItemWidget>(&widget), "/some/path.png"};
   manager.loadArtworkParallel({info}, /*highPriority=*/true);
@@ -340,14 +431,14 @@ void TestArtworkManager::testLoadArtworkParallel_withoutSetupReferences() {
 // ─── addPendingArtwork dedup ────────────────────────────────────────────────
 
 void TestArtworkManager::testAddPendingArtwork_nullWidgetSafe() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   wireSetup(&manager);
   manager.addPendingArtwork(nullptr, "/a/b/c.png");
   QVERIFY(true);
 }
 
 void TestArtworkManager::testAddPendingArtwork_emptyPathSafe() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   wireSetup(&manager);
   ItemWidget widget;
   manager.addPendingArtwork(&widget, QString{});
@@ -357,7 +448,7 @@ void TestArtworkManager::testAddPendingArtwork_emptyPathSafe() {
 void TestArtworkManager::testAddPendingArtwork_withoutStackedWidgetIsNoop() {
   // Without setupReferences the early-return guards in addPendingArtwork
   // protect against UB. Idempotent calls must remain safe.
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   ItemWidget widget;
   manager.addPendingArtwork(&widget, "/x.png");
   manager.addPendingArtwork(&widget, "/x.png");
@@ -367,7 +458,7 @@ void TestArtworkManager::testAddPendingArtwork_withoutStackedWidgetIsNoop() {
 // ─── clearPendingArtworkForWidget ───────────────────────────────────────────
 
 void TestArtworkManager::testClearPendingArtworkForWidget_nullSafe() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   manager.clearPendingArtworkForWidget(nullptr);
   QVERIFY(true);
 }
@@ -375,7 +466,7 @@ void TestArtworkManager::testClearPendingArtworkForWidget_nullSafe() {
 // ─── QPointer-based widget tracking ─────────────────────────────────────────
 
 void TestArtworkManager::testClearWidgetReferences_survivesDeletedWidget() {
-  ArtworkManager manager(m_cache.get());
+  ArtworkManager manager;
   wireSetup(&manager);
 
   // Use a heap-allocated widget so we can delete it and then exercise

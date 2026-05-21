@@ -4,6 +4,8 @@
 // touch this file.
 #include "scraperesultdialog.h"
 
+#include "applicationcontext.h"
+#include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
 #include "result/batchprogressview.h"
 #include "result/singleitemview.h"
@@ -60,6 +62,7 @@ Q_LOGGING_CATEGORY(lcDialogTimings, "kartend.scrape.timings", QtWarningMsg)
 
 #include "extensionutils.h"
 #include "idatabasemanager.h"
+#include "imagedecodeutils.h"
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
 #include "scrapejobgrouping.h"
@@ -71,73 +74,7 @@ namespace {
 constexpr int DIALOG_WIDTH = 900;
 constexpr int DIALOG_HEIGHT = 780;
 
-/// Reflowing wrap layout for the metadata chip widgets. Items lay
-/// out left-to-right until the right edge of the container is
-/// reached, then wrap to the next line. Width changes (user resize)
-/// re-flow the items so ultrawide windows pack more chips per row
-/// and narrow windows stack them. Adapted from the canonical Qt
-/// FlowLayout example.
-class FlowLayout : public QLayout {
-public:
-  explicit FlowLayout(QWidget *parent, int margin = 0, int hSpacing = 8, int vSpacing = 6)
-      : QLayout(parent), m_hSpace(hSpacing), m_vSpace(vSpacing) {
-    setContentsMargins(margin, margin, margin, margin);
-  }
-  ~FlowLayout() override {
-    while (QLayoutItem *item = takeAt(0)) delete item;
-  }
-  void addItem(QLayoutItem *item) override { m_items.append(item); }
-  int horizontalSpacing() const { return m_hSpace; }
-  int verticalSpacing() const { return m_vSpace; }
-  Qt::Orientations expandingDirections() const override { return {}; }
-  bool hasHeightForWidth() const override { return true; }
-  int heightForWidth(int width) const override { return doLayout(QRect(0, 0, width, 0), true); }
-  int count() const override { return m_items.size(); }
-  QLayoutItem *itemAt(int idx) const override { return m_items.value(idx); }
-  QLayoutItem *takeAt(int idx) override {
-    return (idx >= 0 && idx < m_items.size()) ? m_items.takeAt(idx) : nullptr;
-  }
-  QSize minimumSize() const override {
-    QSize s;
-    for (auto *it : m_items) s = s.expandedTo(it->minimumSize());
-    int l, t, r, b;
-    getContentsMargins(&l, &t, &r, &b);
-    s += QSize(l + r, t + b);
-    return s;
-  }
-  void setGeometry(const QRect &r) override {
-    QLayout::setGeometry(r);
-    doLayout(r, false);
-  }
-  QSize sizeHint() const override { return minimumSize(); }
-
-private:
-  int doLayout(const QRect &rect, bool testOnly) const {
-    int l, t, r, b;
-    getContentsMargins(&l, &t, &r, &b);
-    QRect eff = rect.adjusted(l, t, -r, -b);
-    int x = eff.x();
-    int y = eff.y();
-    int lineH = 0;
-    for (auto *it : m_items) {
-      const QSize sz = it->sizeHint();
-      int nextX = x + sz.width() + m_hSpace;
-      if (nextX - m_hSpace > eff.right() && lineH > 0) {
-        x = eff.x();
-        y += lineH + m_vSpace;
-        nextX = x + sz.width() + m_hSpace;
-        lineH = 0;
-      }
-      if (!testOnly) it->setGeometry(QRect(QPoint(x, y), sz));
-      x = nextX;
-      lineH = qMax(lineH, sz.height());
-    }
-    return y + lineH - rect.y() + b;
-  }
-  QList<QLayoutItem *> m_items;
-  int m_hSpace;
-  int m_vSpace;
-};
+// FlowLayout extracted to flowlayout.{h,cpp} (Kartend-3fkz step 1).
 
 QString renderDetailHtml(const Scraper::ScrapedItem &item) {
   // Keep the markup minimal — no inline styles, palette-aware via Qt's
@@ -1003,7 +940,7 @@ void ScrapeResultDialog::appendThumbAsync(const QString &path) {
     m_liveThumbsStrip->scrollToItem(row, QAbstractItemView::PositionAtBottom);
   });
   watcher->setFuture(QtConcurrent::run([path]() {
-    QImage img(path);
+    QImage img = ImageDecodeUtils::loadCapped(path);
     if (img.isNull()) return qMakePair(path, QImage());
     return qMakePair(path, img.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   }));
@@ -1218,7 +1155,9 @@ void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QStrin
       // thread; a SIGTRAP here would crash the dialog before the user
       // could even close it.
       if (!ExtensionUtils::isDecodableImagePath(p)) continue;
-      QPixmap pm(p);
+      const QImage img = ImageDecodeUtils::loadCapped(p);
+      if (img.isNull()) continue;
+      const QPixmap pm = QPixmap::fromImage(img);
       if (pm.isNull()) continue;
       auto *row = new QListWidgetItem(
           QIcon(pm.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation)), QString(),
@@ -1404,8 +1343,9 @@ void ScrapeResultDialog::rebuildItemsList(int collectionIndex) {
     m_unifiedItemsList->clear();
     auto *placeholder = new QListWidgetItem(tr("Loading items…"), m_unifiedItemsList);
     placeholder->setFlags(placeholder->flags() & ~Qt::ItemIsEnabled);
-    if (!m_scraperCtx.databaseManager || !m_scraperCtx.collections) return;
-    auto *db = m_scraperCtx.databaseManager;
+    // Kartend-m02z: read DB through ctx instead of cached pointer.
+    auto *db = m_scraperCtx.ctx ? m_scraperCtx.ctx->databaseManager() : nullptr;
+    if (!db || !m_scraperCtx.collections) return;
     CollectionContext context;
     context.config = cfg;
     context.currentIndex = collectionIndex;
@@ -1535,220 +1475,230 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
   m_service = service;
   if (!m_service) return;
   qCInfo(lcDialogTimings) << "DIALOG setScraperService: establishing connections";
-  // Connect to every signal the dialog needs to keep its Live view
-  // in sync. UniqueConnection so callers re-setting the same service
-  // (e.g. a stale dialog handing off to a fresh one) don't double-
-  // wire.
-  connect(m_service, &Scraper::ScraperService::scrapeStarted, this, [this](int total) {
-    qCInfo(lcDialogTimings) << "DIALOG service.scrapeStarted total=" << total;
-    setUnifiedSetupEnabled(false);
-    m_unifiedProgressBar->setRange(0, std::max(1, total));
-    m_unifiedProgressBar->setValue(m_service->itemsCompleted());
-    // Reset rate-window samples. The seen-keys union is left
-    // intact so the pre-seeded known SS keys (plus any keys
-    // accumulated during prior runs in this session) stay
-    // visible — values clear naturally as each item rewrites
-    // them.
-    m_rateSamples.clear();
-    if (!m_liveTickTimer) {
-      m_liveTickTimer = new QTimer(this);
-      m_liveTickTimer->setInterval(1000);
-      connect(m_liveTickTimer, &QTimer::timeout, this,
-              &ScrapeResultDialog::updateUnifiedProgressLabel);
-    }
-    m_liveTickTimer->start();
-    // Value-marquee timer: scrolls overflowing chip text L→R
-    // then wraps. Lazy-init on first scrapeStart.
-    if (!m_marqueeTimer) {
-      m_marqueeTimer = new QTimer(this);
-      m_marqueeTimer->setInterval(150);
-      connect(m_marqueeTimer, &QTimer::timeout, this, &ScrapeResultDialog::tickValueMarquees);
-    }
-    m_marqueePauseTicks.clear();
-    m_marqueeTimer->start();
-    updateUnifiedProgressLabel();
-  });
+  // Connect to every signal the dialog needs to keep its Live view in
+  // sync. Each handler was an inline lambda before Kartend-3fkz step 2
+  // pulled the bodies out into named private slots — setScraperService
+  // is now a connect table, and each handler is reviewable on its own.
+  connect(m_service, &Scraper::ScraperService::scrapeStarted, this,
+          &ScrapeResultDialog::onServiceScrapeStarted);
   connect(m_service, &Scraper::ScraperService::itemBegan, this,
-          [this](int done, int total, const QString &collectionName, const QString &name) {
-            Q_UNUSED(total);
-            Q_UNUSED(done);
-            // Hidden dialog → skip the label-update work. With high
-            // batchItemConcurrency this fires several times per second;
-            // not worth updating widgets nobody can see.
-            if (!isVisible()) return;
-            qCDebug(lcDialogTimings) << "DIALOG service.itemBegan name=" << name;
-            // Refresh the collection label HERE, not only in the
-            // itemCompleted handler below: itemCompleted fires only on a
-            // successful scrape, so a collection whose items all error
-            // (or all skip) would otherwise leave the label frozen on the
-            // last collection that produced a success while the scrape
-            // churns on. itemBegan fires for every item whatever the
-            // outcome. Gated on an actual collection change so
-            // batchItemConcurrency > 1 doesn't re-set the label as each
-            // parallel item in the same collection starts.
-            if (collectionName != m_shownCollectionName) {
-              m_shownCollectionName = collectionName;
-              m_unifiedCurrentLabel->setText(tr("Collection: %1").arg(collectionName));
-            }
-            // The metadata panel and the richer "last scraped" label form
-            // are still updated together by the itemCompleted handler so
-            // they always describe the same completed item — deliberately
-            // not touched here, where many parallel items mid-lookup would
-            // wipe the panel every few hundred ms.
-            updateUnifiedProgressLabel();
-          });
+          &ScrapeResultDialog::onServiceItemBegan);
   connect(m_service, &Scraper::ScraperService::itemCompleted, this,
-          [this](int done, int total, const Scraper::ScrapedItem &scraped,
-                 const QStringList &mediaPaths) {
-            Q_UNUSED(done);
-            Q_UNUSED(total);
-            // Hidden dialog → skip every UI update. The service still
-            // tracks recentMediaPaths + lastScrapedItem internally, and
-            // startUnifiedScrape rebuilds the thumb strip + metadata
-            // from that snapshot when the dialog is reopened. No visible
-            // work means no reason to decode + smooth-scale thumbnails
-            // on the main thread per completed item.
-            if (!isVisible()) return;
-            // Don't poke the progress bar here — updateUnifiedProgressLabel
-            // (called below) is the single source of truth and reads
-            // counters straight from the service. Doing both used to
-            // race: this slot would set the value, then the helper would
-            // reset it from the legacy m_unifiedItemsCompletedAcross
-            // (always 0 in service mode), so the bar stayed at zero.
-            // Shared field-population path so auto and interactive
-            // modes render to identical widgets.
-            applyScrapedItemToLive(scraped);
-            // Sync the "currently scraping" label with whatever just
-            // landed in the metadata panel — both update together so
-            // label and fields always describe the same item even
-            // when concurrency has many items in flight.
-            QString displayName = scraped.title;
-            if (displayName.isEmpty() && !mediaPaths.isEmpty()) {
-              displayName = QFileInfo(mediaPaths.first()).completeBaseName();
-            }
-            if (displayName.isEmpty()) {
-              displayName = QFileInfo(m_service->currentItemPath()).fileName();
-            }
-            m_unifiedCurrentLabel->setText(
-                tr("Collection: %1 — last scraped: %2")
-                    .arg(m_service->currentCollectionName(), displayName));
-            // Append new media paths to the thumb strip via async
-            // decode/scale (off the UI thread). Each completed
-            // decode auto-scrolls the strip to its own freshly-added
-            // row, so the newest cover is always visible. The strip
-            // is icon-only — less crowded, fits more thumbnails —
-            // and bounded inside the watcher's finished slot so a
-            // long batch doesn't grow it unbounded.
-            for (const QString &p : mediaPaths) {
-              if (p.isEmpty()) continue;
-              appendThumbAsync(p);
-            }
-            updateUnifiedProgressLabel();
-          });
+          &ScrapeResultDialog::onServiceItemCompleted);
   connect(m_service, &Scraper::ScraperService::pickerNeeded, this,
-          [this](const QString &itemPath, const QString &itemName,
-                 const QList<Scraper::ScrapeCandidate> &candidates,
-                 std::shared_ptr<MetadataLookupProvider> provider, const QString &artworkDir) {
-            Q_UNUSED(artworkDir);
-            Q_UNUSED(itemName);
-            // Stay on the unified live view (don't flip to the legacy
-            // single-item page). Surface a candidate combo at the top
-            // of the metadata panel; the existing live fields show
-            // the selected candidate's data; Apply button confirms.
-            m_unifiedPhase = UnifiedPhase::InteractivePicking;
-            m_mode = Mode::Unified;
-            m_interactiveProvider = provider;
-            m_interactiveItems = {itemPath};
-            m_interactiveCursor = 0;
-            m_provider = provider.get();
-            m_candidates = candidates;
-            m_detailCache.clear();
-            m_currentRow = -1;
-            m_currentDetail = Scraper::ScrapedItem();
-            m_singleItemView->clearMediaRows();
-            // Populate the candidate combo; block signals during the
-            // refill so the first-row change doesn't trigger a stray
-            // detail fetch before we explicitly call it below.
-            {
-              QSignalBlocker blocker(m_interactiveCandidateCombo);
-              m_interactiveCandidateCombo->clear();
-              for (const auto &c : m_candidates) {
-                QString label = c.displayName;
-                if (!c.subtitle.isEmpty()) label += QStringLiteral(" — ") + c.subtitle;
-                if (c.matchScore >= 0) label += QStringLiteral("  (%1)").arg(c.matchScore);
-                m_interactiveCandidateCombo->addItem(label);
-              }
-            }
-            m_interactiveCandidateRow->setVisible(m_candidates.size() > 0);
-            if (m_applyButton) {
-              m_applyButton->show();
-              m_applyButton->setEnabled(false);
-            }
-            if (m_scrapeButton) m_scrapeButton->hide();
-            // Fetch detail for the first candidate to populate the
-            // live fields. Apply enables when detail lands.
-            if (!m_candidates.isEmpty()) interactiveFetchDetail(0);
-          });
+          &ScrapeResultDialog::onServicePickerNeeded);
   connect(m_service, &Scraper::ScraperService::scrapeFinished, this,
-          [this](const Scraper::ScraperService::Summary &s) {
-            qCInfo(lcDialogTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
-                                    << "skipped=" << s.skipped << "errors=" << s.errors;
-            if (m_liveTickTimer) m_liveTickTimer->stop();
-            if (m_marqueeTimer) m_marqueeTimer->stop();
-            m_marqueePauseTicks.clear();
-            if (m_interactiveCandidateRow) m_interactiveCandidateRow->hide();
-            // Reset phase so a subsequent Scrape click isn't rejected by
-            // the "if (m_unifiedPhase != Setup) return;" guard in
-            // onScrapeClicked. Interactive runs leave the phase at
-            // InteractivePicking; auto runs leave it at Setup. We
-            // unconditionally snap back here.
-            m_unifiedPhase = UnifiedPhase::Setup;
-            setUnifiedSetupEnabled(true);
-            if (m_scrapeButton) m_scrapeButton->show();
-            if (m_applyButton) m_applyButton->hide();
-            // Quota-exhausted stop: setUnifiedSetupEnabled(true) hid
-            // the progress label, but the user needs to see WHY the
-            // scrape ended early — and when they can resume. Re-show
-            // the current-status label with the quota message. The
-            // reset time comes from the live quota readout when we
-            // have one (the label still holds it); otherwise fall
-            // back to the generic "midnight UTC" wording.
-            if (s.quotaExhausted) {
-              // m_lastQuotaResetText is the local-time HH:mm captured
-              // from the last live quota update; fall back to the
-              // generic wording when no quota update arrived (e.g.
-              // the very first item hit 430 before any ssuser block
-              // was parsed).
-              const QString resetText =
-                  m_lastQuotaResetText.isEmpty() ? tr("midnight UTC") : m_lastQuotaResetText;
-              m_unifiedCurrentLabel->setText(
-                  tr("Scrape stopped — ScreenScraper's daily quota is exhausted. "
-                     "Resume after it resets (%1).")
-                      .arg(resetText));
-              m_unifiedCurrentLabel->show();
-            }
-            emit unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.firstFailures);
-          });
-  connect(m_service, &Scraper::ScraperService::scrapePaused, this, [this]() {
-    m_unifiedCurrentLabel->setText(tr("Scrape paused — close to keep paused, or "
-                                      "reopen to continue."));
-  });
+          &ScrapeResultDialog::onServiceScrapeFinished);
+  connect(m_service, &Scraper::ScraperService::scrapePaused, this,
+          &ScrapeResultDialog::onServiceScrapePaused);
   connect(m_service, &Scraper::ScraperService::quotaUpdated, this,
-          [this](const Scraper::QuotaStatus &quota) {
-            if (!m_unifiedQuotaLabel) return;
-            // dailyMax 0 = quota unknown (SS didn't report a ceiling);
-            // keep the row hidden rather than showing "N / 0".
-            if (!quota.valid || quota.dailyMax <= 0) {
-              m_unifiedQuotaLabel->hide();
-              return;
-            }
-            m_lastQuotaResetText = quota.resetAtUtc.toLocalTime().toString(QStringLiteral("HH:mm"));
-            m_unifiedQuotaLabel->setText(tr("ScreenScraper: %1 / %2 requests today · resets %3")
-                                             .arg(quota.dailyUsed)
-                                             .arg(quota.dailyMax)
-                                             .arg(m_lastQuotaResetText));
-            m_unifiedQuotaLabel->show();
-          });
+          &ScrapeResultDialog::onServiceQuotaUpdated);
+}
+
+void ScrapeResultDialog::onServiceScrapeStarted(int total) {
+  qCInfo(lcDialogTimings) << "DIALOG service.scrapeStarted total=" << total;
+  setUnifiedSetupEnabled(false);
+  m_unifiedProgressBar->setRange(0, std::max(1, total));
+  m_unifiedProgressBar->setValue(m_service->itemsCompleted());
+  // Reset rate-window samples. The seen-keys union is left intact so
+  // the pre-seeded known SS keys (plus any keys accumulated during
+  // prior runs in this session) stay visible — values clear naturally
+  // as each item rewrites them.
+  m_rateSamples.clear();
+  if (!m_liveTickTimer) {
+    m_liveTickTimer = new QTimer(this);
+    m_liveTickTimer->setInterval(1000);
+    connect(m_liveTickTimer, &QTimer::timeout, this,
+            &ScrapeResultDialog::updateUnifiedProgressLabel);
+  }
+  m_liveTickTimer->start();
+  // Value-marquee timer: scrolls overflowing chip text L→R then wraps.
+  // Lazy-init on first scrapeStart.
+  if (!m_marqueeTimer) {
+    m_marqueeTimer = new QTimer(this);
+    m_marqueeTimer->setInterval(150);
+    connect(m_marqueeTimer, &QTimer::timeout, this, &ScrapeResultDialog::tickValueMarquees);
+  }
+  m_marqueePauseTicks.clear();
+  m_marqueeTimer->start();
+  updateUnifiedProgressLabel();
+}
+
+void ScrapeResultDialog::onServiceItemBegan(int done, int total, const QString &collectionName,
+                                            const QString &name) {
+  Q_UNUSED(total);
+  Q_UNUSED(done);
+  // Hidden dialog → skip the label-update work. With high
+  // batchItemConcurrency this fires several times per second; not
+  // worth updating widgets nobody can see.
+  if (!isVisible()) return;
+  qCDebug(lcDialogTimings) << "DIALOG service.itemBegan name=" << name;
+  // Refresh the collection label HERE, not only in the itemCompleted
+  // handler below: itemCompleted fires only on a successful scrape, so
+  // a collection whose items all error (or all skip) would otherwise
+  // leave the label frozen on the last collection that produced a
+  // success while the scrape churns on. itemBegan fires for every item
+  // whatever the outcome. Gated on an actual collection change so
+  // batchItemConcurrency > 1 doesn't re-set the label as each parallel
+  // item in the same collection starts.
+  if (collectionName != m_shownCollectionName) {
+    m_shownCollectionName = collectionName;
+    m_unifiedCurrentLabel->setText(tr("Collection: %1").arg(collectionName));
+  }
+  // The metadata panel and the richer "last scraped" label form are
+  // still updated together by the itemCompleted handler so they always
+  // describe the same completed item — deliberately not touched here,
+  // where many parallel items mid-lookup would wipe the panel every
+  // few hundred ms.
+  updateUnifiedProgressLabel();
+}
+
+void ScrapeResultDialog::onServiceItemCompleted(int done, int total,
+                                                const Scraper::ScrapedItem &scraped,
+                                                const QStringList &mediaPaths) {
+  Q_UNUSED(done);
+  Q_UNUSED(total);
+  // Hidden dialog → skip every UI update. The service still tracks
+  // recentMediaPaths + lastScrapedItem internally, and startUnifiedScrape
+  // rebuilds the thumb strip + metadata from that snapshot when the
+  // dialog is reopened. No visible work means no reason to decode +
+  // smooth-scale thumbnails on the main thread per completed item.
+  if (!isVisible()) return;
+  // Don't poke the progress bar here — updateUnifiedProgressLabel
+  // (called below) is the single source of truth and reads counters
+  // straight from the service. Doing both used to race: this slot
+  // would set the value, then the helper would reset it from the
+  // legacy m_unifiedItemsCompletedAcross (always 0 in service mode),
+  // so the bar stayed at zero. Shared field-population path so auto
+  // and interactive modes render to identical widgets.
+  applyScrapedItemToLive(scraped);
+  // Sync the "currently scraping" label with whatever just landed in
+  // the metadata panel — both update together so label and fields
+  // always describe the same item even when concurrency has many
+  // items in flight.
+  QString displayName = scraped.title;
+  if (displayName.isEmpty() && !mediaPaths.isEmpty()) {
+    displayName = QFileInfo(mediaPaths.first()).completeBaseName();
+  }
+  if (displayName.isEmpty()) {
+    displayName = QFileInfo(m_service->currentItemPath()).fileName();
+  }
+  m_unifiedCurrentLabel->setText(tr("Collection: %1 — last scraped: %2")
+                                     .arg(m_service->currentCollectionName(), displayName));
+  // Append new media paths to the thumb strip via async decode/scale
+  // (off the UI thread). Each completed decode auto-scrolls the strip
+  // to its own freshly-added row, so the newest cover is always
+  // visible. The strip is icon-only — less crowded, fits more
+  // thumbnails — and bounded inside the watcher's finished slot so a
+  // long batch doesn't grow it unbounded.
+  for (const QString &p : mediaPaths) {
+    if (p.isEmpty()) continue;
+    appendThumbAsync(p);
+  }
+  updateUnifiedProgressLabel();
+}
+
+void ScrapeResultDialog::onServicePickerNeeded(
+    const QString &itemPath, const QString &itemName,
+    const QList<Scraper::ScrapeCandidate> &candidates,
+    std::shared_ptr<MetadataLookupProvider> provider, const QString &artworkDir) {
+  Q_UNUSED(artworkDir);
+  Q_UNUSED(itemName);
+  // Stay on the unified live view (don't flip to the legacy single-item
+  // page). Surface a candidate combo at the top of the metadata panel;
+  // the existing live fields show the selected candidate's data; Apply
+  // button confirms.
+  m_unifiedPhase = UnifiedPhase::InteractivePicking;
+  m_mode = Mode::Unified;
+  m_interactiveProvider = provider;
+  m_interactiveItems = {itemPath};
+  m_interactiveCursor = 0;
+  m_provider = provider.get();
+  m_candidates = candidates;
+  m_detailCache.clear();
+  m_currentRow = -1;
+  m_currentDetail = Scraper::ScrapedItem();
+  m_singleItemView->clearMediaRows();
+  // Populate the candidate combo; block signals during the refill so
+  // the first-row change doesn't trigger a stray detail fetch before
+  // we explicitly call it below.
+  {
+    QSignalBlocker blocker(m_interactiveCandidateCombo);
+    m_interactiveCandidateCombo->clear();
+    for (const auto &c : m_candidates) {
+      QString label = c.displayName;
+      if (!c.subtitle.isEmpty()) label += QStringLiteral(" — ") + c.subtitle;
+      if (c.matchScore >= 0) label += QStringLiteral("  (%1)").arg(c.matchScore);
+      m_interactiveCandidateCombo->addItem(label);
+    }
+  }
+  m_interactiveCandidateRow->setVisible(m_candidates.size() > 0);
+  if (m_applyButton) {
+    m_applyButton->show();
+    m_applyButton->setEnabled(false);
+  }
+  if (m_scrapeButton) m_scrapeButton->hide();
+  // Fetch detail for the first candidate to populate the live fields.
+  // Apply enables when detail lands.
+  if (!m_candidates.isEmpty()) interactiveFetchDetail(0);
+}
+
+void ScrapeResultDialog::onServiceScrapeFinished(const Scraper::ScraperService::Summary &s) {
+  qCInfo(lcDialogTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
+                          << "skipped=" << s.skipped << "errors=" << s.errors;
+  if (m_liveTickTimer) m_liveTickTimer->stop();
+  if (m_marqueeTimer) m_marqueeTimer->stop();
+  m_marqueePauseTicks.clear();
+  if (m_interactiveCandidateRow) m_interactiveCandidateRow->hide();
+  // Reset phase so a subsequent Scrape click isn't rejected by the
+  // "if (m_unifiedPhase != Setup) return;" guard in onScrapeClicked.
+  // Interactive runs leave the phase at InteractivePicking; auto runs
+  // leave it at Setup. We unconditionally snap back here.
+  m_unifiedPhase = UnifiedPhase::Setup;
+  setUnifiedSetupEnabled(true);
+  if (m_scrapeButton) m_scrapeButton->show();
+  if (m_applyButton) m_applyButton->hide();
+  // Quota-exhausted stop: setUnifiedSetupEnabled(true) hid the progress
+  // label, but the user needs to see WHY the scrape ended early — and
+  // when they can resume. Re-show the current-status label with the
+  // quota message. The reset time comes from the live quota readout
+  // when we have one (the label still holds it); otherwise fall back
+  // to the generic "midnight UTC" wording.
+  if (s.quotaExhausted) {
+    // m_lastQuotaResetText is the local-time HH:mm captured from the
+    // last live quota update; fall back to the generic wording when no
+    // quota update arrived (e.g. the very first item hit 430 before
+    // any ssuser block was parsed).
+    const QString resetText =
+        m_lastQuotaResetText.isEmpty() ? tr("midnight UTC") : m_lastQuotaResetText;
+    m_unifiedCurrentLabel->setText(
+        tr("Scrape stopped — ScreenScraper's daily quota is exhausted. "
+           "Resume after it resets (%1).")
+            .arg(resetText));
+    m_unifiedCurrentLabel->show();
+  }
+  emit unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.firstFailures);
+}
+
+void ScrapeResultDialog::onServiceScrapePaused() {
+  m_unifiedCurrentLabel->setText(tr("Scrape paused — close to keep paused, or "
+                                    "reopen to continue."));
+}
+
+void ScrapeResultDialog::onServiceQuotaUpdated(const Scraper::QuotaStatus &quota) {
+  if (!m_unifiedQuotaLabel) return;
+  // dailyMax 0 = quota unknown (SS didn't report a ceiling); keep the
+  // row hidden rather than showing "N / 0".
+  if (!quota.valid || quota.dailyMax <= 0) {
+    m_unifiedQuotaLabel->hide();
+    return;
+  }
+  m_lastQuotaResetText = quota.resetAtUtc.toLocalTime().toString(QStringLiteral("HH:mm"));
+  m_unifiedQuotaLabel->setText(tr("ScreenScraper: %1 / %2 requests today · resets %3")
+                                   .arg(quota.dailyUsed)
+                                   .arg(quota.dailyMax)
+                                   .arg(m_lastQuotaResetText));
+  m_unifiedQuotaLabel->show();
 }
 
 int ScrapeResultDialog::totalCheckedItemCount() const {
@@ -2038,7 +1988,10 @@ void ScrapeResultDialog::startNextCollectionInQueue() {
 }
 
 void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringList &items) {
-  if (!m_scraperCtx.providerBuilder || !m_scraperCtx.databaseManager ||
+  // Kartend-m02z: ScraperContext now carries the full ApplicationContext;
+  // a missing/null ctx is treated like the legacy missing databaseManager.
+  auto *runAutoDb = m_scraperCtx.ctx ? m_scraperCtx.ctx->databaseManager() : nullptr;
+  if (!m_scraperCtx.providerBuilder || !runAutoDb ||
       !m_scraperCtx.generalSettings || !m_scraperCtx.collections) {
     ++m_unifiedErrorsTotal;
     ++m_unifiedQueueCursor;
@@ -2082,7 +2035,7 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
   }
 
   auto *runner = new Scraper::BatchScrapeRunner(
-      m_scraperCtx.databaseManager, std::move(provider), uuid, items, artworkDir,
+      m_scraperCtx.ctx, std::move(provider), uuid, items, artworkDir,
       /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, skipRecentDays, this);
   runner->setMediaTypeFilter(mediaFilter);
   runner->setWriteMetadata(writeMetadata);
@@ -2092,10 +2045,11 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
       runner, &Scraper::BatchScrapeRunner::progress, this,
       [this](int done, int total, const QString &name) {
         // `done` is per-collection; aggregate across queue items
-        // for the dialog's outer progress.
+        // for the dialog's outer progress. m_unifiedItemsCompletedAcross
+        // accumulates the prior queue items' completions before this
+        // collection started — the +done below is per-collection
+        // progress on top of that running total.
         const int totalAcross = totalCheckedItemCount();
-        const int prior = m_unifiedItemsCompletedAcross - 0; // unused but documents intent
-        Q_UNUSED(prior);
         m_unifiedProgressBar->setRange(0, totalAcross);
         m_unifiedProgressBar->setValue(m_unifiedItemsCompletedAcross + done);
         m_unifiedCurrentLabel->setText(
@@ -2429,6 +2383,12 @@ void ScrapeResultDialog::onApply() {
   qCInfo(lcDialogTimings) << "DIALOG dispatch begin total=" << m_downloadsTotal
                           << "first_url=" << sample;
 
+  dispatchSelectedDownloads(selected, applyTimer);
+}
+
+void ScrapeResultDialog::dispatchSelectedDownloads(
+    const QList<Scraper::MediaAsset> &selected,
+    const std::shared_ptr<QElapsedTimer> &applyTimer) {
   // Fire every selected asset at once. Scraper::HttpClient enforces
   // the per-host concurrency cap + inter-start throttle, so dispatching
   // in parallel just fills the available slots instead of waiting for
@@ -2535,11 +2495,6 @@ void ScrapeResultDialog::onApply() {
   }
   qCInfo(lcDialogTimings) << "DIALOG dispatch loop returned in" << applyTimer->elapsed() << "ms"
                           << "(should be near zero — all calls are async)";
-}
-
-void ScrapeResultDialog::downloadNextSelectedMedia() {
-  // Kept for ABI stability (the header still declares it). The parallel
-  // dispatch in onApply replaces the serial chain; nothing to do here.
 }
 
 QString ScrapeResultDialog::formatDuration(qint64 ms) {

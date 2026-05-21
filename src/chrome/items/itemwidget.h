@@ -21,6 +21,7 @@ class QPushButton;
 
 class ItemWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ItemWidget)
   Q_PROPERTY(qreal pulseOpacity READ pulseOpacity WRITE setPulseOpacity)
   bool isSelectedState = false;
   QPropertyAnimation *pulseAnimation = nullptr;

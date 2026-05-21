@@ -20,6 +20,7 @@ QT_END_NAMESPACE
  */
 class ErrorDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ErrorDialog)
 public:
   explicit ErrorDialog(QWidget *parent = nullptr);
 

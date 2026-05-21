@@ -52,6 +52,7 @@ struct CollectionBackgroundControllerSetup {
  */
 class CollectionBackgroundController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CollectionBackgroundController)
 public:
   explicit CollectionBackgroundController(QObject *parent = nullptr);
   ~CollectionBackgroundController() override = default;

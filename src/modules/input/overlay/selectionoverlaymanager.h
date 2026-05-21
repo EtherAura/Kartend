@@ -8,12 +8,13 @@
 #include <QWidget>
 class ItemWidget;
 class InteractionStateHolder;
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 // Manages the selection overlay widget and its glide animation
 // The overlay provides a visual selection indicator that animates between items
 class SelectionOverlayManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SelectionOverlayManager)
 public:
   explicit SelectionOverlayManager(QObject *parent = nullptr);
   ~SelectionOverlayManager() override;
@@ -32,7 +33,7 @@ public:
   /// time it's created (ensureOverlay()). Subsequent show / animate calls
   /// route their raise() through the manager so the selection highlight
   /// restacks deterministically against every other overlay.
-  void setLayerManager(OverlayLayerManager *manager);
+  void setLayerManager(OverlayZOrderRegistry *manager);
 
   // Force overlay visibility (e.g., during click-hold scrolling)
   void setForceVisible(bool force);
@@ -94,7 +95,7 @@ private:
   QPointer<QPropertyAnimation> m_animation;
   bool m_forceVisible = false;
   bool m_restartingAnim = false;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 
 #endif

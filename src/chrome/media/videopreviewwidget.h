@@ -32,6 +32,7 @@ QT_END_NAMESPACE
  */
 class VideoPreviewWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(VideoPreviewWidget)
 public:
   explicit VideoPreviewWidget(QWidget *parent = nullptr);
   ~VideoPreviewWidget() override;

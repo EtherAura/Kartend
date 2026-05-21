@@ -25,6 +25,7 @@ class QWidget;
 /// re-emits as its own public signals.
 class DetailsPaneResizeGrip : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DetailsPaneResizeGrip)
 
 public:
   explicit DetailsPaneResizeGrip(QWidget *host, QObject *parent = nullptr);

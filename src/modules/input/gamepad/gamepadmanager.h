@@ -15,12 +15,14 @@ struct ApplicationContext;
 struct GeneralSettings;
 
 struct GamepadManagerSetup {
+  // Kartend-davi: keyboardManager moved out — read through `ctx` at the
+  // call site (m_ctx->keyboardManager()) instead of caching a field. Stops
+  // the manager from drifting if ApplicationContext::managers is rebound
+  // mid-run.
   const ApplicationContext *ctx = nullptr;
-  IKeyboardManager *keyboardManager = nullptr;
   const GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
-  SETUP_GETTER_DECL(IKeyboardManager *, KeyboardManager)
   SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
 };
@@ -34,6 +36,7 @@ struct GamepadManagerSetup {
  */
 class GamepadManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(GamepadManager)
 
 public:
   explicit GamepadManager(QObject *parent = nullptr);
@@ -63,7 +66,12 @@ private:
 
   [[nodiscard]] bool shuttingDown() const;
 
-  IKeyboardManager *m_keyboardManager = nullptr;
+  // Kartend-davi: read through the app context rather than caching the
+  // sibling pointer. Stops the manager from drifting out of sync if
+  // ApplicationContext::managers.keyboardManager is rebound mid-run.
+  [[nodiscard]] IKeyboardManager *keyboardMgr() const;
+
+  const ApplicationContext *m_ctx = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 

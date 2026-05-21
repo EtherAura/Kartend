@@ -29,6 +29,7 @@ QT_END_NAMESPACE
 ///     videoPreview, falling back to the collection's backgroundVideo).
 class MarqueeWindow : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MarqueeWindow)
 
 public:
   /// Constructs the window on `targetScreen` (use the primary screen

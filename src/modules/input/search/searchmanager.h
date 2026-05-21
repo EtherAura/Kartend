@@ -51,6 +51,7 @@ struct SearchManagerSetup {
 
 class SearchManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SearchManager)
 public:
   explicit SearchManager(QObject *parent = nullptr);
   ~SearchManager() override;

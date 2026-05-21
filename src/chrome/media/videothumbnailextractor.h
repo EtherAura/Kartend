@@ -29,6 +29,7 @@ QT_END_NAMESPACE
  */
 class VideoThumbnailExtractor : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(VideoThumbnailExtractor)
 public:
   static VideoThumbnailExtractor *instance();
 

@@ -9,7 +9,7 @@ class QLabel;
 class QPropertyAnimation;
 QT_END_NAMESPACE
 
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 /**
  * @brief Transient full-window splash overlay for startup and focus return.
@@ -20,6 +20,7 @@ class OverlayLayerManager;
  */
 class SplashOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SplashOverlay)
 public:
   enum class Reason { Startup, FocusReturn };
 
@@ -38,7 +39,7 @@ public:
   /// overlay in their documented order instead of relying on call-order
   /// luck. Safe to call once after construction; null restores legacy
   /// QWidget::raise() behaviour.
-  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+  void setLayerManager(OverlayZOrderRegistry *manager) { m_layerManager = manager; }
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -60,7 +61,7 @@ private:
   QPropertyAnimation *m_fadeAnimation = nullptr;
   QTimer m_hideTimer;
   bool m_active = false;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 
 #endif // SPLASHOVERLAY_H

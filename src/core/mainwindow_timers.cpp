@@ -7,6 +7,7 @@
 
 #include "applicationmanager.h"
 #include "collectionutils.h"
+#include "dbeventscontroller.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
 #include "iartworkmanager.h"
@@ -136,7 +137,9 @@ void MainWindow::setupInitialTimersWithCollections() {
     const QString startupName = m_generalSettings.startupCollection.trimmed();
     if (m_generalSettings.useHomeView && startupName.isEmpty()) {
       if (getNavigationManager()) {
-        m_suppressStartupScanOverlays = true;
+        if (m_dbEventsController) {
+          m_dbEventsController->setSuppressStartupScanOverlays(true);
+        }
         getNavigationManager()->loadRootView();
       }
       return;
@@ -167,7 +170,9 @@ void MainWindow::setupInitialTimersWithCollections() {
       if (getNavigationManager()) {
         // The initial fetchItemCount path may trigger a rescan; keep the UI
         // navigable by suppressing any blocking overlay for this startup scan.
-        m_suppressStartupScanOverlays = true;
+        if (m_dbEventsController) {
+          m_dbEventsController->setSuppressStartupScanOverlays(true);
+        }
         getNavigationManager()->showCollectionItems(rootIndex);
       }
     }

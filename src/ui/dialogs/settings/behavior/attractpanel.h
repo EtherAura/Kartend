@@ -20,6 +20,7 @@ struct SettingsModel;
 /// rest of the per-collection deferred fields.
 class AttractPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AttractPanel)
 public:
   explicit AttractPanel(QWidget *parent = nullptr);
   ~AttractPanel() override;

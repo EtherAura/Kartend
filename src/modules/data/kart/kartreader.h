@@ -27,6 +27,7 @@ struct ExtractResult {
 
 class Extractor : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(Extractor)
 
 public:
   explicit Extractor(QObject *parent = nullptr);

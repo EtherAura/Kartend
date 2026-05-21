@@ -19,7 +19,7 @@ class QWidget;
  * across 9 communities).
  *
  * Usage:
- *   1. MainWindow constructs one OverlayLayerManager, parented to itself.
+ *   1. MainWindow constructs one OverlayZOrderRegistry, parented to itself.
  *   2. After every overlay widget is constructed, MainWindow registers it
  *      with the manager pointer + a documented Layer enum value.
  *   3. Each overlay class accepts a setLayerManager() back-pointer; its
@@ -32,8 +32,9 @@ class QWidget;
  * overlay in order from lowest to highest layer, so a single bringToFront
  * deterministically restacks the entire overlay surface.
  */
-class OverlayLayerManager : public QObject {
+class OverlayZOrderRegistry : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(OverlayZOrderRegistry)
 public:
   /// Z-order from bottom-most (Backdrop) to top-most (Splash). Adding a
   /// new layer requires picking the right slot relative to its neighbours.
@@ -65,8 +66,8 @@ public:
   };
   Q_ENUM(Layer)
 
-  explicit OverlayLayerManager(QObject *parent = nullptr);
-  ~OverlayLayerManager() override;
+  explicit OverlayZOrderRegistry(QObject *parent = nullptr);
+  ~OverlayZOrderRegistry() override;
 
   /// Register @p overlay at @p layer. Idempotent: re-registering an already-
   /// registered overlay updates its layer assignment without duplicating

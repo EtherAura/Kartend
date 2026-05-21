@@ -17,6 +17,7 @@ struct SettingsModel;
 /// `changed()`; the dialog persists on Apply).
 class ScraperCredentialsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScraperCredentialsPanel)
 public:
   explicit ScraperCredentialsPanel(QWidget *parent = nullptr);
   ~ScraperCredentialsPanel() override;

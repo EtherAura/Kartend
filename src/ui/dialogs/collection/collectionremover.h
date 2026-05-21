@@ -71,6 +71,7 @@ public:
 /// itself + the model in at construction.
 class CollectionRemover : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CollectionRemover)
 
 public:
   CollectionRemover(SettingsModel *model, CollectionRemoverHost *host, QObject *parent = nullptr);

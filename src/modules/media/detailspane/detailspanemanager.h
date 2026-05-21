@@ -77,6 +77,7 @@ struct DetailsPaneManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class DetailsPaneManager : public QObject, public IDetailsPaneManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DetailsPaneManager)
 
 public:
   explicit DetailsPaneManager(QObject *parent = nullptr);

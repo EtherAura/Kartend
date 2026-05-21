@@ -39,6 +39,7 @@ class IViewportManager;
  */
 class WheelEventHandler : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(WheelEventHandler)
 public:
   explicit WheelEventHandler(QObject *parent = nullptr);
   ~WheelEventHandler() override;

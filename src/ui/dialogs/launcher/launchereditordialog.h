@@ -28,6 +28,7 @@ QT_END_NAMESPACE
 /// mode.
 class LauncherEditorDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LauncherEditorDialog)
 public:
   explicit LauncherEditorDialog(QWidget *parent, const LauncherConfig &initial,
                                 const QString &title,

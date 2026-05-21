@@ -1,7 +1,7 @@
 target_sources(kartend_core PRIVATE
+  dbeventscontroller.cpp
   gridwidthdebouncer.cpp
   mainwindow.cpp
-  mainwindow_dbevents.cpp
   mainwindow_scraper.cpp
   mainwindow_setup.cpp
   mainwindow_timers.cpp
@@ -9,12 +9,15 @@ target_sources(kartend_core PRIVATE
   mainwindow_wiring.cpp
   marqueecontroller.cpp
   menucontroller.cpp
+  scrapercontroller.cpp
   scrolleventscontroller.cpp
   toolbarcontroller.cpp
+  dbeventscontroller.h
   gridwidthdebouncer.h
   mainwindow.h
   marqueecontroller.h
   menucontroller.h
+  scrapercontroller.h
   scrolleventscontroller.h
   toolbarcontroller.h
   mainwindow.ui

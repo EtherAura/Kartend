@@ -20,6 +20,7 @@ struct SettingsModel;
 /// QGuiApplication::screens() at panel-construction time.
 class MarqueePanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MarqueePanel)
 public:
   explicit MarqueePanel(QWidget *parent = nullptr);
   ~MarqueePanel() override;

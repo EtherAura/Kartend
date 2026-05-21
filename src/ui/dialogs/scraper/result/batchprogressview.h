@@ -28,6 +28,7 @@ QT_END_NAMESPACE
 /// after a Cancel).
 class BatchScrapeProgressView : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(BatchScrapeProgressView)
 public:
   explicit BatchScrapeProgressView(QWidget *parent = nullptr);
 

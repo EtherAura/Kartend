@@ -26,6 +26,7 @@ class ISettingsManager;
 /// once no migration paths reference it.
 class ScraperCredentialsDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScraperCredentialsDialog)
 public:
   ScraperCredentialsDialog(GeneralSettings *generalSettings, ISettingsManager *settingsManager,
                            QWidget *parent = nullptr);

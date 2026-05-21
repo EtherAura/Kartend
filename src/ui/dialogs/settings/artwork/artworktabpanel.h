@@ -19,6 +19,7 @@ struct SettingsModel;
 /// load/save shape; internal browse pickers.
 class ArtworkTabPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArtworkTabPanel)
 public:
   explicit ArtworkTabPanel(QWidget *parent = nullptr);
   ~ArtworkTabPanel() override;

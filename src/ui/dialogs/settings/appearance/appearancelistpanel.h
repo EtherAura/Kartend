@@ -16,6 +16,7 @@ struct SettingsModel;
 /// sub-sub-tab. Owns the list-view font size and row height spin boxes.
 class AppearanceListPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceListPanel)
 public:
   explicit AppearanceListPanel(QWidget *parent = nullptr);
   ~AppearanceListPanel() override;

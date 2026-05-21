@@ -5,6 +5,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include "connectionpragmas.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
 #include "uiconstants/database.h"
@@ -35,36 +36,12 @@ bool openConnection(QSqlDatabase &db, const QString &dbPath) {
 }
 
 void applyConnectionPragmas(QSqlDatabase &db) {
-  QSqlQuery query(db);
-  if (!query.exec("PRAGMA foreign_keys = ON")) {
-    auto err =
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to enable foreign keys",
-                              "DatabaseSchema::applyConnectionPragmas")
-            .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
-  if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable WAL mode, falling back to DELETE mode",
-                                     "DatabaseSchema::applyConnectionPragmas")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-    if (!query.exec("PRAGMA journal_mode = DELETE")) {
-      auto fallbackErr =
-          ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set DELETE journal mode",
-                                "DatabaseSchema::applyConnectionPragmas")
-              .withDetails(query.lastError().text());
-      ErrorUtils::logError(fallbackErr);
-    }
-  }
-  const QString busyTimeoutPragma =
-      QStringLiteral("PRAGMA busy_timeout = %1").arg(UIConstants::Database::MAIN_BUSY_TIMEOUT_MS);
-  if (!query.exec(busyTimeoutPragma)) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set busy timeout",
-                                     "DatabaseSchema::applyConnectionPragmas")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
+  // Kartend-67wo: route through the shared PRAGMA helper so changes here
+  // propagate to every connection opener.
+  MediaDbConnectionInit::PragmaConfig cfg;
+  cfg.busyTimeoutMs = UIConstants::Database::MAIN_BUSY_TIMEOUT_MS;
+  cfg.setSynchronousNormal = false; // main connection keeps default for now
+  MediaDbConnectionInit::applyPragmas(db, cfg, QStringLiteral("DatabaseSchema::applyConnectionPragmas"));
 }
 
 void createTables(QSqlDatabase &db) {

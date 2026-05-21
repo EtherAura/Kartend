@@ -16,6 +16,7 @@
 #include "scrapertypes.h"
 
 class IDatabaseManager;
+struct ApplicationContext;
 class QLockFile;
 class QTimer;
 struct GeneralSettings;
@@ -46,6 +47,7 @@ namespace Scraper {
 /// (toggleable to silent auto-resume via GeneralSettings).
 class ScraperService : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScraperService)
 public:
   enum class State { Idle, RunningAuto, RunningInteractive, PausedInteractive, Finishing };
   Q_ENUM(State)
@@ -97,9 +99,12 @@ public:
   };
 
   /// Wiring needed to launch / resume a scrape. Caller (MainWindow)
-  /// fills these in once at construction.
+  /// fills these in once at construction. Kartend-m02z: holds the full
+  /// ApplicationContext instead of a snapshot of the DB pointer so the
+  /// runner and other call sites stay in sync if ApplicationContext::managers
+  /// is rebound.
   struct Context {
-    IDatabaseManager *databaseManager = nullptr;
+    const ApplicationContext *ctx = nullptr;
     GeneralSettings *generalSettings = nullptr;
     QList<CollectionConfig> *collections = nullptr;
     /// Builder for a fresh provider per collection index. Same shape

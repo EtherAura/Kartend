@@ -26,6 +26,7 @@ QT_END_NAMESPACE
 /// again — re-running via Help → Setup Wizard… stays available.
 class FirstRunWizard : public QWizard {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(FirstRunWizard)
 public:
   struct Result {
     /// True when the user clicked Finish (vs Cancel/close).

@@ -33,6 +33,7 @@ struct AnimationManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class AnimationManager : public QObject, public IAnimationManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AnimationManager)
 public:
   explicit AnimationManager(QObject *parent = nullptr);
   ~AnimationManager() override;

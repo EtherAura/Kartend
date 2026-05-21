@@ -156,6 +156,10 @@ void TmdbProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate, Detail
 void TmdbProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   if (!callback) return;
   // Image host doesn't require auth — public CDN. User-Agent kept
-  // for audit-trail consistency.
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback));
+  // for audit-trail consistency. Kartend-9ryx: scope the response to
+  // image/* so a misrouted or hostile CDN response can't reach the
+  // decoder.
+  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
+                                       QStringLiteral("image/"));
 }

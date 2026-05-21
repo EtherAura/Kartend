@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <QFileInfo>
 
-ScrollDataManager::ScrollDataManager(QObject *parent) : QObject(parent) {}
+ScrollDataStore::ScrollDataStore(QObject *parent) : QObject(parent) {}
 
-void ScrollDataManager::initializeStorage(int totalCount) {
+void ScrollDataStore::initializeStorage(int totalCount) {
   m_filePaths.clear();
   m_fileNames.clear();
 
@@ -14,7 +14,7 @@ void ScrollDataManager::initializeStorage(int totalCount) {
   }
 }
 
-void ScrollDataManager::resizeStorage(int totalCount) {
+void ScrollDataStore::resizeStorage(int totalCount) {
   totalCount = std::max(0, totalCount);
   const int oldSize = m_filePaths.size();
   if (totalCount == oldSize) {
@@ -42,7 +42,7 @@ void ScrollDataManager::resizeStorage(int totalCount) {
   m_filePaths.resize(totalCount);
 }
 
-void ScrollDataManager::initializeSubcollections(const CollectionContext &context,
+void ScrollDataStore::initializeSubcollections(const CollectionContext &context,
                                                  const QList<CollectionConfig> *collections,
                                                  const CollectionHierarchyCache *hierarchyCache) {
   m_subcollections.clear();
@@ -140,7 +140,7 @@ void ScrollDataManager::initializeSubcollections(const CollectionContext &contex
   }
 }
 
-void ScrollDataManager::initializeVirtualFolders(const CollectionContext &context) {
+void ScrollDataStore::initializeVirtualFolders(const CollectionContext &context) {
   m_virtualFolders.clear();
 
   if (context.suppressVirtualFolders) {
@@ -234,7 +234,7 @@ void ScrollDataManager::initializeVirtualFolders(const CollectionContext &contex
   }
 }
 
-void ScrollDataManager::applyUnifiedSort(const CollectionContext &context,
+void ScrollDataStore::applyUnifiedSort(const CollectionContext &context,
                                          const QList<CollectionConfig> *collections) {
   m_unifiedItems.clear();
   m_unifiedSortActive = false;
@@ -386,7 +386,7 @@ void ScrollDataManager::applyUnifiedSort(const CollectionContext &context,
   m_unifiedSortActive = true;
 }
 
-void ScrollDataManager::setupFilePathMappings(const CollectionContext &context) {
+void ScrollDataStore::setupFilePathMappings(const CollectionContext &context) {
   m_filePathToDisplayName.clear();
   if (context.config.showAllSubcollectionItems) {
     for (auto it = m_fileNames.constBegin(); it != m_fileNames.constEnd(); ++it) {
@@ -395,7 +395,7 @@ void ScrollDataManager::setupFilePathMappings(const CollectionContext &context) 
   }
 }
 
-void ScrollDataManager::clear() {
+void ScrollDataStore::clear() {
   m_filePaths.clear();
   m_fileNames.clear();
   m_subcollections.clear();
@@ -405,7 +405,7 @@ void ScrollDataManager::clear() {
   m_unifiedSortActive = false;
 }
 
-QList<int> ScrollDataManager::receiveItemsRange(int offset, const QStringList &paths,
+QList<int> ScrollDataStore::receiveItemsRange(int offset, const QStringList &paths,
                                                 const QHash<QString, QString> &names) {
   QList<int> updatedVisualIndices;
 
@@ -431,7 +431,7 @@ QList<int> ScrollDataManager::receiveItemsRange(int offset, const QStringList &p
   return updatedVisualIndices;
 }
 
-int ScrollDataManager::visualIndexFromFilePath(const QString &filePath) const {
+int ScrollDataStore::visualIndexFromFilePath(const QString &filePath) const {
   if (filePath.isEmpty()) {
     return -1;
   }

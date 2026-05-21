@@ -17,6 +17,10 @@ Build modes (mutually exclusive):
 Build options:
   --tests           Configure with -DKARTEND_BUILD_TESTS=ON
   --run-tests       Run ctest after a successful build (requires --tests)
+  --coverage        Configure with -DKARTEND_ENABLE_COVERAGE=ON for gcov
+                    instrumentation (implies --debug + --tests; pair with
+                    --run-tests to populate coverage counters; capture the
+                    report with lcov against the build dir afterwards).
   --install         Run `cmake --install` after a successful build (honors DESTDIR;
                     auto-elevates with sudo or doas when the install prefix
                     isn't writable by the current user)
@@ -63,6 +67,7 @@ keep_builds=false
 use_ccache=true
 build_tests=false
 run_tests=false
+coverage_build=false
 install_after_build=false
 generator_preference="auto"  # auto|ninja|make
 incremental_build=true
@@ -84,6 +89,7 @@ for arg in "$@"; do
     --format-apply) format_apply=true ;;
     --tests)       build_tests=true ;;
     --run-tests)   run_tests=true ;;
+    --coverage)    coverage_build=true; build_tests=true; debug_build=true ;;
     --install)     install_after_build=true ;;
     --uninstall)   uninstall_only=true ;;
     --prefix=*)    install_prefix="${arg#--prefix=}" ;;
@@ -398,10 +404,21 @@ prune_other_builds() {
   for d in "$build_root"/*; do
     [ -d "$d" ] || continue
     [ "$(basename "$d")" = "$keep_basename" ] && continue
-    # Safety: only prune build dirs created by this script.
-    if [ -f "$d/$build_marker_file" ]; then
+    # Prune dirs created by this script (.kartend-build-dir marker) AND
+    # any dir that looks like a CMake build dir (CMakeCache.txt) so
+    # hand-named legacy build folders don't accumulate (Kartend-bkq3).
+    # Conservative: dirs without either signal are left alone — could be
+    # the user's own scratch space.
+    if [ -f "$d/$build_marker_file" ] || [ -f "$d/CMakeCache.txt" ]; then
       rm -rf -- "$d"
     fi
+  done
+  # Sweep stray top-level log files dropped by aborted runs or
+  # out-of-tree CMake invocations. Anything matching *.log here is build
+  # detritus — the active build's log lives under <build_dir>/logs/.
+  for f in "$build_root"/*.log; do
+    [ -f "$f" ] || continue
+    rm -f -- "$f"
   done
   shopt -u nullglob
 }
@@ -897,6 +914,9 @@ if $maintenance_build; then
   if $build_tests; then
     cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
+  if $coverage_build; then
+    cmake_args+=(-DKARTEND_ENABLE_COVERAGE=ON)
+  fi
   if $ccache_available; then
     cmake_args+=(
       -DCMAKE_C_COMPILER_LAUNCHER=ccache
@@ -1240,6 +1260,9 @@ if $pgo_build; then
   if $build_tests; then
     cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
+  if $coverage_build; then
+    cmake_args+=(-DKARTEND_ENABLE_COVERAGE=ON)
+  fi
   if $ccache_available; then
     cmake_args+=(
       -DCMAKE_C_COMPILER_LAUNCHER=ccache
@@ -1284,6 +1307,9 @@ if $pgo_build; then
   fi
   if $build_tests; then
     cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
+  fi
+  if $coverage_build; then
+    cmake_args+=(-DKARTEND_ENABLE_COVERAGE=ON)
   fi
   if $ccache_available; then
     cmake_args+=(
@@ -1381,6 +1407,9 @@ if ! $pgo_build; then
   fi
   if $build_tests; then
     cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
+  fi
+  if $coverage_build; then
+    cmake_args+=(-DKARTEND_ENABLE_COVERAGE=ON)
   fi
   if $ccache_available; then
     cmake_args+=(

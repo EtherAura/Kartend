@@ -21,6 +21,7 @@ struct SettingsModel;
 /// picker dialogs and the position-driven width-vs-height visibility toggle.
 class SidebarPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SidebarPanel)
 public:
   explicit SidebarPanel(QWidget *parent = nullptr);
   ~SidebarPanel() override;

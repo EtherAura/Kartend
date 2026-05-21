@@ -22,6 +22,7 @@
 #include "detailspane.h"
 #include "detailspanegalleryview.h"
 #include "extensionutils.h"
+#include "imagedecodeutils.h"
 #include "ui_detailspane.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
@@ -213,7 +214,8 @@ void DetailsPane::rebuildHorizontalGallery() {
                 m_galleryPixmapCacheOrder.append(path);
                 if (btnGuard) btnGuard->setIcon(QIcon(pix));
               });
-      watcher->setFuture(QtConcurrent::run([path]() { return QImage(path); }));
+      watcher->setFuture(
+          QtConcurrent::run([path]() { return ImageDecodeUtils::loadCapped(path); }));
     }
     m_hGalleryLayout->addWidget(btn);
     addedThumb = true;

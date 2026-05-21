@@ -44,6 +44,7 @@ prepareFromCollection(const CollectionConfig &cfg, const QString &collectionUuid
 
 class Writer : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(Writer)
 
 public:
   explicit Writer(QObject *parent = nullptr);

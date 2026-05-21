@@ -32,7 +32,7 @@ class IDatabaseManager;
 class ISessionManager;
 class IArtworkManager;
 class IDetailsPane;
-class SelectionRestoreManager;
+class SelectionRestoreCoordinator;
 class LoadingOverlay;
 class EmptyStateWidget;
 class NavigationStackManager;
@@ -90,10 +90,21 @@ struct NavigationManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class NavigationManager : public QObject, public INavigationManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(NavigationManager)
 public:
   explicit NavigationManager(QObject *parent = nullptr);
   ~NavigationManager() override;
   [[nodiscard]] bool isNavigationInProgress() const;
+  /// True when this NavigationManager is alive and not currently in
+  /// teardown — the runtime equivalent of the legacy `parent() != nullptr`
+  /// check that used to gate every navigation entry point. Returns true
+  /// pre-setup (m_isShuttingDown predicate not yet installed) so
+  /// construction-time wiring still routes. Use this instead of
+  /// `parent()` so the manager's lifetime no longer couples to the
+  /// QObject parent-child tree (Kartend-3v92 / Kartend-d70s).
+  [[nodiscard]] bool isAlive() const {
+    return !m_isShuttingDown || !m_isShuttingDown();
+  }
 
   // Persist current viewport/selection state before shutdown.
   // Call this before blocking signals or clearing collection index.
@@ -136,8 +147,7 @@ public slots:
   void filterItems(const QString &searchText) override;
   void filterItemsCurrentAndSubcollections(const QString &searchText) override;
   void filterItemsAllCollections(const QString &searchText) override;
-  void scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
-                                int finalEnsureDelayMs) override;
+  void scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs) override;
   void onItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);
   void onBackgroundCollectionScanCompleted(const QString &collectionUuid);
@@ -236,7 +246,7 @@ private:
   std::function<void()> m_refreshTitleCounts;
 
   // Owned manager for selection restore logic
-  std::unique_ptr<SelectionRestoreManager> m_selectionRestoreManager;
+  std::unique_ptr<SelectionRestoreCoordinator> m_selectionRestoreManager;
 
   bool m_virtualScrollConnected = false;
   [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const -> bool;

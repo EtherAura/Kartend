@@ -21,7 +21,7 @@ struct CollectionConfig;
 struct GeneralSettings;
 
 /**
- * @brief Setup struct for SelectionRestoreManager dependencies.
+ * @brief Setup struct for SelectionRestoreCoordinator dependencies.
  */
 struct SelectionRestoreManagerSetup {
   const ApplicationContext *ctx = nullptr;
@@ -47,26 +47,26 @@ struct SelectionRestoreManagerSetup {
  * Uses a token-based system to ensure only the most recent restore request
  * is honored when navigating between collections.
  */
-class SelectionRestoreManager : public QObject {
+class SelectionRestoreCoordinator : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SelectionRestoreCoordinator)
 
 public:
-  explicit SelectionRestoreManager(QObject *parent = nullptr);
-  ~SelectionRestoreManager() override;
+  explicit SelectionRestoreCoordinator(QObject *parent = nullptr);
+  ~SelectionRestoreCoordinator() override;
 
   void setupReferences(const SelectionRestoreManagerSetup &setup);
 
   /**
-   * @brief Schedules selection restoration with retry attempts.
+   * @brief Schedules selection restoration after a final-ensure delay.
    * @param desiredIndex The index to restore selection to.
-   * @param maxAttempts Maximum number of retry attempts (unused, kept for API
-   * compatibility).
-   * @param attemptDelayMs Delay between attempts (unused, kept for API
-   * compatibility).
-   * @param finalEnsureDelayMs Final verification delay.
+   * @param finalEnsureDelayMs Delay before the post-restore verification fires.
+   *
+   * The legacy maxAttempts + attemptDelayMs parameters were dropped in
+   * Kartend-plqg — they were Q_UNUSED on receipt and the callers' constant
+   * kRestoreAttempts / kRestoreIntervalMs args were dead too.
    */
-  void scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
-                                int finalEnsureDelayMs);
+  void scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs);
 
   /**
    * @brief Checks if selection should be restored based on settings and search

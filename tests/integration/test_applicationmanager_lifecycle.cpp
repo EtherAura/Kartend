@@ -96,27 +96,29 @@ void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
   record(manager.getInteractionManager());
 }
 
-void TestApplicationManagerLifecycle::testManagersAreParentedToApplicationManager() {
+void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
   ensureSandbox();
   ApplicationManager manager;
   ApplicationContext appCtx; manager.initialize(&appCtx);
 
-  // Every manager constructed with ApplicationManager as Qt parent should
-  // report it via QObject::parent(). CacheManager is intentionally
-  // unparented (constructed without a parent argument) so it is excluded.
-  // The parenting matters for shutdown ordering: managers without
-  // ApplicationManager as parent rely solely on unique_ptr member-order
-  // destruction, so a regression that drops the `this` arg would silently
-  // change destruction semantics.
-  QCOMPARE(manager.getSessionManager()->parent(), &manager);
-  QCOMPARE(manager.getArtworkManager()->parent(), &manager);
-  QCOMPARE(manager.getDatabaseManager()->parent(), &manager);
-  QCOMPARE(manager.getPlaylistManager()->parent(), &manager);
-  QCOMPARE(manager.getSettingsManager()->parent(), &manager);
-  QCOMPARE(manager.getScrollManager()->parent(), &manager);
-  QCOMPARE(manager.getDetailsPaneManager()->parent(), &manager);
-  QCOMPARE(manager.getNavigationManager()->parent(), &manager);
-  QCOMPARE(manager.getInteractionManager()->parent(), &manager);
+  // Kartend-d70s (re-attempted after Kartend-3v92 replaced
+  // NavigationManager's parent()-based lifetime guards with the
+  // isAlive() helper): sub-managers are owned solely by their
+  // std::unique_ptr members. QObject parent stays null so Qt's children
+  // sweep can never double-delete a manager that's also held in a
+  // unique_ptr, and so a future reparent doesn't change destruction
+  // semantics. Asserting parent() == nullptr here catches a regression
+  // that adds `this` back to any of these make_unique calls — that
+  // would resurrect the double-ownership footgun.
+  QCOMPARE(manager.getSessionManager()->parent(), nullptr);
+  QCOMPARE(manager.getArtworkManager()->parent(), nullptr);
+  QCOMPARE(manager.getDatabaseManager()->parent(), nullptr);
+  QCOMPARE(manager.getPlaylistManager()->parent(), nullptr);
+  QCOMPARE(manager.getSettingsManager()->parent(), nullptr);
+  QCOMPARE(manager.getScrollManager()->parent(), nullptr);
+  QCOMPARE(manager.getDetailsPaneManager()->parent(), nullptr);
+  QCOMPARE(manager.getNavigationManager()->parent(), nullptr);
+  QCOMPARE(manager.getInteractionManager()->parent(), nullptr);
 
   // CacheManager is intentionally not a QObject (plain class) and therefore
   // has no Qt-parent relationship. Its lifetime is bounded entirely by the

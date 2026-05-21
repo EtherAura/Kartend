@@ -20,7 +20,7 @@ class IDetailsPane;
 class InteractionStateHolder;
 class LoadingOverlay;
 class EmptyStateWidget;
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 // Forward declarations for managers
 class IScrollManager;
@@ -113,7 +113,7 @@ struct ApplicationContext {
     /// and forward it through their own setLayerManager() to register their
     /// owned widget. Optional — null means each overlay falls back to
     /// direct QWidget::raise().
-    OverlayLayerManager *overlayLayerManager = nullptr;
+    OverlayZOrderRegistry *overlayLayerManager = nullptr;
   } ui;
 
   // ─────────────────────────────────────────────────────────────────────────

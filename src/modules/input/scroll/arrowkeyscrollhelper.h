@@ -21,6 +21,7 @@ class ScrollEventHandler;
  */
 class ArrowKeyScrollHelper : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArrowKeyScrollHelper)
 public:
   explicit ArrowKeyScrollHelper(QObject *parent = nullptr);
   ~ArrowKeyScrollHelper() override;

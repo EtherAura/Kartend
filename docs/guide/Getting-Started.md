@@ -242,8 +242,8 @@ See [Splash Screens & Now Playing](Splash-and-Now-Playing.md).
 Once you have one collection working, branching out is usually one of:
 
 - **More launchers** — add additional launchers per collection (e.g.
-  RPCS3 *and* RetroArch for the same library), build reusable launcher
-  presets, or override on a per-item basis. See
+  mpv *and* VLC for the same library), build reusable launcher presets,
+  or override on a per-item basis. See
   [Launchers](Launchers.md).
 - **More artwork** — add `boxfront`, `screenshot`, `marquee` artwork
   types and browse them in the sidebar gallery. See

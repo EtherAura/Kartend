@@ -17,6 +17,7 @@ QT_END_NAMESPACE
 /// list without going through this panel.
 class LauncherPresetsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LauncherPresetsPanel)
 public:
   explicit LauncherPresetsPanel(QWidget *parent = nullptr);
   ~LauncherPresetsPanel() override;

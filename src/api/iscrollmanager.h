@@ -21,7 +21,7 @@ struct GridMetrics;
  *
  * Unlike INavigationManager / IDetailsPaneManager (plain abstract classes),
  * this interface is a QObject — the same shape as IDatabaseManager. A
- * sibling (SelectionRestoreManager) connects to ScrollManager's
+ * sibling (SelectionRestoreCoordinator) connects to ScrollManager's
  * virtualScrollSetupComplete signal through ctx, so that one signal is
  * promoted to the interface; QObject + Q_OBJECT is required to declare it.
  * ScrollManager keeps its remaining signals/slots on the concrete class and
@@ -34,6 +34,7 @@ struct GridMetrics;
  */
 class IScrollManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(IScrollManager)
 public:
   using QObject::QObject;
   ~IScrollManager() override = default;

@@ -4,15 +4,15 @@
 
 #include <QWidget>
 
-OverlayLayerManager::OverlayLayerManager(QObject *parent) : QObject(parent) {}
+OverlayZOrderRegistry::OverlayZOrderRegistry(QObject *parent) : QObject(parent) {}
 
-OverlayLayerManager::~OverlayLayerManager() = default;
+OverlayZOrderRegistry::~OverlayZOrderRegistry() = default;
 
-void OverlayLayerManager::purgeDestroyed() {
+void OverlayZOrderRegistry::purgeDestroyed() {
   m_entries.removeIf([](const Entry &e) { return e.widget.isNull(); });
 }
 
-void OverlayLayerManager::registerOverlay(QWidget *overlay, Layer layer) {
+void OverlayZOrderRegistry::registerOverlay(QWidget *overlay, Layer layer) {
   if (!overlay) {
     return;
   }
@@ -27,14 +27,14 @@ void OverlayLayerManager::registerOverlay(QWidget *overlay, Layer layer) {
   m_entries.append(Entry{overlay, layer});
 }
 
-void OverlayLayerManager::unregisterOverlay(QWidget *overlay) {
+void OverlayZOrderRegistry::unregisterOverlay(QWidget *overlay) {
   if (!overlay) {
     return;
   }
   m_entries.removeIf([overlay](const Entry &e) { return e.widget.data() == overlay; });
 }
 
-void OverlayLayerManager::bringToFront(QWidget *overlay) {
+void OverlayZOrderRegistry::bringToFront(QWidget *overlay) {
   if (!overlay) {
     return;
   }
@@ -62,7 +62,7 @@ void OverlayLayerManager::bringToFront(QWidget *overlay) {
   restack();
 }
 
-void OverlayLayerManager::restack() {
+void OverlayZOrderRegistry::restack() {
   purgeDestroyed();
   // Iterate in stored order (already z-order ascending because the entries
   // are kept sorted by Layer with within-layer last-bringToFront-wins

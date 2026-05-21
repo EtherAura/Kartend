@@ -12,6 +12,7 @@ QT_END_NAMESPACE
 
 class KartMergeDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(KartMergeDialog)
 
 public:
   KartMergeDialog(const QString &itemPath, const ItemMetadataStore::ItemMetadata &existing,

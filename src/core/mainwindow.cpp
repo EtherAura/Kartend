@@ -47,9 +47,12 @@
 #include "launcherchooserdialog.h"
 #include "launchmanager.h"
 #include "loadingoverlay.h"
+#include "dbeventscontroller.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
+#include "scrapercontroller.h"
+#include "scraperservice.h"
 #include "scrolleventscontroller.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
@@ -87,16 +90,22 @@ MainWindow::MainWindow(QWidget *parent)
       gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
       m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
       currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
-  m_appManager = std::make_unique<ApplicationManager>(this);
+  // unique_ptr is the sole owner; QObject parent stays null (Kartend-d70s,
+  // re-attempted after Kartend-3v92 replaced NavigationManager's parent()
+  // lifetime guards with the isAlive() helper). Destruction is driven
+  // purely by member order.
+  m_appManager = std::make_unique<ApplicationManager>(nullptr);
   m_appManager->initialize(&m_appContext);
-  m_scraperService = std::make_unique<Scraper::ScraperService>(this);
-  m_marqueeController = std::make_unique<MarqueeController>(this);
-  m_scrollEventsController = std::make_unique<ScrollEventsController>(this);
+  // Kartend-hzef step 3: scraper service ownership moved to ScraperController.
+  m_marqueeController = std::make_unique<MarqueeController>(nullptr);
+  m_scrollEventsController = std::make_unique<ScrollEventsController>(nullptr);
+  m_dbEventsController = std::make_unique<DbEventsController>(nullptr);
+  m_scraperController = std::make_unique<ScraperController>(nullptr);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
   // against a live instance. The manager owns no widgets — overlays remain
   // parented to centralwidget as before.
-  m_overlayLayerManager = std::make_unique<OverlayLayerManager>(this);
+  m_overlayLayerManager = std::make_unique<OverlayZOrderRegistry>(nullptr);
 
   ui->setupUi(this);
   setupUI();
@@ -433,6 +442,25 @@ void MainWindow::refreshTitleCounts() {
 // Wires managers and signals; ensures sidebar metadata is refreshed when the
 // sidebar becomes visible or its layout changes
 void MainWindow::setupManagerConnections() {
+  // Kartend-8y5z: this method used to be 250 LOC of inlined setup; it's
+  // now a sequence of per-area wireXxx() calls. Order matters —
+  // InteractionManager seeds the ApplicationContext that NavigationManager,
+  // DetailPageManager, and KartManager all read through.
+  wireInteractionManager();
+  wireNavigationManager();
+
+  connectDatabaseManager();
+  connectScrollManager();
+  connectSidebarManager();
+  connectSearchComponents();
+  connectScrollBars();
+  connectFilterToolbar();
+
+  wireDetailPageManager();
+  wireKartManager();
+}
+
+void MainWindow::wireInteractionManager() {
   InteractionManagerSetup setup;
   setup.ctx = &m_appContext; // Managers and UI elements from shared context
 
@@ -520,23 +548,6 @@ void MainWindow::setupManagerConnections() {
     });
   }
 
-  // Now set up NavigationManager with fully populated context
-  NavigationManagerSetup navSetup;
-  navSetup.ctx = &m_appContext; // Managers and UI elements from shared context
-
-  // Callbacks (not in context)
-  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
-  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
-
-  getNavigationManager()->setupReferences(navSetup);
-
-  connectDatabaseManager();
-  connectScrollManager();
-  connectSidebarManager();
-  connectSearchComponents();
-  connectScrollBars();
-  connectFilterToolbar();
-
   // EventManager gates item-grid input while a modal scrape dialog is up,
   // and LaunchManager prompts a launcher chooser for multi-launcher
   // collections. Both dialog types live in the UI layer, so MainWindow
@@ -554,7 +565,20 @@ void MainWindow::setupManagerConnections() {
       });
     }
   }
+}
 
+void MainWindow::wireNavigationManager() {
+  NavigationManagerSetup navSetup;
+  navSetup.ctx = &m_appContext; // Managers and UI elements from shared context
+
+  // Callbacks (not in context)
+  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
+  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+
+  getNavigationManager()->setupReferences(navSetup);
+}
+
+void MainWindow::wireDetailPageManager() {
   // detail page wiring. The overlay was created in
   // mainwindow_setup.cpp and parented to ui->centralwidget so it can cover
   // the entire window. Hand it to DetailPageManager along with the sidebar
@@ -604,7 +628,9 @@ void MainWindow::setupManagerConnections() {
               });
     }
   }
+}
 
+void MainWindow::wireKartManager() {
   if (auto *km = getKartManager()) {
     kart::KartManagerSetup kartSetup;
     kartSetup.settingsManager = getSettingsManager();
@@ -629,6 +655,33 @@ void MainWindow::setupManagerConnections() {
         r.choice = kart::MergeChoice::Skip;
       }
       return r;
+    };
+    // Kartend-s6mj: interactive confirmation when an imported .kart carries
+    // launcher / icon / placeholder paths outside the safe allowlist. The
+    // user sees one (field, path) entry per row and must opt in via the
+    // non-default "Import anyway" button. Cancel is default to make the
+    // safe choice the easy one (a malicious .kart's launcherPath=/bin/sh
+    // would otherwise execute on the next Launch click).
+    kartSetup.suspiciousPathConfirmer =
+        [this](const QList<kart::SuspiciousKartPath> &suspicious) -> bool {
+      QStringList lines;
+      lines.reserve(suspicious.size());
+      for (const auto &[field, path] : suspicious) {
+        lines.append(QStringLiteral("• %1: %2").arg(field, path));
+      }
+      QMessageBox box(this);
+      box.setIcon(QMessageBox::Warning);
+      box.setWindowTitle(tr("Import Kart — suspicious paths"));
+      box.setText(tr("This .kart references paths outside the safe-prefix "
+                     "allowlist (your home directory, /usr/bin, /usr/local/bin, "
+                     "/opt). Continuing will register these paths and they may "
+                     "be executed on a later Launch click."));
+      box.setInformativeText(lines.join(QLatin1Char('\n')));
+      auto *importAnyway = box.addButton(tr("Import anyway"), QMessageBox::AcceptRole);
+      auto *cancel = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+      box.setDefaultButton(cancel);
+      box.exec();
+      return box.clickedButton() == importAnyway;
     };
     km->setupReferences(kartSetup);
 

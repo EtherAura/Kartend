@@ -1,6 +1,6 @@
 # Video Previews
 
-Per-item video previews — short clips, gameplay footage, trailers — can
+Per-item video previews — short clips, scene cuts, trailers — can
 be attached to any item by dropping a video file with a matching base
 filename into the collection's video directory. Previews show up in
 two places: the **sidebar** as a player, and **Cover Flow view** as the
@@ -215,7 +215,7 @@ For systematic playback issues see
 
 ## For developers
 
-- Player widget: [src/ui/widgets/videopreviewwidget.h](../../src/ui/widgets/).
+- Player widget: [src/chrome/media/videopreviewwidget.h](../../src/chrome/media/).
   Wraps `QMediaPlayer` + `QVideoSink` for sidebar embedding.
 - Cover Flow video integration: in the Cover Flow view engine under
   [src/modules/input/scroll/](../../src/modules/input/scroll/) — the center tile

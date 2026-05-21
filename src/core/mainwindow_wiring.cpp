@@ -142,7 +142,9 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "dbeventscontroller.h"
 #include "detailspanemanager.h"
+#include "scrapercontroller.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -266,20 +268,37 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(db, &DatabaseManager::visualIndexForPathLoaded, scroll,
                    &ScrollManager::onVisualIndexForPathLoaded);
 
-  // DatabaseManager → MainWindow (overlay/title/filter UI state)
-  QObject::connect(db, &DatabaseManager::itemCountLoaded, this,
-                   &MainWindow::releaseStartupOverlaySuppressionIfIdle);
-  QObject::connect(db, &DatabaseManager::cachedCountsUpdated, this,
-                   &MainWindow::refreshTitleCountsIfActive);
-  QObject::connect(db, &DatabaseManager::itemsLoaded, this,
-                   &MainWindow::refreshFilterToolbarOnItemsLoaded);
-  QObject::connect(db, &DatabaseManager::scanProgress, this, &MainWindow::onScanProgress);
-  QObject::connect(db, &DatabaseManager::scanStarting, this, &MainWindow::onScanStarting);
-  QObject::connect(db, &DatabaseManager::collectionScanCompleted, this,
-                   &MainWindow::onCollectionScanCompletedStartup);
-  QObject::connect(db, &DatabaseManager::collectionScanCompleted, this,
-                   &MainWindow::onCollectionScanCompletedOverlay);
-  QObject::connect(db, &DatabaseManager::scanItemsProgress, this, &MainWindow::onScanItemsProgress);
+  // DatabaseManager → DbEventsController (extracted from MainWindow,
+  // Kartend-hzef step 2). Context is wired here because every manager and
+  // callback the controller reads back is already resolved above.
+  DbEventsControllerContext dec;
+  dec.getLoadingOverlay = [this]() { return m_loadingOverlay; };
+  dec.getNavigationManager = [this]() { return getNavigationManager(); };
+  dec.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
+  dec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  dec.getCollections = [this]() -> const QList<CollectionConfig> * { return &m_collections; };
+  dec.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+  dec.refreshFilterToolbar = [this]() { refreshFilterToolbar(); };
+  dec.setWindowTitle = [this](const QString &title) { setWindowTitle(title); };
+  m_dbEventsController->setContext(dec);
+
+  auto *decCtl = m_dbEventsController.get();
+  QObject::connect(db, &DatabaseManager::itemCountLoaded, decCtl,
+                   &DbEventsController::releaseStartupOverlaySuppressionIfIdle);
+  QObject::connect(db, &DatabaseManager::cachedCountsUpdated, decCtl,
+                   &DbEventsController::refreshTitleCountsIfActive);
+  QObject::connect(db, &DatabaseManager::itemsLoaded, decCtl,
+                   &DbEventsController::refreshFilterToolbarOnItemsLoaded);
+  QObject::connect(db, &DatabaseManager::scanProgress, decCtl,
+                   &DbEventsController::onScanProgress);
+  QObject::connect(db, &DatabaseManager::scanStarting, decCtl,
+                   &DbEventsController::onScanStarting);
+  QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
+                   &DbEventsController::onCollectionScanCompletedStartup);
+  QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
+                   &DbEventsController::onCollectionScanCompletedOverlay);
+  QObject::connect(db, &DatabaseManager::scanItemsProgress, decCtl,
+                   &DbEventsController::onScanItemsProgress);
 
   // SettingsManager → MainWindow / DetailsPaneManager
   QObject::connect(settings, &SettingsManager::collectionsModified, this,
@@ -287,12 +306,29 @@ void MainWindow::connectDatabaseManager() {
 
   // DatabaseManager / SettingsManager → DetailsPaneManager (sidebar summary)
   if (details) {
-    QObject::connect(db, &DatabaseManager::collectionScanCompleted, this,
-                     &MainWindow::refreshCollectionSummaryOnScanCompleted);
+    QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
+                     &DbEventsController::refreshCollectionSummaryOnScanCompleted);
     QObject::connect(db, &DatabaseManager::cachedCountsUpdated, details,
                      &DetailsPaneManager::refreshCollectionSummary);
     QObject::connect(settings, &SettingsManager::collectionsModified, details,
                      &DetailsPaneManager::refreshCollectionSummary);
+  }
+
+  // Kartend-hzef step 3: wire the ScraperController's context here too —
+  // every closure target manager is already resolved above.
+  if (m_scraperController) {
+    ScraperControllerContext sc;
+    sc.getParentWindow = [this]() -> QWidget * { return this; };
+    sc.getCollections = [this]() { return &m_collections; };
+    sc.getGeneralSettings = [this]() { return &m_generalSettings; };
+    sc.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+    sc.getApplicationContext = [this]() -> const ApplicationContext * { return &m_appContext; };
+    sc.getDatabaseManager = [this]() { return getDatabaseManager(); };
+    sc.getNavigationManager = [this]() { return getNavigationManager(); };
+    sc.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
+    sc.getInteractionManager = [this]() { return getInteractionManager(); };
+    sc.getScrollManager = [this]() { return getScrollManager(); };
+    m_scraperController->setContext(sc);
   }
 }
 

@@ -65,12 +65,12 @@ void SearchLoadingOverlay::setParentWidget(QWidget *parent) {
   }
 }
 
-void SearchLoadingOverlay::setLayerManager(OverlayLayerManager *manager) {
+void SearchLoadingOverlay::setLayerManager(OverlayZOrderRegistry *manager) {
   m_layerManager = manager;
   // If the overlay already exists, register it now so the next show() sees
   // its layer assignment. Otherwise ensureOverlay() handles registration.
   if (m_layerManager && m_overlay) {
-    m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SearchLoading);
+    m_layerManager->registerOverlay(m_overlay, OverlayZOrderRegistry::Layer::SearchLoading);
   }
 }
 
@@ -106,7 +106,7 @@ void SearchLoadingOverlay::ensureOverlay() {
   m_overlay->setLayout(layout);
   m_overlay->hide();
   if (m_layerManager) {
-    m_layerManager->registerOverlay(m_overlay, OverlayLayerManager::Layer::SearchLoading);
+    m_layerManager->registerOverlay(m_overlay, OverlayZOrderRegistry::Layer::SearchLoading);
   }
 }
 

@@ -32,6 +32,7 @@ class ISessionManager;
  */
 class QueryManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(QueryManager)
 public:
   explicit QueryManager(ISessionManager *sessionManager,
                         const QString &connectionName = QStringLiteral("kartend_worker"),

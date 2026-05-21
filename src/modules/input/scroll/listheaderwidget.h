@@ -17,6 +17,7 @@ enum class ListSortColumn { Name = 0, Collection = 1, Artwork = 2 };
 /// Supports drag-to-resize columns.
 class ListHeaderWidget : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ListHeaderWidget)
 
 public:
   explicit ListHeaderWidget(QWidget *parent = nullptr);

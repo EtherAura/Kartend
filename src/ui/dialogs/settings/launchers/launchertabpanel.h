@@ -33,6 +33,7 @@ struct SettingsModel;
 /// GeneralSettings).
 class LauncherTabPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LauncherTabPanel)
 public:
   explicit LauncherTabPanel(QWidget *parent = nullptr);
   ~LauncherTabPanel() override;

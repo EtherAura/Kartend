@@ -7,6 +7,7 @@
 # forward declarations, so any module may #include them without creating a
 # module->module library edge.
 target_sources(kartend_api PRIVATE
+  errorpresentation.h
   ianimationmanager.h
   iartworkmanager.h
   icachemanager.h

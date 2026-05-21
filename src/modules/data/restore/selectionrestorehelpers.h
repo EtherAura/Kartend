@@ -3,7 +3,7 @@
 
 #include <QString>
 
-// Pure helpers extracted from SelectionRestoreManager. The manager owns the
+// Pure helpers extracted from SelectionRestoreCoordinator. The manager owns the
 // QTimer + ApplicationContext + lambda dispatch wiring; these are the
 // decisions in between, so the validity / clamping / "should I restore?"
 // rules can be unit-tested without the full UI graph.

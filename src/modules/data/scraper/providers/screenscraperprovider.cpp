@@ -559,7 +559,14 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
           return;
         }
         callback(response);
-      });
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes,
+      // Kartend-9ryx: media fetches must come back as image/*.
+      // ScreenScraper has been observed to serve 200-OK HTML
+      // "Access denied" pages under expired media URLs; the prefix
+      // check turns those into structured errors instead of decode
+      // failures.
+      QStringLiteral("image/"));
 }
 
 namespace ScreenScraperProviderHelpers {

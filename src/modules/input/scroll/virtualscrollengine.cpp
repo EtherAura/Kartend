@@ -87,7 +87,7 @@ void VirtualScrollEngine::updateVirtualView() {
 
   QElapsedTimer perfCalcTimer;
   if (perfTrace) perfCalcTimer.start();
-  QSet<int> needed = calculateNeededIndices();
+  const NeededRange needed = calculateNeededIndices();
   if (perfTrace) perfCalcMs = perfCalcTimer.elapsed();
 
   if (needed.isEmpty()) {
@@ -103,7 +103,7 @@ void VirtualScrollEngine::updateVirtualView() {
 
   QElapsedTimer perfEnsureTimer;
   if (perfTrace) perfEnsureTimer.start();
-  for (int visualIndex : needed) {
+  for (int visualIndex = needed.firstIndex; visualIndex <= needed.lastIndex; ++visualIndex) {
     ensureWidgetForIndex(visualIndex);
   }
   if (perfTrace) perfEnsureMs = perfEnsureTimer.elapsed();
@@ -136,7 +136,17 @@ void VirtualScrollEngine::updateVirtualView() {
     if (m_owner->m_overlayManager->isForceVisible() && m_owner->m_selectionState->hasSelection()) {
       m_owner->refreshSelectionOverlayState();
     }
-    m_owner->m_overlayManager->raise();
+    // QPropertyAnimation::valueChanged drives updateVirtualView at ~60 Hz
+    // during smooth scroll. QWidget::raise() does a full re-stacking and
+    // emits a paint on the overlay + siblings — skip it on animation
+    // frames where the selection hasn't moved (Kartend-eukc). Whenever
+    // the committed index actually changes, the overlay is re-raised and
+    // its sibling order is published again.
+    const int committedIndex = m_owner->m_selectionState->committedSelectedIndex();
+    if (committedIndex != m_lastRaisedSelectionIndex) {
+      m_owner->m_overlayManager->raise();
+      m_lastRaisedSelectionIndex = committedIndex;
+    }
   }
 
   if (perfTrace) {
@@ -168,33 +178,36 @@ void VirtualScrollEngine::updateVirtualView() {
   }
 }
 
-auto VirtualScrollEngine::calculateNeededIndices() const -> QSet<int> {
-  int firstVisible = m_owner->getFirstVisibleRow();
-  int lastVisible = m_owner->getLastVisibleRow();
-  int startRow = qMax(0, firstVisible - 1);
+auto VirtualScrollEngine::calculateNeededIndices() const -> NeededRange {
+  const int firstVisible = m_owner->getFirstVisibleRow();
+  const int lastVisible = m_owner->getLastVisibleRow();
+  const int startRow = qMax(0, firstVisible - 1);
   int endRow = lastVisible + 1;
 
-  int maxRow = ((m_owner->m_totalItems + m_owner->m_metrics.itemsPerRow - 1) /
-                m_owner->m_metrics.itemsPerRow) -
-               1;
+  const int itemsPerRow = m_owner->m_metrics.itemsPerRow;
+  const int totalItems = m_owner->m_totalItems;
+  if (itemsPerRow <= 0 || totalItems <= 0) {
+    return {};
+  }
+  const int maxRow = ((totalItems + itemsPerRow - 1) / itemsPerRow) - 1;
   if (maxRow < 0) {
     return {};
   }
   endRow = std::min(endRow, maxRow);
-
-  QSet<int> needed;
-  for (int rowIndex = startRow; rowIndex <= endRow; ++rowIndex) {
-    for (int columnIndex = 0; columnIndex < m_owner->m_metrics.itemsPerRow; ++columnIndex) {
-      int visualIndex = (rowIndex * m_owner->m_metrics.itemsPerRow) + columnIndex;
-      if (visualIndex < m_owner->m_totalItems) {
-        needed.insert(visualIndex);
-      }
-    }
+  if (endRow < startRow) {
+    return {};
   }
-  return needed;
+
+  // Kartend-gro2: rows are contiguous and item indices are monotonic, so the
+  // QSet bookkeeping the old loop did was redundant. Encode the band as a
+  // half-open visual-index range (clamped to totalItems).
+  NeededRange range;
+  range.firstIndex = startRow * itemsPerRow;
+  range.lastIndex = std::min(((endRow + 1) * itemsPerRow) - 1, totalItems - 1);
+  return range;
 }
 
-void VirtualScrollEngine::removeUnneededWidgets(const QSet<int> &needed) {
+void VirtualScrollEngine::removeUnneededWidgets(const NeededRange &needed) {
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end();
        /* advance inside */) {
     if (!needed.contains(it.key())) {

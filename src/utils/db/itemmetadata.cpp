@@ -123,6 +123,96 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   return metadata;
 }
 
+ErrorUtils::Result<QHash<QString, ItemMetadata>>
+loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &paths) {
+  QHash<QString, ItemMetadata> out;
+
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemMetadataStore::loadBatch");
+  }
+  if (paths.isEmpty()) return out;
+
+  out.reserve(paths.size());
+
+  // SQLite's compile-time SQLITE_LIMIT_VARIABLE_NUMBER caps the number of
+  // bound parameters per statement. Historic default is 999; modern builds
+  // raise it to 32766. Stay safely under the conservative ceiling and
+  // reserve one slot for the collection_uuid binding.
+  constexpr qsizetype kChunkSize = 900;
+
+  for (qsizetype chunkStart = 0; chunkStart < paths.size(); chunkStart += kChunkSize) {
+    const qsizetype chunkEnd = qMin(chunkStart + kChunkSize, paths.size());
+    const qsizetype chunkLen = chunkEnd - chunkStart;
+
+    QString sql = QStringLiteral(
+        "SELECT path, title, description, genre, developer, publisher, release_date, "
+        "content_rating, players, runtime_seconds, tags, custom_fields, "
+        "manual_path, launcher_index, source, updated_at "
+        "FROM item_metadata WHERE collection_uuid = ? AND path IN (");
+    for (qsizetype i = 0; i < chunkLen; ++i) {
+      if (i > 0) sql.append(QLatin1Char(','));
+      sql.append(QLatin1Char('?'));
+    }
+    sql.append(QLatin1Char(')'));
+
+    QSqlQuery q(db);
+    if (!q.prepare(sql)) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                 "Failed to prepare item_metadata batch select",
+                                 "ItemMetadataStore::loadBatch")
+          .withDetails(q.lastError().text());
+    }
+    q.addBindValue(collectionUuid);
+    for (qsizetype i = chunkStart; i < chunkEnd; ++i) {
+      q.addBindValue(paths.at(i));
+    }
+    if (!q.exec()) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                 "Failed to query item_metadata batch",
+                                 "ItemMetadataStore::loadBatch")
+          .withDetails(q.lastError().text());
+    }
+
+    while (q.next()) {
+      ItemMetadata md;
+      md.collectionUuid = collectionUuid;
+      md.path = q.value(0).toString();
+      md.title = q.value(1).toString();
+      md.description = q.value(2).toString();
+      md.genre = q.value(3).toString();
+      md.developer = q.value(4).toString();
+      md.publisher = q.value(5).toString();
+      md.releaseDate = q.value(6).toString();
+      md.contentRating = q.value(7).toString();
+      md.players = q.value(8).toString();
+      const QVariant runtime = q.value(9);
+      md.runtimeSeconds = runtime.isNull() ? -1 : runtime.toInt();
+      md.tags = q.value(10).toString();
+      md.customFields = q.value(11).toString();
+      md.manualPath = q.value(12).toString();
+      const QVariant launcherIdx = q.value(13);
+      md.launcherIndex = launcherIdx.isNull() ? -1 : launcherIdx.toInt();
+      md.source = q.value(14).toString();
+      md.updatedAt = q.value(15).toString();
+      out.insert(md.path, md);
+    }
+  }
+
+  // Mirror single-load: paths without a row return an empty-but-keyed stub
+  // so the caller can iterate paths uniformly without checking contains().
+  for (const QString &p : paths) {
+    if (!out.contains(p)) {
+      ItemMetadata empty;
+      empty.collectionUuid = collectionUuid;
+      empty.path = p;
+      out.insert(p, empty);
+    }
+  }
+
+  return out;
+}
+
 ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   if (!db.isOpen()) {
     return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",

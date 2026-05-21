@@ -35,6 +35,7 @@ struct ContainerPositionParams {
  */
 class VirtualContainerManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(VirtualContainerManager)
 public:
   explicit VirtualContainerManager(QObject *parent = nullptr);
   ~VirtualContainerManager() override;

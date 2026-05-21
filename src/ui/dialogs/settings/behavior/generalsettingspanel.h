@@ -26,6 +26,7 @@ struct SettingsModel;
 /// Save). This unifies behavior with the rest of the general tab.
 class GeneralSettingsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(GeneralSettingsPanel)
 public:
   explicit GeneralSettingsPanel(QWidget *parent = nullptr);
   ~GeneralSettingsPanel() override;

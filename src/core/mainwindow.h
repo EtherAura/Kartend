@@ -50,10 +50,12 @@ class DetailPageOverlay;
 class DetailPageManager;
 class MenuController;
 class MarqueeController;
+class DbEventsController;
+class ScraperController;
 class ScrollEventsController;
 class TextZoomHud;
 class ISettingsDialog;
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 namespace kart {
 class KartManager;
@@ -65,6 +67,7 @@ class DebouncedTimer;
 
 class MainWindow : public QMainWindow, public IMainWindow {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MainWindow)
 
 public:
   explicit MainWindow(QWidget *parent = nullptr);
@@ -157,12 +160,9 @@ public:
   void openScraperDialog(int preCollectionIndex = -1,
                          const QString &preItemPath = QString()) override;
 
-  /// Accessor for the long-lived ScraperService that survives
-  /// dialog close + app restart. Owns the active scrape queue;
-  /// persists state to disk after each item completes.
-  [[nodiscard]] Scraper::ScraperService *getScraperService() const {
-    return m_scraperService.get();
-  }
+  // Kartend-hzef step 3: getScraperService() was never used by an external
+  // caller; service ownership moved into ScraperController and the accessor
+  // is gone with it. Re-add as a forwarder if a future caller needs it.
 
   /// Check for a pending-scrape state file on startup and surface a
   /// modal resume / discard prompt (unless GeneralSettings has
@@ -247,17 +247,19 @@ protected:
   void keyPressEvent(QKeyEvent *event) override;
   auto eventFilter(QObject *watched, QEvent *event) -> bool override;
   void closeEvent(QCloseEvent *event) override;
+  void showEvent(QShowEvent *event) override;
   void dragEnterEvent(QDragEnterEvent *event) override;
   void dropEvent(QDropEvent *event) override;
 
 private:
   bool m_isShuttingDown = false;
+  bool m_deferredStartupDone = false;
   std::unique_ptr<MenuController> m_menuController;
   /// Central z-order coordinator for every registered overlay. Constructed
   /// before any overlay widget so each overlay's setLayerManager() call
   /// during setupUI() registers against a live instance. Owns no widgets —
   /// only references via QPointer.
-  std::unique_ptr<OverlayLayerManager> m_overlayLayerManager;
+  std::unique_ptr<OverlayZOrderRegistry> m_overlayLayerManager;
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;
@@ -271,6 +273,8 @@ private:
   /// / CoverFlow activation signals. Replaces the mainwindow_scrollevents.cpp
   /// partial (Kartend-hzef).
   std::unique_ptr<ScrollEventsController> m_scrollEventsController;
+  std::unique_ptr<DbEventsController> m_dbEventsController;
+  std::unique_ptr<ScraperController> m_scraperController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -287,16 +291,10 @@ private:
 
   std::unique_ptr<ApplicationManager> m_appManager;
   DetailsPane *m_MetadataSidebar = nullptr;
-  /// Long-lived scraper coordinator. Owns the active queue + runner
-  /// across dialog lifetime; persists in-flight state to
-  /// `~/.config/Kartend/pending-scrape.json` after each item so a
-  /// crash or program exit can resume on next launch.
-  std::unique_ptr<Scraper::ScraperService> m_scraperService;
-  /// Single reused Scraper dialog instance — created on first
-  /// openScraperDialog call and kept alive afterwards so closing it
-  /// (Close button or X) merely hides; reopening reuses the same
-  /// widget tree. Parented to this MainWindow.
-  ScrapeResultDialog *m_scraperDialog = nullptr;
+
+  // Kartend-hzef step 3: ScraperService ownership + the dialog cache moved
+  // into m_scraperController. The pending-scrape state file is still
+  // persisted to ~/.config/Kartend/pending-scrape.json by the service.
 
   void setupManagerConnections();
 
@@ -319,6 +317,15 @@ private:
   void connectDatabaseManager();
   void connectScrollManager();
   void connectSidebarManager();
+  // Kartend-8y5z: setupManagerConnections was 250 LOC of inlined wiring;
+  // these helpers carry the per-area chunks. Each is called once from
+  // setupManagerConnections (in dependency order — InteractionManager's
+  // ctx must be populated before NavigationManager's setup), so the
+  // public method is now a sequence of named calls instead of a god method.
+  void wireInteractionManager();
+  void wireNavigationManager();
+  void wireDetailPageManager();
+  void wireKartManager();
   /// pushes the "sidebar is hidden AND its mode would shrink the
   /// grid (Expand)" predicate to ScrollManager so the layout calculator picks
   /// the alternate per-collection grid sizes when applicable. Called whenever
@@ -345,17 +352,8 @@ private:
   // connections are made in connectDatabaseManager / connectScrollManager /
   // connectSidebarManager.
   //
-  // DatabaseManager edges
-  void releaseStartupOverlaySuppressionIfIdle(int /*count*/);
-  void refreshTitleCountsIfActive();
-  void refreshFilterToolbarOnItemsLoaded(const QStringList & /*paths*/,
-                                         const QHash<QString, QString> & /*names*/);
-  void onScanProgress(int current, int total, const QString &name);
-  void onScanStarting(const QString &name, int estimatedItems);
-  void onCollectionScanCompletedStartup(const QString &uuid);
-  void onCollectionScanCompletedOverlay(const QString &uuid);
-  void onScanItemsProgress(int itemsProcessed, int totalItems);
-  void refreshCollectionSummaryOnScanCompleted(const QString &uuid);
+  // Kartend-hzef step 2: DatabaseManager scan/count slots moved to
+  // m_dbEventsController.
   // ScrollManager edges — most are owned by m_scrollEventsController; only
   // the filter-changed slot still has MainWindow-side responsibilities and
   // stays here for now.
@@ -383,19 +381,11 @@ private:
   void setupInitialTimersEmptyCollections();
   void setupInitialTimersWithCollections();
 
-  // On startup, the initial collection load can trigger a database rescan.
-  // Suppress the loading overlay for that first scan so the UI remains
-  // immediately navigable while work continues in the background.
-  bool m_suppressStartupScanOverlays = false;
+  // Kartend-hzef step 2: scan-counter state moved to DbEventsController.
+  // mainwindow_timers.cpp's loadInitialCollection still needs to set the
+  // suppression mode on first load — it goes through
+  // m_dbEventsController->setSuppressStartupScanOverlays(true).
 
-  // Number of in-flight startup scan operations (tracked via scanStarting/
-  // collectionScanCompleted while m_suppressStartupScanOverlays is true).
-  int m_startupActiveScanCount = 0;
-
-  // Counter for active scan operations (e.g., when showAllSubcollectionItems
-  // triggers scans of all descendants). Overlay stays visible until all
-  // complete.
-  int m_activeScanCount = 0;
   void initializeAppContext();
   void showAbout();
   void showFocusReturnSplash();

@@ -1,5 +1,6 @@
 // Manages search filtering and subcollection filtering for scroll view
 #include "filtermanager.h"
+#include "applicationcontext.h"
 #include "artworkutils.h"
 #include "filterhelpers.h"
 #include "idatabasemanager.h"
@@ -8,8 +9,12 @@
 
 FilterManager::FilterManager(QObject *parent) : QObject(parent) {}
 
-void FilterManager::setDatabaseManager(IDatabaseManager *manager) {
-  m_databaseManager = manager;
+void FilterManager::setApplicationContext(const ApplicationContext *ctx) {
+  m_ctx = ctx;
+}
+
+IDatabaseManager *FilterManager::dbMgr() const {
+  return m_ctx ? m_ctx->databaseManager() : nullptr;
 }
 
 void FilterManager::setCollections(const QList<CollectionConfig> *collections) {
@@ -262,8 +267,8 @@ void FilterManager::determineTargetCollections(int subcollectionIndex,
 auto FilterManager::itemBelongsToTargetCollections(const QString &entry,
                                                    const QSet<int> &targetCollections) const
     -> bool {
-  if (m_databaseManager) {
-    int collectionIndexForEntry = m_databaseManager->getCollectionIndexForFile(entry);
+  if (auto *db = dbMgr()) {
+    int collectionIndexForEntry = db->getCollectionIndexForFile(entry);
     if (collectionIndexForEntry >= 0 && targetCollections.contains(collectionIndexForEntry)) {
       return true;
     }
@@ -273,7 +278,7 @@ auto FilterManager::itemBelongsToTargetCollections(const QString &entry,
       for (auto it = m_fileNames->constBegin(); it != m_fileNames->constEnd(); ++it) {
         const QString &key = it.key();
         if (key.endsWith("/" + entry) || key.endsWith(QDir::separator() + entry) || key == entry) {
-          int altCollectionIndex = m_databaseManager->getCollectionIndexForFile(it.key());
+          int altCollectionIndex = db->getCollectionIndexForFile(it.key());
           if (altCollectionIndex >= 0 && targetCollections.contains(altCollectionIndex)) {
             return true;
           }

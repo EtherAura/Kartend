@@ -17,6 +17,7 @@
 
 #include "batchscraperunner.h"
 
+#include "applicationcontext.h"
 #include "errorutils.h"
 #include "metadatalookupprovider.h"
 #include "mockdatabasemanager.h"
@@ -537,8 +538,11 @@ void TestBatchScrapeRunner::skipModeCountsAlreadyScrapedItemsAsSkipped() {
   // The provider is never consulted: every item is filtered out
   // before the queue runs.
   auto stub = std::make_shared<StubProvider>();
+  // Kartend-m02z: BatchScrapeRunner now takes the full ApplicationContext.
+  ApplicationContext ctx;
+  ctx.managers.databaseManager = &db;
   Scraper::BatchScrapeRunner runner(
-      &db, stub, QStringLiteral("uuid"),
+      &ctx, stub, QStringLiteral("uuid"),
       QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin"),
                   QStringLiteral("/games/C.bin")},
       QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
@@ -591,8 +595,10 @@ void TestBatchScrapeRunner::skipModeWindowKeepsRecentScrapesSkipped() {
   // and a 30-day Skip window — all three items must be filtered out.
   TimestampedScrapedDb db(/*daysAgo=*/5);
   auto stub = std::make_shared<StubProvider>();
+  ApplicationContext ctx;
+  ctx.managers.databaseManager = &db;
   Scraper::BatchScrapeRunner runner(
-      &db, stub, QStringLiteral("uuid"),
+      &ctx, stub, QStringLiteral("uuid"),
       QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin"),
                   QStringLiteral("/games/C.bin")},
       QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
@@ -645,8 +651,10 @@ void TestBatchScrapeRunner::skipModeWindowZeroPreservesLegacyBehaviour() {
   // window the user might set later.
   TimestampedScrapedDb db(/*daysAgo=*/90);
   auto stub = std::make_shared<StubProvider>();
+  ApplicationContext ctx;
+  ctx.managers.databaseManager = &db;
   Scraper::BatchScrapeRunner runner(
-      &db, stub, QStringLiteral("uuid"),
+      &ctx, stub, QStringLiteral("uuid"),
       QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin")},
       QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
       /*itemConcurrency=*/1, /*skipRecentDays=*/0);

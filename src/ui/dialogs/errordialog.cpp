@@ -1,5 +1,6 @@
 // Error dialog for displaying user-facing error messages
 #include "errordialog.h"
+#include "errorpresentation.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -234,3 +235,20 @@ auto ErrorDialog::showCriticalError(QWidget *parent, const ErrorUtils::ErrorCont
 
   return dialog.exec() == QDialog::Accepted;
 }
+
+// Kartend-ncot: free-function entry points so lower-layer modules don't
+// upward-include errordialog.h. Implementation forwards to the static members
+// above, which remain available to other callers in src/ui/ that already have
+// the concrete header.
+namespace ErrorPresentation {
+
+void showError(QWidget *parent, const ErrorUtils::ErrorContext &context) {
+  ErrorDialog::showError(parent, context);
+}
+
+auto showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context,
+                       bool allowContinue) -> bool {
+  return ErrorDialog::showCriticalError(parent, context, allowContinue);
+}
+
+} // namespace ErrorPresentation

@@ -8,6 +8,7 @@
 #include <QtConcurrentRun>
 
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "kartdb.h"
 // Kartend-a3ir: the previous #include of "kartmergedialog.h" was the last
 // data->ui edge in src/. The interactive merge-conflict decision is now
@@ -36,8 +37,68 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
 
 } // namespace
 
+QList<SuspiciousKartPath>
+collectSuspiciousKartPaths(const CollectionConfig &cfg,
+                           const QSet<QString> &trustedLauncherPaths) {
+  QList<SuspiciousKartPath> out;
+  const QString home = QDir::homePath();
+  const QStringList allowedRoots = {home, QStringLiteral("/usr/bin"),
+                                    QStringLiteral("/usr/local/bin"), QStringLiteral("/opt")};
+  auto isPathAllowed = [&](const QString &path) {
+    const QString abs = QFileInfo(path).absoluteFilePath();
+    for (const QString &root : allowedRoots) {
+      if (abs.startsWith(root + QLatin1Char('/')) || abs == root) {
+        return true;
+      }
+    }
+    return false;
+  };
+  auto check = [&](const QString &field, const QString &path, bool launcherField) {
+    if (path.isEmpty()) return;
+    if (isPathAllowed(path)) return;
+    // Kartend-s6mj: a path already trusted via an existing collection's
+    // launcher entry doesn't need to re-prompt the user. Only applies to
+    // launcher fields — the icon/placeholder fields aren't reused across
+    // collections in the same way.
+    if (launcherField && trustedLauncherPaths.contains(path)) {
+      return;
+    }
+    out.append({field, path});
+  };
+  check(QStringLiteral("launcher.launcherPath"), cfg.launcher.launcherPath, /*launcherField=*/true);
+  for (int i = 0; i < cfg.launcher.additionalLaunchers.size(); ++i) {
+    check(QStringLiteral("additionalLaunchers[%1].launcherPath").arg(i),
+          cfg.launcher.additionalLaunchers[i].launcherPath, /*launcherField=*/true);
+  }
+  check(QStringLiteral("collectionIcon"), cfg.collectionIcon, /*launcherField=*/false);
+  check(QStringLiteral("placeholderArtwork"), cfg.placeholderArtwork, /*launcherField=*/false);
+  return out;
+}
+
 KartManager::KartManager(QObject *parent) : QObject(parent) {}
 KartManager::~KartManager() = default;
+
+QSet<QString> KartManager::previouslyTrustedLauncherPaths() const {
+  QSet<QString> out;
+  if (!m_setup.getCollections) {
+    return out;
+  }
+  QList<CollectionConfig> *collections = m_setup.getCollections();
+  if (!collections) {
+    return out;
+  }
+  for (const CollectionConfig &c : std::as_const(*collections)) {
+    if (!c.launcher.launcherPath.isEmpty()) {
+      out.insert(c.launcher.launcherPath);
+    }
+    for (const LauncherConfig &alt : std::as_const(c.launcher.additionalLaunchers)) {
+      if (!alt.launcherPath.isEmpty()) {
+        out.insert(alt.launcherPath);
+      }
+    }
+  }
+  return out;
+}
 
 void KartManager::setupReferences(const KartManagerSetup &setup) {
   m_setup = setup;
@@ -74,6 +135,25 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   cfg.manualDirectory = QDir(result.destDir).filePath("manual");
   cfg.parentCollectionIndex = -1;
   cfg.isSubcollection = false;
+
+  // Kartend-efhg: log every imported path that falls outside the safe
+  // allowlist so a malicious .kart that points launcherPath at /bin/sh
+  // (or sneaks in a collectionIcon pointing at /etc) leaves an audit
+  // trail before any later Launch click executes it.
+  //
+  // Kartend-s6mj: interactive callers ask the user via the
+  // suspiciousPathConfirmer before getting here (runImport applies the
+  // gate). Headless callers still hit finalizeImport directly, so we keep
+  // the audit-log here as the floor.
+  const auto suspicious =
+      collectSuspiciousKartPaths(cfg, previouslyTrustedLauncherPaths());
+  for (const auto &[field, path] : suspicious) {
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
+                             ErrorUtils::ErrorCode::InvalidFilePath,
+                             "Imported .kart references a path outside the safe-prefix allowlist",
+                             "KartManager::finalizeImport")
+                             .withDetails(QString("Field: %1, Path: %2").arg(field, path)));
+  }
 
   if (registerCollection) {
     if (!m_setup.settingsManager || !m_setup.getCollections) {
@@ -126,6 +206,19 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
                                                     bool registerCollection) {
   auto extracted = extractKart(kartPath, destDir);
   if (extracted.isError()) return extracted.error();
+  // Kartend-s6mj: importKart is the synchronous entry the drop-handler and
+  // tests use. It still consults a wired confirmer so dropping a malicious
+  // .kart prompts the user before the manifest's launcher path is
+  // registered.
+  if (m_setup.suspiciousPathConfirmer) {
+    const auto suspicious = collectSuspiciousKartPaths(
+        extracted.value().manifest.collectionConfig, previouslyTrustedLauncherPaths());
+    if (!suspicious.isEmpty() && !m_setup.suspiciousPathConfirmer(suspicious)) {
+      return ErrorUtils::ErrorContext::warning(
+          ErrorUtils::ErrorCode::OperationCancelled,
+          "Import cancelled at suspicious-path confirmation", "KartManager::importKart");
+    }
+  }
   return finalizeImport(extracted.value(), registerCollection,
                         makeFixedChoiceResolver(MergeChoice::Skip));
 }
@@ -262,6 +355,26 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
               return;
             }
             QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
+            // Kartend-s6mj: ask the user before importing a .kart whose
+            // launcher / icon / placeholder paths fall outside the safe
+            // allowlist. The pre-extracted manifest's collectionConfig
+            // already carries the un-finalized fields (finalizeImport
+            // overwrites only the *Directory paths, not launcher /
+            // icon / placeholder), so the suspicious set is stable
+            // here.
+            const auto suspicious = collectSuspiciousKartPaths(
+                extracted.value().manifest.collectionConfig, previouslyTrustedLauncherPaths());
+            if (!suspicious.isEmpty() && m_setup.suspiciousPathConfirmer) {
+              if (!m_setup.suspiciousPathConfirmer(suspicious)) {
+                auto ctx = ErrorUtils::ErrorContext::warning(
+                               ErrorUtils::ErrorCode::OperationCancelled,
+                               "Import cancelled at suspicious-path confirmation",
+                               "KartManager::runImport");
+                emit importFailed(ctx);
+                emit kartProgressFailed();
+                return;
+              }
+            }
             // The interactive merge resolver lives in the UI layer (see
             // Kartend-a3ir) — fall back to Skip in headless contexts where
             // no resolver was wired.

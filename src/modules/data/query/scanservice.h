@@ -41,6 +41,7 @@ class PreparedStatementCache;
  */
 class ScanService : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScanService)
 public:
   explicit ScanService(QSqlDatabase &db, PreparedStatementCache &cache, QObject *parent = nullptr);
   ~ScanService() override = default;

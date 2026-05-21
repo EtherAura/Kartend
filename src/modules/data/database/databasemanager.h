@@ -40,6 +40,7 @@ struct ApplicationContext;
  */
 class DatabaseManager : public IDatabaseManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DatabaseManager)
 public:
   explicit DatabaseManager(const ApplicationContext *ctx, QObject *parent = nullptr);
   ~DatabaseManager() override;
@@ -99,6 +100,13 @@ public:
   /// empty struct is returned so the sidebar can degrade gracefully.
   [[nodiscard]] ItemMetadataStore::ItemMetadata
   loadItemMetadata(const QString &collectionUuid, const QString &path) const override;
+
+  /// Batched WHERE-path-IN counterpart to loadItemMetadata. Cache-aware:
+  /// pulls cache hits first, issues a single chunked SELECT for the
+  /// remainder, and back-populates the cache with the rows that came back.
+  /// Paths without a row return as empty-but-keyed stubs.
+  [[nodiscard]] QHash<QString, ItemMetadataStore::ItemMetadata>
+  loadItemMetadataBatch(const QString &collectionUuid, const QStringList &paths) const override;
 
   /// Persists extended metadata via the main-thread connection. Used by
   /// user-driven editors (e.g. custom fields dialog,). Returns
@@ -187,6 +195,10 @@ signals:
 
   // Internal signal to trigger lazy background FTS backfill on scan worker.
   void requestEnsureItemsFtsReady();
+
+  // Queued-connection equivalent of m_worker->requestCancelScan() — see
+  // cancelScan() impl for the Kartend-fvye rationale.
+  void cancelScanRequested();
 
 public slots:
   /// Request cancellation of any in-progress scan

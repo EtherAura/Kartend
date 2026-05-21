@@ -1,5 +1,5 @@
 // Tests for SelectionRestoreHelpers — pure helpers extracted from
-// SelectionRestoreManager. The manager itself owns timers + ApplicationContext
+// SelectionRestoreCoordinator. The manager itself owns timers + ApplicationContext
 // + lambda dispatch; these are the predicates and the clamp it leans on.
 
 #include <QTest>

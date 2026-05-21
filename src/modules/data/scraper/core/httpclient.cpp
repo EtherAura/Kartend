@@ -107,7 +107,7 @@ void HttpClient::clearPending() {
 }
 
 void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
-                     qint64 maxResponseBytes) {
+                     qint64 maxResponseBytes, const QString &expectedContentTypePrefix) {
   if (!url.isValid()) {
     if (callback) {
       callback(ErrorContext::error(ErrorCode::InvalidArgument, "Invalid request URL",
@@ -115,7 +115,8 @@ void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback
     }
     return;
   }
-  PendingRequest req{url, userAgent, std::move(callback), maxResponseBytes};
+  PendingRequest req{url, userAgent, std::move(callback), maxResponseBytes,
+                     expectedContentTypePrefix};
   const QString host = url.host();
   // Timestamped trace so we can see (a) when the caller enqueued vs.
   // (b) when the request actually starts vs. (c) when the reply lands.
@@ -227,6 +228,9 @@ void HttpClient::send(const QString &host, PendingRequest request) {
   perReq->start();
   const QString urlPath = request.url.path().left(80);
   const qint64 maxResponseBytes = request.maxResponseBytes;
+  // Captured by value into the finished slot so the MIME check runs on
+  // the response Content-Type (Kartend-9ryx). Empty => no check.
+  const QString expectedContentTypePrefix = request.expectedContentTypePrefix;
 
   // Response-size cap: a hostile or buggy server can stream gigabytes
   // unboundedly otherwise. Hook downloadProgress and abort the reply if
@@ -251,7 +255,7 @@ void HttpClient::send(const QString &host, PendingRequest request) {
 
   connect(reply, &QNetworkReply::finished, this,
           [this, reply, host, callback = std::move(callback), perReq, urlPath,
-           sizeCapExceeded]() mutable {
+           sizeCapExceeded, expectedContentTypePrefix]() mutable {
             const qint64 ms = perReq->elapsed();
             // Definitive HTTP/2 readout. The connect-side attribute we
             // set asks Qt to *try* h2, but the actual negotiation can
@@ -327,6 +331,31 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                                .withHttpStatus(httpStatus);
                 if (retryAfter > 0) ctx.withRetryAfter(retryAfter);
                 callback(ctx);
+              } else if (!expectedContentTypePrefix.isEmpty()) {
+                // MIME allowlist guard (Kartend-9ryx): if the caller
+                // declared an expected Content-Type prefix (e.g.
+                // "image/" for media fetches), verify the server
+                // honoured it before handing the body to the decode
+                // path. Hostile or misconfigured upstreams that serve
+                // HTML / JSON / executable bytes under an image URL
+                // are rejected here instead of being routed to
+                // QImage::loadFromData below.
+                const QString contentType =
+                    reply->header(QNetworkRequest::ContentTypeHeader).toString();
+                if (!contentType.startsWith(expectedContentTypePrefix, Qt::CaseInsensitive)) {
+                  auto ctx =
+                      ErrorContext::error(ErrorCode::InvalidArgument,
+                                          QStringLiteral("Unexpected response Content-Type"),
+                                          "Scraper::HttpClient::send")
+                          .withDetails(QStringLiteral("Expected prefix: %1, got: %2")
+                                           .arg(expectedContentTypePrefix,
+                                                contentType.isEmpty()
+                                                    ? QStringLiteral("(none)")
+                                                    : contentType));
+                  callback(ctx);
+                } else {
+                  callback(reply->readAll());
+                }
               } else {
                 callback(reply->readAll());
               }

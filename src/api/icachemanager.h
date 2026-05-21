@@ -39,9 +39,9 @@ struct CacheMetrics {
  * this is a plain abstract class, not a QObject: CacheManager exposes no
  * signals or slots, so there is nothing to moc.
  *
- * The static shutdown / sizing helpers (`saveTimestampsSnapshotToDiskForShutdown`,
- * `getCacheSize`) are intentionally not part of this interface — they are
- * instance-free and stay on the concrete class.
+ * The static shutdown helper `saveTimestampsSnapshotToDiskForShutdown` is
+ * intentionally not part of this interface — it is instance-free and stays
+ * on the concrete class.
  */
 class ICacheManager {
 public:
@@ -75,6 +75,14 @@ public:
   [[nodiscard]] virtual CacheMetrics metrics() const = 0;
   virtual void resetMetrics() = 0;
   virtual void logMetrics() const = 0;
+
+  /// Approximate on-disk cache footprint in bytes. Implemented via a
+  /// cached directory walk in the real CacheManager; tests can stub it.
+  /// Kartend-davi widened the interface so ArtworkManager (which reaches
+  /// the cache through ApplicationContext) can use this in its periodic
+  /// "have we grown enough to flush?" heuristic without static_casting
+  /// back to the concrete type.
+  [[nodiscard]] virtual qint64 getCacheSize() const = 0;
 };
 
 #endif // ICACHEMANAGER_H

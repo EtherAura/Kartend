@@ -46,6 +46,7 @@ struct ViewportManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class ViewportManager : public QObject, public IViewportManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ViewportManager)
 
 public:
   explicit ViewportManager(QObject *parent = nullptr);

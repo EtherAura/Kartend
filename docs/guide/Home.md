@@ -1,8 +1,8 @@
 # Kartend Wiki
 
 The user guide for [Kartend](../../readme.md) — a Qt6 / KDE frontend for
-organizing and launching multimedia collections (games, movies, music,
-documents, anything you can hand to a launcher).
+organizing and launching multimedia collections (films, music,
+audiobooks, reference materials, anything you can hand to a launcher).
 
 If you just want to get something on screen, jump straight to
 [Getting Started](Getting-Started.md). If you've already built a library

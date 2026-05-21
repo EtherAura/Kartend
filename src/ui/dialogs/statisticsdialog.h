@@ -33,6 +33,7 @@ class ISettingsManager;
 /// "Reset usage stats…" clears every tracking column across the library.
 class StatisticsDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(StatisticsDialog)
 public:
   StatisticsDialog(IDatabaseManager *databaseManager, const QList<CollectionConfig> *collections,
                    bool runtimeDetectionEnabled, GeneralSettings *generalSettings,

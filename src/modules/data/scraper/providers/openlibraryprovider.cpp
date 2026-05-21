@@ -110,5 +110,10 @@ void OpenLibraryProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   if (!callback) {
     return;
   }
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback));
+  // Kartend-9ryx: media fetches must come back as image/* — a misconfigured
+  // cover URL that 200s with text/html or application/json could otherwise
+  // be fed straight into the image decoder below.
+  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
+                                       QStringLiteral("image/"));
 }

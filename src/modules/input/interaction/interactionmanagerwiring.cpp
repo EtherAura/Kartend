@@ -36,9 +36,7 @@ void InteractionManager::connectSearchManagerSignals() {
           &InteractionManager::clearSelection);
   connect(m_searchManager.get(), &SearchManager::requestSelectionRestore, this, [this](int index) {
     if (navMgr()) {
-      navMgr()->scheduleSelectionRestore(index, UIConstants::Selection::RESTORE_STEPS,
-                                         UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                                         UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+      navMgr()->scheduleSelectionRestore(index, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
     }
   });
   connect(m_searchManager.get(), &SearchManager::requestScrollbarRecovery, this,
@@ -263,14 +261,13 @@ void InteractionManager::connectMouseManagerSignals() {
               scrollMgr()->setForceSelectionOverlayVisible(visible);
             }
           });
-  connect(m_mouseManager.get(), &MouseManager::requestScrollAreaProperty, this,
-          [this](const char *name, bool value) {
-            if (m_itemScrollArea) {
-              m_itemScrollArea->setProperty(name, value);
-            }
-          });
-  connect(m_mouseManager.get(), &MouseManager::requestSetProperty, this,
-          [this](const char *name, const QVariant &value) { setProperty(name, value); });
+  // Kartend-8jym: the requestScrollAreaProperty + requestSetProperty
+  // signal/slot connections previously sat here. Both signals were
+  // declared but never emitted anywhere in src/, so the connections
+  // were dead-end wiring for the dynamic-Qt-property antipattern
+  // Kartend-0zhz retired. Removed wholesale; reinstate only if a real
+  // emit site shows up, in which case it should route through a typed
+  // accessor on InteractionStateHolder rather than QObject::setProperty.
 }
 
 void InteractionManager::connectViewportManagerSignals() {

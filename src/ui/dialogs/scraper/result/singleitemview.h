@@ -28,6 +28,7 @@ QT_END_NAMESPACE
 
 class SingleItemScrapeView : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SingleItemScrapeView)
 public:
   explicit SingleItemScrapeView(QWidget *parent = nullptr);
 

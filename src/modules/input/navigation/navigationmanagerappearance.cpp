@@ -86,7 +86,7 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
 }
 
 void NavigationManager::restoreSelectionForCurrentCollection() {
-  if ((!parent()) || QApplication::closingDown()) {
+  if ((!isAlive()) || QApplication::closingDown()) {
     return;
   }
   if ((!scrollMgr()) || (!interactionMgr())) {
@@ -111,9 +111,7 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
     return;
   }
 
-  scheduleSelectionRestore(desired, UIConstants::Selection::RESTORE_STEPS,
-                           UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                           UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+  scheduleSelectionRestore(desired, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
 }
 void NavigationManager::persistCurrentSelection() {
   static const bool diagEnabled = qEnvironmentVariableIntValue("KARTEND_SEARCH_DIAG");

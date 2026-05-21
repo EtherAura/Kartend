@@ -24,6 +24,7 @@ QT_END_NAMESPACE
 /// pre-loading existing values via setInitialName / setInitialFilter.
 class CreateSmartPlaylistDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CreateSmartPlaylistDialog)
 public:
   explicit CreateSmartPlaylistDialog(QWidget *parent = nullptr);
 

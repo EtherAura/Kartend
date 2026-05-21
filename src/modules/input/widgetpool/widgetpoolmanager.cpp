@@ -42,8 +42,11 @@ void WidgetPoolManager::setWidgetParent(QWidget *parent) {
 }
 
 auto WidgetPoolManager::acquire() -> ItemWidget * {
-  pruneNullEntries(m_pool);
-  pruneNullEntries(m_stalePool);
+  // Kartend-gro2: takeLastValid already skips null QPointers inline as it
+  // pops, so the per-call O(N) sweep here was redundant work on the
+  // acquire hot path. The scroll-idle prune (ScrollManager's
+  // m_prewarmIdleTimer → pruneStaleWidgets + prewarmAsync) keeps the
+  // long-tail list compacted during quiet moments.
 
   // First try the main pool (fresh widgets)
   if (ItemWidget *widget = takeLastValid(m_pool)) {
@@ -76,8 +79,11 @@ void WidgetPoolManager::release(ItemWidget *widget) {
     return;
   }
 
+  // Kartend-gro2: m_stalePool is read by acquire/softClear/clear paths but not
+  // by anything in release(); skip the redundant sweep here. m_pool's prune
+  // stays — the size check below would otherwise discard a healthy widget if
+  // null entries inflated the count.
   pruneNullEntries(m_pool);
-  pruneNullEntries(m_stalePool);
 
   // Disconnect signals before returning to pool
   disconnectAll(widget);
@@ -86,6 +92,17 @@ void WidgetPoolManager::release(ItemWidget *widget) {
   int optimalSize = calculateOptimalSize();
   if (m_pool.size() < optimalSize) {
     widget->hide();
+    // Reparent immediately to the long-lived m_widgetParent reservoir so
+    // pool widgets always live under a parent that outlives any virtual
+    // container. softClear() previously walked the whole pool to reparent
+    // every entry just-in-time before a container teardown — ~150
+    // setParent calls per collection switch, each triggering geometry +
+    // layout invalidation on the destination. Doing it once at release
+    // amortises the cost and turns softClear into a bucket move
+    // (Kartend-6tbe).
+    if (m_widgetParent && widget->parentWidget() != m_widgetParent) {
+      widget->setParent(m_widgetParent);
+    }
     m_pool.append(widget);
     ++m_metrics.releases;
   } else {
@@ -106,13 +123,16 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
   pruneNullEntries(m_pool);
   pruneNullEntries(m_stalePool);
 
-  // Move main pool widgets to stale pool instead of deleting them
-  // This allows reuse if the new collection needs widgets quickly
-  // CRITICAL: Reparent widgets to safeParent before the old virtual container
-  // is deleted, otherwise setParent() will crash accessing deleted memory
+  // Move main pool widgets to stale pool. Widgets are reparented to
+  // m_widgetParent in release() now, so this is a bucket move with no
+  // setParent loop (Kartend-6tbe). The safeParent argument is retained
+  // as a defensive fallback: if any widget ever lands in m_pool with a
+  // dangling parent (e.g. inserted by a future code path that bypasses
+  // release()), we still rescue it before its old parent is destroyed.
   if (safeParent) {
     for (const QPointer<ItemWidget> &widget : m_pool) {
-      if (widget) {
+      if (widget && widget->parentWidget() != m_widgetParent &&
+          widget->parentWidget() != safeParent) {
         widget->setParent(safeParent);
         widget->hide();
       }

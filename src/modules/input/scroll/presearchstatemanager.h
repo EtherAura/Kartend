@@ -18,11 +18,12 @@ class IArtworkManager;
  * (positions, scroll position, loaded artwork) so that exiting search can
  * instantly restore the view without reloading artwork from disk.
  */
-class PreSearchStateManager : public QObject {
+class PreSearchStateCache : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(PreSearchStateCache)
 public:
-  explicit PreSearchStateManager(QObject *parent = nullptr);
-  ~PreSearchStateManager() override = default;
+  explicit PreSearchStateCache(QObject *parent = nullptr);
+  ~PreSearchStateCache() override = default;
 
   /**
    * @brief Set external dependencies.

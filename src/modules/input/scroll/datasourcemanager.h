@@ -5,11 +5,11 @@
 #include <QObject>
 
 class FilterManager;
-class ScrollDataManager;
-class PreSearchStateManager;
+class ScrollDataStore;
+class PreSearchStateCache;
 class SearchLoadingOverlay;
-class IDatabaseManager;
 class QWidget;
+struct ApplicationContext;
 
 /**
  * @brief Owns the data-source sub-managers extracted from ScrollManager
@@ -17,8 +17,8 @@ class QWidget;
  *
  * Bundles four concerns previously held directly by ScrollManager:
  *  - FilterManager (search/subcollection filtering)
- *  - ScrollDataManager (file paths, names, subcollections, virtual folders)
- *  - PreSearchStateManager (saved widget state for fast search restoration)
+ *  - ScrollDataStore (file paths, names, subcollections, virtual folders)
+ *  - PreSearchStateCache (saved widget state for fast search restoration)
  *  - SearchLoadingOverlay (visual feedback during searches)
  *
  * ScrollManager keeps thin raw aliases (m_filterManager, m_dataManager,
@@ -28,19 +28,20 @@ class QWidget;
  *
  * Memory ownership: all four sub-managers are owned via unique_ptr.
  */
-class DataSourceManager : public QObject {
+class DataSourceCoordinator : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DataSourceCoordinator)
 public:
-  explicit DataSourceManager(QObject *parent = nullptr);
-  ~DataSourceManager() override;
+  explicit DataSourceCoordinator(QObject *parent = nullptr);
+  ~DataSourceCoordinator() override;
 
   // ─────────────────────────────────────────────────────────────────────
   // Sub-object access (raw, non-owning pointers)
   // ─────────────────────────────────────────────────────────────────────
 
   [[nodiscard]] FilterManager *filterManager() const { return m_filterManager.get(); }
-  [[nodiscard]] ScrollDataManager *dataManager() const { return m_dataManager.get(); }
-  [[nodiscard]] PreSearchStateManager *preSearchStateManager() const {
+  [[nodiscard]] ScrollDataStore *dataManager() const { return m_dataManager.get(); }
+  [[nodiscard]] PreSearchStateCache *preSearchStateManager() const {
     return m_preSearchStateManager.get();
   }
   [[nodiscard]] SearchLoadingOverlay *searchLoadingOverlay() const {
@@ -51,9 +52,10 @@ public:
   // Configuration helpers
   // ─────────────────────────────────────────────────────────────────────
 
-  /// Forwards a database-manager pointer to FilterManager. ScrollManager
-  /// receives the database manager later than its sub-managers are constructed.
-  void setDatabaseManager(IDatabaseManager *manager);
+  /// Kartend-davi: forwards the ApplicationContext to FilterManager so it
+  /// can read its sibling-manager pointers (currently IDatabaseManager)
+  /// through ctx instead of caching the raw pointer.
+  void setApplicationContext(const ApplicationContext *ctx);
   /// Sets the parent widget for the search loading overlay (typically the
   /// scroll-area viewport).
   void setSearchOverlayParent(QWidget *parent);
@@ -77,8 +79,8 @@ signals:
 
 private:
   std::unique_ptr<FilterManager> m_filterManager;
-  std::unique_ptr<ScrollDataManager> m_dataManager;
-  std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
+  std::unique_ptr<ScrollDataStore> m_dataManager;
+  std::unique_ptr<PreSearchStateCache> m_preSearchStateManager;
   std::unique_ptr<SearchLoadingOverlay> m_searchLoadingOverlay;
 };
 

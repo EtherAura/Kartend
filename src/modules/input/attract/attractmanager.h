@@ -49,6 +49,7 @@ struct AttractManagerSetup {
  */
 class AttractManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AttractManager)
 
 public:
   explicit AttractManager(QObject *parent = nullptr);

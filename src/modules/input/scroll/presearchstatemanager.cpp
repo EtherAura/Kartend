@@ -5,14 +5,14 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
-PreSearchStateManager::PreSearchStateManager(QObject *parent) : QObject(parent) {}
+PreSearchStateCache::PreSearchStateCache(QObject *parent) : QObject(parent) {}
 
-void PreSearchStateManager::setReferences(QScrollArea *scrollArea, QWidget *gridContainer) {
+void PreSearchStateCache::setReferences(QScrollArea *scrollArea, QWidget *gridContainer) {
   m_scrollArea = scrollArea;
   m_gridContainer = gridContainer;
 }
 
-bool PreSearchStateManager::saveState(QHash<int, ItemWidget *> &activeWidgets) {
+bool PreSearchStateCache::saveState(QHash<int, ItemWidget *> &activeWidgets) {
   // Only save if not already saved and we have widgets to save
   if (!m_savedWidgets.isEmpty() || activeWidgets.isEmpty()) {
     return false;
@@ -37,7 +37,7 @@ bool PreSearchStateManager::saveState(QHash<int, ItemWidget *> &activeWidgets) {
   return true;
 }
 
-bool PreSearchStateManager::restoreState(QHash<int, ItemWidget *> &activeWidgets,
+bool PreSearchStateCache::restoreState(QHash<int, ItemWidget *> &activeWidgets,
                                          QWidget *virtualContainer, WidgetPoolManager *widgetPool,
                                          IArtworkManager *artworkManager,
                                          std::function<QPoint(int)> getPositionFunc, int itemWidth,
@@ -111,7 +111,7 @@ bool PreSearchStateManager::restoreState(QHash<int, ItemWidget *> &activeWidgets
   return true;
 }
 
-void PreSearchStateManager::discardSavedState() {
+void PreSearchStateCache::discardSavedState() {
   // Delete any saved widgets
   for (auto it = m_savedWidgets.begin(); it != m_savedWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {

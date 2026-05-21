@@ -225,12 +225,12 @@ launched app is in front).
 
 - Boot splash: `MainWindow` paints the splash widget before the first
   collection load completes; `bootSplashEnabled` gates the path.
-- Startup video: [src/ui/widgets/](../../src/ui/widgets/)
+- Startup video: [src/ui/widgets/overlays/startupvideooverlay.h](../../src/ui/widgets/overlays/)
   (`StartupVideoOverlay`). Reuses the `QMediaPlayer` infrastructure;
   unmuted (`QAudioOutput::setVolume(1.0)`).
 - Resume-focus splash: same widget path, triggered by
   `QApplication::focusWindowChanged` after a known-launched-item exit.
-- Now Playing overlay: [src/ui/widgets/nowplayingoverlay.h](../../src/ui/widgets/).
+- Now Playing overlay: [src/ui/widgets/overlays/nowplayingoverlay.h](../../src/ui/widgets/overlays/).
   Active while `LaunchManager`'s tracked `QProcess` is alive.
 - Attract suspension hook:
   `AttractManager::setSuspended(true)` is called by `LaunchManager`

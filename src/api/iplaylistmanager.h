@@ -55,6 +55,7 @@ struct PlaylistItemRef {
  */
 class IPlaylistManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(IPlaylistManager)
 public:
   using QObject::QObject;
   ~IPlaylistManager() override = default;

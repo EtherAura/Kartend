@@ -22,7 +22,9 @@
 #include "usagestatsstore.h"
 
 class ArtworkPreviewOverlay;
+class DetailsPaneArtwork;
 class DetailsPaneGalleryView;
+class DetailsPaneMetadataView;
 class DetailsPaneResizeGrip;
 template <typename T> class QFutureWatcher;
 class VideoPreviewWidget;
@@ -35,11 +37,23 @@ QT_END_NAMESPACE
 
 class DetailsPane : public QWidget, public IDetailsPane {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DetailsPane)
   // The vertical-dock gallery row's helper reaches into ui->contentWidget /
   // ui->artworkDisplay and m_videoPlayback.videoPreview to build + anchor its section.
   // Tightly coupled by design; the helper exists to group the gallery's
   // setup/rebuild state cohesively.
   friend class DetailsPaneGalleryView;
+  // Artwork + video-preview helper (Kartend-5nxz). Same coupling rationale:
+  // reads/writes m_videoPlayback / m_artworkSource / m_primaryArtworkPath /
+  // m_artworkLoadGen and the .ui-owned artwork display widget. State stays
+  // on the host so the other helpers and ~100 existing access sites are
+  // unchanged.
+  friend class DetailsPaneArtwork;
+  // Metadata-rows helper (Kartend-cd2u). Same friend-of-host pattern:
+  // reads/writes m_detailsContainer / m_detailsLayout / m_descriptionScroll /
+  // m_metadataScroll / m_metadataAutoScrollTimer / m_manualButton /
+  // m_manualPath / m_currentMetadataTitle. State stays on the host.
+  friend class DetailsPaneMetadataView;
 
 public:
   explicit DetailsPane(QWidget *parent = nullptr);
@@ -269,7 +283,6 @@ private:
   /// sidebar doesn't show a giant preview that pushes the file info off-
   /// screen.
   void applyPreviewSize();
-  [[nodiscard]] int previewBoxSize() const;
   /// flip the contentLayout direction (TopToBottom / LeftToRight),
   /// scrollbar policies, and inter-section separator orientation based on the
   /// active dock edge. Called from applyAppearance after m_position is set.
@@ -314,6 +327,15 @@ private:
   /// Per-item media gallery row (vertical-dock) with section construction,
   /// thumb building, and the click-to-preview overlay. Owned, not borrowed.
   DetailsPaneGalleryView *m_galleryView = nullptr;
+  /// Owns the artwork preview + video preview behaviour (Kartend-5nxz).
+  /// Constructed in setupUI alongside m_galleryView. Parented to this so
+  /// destruction order matches the rest of the helpers. Friend-of-host so
+  /// it can reach m_videoPlayback / m_artworkSource etc. directly.
+  DetailsPaneArtwork *m_artworkController = nullptr;
+  /// Owns the dynamically-built "Details" section — description tile,
+  /// metadata grid, usage-stats rows, Manual button (Kartend-cd2u).
+  /// Same friend-of-host pattern as m_artworkController.
+  DetailsPaneMetadataView *m_metadataView = nullptr;
   Ui::DetailsPane *ui;
   /// Grouped video preview state: the widget, debounce timer, queued
   /// path, and scroll-idle predicate. Migration step toward a future
@@ -445,8 +467,6 @@ private:
   // pinned at the top of the section when a manual is available.
   QPushButton *m_manualButton = nullptr;
   QString m_manualPath;
-  void ensureManualButton();
-  void openCurrentManual();
 
   /// cached item name from the most recent setMetadata call.
   /// The .ui's itemNameValue holds the same string but the horizontal view

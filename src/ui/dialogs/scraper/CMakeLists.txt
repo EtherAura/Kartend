@@ -1,4 +1,5 @@
 target_sources(kartend_ui PRIVATE
+  flowlayout.cpp
   mediatypecheckboxbuilder.cpp
   result/batchprogressview.cpp
   result/singleitemview.cpp
@@ -7,6 +8,7 @@ target_sources(kartend_ui PRIVATE
   scrapercredentialspanel.cpp
   scraperesultdialog.cpp
   scrapersettingspanel.cpp
+  flowlayout.h
   mediatypecheckboxbuilder.h
   result/batchprogressview.h
   result/singleitemview.h

@@ -1,6 +1,8 @@
 // Cover-flow view mode implementation.
 
 #include "coverflowwidget.h"
+
+#include "coverflowgallerystrip.h"
 #include "extensionutils.h"
 #include "uiconstants/artwork.h"
 #include "videopreviewwidget.h"
@@ -46,9 +48,11 @@ constexpr qreal kSideStrideFactor = 0.34;   ///< inter-side stride / cardSize
 constexpr int kGlideDurationMs = 240;
 constexpr qreal kCardSizeFactor = 0.72; ///< card edge / min(viewportW, viewportH)
 constexpr int kReflectionAlpha = 70;    ///< 0-255
-constexpr int kGalleryThumbSize = 48;   ///< thumbnail edge in px
-constexpr int kGalleryThumbSpacing = 8; ///< inter-thumbnail gap
-constexpr int kGalleryStripHeight = 64; ///< vertical slot reserved at bottom
+// Gallery-strip layout constants moved to coverflowgallerystrip.h
+// (Kartend-y3ia step 1). The remaining references in this TU read
+// CoverFlowGalleryStripConstants::kStripHeight via the using-directive
+// just below the namespace block.
+using CoverFlowGalleryStripConstants::kStripHeight;
 
 QPixmap loadAndScale(const QString &path, int targetSize) {
   // Extension guard: never hand a non-image file (e.g. a scraped .pdf
@@ -90,6 +94,13 @@ CoverFlowWidget::CoverFlowWidget(QWidget *parent) : QWidget(parent) {
   m_glide = new QPropertyAnimation(this, "selectionPositionF", this);
   m_glide->setDuration(kGlideDurationMs);
   m_glide->setEasingCurve(QEasingCurve::OutCubic);
+
+  // Gallery toolbar helper (Kartend-y3ia step 1). State (m_gallery,
+  // m_galleryActiveIndex, m_galleryThumbCache) lives on this; the strip
+  // is friend-of-host so it can reach those + palette() and
+  // selectionColorOrFallback() without a public accessor surface.
+  m_galleryStrip = new CoverFlowGalleryStrip(this);
+  m_galleryStrip->setHost(this);
 
   // Video preview is positioned over the centered card whenever m_videoMode
   // is on AND the focused card has a videoPath. Reuses the same QLabel +
@@ -210,142 +221,6 @@ void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGallery
   update();
 }
 
-QList<QRect> CoverFlowWidget::galleryThumbRects() const {
-  QList<QRect> rects;
-  if (m_gallery.isEmpty()) {
-    return rects;
-  }
-  const int count = m_gallery.size();
-  const int totalWidth = count * kGalleryThumbSize + (count - 1) * kGalleryThumbSpacing;
-  const int startX = std::max(0, (width() - totalWidth) / 2);
-  const int y = height() - kGalleryStripHeight + (kGalleryStripHeight - kGalleryThumbSize) / 2;
-  for (int i = 0; i < count; ++i) {
-    int x = startX + i * (kGalleryThumbSize + kGalleryThumbSpacing);
-    rects.append(QRect(x, y, kGalleryThumbSize, kGalleryThumbSize));
-  }
-  return rects;
-}
-
-int CoverFlowWidget::hitTestGallery(const QPoint &pt) const {
-  const auto rects = galleryThumbRects();
-  for (int i = 0; i < rects.size(); ++i) {
-    if (rects[i].contains(pt)) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-QPixmap CoverFlowWidget::galleryThumbPixmap(int entryIdx, int size) {
-  if (entryIdx < 0 || entryIdx >= m_gallery.size()) {
-    return {};
-  }
-  const auto &entry = m_gallery[entryIdx];
-  const QString key = entry.path + QStringLiteral("::") + QString::number(size);
-  auto it = m_galleryThumbCache.constFind(key);
-  if (it != m_galleryThumbCache.constEnd()) {
-    return it.value();
-  }
-
-  if (entry.isVideo) {
-    // Pull a real first-frame thumbnail from the shared extractor (same
-    // path the sidebar gallery uses). Cached by absolute path; the first
-    // request kicks off async extraction and we'll get a frameReady
-    // signal that invalidates this slot for the next paint.
-    auto *extractor = VideoThumbnailExtractor::instance();
-    QPixmap raw = extractor->cached(entry.path);
-    if (raw.isNull() && !extractor->hasCacheEntry(entry.path)) {
-      extractor->requestFrame(entry.path);
-    }
-    QPixmap pm;
-    if (!raw.isNull()) {
-      pm = raw.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-      // Don't cache the scaled-from-real frame here — the extractor cache
-      // is the single source of truth, and we want subsequent paints to
-      // re-pull on the off chance the extractor refines the frame.
-      return pm;
-    }
-    // Frame not ready yet: paint a placeholder with a ▶ glyph so the slot
-    // doesn't appear empty during extraction. Cache only the placeholder
-    // so paintEvent doesn't re-render it every tick; the frameReady
-    // handler clears this entry when the real frame arrives.
-    pm = QPixmap(size, size);
-    pm.fill(palette().color(QPalette::Mid).darker(120));
-    {
-      QPainter p(&pm);
-      p.setRenderHint(QPainter::Antialiasing, true);
-      p.setBrush(palette().color(QPalette::HighlightedText));
-      p.setPen(Qt::NoPen);
-      const int triH = size / 2;
-      const int triW = size / 2;
-      const int cx = size / 2;
-      const int cy = size / 2;
-      QPolygon tri;
-      tri << QPoint(cx - triW / 2, cy - triH / 2) << QPoint(cx - triW / 2, cy + triH / 2)
-          << QPoint(cx + triW / 2, cy);
-      p.drawPolygon(tri);
-    }
-    m_galleryThumbCache.insert(key, pm);
-    return pm;
-  }
-
-  // Artwork entry: load + scale to thumb size, with caching. The extension
-  // guard keeps non-image entries (e.g. a .pdf manual) away from QImageReader
-  // — leaving `img` null routes them to the placeholder branch below.
-  QImage img;
-  if (ExtensionUtils::isDecodableImagePath(entry.path)) {
-    QImageReader reader(entry.path);
-    reader.setAutoTransform(true);
-    reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
-    reader.setScaledSize(QSize(size * 2, size * 2));
-    img = reader.read();
-  }
-  QPixmap pm;
-  if (!img.isNull()) {
-    pm = QPixmap::fromImage(img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  } else {
-    pm = QPixmap(size, size);
-    pm.fill(palette().color(QPalette::Mid));
-  }
-  m_galleryThumbCache.insert(key, pm);
-  return pm;
-}
-
-void CoverFlowWidget::paintGalleryToolbar(QPainter &painter) {
-  const auto rects = galleryThumbRects();
-  if (rects.isEmpty()) {
-    return;
-  }
-  painter.save();
-  painter.setRenderHint(QPainter::Antialiasing, true);
-  for (int i = 0; i < rects.size(); ++i) {
-    QRect r = rects[i];
-    QPixmap pm = galleryThumbPixmap(i, kGalleryThumbSize);
-    if (!pm.isNull()) {
-      QRect target = pm.rect();
-      target.moveCenter(r.center());
-      // Background rounded tile so partial-aspect-ratio thumbs sit on a
-      // consistent surface instead of bleeding into the carousel backdrop.
-      QPainterPath bg;
-      bg.addRoundedRect(r, 6, 6);
-      painter.setPen(Qt::NoPen);
-      painter.setBrush(palette().color(QPalette::Base));
-      painter.drawPath(bg);
-      painter.setClipPath(bg);
-      painter.drawPixmap(target, pm);
-      painter.setClipping(false);
-    }
-    // Active outline: highlight the entry currently driving the centered
-    // card's display.
-    if (i == m_galleryActiveIndex) {
-      QPen pen(selectionColorOrFallback(), 2);
-      painter.setPen(pen);
-      painter.setBrush(Qt::NoBrush);
-      painter.drawRoundedRect(r.adjusted(-1, -1, 1, 1), 7, 7);
-    }
-  }
-  painter.restore();
-}
 
 void CoverFlowWidget::setVideoPathForIndex(int index, const QString &videoPath) {
   if (index < 0 || index >= static_cast<int>(m_cards.size())) {
@@ -429,7 +304,7 @@ int CoverFlowWidget::cardSize() const {
   // Reserve vertical slots for the title strip and (when present) the
   // per-item gallery thumbnail row at the bottom edge.
   const int titleSlot = m_hideTitles ? 0 : m_fontSize * 3;
-  const int gallerySlot = m_gallery.isEmpty() ? 0 : kGalleryStripHeight;
+  const int gallerySlot = m_gallery.isEmpty() ? 0 : kStripHeight;
   int extent = std::min(width(), height() - titleSlot - gallerySlot);
   return std::max(64, static_cast<int>(extent * kCardSizeFactor));
 }
@@ -468,7 +343,7 @@ QList<CoverFlowWidget::CardLayout> CoverFlowWidget::computeVisibleLayout() const
   // Carousel vertical center is offset upward to leave room for the title
   // strip and (when present) the gallery thumbnail row at the bottom.
   const int titleSlot = m_hideTitles ? 0 : m_fontSize * 3;
-  const int gallerySlot = m_gallery.isEmpty() ? 0 : kGalleryStripHeight;
+  const int gallerySlot = m_gallery.isEmpty() ? 0 : kStripHeight;
   const qreal centerY = (height() - titleSlot - gallerySlot) / 2.0;
 
   // Build painted-from-back-to-front order: farthest sides first, then center
@@ -697,7 +572,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
 
   // Title strip under the carousel for the centered card. Sits above the
   // optional gallery thumbnail row at the very bottom.
-  const int gallerySlotEnd = m_gallery.isEmpty() ? 0 : kGalleryStripHeight;
+  const int gallerySlotEnd = m_gallery.isEmpty() ? 0 : kStripHeight;
   if (!m_hideTitles && m_selectedIndex >= 0 && m_selectedIndex < m_cards.size()) {
     QFont f = painter.font();
     if (!m_fontFamily.isEmpty()) {
@@ -716,8 +591,8 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
   }
 
   // Per-item gallery toolbar.
-  if (!m_gallery.isEmpty()) {
-    paintGalleryToolbar(painter);
+  if (!m_gallery.isEmpty() && m_galleryStrip) {
+    m_galleryStrip->paint(painter);
   }
 }
 
@@ -819,7 +694,7 @@ void CoverFlowWidget::mousePressEvent(QMouseEvent *event) {
   // bottom edge can switch artwork variants without first focusing some
   // background card.
   if (event->button() == Qt::LeftButton) {
-    int galleryHit = hitTestGallery(event->pos());
+    int galleryHit = m_galleryStrip ? m_galleryStrip->hitTest(event->pos()) : -1;
     if (galleryHit >= 0) {
       const auto &entry = m_gallery[galleryHit];
       m_galleryActiveIndex = galleryHit;

@@ -151,11 +151,11 @@ void ArtworkManager::onSilentPrecacheBatchComplete(const QStringList &requestedP
       continue;
     }
     pixmap.setDevicePixelRatio(r.image.devicePixelRatio());
-    if (m_cacheManager) {
+    if (auto *cache = cacheMgr()) {
       if (r.loadedFromDiskCache) {
-        m_cacheManager->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
+        cache->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
       } else {
-        m_cacheManager->cacheArtwork(r.artworkPath, pixmap);
+        cache->cacheArtwork(r.artworkPath, pixmap);
       }
     }
     m_pathCatalog.markSilentlyCached(r.artworkPath);

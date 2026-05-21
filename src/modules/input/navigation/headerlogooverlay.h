@@ -35,6 +35,7 @@ QT_END_NAMESPACE
 /// preserving aspect ratio.
 class HeaderLogoOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(HeaderLogoOverlay)
 public:
   explicit HeaderLogoOverlay(QWidget *parent = nullptr);
   ~HeaderLogoOverlay() override;

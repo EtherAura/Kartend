@@ -18,6 +18,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include "connectionpragmas.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
 #include "querymanagersql.h"
@@ -97,13 +98,13 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
                              "QueryManager::ensureDatabaseConnection");
       ErrorUtils::logError(success);
 
-      // Re-initialize PRAGMAs after reconnection
-      QSqlQuery query(m_db);
-      query.exec("PRAGMA foreign_keys = ON");
-      query.exec("PRAGMA journal_mode = WAL");
-      query.exec(QStringLiteral("PRAGMA busy_timeout = %1")
-                     .arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS));
-      query.exec("PRAGMA synchronous = NORMAL");
+      // Re-initialize PRAGMAs after reconnection. Kartend-67wo: shared
+      // helper keeps this in sync with the initial-open path.
+      MediaDbConnectionInit::PragmaConfig cfg;
+      cfg.busyTimeoutMs = UIConstants::Database::WORKER_BUSY_TIMEOUT_MS;
+      cfg.setSynchronousNormal = true;
+      MediaDbConnectionInit::applyPragmas(
+          m_db, cfg, QStringLiteral("QueryManager::ensureDatabaseConnection"));
 
       return true;
     }
@@ -180,40 +181,17 @@ void QueryManager::initDatabase() {
     return;
   }
 
-  QSqlQuery query(m_db);
-  if (!query.exec("PRAGMA foreign_keys = ON")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable foreign keys", "QueryManager::initDatabase")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
-  if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to enable WAL mode",
-                                     "QueryManager::initDatabase")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
-  // Set busy timeout to prevent indefinite blocking when another connection
-  // holds a lock (e.g., FTS backfill on scan worker). Queries will fail with
-  // SQLITE_BUSY after the timeout, allowing graceful fallback.
-  const QString busyTimeoutPragma =
-      QStringLiteral("PRAGMA busy_timeout = %1").arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS);
-  if (!query.exec(busyTimeoutPragma)) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set busy timeout",
-                                     "QueryManager::initDatabase")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
-  // Use NORMAL synchronous mode for better write performance while maintaining
-  // data safety - WAL mode already provides crash recovery guarantees
-  if (!query.exec("PRAGMA synchronous = NORMAL")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to set synchronous mode", "QueryManager::initDatabase")
-                   .withDetails(query.lastError().text());
-    ErrorUtils::logError(err);
-  }
+  // Kartend-67wo: shared PRAGMA helper — worker connection uses the longer
+  // busy_timeout (FTS backfill etc. holds locks) and synchronous=NORMAL for
+  // write throughput.
+  MediaDbConnectionInit::PragmaConfig pragmaCfg;
+  pragmaCfg.busyTimeoutMs = UIConstants::Database::WORKER_BUSY_TIMEOUT_MS;
+  pragmaCfg.setSynchronousNormal = true;
+  MediaDbConnectionInit::applyPragmas(m_db, pragmaCfg,
+                                      QStringLiteral("QueryManager::initDatabase"));
 
   // Ensure tables exist when worker opens DB in isolation.
+  QSqlQuery query(m_db);
   query.exec("CREATE TABLE IF NOT EXISTS collections ("
              "id INTEGER PRIMARY KEY, "
              "name TEXT NOT NULL, "

@@ -27,6 +27,7 @@ QT_END_NAMESPACE
 /// ancestor so the visible hierarchy stays connected.
 class CollectionPickerDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(CollectionPickerDialog)
 public:
   CollectionPickerDialog(const QList<CollectionConfig> &collections,
                          const QList<int> &excludedIndices, const QList<int> &initialChecked = {},

@@ -22,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include "extensionutils.h"
+#include "imagedecodeutils.h"
 #include "itemmetadata.h"
 #include "uiconstants/metadata.h"
 #include "videothumbnailextractor.h"
@@ -334,7 +335,10 @@ void DetailPageOverlay::renderHeroArtwork() {
       pixmap = placeholder;
     }
   } else if (ExtensionUtils::isDecodableImagePath(entry.path)) {
-    pixmap = QPixmap(entry.path);
+    const QImage img = ImageDecodeUtils::loadCapped(entry.path);
+    if (!img.isNull()) {
+      pixmap = QPixmap::fromImage(img);
+    }
   }
   // A non-image entry.path (e.g. a .pdf manual) leaves `pixmap` null and
   // falls through to the "Unable to load" branch — never reaching Qt's

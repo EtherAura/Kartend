@@ -1,9 +1,11 @@
 #ifndef ITEMMETADATA_H
 #define ITEMMETADATA_H
 
+#include <QHash>
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QStringList>
 
 #include "errorutils.h"
 
@@ -63,6 +65,14 @@ struct ItemMetadata {
 /// error only on actual database failures.
 [[nodiscard]] ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectionUuid,
                                                     const QString &path);
+
+/// Batched counterpart to load(): runs `WHERE collection_uuid = ? AND path
+/// IN (...)` queries (chunked under SQLite's SQLITE_LIMIT_VARIABLE_NUMBER)
+/// and returns a (path -> ItemMetadata) hash covering exactly @p paths.
+/// Paths without a row are returned as empty-but-keyed ItemMetadata, same
+/// as load(). Returns an error only on actual database failures.
+[[nodiscard]] ErrorUtils::Result<QHash<QString, ItemMetadata>>
+loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &paths);
 
 /// Inserts or updates metadata for (metadata.collectionUuid, metadata.path).
 /// Always refreshes `updated_at` to the current UTC ISO timestamp.

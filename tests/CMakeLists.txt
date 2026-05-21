@@ -17,6 +17,8 @@ include_directories(
   ${SRC_DIR}/utils/text
   ${SRC_DIR}/utils/threading
   ${SRC_DIR}/utils/view
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/modules/data/playlist
   ${SRC_DIR}/modules/data/query
   ${SRC_DIR}/modules/input/scroll
   ${SRC_DIR}/modules/input/interaction
@@ -39,11 +41,14 @@ target_link_libraries(test_gridlayoutcalculator
 )
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
-# ScrollDataManager tests (synthetic Home view tile population — Kartend-83iu)
+# ScrollDataStore tests (synthetic Home view tile population — Kartend-83iu)
 add_executable(test_scrolldatamanager
   modules/scroll/test_scrolldatamanager.cpp
   ${SRC_DIR}/modules/input/scroll/scrolldatamanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/view/artworkutils.cpp
@@ -67,7 +72,7 @@ target_link_libraries(test_scrolldatamanager
   Qt6::Widgets
   Qt6::Test
 )
-add_test(NAME ScrollDataManager COMMAND test_scrolldatamanager)
+add_test(NAME ScrollDataStore COMMAND test_scrolldatamanager)
 
 # ViewportHelpers tests (small-movement threshold, force-immediate combine)
 add_executable(test_viewporthelpers
@@ -126,6 +131,9 @@ add_executable(test_launchmanager
   ${SRC_DIR}/modules/input/launch/launchmanagerarchive.cpp
   ${SRC_DIR}/ui/dialogs/launcher/launcherchooserdialog.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
 )
@@ -264,6 +272,7 @@ add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
 # not actually started during the test.
 add_executable(test_coverflowwidget
   ui/widgets/test_coverflowwidget.cpp
+  ${SRC_DIR}/chrome/items/coverflowgallerystrip.cpp
   ${SRC_DIR}/chrome/items/coverflowwidget.cpp
   ${SRC_DIR}/chrome/media/videopreviewwidget.cpp
   ${SRC_DIR}/chrome/media/videothumbnailextractor.cpp
@@ -324,6 +333,7 @@ add_test(NAME CacheManager COMMAND test_cachemanager)
 add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/data/playlist/playlistmanager.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/api/iplaylistmanager.h
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
@@ -351,6 +361,9 @@ add_executable(test_sessionmanager
   modules/session/test_sessionmanager.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -385,6 +398,7 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
@@ -393,6 +407,9 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -433,6 +450,7 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
@@ -441,6 +459,9 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -483,6 +504,7 @@ add_executable(test_querymanager_abspath
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
@@ -491,6 +513,9 @@ add_executable(test_querymanager_abspath
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -532,6 +557,7 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
@@ -540,6 +566,9 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -578,6 +607,7 @@ add_executable(test_querymanager_shell_collection_sort
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
@@ -586,6 +616,9 @@ add_executable(test_querymanager_shell_collection_sort
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -620,6 +653,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/database/cachedcountsservice.cpp
   ${SRC_DIR}/modules/data/database/databasemanager.cpp
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/database/filemapcache.cpp
   ${SRC_DIR}/api/idatabasemanager.h
   ${SRC_DIR}/utils/text/titlefilter.cpp
@@ -641,6 +675,9 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -695,6 +732,9 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/chrome/items/itemwidgetsetters.cpp
   ${SRC_DIR}/utils/view/artworkutils.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/fs/extensionutils.cpp
   ${SRC_DIR}/utils/db/itemartwork.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
@@ -753,6 +793,9 @@ add_executable(test_titlefilter
   utils/test_titlefilter.cpp
   ${SRC_DIR}/utils/text/titlefilter.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -774,6 +817,9 @@ add_test(NAME TitleFilter COMMAND test_titlefilter)
 # cohesive home rather than accreting into a single mega-file.
 set(_kartend_collectionutils_test_sources
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -841,6 +887,9 @@ add_executable(test_configvalidation
   utils/test_configvalidation.cpp
   ${SRC_DIR}/utils/fs/configvalidation.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -1073,6 +1122,7 @@ add_executable(test_batchscraperunner_integration
   ${SRC_DIR}/modules/data/database/cachedcountsservice.cpp
   ${SRC_DIR}/modules/data/database/databasemanager.cpp
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/modules/data/database/filemapcache.cpp
   ${SRC_DIR}/api/idatabasemanager.h
   ${SRC_DIR}/utils/text/titlefilter.cpp
@@ -1094,6 +1144,9 @@ add_executable(test_batchscraperunner_integration
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
   ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -1363,6 +1416,7 @@ add_executable(test_batchscraperunner
   ${SRC_DIR}/modules/data/scraper/core/scrapepersistence.cpp
   ${SRC_DIR}/modules/data/scraper/core/scrapewriteworker.cpp
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/utils/app/loggingcategories.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/db/itemartwork.cpp
@@ -1402,6 +1456,7 @@ add_executable(test_scraperservice_resume
   ${SRC_DIR}/modules/data/scraper/core/scrapepersistence.cpp
   ${SRC_DIR}/modules/data/scraper/core/scrapewriteworker.cpp
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
   ${SRC_DIR}/utils/app/loggingcategories.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/db/itemartwork.cpp
@@ -1580,6 +1635,9 @@ add_executable(test_kartmanifest
   modules/kart/test_kartmanifest.cpp
   ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -1610,6 +1668,9 @@ add_executable(test_kartreader
   ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/data/kart/kartreader.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -1645,6 +1706,9 @@ add_executable(test_kartwriter
   ${SRC_DIR}/modules/data/kart/kartreader.cpp
   ${SRC_DIR}/modules/data/kart/kartwriter.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -1678,6 +1742,9 @@ add_executable(test_kartmerge
   ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/data/kart/kartmerge.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -1713,6 +1780,9 @@ add_executable(test_navigationhelpers
   modules/navigation/test_navigationhelpers.cpp
   ${SRC_DIR}/modules/input/navigation/navigationhelpers.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -1778,6 +1848,34 @@ target_link_libraries(test_settingshelpers
 )
 add_test(NAME SettingsHelpers COMMAND test_settingshelpers)
 
+# SettingsManager migration / schemaVersion tests (Kartend-39g9). Links
+# against the full kartend object-lib aggregate because SettingsManager
+# pulls in a wide dependency footprint (path/error/config-validation utils,
+# manager interfaces). Fixtures live alongside the test source so each
+# build picks them up via the KARTEND_TEST_FIXTURES_DIR compile define.
+add_executable(test_settingsmigration
+  modules/settings/test_settingsmigration.cpp
+)
+target_link_libraries(test_settingsmigration
+  PRIVATE
+    ${KARTEND_LIB_TARGET}
+    ${KARTEND_AREA_LIBS}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
+    Qt6::Test
+)
+target_compile_definitions(test_settingsmigration PRIVATE
+  KARTEND_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/modules/settings/fixtures"
+)
+target_include_directories(test_settingsmigration PRIVATE
+  ${CMAKE_BINARY_DIR}/kartend_chrome_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
+)
+add_test(NAME SettingsMigration COMMAND test_settingsmigration)
+
 # KeyboardHelpers tests (pure helpers extracted from KeyboardManager)
 add_executable(test_keyboardhelpers
   modules/keyboard/test_keyboardhelpers.cpp
@@ -1798,6 +1896,9 @@ add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp
   ${SRC_DIR}/modules/input/search/searchhelpers.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
@@ -1953,7 +2054,7 @@ target_link_libraries(test_attracthelpers
 )
 add_test(NAME AttractHelpers COMMAND test_attracthelpers)
 
-# SelectionRestoreHelpers tests (pure helpers extracted from SelectionRestoreManager)
+# SelectionRestoreHelpers tests (pure helpers extracted from SelectionRestoreCoordinator)
 add_executable(test_selectionrestorehelpers
   modules/restore/test_selectionrestorehelpers.cpp
   ${SRC_DIR}/modules/data/restore/selectionrestorehelpers.cpp

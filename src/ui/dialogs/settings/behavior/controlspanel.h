@@ -30,6 +30,7 @@ class GamepadCaptureController;
 /// directly.
 class ControlsPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ControlsPanel)
 public:
   explicit ControlsPanel(QWidget *parent = nullptr);
   ~ControlsPanel() override;

@@ -34,6 +34,7 @@ QT_END_NAMESPACE
  */
 class StartupVideoOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(StartupVideoOverlay)
 public:
   explicit StartupVideoOverlay(QWidget *parent = nullptr);
   ~StartupVideoOverlay() override;

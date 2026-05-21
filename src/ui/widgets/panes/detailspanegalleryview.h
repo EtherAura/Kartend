@@ -29,6 +29,7 @@ class QWidget;
 /// "Artwork" thumb. Click-overlay parents to the host's top-level window.
 class DetailsPaneGalleryView : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(DetailsPaneGalleryView)
 
 public:
   explicit DetailsPaneGalleryView(QObject *parent = nullptr);

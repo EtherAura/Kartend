@@ -10,7 +10,7 @@ class QPushButton;
 class QWheelEvent;
 QT_END_NAMESPACE
 
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 class VideoPreviewWidget;
 
 /**
@@ -25,6 +25,7 @@ class VideoPreviewWidget;
  */
 class ArtworkPreviewOverlay : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArtworkPreviewOverlay)
 
 public:
   explicit ArtworkPreviewOverlay(QWidget *parent = nullptr);
@@ -84,9 +85,9 @@ public:
   /// callers leave it empty since they don't have an associated file).
   [[nodiscard]] QString currentFilePath() const { return m_currentFilePath; }
 
-  /// See OverlayLayerManager. Routes displayPixmap / displayVideo raise()
+  /// See OverlayZOrderRegistry. Routes displayPixmap / displayVideo raise()
   /// through the central z-order coordinator when installed.
-  void setLayerManager(OverlayLayerManager *manager) { m_layerManager = manager; }
+  void setLayerManager(OverlayZOrderRegistry *manager) { m_layerManager = manager; }
 
 signals:
   /// Emitted when the user activates (Enter / double-click) while the
@@ -142,7 +143,7 @@ private:
   /// (e.g. opened via the old sidebar gallery click path that didn't
   /// supply entries). Cycle wraps modulo m_galleryEntries.size().
   int m_galleryIndex = -1;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 
   void setupUI();
   void ensureVideoPreview();

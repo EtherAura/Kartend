@@ -28,6 +28,7 @@ QT_END_NAMESPACE
  */
 class ConfigProfileController : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ConfigProfileController)
 public:
   /// Setup struct for ConfigProfileController dependencies. Every field is
   /// borrowed — `dialogParent` is used purely as the parent widget for the

@@ -56,6 +56,7 @@ struct ArrowNavigationHandlerSetup {
  */
 class ArrowNavigationHandler : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArrowNavigationHandler)
 
 public:
   explicit ArrowNavigationHandler(QObject *parent = nullptr);

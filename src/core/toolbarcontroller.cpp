@@ -192,8 +192,14 @@ void ToolbarController::refreshFilterToolbar() {
       if (!action || !m_mainWindow) {
         return;
       }
-      const QString role = action->property("filterRole").toString();
-      if (role == QLatin1String("type")) {
+      // Kartend-0zhz: per-action role lookup is a strongly-typed enum
+      // lookup now, not a QObject dynamic property.
+      const auto roleIt = m_filterRoles.constFind(action);
+      if (roleIt == m_filterRoles.constEnd()) {
+        return;
+      }
+      const FilterRole role = roleIt.value();
+      if (role == FilterRole::Type) {
         const QString chosen = action->data().toString();
         if (m_mainWindow->m_generalSettings.collectionTypeFilter == chosen) {
           return;
@@ -206,7 +212,7 @@ void ToolbarController::refreshFilterToolbar() {
           m_mainWindow->getNavigationManager()->safeReloadCollection(
               m_mainWindow->currentCollectionIndex);
         }
-      } else if (role == QLatin1String("title-toggle")) {
+      } else if (role == FilterRole::TitleToggle) {
         if (m_mainWindow->currentCollectionIndex < 0 ||
             m_mainWindow->currentCollectionIndex >= m_mainWindow->m_collections.size()) {
           return;
@@ -224,7 +230,7 @@ void ToolbarController::refreshFilterToolbar() {
           m_mainWindow->getNavigationManager()->safeReloadCollection(
               m_mainWindow->currentCollectionIndex);
         }
-      } else if (role == QLatin1String("title-edit")) {
+      } else if (role == FilterRole::TitleEdit) {
         showTitleFilterEditor();
       }
     });
@@ -235,6 +241,9 @@ void ToolbarController::refreshFilterToolbar() {
   // dangling QAction the next time refresh runs without rebuilding the
   // section.
   m_titleFilterEnabledAction = nullptr;
+  // Kartend-0zhz: clear the per-action role map so old QAction* keys
+  // from the just-cleared menu can't accumulate as dangling references.
+  m_filterRoles.clear();
 
   // Type filter section — only emitted when at least one collection actually
   // declares a type tag. QActionGroup gives radio-button semantics so the
@@ -252,7 +261,7 @@ void ToolbarController::refreshFilterToolbar() {
     QAction *allAction = menu->addAction(tr("<All types>"));
     allAction->setCheckable(true);
     allAction->setData(QString());
-    allAction->setProperty("filterRole", QStringLiteral("type"));
+    m_filterRoles.insert(allAction, FilterRole::Type);
     typeGroup->addAction(allAction);
     if (previous.isEmpty()) {
       allAction->setChecked(true);
@@ -262,7 +271,7 @@ void ToolbarController::refreshFilterToolbar() {
       QAction *action = menu->addAction(type);
       action->setCheckable(true);
       action->setData(type);
-      action->setProperty("filterRole", QStringLiteral("type"));
+      m_filterRoles.insert(action, FilterRole::Type);
       typeGroup->addAction(action);
       if (type == previous) {
         action->setChecked(true);
@@ -289,7 +298,7 @@ void ToolbarController::refreshFilterToolbar() {
   // active collection's flag onto the checkable entry.
   QAction *toggleAction = menu->addAction(tr("Apply title patterns"));
   toggleAction->setCheckable(true);
-  toggleAction->setProperty("filterRole", QStringLiteral("title-toggle"));
+  m_filterRoles.insert(toggleAction, FilterRole::TitleToggle);
   bool toggleOn = false;
   if (m_mainWindow->currentCollectionIndex >= 0 &&
       m_mainWindow->currentCollectionIndex < m_mainWindow->m_collections.size()) {
@@ -303,7 +312,7 @@ void ToolbarController::refreshFilterToolbar() {
   m_titleFilterEnabledAction = toggleAction;
 
   QAction *editAction = menu->addAction(tr("Edit title patterns…"));
-  editAction->setProperty("filterRole", QStringLiteral("title-edit"));
+  m_filterRoles.insert(editAction, FilterRole::TitleEdit);
 }
 
 void ToolbarController::showTitleFilterEditor() {

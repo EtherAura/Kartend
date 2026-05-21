@@ -72,6 +72,42 @@ constexpr int PROGRESS_REPORT_INTERVAL = 50000;
 // SQLITE_LIMIT_VARIABLE_NUMBER. Keep this in sync with the column count of the
 // upsert in commitStagedScanResults.
 constexpr int APPLY_BATCH_SIZE = 142;
+
+// Kartend-7axx: the four scan/save pipelines all open-coded the same
+// throttle pattern (lambda over a QElapsedTimer + a lastEmitMs cursor).
+// Factor it once so adding a new pipeline doesn't grow a fifth copy.
+class ScanProgressThrottle {
+public:
+  using Emitter = std::function<void(int processed, int total)>;
+
+  ScanProgressThrottle(int minIntervalMs, Emitter emitter)
+      : m_minIntervalMs(minIntervalMs), m_emitter(std::move(emitter)) {
+    m_timer.start();
+    // Initialise so the first non-force report always fires (legacy
+    // behaviour from each pipeline's open-coded copy).
+    m_lastEmitMs = -minIntervalMs;
+  }
+
+  /// Named `report`, not `emit`, because Qt's emit-keyword macro would
+  /// expand to nothing and produce a syntax error at the call site.
+  void report(int processed, int total, bool force = false) {
+    if (force) {
+      m_emitter(processed, total);
+      m_lastEmitMs = m_timer.elapsed();
+      return;
+    }
+    const qint64 nowMs = m_timer.elapsed();
+    if (nowMs - m_lastEmitMs < m_minIntervalMs) return;
+    m_emitter(processed, total);
+    m_lastEmitMs = nowMs;
+  }
+
+private:
+  QElapsedTimer m_timer;
+  qint64 m_lastEmitMs = 0;
+  int m_minIntervalMs;
+  Emitter m_emitter;
+};
 } // namespace
 
 ScanService::ScanService(QSqlDatabase &db, PreparedStatementCache &cache, QObject *parent)
@@ -139,8 +175,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
     const bool hasItems =
         (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
     if (hasItems && storedSignature.trimmed().isEmpty()) {
-      QSqlQuery update(m_db);
-      update.prepare("UPDATE collections SET ext_signature = ? WHERE uuid = ?");
+      QSqlQuery &update = m_cache.get(QuerySQL::UPDATE_COLLECTION_EXT_SIGNATURE);
       update.addBindValue(currentSignature);
       update.addBindValue(uuid);
       if (!update.exec()) {
@@ -269,21 +304,10 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
     }
 
     // Throttle scan progress emissions to avoid spamming the UI event loop.
-    QElapsedTimer progressTimer;
-    progressTimer.start();
-    qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+    ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                  [this](int p, int t) { emit scanItemsProgress(p, t); });
     auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-      if (force) {
-        emit scanItemsProgress(processed, total);
-        lastProgressEmitMs = progressTimer.elapsed();
-        return;
-      }
-      const qint64 nowMs = progressTimer.elapsed();
-      if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
-        return;
-      }
-      emit scanItemsProgress(processed, total);
-      lastProgressEmitMs = nowMs;
+      throttle.report(processed, total, force);
     };
 
     // Sequential scan for flat directories (original behavior)
@@ -381,21 +405,10 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   int directoryResultsConsumed = 0;
 
   // Throttle scan progress emissions to avoid spamming the UI event loop.
-  QElapsedTimer progressTimer;
-  progressTimer.start();
-  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                [this](int p, int t) { emit scanItemsProgress(p, t); });
   auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-    if (force) {
-      emit scanItemsProgress(processed, total);
-      lastProgressEmitMs = progressTimer.elapsed();
-      return;
-    }
-    const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
-      return;
-    }
-    emit scanItemsProgress(processed, total);
-    lastProgressEmitMs = nowMs;
+    throttle.report(processed, total, force);
   };
 
   while (!cancelFlag.load(std::memory_order_acquire)) {
@@ -522,22 +535,10 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   QDir dir(collection.mediaDirectory);
 
   // Throttle scan progress emissions to avoid spamming the UI event loop.
-  QElapsedTimer progressTimer;
-  progressTimer.start();
-  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-
+  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                [this](int p, int t) { emit scanItemsProgress(p, t); });
   auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-    if (force) {
-      emit scanItemsProgress(processed, total);
-      lastProgressEmitMs = progressTimer.elapsed();
-      return;
-    }
-    const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
-      return;
-    }
-    emit scanItemsProgress(processed, total);
-    lastProgressEmitMs = nowMs;
+    throttle.report(processed, total, force);
   };
 
   bool inTransaction = false;
@@ -821,22 +822,10 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
   itemsApplied = 0;
 
   // Throttle progress emissions during the apply phase.
-  QElapsedTimer progressTimer;
-  progressTimer.start();
-  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-
+  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                [this](int p, int t) { emit scanItemsProgress(p, t); });
   auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-    if (force) {
-      emit scanItemsProgress(processed, total);
-      lastProgressEmitMs = progressTimer.elapsed();
-      return;
-    }
-    const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
-      return;
-    }
-    emit scanItemsProgress(processed, total);
-    lastProgressEmitMs = nowMs;
+    throttle.report(processed, total, force);
   };
 
   // Prepare collection row (upsert into collections table).
@@ -890,9 +879,7 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
         break;
       }
 
-      QSqlQuery sel(m_db);
-      sel.prepare("SELECT rowid, path, rel_path, name, last_modified FROM scanned_items "
-                  "WHERE rowid > ? ORDER BY rowid LIMIT ?");
+      QSqlQuery &sel = m_cache.get(QuerySQL::SELECT_STAGED_SCAN_RESULTS);
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
       if (!sel.exec()) {
@@ -951,25 +938,15 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
              "name=excluded.name, "
              "last_modified=excluded.last_modified";
 
-      QSqlQuery ins(m_db);
-      // Check prepare() explicitly: a failed prepare (e.g. SQLite's "too many
-      // SQL variables" when a batch exceeds SQLITE_LIMIT_VARIABLE_NUMBER)
-      // leaves the statement with zero parameters, so the bindValue loop below
-      // would otherwise mask the real cause as a generic "Parameter count
-      // mismatch" at exec(). Surface the true error instead.
-      if (!ins.prepare(sql)) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to prepare staged scan upsert",
-                                         "ScanService::commitStagedScanResults")
-                       .withDetails(QString("rows=%1, binds=%2: %3")
-                                        .arg(paths.size())
-                                        .arg(paths.size() * 7)
-                                        .arg(ins.lastError().text()));
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
-        upsertOk = false;
-        break;
-      }
+      // Route through the prepared-statement cache so full batches (the
+      // common case — every batch except the last is APPLY_BATCH_SIZE rows
+      // and produces an identical SQL string) reuse the same prepared
+      // statement across the entire scan instead of paying a fresh
+      // prepare/finalize cycle per batch (Kartend-o5mr). The trailing
+      // partial batch gets its own cache entry; both stay bounded by the
+      // cache's max size. lastError() is read off the cached statement;
+      // it still surfaces SQLite's "too many SQL variables" diagnostics.
+      QSqlQuery &ins = m_cache.get(sql);
       for (int i = 0; i < paths.size(); ++i) {
         ins.addBindValue(legacyId);
         ins.addBindValue(uuid);
@@ -1089,7 +1066,11 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
 
   // Temporarily disable synchronous writes for bulk insert performance.
   QSqlQuery pragmaOff(m_db);
-  if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
+  // Kartend-y9if: NORMAL has the same speed envelope as OFF under WAL
+  // (the actual win comes from coalescing fsyncs across the transaction,
+  // not from skipping them entirely) and rules out the torn-page
+  // corruption window a crash mid-scan could otherwise leave behind.
+  if (!pragmaOff.exec("PRAGMA synchronous = NORMAL")) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to set synchronous=OFF for bulk insert",
                                                "ScanService::scanAndSaveItemsToDatabase")
@@ -1152,14 +1133,24 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
                                                   int &legacyIdOut) {
   legacyIdOut = -1;
 
-  // Retry constants for lock handling
-  constexpr int MAX_RETRIES = 5;
+  // Retry constants for lock handling. Kartend-6yhq dropped MAX_RETRIES
+  // from 5 to 4: the previous worst-case backoff cumulative was
+  // 100+200+400+800+1600 = 3.1s of dead worker thread time on a
+  // genuinely contended DB. The new ceiling is 100+200+400+800 = 1.5s,
+  // which is still long enough for sane contention to clear without
+  // pinning the scan worker for multiple seconds per collection.
+  // Cancellation is also polled between sleeps so the user can interrupt
+  // mid-backoff.
+  constexpr int MAX_RETRIES = 4;
   constexpr int BASE_DELAY_MS = 100;
 
   bool prepareSuccess = false;
   for (int attempt = 0; attempt < MAX_RETRIES && !prepareSuccess; ++attempt) {
     if (attempt > 0) {
-      // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+      if (isScanCancelled()) {
+        return false;
+      }
+      // Exponential backoff: 100ms, 200ms, 400ms, 800ms
       QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
     }
 
@@ -1251,7 +1242,11 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
-  if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
+  // Kartend-y9if: NORMAL has the same speed envelope as OFF under WAL
+  // (the actual win comes from coalescing fsyncs across the transaction,
+  // not from skipping them entirely) and rules out the torn-page
+  // corruption window a crash mid-scan could otherwise leave behind.
+  if (!pragmaOff.exec("PRAGMA synchronous = NORMAL")) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to set synchronous=OFF for bulk insert",
                                                "ScanService::saveItemsToDatabase")
@@ -1259,15 +1254,11 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
   }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
 
-  // Batch insert for performance - SQLite handles up to 999 variables per
-  // statement With 5 columns per row, we can insert 199 rows per batch (995
-  // variables)
-  constexpr int BATCH_SIZE = 199;
-  // Commit every N batches to save incremental progress (~100K items per
-  // commit)
-  constexpr int COMMIT_INTERVAL_BATCHES = 500;
-  constexpr int PROGRESS_REPORT_INTERVAL = 50000; // Report every 50K items
-
+  // Kartend-v5d4: BATCH_SIZE / COMMIT_INTERVAL_BATCHES / PROGRESS_REPORT_INTERVAL
+  // are file-scope constants in the anonymous namespace at the top of this
+  // TU; the local-static re-declarations that used to live here shadowed
+  // them and could silently drift apart from the canonical values during a
+  // refactor. Using the file-scope names directly removes that footgun.
   const int totalItems = filePaths.size();
 
   // Cancellation-safe writes: stage into TEMP table and only apply to

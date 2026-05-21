@@ -1,5 +1,6 @@
 #include "scraperservice.h"
 
+#include "applicationcontext.h"
 #include "idatabasemanager.h"
 #include "pathutils.h"
 #include "scrapepersistence.h"
@@ -299,7 +300,11 @@ void ScraperService::pump() {
 }
 
 void ScraperService::startAutoCollection() {
-  if (!m_ctx.providerBuilder || !m_ctx.databaseManager || !m_ctx.generalSettings) {
+  // Kartend-m02z: ScraperService::Context now carries the full
+  // ApplicationContext; treat the absence of a usable DB through ctx the
+  // same as the old databaseManager==nullptr branch.
+  auto *db = m_ctx.ctx ? m_ctx.ctx->databaseManager() : nullptr;
+  if (!m_ctx.providerBuilder || !db || !m_ctx.generalSettings) {
     // Whole collection fails — count every item as an error (not just
     // one) so scraped + skipped + errors still reconciles with the
     // total, and record a reason so the error-details popup explains it.
@@ -341,7 +346,7 @@ void ScraperService::startAutoCollection() {
   const int itemConcurrency = m_ctx.generalSettings->scraperOptions.batchItemConcurrency;
   const int skipRecentDays = m_ctx.generalSettings->scraperOptions.skipRecentScrapeDays;
   m_autoRunner = new BatchScrapeRunner(
-      m_ctx.databaseManager, std::move(provider), job.collectionUuid, job.items, job.artworkDir,
+      m_ctx.ctx, std::move(provider), job.collectionUuid, job.items, job.artworkDir,
       /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, skipRecentDays, this);
   m_autoRunner->setMediaTypeFilter(m_mediaFilter);
   m_autoRunner->setWriteMetadata(m_writeMetadata);

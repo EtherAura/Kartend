@@ -41,11 +41,11 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex) -> boo
   bool hasSub = false;
   bool hasItems = false;
   if (!getHasSubAndItems(collectionIndex, hasSub, hasItems)) {
-    if ((parent()) && (interactionMgr())) {
+    if (isAlive() && interactionMgr()) {
       // Clear navigation progress flag early when validation fails -
       // prevents navigation from being blocked indefinitely
       QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
-        if (parent() && interactionMgr()) {
+        if (isAlive() && interactionMgr()) {
           interactionMgr()->setNavigationInProgress(false);
         }
       });
@@ -63,7 +63,7 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex, int p
     scrollMgr()->applySubcollectionFilter(collectionIndex);
   }
 
-  // Delegate selection restore to SelectionRestoreManager
+  // Delegate selection restore to SelectionRestoreCoordinator
   if (m_selectionRestoreManager) {
     m_selectionRestoreManager->handleSubcollectionRestore(collectionIndex);
   }
@@ -97,25 +97,22 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
   QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this, [this]() {
-    if (parent() && interactionMgr()) {
+    if (isAlive() && interactionMgr()) {
       interactionMgr()->setNavigationInProgress(false);
     }
   });
 }
 
-// Delegates to SelectionRestoreManager for selection restoration
-auto NavigationManager::scheduleSelectionRestore(int desiredIndex, int maxAttempts,
-                                                 int attemptDelayMs, int finalEnsureDelayMs)
-    -> void {
+// Delegates to SelectionRestoreCoordinator for selection restoration
+auto NavigationManager::scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs) -> void {
   if (m_selectionRestoreManager) {
-    m_selectionRestoreManager->scheduleSelectionRestore(desiredIndex, maxAttempts, attemptDelayMs,
-                                                        finalEnsureDelayMs);
+    m_selectionRestoreManager->scheduleSelectionRestore(desiredIndex, finalEnsureDelayMs);
   }
 }
 
 // Validates collection index for showCollectionItems operation
 auto NavigationManager::validateCollectionIndex(int collectionIndex) const -> bool {
-  if (!parent() || !m_collections) {
+  if (!isAlive() || !m_collections) {
     return false;
   }
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {

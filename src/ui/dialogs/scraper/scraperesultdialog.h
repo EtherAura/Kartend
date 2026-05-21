@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -35,6 +36,7 @@ QT_END_NAMESPACE
 
 class BatchScrapeProgressView;
 class IDatabaseManager;
+struct ApplicationContext;
 class MetadataLookupProvider;
 class SingleItemScrapeView;
 struct GeneralSettings;
@@ -60,6 +62,7 @@ struct GeneralSettings;
 /// moving on. Cancellation commits whatever's already landed.
 class ScrapeResultDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ScrapeResultDialog)
 public:
   /// Outcome of a successful Apply. The `media` list mirrors the
   /// detail's media but only contains entries the user checked, with
@@ -87,7 +90,10 @@ public:
   /// right-click flow's applyScrapedItem path).
   struct ScraperContext {
     QList<CollectionConfig> *collections = nullptr;
-    IDatabaseManager *databaseManager = nullptr;
+    // Kartend-m02z: full app context (replaces the cached IDatabaseManager
+    // pointer) so the BatchScrapeRunner this struct constructs can read
+    // through ctx and stay in sync with ApplicationContext::managers.
+    const ApplicationContext *ctx = nullptr;
     GeneralSettings *generalSettings = nullptr;
     std::function<std::shared_ptr<MetadataLookupProvider>(int collectionIndex)> providerBuilder;
     /// Invoked after each successful interactive-mode scrape so the
@@ -200,13 +206,37 @@ private slots:
   /// Wired to the clickable error count in the unified counts label.
   void showScrapeErrorDetails();
 
+  // ScraperService signal handlers (Kartend-3fkz step 2). Each was an
+  // inline lambda inside setScraperService — extracted to named slots so
+  // setScraperService becomes a connect table and the bodies are
+  // reviewable in isolation.
+  void onServiceScrapeStarted(int total);
+  void onServiceItemBegan(int done, int total, const QString &collectionName,
+                          const QString &name);
+  void onServiceItemCompleted(int done, int total, const Scraper::ScrapedItem &scraped,
+                              const QStringList &mediaPaths);
+  void onServicePickerNeeded(const QString &itemPath, const QString &itemName,
+                             const QList<Scraper::ScrapeCandidate> &candidates,
+                             std::shared_ptr<MetadataLookupProvider> provider,
+                             const QString &artworkDir);
+  void onServiceScrapeFinished(const Scraper::ScraperService::Summary &s);
+  void onServiceScrapePaused();
+  void onServiceQuotaUpdated(const Scraper::QuotaStatus &quota);
+
 private:
   enum class Mode { SingleItem, Batch, Unified };
   enum class UnifiedPhase { Setup, AutoRunning, InteractiveLookingUp, InteractivePicking, Done };
 
   void buildUi();
   void buildUnifiedPanel();
-  void downloadNextSelectedMedia();
+  /// Fan out the per-asset download dispatches for the assets the user
+  /// just confirmed via Apply (Kartend-3fkz step 5). Extracted from
+  /// onApply so onApply itself stays a confirmation + routing shell.
+  /// Each callback updates m_downloadsPending / m_result.downloads via
+  /// a QPointer guard so a dialog destroyed mid-flight doesn't
+  /// dereference a stale `this`.
+  void dispatchSelectedDownloads(const QList<Scraper::MediaAsset> &selected,
+                                  const std::shared_ptr<QElapsedTimer> &applyTimer);
   /// Format the elapsed/ETA strings shared by both modes. `etaMs` is
   /// the projected milliseconds remaining; pass <= 0 to display "—".
   [[nodiscard]] static QString formatDuration(qint64 ms);

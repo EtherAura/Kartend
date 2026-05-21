@@ -1,0 +1,54 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run kartend (release)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/ninja-release/src/kartend",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "preLaunchTask": "build (release)",
+      "setupCommands": [
+        { "description": "Enable pretty-printing for gdb", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    },
+    {
+      "name": "Debug kartend (TSan)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/TSan/src/kartend",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        { "name": "TSAN_OPTIONS", "value": "halt_on_error=1:second_deadlock_stack=1" }
+      ],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "description": "Enable pretty-printing for gdb", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    },
+    {
+      "name": "Debug test_integration",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/ninja-release/tests/integration/test_integration",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "preLaunchTask": "build (release)",
+      "setupCommands": [
+        { "description": "Enable pretty-printing for gdb", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    }
+  ]
+}

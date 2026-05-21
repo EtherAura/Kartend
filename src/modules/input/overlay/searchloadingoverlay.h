@@ -7,7 +7,7 @@
 #include <QPropertyAnimation>
 #include <QWidget>
 class QTimer;
-class OverlayLayerManager;
+class OverlayZOrderRegistry;
 
 /**
  * @brief Manages a subtle loading overlay shown during search operations.
@@ -18,6 +18,7 @@ class OverlayLayerManager;
  */
 class SearchLoadingOverlay : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SearchLoadingOverlay)
 public:
   explicit SearchLoadingOverlay(QObject *parent = nullptr);
   ~SearchLoadingOverlay() override;
@@ -43,7 +44,7 @@ public:
   /// Wire the centralized z-order coordinator. The owned overlay widget is
   /// registered with the manager at the SearchLoading layer the first time
   /// it's created (ensureOverlay()).
-  void setLayerManager(OverlayLayerManager *manager);
+  void setLayerManager(OverlayZOrderRegistry *manager);
 
 private:
   void ensureOverlay();
@@ -57,7 +58,7 @@ private:
   QPointer<QPropertyAnimation> m_pulseAnimation;
   QTimer *m_pulseTimer = nullptr;
   bool m_pulseDimming = true;
-  OverlayLayerManager *m_layerManager = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 
 #endif // SEARCHLOADINGOVERLAY_H

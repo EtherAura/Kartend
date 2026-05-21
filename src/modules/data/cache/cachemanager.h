@@ -2,7 +2,9 @@
 #define CACHEMANAGER_H
 
 #include <memory>
+#include <QAtomicInteger>
 #include <QCache>
+#include <QFuture>
 #include <QHash>
 #include <QImage>
 #include <QMutex>
@@ -59,10 +61,25 @@ public:
   void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) override;
 
   void clearCollectionCache(int collectionIndex) override;
-  [[nodiscard]] static qint64 getCacheSize();
+  /// Approximate total bytes on disk under the artwork cache directory.
+  /// Cached internally and refreshed via a background QDirIterator walk —
+  /// the call returns the most recent cached value immediately, and
+  /// dispatches a re-walk when the cached value is older than ~30 s and
+  /// no walk is already in flight. First call returns 0 while the
+  /// initial walk runs; subsequent calls return the real total once the
+  /// walk completes. Non-blocking on the GUI thread (Kartend-bwcd).
+  [[nodiscard]] qint64 getCacheSize() const;
   void releaseGuiResources() override;
 
   void setArtworkCacheBudgetMB(int megabytes) override;
+
+  /// Test-only introspection: the QCache::maxCost ceiling (in bytes) the
+  /// artwork cache is currently configured for. Exposed solely so tests
+  /// can assert that setArtworkCacheBudgetMB(...) pushed the expected
+  /// value through and that the 1 MB floor clamps as designed
+  /// (Kartend-c7mb). Not part of ICacheManager — production code reads
+  /// metrics() instead.
+  [[nodiscard]] int artworkCacheMaxCostForTesting() const { return artworkCache.maxCost(); }
 
   // Cache metrics access
   [[nodiscard]] CacheMetrics metrics() const override;
@@ -88,8 +105,24 @@ private:
   // repeated PNG encodes and metadata writes during active scrolling).
   QObject *m_timerContext = nullptr;
   QTimer *m_debouncedSaveTimer = nullptr;
+  // Kartend-gro2: coalesce cross-thread timer-start posts so a flood of
+  // scheduleSaveToDisk() calls during initial cache fill produces at most one
+  // outstanding QueuedConnection invokeMethod task.
+  QAtomicInteger<int> m_savePostInFlight = 0;
   bool m_metadataDirty = false;
   qint64 m_firstDirtyAtMs = 0;
+
+  // Cache for getCacheSize() — protects against GUI-thread directory
+  // walks every CHECK_INTERVAL artworks (Kartend-bwcd). m_diskCacheSizeMutex
+  // serialises reads/writes of the cached value + bookkeeping fields. The
+  // walk itself runs via QtConcurrent on the global pool and publishes the
+  // result via the mutex. ~CacheManager waits on m_cacheSizeWalkFuture so
+  // an in-flight walk can't outlive the owning object.
+  mutable QMutex m_diskCacheSizeMutex;
+  mutable qint64 m_cachedDiskCacheSize = 0;
+  mutable qint64 m_lastDiskWalkMs = 0;
+  mutable bool m_diskWalkInFlight = false;
+  mutable QFuture<void> m_cacheSizeWalkFuture;
 };
 
 #endif // CACHEMANAGER_H

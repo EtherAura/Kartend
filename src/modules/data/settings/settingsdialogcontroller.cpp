@@ -9,7 +9,7 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
-#include "errordialog.h"
+#include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idetailspanemanager.h"
@@ -319,7 +319,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     // dialog. Without this the toolbar/tree-driven save buttons would lie
     // about a successful save when QSettings::sync() returns a status error.
     if (auto result = saveCollections(collections); result.isError()) {
-      ErrorDialog::showError(parent, result.error());
+      ErrorPresentation::showError(parent, result.error());
     }
   };
 
@@ -407,7 +407,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   // an explicit emit here would double-fire and run rebuildHierarchyCache
   // twice for no benefit. Removed.
   if (auto result = saveCollections(collections); result.isError()) {
-    ErrorDialog::showError(parent, result.error());
+    ErrorPresentation::showError(parent, result.error());
   }
 
   // Drop items/collections rows that no live collection owns — orphans

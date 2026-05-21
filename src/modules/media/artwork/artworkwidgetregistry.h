@@ -26,6 +26,7 @@ class ItemWidget;
 /// ArtworkManager so destruction order is well-defined.
 class ArtworkWidgetRegistry : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArtworkWidgetRegistry)
 
 public:
   explicit ArtworkWidgetRegistry(QObject *parent = nullptr);

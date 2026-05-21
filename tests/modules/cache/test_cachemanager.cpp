@@ -49,6 +49,10 @@ private slots:
   void testCancelPendingIo_isIdempotentAndStopsTimer();
   void testDestruct_withScheduledSavesUnderLoad_doesNotCrash();
 
+  // Budget resize (Kartend-c7mb regression coverage)
+  void testSetArtworkCacheBudgetMB_resizesCeiling();
+  void testSetArtworkCacheBudgetMB_clampsBelowOneMB();
+
 private:
   CacheManager *m_cacheManager;
   QTemporaryDir *m_tempDir;
@@ -351,10 +355,16 @@ void TestCacheManager::testCancelPendingIo_isIdempotentAndStopsTimer() {
   m_cacheManager->cancelPendingIo();
 
   // After cancellation, scheduleSaveToDisk early-returns at the m_cancelIo
-  // check, so re-scheduling cannot resurrect a fire-after-cancel path.
+  // check, so re-scheduling cannot resurrect a fire-after-cancel path. The
+  // condition is a *negative* (timer must NOT fire), so the only thing this
+  // test can do is drive the event loop long enough that a non-cancelled
+  // timer WOULD have fired. Kartend-2s1m: bumped from 150ms (flaky under CI
+  // load) to 500ms (10× the scheduled delay, which is the safe margin).
   m_cacheManager->scheduleSaveToDisk(50);
-  QTest::qWait(150); // > 50ms: a non-cancelled timer would have fired.
+  QTest::qWait(500);
 
+  // The cancel + reschedule + wait sequence must not crash, hang, or
+  // resurrect a timer. Reaching here is the assertion.
   QVERIFY(true);
 }
 
@@ -395,6 +405,32 @@ void TestCacheManager::testDestruct_withScheduledSavesUnderLoad_doesNotCrash() {
                           .arg(elapsedMs)));
 
   QCoreApplication::processEvents();
+}
+
+// ─── Budget resize (Kartend-c7mb) ───────────────────────────────────────────
+
+void TestCacheManager::testSetArtworkCacheBudgetMB_resizesCeiling() {
+  // setArtworkCacheBudgetMB takes a megabytes value and pushes it into the
+  // underlying QCache::setMaxCost in bytes. The internal accounting unit is
+  // bytes, so a 64 MB budget should produce a maxCost of 64*1024*1024.
+  m_cacheManager->setArtworkCacheBudgetMB(64);
+  QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 64 * 1024 * 1024);
+
+  // Re-resizing replaces the prior ceiling, not adds to it.
+  m_cacheManager->setArtworkCacheBudgetMB(128);
+  QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 128 * 1024 * 1024);
+}
+
+void TestCacheManager::testSetArtworkCacheBudgetMB_clampsBelowOneMB() {
+  // 0 and negative values must not collapse the cache to an
+  // immediate-eviction state (QCache treats maxCost <= 0 specially); the
+  // implementation enforces a 1 MB floor. Both 0 and -5 should land at the
+  // same floor.
+  m_cacheManager->setArtworkCacheBudgetMB(0);
+  QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 1 * 1024 * 1024);
+
+  m_cacheManager->setArtworkCacheBudgetMB(-5);
+  QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 1 * 1024 * 1024);
 }
 
 QTEST_MAIN(TestCacheManager)

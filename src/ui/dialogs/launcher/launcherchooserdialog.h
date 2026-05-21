@@ -23,6 +23,7 @@ QT_END_NAMESPACE
 /// \endcode
 class LauncherChooserDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(LauncherChooserDialog)
 public:
   explicit LauncherChooserDialog(QWidget *parent, const QString &collectionName,
                                  const QStringList &launcherNames, int defaultIndex);

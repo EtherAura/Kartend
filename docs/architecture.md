@@ -92,7 +92,7 @@ src/
 | `searchmanager` | Handles search bar logic, search modes, and query debouncing for item filtering. |
 | `eventmanager` | Filters and dispatches input events to specialized handlers for mouse, keyboard, and wheel. |
 | `animationmanager` | Manages smooth scroll animations with easing curves for vertical and horizontal scrolling. |
-| `launchmanager` | Launches media items with configured emulators, handling RetroArch cores and parameters. |
+| `launchmanager` | Launches media items with configured external launchers, handling per-launcher parameters and the RetroArch core slot. |
 | `artworkmanager` | Handles async artwork loading with QtConcurrent, caching, and viewport-aware prioritization. |
 | `databasemanager` | Coordinates SQLite database access via worker thread for collection metadata queries. |
 | `querymanager` | Executes SQLite queries on worker thread for paginated item loading and filtering. |
@@ -119,7 +119,7 @@ Additional helper managers owned by their parent feature module (not top-level):
 
 | Component | Description |
 |-----------|-------------|
-| `uiconstants.h` | Centralized namespace for all UI timing, spacing, and dimension constants. |
+| `uiconstants/` | Per-area headers (`grid.h`, `dialog.h`, `icons.h`, …) carrying UI timing, spacing, and dimension constants. The old `uiconstants.h` umbrella was deprecated in Kartend-m175 — 117 callers migrated to the topical subheaders. |
 | `settingsdialog` | Collection configuration dialog with tree-based hierarchy editing and live preview. |
 | `detailspane` | Displays file metadata, artwork gallery, and item details in the side pane. |
 | `itemwidget` | Media item widget displaying artwork, title, and selection state with pulse animation. |

@@ -27,6 +27,7 @@ QT_END_NAMESPACE
 /// DetailsPaneManager, which knows the owning collection's UUID.
 class ItemArtworkLinksDialog : public QDialog {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ItemArtworkLinksDialog)
 public:
   explicit ItemArtworkLinksDialog(QWidget *parent = nullptr);
 

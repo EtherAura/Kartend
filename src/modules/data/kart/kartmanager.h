@@ -5,6 +5,8 @@
 #include <memory>
 #include <QList>
 #include <QObject>
+#include <QPair>
+#include <QSet>
 #include <QString>
 
 #include "collectionutils.h"
@@ -24,6 +26,18 @@ class Writer;
 
 namespace kart {
 
+/// Field+path pair returned by collectSuspiciousKartPaths.
+using SuspiciousKartPath = QPair<QString, QString>;
+
+/// Owner-provided confirmation hook for suspicious .kart paths during
+/// interactive import (Kartend-s6mj). When the manifest carries
+/// launcherPath / collectionIcon / placeholderArtwork entries outside the
+/// safe-prefix allowlist (and not previously trusted), the manager calls
+/// this closure with the offending (field, path) pairs and aborts the
+/// import unless it returns true. UI side typically shows a QMessageBox
+/// warning with default=Cancel.
+using SuspiciousPathConfirmer = std::function<bool(const QList<SuspiciousKartPath> &)>;
+
 struct KartManagerSetup {
   ISettingsManager *settingsManager = nullptr;
   std::function<QList<CollectionConfig> *()> getCollections;
@@ -39,10 +53,26 @@ struct KartManagerSetup {
   /// user's choice. Left null in headless contexts — the manager falls
   /// back to MergeChoice::Skip if no resolver is wired.
   ConflictResolver mergeResolver;
+
+  /// Kartend-s6mj: optional suspicious-path confirmation hook for
+  /// interactive .kart imports. Left null in headless contexts; the
+  /// import then proceeds (with the warning logged from finalizeImport).
+  SuspiciousPathConfirmer suspiciousPathConfirmer;
 };
+
+/// Classify the imported manifest's externally-controlled path fields against
+/// a safe-prefix allowlist (user home, /usr/bin, /usr/local/bin, /opt) plus
+/// the @p trustedLauncherPaths set (typically already-configured launcher
+/// paths from existing collections). Returns the (field, path) pairs that
+/// fall outside any safe root so the caller can surface a confirmation
+/// dialog before registering the collection.
+[[nodiscard]] QList<SuspiciousKartPath>
+collectSuspiciousKartPaths(const CollectionConfig &cfg,
+                           const QSet<QString> &trustedLauncherPaths);
 
 class KartManager : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(KartManager)
 
 public:
   explicit KartManager(QObject *parent = nullptr);
@@ -106,6 +136,12 @@ private:
 
   void runImport(const QString &kartPath, const QString &destDir);
   void runExport(int collectionIndex, const QString &outPath);
+
+  /// Kartend-s6mj: gather launcher paths already configured in any saved
+  /// collection so collectSuspiciousKartPaths can treat them as trusted —
+  /// the user has effectively approved them before, so re-prompting on
+  /// every re-import would be noise.
+  [[nodiscard]] QSet<QString> previouslyTrustedLauncherPaths() const;
 };
 
 } // namespace kart

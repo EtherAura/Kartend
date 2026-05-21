@@ -49,6 +49,7 @@ struct KeyboardManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class KeyboardManager : public QObject, public IKeyboardManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(KeyboardManager)
 
 public:
   explicit KeyboardManager(QObject *parent = nullptr);

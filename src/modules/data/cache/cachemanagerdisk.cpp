@@ -54,10 +54,20 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
     }
   }
 
+  // Coalesce: if we already posted a start-timer task that hasn't yet run on
+  // m_timerContext's thread, skip posting another. During heavy cache fill this
+  // avoids hundreds of redundant QueuedConnection events all racing to start
+  // the same timer. The flag is cleared inside the lambda so the next round of
+  // dirty work re-posts as expected.
+  if (m_savePostInFlight.fetchAndStoreAcquire(1) != 0) {
+    return;
+  }
+
   // Ensure the timer is started on its owning thread.
   QMetaObject::invokeMethod(
       m_timerContext,
       [this, effectiveDelay]() {
+        m_savePostInFlight.storeRelease(0);
         if (m_debouncedSaveTimer) {
           m_debouncedSaveTimer->start(effectiveDelay);
         }

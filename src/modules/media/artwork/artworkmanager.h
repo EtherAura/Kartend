@@ -20,7 +20,7 @@ class QScrollArea;
 class QStackedWidget;
 class QWidget;
 class QTimer;
-class CacheManager;
+class ICacheManager;
 class InteractionStateHolder;
 
 namespace TimerUtils {
@@ -37,6 +37,10 @@ struct ArtworkInfo {
   struct Result {
     QPointer<ItemWidget> widget;
     QString artworkPath;
+    // Kartend-gro2: precomputed off the GUI thread so applyResultsToUi's
+    // stale-identity check doesn't construct a QFileInfo per result inside
+    // its per-tick loop.
+    QString artworkBaseName;
     QImage image;
     bool loadedFromDiskCache = false;
   };
@@ -106,9 +110,12 @@ struct UIReferences {
 // role interface — single-QObject-base multiple inheritance.
 class ArtworkManager : public QObject, public IArtworkManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(ArtworkManager)
 
 public:
-  explicit ArtworkManager(CacheManager *cacheManager, QObject *parent = nullptr);
+  // Kartend-davi: constructor no longer takes CacheManager*; the ctx
+  // supplied via setupReferences holds the cache pointer authoritatively.
+  explicit ArtworkManager(QObject *parent = nullptr);
 
   void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
@@ -151,7 +158,15 @@ public:
   ~ArtworkManager() override;
 
 private:
-  CacheManager *m_cacheManager;
+  // Kartend-davi: cacheManager is reached through the app context instead of
+  // a cached field. m_ctx is set in setupReferences (which must precede
+  // initializeCache — see MainWindow::setupArtworkManager). The accessor
+  // returns ICacheManager*; every previously-CacheManager-typed call site
+  // uses interface methods (cacheArtwork, scheduleSaveToDisk, etc.) so the
+  // narrower role surface is sufficient.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] ICacheManager *cacheMgr() const;
+
   /// Applies processed artwork results to UI widgets on the GUI thread.
   void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,

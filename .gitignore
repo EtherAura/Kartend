@@ -8,7 +8,13 @@ build-*/
 *.dylib
 *.dll
 .DS_Store
-.vscode/
+.vscode/*
+# Kartend-zvh0: ship a curated launch + tasks set so 'F5 to debug' works
+# without per-developer setup. Other .vscode entries (settings.json with
+# user-specific clang paths, mcp.json with API-key prompts) stay
+# gitignored as personal config.
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Defensive: catch in-source CMake artifacts if a `cmake -B .` ever runs
 # from the source root by accident. The /build entry above only protects
@@ -66,6 +72,11 @@ venv/
 *.log
 /core
 /core.*
+
+# Screenshots dropped at repo root by KDE/GNOME tools — never repo content.
+/Screenshot*.png
+/Screenshot*.jpg
+/Screenshot*.webp
 
 # Root compile_commands.json (CMake export sometimes mirrored here)
 /compile_commands.json

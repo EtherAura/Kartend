@@ -16,6 +16,7 @@ struct SettingsModel;
 /// logo path + position combo + browse picker.
 class AppearanceToolbarPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(AppearanceToolbarPanel)
 public:
   explicit AppearanceToolbarPanel(QWidget *parent = nullptr);
   ~AppearanceToolbarPanel() override;

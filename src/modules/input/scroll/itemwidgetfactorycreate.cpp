@@ -113,12 +113,13 @@ ItemWidget *ItemWidgetFactory::createPlaceholderWidget() {
 
 void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName, QString &fullPath,
                                               QString &displayName, int &collectionIndex) {
-  if (!m_databaseManager) {
+  auto *db = dbMgr();
+  if (!db) {
     return;
   }
 
   // Use DatabaseManager for path resolution
-  fullPath = m_databaseManager->resolveFilePath(rawFileName, m_context);
+  fullPath = db->resolveFilePath(rawFileName, m_context);
 
   if (!fullPath.isEmpty()) {
     if (m_context.config.showAllSubcollectionItems) {
@@ -158,8 +159,8 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName, QStrin
 
 void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPath,
                                                           int &collectionIndex) {
-  if (m_databaseManager) {
-    int detectedCollectionIndex = m_databaseManager->getCollectionIndexForFile(fullPath);
+  if (auto *db = dbMgr()) {
+    int detectedCollectionIndex = db->getCollectionIndexForFile(fullPath);
     if (detectedCollectionIndex >= 0) {
       collectionIndex = detectedCollectionIndex;
     }
@@ -212,8 +213,8 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
                             << "cachedArtworkPaths.size=" << m_cachedArtworkPaths.size()
                             << "cachedPath=" << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
     }
-    if (!cachedPath.isEmpty() && m_artworkManager) {
-      m_artworkManager->addPendingArtwork(widget, cachedPath);
+    if (auto *art = artworkMgr(); art && !cachedPath.isEmpty()) {
+      art->addPendingArtwork(widget, cachedPath);
       return;
     }
   }
@@ -223,8 +224,8 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
 
   QString artworkDir = m_context.config.artworkDirectory;
 
-  if (m_databaseManager && m_context.config.showAllSubcollectionItems) {
-    QString foundArtworkDir = m_databaseManager->findArtworkDirectoryForFile(fullPath);
+  if (auto *db = dbMgr(); db && m_context.config.showAllSubcollectionItems) {
+    QString foundArtworkDir = db->findArtworkDirectoryForFile(fullPath);
     if (!foundArtworkDir.isEmpty()) {
       artworkDir = foundArtworkDir;
     }
@@ -256,8 +257,8 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   // recycled widget reproduces the chosen type. The override map is the only
   // thing that survives widget pool churn — clearing happens in
   // ArtworkManager::clearWidgetReferences (collection change / pre-search).
-  if (m_artworkManager) {
-    const QString overrideType = m_artworkManager->artworkTypeOverrideFor(fullPath);
+  if (auto *art = artworkMgr()) {
+    const QString overrideType = art->artworkTypeOverrideFor(fullPath);
     if (!overrideType.isEmpty()) {
       const QString baseName = QFileInfo(fullPath).completeBaseName();
       const QString overridePath =
@@ -267,7 +268,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
           widget->setHasArtwork(true);
           return;
         }
-        m_artworkManager->addPendingArtwork(widget, overridePath);
+        art->addPendingArtwork(widget, overridePath);
         return;
       }
       // Override file vanished from disk — fall through to the legacy lookup
@@ -316,8 +317,8 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     return;
   }
 
-  if (!artworkPath.isEmpty() && m_artworkManager) {
-    m_artworkManager->addPendingArtwork(widget, artworkPath);
+  if (auto *art = artworkMgr(); art && !artworkPath.isEmpty()) {
+    art->addPendingArtwork(widget, artworkPath);
   } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && artworkPath.isEmpty()) {
     static int emptyCount = 0;
     if (++emptyCount <= 5) { // Only log first 5 to avoid spam

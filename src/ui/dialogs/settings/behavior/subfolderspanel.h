@@ -21,6 +21,7 @@ struct SettingsModel;
 /// off.
 class SubfoldersPanel : public QWidget {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SubfoldersPanel)
 public:
   explicit SubfoldersPanel(QWidget *parent = nullptr);
   ~SubfoldersPanel() override;

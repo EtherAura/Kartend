@@ -70,14 +70,14 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
   // algorithms. Borrows ScrollManager state via friendship.
   m_engine = std::make_unique<VirtualScrollEngine>(this);
 
-  // Data source manager: owns FilterManager + ScrollDataManager +
-  // PreSearchStateManager + SearchLoadingOverlay.
-  m_dataSource = std::make_unique<DataSourceManager>(this);
+  // Data source manager: owns FilterManager + ScrollDataStore +
+  // PreSearchStateCache + SearchLoadingOverlay.
+  m_dataSource = std::make_unique<DataSourceCoordinator>(this);
   m_filterManager = m_dataSource->filterManager();
   m_dataManager = m_dataSource->dataManager();
   m_preSearchStateManager = m_dataSource->preSearchStateManager();
   m_searchLoadingOverlay = m_dataSource->searchLoadingOverlay();
-  connect(m_dataSource.get(), &DataSourceManager::filterChanged, this,
+  connect(m_dataSource.get(), &DataSourceCoordinator::filterChanged, this,
           &ScrollManager::filterChanged);
 
   // Selection display manager: owns overlay + state tracker + list header +
@@ -159,7 +159,7 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
   connect(m_arrowKeyScrollHelper.get(), &ArrowKeyScrollHelper::requestViewUpdate, this,
           &ScrollManager::updateVirtualView);
 
-  // ScrollDataManager and PreSearchStateManager are now owned by m_dataSource
+  // ScrollDataStore and PreSearchStateCache are now owned by m_dataSource
   // Raw aliases (m_dataManager, m_preSearchStateManager) were
   // set up at construction.
 

@@ -47,6 +47,7 @@ struct MouseManagerSetup {
 // role interface — single-QObject-base multiple inheritance.
 class MouseManager : public QObject, public IMouseManager {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(MouseManager)
 public:
   explicit MouseManager(QObject *parent = nullptr);
   ~MouseManager() override;
@@ -131,11 +132,11 @@ signals:
   /// Request to set scroll manager overlay visibility
   void requestOverlayVisibility(bool visible);
 
-  /// Request to set properties on the scroll area
-  void requestScrollAreaProperty(const char *name, bool value);
-
-  /// Request to set a dynamic property
-  void requestSetProperty(const char *name, const QVariant &value);
+  // Kartend-8jym: requestScrollAreaProperty + requestSetProperty signals
+  // removed — never emitted anywhere in src/ and their connect handlers in
+  // InteractionManager::wireMouseManagerSignals were the dynamic-Qt-property
+  // antipattern Kartend-0zhz wanted gone. The state they were nominally for
+  // is owned by InteractionStateHolder now.
 
 private slots:
   void onMouseHoldScrollStep();

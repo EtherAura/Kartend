@@ -33,7 +33,7 @@ private slots:
   void testBareConstructDestructIsSafe();
   void testGettersReturnNullBeforeInitialize();
   void testInitializeWiresAllManagers();
-  void testManagersAreParentedToApplicationManager();
+  void testManagersHaveNullQObjectParent();
   void testShutdownAfterInitializeIsSafe();
   void testDestructAfterInitializeWithoutShutdownIsSafe();
 };

@@ -1,5 +1,8 @@
 target_sources(kartend_utils PRIVATE
   cliargs.cpp
+  collection/collectionhierarchycache.cpp
+  collection/helpers.cpp
+  collection/launcherconfig.cpp
   collectionutils.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
@@ -16,6 +19,7 @@ target_sources(kartend_utils PRIVATE
   collection/folderbrowsingoptions.h
   collection/generalsettings.h
   collection/gridlayoutpreferences.h
+  collection/helpers.h
   collection/launcherconfig.h
   collection/launcherpreset.h
   collection/listviewoptions.h

@@ -20,6 +20,7 @@
 #include "detailspane.h"
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
+#include "imagedecodeutils.h"
 #include "itemwidget.h"
 #include "textzoom.h"
 #include "ui_detailspane.h"
@@ -87,7 +88,8 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   m_patternIntensity = std::clamp(collection.sidebar.sidebarPatternIntensity, 0, 100);
   m_patternColor = QColor(collection.sidebar.sidebarPatternColor);
   if (ExtensionUtils::isDecodableImagePath(collection.sidebar.sidebarBackgroundImage)) {
-    m_bgImage = QPixmap(collection.sidebar.sidebarBackgroundImage);
+    const QImage img = ImageDecodeUtils::loadCapped(collection.sidebar.sidebarBackgroundImage);
+    m_bgImage = img.isNull() ? QPixmap() : QPixmap::fromImage(img);
   } else {
     // Empty or non-image path — never hand it to QPixmap's autodetect,
     // which would route a .pdf to the abort()-prone PDF image plugin.

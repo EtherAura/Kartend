@@ -20,6 +20,7 @@ class SelectionOverlayManager;
  */
 class SelectionCoordinator : public QObject {
   Q_OBJECT
+  Q_DISABLE_COPY_MOVE(SelectionCoordinator)
 public:
   explicit SelectionCoordinator(QObject *parent = nullptr);
   ~SelectionCoordinator() override = default;

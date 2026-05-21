@@ -14,6 +14,7 @@
 #include <QTextStream>
 #include <QUuid>
 
+#include "connectionpragmas.h"
 #include "errorutils.h"
 #include "pathutils.h"
 
@@ -80,9 +81,19 @@ bool PlaylistManager::initialize() {
   }
 
   // Foreign keys must be enabled per-connection; the cascade in
-  // playlist_items relies on it.
-  QSqlQuery pragma(m_db);
-  pragma.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
+  // playlist_items relies on it. Kartend-67wo: routed through the shared
+  // PRAGMA helper so future additions to the standard set (e.g. a future
+  // mmap_size setting) reach this connection too. The other PRAGMA knobs
+  // (journal_mode/synchronous/busy_timeout) are intentionally left off
+  // here — this is a secondary connection to media.db whose primary
+  // openers already set those.
+  MediaDbConnectionInit::PragmaConfig cfg;
+  cfg.enableForeignKeys = true;
+  cfg.enableWalWithFallback = false;
+  cfg.setSynchronousNormal = false;
+  cfg.busyTimeoutMs = 0;
+  MediaDbConnectionInit::applyPragmas(m_db, cfg,
+                                      QStringLiteral("PlaylistManager::initialize"));
 
   // Create the playlist tables locally (idempotent CREATE TABLE IF NOT EXISTS)
   // rather than re-running the full schema migration suite. The full migration

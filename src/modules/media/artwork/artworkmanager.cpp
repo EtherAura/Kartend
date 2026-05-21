@@ -7,6 +7,7 @@
 #include "artworkwidgetregistry.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
+#include "icachemanager.h"
 #include "extensionutils.h"
 #include "interactionstateholder.h"
 #include "itemartwork.h"
@@ -95,7 +96,7 @@ auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
 }
 
 // Periodically triggers a deferred persistent cache save when size grows enough
-auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager) -> void {
+auto maybeTriggerCacheSave(ArtworkManager *self, ICacheManager *cacheManager) -> void {
   static int updateCount = 0;
   if (++updateCount % UIConstants::Cache::CHECK_INTERVAL != 0) {
     return;
@@ -117,9 +118,11 @@ auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager) -> 
 }
 } // namespace
 
-// Constructs the artwork manager and sets up timers
-ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
-    : QObject(parent), m_cacheManager(cacheManager), collections(nullptr),
+// Constructs the artwork manager and sets up timers. Kartend-davi: dispatcher
+// creation moves to setupReferences (the dispatcher needs the cache pointer,
+// which now comes from m_ctx).
+ArtworkManager::ArtworkManager(QObject *parent)
+    : QObject(parent), collections(nullptr),
       currentCollectionIndex(nullptr), stackedWidget(nullptr), itemsPage(nullptr),
       gridContainer(nullptr), m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr),
       m_persistentLoadTimer(nullptr), m_cacheTimer(nullptr), m_silentLoadingActive(false),
@@ -135,7 +138,9 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
           10   // historySize
       }) {
   m_widgetRegistry = new ArtworkWidgetRegistry(this);
-  m_dispatcher = new ArtworkLoadDispatcher(cacheManager, this);
+  // Kartend-davi: construct with no cache up front so cancelAll paths work
+  // even before setupReferences binds the cache via ctx.
+  m_dispatcher = new ArtworkLoadDispatcher(nullptr, this);
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -147,11 +152,17 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
   m_cacheTimer->setObjectName("artCacheTimer");
   m_cacheTimer->setInterval(UIConstants::Cache::SAVE_INTERVAL_MS);
   connect(m_cacheTimer, &QTimer::timeout, this, [this]() {
-    if (!QApplication::closingDown() && m_cacheManager) {
-      m_cacheManager->scheduleSaveToDisk(UIConstants::Cache::QUICK_SAVE_DELAY_MS);
+    if (!QApplication::closingDown()) {
+      if (auto *cache = cacheMgr()) {
+        cache->scheduleSaveToDisk(UIConstants::Cache::QUICK_SAVE_DELAY_MS);
+      }
     }
   });
   m_cacheTimer->start();
+}
+
+ICacheManager *ArtworkManager::cacheMgr() const {
+  return m_ctx ? m_ctx->cacheManager() : nullptr;
 }
 
 // Destructor stops timers, cancels in-flight dispatch, and clears widget state.
@@ -198,8 +209,8 @@ void ArtworkManager::clearLoadedArtworkState() {
 
 // Initializes persistent cache from disk
 void ArtworkManager::initializeCache() {
-  if (m_cacheManager) {
-    m_cacheManager->initialize();
+  if (auto *cache = cacheMgr()) {
+    cache->initialize();
   }
 }
 
@@ -218,8 +229,8 @@ auto ArtworkManager::loadArtworkFromFile(const QString &artworkPath) -> QPixmap 
     return {};
   }
   QPixmap processedPixmap = ArtworkManager::createProcessedArtwork(pixmap);
-  if (!processedPixmap.isNull() && m_cacheManager) {
-    m_cacheManager->cacheArtwork(artworkPath, processedPixmap);
+  if (auto *cache = cacheMgr(); cache && !processedPixmap.isNull()) {
+    cache->cacheArtwork(artworkPath, processedPixmap);
   }
   return processedPixmap;
 }
@@ -242,6 +253,9 @@ SETUP_GETTER_DEF_MGR_CTX_ONLY(ArtworkManagerSetup, InteractionStateHolder *, Int
                               interactionState)
 
 void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
+  // Kartend-davi: ctx must be stashed before the dispatcher is built — the
+  // dispatcher reads the cache pointer through it.
+  m_ctx = setup.ctx;
   stackedWidget = setup.getStackedWidget();
   itemsPage = setup.getItemsPage();
   gridContainer = setup.getGridContainer();
@@ -249,6 +263,10 @@ void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
   ui.itemScrollArea = setup.getItemScrollArea();
   collections = setup.getCollections();
   currentCollectionIndex = setup.getCurrentCollectionIndex();
+
+  if (m_dispatcher) {
+    m_dispatcher->setCacheManager(cacheMgr());
+  }
 }
 
 // Checks if artwork loading should be skipped due to shutdown or invalid state
@@ -330,7 +348,7 @@ void ArtworkManager::updateViewportArtwork() {
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 
-  maybeTriggerCacheSave(this, m_cacheManager);
+  maybeTriggerCacheSave(this, cacheMgr());
 }
 
 // Build artwork path list for current collection (and descendants if enabled)
@@ -513,11 +531,12 @@ auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap) -> QP
 }
 
 auto ArtworkManager::getCachedPixmap(const QString &artworkPath) -> QPixmap {
-  if (artworkPath.isEmpty() || !m_cacheManager) {
+  auto *cache = cacheMgr();
+  if (artworkPath.isEmpty() || !cache) {
     return {};
   }
   // Avoid UI-thread disk I/O; the disk cache is consulted from worker threads.
-  return m_cacheManager->getArtworkFromMemoryOnly(artworkPath);
+  return cache->getArtworkFromMemoryOnly(artworkPath);
 }
 
 // Checks if artwork loading should be suppressed (e.g. during fast scrolling)
@@ -627,9 +646,25 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
   QElapsedTimer perfTimer;
   const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
   if (perfTrace) perfTimer.start();
+
+  // Cap the synchronous work per event-loop tick (Kartend-d3qo). A
+  // dispatcher batch of ~30 items used to apply every QPixmap::fromImage
+  // + setArtworkPixmap + widget->update() in one tick, and multiple
+  // batches landing in quick succession compounded into a visible hitch
+  // during scroll. Process up to kMaxPerTick items synchronously and
+  // re-queue the rest via QMetaObject::invokeMethod (QueuedConnection)
+  // so the next tick can paint between the two halves. The cap counts
+  // total iterations (applied + skipped) so a batch full of stale
+  // widgets still progresses without a giant 30-item sweep.
+  constexpr int kMaxPerTick = 8;
   int applied = 0;
   int skipped = 0;
+  int processed = 0;
   for (const auto &result : batchResults) {
+    if (processed >= kMaxPerTick) {
+      break;
+    }
+    ++processed;
     if (result.widget.isNull() || result.image.isNull()) {
       ++skipped;
       continue;
@@ -664,7 +699,11 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
       ++skipped;
       continue;
     }
-    const QString artworkBaseName = QFileInfo(result.artworkPath).completeBaseName();
+    // Kartend-gro2: prefer the worker-precomputed basename; fall back to the
+    // ad-hoc QFileInfo derivation if a producer somewhere hasn't been updated.
+    const QString artworkBaseName = result.artworkBaseName.isEmpty()
+                                        ? QFileInfo(result.artworkPath).completeBaseName()
+                                        : result.artworkBaseName;
     if (widgetBaseName != artworkBaseName) {
       ++skipped;
       continue;
@@ -672,11 +711,11 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
 
     m_widgetRegistry->markLoaded(widget, result.artworkPath);
     m_widgetRegistry->track(widget);
-    if (m_cacheManager) {
+    if (auto *cache = cacheMgr()) {
       if (result.loadedFromDiskCache) {
-        m_cacheManager->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
+        cache->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
       } else {
-        m_cacheManager->cacheArtwork(result.artworkPath, pixmap);
+        cache->cacheArtwork(result.artworkPath, pixmap);
       }
     }
     if (!QApplication::closingDown()) {
@@ -687,10 +726,21 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
       ++skipped;
     }
   }
+
+  if (processed < batchResults.size()) {
+    // Re-queue the unprocessed tail; the next event-loop tick picks it
+    // up. mid() copies the tail into a new QList so the original batch
+    // can be released as soon as this call returns.
+    QList<ArtworkInfo::Result> remainder = batchResults.mid(processed);
+    QMetaObject::invokeMethod(
+        this, [this, remainder]() { applyResultsToUi(remainder); }, Qt::QueuedConnection);
+  }
+
   if (perfTrace) {
     qCDebug(lcPerfTrace).nospace()
         << "applyResultsToUi: totalMs=" << perfTimer.elapsed() << " applied=" << applied
-        << " skipped=" << skipped << " size=" << batchResults.size();
+        << " skipped=" << skipped << " processed=" << processed
+        << " size=" << batchResults.size();
   }
 }
 
