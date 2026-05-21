@@ -42,12 +42,26 @@ public:
 
   using ResponseCallback = std::function<void(ErrorUtils::Result<QByteArray> response)>;
 
+  /// Default response-size cap. A hostile or buggy server can stream
+  /// gigabytes into RAM otherwise — none of our legitimate scraper
+  /// payloads (JSON metadata up to a few hundred KB, box art and
+  /// screenshots in the low MB, manuals/videos in the tens of MB) come
+  /// anywhere near this. Tuned to leave a wide margin above any real
+  /// response while still stopping a runaway long before OOM.
+  static constexpr qint64 kDefaultMaxResponseBytes = 256LL * 1024 * 1024;
+
   /// Issue an HTTP GET with the supplied User-Agent (required by some
   /// providers — MusicBrainz rejects bare requests). The callback fires
   /// on the main thread when the reply completes (success or error).
   /// Requests for the same host are queued behind any in-flight ones
   /// to honour the rate limit.
-  void get(const QUrl &url, const QString &userAgent, ResponseCallback callback);
+  ///
+  /// @p maxResponseBytes caps the response body. If the server streams
+  /// more than this, the reply is aborted and the callback fires with
+  /// ErrorCode::ResponseTooLarge. Pass <= 0 to disable the cap (not
+  /// recommended for untrusted upstreams).
+  void get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
+           qint64 maxResponseBytes = kDefaultMaxResponseBytes);
 
   /// Configure the rate limit for a host. `intervalMs` is the minimum
   /// delay between consecutive request *starts* (not completions, so
@@ -71,6 +85,7 @@ private:
     QUrl url;
     QString userAgent;
     ResponseCallback callback;
+    qint64 maxResponseBytes = kDefaultMaxResponseBytes;
   };
 
   void enqueue(const QString &host, PendingRequest request);

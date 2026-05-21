@@ -78,6 +78,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Scraper HTTP responses are now capped at 256 MiB by default. Previously
+  every scraper reply ran `QNetworkReply::readAll()` unconditionally, so a
+  hostile or buggy upstream that streamed bytes forever could pin the
+  scraper's RAM until OOM. The cap is enforced via the `downloadProgress`
+  signal — once received bytes cross the threshold the reply is aborted
+  and the callback receives `ErrorCode::ResponseTooLarge`. Per-call
+  override is available via the new `maxResponseBytes` parameter on
+  `HttpClient::get`. New `HttpClient` unit test exercises the abort with
+  a local `QTcpServer` streaming an unbounded body
+
 ## [0.0.8] - 2026-05-20
 
 ### Added

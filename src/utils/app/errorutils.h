@@ -78,6 +78,7 @@ enum class ErrorCode {
   // General errors (900-999)
   InvalidArgument = 900,
   OperationCancelled = 901,
+  ResponseTooLarge = 902,
   UnknownError = 999
 };
 
@@ -285,6 +286,8 @@ inline void logError(const ErrorContext &ctx) {
     return "InvalidArgument";
   case ErrorCode::OperationCancelled:
     return "OperationCancelled";
+  case ErrorCode::ResponseTooLarge:
+    return "ResponseTooLarge";
   case ErrorCode::UnknownError:
     return "UnknownError";
   }

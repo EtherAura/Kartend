@@ -1282,6 +1282,27 @@ target_link_libraries(test_metadataproviderregistry
 )
 add_test(NAME MetadataProviderRegistry COMMAND test_metadataproviderregistry)
 
+# HttpClient tests (Kartend-zy10 response-size cap). Runs a local
+# QTcpServer that floods bytes after a minimal HTTP response header and
+# verifies HttpClient aborts the reply once the cap is exceeded. The
+# control-case test asserts a small response under the cap is delivered
+# in full. Pure Qt::Network — no QHttpServer dependency (which isn't in
+# Kartend's required Qt components and isn't guaranteed to be in CI).
+add_executable(test_httpclient
+  modules/scraper/test_httpclient.cpp
+  ${SRC_DIR}/modules/data/scraper/core/httpclient.cpp
+)
+target_include_directories(test_httpclient PRIVATE
+  ${SRC_DIR}/modules/data/scraper/core
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_httpclient
+  Qt6::Core
+  Qt6::Network
+  Qt6::Test
+)
+add_test(NAME HttpClient COMMAND test_httpclient)
+
 # LauncherProbe tests
 add_executable(test_launcherprobe
   utils/test_launcherprobe.cpp

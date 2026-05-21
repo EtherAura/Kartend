@@ -106,7 +106,8 @@ void HttpClient::clearPending() {
   // we want drainHost() to see the right count after they decrement.
 }
 
-void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback callback) {
+void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
+                     qint64 maxResponseBytes) {
   if (!url.isValid()) {
     if (callback) {
       callback(ErrorContext::error(ErrorCode::InvalidArgument, "Invalid request URL",
@@ -114,7 +115,7 @@ void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback
     }
     return;
   }
-  PendingRequest req{url, userAgent, std::move(callback)};
+  PendingRequest req{url, userAgent, std::move(callback), maxResponseBytes};
   const QString host = url.host();
   // Timestamped trace so we can see (a) when the caller enqueued vs.
   // (b) when the request actually starts vs. (c) when the reply lands.
@@ -225,9 +226,32 @@ void HttpClient::send(const QString &host, PendingRequest request) {
   auto perReq = std::make_shared<QElapsedTimer>();
   perReq->start();
   const QString urlPath = request.url.path().left(80);
+  const qint64 maxResponseBytes = request.maxResponseBytes;
+
+  // Response-size cap: a hostile or buggy server can stream gigabytes
+  // unboundedly otherwise. Hook downloadProgress and abort the reply if
+  // received bytes cross the cap. Shared flag lets the finished slot
+  // distinguish a cap-induced abort (ResponseTooLarge) from the
+  // transfer-timeout abort QNAM itself raises (OperationCancelled), so
+  // the error message and ErrorCode line up with the actual cause.
+  auto sizeCapExceeded = std::make_shared<bool>(false);
+  if (maxResponseBytes > 0) {
+    connect(reply, &QNetworkReply::downloadProgress, this,
+            [reply, sizeCapExceeded, maxResponseBytes, host, urlPath](qint64 received,
+                                                                      qint64 /*total*/) {
+              if (received > maxResponseBytes && !*sizeCapExceeded) {
+                *sizeCapExceeded = true;
+                qCWarning(lcScrapeTimings)
+                    << "ABORT-OVERSIZE" << host << urlPath << "received=" << received
+                    << "cap=" << maxResponseBytes;
+                reply->abort();
+              }
+            });
+  }
 
   connect(reply, &QNetworkReply::finished, this,
-          [this, reply, host, callback = std::move(callback), perReq, urlPath]() mutable {
+          [this, reply, host, callback = std::move(callback), perReq, urlPath,
+           sizeCapExceeded]() mutable {
             const qint64 ms = perReq->elapsed();
             // Definitive HTTP/2 readout. The connect-side attribute we
             // set asks Qt to *try* h2, but the actual negotiation can
@@ -275,21 +299,32 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                       QString::fromLatin1(reply->rawHeader("Retry-After")).toInt(&ok);
                   if (ok && parsed > 0) retryAfter = parsed;
                 }
-                // A request aborted by the transfer timeout above
-                // surfaces as OperationCanceledError. HttpClient never
-                // calls abort() itself, so that error here always means
-                // the connection stalled — report it as its own failure
-                // mode so a dead connection is distinguishable from a
-                // genuine 4xx/5xx in the scrape summary's failure list.
-                const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError;
-                auto ctx =
-                    ErrorContext::error(timedOut ? ErrorCode::OperationCancelled
-                                                 : ErrorCode::DatabaseQueryFailed,
-                                        timedOut ? QStringLiteral("Network request timed out")
-                                                 : QStringLiteral("HTTP request failed"),
-                                        "Scraper::HttpClient::send")
-                        .withDetails(details)
-                        .withHttpStatus(httpStatus);
+                // OperationCanceledError surfaces from two distinct
+                // sources here: (1) the transfer timeout that QNAM
+                // enforces (kTransferTimeoutMs), and (2) our own
+                // reply->abort() from the response-size cap above. The
+                // sizeCapExceeded flag is the only way to tell them
+                // apart — distinguish them so the user sees the right
+                // diagnosis (stalled connection vs. oversized response)
+                // and so ScreenScraperProvider's retry logic, which
+                // treats OperationCancelled as a transient timeout,
+                // doesn't loop on a server that's deliberately flooding.
+                const bool oversizedResponse =
+                    reply->error() == QNetworkReply::OperationCanceledError && *sizeCapExceeded;
+                const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError &&
+                                      !*sizeCapExceeded;
+                ErrorCode errorCode = ErrorCode::DatabaseQueryFailed;
+                QString errorMsg = QStringLiteral("HTTP request failed");
+                if (oversizedResponse) {
+                  errorCode = ErrorCode::ResponseTooLarge;
+                  errorMsg = QStringLiteral("Response exceeded size cap; aborted");
+                } else if (timedOut) {
+                  errorCode = ErrorCode::OperationCancelled;
+                  errorMsg = QStringLiteral("Network request timed out");
+                }
+                auto ctx = ErrorContext::error(errorCode, errorMsg, "Scraper::HttpClient::send")
+                               .withDetails(details)
+                               .withHttpStatus(httpStatus);
                 if (retryAfter > 0) ctx.withRetryAfter(retryAfter);
                 callback(ctx);
               } else {
