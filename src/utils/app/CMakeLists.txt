@@ -7,6 +7,20 @@ target_sources(kartend_utils PRIVATE
   settingsutils.cpp
   applicationcontext.h
   cliargs.h
+  collection/archiveoptions.h
+  collection/collectionbackground.h
+  collection/collectionconfig.h
+  collection/collectioncontext.h
+  collection/collectionfilterpreferences.h
+  collection/collectionhierarchycache.h
+  collection/folderbrowsingoptions.h
+  collection/generalsettings.h
+  collection/gridlayoutpreferences.h
+  collection/launcherconfig.h
+  collection/launcherpreset.h
+  collection/listviewoptions.h
+  collection/scraperoverrides.h
+  collection/sidebarappearance.h
   collectiontypes.h
   collectionutils.h
   errorutils.h
