@@ -1,5 +1,5 @@
 // MarqueeController — drives the secondary-monitor marquee / topper window.
-// Extracted from MainWindow (mainwindowwiring.cpp / mainwindowsetup.cpp seam).
+// Extracted from MainWindow (mainwindow_wiring.cpp / mainwindow_setup.cpp seam).
 #include "marqueecontroller.h"
 #include "applicationcontext.h"
 #include "artworkmanager.h"

@@ -1,7 +1,7 @@
 // MainWindow's reactions to ScrollManager view-mode / column-resize /
 // CoverFlow activation signals.
 //
-// Extracted from mainwindowwiring.cpp during the responsibility-based TU
+// Extracted from mainwindow_wiring.cpp during the responsibility-based TU
 // split. These slot handlers all share one concern: react to changes
 // originating in ScrollManager (sort-mode flip, list-column resize,
 // CoverFlow activation/item-activate, artwork preview visibility) by

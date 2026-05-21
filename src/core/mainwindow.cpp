@@ -230,7 +230,7 @@ int MainWindow::zoomedFontSize(int baseSize) {
 // Toolbar / shortcut setup methods (setupTextZoomShortcuts, setupVideoPauseShortcut,
 // setupViewModeButton, syncViewModeButton, setupSearchModeAction,
 // setupPreviewVolumeSlider, applyTextZoom, applyToolbarCustomization) live in
-// mainwindowtoolbar.cpp.
+// mainwindow_toolbar.cpp.
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
   if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) {
@@ -554,7 +554,7 @@ void MainWindow::setupManagerConnections() {
   }
 
   // detail page wiring. The overlay was created in
-  // mainwindowsetup.cpp and parented to ui->centralwidget so it can cover
+  // mainwindow_setup.cpp and parented to ui->centralwidget so it can cover
   // the entire window. Hand it to DetailPageManager along with the sidebar
   // and DB so the manager can build payloads. Keyboard signal lives on
   // InteractionManager's owned KeyboardManager.

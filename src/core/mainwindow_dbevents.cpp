@@ -1,13 +1,13 @@
 // MainWindow's reactions to DatabaseManager scan/count signals.
 //
-// Extracted from mainwindowwiring.cpp during the responsibility-based TU
+// Extracted from mainwindow_wiring.cpp during the responsibility-based TU
 // split. These slot handlers all share one concern: react to background
 // scan / count progress and end-of-scan transitions by driving the
 // loading overlay, the window title, the scan-suppression counters, and
 // the post-scan collection-summary refresh.
 //
 // The signal/slot connect()s that wire DatabaseManager into these handlers
-// continue to live in mainwindowwiring.cpp's connectDatabaseManager().
+// continue to live in mainwindow_wiring.cpp's connectDatabaseManager().
 
 #include <QApplication>
 #include <QString>

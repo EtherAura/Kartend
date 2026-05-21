@@ -1,6 +1,6 @@
 // MainWindow's scraper-service + marquee lifecycle entry points.
 //
-// Extracted from mainwindowwiring.cpp during the responsibility-based TU
+// Extracted from mainwindow_wiring.cpp during the responsibility-based TU
 // split. Owns:
 //
 //   * openScraperDialog() — long-lived ScrapeResultDialog construction +

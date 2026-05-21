@@ -326,7 +326,7 @@ private:
   void refreshFilterToolbar();
 
   // Wiring slot handlers — each method below is the named target of one
-  // signal/slot connection in mainwindowwiring.cpp. Extracted from inline
+  // signal/slot connection in mainwindow_wiring.cpp. Extracted from inline
   // lambdas so the manager graph can be read as a flat table of
   // {sender, signal, receiver, slot} edges. Order roughly mirrors the order
   // connections are made in connectDatabaseManager / connectScrollManager /

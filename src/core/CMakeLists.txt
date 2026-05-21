@@ -4,10 +4,10 @@ target_sources(kartend_core PRIVATE
   mainwindow_dbevents.cpp
   mainwindow_scraper.cpp
   mainwindow_scrollevents.cpp
-  mainwindowsetup.cpp
-  mainwindowtimers.cpp
-  mainwindowtoolbar.cpp
-  mainwindowwiring.cpp
+  mainwindow_setup.cpp
+  mainwindow_timers.cpp
+  mainwindow_toolbar.cpp
+  mainwindow_wiring.cpp
   marqueecontroller.cpp
   menucontroller.cpp
   toolbarcontroller.cpp

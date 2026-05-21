@@ -2,7 +2,7 @@
 // QToolButton + four view QActions, the search-mode QAction inside the
 // search QLineEdit, and the consolidated filter QToolButton + its type
 // radio group / title-pattern toggle / pattern editor. Replaces a chunk of
-// the previous mainwindowtoolbar.cpp + mainwindowwiring.cpp partial-class
+// the previous mainwindow_toolbar.cpp + mainwindow_wiring.cpp partial-class
 // TUs that managed the same widgets through MainWindow::* members.
 #include "toolbarcontroller.h"
 
