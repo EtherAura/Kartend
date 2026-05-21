@@ -1,0 +1,21 @@
+target_sources(kartend_ui PRIVATE
+  applysettingsdialog.cpp
+  settingsdialog.cpp
+  settingsdialogbrowse.cpp
+  settingsdialogchecks.cpp
+  settingsdialogform.cpp
+  settingsdialoggeneral.cpp
+  settingsdialoglaunchers.cpp
+  settingsdialoglinks.cpp
+  settingsdialognav.cpp
+  settingsdialogremove.cpp
+  settingsdialogsetup.cpp
+  settingsdialogtree.cpp
+  treemanager.cpp
+  applysettingsdialog.h
+  settingsdialog.h
+  settingsformbinding.h
+  settingsmodel.h
+  treemanager.h
+  settingsdialog.ui
+)

@@ -56,8 +56,11 @@ src/
 │       ├── detailpage/  # Detail-page coordinator
 │       └── detailspane/ # Metadata / details side pane
 ├── ui/                  # UI components and constants
-│   ├── dialogs/         # Dialogs grouped by domain: settings/, collection/,
-│   │                    # launcher/, scraper/, kart/ (loose dialogs at root)
+│   ├── dialogs/         # Dialogs grouped by domain: settings/ (further
+│   │                    # split into core/ + appearance/ + behavior/ +
+│   │                    # artwork/ + launchers/ + collections/ per
+│   │                    # Kartend-cqx3), collection/, launcher/, scraper/,
+│   │                    # kart/ (loose dialogs at root)
 │   └── widgets/         # UI-coupled widgets: details pane, marquee window,
 │                        # splash / now-playing / startup-video / text-zoom
 │                        # overlays (neutral widgets live in src/chrome/)

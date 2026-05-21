@@ -1,0 +1,20 @@
+target_sources(kartend_ui PRIVATE
+  attractpanel.cpp
+  configurationpanel.cpp
+  controlspanel.cpp
+  generalsettingspanel.cpp
+  marqueepanel.cpp
+  subfolderspanel.cpp
+  attractpanel.h
+  configurationpanel.h
+  controlspanel.h
+  generalsettingspanel.h
+  marqueepanel.h
+  subfolderspanel.h
+  attractpanel.ui
+  configurationpanel.ui
+  controlspanel.ui
+  generalsettingspanel.ui
+  marqueepanel.ui
+  subfolderspanel.ui
+)

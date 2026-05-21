@@ -116,6 +116,12 @@ target_include_directories(kartend_utils PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/launcher
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/scraper
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/appearance
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/artwork
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/behavior
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/collections
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/core
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/launchers
   # NOTE: src/ui/uiconstants/ is intentionally NOT on the include path.
   # Several uiconstants sub-headers (detailspane.h, gamepad.h, navigation.h,
   # etc.) collide by basename with widget / dialog / manager headers, so
