@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ArtworkLoadDispatcher::cancelAll`), so workers that captured the old
   token before a reset-without-prior-cancel correctly observe
   `isCancelled()` and bail out
+- The user-configurable **pixmap cache size** setting now actually
+  resizes the artwork cache. Previously only Qt's process-global
+  `QPixmapCache` picked up the value; the `CacheManager` in-process
+  `artworkCache` — the QCache that backs fast UI thumbnail lookups — was
+  left at its hardcoded 50 MB default forever. Changing the slider in
+  Settings → General now propagates to both caches via a single
+  `IMainWindow::applyPixmapCacheBudget` entry point, applied both at
+  startup wiring and on settings save
 
 ### Removed
 

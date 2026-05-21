@@ -66,6 +66,12 @@ public:
   virtual void clearCollectionCache(int collectionIndex) = 0;
   virtual void releaseGuiResources() = 0;
 
+  /// Resize the in-memory artwork QCache budget. Driven by the user
+  /// `pixmapCacheSizeMB` setting; clamped to a sane lower bound by the
+  /// implementation to avoid degenerating into an immediate-eviction
+  /// cache. Called at startup wiring and on settings change.
+  virtual void setArtworkCacheBudgetMB(int megabytes) = 0;
+
   [[nodiscard]] virtual CacheMetrics metrics() const = 0;
   virtual void resetMetrics() = 0;
   virtual void logMetrics() const = 0;

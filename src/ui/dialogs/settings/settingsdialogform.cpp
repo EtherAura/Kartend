@@ -429,9 +429,13 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     mwSettings.keyboardRepeatIntervalMs = m_generalSettings.keyboardRepeatIntervalMs;
     mwSettings.keyboardRepeatDelayMs = m_generalSettings.keyboardRepeatDelayMs;
     mwSettings.listKeyboardRepeatIntervalMs = m_generalSettings.listKeyboardRepeatIntervalMs;
-    // Performance & History (with live-apply side effects)
+    // Performance & History (with live-apply side effects).
+    // applyPixmapCacheBudget propagates the new size to both
+    // QPixmapCache and the CacheManager artworkCache in lockstep —
+    // see Kartend-10pb (the latter never received the user setting
+    // before).
     mwSettings.pixmapCacheSizeMB = m_generalSettings.pixmapCacheSizeMB;
-    QPixmapCache::setCacheLimit(m_generalSettings.pixmapCacheSizeMB * 1024);
+    mainWindow->applyPixmapCacheBudget(m_generalSettings.pixmapCacheSizeMB);
     mwSettings.runtimeDetectionEnabled = m_generalSettings.runtimeDetectionEnabled;
     mwSettings.historyEnabled = m_generalSettings.historyEnabled;
     mwSettings.historyMaxEntries = m_generalSettings.historyMaxEntries;

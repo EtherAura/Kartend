@@ -214,9 +214,10 @@ void MainWindow::setupUI() {
 void MainWindow::setupUIReferences() {
   setWindowTitle("Kartend");
 
-  // Apply user-configured pixmap cache size (in KB, settings stores MB)
-  int cacheSizeKB = m_generalSettings.pixmapCacheSizeMB * 1024;
-  QPixmapCache::setCacheLimit(cacheSizeKB);
+  // Apply user-configured pixmap cache size. Routes through the shared
+  // helper so QPixmapCache AND CacheManager::artworkCache both pick up
+  // the user setting in lockstep (Kartend-10pb).
+  applyPixmapCacheBudget(m_generalSettings.pixmapCacheSizeMB);
 
   VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
       m_generalSettings.videoThumbnailExtractionTimeoutMs);
@@ -310,6 +311,18 @@ void MainWindow::setupUIReferences() {
     m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());
     m_detailPageOverlay->setLayerManager(m_overlayLayerManager.get());
     m_textZoomHud->setLayerManager(m_overlayLayerManager.get());
+  }
+}
+
+void MainWindow::applyPixmapCacheBudget(int megabytes) {
+  // QPixmapCache::setCacheLimit takes KB; our settings store MB.
+  QPixmapCache::setCacheLimit(megabytes * 1024);
+  // CacheManager::artworkCache budget is owned by the manager itself —
+  // before getCacheManager() is wired up (very early startup), the
+  // CacheManager holds its construction-time legacy default and will
+  // pick up the user value on the next call.
+  if (auto *cm = getCacheManager()) {
+    cm->setArtworkCacheBudgetMB(megabytes);
   }
 }
 

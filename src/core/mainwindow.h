@@ -139,6 +139,14 @@ public:
   /// Delegates to the ToolbarController.
   void applyToolbarCustomization() override;
 
+  /// Push the pixmap cache budget to Qt's QPixmapCache (per-process
+  /// QPainter scratch cache) AND the CacheManager's artworkCache (the
+  /// in-process artwork QCache used for fast UI thumbnails). Both used
+  /// to be set independently from settings code paths, which let the
+  /// CacheManager budget drift permanently to the legacy 50 MB default
+  /// — Kartend-10pb. Idempotent.
+  void applyPixmapCacheBudget(int megabytes) override;
+
   /// Open the unified Scraper dialog. Caller is responsible for any
   /// pre-selection (right-click flow passes a collection + item; File
   /// → Scraper passes nothing). The dialog handles the rest:

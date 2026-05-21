@@ -3,6 +3,7 @@
 #include "cachemanager.h"
 #include "uiconstants/cache.h"
 
+#include <algorithm>
 #include <limits>
 #include <QApplication>
 #include <QDateTime>
@@ -50,6 +51,11 @@ Q_LOGGING_CATEGORY(lcCacheManager, "kartend.cachemanager")
   } while (0)
 
 CacheManager::CacheManager() : m_diskStorage(std::make_unique<CacheDiskStorage>()) {
+  // Construction-time default. Owner wires the user-configured budget
+  // via setArtworkCacheBudgetMB() during startup; until then we hold the
+  // legacy compile-time default so any early artwork inserts that happen
+  // before the wiring still get a budget (better than max=0 → no
+  // caching). UIConstants::Cache::PIXMAP_CACHE_KB is in KB.
   constexpr qint64 BYTES_PER_KB = 1024;
   const qint64 maxBytes = static_cast<qint64>(UIConstants::Cache::PIXMAP_CACHE_KB) * BYTES_PER_KB;
   const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
@@ -131,6 +137,22 @@ void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);
   artworkCache.clear();
   dirtyArtwork.clear();
+}
+
+void CacheManager::setArtworkCacheBudgetMB(int megabytes) {
+  // Floor at 1 MB so a hand-edited or otherwise out-of-range value can't
+  // collapse the cache into an immediate-eviction state (QCache treats
+  // maxCost <= 0 as no-cache). The settings UI already clamps to [10,500]
+  // on the way in; this guard catches direct API misuse / future
+  // recallers.
+  constexpr int kMinBudgetMB = 1;
+  const int effectiveMB = std::max(kMinBudgetMB, megabytes);
+  constexpr qint64 BYTES_PER_MB = 1024 * 1024;
+  const qint64 maxBytes = static_cast<qint64>(effectiveMB) * BYTES_PER_MB;
+  const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
+  QMutexLocker locker(&m_mutex);
+  artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max()
+                                            : static_cast<int>(maxBytes));
 }
 
 // Initializes persistent cache metadata from disk

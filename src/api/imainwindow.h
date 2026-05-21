@@ -74,6 +74,13 @@ public:
   /// GeneralSettings to the items-page toolbar after a settings save.
   /// Idempotent.
   virtual void applyToolbarCustomization() = 0;
+
+  /// Apply the user-configured pixmap cache budget (MB) to BOTH Qt's
+  /// process-global QPixmapCache and the CacheManager artworkCache.
+  /// Settings dialogs and startup wiring should call this single entry
+  /// point rather than touching the two caches independently — historic
+  /// drift between them was Kartend-10pb. Idempotent.
+  virtual void applyPixmapCacheBudget(int megabytes) = 0;
 };
 
 #endif // IMAINWINDOW_H

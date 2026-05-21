@@ -62,6 +62,8 @@ public:
   [[nodiscard]] static qint64 getCacheSize();
   void releaseGuiResources() override;
 
+  void setArtworkCacheBudgetMB(int megabytes) override;
+
   // Cache metrics access
   [[nodiscard]] CacheMetrics metrics() const override;
   void resetMetrics() override;
