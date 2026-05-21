@@ -436,6 +436,27 @@ maybe_prepare_build_dir() {
 
 run_ctest() {
   local dir="$1"
+  # Refuse to run ctest in the repo root: ctest scans PWD for tests if it
+  # can't locate CTestTestfile.cmake and leaks a `Testing/` scratch dir
+  # alongside the source tree. The build dir always has CTestTestfile.cmake
+  # next to the per-test binaries; that's the only place ctest belongs.
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  local abs_dir
+  abs_dir="$(cd "$dir" 2>/dev/null && pwd)" || {
+    echo "run_ctest: build dir not found: $dir" >&2
+    return 1
+  }
+  if [[ "$abs_dir" == "$repo_root" ]]; then
+    echo "run_ctest: refusing to run ctest in the repo root ($abs_dir)." >&2
+    echo "ctest must run against a configured build dir (e.g. build/ninja-release)." >&2
+    return 1
+  fi
+  if [[ ! -f "$abs_dir/CTestTestfile.cmake" ]]; then
+    echo "run_ctest: $abs_dir does not look like a build dir (no CTestTestfile.cmake)." >&2
+    echo "Did you mean a sibling under build/?" >&2
+    return 1
+  fi
   ctest --test-dir "$dir" --output-on-failure
 }
 

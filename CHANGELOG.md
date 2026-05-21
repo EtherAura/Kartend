@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.scripts/check-layering.py` now lints `src/widgets/` in addition to
   `src/utils/`, failing the maintenance build if the neutral widget
   layer reaches upward into `src/modules/`, `src/ui/`, or `src/core/`
+- `.scripts/build.sh`'s `run_ctest` helper now refuses to run if the
+  passed dir is the repo root or doesn't contain `CTestTestfile.cmake`.
+  Catches the footgun where ctest leaks a `Testing/` scratch dir
+  alongside the source tree when invoked outside a configured build dir
 
 ### Changed
 
