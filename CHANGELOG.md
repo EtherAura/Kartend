@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GUI thread at dispatch time and passed into the worker — Qt 6 documents
   `primaryScreen()` as a GUI-thread-only accessor, and the worker-side
   read was undefined behaviour even though it hadn't manifested visibly
+- `ScanWorkController` no longer has a data race on its cancellation
+  token: the `shared_ptr<atomic_bool>` is now guarded by a mutex so the
+  GUI thread's `requestCancel()` cannot race the scan worker's `reset()`
+  / `token()`. `reset()` also now permanently cancels the OLD token
+  before swapping in a fresh one (mirroring
+  `ArtworkLoadDispatcher::cancelAll`), so workers that captured the old
+  token before a reset-without-prior-cancel correctly observe
+  `isCancelled()` and bail out
 
 ### Removed
 
