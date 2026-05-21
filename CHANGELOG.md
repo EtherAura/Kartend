@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Artwork worker threads no longer call `QGuiApplication::primaryScreen()`
+  during decode. The DPR (device pixel ratio) is now snapshotted on the
+  GUI thread at dispatch time and passed into the worker — Qt 6 documents
+  `primaryScreen()` as a GUI-thread-only accessor, and the worker-side
+  read was undefined behaviour even though it hadn't manifested visibly
+
 ### Removed
 
 ### Deprecated

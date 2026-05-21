@@ -33,9 +33,10 @@ namespace {
 
 // Decode-at-target-size: avoids loading full-resolution artwork unnecessarily,
 // a major CPU+RAM win for large cover sets. DPR-aware so HiDPI displays get
-// crisp output. Worker-thread safe — touches only QImageReader and a one-shot
-// QGuiApplication::primaryScreen() probe.
-auto loadAndProcessImage(const QString &path) -> QImage {
+// crisp output. Worker-thread safe — touches only QImageReader; the DPR
+// argument must be snapshotted on the GUI thread by the caller because
+// QGuiApplication::primaryScreen() is documented as a GUI-thread accessor.
+auto loadAndProcessImage(const QString &path, qreal dpr) -> QImage {
   if (path.isEmpty() || !QFile::exists(path)) {
     return {};
   }
@@ -45,10 +46,6 @@ auto loadAndProcessImage(const QString &path) -> QImage {
   // worker-thread decode path; keep it strictly images-only.
   if (!ExtensionUtils::isDecodableImagePath(path)) {
     return {};
-  }
-  qreal dpr = 1.0;
-  if (QGuiApplication::primaryScreen()) {
-    dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
   }
   const int actualSize = qRound(UIConstants::Artwork::BOX_SIZE * dpr);
 
@@ -73,7 +70,7 @@ auto loadAndProcessImage(const QString &path) -> QImage {
 
 QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
                                                 const std::atomic<bool> &cancelled,
-                                                CacheManager *cacheManager) {
+                                                CacheManager *cacheManager, qreal dpr) {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
   for (const ArtworkInfo &info : batch) {
@@ -90,7 +87,7 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
       loadedFromDiskCache = !img.isNull();
     }
     if (!loadedFromDiskCache) {
-      img = loadAndProcessImage(info.artworkPath);
+      img = loadAndProcessImage(info.artworkPath, dpr);
     }
     if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
@@ -108,7 +105,7 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
 
 QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
                                                      const std::atomic<bool> &cancelled,
-                                                     CacheManager *cacheManager) {
+                                                     CacheManager *cacheManager, qreal dpr) {
   QList<ArtworkPrecacheResult> results;
   results.reserve(paths.size());
   for (const QString &artworkPath : paths) {
@@ -122,7 +119,7 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
       loadedFromDiskCache = !img.isNull();
     }
     if (!loadedFromDiskCache) {
-      img = loadAndProcessImage(artworkPath);
+      img = loadAndProcessImage(artworkPath, dpr);
     }
     if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
@@ -185,16 +182,21 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = batch.size();
   auto handler = std::move(onComplete);
+  // Snapshot DPR on the GUI thread — QGuiApplication::primaryScreen() is not
+  // safe to call from a worker. Dpr changes are rare; at-most one batch lags.
+  const qreal dpr = QGuiApplication::primaryScreen()
+                        ? QGuiApplication::primaryScreen()->devicePixelRatio()
+                        : qreal{1.0};
 
   QFuture<void> future = QtConcurrent::run(m_threadPool, [batch = std::move(batch), highPriority,
                                                           cancelFlag, batchItemCount, appReceiver,
-                                                          cacheManager, handler]() {
+                                                          cacheManager, handler, dpr]() {
     if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
       return;
     }
     QElapsedTimer timer;
     timer.start();
-    QList<ArtworkInfo::Result> results = processBatchOnWorker(batch, *cancelFlag, cacheManager);
+    QList<ArtworkInfo::Result> results = processBatchOnWorker(batch, *cancelFlag, cacheManager, dpr);
     const qint64 elapsedMs = timer.elapsed();
     if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
       return;
@@ -232,17 +234,21 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = paths.size();
   auto handler = std::move(onComplete);
+  // Snapshot DPR on the GUI thread — see dispatchBatch().
+  const qreal dpr = QGuiApplication::primaryScreen()
+                        ? QGuiApplication::primaryScreen()->devicePixelRatio()
+                        : qreal{1.0};
 
   QFuture<void> future = QtConcurrent::run(m_threadPool, [paths = std::move(paths), cancelFlag,
                                                           batchItemCount, appReceiver, cacheManager,
-                                                          handler]() {
+                                                          handler, dpr]() {
     if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
       return;
     }
     QElapsedTimer timer;
     timer.start();
     QList<ArtworkPrecacheResult> results =
-        processPrecacheOnWorker(paths, *cancelFlag, cacheManager);
+        processPrecacheOnWorker(paths, *cancelFlag, cacheManager, dpr);
     const qint64 elapsedMs = timer.elapsed();
     if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
       return;
