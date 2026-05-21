@@ -4,7 +4,7 @@
 #include "artworkutils.h"
 #include "extensionutils.h"
 #include "overlaylayermanager.h"
-#include "uiconstants.h"
+#include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 #include "videoutils.h"
 

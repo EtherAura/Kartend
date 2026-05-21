@@ -15,7 +15,9 @@
 #include "interactionstateholder.h"
 #include "iscrollmanager.h"
 #include "iselectionmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/keyboard.h"
+#include "uiconstants/listview.h"
 #include "viewportmanager.h"
 #include <QApplication>
 #include <QDateTime>

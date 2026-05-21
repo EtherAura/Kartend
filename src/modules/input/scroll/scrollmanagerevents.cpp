@@ -13,7 +13,9 @@
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
+#include "uiconstants/keyboard.h"
+#include "uiconstants/mouse.h"
 
 #include <QLoggingCategory>
 #include <QScrollArea>

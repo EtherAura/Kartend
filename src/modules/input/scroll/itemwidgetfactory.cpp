@@ -6,7 +6,7 @@
 #include "idatabasemanager.h"
 #include "itemwidget.h"
 #include "textzoom.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
 #include "widgetpoolmanager.h"
 
 #include <QDir>

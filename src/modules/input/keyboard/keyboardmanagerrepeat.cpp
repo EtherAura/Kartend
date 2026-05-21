@@ -14,7 +14,6 @@
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcKeyboardManager)

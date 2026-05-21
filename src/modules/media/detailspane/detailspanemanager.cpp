@@ -11,7 +11,7 @@
 #include "itemmetadata.h"
 #include "pathutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/detailspane.h"
 #include "videoutils.h"
 #include <algorithm>
 #include <QApplication>

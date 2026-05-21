@@ -16,7 +16,8 @@
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/listview.h"
 
 #include <algorithm>
 #include <QHash>

@@ -21,7 +21,7 @@
 #include "dbmigrations.h"
 #include "errorutils.h"
 #include "querymanagersql.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;

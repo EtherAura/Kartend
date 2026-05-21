@@ -15,7 +15,8 @@
 #include "isettingsmanager.h"
 #include "selectionrestorehelpers.h"
 #include "setuputils.h"
-#include "uiconstants.h"
+#include "uiconstants/selection.h"
+#include "uiconstants/timing.h"
 
 #include <QLoggingCategory>
 // Default to warning — restore scheduling logs on every reload and

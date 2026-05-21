@@ -27,7 +27,6 @@
 #include "selectionstatetracker.h"
 #include "textzoom.h"
 #include "timerutils.h"
-#include "uiconstants.h"
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
 

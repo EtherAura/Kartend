@@ -23,7 +23,8 @@
 #include "settingsdialog.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/item.h"
 
 void SettingsDialog::updateCollectionTreeWidget() {
   if (!m_treeManager) {

@@ -30,7 +30,8 @@
 #include "iselectionmanager.h"
 #include "iviewportmanager.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/mouse.h"
+#include "uiconstants/timing.h"
 #include "wheeleventhandler.h"
 
 #include <QLoggingCategory>

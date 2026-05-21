@@ -11,7 +11,7 @@
 #include "scrollmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 #include <algorithm>
 #include <QLineEdit>

@@ -25,7 +25,8 @@
 #include "iviewportmanager.h"
 #include "mousemanager.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/mouse.h"
 
 WheelEventHandler::WheelEventHandler(QObject *parent) : QObject(parent) {}
 WheelEventHandler::~WheelEventHandler() = default;

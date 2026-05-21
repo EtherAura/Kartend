@@ -19,7 +19,8 @@
 #include "scrollmanager.h"
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/scroll.h"
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
 

@@ -10,7 +10,7 @@
 #include "mainwindow.h"
 #include "navigationmanager.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/icons.h"
 
 #include <QAction>
 #include <QActionGroup>

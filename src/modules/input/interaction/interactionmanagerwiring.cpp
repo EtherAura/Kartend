@@ -29,7 +29,7 @@
 #include "inavigationmanager.h"
 #include "itemwidget.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/selection.h"
 
 void InteractionManager::connectSearchManagerSignals() {
   connect(m_searchManager.get(), &SearchManager::requestClearSelection, this,

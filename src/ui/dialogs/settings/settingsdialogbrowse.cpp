@@ -42,7 +42,6 @@
 #include "subfolderspanel.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
 
 void SettingsDialog::checkForChanges() {
   // Skip change detection during programmatic loading to avoid

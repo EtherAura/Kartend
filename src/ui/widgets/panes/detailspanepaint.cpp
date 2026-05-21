@@ -23,7 +23,6 @@
 #include "itemwidget.h"
 #include "textzoom.h"
 #include "ui_detailspane.h"
-#include "uiconstants.h"
 
 void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // m_position must be set BEFORE setActiveTab, because

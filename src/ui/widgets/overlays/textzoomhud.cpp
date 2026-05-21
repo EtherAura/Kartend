@@ -14,7 +14,7 @@
 #include <QResizeEvent>
 #include <QTimer>
 
-#include "uiconstants.h"
+#include "uiconstants/overlay.h"
 
 namespace {
 constexpr int kTopMargin = 24;

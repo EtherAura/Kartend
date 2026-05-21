@@ -21,7 +21,6 @@
 #include "textzoomhud.h"
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
 #include "videopreviewwidget.h"
 
 void MainWindow::setupTextZoomShortcuts() {

@@ -5,7 +5,9 @@
 #include "itemwidget.h"
 #include "overlayhelpers.h"
 #include "overlaylayermanager.h"
-#include "uiconstants.h"
+#include "uiconstants/collectionicon.h"
+#include "uiconstants/selection.h"
+#include "uiconstants/widget.h"
 #include <QColor>
 #include <QPropertyAnimation>
 #include <QWidget>

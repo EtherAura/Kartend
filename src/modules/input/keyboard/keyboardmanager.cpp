@@ -15,7 +15,8 @@
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/timing.h"
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")

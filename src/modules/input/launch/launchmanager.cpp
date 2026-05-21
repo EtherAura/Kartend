@@ -7,7 +7,6 @@
 #include "errorutils.h"
 #include "pathutils.h"
 #include "setuputils.h"
-#include "uiconstants.h"
 
 #include <QDateTime>
 #include <QDir>

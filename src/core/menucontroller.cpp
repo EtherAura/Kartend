@@ -11,7 +11,7 @@
 #include "shortcutsdialog.h"
 #include "statisticsdialog.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
+#include "uiconstants/icons.h"
 
 #include <QApplication>
 #include <QFileInfo>

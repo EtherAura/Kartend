@@ -4,7 +4,8 @@
 #include "extensionutils.h"
 #include "loggingcategories.h"
 #include "threadpoolutils.h"
-#include "uiconstants.h"
+#include "uiconstants/artwork.h"
+#include "uiconstants/concurrency.h"
 
 #include <QApplication>
 #include <QCoreApplication>

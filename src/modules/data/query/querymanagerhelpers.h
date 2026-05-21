@@ -30,7 +30,7 @@
 
 #include "collectionutils.h"
 #include "queryhelpers.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
 
 class PreparedStatementCache;
 

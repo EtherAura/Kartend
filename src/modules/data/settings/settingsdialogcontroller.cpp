@@ -20,7 +20,7 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 #include <memory>
 #include <QDialog>
 #include <QLabel>

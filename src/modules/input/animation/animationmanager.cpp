@@ -6,7 +6,7 @@
 #include "iartworkmanager.h"
 #include "interactionstateholder.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/animation.h"
 
 #include <cmath>
 #include <QApplication>

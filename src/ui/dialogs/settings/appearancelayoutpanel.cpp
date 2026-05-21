@@ -3,7 +3,8 @@
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_appearancelayoutpanel.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/viewport.h"
 
 #include <QCheckBox>
 #include <QComboBox>

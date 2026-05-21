@@ -10,7 +10,8 @@
 #include "scrollmanager.h"
 #include "searchhelpers.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/icons.h"
+#include "uiconstants/search.h"
 #include <QAction>
 #include <QApplication>
 #include <QDateTime>

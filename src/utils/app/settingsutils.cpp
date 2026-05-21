@@ -2,7 +2,6 @@
 #include "settingsutils.h"
 #include "errorutils.h"
 #include "pathutils.h"
-#include "uiconstants.h"
 #include <algorithm>
 #include <QDir>
 #include <QFile>

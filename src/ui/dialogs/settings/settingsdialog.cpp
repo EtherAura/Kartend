@@ -63,7 +63,8 @@
 #include "toolbarpanel.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
+#include "uiconstants/viewport.h"
 
 SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
                                int initialIndex)

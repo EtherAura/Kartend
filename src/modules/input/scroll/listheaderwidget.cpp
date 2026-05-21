@@ -1,6 +1,8 @@
 // List header widget for list view mode with sortable column headers.
 #include "listheaderwidget.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/icons.h"
+#include "uiconstants/listview.h"
 
 #include <QCursor>
 #include <QHBoxLayout>

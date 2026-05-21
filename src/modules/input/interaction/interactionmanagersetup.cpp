@@ -44,7 +44,6 @@
 #include "scrollmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
 #include "viewportmanager.h"
 
 #include <QLoggingCategory>

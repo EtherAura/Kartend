@@ -2,7 +2,7 @@
 #include "searchloadingoverlay.h"
 
 #include "overlaylayermanager.h"
-#include "uiconstants.h"
+#include "uiconstants/overlay.h"
 #include <QGraphicsOpacityEffect>
 #include <QLabel>
 #include <QPropertyAnimation>

@@ -22,7 +22,6 @@
 #include "videoutils.h"
 
 #include "timerutils.h"
-#include "uiconstants.h"
 
 #include <QElapsedTimer>
 #include <QFileInfo>

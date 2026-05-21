@@ -22,7 +22,7 @@
 #include "pathutils.h"
 #include "querymanager.h"
 #include "titlefilter.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")

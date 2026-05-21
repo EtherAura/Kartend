@@ -27,7 +27,7 @@
 #include "collectionutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
 #include "workersignalspy.h"
 
 class TestQueryManagerShellCollectionSort : public QObject {

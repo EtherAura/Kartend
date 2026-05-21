@@ -17,7 +17,7 @@
 #include "settingshelpers.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/attract.h"
 #include <algorithm>
 #include <QDir>
 #include <QFile>

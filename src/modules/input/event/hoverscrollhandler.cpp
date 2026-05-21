@@ -21,7 +21,7 @@
 #include "itemwidget.h"
 #include "iviewportmanager.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/mouse.h"
 
 namespace {
 

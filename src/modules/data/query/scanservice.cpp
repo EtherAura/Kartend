@@ -52,7 +52,7 @@
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
-#include "uiconstants.h"
+#include "uiconstants/database.h"
 
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 

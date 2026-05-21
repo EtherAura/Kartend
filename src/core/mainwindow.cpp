@@ -70,7 +70,7 @@
 #include "textzoomhud.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 #include <QDragEnterEvent>
 #include <QDropEvent>

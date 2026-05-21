@@ -1,7 +1,7 @@
 #include "scrolleventhandler.h"
 #include "interactionstateholder.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/mouse.h"
 #include <QAbstractAnimation>
 #include <QPropertyAnimation>
 #include <QScrollArea>

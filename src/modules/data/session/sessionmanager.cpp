@@ -4,7 +4,6 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "pathutils.h"
-#include "uiconstants.h"
 
 #include <algorithm>
 #include <QApplication>

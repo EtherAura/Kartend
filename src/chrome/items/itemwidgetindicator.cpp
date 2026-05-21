@@ -1,7 +1,9 @@
 // Triangle indicator update + paint extracted from itemwidget.cpp.
 // These remain ItemWidget members; this is a translation-unit split.
 #include "itemwidget.h"
-#include "uiconstants.h"
+#include "uiconstants/collectionicon.h"
+#include "uiconstants/metadata.h"
+#include "uiconstants/widget.h"
 #include <algorithm>
 #include <QColor>
 #include <QLabel>

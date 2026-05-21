@@ -23,7 +23,8 @@
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
+#include "uiconstants/detailspane.h"
+#include "uiconstants/grid.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)

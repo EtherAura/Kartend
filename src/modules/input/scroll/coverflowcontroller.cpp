@@ -23,7 +23,7 @@
 #include "scrolldatamanager.h"
 #include "textzoom.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/scroll.h"
 #include "videoutils.h"
 
 #include <QBoxLayout>

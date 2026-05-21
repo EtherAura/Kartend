@@ -56,7 +56,9 @@
 #include "stringutils.h"
 #include "textzoomhud.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
+#include "uiconstants/dialog.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/icons.h"
 #include "videothumbnailextractor.h"
 
 #include <QLoggingCategory>

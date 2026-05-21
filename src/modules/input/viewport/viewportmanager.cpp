@@ -11,7 +11,7 @@
 #include "iselectionmanager.h"
 
 #include "gridutils.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 #include <QApplication>
 #include <QDateTime>

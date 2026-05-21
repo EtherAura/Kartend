@@ -11,7 +11,8 @@
 #include "viewportmanager.h"
 
 #include "gridutils.h"
-#include "uiconstants.h"
+#include "uiconstants/detailspane.h"
+#include "uiconstants/grid.h"
 
 #include <QApplication>
 #include <QDateTime>

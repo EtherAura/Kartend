@@ -48,7 +48,6 @@
 #include "toolbarpanel.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
 #include "videothumbnailextractor.h"
 
 void SettingsDialog::revertCurrentCollectionEdits() {

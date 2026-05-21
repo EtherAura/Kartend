@@ -7,7 +7,6 @@
 #include "isessionmanager.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
-#include "uiconstants.h"
 #include <algorithm>
 #include <atomic>
 #include <QCryptographicHash>

@@ -1,7 +1,7 @@
 // Manages in-memory pixmap cache with LRU eviction and optional disk
 // persistence.
 #include "cachemanager.h"
-#include "uiconstants.h"
+#include "uiconstants/cache.h"
 
 #include <limits>
 #include <QApplication>

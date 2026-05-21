@@ -14,7 +14,7 @@
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 #include <QApplication>
 #include <QLoggingCategory>

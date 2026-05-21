@@ -17,7 +17,7 @@
 #include <QResizeEvent>
 #include <QVBoxLayout>
 
-#include "uiconstants.h"
+#include "uiconstants/overlay.h"
 
 namespace {
 constexpr int kCardMinimumWidth = 460;

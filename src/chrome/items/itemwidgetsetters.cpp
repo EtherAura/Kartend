@@ -2,7 +2,7 @@
 // Extracted from itemwidget.cpp during LOC-reduction refactor.
 // These remain ItemWidget members; pure translation-unit split.
 #include "itemwidget.h"
-#include "uiconstants.h"
+#include "uiconstants/icons.h"
 
 #include <QLabel>
 #include <QLoggingCategory>

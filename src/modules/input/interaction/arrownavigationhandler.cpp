@@ -7,7 +7,7 @@
 #include "keyboardmanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/mouse.h"
 
 #include <QApplication>
 #include <QScrollArea>

@@ -43,7 +43,6 @@
 #include "subfolderspanel.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
 
 auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {

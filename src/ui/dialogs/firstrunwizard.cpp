@@ -15,7 +15,7 @@
 #include <QVBoxLayout>
 #include <QWizardPage>
 
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
 
 namespace {
 

@@ -1,6 +1,6 @@
 #include "scanworkcontroller.h"
 
-#include "uiconstants.h"
+#include "uiconstants/concurrency.h"
 
 #include <algorithm>
 #include <QRunnable>

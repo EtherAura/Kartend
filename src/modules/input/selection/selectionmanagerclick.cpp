@@ -26,7 +26,8 @@
 #include "iviewportmanager.h"
 #include "scrollmanager.h"
 #include "selectionhelpers.h"
-#include "uiconstants.h"
+#include "uiconstants/keyboard.h"
+#include "uiconstants/selection.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcSelectionManager)

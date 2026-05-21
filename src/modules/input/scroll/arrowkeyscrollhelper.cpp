@@ -2,7 +2,8 @@
 #include "collectionutils.h"
 #include "interactionstateholder.h"
 #include "scrolleventhandler.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/item.h"
 #include <cmath>
 #include <QDateTime>
 #include <QPropertyAnimation>

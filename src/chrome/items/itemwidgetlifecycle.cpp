@@ -2,7 +2,8 @@
 // These remain ItemWidget members; this is a translation-unit split.
 #include "itemwidget.h"
 #include "propertyutils.h"
-#include "uiconstants.h"
+#include "uiconstants/animation.h"
+#include "uiconstants/icons.h"
 #include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>

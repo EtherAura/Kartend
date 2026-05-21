@@ -12,7 +12,8 @@
 #include "artworkwidgetregistry.h"
 #include "cachemanager.h"
 #include "loggingcategories.h"
-#include "uiconstants.h"
+#include "uiconstants/artwork.h"
+#include "uiconstants/timing.h"
 
 #include <QApplication>
 #include <QDateTime>

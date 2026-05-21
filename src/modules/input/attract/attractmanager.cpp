@@ -10,7 +10,7 @@
 #include "gridlayoutcalculator.h"
 #include "iscrollmanager.h"
 #include "iselectionmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/attract.h"
 
 #include <QRandomGenerator>
 #include <QScrollBar>

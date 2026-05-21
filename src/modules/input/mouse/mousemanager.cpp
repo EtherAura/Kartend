@@ -10,7 +10,8 @@
 #include "itemwidget.h"
 #include "mousehelpers.h"
 #include "scrollmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/mouse.h"
 
 #include <QScrollArea>
 #include <QScrollBar>

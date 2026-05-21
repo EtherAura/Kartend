@@ -27,7 +27,6 @@
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
-#include "uiconstants.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;

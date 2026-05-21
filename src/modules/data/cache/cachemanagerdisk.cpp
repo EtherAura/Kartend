@@ -5,7 +5,7 @@
 // shutdown-time synchronous flush.
 #include "cachediskstorage.h"
 #include "cachemanager.h"
-#include "uiconstants.h"
+#include "uiconstants/cache.h"
 
 #include <QApplication>
 #include <QDateTime>

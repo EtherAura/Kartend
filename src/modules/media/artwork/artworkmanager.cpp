@@ -16,7 +16,8 @@
 #include "setuputils.h"
 #include "threadpoolutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/artwork.h"
+#include "uiconstants/cache.h"
 
 #include <algorithm>
 #include <functional>

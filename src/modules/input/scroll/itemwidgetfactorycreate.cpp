@@ -9,7 +9,6 @@
 #include "itemwidget.h"
 #include "loggingcategories.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
 #include <QDir>

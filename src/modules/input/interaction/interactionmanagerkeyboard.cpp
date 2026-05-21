@@ -44,7 +44,7 @@
 #include "scrollmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/selection.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)

@@ -118,10 +118,10 @@ target_include_directories(kartend_utils PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings
   # NOTE: src/ui/uiconstants/ is intentionally NOT on the include path.
   # Several uiconstants sub-headers (detailspane.h, gamepad.h, navigation.h,
-  # etc.) collide by basename with widget / dialog / manager headers, and
-  # the uiconstants files are referenced as `uiconstants/<name>.h` from
-  # src/ui/uiconstants.h. Keeping the dir off the search path preserves the
-  # single-source resolution for the colliding basenames.
+  # etc.) collide by basename with widget / dialog / manager headers, so
+  # consumers reference them as `uiconstants/<name>.h` from the umbrella
+  # path. Keeping the dir off the search path preserves the single-source
+  # resolution for the colliding basenames.
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/widgets/overlays
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/widgets/panes
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/app

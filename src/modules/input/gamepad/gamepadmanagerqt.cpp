@@ -2,7 +2,6 @@
 // GamepadManager.
 #include "gamepadmanager.h"
 #include "ikeyboardmanager.h"
-#include "uiconstants.h"
 
 #include <QApplication>
 

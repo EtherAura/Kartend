@@ -2,7 +2,11 @@
 // animation.
 #include "itemwidget.h"
 #include "propertyutils.h"
-#include "uiconstants.h"
+#include "uiconstants/animation.h"
+#include "uiconstants/collectionicon.h"
+#include "uiconstants/color.h"
+#include "uiconstants/item.h"
+#include "uiconstants/widget.h"
 #include <algorithm>
 #include <QApplication>
 #include <QColor>

@@ -3,7 +3,8 @@
 
 #include "collectionutils.h"
 #include "gridutils.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/listview.h"
 #include <QPoint>
 #include <QRect>
 

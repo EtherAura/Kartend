@@ -23,7 +23,7 @@
 
 #include "extensionutils.h"
 #include "itemmetadata.h"
-#include "uiconstants.h"
+#include "uiconstants/metadata.h"
 #include "videothumbnailextractor.h"
 
 namespace {

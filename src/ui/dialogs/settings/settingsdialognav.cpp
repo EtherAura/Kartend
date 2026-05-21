@@ -22,7 +22,7 @@
 
 #include "settingsdialog.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
+#include "uiconstants/icons.h"
 
 namespace {
 // Page index lives in Qt::UserRole; -1 marks a non-selectable group header.

@@ -27,7 +27,7 @@
 #include "iviewportmanager.h"
 #include "scrollmanager.h"
 #include "selectionhelpers.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 #include <QLoggingCategory>
 // Default to warning — persistSelection fires per grid move, which

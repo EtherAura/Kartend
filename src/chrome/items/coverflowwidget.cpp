@@ -2,7 +2,7 @@
 
 #include "coverflowwidget.h"
 #include "extensionutils.h"
-#include "uiconstants.h"
+#include "uiconstants/artwork.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 

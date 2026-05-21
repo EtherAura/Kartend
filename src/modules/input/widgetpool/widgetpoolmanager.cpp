@@ -1,7 +1,8 @@
 // Manages widget recycling pool for efficient virtual scrolling
 #include "widgetpoolmanager.h"
 #include "itemwidget.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/widget.h"
 #include <algorithm>
 #include <QLoggingCategory>
 #include <QTimer>

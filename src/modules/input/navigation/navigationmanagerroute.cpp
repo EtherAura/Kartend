@@ -11,7 +11,8 @@
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/navigation.h"
+#include "uiconstants/timing.h"
 
 #include <QLineEdit>
 #include <QStackedWidget>

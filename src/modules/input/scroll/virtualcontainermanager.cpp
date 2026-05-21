@@ -2,7 +2,7 @@
 #include "filtermanager.h"
 #include "scrollhelpers.h"
 #include "selectionoverlaymanager.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
 #include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>

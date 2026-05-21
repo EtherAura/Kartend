@@ -37,10 +37,12 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 SRC = REPO / "src"
 
 # Headers a foundation-layer file is allowed to include even though they
-# live above it. UIConstants is a pure compile-time constants namespace
-# with no behavioural dependency; relocating it into utils/ is tracked
-# separately. Keep this list short and justified.
-ALLOWLIST = {"uiconstants.h"}
+# live above it. The UIConstants subheaders under src/ui/uiconstants/ are
+# pure compile-time constants namespaces with no behavioural dependency;
+# the seeding loop below adds them all to this set. Relocating them into
+# utils/ is tracked separately. Keep additions to this list short and
+# justified.
+ALLOWLIST: set[str] = set()
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 

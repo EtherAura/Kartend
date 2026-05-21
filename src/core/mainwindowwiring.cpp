@@ -149,7 +149,7 @@
 #include "timerutils.h"
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
-#include "uiconstants.h"
+#include "uiconstants/detailspane.h"
 
 // =====================================================================
 // Small slot handlers that live alongside their connect()s — too small

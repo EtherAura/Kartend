@@ -22,7 +22,6 @@
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
 #include "timerutils.h"
-#include "uiconstants.h"
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
 #include <algorithm>

@@ -20,7 +20,7 @@
 
 #include "collectionutils.h"
 #include "isettingsmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/mouse.h"
 
 // Stops key/mouse repeat navigation and restores artwork / centering properties
 void InteractionManager::stopRepeat(bool suppressRecentering) {

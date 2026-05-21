@@ -1,7 +1,7 @@
 // Provides debounced timer coordination for viewport and layout updates.
 #include "timerutils.h"
 
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 #include <QApplication>
 #include <QTimer>
 

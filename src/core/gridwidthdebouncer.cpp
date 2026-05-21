@@ -1,7 +1,7 @@
 #include "gridwidthdebouncer.h"
 
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/timing.h"
 
 GridWidthDebouncer::GridWidthDebouncer(QObject *parent) : QObject(parent) {
   m_saveTimer = new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);

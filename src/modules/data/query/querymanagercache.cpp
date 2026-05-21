@@ -24,7 +24,6 @@
 #include "querymanagersql.h"
 #include "smartfilter.h"
 #include "smartplaylistevaluator.h"
-#include "uiconstants.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;

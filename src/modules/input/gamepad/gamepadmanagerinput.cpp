@@ -1,7 +1,7 @@
 // Direction + input handling cluster split out from gamepadmanager.cpp.
 #include "gamepadmanager.h"
 #include "ikeyboardmanager.h"
-#include "uiconstants.h"
+#include "uiconstants/gamepad.h"
 
 #include <QApplication>
 

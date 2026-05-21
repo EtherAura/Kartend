@@ -18,7 +18,7 @@
 #include "selectionrestoremanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
-#include "uiconstants.h"
+#include "uiconstants/selection.h"
 #include <algorithm>
 #include <QApplication>
 #include <QDateTime>

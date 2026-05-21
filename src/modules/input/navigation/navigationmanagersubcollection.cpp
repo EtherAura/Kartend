@@ -10,7 +10,9 @@
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/artwork.h"
+#include "uiconstants/navigation.h"
+#include "uiconstants/selection.h"
 
 #include <QDateTime>
 #include <QLabel>

@@ -6,7 +6,7 @@
 
 #include "animationmanager.h"
 #include "gridutils.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
 
 #include <cmath>
 #include <QtGlobal>

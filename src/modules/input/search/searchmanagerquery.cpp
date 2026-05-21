@@ -9,7 +9,7 @@
 #include "searchhelpers.h"
 #include "searchmanager.h"
 #include "settingsutils.h"
-#include "uiconstants.h"
+#include "uiconstants/search.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>

@@ -6,7 +6,6 @@
 
 #include "detailspane.h"
 #include "detailspanegalleryview.h"
-#include "uiconstants.h"
 #include "videopreviewwidget.h"
 
 #include <QElapsedTimer>

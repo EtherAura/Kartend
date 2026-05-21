@@ -23,7 +23,10 @@
 #include "pathutils.h"
 #include "settingsutils.h"
 #include "titlefilter.h"
-#include "uiconstants.h"
+#include "uiconstants/detailspane.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/item.h"
+#include "uiconstants/listview.h"
 
 namespace {
 

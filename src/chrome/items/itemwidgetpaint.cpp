@@ -5,7 +5,9 @@
 // These remain ItemWidget members and access existing class state and statics.
 #include "itemwidget.h"
 #include "propertyutils.h"
-#include "uiconstants.h"
+#include "uiconstants/animation.h"
+#include "uiconstants/listview.h"
+#include "uiconstants/widget.h"
 #include <algorithm>
 #include <QFont>
 #include <QFontMetrics>

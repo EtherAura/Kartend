@@ -2,7 +2,7 @@
 #include "errorutils.h"
 #include "launchmanager.h"
 #include "pathutils.h"
-#include "uiconstants.h"
+#include "uiconstants/launch.h"
 
 #include <QDir>
 #include <QDirIterator>

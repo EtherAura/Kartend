@@ -4,7 +4,8 @@
 // cohesive namespace; ItemWidget's existing static API forwards here.
 #include "itemplaceholderrenderer.h"
 
-#include "uiconstants.h"
+#include "uiconstants/color.h"
+#include "uiconstants/placeholder.h"
 
 #include <algorithm>
 #include <QApplication>

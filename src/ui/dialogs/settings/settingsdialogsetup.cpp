@@ -44,7 +44,8 @@
 #include "subfolderspanel.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
-#include "uiconstants.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/viewport.h"
 
 void SettingsDialog::setupBasicUIConnections() {
   connect(m_saveButton, &QPushButton::clicked, this, [this]() {

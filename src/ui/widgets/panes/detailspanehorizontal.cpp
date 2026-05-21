@@ -23,7 +23,7 @@
 #include "detailspanegalleryview.h"
 #include "extensionutils.h"
 #include "ui_detailspane.h"
-#include "uiconstants.h"
+#include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 
 int DetailsPane::horizontalPreviewSize() const {
