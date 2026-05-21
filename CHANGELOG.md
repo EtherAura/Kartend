@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `.scripts/check-layering.py` now lints `src/widgets/` in addition to
-  `src/utils/`, failing the maintenance build if the neutral widget
+- `.scripts/check-layering.py` now lints `src/chrome/` in addition to
+  `src/utils/`, failing the maintenance build if the neutral chrome
   layer reaches upward into `src/modules/`, `src/ui/`, or `src/core/`
 - `.scripts/build.sh`'s `run_ctest` helper now refuses to run if the
   passed dir is the repo root or doesn't contain `CTestTestfile.cmake`.
@@ -28,11 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared chrome widgets (`ItemWidget`, `CoverFlowWidget`,
   `ArtworkPreviewOverlay`, `VideoPreviewWidget`, `VideoThumbnailExtractor`,
   plus the `ItemPlaceholderRenderer` helper) moved from
-  `src/ui/widgets/{items,media,overlays}/` to a new `src/widgets/` layer
+  `src/ui/widgets/{items,media,overlays}/` to a new `src/chrome/` layer
   that sits between `src/utils/` and `src/modules/`. Callers in
   `src/modules/input/` and `src/modules/media/` no longer take an upward
   dep on `src/ui/` to reach these widgets; the include statements
-  themselves are unchanged (CMake resolves them to the new path)
+  themselves are unchanged (CMake resolves them to the new path).
+  The per-area OBJECT library was renamed `kartend_widgets` →
+  `kartend_chrome` so the CMake-level layering matches the directory name
 - `KartManager` no longer includes `kartmergedialog.h` — the interactive
   merge-conflict dialog is now supplied by the UI layer (MainWindow) as
   a `ConflictResolver` closure on `KartManagerSetup::mergeResolver`. The

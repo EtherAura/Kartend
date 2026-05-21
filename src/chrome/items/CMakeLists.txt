@@ -1,4 +1,4 @@
-target_sources(kartend_widgets PRIVATE
+target_sources(kartend_chrome PRIVATE
   coverflowwidget.cpp
   itemplaceholderrenderer.cpp
   itemwidget.cpp

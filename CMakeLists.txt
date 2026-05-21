@@ -66,7 +66,7 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets/panes
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/widgets/items
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/chrome/items
 )
 
 # Qt6 required. 6.4 is the floor: project uses QTimeZone::utc() which was
@@ -170,7 +170,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Aggregator INTERFACE library that pulls every per-area OBJECT lib into the
 # main executable + integration test harness. The per-area libs (kartend_utils,
-# kartend_api, kartend_widgets, kartend_data, kartend_input, kartend_media,
+# kartend_api, kartend_chrome, kartend_data, kartend_input, kartend_media,
 # kartend_behavior, kartend_ui, kartend_core) are declared in
 # src/CMakeLists.txt with a PUBLIC target_link_libraries DAG that enforces
 # downward-only edges at the library level. Replaces the prior monolithic
@@ -186,7 +186,7 @@ add_subdirectory(src)
 set(KARTEND_AREA_LIBS
   kartend_utils
   kartend_api
-  kartend_widgets
+  kartend_chrome
   kartend_data
   kartend_input
   kartend_media

@@ -11,6 +11,12 @@ Kartend uses a **module-based architecture** where `MainWindow` owns `Applicatio
 ```
 src/
 ├── api/                 # Neutral header-only role interfaces (i*.h); no .cpp
+├── chrome/              # Neutral chrome layer — "dumb" widgets shared between
+│   │                    # input/media/core/ui without taking an upward dep
+│   │                    # on src/ui/. Layering enforced by check-layering.py.
+│   ├── items/           # ItemWidget, CoverFlowWidget, placeholder renderers
+│   ├── media/           # VideoPreviewWidget, video thumbnail extractor
+│   └── overlays/        # ArtworkPreviewOverlay, OverlayLayerManager
 ├── core/                # Main application entry and window
 ├── modules/             # Feature modules grouped by domain
 │   ├── behavior/        # Manager lifecycle coordination
@@ -52,8 +58,9 @@ src/
 ├── ui/                  # UI components and constants
 │   ├── dialogs/         # Dialogs grouped by domain: settings/, collection/,
 │   │                    # launcher/, scraper/, kart/ (loose dialogs at root)
-│   └── widgets/         # Item widget, details pane, generic overlays,
-│                        # video-preview widgets
+│   └── widgets/         # UI-coupled widgets: details pane, marquee window,
+│                        # splash / now-playing / startup-video / text-zoom
+│                        # overlays (neutral widgets live in src/chrome/)
 └── utils/               # Shared utilities and data structures
 ```
 

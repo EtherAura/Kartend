@@ -65,14 +65,14 @@ target_link_libraries(test_integration
 
 # AUTOUIC generates ui_*.h headers next to the consuming target's autogen
 # directory. With the per-area OBJECT lib split, each area that owns a
-# matching .ui file produces its own autogen include path: kartend_widgets
+# matching .ui file produces its own autogen include path: kartend_chrome
 # for itemwidget.ui, kartend_core for mainwindow.ui, kartend_ui for every
 # settings panel .ui under src/ui/dialogs/settings/, and detailspane.ui under
 # src/ui/widgets/panes/. The integration test pulls headers (itemwidget.h,
 # mainwindow.h, settingsdialog.h, detailspane.h) that #include those
 # generated ui_*.h files, so all four autogen include dirs are needed.
 target_include_directories(test_integration PRIVATE
-  ${CMAKE_BINARY_DIR}/kartend_widgets_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_chrome_autogen/include
   ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
   ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
   ${CMAKE_CURRENT_SOURCE_DIR}

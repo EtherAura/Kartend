@@ -32,7 +32,7 @@ add_library(kartend_utils OBJECT)
 # AUTOMOC must produce moc_iscrollmanager.cpp here, otherwise concrete
 # implementations like ScrollManager lose their parent's meta-object info.
 add_library(kartend_api OBJECT)
-add_library(kartend_widgets OBJECT)
+add_library(kartend_chrome OBJECT)
 add_library(kartend_data OBJECT)
 add_library(kartend_input OBJECT)
 add_library(kartend_media OBJECT)
@@ -43,7 +43,7 @@ add_library(kartend_core OBJECT)
 # All OBJECT libs are consumed by both the PIE executable and the test
 # harness, so their objects must be position-independent.
 set_target_properties(
-  kartend_utils kartend_api kartend_widgets kartend_data kartend_input
+  kartend_utils kartend_api kartend_chrome kartend_data kartend_input
   kartend_media kartend_behavior kartend_ui kartend_core
   PROPERTIES POSITION_INDEPENDENT_CODE ON
 )
@@ -58,7 +58,7 @@ set_target_properties(
 # the residual modules/*->ui/* upward edges are interface-broken.
 # ---------------------------------------------------------------------------
 # AUTOUIC generates ui_*.h headers under each OBJECT lib's autogen include
-# directory (e.g. kartend_widgets_autogen/include/ui_itemwidget.h). Cross-lib
+# directory (e.g. kartend_chrome_autogen/include/ui_itemwidget.h). Cross-lib
 # header inclusion — for instance, behavior's applicationmanager.cpp pulling
 # artworkmanager.h which transitively #includes itemwidget.h which #includes
 # ui_itemwidget.h — needs every autogen dir on the global compile include
@@ -67,7 +67,7 @@ target_include_directories(kartend_utils PUBLIC
   ${CMAKE_BINARY_DIR}
   ${CMAKE_BINARY_DIR}/src/kartend_utils_autogen/include
   ${CMAKE_BINARY_DIR}/src/kartend_api_autogen/include
-  ${CMAKE_BINARY_DIR}/src/kartend_widgets_autogen/include
+  ${CMAKE_BINARY_DIR}/src/kartend_chrome_autogen/include
   ${CMAKE_BINARY_DIR}/src/kartend_data_autogen/include
   ${CMAKE_BINARY_DIR}/src/kartend_input_autogen/include
   ${CMAKE_BINARY_DIR}/src/kartend_media_autogen/include
@@ -130,9 +130,9 @@ target_include_directories(kartend_utils PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/text
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/threading
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/view
-  ${CMAKE_CURRENT_SOURCE_DIR}/widgets/items
-  ${CMAKE_CURRENT_SOURCE_DIR}/widgets/media
-  ${CMAKE_CURRENT_SOURCE_DIR}/widgets/overlays
+  ${CMAKE_CURRENT_SOURCE_DIR}/chrome/items
+  ${CMAKE_CURRENT_SOURCE_DIR}/chrome/media
+  ${CMAKE_CURRENT_SOURCE_DIR}/chrome/overlays
 )
 
 # Qt6 link deps published through kartend_utils PUBLIC — every per-area lib
@@ -166,7 +166,7 @@ target_link_libraries(kartend_utils PUBLIC
 # precondition for tightening per-area target_link_libraries-enforced
 # layering once the residual upward edges are interface-broken.
 target_link_libraries(kartend_api PUBLIC kartend_utils)
-target_link_libraries(kartend_widgets PRIVATE kartend_utils)
+target_link_libraries(kartend_chrome PRIVATE kartend_utils)
 target_link_libraries(kartend_data PUBLIC kartend_utils)
 target_link_libraries(kartend_input PUBLIC kartend_utils)
 target_link_libraries(kartend_media PUBLIC kartend_utils)
@@ -180,7 +180,7 @@ target_link_libraries(kartend_core PUBLIC kartend_utils)
 target_link_libraries(${KARTEND_LIB_TARGET} INTERFACE
   kartend_utils
   kartend_api
-  kartend_widgets
+  kartend_chrome
   kartend_data
   kartend_input
   kartend_media
@@ -201,18 +201,18 @@ target_link_libraries(${KARTEND_LIB_TARGET} INTERFACE
 # compile step. The dependency direction is downward-only (a consumer
 # higher in the layered DAG can depend on a producer lower / sibling, but
 # never the reverse) to avoid CMake-level cycles.
-add_dependencies(kartend_ui kartend_widgets_autogen)
-add_dependencies(kartend_data kartend_widgets_autogen)
-add_dependencies(kartend_input kartend_widgets_autogen kartend_ui_autogen)
-add_dependencies(kartend_media kartend_widgets_autogen kartend_ui_autogen)
+add_dependencies(kartend_ui kartend_chrome_autogen)
+add_dependencies(kartend_data kartend_chrome_autogen)
+add_dependencies(kartend_input kartend_chrome_autogen kartend_ui_autogen)
+add_dependencies(kartend_media kartend_chrome_autogen kartend_ui_autogen)
 add_dependencies(kartend_behavior
-  kartend_widgets_autogen
+  kartend_chrome_autogen
   kartend_ui_autogen
   kartend_input_autogen
   kartend_media_autogen
 )
 add_dependencies(kartend_core
-  kartend_widgets_autogen
+  kartend_chrome_autogen
   kartend_ui_autogen
   kartend_input_autogen
   kartend_media_autogen
@@ -226,8 +226,8 @@ add_dependencies(kartend_core
 # ---------------------------------------------------------------------------
 add_subdirectory(api)
 add_subdirectory(assets)
+add_subdirectory(chrome)
 add_subdirectory(core)
 add_subdirectory(modules)
 add_subdirectory(ui)
 add_subdirectory(utils)
-add_subdirectory(widgets)

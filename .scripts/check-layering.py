@@ -6,10 +6,10 @@ into one OBJECT library, so the layering is not compiler-enforced. This
 script enforces the invariants that must always hold:
 
     src/utils/    is the foundation layer and MUST NOT depend on any
-                  higher layer (src/modules/, src/widgets/, src/ui/,
+                  higher layer (src/modules/, src/chrome/, src/ui/,
                   src/core/).
 
-    src/widgets/  is the neutral chrome layer (Kartend-jvib) sitting
+    src/chrome/   is the neutral chrome layer (Kartend-jvib) sitting
                   between utils/ and modules/. The QWidgets in here
                   must stay "dumb" — pixmaps, strings, Qt signals — so
                   input/media can include them without a transitive
@@ -22,7 +22,7 @@ its header actually lives in and fails if a file reaches upward.
 This is the first guardrail for issue "module folders don't enforce
 layering" — the eventual fix is to split each top-level module into its
 own library with explicit `target_link_libraries`. Until then, this lint
-stops the foundation/widgets layers from silently accreting upward edges.
+stops the foundation/chrome layers from silently accreting upward edges.
 
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
 """
@@ -66,12 +66,12 @@ def main() -> int:
     area = header_area_map()
     # What's "upward" depends on which layer we're checking:
     #   utils/   — nothing above is reachable (utils is the floor)
-    #   widgets/ — modules/, ui/, core/ are above; utils/ + widgets/ are OK
+    #   chrome/  — modules/, ui/, core/ are above; utils/ + chrome/ are OK
     # The eventual hchk split will make this CMake-enforced; until then the
     # lint is the only guardrail.
     layer_upward = {
-        "utils": {"modules", "widgets", "ui", "core"},
-        "widgets": {"modules", "ui", "core"},
+        "utils": {"modules", "chrome", "ui", "core"},
+        "chrome": {"modules", "ui", "core"},
     }
     violations: list[tuple[str, str, str, str]] = []  # (layer, file, include, target)
 
@@ -103,7 +103,7 @@ def main() -> int:
         return 1
 
     print(
-        "check-layering: OK — src/utils/ and src/widgets/ stay within "
+        "check-layering: OK — src/utils/ and src/chrome/ stay within "
         "their layers"
     )
     return 0
