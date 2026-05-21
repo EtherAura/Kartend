@@ -87,6 +87,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   override is available via the new `maxResponseBytes` parameter on
   `HttpClient::get`. New `HttpClient` unit test exercises the abort with
   a local `QTcpServer` streaming an unbounded body
+- Scraper credentials (TMDB bearer tokens, ScreenScraper user/dev
+  passwords) are no longer persisted as plaintext under `[Scrapers]` in
+  `kartend.conf`. When the build picks up Qt6Keychain at configure time
+  (`qtkeychain-qt6-dev` on Debian/Ubuntu; equivalent elsewhere),
+  credential values go to the platform secret service — GNOME Keyring /
+  KWallet on Linux, Credential Manager on Windows, Keychain on macOS —
+  and the INI file holds only an `@keychain` sentinel marking which
+  provider/field pairs exist. Legacy plaintext entries are read on
+  first launch and migrated to the keychain on the next settings save.
+  Builds without QtKeychain (or runs where no secret service is
+  available) fall back to the previous plaintext-INI behaviour with a
+  warning logged
 
 ## [0.0.8] - 2026-05-20
 

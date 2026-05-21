@@ -20,16 +20,88 @@
 #include "uiconstants/attract.h"
 #include <algorithm>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QLabel>
 #include <QPointer>
 #include <QScrollArea>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
+
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+#include <qt6keychain/keychain.h>
+#endif
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 #define debugLog(msg) qCDebug(lcSettingsManager) << msg
+
+namespace {
+// Sentinel value stored in QSettings [Scrapers/<provider>/<field>] when
+// the real credential lives in the platform keychain. On load, finding
+// this sentinel triggers a keychain lookup; anything else is treated as
+// either an empty/missing credential or a legacy plaintext value
+// awaiting migration on the next save.
+constexpr const char *kKeychainSentinel = "@keychain";
+constexpr const char *kKeychainService = "io.github.EtherAura.Kartend.scrapers";
+
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+// Synchronous wrappers around QKeychain's async Job API. Credentials are
+// read/written only at settings load (once at startup) and save (when
+// the user clicks Save in the Settings dialog), never on a hot path, so
+// blocking the calling thread on a local QEventLoop is acceptable. The
+// insecureFallback flag is left at its default (false) so a missing
+// secret service surfaces as NoBackendAvailable rather than silently
+// dropping a plaintext copy into QSettings — settingsmanager handles the
+// fallback explicitly so the caller can see the boundary and so the
+// migration logic isn't confused by QKeychain doubling up its own
+// plaintext copy.
+QString syncReadKeychain(const QString &key, bool *ok) {
+  const QString service = QLatin1String(kKeychainService);
+  QKeychain::ReadPasswordJob job(service);
+  job.setAutoDelete(false);
+  job.setKey(key);
+  QEventLoop loop;
+  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
+  job.start();
+  loop.exec();
+  if (job.error() == QKeychain::NoError) {
+    if (ok) *ok = true;
+    return job.textData();
+  }
+  if (ok) *ok = false;
+  return {};
+}
+
+bool syncWriteKeychain(const QString &key, const QString &value) {
+  const QString service = QLatin1String(kKeychainService);
+  QKeychain::WritePasswordJob job(service);
+  job.setAutoDelete(false);
+  job.setKey(key);
+  job.setTextData(value);
+  QEventLoop loop;
+  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
+  job.start();
+  loop.exec();
+  return job.error() == QKeychain::NoError;
+}
+
+bool syncDeleteKeychain(const QString &key) {
+  const QString service = QLatin1String(kKeychainService);
+  QKeychain::DeletePasswordJob job(service);
+  job.setAutoDelete(false);
+  job.setKey(key);
+  QEventLoop loop;
+  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
+  job.start();
+  loop.exec();
+  // EntryNotFound on a delete is expected (key was already gone) — treat
+  // as success so a re-save without the key doesn't log a warning.
+  return job.error() == QKeychain::NoError || job.error() == QKeychain::EntryNotFound;
+}
+#endif // KARTEND_HAVE_QTKEYCHAIN
+} // namespace
 
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(const ApplicationContext *ctx, QObject *parent)
@@ -289,6 +361,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // read these via GeneralSettings::scraperCredentials; missing entries
   // mean "not configured" and the provider should surface a friendly
   // error rather than fall back to bundled credentials.
+  //
+  // When KARTEND_HAVE_QTKEYCHAIN is defined, the INI value @keychain is
+  // a sentinel meaning the real credential lives in the platform secret
+  // service; any other non-empty value is either a legacy plaintext
+  // credential (will be migrated to the keychain on next save) or
+  // came from a build without keychain support.
   settings.scraperCredentials.clear();
   s.beginGroup("Scrapers");
   for (const QString &fullKey : s.allKeys()) {
@@ -300,7 +378,25 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     }
     const QString providerId = fullKey.left(slash);
     const QString fieldName = fullKey.mid(slash + 1);
-    settings.scraperCredentials[providerId][fieldName] = s.value(fullKey).toString();
+    QString resolvedValue = s.value(fullKey).toString();
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+    if (resolvedValue == QLatin1String(kKeychainSentinel)) {
+      bool ok = false;
+      const QString fromKeychain = syncReadKeychain(fullKey, &ok);
+      if (ok) {
+        resolvedValue = fromKeychain;
+      } else {
+        // Keychain backend dropped or the entry was wiped externally —
+        // surface as a missing credential rather than handing the
+        // sentinel back to the provider as if it were a real password.
+        qCWarning(lcSettingsManager)
+            << "Scraper credential" << fullKey << "marked @keychain but lookup failed; "
+            << "treating as missing. Re-enter in Settings → Scrapers to repopulate.";
+        resolvedValue.clear();
+      }
+    }
+#endif
+    settings.scraperCredentials[providerId][fieldName] = resolvedValue;
   }
   s.endGroup();
 
@@ -616,6 +712,23 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   // Persist scraper credentials. Wipe the entire [Scrapers] group
   // first so removing a credential field via the UI actually clears
   // the row from disk (otherwise the next load would resurrect it).
+  //
+  // With KARTEND_HAVE_QTKEYCHAIN, credential values go to the platform
+  // secret service and the INI holds only the @keychain sentinel as a
+  // presence marker. When the keychain backend is unavailable (headless
+  // Linux without dbus, etc.) we fall back to writing the plaintext
+  // value into the INI — same behaviour as a build without keychain
+  // support. The pre-wipe snapshot of old INI keys is used to drop
+  // keychain entries for credentials that the user removed via the UI.
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+  QStringList preWipeKeys;
+  {
+    s.beginGroup("Scrapers");
+    preWipeKeys = s.allKeys();
+    s.endGroup();
+  }
+  QSet<QString> retainedKeys;
+#endif
   s.remove(QStringLiteral("Scrapers"));
   s.beginGroup("Scrapers");
   for (auto pIt = m_generalSettings.scraperCredentials.constBegin();
@@ -628,10 +741,37 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
       // Skip empty values so a fully-cleared field doesn't write an
       // empty row that survives a round-trip.
       if (fIt.value().isEmpty()) continue;
-      s.setValue(providerId + QLatin1Char('/') + field, fIt.value());
+      const QString fullKey = providerId + QLatin1Char('/') + field;
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+      if (syncWriteKeychain(fullKey, fIt.value())) {
+        s.setValue(fullKey, QLatin1String(kKeychainSentinel));
+        retainedKeys.insert(fullKey);
+      } else {
+        // No backend available — fall back to plaintext INI (matches a
+        // build without keychain support; the security improvement is
+        // best-effort, not load-bearing).
+        qCWarning(lcSettingsManager)
+            << "Keychain write failed for" << fullKey << "; falling back to plaintext INI";
+        s.setValue(fullKey, fIt.value());
+      }
+#else
+      s.setValue(fullKey, fIt.value());
+#endif
     }
   }
   s.endGroup();
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+  // Sweep keychain entries that the user removed in the UI. preWipeKeys
+  // is the union of keys present before the wipe (legacy plaintext +
+  // existing @keychain sentinels); anything not retained this round
+  // gets a delete. EntryNotFound from the delete is fine — it means we
+  // already cleaned up on a prior save.
+  for (const QString &k : preWipeKeys) {
+    if (!retainedKeys.contains(k)) {
+      syncDeleteKeychain(k);
+    }
+  }
+#endif
 
   // Scraper performance + behavior options. Wipe the group first so
   // a "Reset to defaults" round-trip doesn't leave stale custom keys.

@@ -168,6 +168,14 @@ target_link_libraries(kartend_utils PUBLIC
 target_link_libraries(kartend_api PUBLIC kartend_utils)
 target_link_libraries(kartend_chrome PRIVATE kartend_utils)
 target_link_libraries(kartend_data PUBLIC kartend_utils)
+# Conditional secure-credentials backend. When Qt6Keychain isn't available
+# at configure time the data layer keeps the legacy plaintext-INI path
+# unchanged (KARTEND_HAVE_QTKEYCHAIN is undefined) — see settingsmanager
+# scraper-credential read/write code.
+if (TARGET Qt6Keychain::Qt6Keychain)
+  target_link_libraries(kartend_data PRIVATE Qt6Keychain::Qt6Keychain)
+  target_compile_definitions(kartend_data PRIVATE KARTEND_HAVE_QTKEYCHAIN)
+endif()
 target_link_libraries(kartend_input PUBLIC kartend_utils)
 target_link_libraries(kartend_media PUBLIC kartend_utils)
 target_link_libraries(kartend_behavior PRIVATE kartend_utils)

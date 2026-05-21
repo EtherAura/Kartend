@@ -92,6 +92,16 @@ if (PkgConfig_FOUND AND KARTEND_ENABLE_ZSTD)
   pkg_check_modules(ZSTD QUIET IMPORTED_TARGET libzstd)
 endif()
 
+# Optional: QtKeychain for secure scraper credential storage. Without it,
+# the [Scrapers] group is persisted to QSettings as plaintext (the legacy
+# behaviour). With it, credential values are stored in the platform
+# secret service (GNOME Keyring, KWallet, Windows Credential Manager,
+# macOS Keychain) and the INI file holds only the index of which
+# provider/field pairs exist. QtKeychain itself ships an
+# insecureFallback mode for headless / no-secret-service systems, so the
+# runtime degrades gracefully rather than refusing to start.
+find_package(Qt6Keychain QUIET)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
