@@ -38,6 +38,7 @@ class BatchScrapeProgressView;
 class IDatabaseManager;
 struct ApplicationContext;
 class MetadataLookupProvider;
+class ScrapeResultDialogUnified;
 class SingleItemScrapeView;
 struct GeneralSettings;
 
@@ -63,6 +64,15 @@ struct GeneralSettings;
 class ScrapeResultDialog : public QDialog {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScrapeResultDialog)
+
+  // ScrapeResultDialogUnified (Kartend-izpz, 3fkz step 3) owns the
+  // unified-flow logic — collection tree, items list, queue walker, live
+  // metadata panel, ScraperService signal handlers. State stays on this
+  // host (the access sites already exist here and on the slot trampolines
+  // below); the unified controller reaches it through this friend
+  // declaration.
+  friend class ScrapeResultDialogUnified;
+
 public:
   /// Outcome of a successful Apply. The `media` list mirrors the
   /// detail's media but only contains entries the user checked, with
@@ -211,8 +221,7 @@ private slots:
   // setScraperService becomes a connect table and the bodies are
   // reviewable in isolation.
   void onServiceScrapeStarted(int total);
-  void onServiceItemBegan(int done, int total, const QString &collectionName,
-                          const QString &name);
+  void onServiceItemBegan(int done, int total, const QString &collectionName, const QString &name);
   void onServiceItemCompleted(int done, int total, const Scraper::ScrapedItem &scraped,
                               const QStringList &mediaPaths);
   void onServicePickerNeeded(const QString &itemPath, const QString &itemName,
@@ -228,7 +237,6 @@ private:
   enum class UnifiedPhase { Setup, AutoRunning, InteractiveLookingUp, InteractivePicking, Done };
 
   void buildUi();
-  void buildUnifiedPanel();
   /// Fan out the per-asset download dispatches for the assets the user
   /// just confirmed via Apply (Kartend-3fkz step 5). Extracted from
   /// onApply so onApply itself stays a confirmation + routing shell.
@@ -236,7 +244,7 @@ private:
   /// a QPointer guard so a dialog destroyed mid-flight doesn't
   /// dereference a stale `this`.
   void dispatchSelectedDownloads(const QList<Scraper::MediaAsset> &selected,
-                                  const std::shared_ptr<QElapsedTimer> &applyTimer);
+                                 const std::shared_ptr<QElapsedTimer> &applyTimer);
   /// Format the elapsed/ETA strings shared by both modes. `etaMs` is
   /// the projected milliseconds remaining; pass <= 0 to display "—".
   [[nodiscard]] static QString formatDuration(qint64 ms);
@@ -245,36 +253,11 @@ private:
   /// stay visually consistent.
   void updateSingleItemProgress(int completed);
 
-  // ── Unified flow helpers ────────────────────────────────────────
-  void populateCollectionTree();
-  void rebuildItemsList(int collectionIndex);
-  /// Apply the per-collection bookkeeping for a check-state change:
-  /// seed (or clear) that collection's item-inclusion set. Shared by a
-  /// direct checkbox click and the parent → subtree cascade.
-  void applyCollectionCheckState(int collectionIndex, bool checked);
-  void setUnifiedSetupEnabled(bool enabled);
-  void updateUnifiedProgressLabel();
-  /// Total items checked across every checked collection — the
-  /// denominator for progress + ETA computations.
-  [[nodiscard]] int totalCheckedItemCount() const;
-  /// Walk the collection queue, run the next not-yet-scraped one.
-  /// Each call either kicks off the next collection or fires the
-  /// "all done" summary path.
-  void startNextCollectionInQueue();
-  /// Drive auto-mode for a single collection: build the runner, attach
-  /// signals, switch to BatchProgress page, start the runner.
-  void runAutoCollection(int collectionIndex, const QStringList &items);
-  /// Drive interactive-mode for a single collection: walk its items
-  /// one at a time through the candidate picker.
-  void runInteractiveCollection(int collectionIndex, const QStringList &items);
-  void interactiveNextItem();
-  void interactiveOnLookupResult(ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result);
-  void interactiveOnApplied();
-  void interactiveOnSkipped();
-  /// Single-item Apply's completion path branches here so the unified
-  /// interactive flow can advance to the next item instead of closing
-  /// the dialog. Default behaviour (legacy single-item path): accept().
-  void finishCurrentApply();
+  // Unified-flow helpers — both the per-collection / queue walker and the
+  // Live metadata panel + marquee tick — moved into ScrapeResultDialogUnified
+  // (Kartend-izpz). The slots above are 1-line trampolines that forward into
+  // m_unified; state stays here so the trampolines and the legacy
+  // SingleItem/Batch paths keep their existing direct access.
 
   MetadataLookupProvider *m_provider = nullptr;
   QList<Scraper::ScrapeCandidate> m_candidates;
@@ -365,11 +348,6 @@ private:
   /// appended after these and torn down / rebuilt from index
   /// m_typedChipCount onward, leaving the typed chips untouched.
   int m_typedChipCount = 0;
-  /// Build (or rebuild) the custom-fields rows inside
-  /// m_liveExtrasContainer. Each pair lays out a label+QLineEdit
-  /// cell in the same 5-pair-per-row pattern as the typed-fields
-  /// grid above.
-  void populateCustomFields(const QHash<QString, QString> &fields);
   QGroupBox *m_liveThumbsGroup = nullptr;
   QListWidget *m_liveThumbsStrip = nullptr;
   QPushButton *m_closeButton = nullptr;
@@ -384,35 +362,12 @@ private:
   /// a row re-fetches detail and refreshes the live metadata fields.
   QWidget *m_interactiveCandidateRow = nullptr;
   class QComboBox *m_interactiveCandidateCombo = nullptr;
-  /// Populate every QLineEdit/QTextBrowser in the live metadata
-  /// panel from `item`. Shared between the auto-mode `itemCompleted`
-  /// signal and the interactive-mode candidate-detail callback so
-  /// both paths render to identical widgets.
-  void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
-  /// Decode + scale a thumbnail off the UI thread, then append it to
-  /// the live thumb strip on the main thread. Replaces a synchronous
-  /// `QPixmap(path) + Qt::SmoothTransformation` per item — that ran
-  /// on the UI thread and was the dominant per-item stall under high
-  /// scrape concurrency. The watcher is parented to `this` so a
-  /// dialog close cleans up any in-flight decodes safely.
-  void appendThumbAsync(const QString &path);
-  /// Ticks every ~150 ms while a scrape is running. Walks every
-  /// QLineEdit value cell in the metadata panel; if text overflows
-  /// the cell width, scrolls the cursor one character to the right
-  /// (which scrolls the visible text leftward), then pauses at the
-  /// end before snapping back to position 0. No reverse animation
-  /// — direction is always L→R, then wrap.
-  void tickValueMarquees();
   /// Per-cell pause counter: while a value is parked at the
   /// rightmost scroll position, this counts down before the cell
   /// snaps back to cursor 0. Cells without entries are in the
   /// advancing phase.
   QHash<class QLineEdit *, int> m_marqueePauseTicks;
   class QTimer *m_marqueeTimer = nullptr;
-  /// Interactive-mode helper: fetches detail for the candidate at
-  /// `idx` from m_candidates and pipes the result into
-  /// applyScrapedItemToLive. Enables the Apply button on success.
-  void interactiveFetchDetail(int idx);
 
   /// Provider-supplied health/load message surfaced before Apply.
   /// Populated from MetadataLookupProvider::fetchHealthStatus on
@@ -518,6 +473,14 @@ private:
   int m_interactiveCursor = 0;
   int m_interactiveCollectionIndex = -1;
   bool m_unifiedCancelled = false;
+
+  /// Owns the unified-flow methods (Kartend-izpz, 3fkz step 3). Constructed
+  /// once in the ctor with a back-pointer to `this`; all unified-flow logic
+  /// (collection tree, items list, queue walker, ScraperService signal
+  /// handlers, live-metadata panel, marquee tick) lives there. State stays
+  /// on this host class so the slot trampolines and the legacy
+  /// SingleItem / Batch paths keep their direct member access.
+  std::unique_ptr<ScrapeResultDialogUnified> m_unified;
 };
 
 #endif // SCRAPERESULTDIALOG_H
