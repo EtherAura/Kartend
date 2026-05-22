@@ -310,8 +310,11 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
       throttle.report(processed, total, force);
     };
 
-    // Sequential scan for flat directories (original behavior)
-    constexpr int PROGRESS_REPORT_INTERVAL = 500;
+    // Sequential scan for flat directories (original behavior). Per-loop
+    // override of the file-static PROGRESS_REPORT_INTERVAL = 50000 — flat
+    // dirs hit each report ~100× more often, so the tighter 500-item cadence
+    // keeps the UI feedback live without flooding the event loop.
+    constexpr int FLAT_PROGRESS_REPORT_INTERVAL = 500;
     int itemsScanned = 0;
 
     // QDir::System is required so symlinks whose targets are temporarily
@@ -343,7 +346,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
       timestamps[relativePath] = mtime;
 
       ++itemsScanned;
-      if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {
+      if (itemsScanned % FLAT_PROGRESS_REPORT_INTERVAL == 0) {
         maybeEmitScanProgress(itemsScanned, -1);
       }
     }
@@ -399,7 +402,10 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
                            QDirIterator::Subdirectories);
 
   int totalItemsScanned = 0;
-  constexpr int PROGRESS_REPORT_INTERVAL = 500;
+  // Per-loop override of the file-static PROGRESS_REPORT_INTERVAL = 50000 —
+  // parallel recursive scans report on a 500-item delta cadence so the
+  // progress bar stays live without the throttle eating every report.
+  constexpr int RECURSIVE_PROGRESS_REPORT_INTERVAL = 500;
   int lastReportedCount = 0;
   int directoriesEnqueued = 1; // root
   int directoryResultsConsumed = 0;
@@ -478,7 +484,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
     }
 
     totalItemsScanned += result.relativePaths.size();
-    if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
+    if (totalItemsScanned - lastReportedCount >= RECURSIVE_PROGRESS_REPORT_INTERVAL) {
       lastReportedCount = totalItemsScanned;
       maybeEmitScanProgress(totalItemsScanned, -1);
     }

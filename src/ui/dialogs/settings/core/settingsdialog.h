@@ -356,8 +356,8 @@ private:
   [[nodiscard]] QList<int> expandedCollectionIndices() const override;
   void expandCollectionAtIndex(int index) override;
   [[nodiscard]] QWidget *dialogWidget() override { return this; }
-  void emitCollectionSaved(const QList<CollectionConfig> &collections) override {
-    emit collectionSaved(collections);
+  void emitCollectionSaved(const QList<CollectionConfig> &savedCollections) override {
+    emit collectionSaved(savedCollections);
   }
   // The remaining host overrides (expandPathToCollection, loadCollectionToUI,
   // propagateCollectionNameChange, updateCollectionTreeWidget,

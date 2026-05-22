@@ -263,8 +263,6 @@ auto InteractionManager::handleEscapeKey() -> bool {
     if (cfg.isSubcollection && cfg.parentCollectionIndex >= 0 &&
         cfg.parentCollectionIndex < m_collections->size()) {
       if (navMgr()) {
-        constexpr int kRestoreAttempts = UIConstants::Selection::RESTORE_STEPS;
-        constexpr int kRestoreIntervalMs = UIConstants::Selection::RESTORE_STEP_DELAY_MS;
         constexpr int kRestoreTimeoutMs = UIConstants::Selection::RESTORE_MAX_DELAY_MS;
         const int parent = cfg.parentCollectionIndex;
         navMgr()->showCollectionItems(parent);

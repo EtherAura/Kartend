@@ -68,7 +68,7 @@ public:
   /// no walk is already in flight. First call returns 0 while the
   /// initial walk runs; subsequent calls return the real total once the
   /// walk completes. Non-blocking on the GUI thread (Kartend-bwcd).
-  [[nodiscard]] qint64 getCacheSize() const;
+  [[nodiscard]] qint64 getCacheSize() const override;
   void releaseGuiResources() override;
 
   void setArtworkCacheBudgetMB(int megabytes) override;
