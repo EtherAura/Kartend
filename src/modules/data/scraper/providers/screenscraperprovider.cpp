@@ -335,7 +335,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // cache and skip straight to the real query.
   m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
                                   callback = std::move(callback)](
-                                     QList<ScreenScraperSystems::System> systems) {
+                                     QList<ScreenScraperSystems::System> systems) mutable {
     const QString romnom =
         !datCanonicalName.isEmpty() ? datCanonicalName : QFileInfo(trimmed).fileName();
     const int systemeid = resolveSystemId(systems);
@@ -553,7 +553,8 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
   // HttpClient::setRateLimit just replaces the policy entry.
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgent(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
           return;

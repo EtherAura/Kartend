@@ -37,9 +37,8 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
 
 } // namespace
 
-QList<SuspiciousKartPath>
-collectSuspiciousKartPaths(const CollectionConfig &cfg,
-                           const QSet<QString> &trustedLauncherPaths) {
+QList<SuspiciousKartPath> collectSuspiciousKartPaths(const CollectionConfig &cfg,
+                                                     const QSet<QString> &trustedLauncherPaths) {
   QList<SuspiciousKartPath> out;
   const QString home = QDir::homePath();
   const QStringList allowedRoots = {home, QStringLiteral("/usr/bin"),
@@ -145,8 +144,7 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   // suspiciousPathConfirmer before getting here (runImport applies the
   // gate). Headless callers still hit finalizeImport directly, so we keep
   // the audit-log here as the floor.
-  const auto suspicious =
-      collectSuspiciousKartPaths(cfg, previouslyTrustedLauncherPaths());
+  const auto suspicious = collectSuspiciousKartPaths(cfg, previouslyTrustedLauncherPaths());
   for (const auto &[field, path] : suspicious) {
     ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
                              ErrorUtils::ErrorCode::InvalidFilePath,
@@ -211,12 +209,12 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
   // .kart prompts the user before the manifest's launcher path is
   // registered.
   if (m_setup.suspiciousPathConfirmer) {
-    const auto suspicious = collectSuspiciousKartPaths(
-        extracted.value().manifest.collectionConfig, previouslyTrustedLauncherPaths());
+    const auto suspicious = collectSuspiciousKartPaths(extracted.value().manifest.collectionConfig,
+                                                       previouslyTrustedLauncherPaths());
     if (!suspicious.isEmpty() && !m_setup.suspiciousPathConfirmer(suspicious)) {
-      return ErrorUtils::ErrorContext::warning(
-          ErrorUtils::ErrorCode::OperationCancelled,
-          "Import cancelled at suspicious-path confirmation", "KartManager::importKart");
+      return ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::OperationCancelled,
+                                               "Import cancelled at suspicious-path confirmation",
+                                               "KartManager::importKart");
     }
   }
   return finalizeImport(extracted.value(), registerCollection,
@@ -367,9 +365,8 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
             if (!suspicious.isEmpty() && m_setup.suspiciousPathConfirmer) {
               if (!m_setup.suspiciousPathConfirmer(suspicious)) {
                 auto ctx = ErrorUtils::ErrorContext::warning(
-                               ErrorUtils::ErrorCode::OperationCancelled,
-                               "Import cancelled at suspicious-path confirmation",
-                               "KartManager::runImport");
+                    ErrorUtils::ErrorCode::OperationCancelled,
+                    "Import cancelled at suspicious-path confirmation", "KartManager::runImport");
                 emit importFailed(ctx);
                 emit kartProgressFailed();
                 return;

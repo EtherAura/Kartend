@@ -43,8 +43,8 @@ void ScrollDataStore::resizeStorage(int totalCount) {
 }
 
 void ScrollDataStore::initializeSubcollections(const CollectionContext &context,
-                                                 const QList<CollectionConfig> *collections,
-                                                 const CollectionHierarchyCache *hierarchyCache) {
+                                               const QList<CollectionConfig> *collections,
+                                               const CollectionHierarchyCache *hierarchyCache) {
   m_subcollections.clear();
 
   if (!collections) {
@@ -235,7 +235,7 @@ void ScrollDataStore::initializeVirtualFolders(const CollectionContext &context)
 }
 
 void ScrollDataStore::applyUnifiedSort(const CollectionContext &context,
-                                         const QList<CollectionConfig> *collections) {
+                                       const QList<CollectionConfig> *collections) {
   m_unifiedItems.clear();
   m_unifiedSortActive = false;
 
@@ -406,7 +406,7 @@ void ScrollDataStore::clear() {
 }
 
 QList<int> ScrollDataStore::receiveItemsRange(int offset, const QStringList &paths,
-                                                const QHash<QString, QString> &names) {
+                                              const QHash<QString, QString> &names) {
   QList<int> updatedVisualIndices;
 
   if (offset < 0 || offset >= m_filePaths.size()) {

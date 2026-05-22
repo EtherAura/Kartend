@@ -12,7 +12,9 @@ FlowLayout::~FlowLayout() {
   while (QLayoutItem *item = takeAt(0)) delete item;
 }
 
-void FlowLayout::addItem(QLayoutItem *item) { m_items.append(item); }
+void FlowLayout::addItem(QLayoutItem *item) {
+  m_items.append(item);
+}
 
 int FlowLayout::heightForWidth(int width) const {
   return doLayout(QRect(0, 0, width, 0), true);

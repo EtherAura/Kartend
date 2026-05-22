@@ -125,8 +125,7 @@ public:
   // of the DB pointer so the runner reads through ctx in dbMgr() and the
   // pointer stays consistent with ApplicationContext::managers across the
   // runner's lifetime.
-  BatchScrapeRunner(const ApplicationContext *ctx,
-                    std::shared_ptr<MetadataLookupProvider> provider,
+  BatchScrapeRunner(const ApplicationContext *ctx, std::shared_ptr<MetadataLookupProvider> provider,
                     QString collectionUuid, QStringList paths, QString artworkDir,
                     bool fetchPrimaryCover = true,
                     Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Overwrite,

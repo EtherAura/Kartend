@@ -24,7 +24,9 @@ using namespace CoverFlowGalleryStripConstants;
 
 CoverFlowGalleryStrip::CoverFlowGalleryStrip(QObject *parent) : QObject(parent) {}
 
-void CoverFlowGalleryStrip::setHost(CoverFlowWidget *host) { m_host = host; }
+void CoverFlowGalleryStrip::setHost(CoverFlowWidget *host) {
+  m_host = host;
+}
 
 QList<QRect> CoverFlowGalleryStrip::thumbRects() const {
   QList<QRect> rects;

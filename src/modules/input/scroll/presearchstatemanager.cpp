@@ -38,10 +38,10 @@ bool PreSearchStateCache::saveState(QHash<int, ItemWidget *> &activeWidgets) {
 }
 
 bool PreSearchStateCache::restoreState(QHash<int, ItemWidget *> &activeWidgets,
-                                         QWidget *virtualContainer, WidgetPoolManager *widgetPool,
-                                         IArtworkManager *artworkManager,
-                                         std::function<QPoint(int)> getPositionFunc, int itemWidth,
-                                         int itemHeight) {
+                                       QWidget *virtualContainer, WidgetPoolManager *widgetPool,
+                                       IArtworkManager *artworkManager,
+                                       std::function<QPoint(int)> getPositionFunc, int itemWidth,
+                                       int itemHeight) {
 
   if (m_savedWidgets.isEmpty()) {
     return false;

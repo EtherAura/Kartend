@@ -118,7 +118,7 @@ auto SelectionRestoreCoordinator::initializeSelectionRestoreToken() const -> int
 }
 
 auto SelectionRestoreCoordinator::createRestoreValidationLambda(int scheduledCollectionIndex,
-                                                            int token) const
+                                                                int token) const
     -> std::function<bool()> {
   return [this, scheduledCollectionIndex, token]() -> bool {
     if (!validateSelectionRestoreContext()) {
@@ -147,8 +147,8 @@ auto SelectionRestoreCoordinator::createRestoreValidationLambda(int scheduledCol
 }
 
 auto SelectionRestoreCoordinator::executeSelectionRestore(int desiredIndex,
-                                                      int scheduledCollectionIndex, int token) const
-    -> void {
+                                                          int scheduledCollectionIndex,
+                                                          int token) const -> void {
   auto validator = createRestoreValidationLambda(scheduledCollectionIndex, token);
 
   debugLog("[SelectionRestore] executeSelectionRestore: desiredIndex="
@@ -182,7 +182,7 @@ auto SelectionRestoreCoordinator::executeSelectionRestore(int desiredIndex,
 }
 
 void SelectionRestoreCoordinator::scheduleSelectionRestore(int desiredIndex,
-                                                       int finalEnsureDelayMs) {
+                                                           int finalEnsureDelayMs) {
   debugLog("[SelectionRestore] scheduleSelectionRestore: desiredIndex=" << desiredIndex);
 
   if (!validateSelectionRestoreContext()) {
@@ -245,7 +245,7 @@ void SelectionRestoreCoordinator::scheduleSelectionRestore(int desiredIndex,
 }
 
 auto SelectionRestoreCoordinator::createSelectionRestoreLambda(int collectionIndex, int selIdx,
-                                                           int token) -> std::function<void()> {
+                                                               int token) -> std::function<void()> {
   QPointer<SelectionRestoreCoordinator> guard(this);
   return [guard, collectionIndex, selIdx, token]() {
     if (!guard || !guard->state() || !guard->m_currentCollectionIndex) {
@@ -265,8 +265,8 @@ auto SelectionRestoreCoordinator::createSelectionRestoreLambda(int collectionInd
   };
 }
 
-void SelectionRestoreCoordinator::scheduleSelectionRestoreVerification(int collectionIndex, int selIdx,
-                                                                   int token) {
+void SelectionRestoreCoordinator::scheduleSelectionRestoreVerification(int collectionIndex,
+                                                                       int selIdx, int token) {
   auto restoreLambda = createSelectionRestoreLambda(collectionIndex, selIdx, token);
 
   // Two staggered verification attempts so the selection sticks even when

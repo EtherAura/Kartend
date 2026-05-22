@@ -505,9 +505,8 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     // for crashes after start, and we want to keep the overlay up
     // until the process is actually gone.
     if (error == QProcess::FailedToStart) {
-      QMessageBox::critical(
-          nullptr, tr("Launch Error"),
-          tr("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+      QMessageBox::critical(nullptr, tr("Launch Error"),
+                            tr("Failed to start tracked launcher:\n%1").arg(child->errorString()));
       cleanup();
     }
   });

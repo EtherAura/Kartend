@@ -142,14 +142,16 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // forensic copy. The save path itself is unchanged — the user can re-save
   // intentionally; we just refuse to silently swallow corruption.
   if (s.status() != QSettings::NoError && QFile::exists(configPath)) {
-    const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmssZ"));
+    const QString stamp =
+        QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmssZ"));
     const QString backupPath = configPath + QStringLiteral(".corrupt-") + stamp;
     const bool copied = QFile::copy(configPath, backupPath);
-    qCWarning(lcSettingsManager)
-        << "Settings INI failed to parse (QSettings::status() ==" << static_cast<int>(s.status())
-        << "for" << configPath << "). Defaults will be loaded;"
-        << (copied ? "the corrupt file has been snapshotted to" : "FAILED to snapshot to") << backupPath
-        << "before the next save.";
+    qCWarning(lcSettingsManager) << "Settings INI failed to parse (QSettings::status() =="
+                                 << static_cast<int>(s.status()) << "for" << configPath
+                                 << "). Defaults will be loaded;"
+                                 << (copied ? "the corrupt file has been snapshotted to"
+                                            : "FAILED to snapshot to")
+                                 << backupPath << "before the next save.";
   }
 
   // Mirror saveCollections()/saveGeneralSettings() write-side path validation
@@ -857,9 +859,9 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   // unconditionally on every save.
   const QString configPath = SettingsUtils::getConfigPath();
   if (!PathUtils::syncDirectory(QFileInfo(configPath).path())) {
-    qCWarning(lcSettingsManager)
-        << "syncDirectory failed for" << QFileInfo(configPath).path()
-        << "— atomic rename completed but its durability across a power loss is no longer guaranteed.";
+    qCWarning(lcSettingsManager) << "syncDirectory failed for" << QFileInfo(configPath).path()
+                                 << "— atomic rename completed but its durability across a power "
+                                    "loss is no longer guaranteed.";
   }
 
   // Cleartext scraper credentials live in [Scrapers]; clamp the INI to 0600

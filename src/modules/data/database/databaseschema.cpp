@@ -41,7 +41,8 @@ void applyConnectionPragmas(QSqlDatabase &db) {
   MediaDbConnectionInit::PragmaConfig cfg;
   cfg.busyTimeoutMs = UIConstants::Database::MAIN_BUSY_TIMEOUT_MS;
   cfg.setSynchronousNormal = false; // main connection keeps default for now
-  MediaDbConnectionInit::applyPragmas(db, cfg, QStringLiteral("DatabaseSchema::applyConnectionPragmas"));
+  MediaDbConnectionInit::applyPragmas(db, cfg,
+                                      QStringLiteral("DatabaseSchema::applyConnectionPragmas"));
 }
 
 void createTables(QSqlDatabase &db) {

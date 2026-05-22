@@ -68,9 +68,7 @@ private:
     int lastIndex = -1; // inclusive; lastIndex < firstIndex means empty
     [[nodiscard]] bool isEmpty() const { return lastIndex < firstIndex; }
     [[nodiscard]] int size() const { return isEmpty() ? 0 : (lastIndex - firstIndex + 1); }
-    [[nodiscard]] bool contains(int idx) const {
-      return idx >= firstIndex && idx <= lastIndex;
-    }
+    [[nodiscard]] bool contains(int idx) const { return idx >= firstIndex && idx <= lastIndex; }
   };
   [[nodiscard]] NeededRange calculateNeededIndices() const;
   void removeUnneededWidgets(const NeededRange &needed);

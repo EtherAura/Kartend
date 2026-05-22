@@ -102,9 +102,7 @@ public:
   /// construction-time wiring still routes. Use this instead of
   /// `parent()` so the manager's lifetime no longer couples to the
   /// QObject parent-child tree (Kartend-3v92 / Kartend-d70s).
-  [[nodiscard]] bool isAlive() const {
-    return !m_isShuttingDown || !m_isShuttingDown();
-  }
+  [[nodiscard]] bool isAlive() const { return !m_isShuttingDown || !m_isShuttingDown(); }
 
   // Persist current viewport/selection state before shutdown.
   // Call this before blocking signals or clearing collection index.

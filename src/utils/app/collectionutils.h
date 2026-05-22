@@ -61,7 +61,8 @@
 // collection/launcherconfig.h (Kartend-0yz3 step 10). resolvePreset's
 // implementation still lives in collectionutils.cpp.
 
-// CollectionFilterPreferences moved to collection/collectionfilterpreferences.h (Kartend-0yz3 step 6).
+// CollectionFilterPreferences moved to collection/collectionfilterpreferences.h (Kartend-0yz3 step
+// 6).
 
 // LauncherProfile moved to collection/launcherconfig.h (Kartend-0yz3 step 10).
 
@@ -79,7 +80,6 @@
 
 // ScraperOverrides moved to collection/scraperoverrides.h (Kartend-0yz3 step 5).
 // CollectionConfig moved to collection/collectionconfig.h (Kartend-0yz3 step 11).
-
 
 // Kartend-ysyn: index validation, grid sizing, and virtual-folder counting
 // helpers moved to collection/helpers.h (already included above).

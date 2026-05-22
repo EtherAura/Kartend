@@ -27,7 +27,9 @@
 
 DetailsPaneMetadataView::DetailsPaneMetadataView(QObject *parent) : QObject(parent) {}
 
-void DetailsPaneMetadataView::setHost(DetailsPane *host) { m_host = host; }
+void DetailsPaneMetadataView::setHost(DetailsPane *host) {
+  m_host = host;
+}
 
 void DetailsPaneMetadataView::ensureDetailsSection() {
   if (!m_host) return;
@@ -97,8 +99,7 @@ void DetailsPaneMetadataView::ensureDetailsSection() {
   m_host->m_metadataScroll->setWidgetResizable(true);
   m_host->m_metadataScroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
   m_host->m_metadataScroll->viewport()->setAutoFillBackground(false);
-  m_host->m_metadataScroll->setStyleSheet(
-      "QScrollArea { background: transparent; border: none; }");
+  m_host->m_metadataScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
   m_host->m_metadataScroll->setWidget(m_host->m_metadataBackdrop);
   outer->addWidget(m_host->m_metadataScroll, /*stretch=*/1);
   // Manual button anchored below the scrolling metadata so it doesn't
@@ -249,8 +250,8 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
   }
 }
 
-void DetailsPaneMetadataView::appendScrollingDescription(const QString &label,
-                                                          const QString &value, int maxLines) {
+void DetailsPaneMetadataView::appendScrollingDescription(const QString &label, const QString &value,
+                                                         int maxLines) {
   if (!m_host || !m_host->m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
@@ -345,8 +346,7 @@ void DetailsPaneMetadataView::appendScrollingDescription(const QString &label,
   });
 }
 
-void DetailsPaneMetadataView::setExtendedMetadata(
-    const ItemMetadataStore::ItemMetadata &metadata) {
+void DetailsPaneMetadataView::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
   if (!m_host) return;
   // Cache the canonical title so a tab switch back to Item can pick it up
   // without re-running the manager's selection pipeline. We do this even
@@ -463,8 +463,7 @@ void DetailsPaneMetadataView::setUsageStats(const UsageStatsStore::ItemUsageStat
     appendDetailRow(QObject::tr("Play count"), QString::number(stats.playCount));
   }
   if (!stats.lastPlayed.isEmpty()) {
-    appendDetailRow(QObject::tr("Last played"),
-                    UsageStatsStore::formatTimestamp(stats.lastPlayed));
+    appendDetailRow(QObject::tr("Last played"), UsageStatsStore::formatTimestamp(stats.lastPlayed));
   }
   if (stats.totalPlaySeconds > 0) {
     appendDetailRow(QObject::tr("Time played"),
@@ -476,8 +475,7 @@ void DetailsPaneMetadataView::setUsageStats(const UsageStatsStore::ItemUsageStat
   // Usage stats just added rows to the grid, so the metadata scroll
   // has content again — reveal it. setExtendedMetadata may have
   // hidden it on an unscraped item.
-  if (m_host->m_metadataScroll && m_host->m_detailsLayout &&
-      m_host->m_detailsLayout->count() > 0) {
+  if (m_host->m_metadataScroll && m_host->m_detailsLayout && m_host->m_detailsLayout->count() > 0) {
     m_host->m_metadataScroll->show();
   }
   m_host->m_detailsContainer->show();

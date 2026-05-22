@@ -221,7 +221,6 @@ void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGallery
   update();
 }
 
-
 void CoverFlowWidget::setVideoPathForIndex(int index, const QString &videoPath) {
   if (index < 0 || index >= static_cast<int>(m_cards.size())) {
     return;

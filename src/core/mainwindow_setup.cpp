@@ -338,7 +338,8 @@ void MainWindow::setupUIReferences() {
                                            OverlayZOrderRegistry::Layer::NowPlaying);
     m_overlayLayerManager->registerOverlay(m_detailPageOverlay,
                                            OverlayZOrderRegistry::Layer::DetailPage);
-    m_overlayLayerManager->registerOverlay(m_textZoomHud, OverlayZOrderRegistry::Layer::TextZoomHud);
+    m_overlayLayerManager->registerOverlay(m_textZoomHud,
+                                           OverlayZOrderRegistry::Layer::TextZoomHud);
     m_loadingOverlay->setLayerManager(m_overlayLayerManager.get());
     m_splashOverlay->setLayerManager(m_overlayLayerManager.get());
     m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());

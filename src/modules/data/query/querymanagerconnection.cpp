@@ -103,8 +103,8 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
       MediaDbConnectionInit::PragmaConfig cfg;
       cfg.busyTimeoutMs = UIConstants::Database::WORKER_BUSY_TIMEOUT_MS;
       cfg.setSynchronousNormal = true;
-      MediaDbConnectionInit::applyPragmas(
-          m_db, cfg, QStringLiteral("QueryManager::ensureDatabaseConnection"));
+      MediaDbConnectionInit::applyPragmas(m_db, cfg,
+                                          QStringLiteral("QueryManager::ensureDatabaseConnection"));
 
       return true;
     }

@@ -22,12 +22,14 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QScrollArea>
-#include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QTimer>
 
 DetailsPaneArtwork::DetailsPaneArtwork(QObject *parent) : QObject(parent) {}
 
-void DetailsPaneArtwork::setHost(DetailsPane *host) { m_host = host; }
+void DetailsPaneArtwork::setHost(DetailsPane *host) {
+  m_host = host;
+}
 
 int DetailsPaneArtwork::previewBoxSize() const {
   if (!m_host || !m_host->ui) {
@@ -102,8 +104,8 @@ void DetailsPaneArtwork::applyPreviewSize() {
   }
   ui->artworkDisplay->setFixedSize(width, height);
   ui->artworkDisplay->show();
-  QPixmap scaled = m_host->m_artworkSource.scaled(width, height, Qt::KeepAspectRatio,
-                                                  Qt::SmoothTransformation);
+  QPixmap scaled =
+      m_host->m_artworkSource.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   QPixmap centered(width, height);
   centered.fill(m_host->palette().color(QPalette::Base));
   QPainter painter(&centered);

@@ -403,7 +403,8 @@ qint64 CacheManager::getCacheSize() const {
   {
     QMutexLocker locker(&m_diskCacheSizeMutex);
     result = m_cachedDiskCacheSize;
-    if (!m_diskWalkInFlight && (m_lastDiskWalkMs == 0 || nowMs - m_lastDiskWalkMs >= STALE_AFTER_MS)) {
+    if (!m_diskWalkInFlight &&
+        (m_lastDiskWalkMs == 0 || nowMs - m_lastDiskWalkMs >= STALE_AFTER_MS)) {
       m_diskWalkInFlight = true;
       shouldDispatch = true;
     }
@@ -420,6 +421,9 @@ qint64 CacheManager::getCacheSize() const {
         dirIt.next();
         totalSize += dirIt.fileInfo().size();
       }
+      // NOLINTNEXTLINE(clang-analyzer-core.NullDereference) — analyzer can't
+      // see that ~CacheManager waits on m_cacheSizeWalkFuture, so the
+      // lambda never outlives `this`. The captured pointer is safe.
       QMutexLocker locker(&m_diskCacheSizeMutex);
       m_cachedDiskCacheSize = totalSize;
       m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();

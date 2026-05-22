@@ -139,7 +139,11 @@ void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback
 }
 
 void HttpClient::enqueue(const QString &host, PendingRequest request) {
-  m_queues[host].enqueue(std::move(request));
+  // QQueue::enqueue takes const T& (no rvalue overload), so std::move
+  // here would be a no-op — use the underlying QList::append rvalue
+  // overload directly to actually move the PendingRequest's QNetworkRequest
+  // + QByteArray payload instead of copying them.
+  m_queues[host].append(std::move(request));
   drainHost(host);
 }
 
@@ -245,17 +249,16 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                                                                       qint64 /*total*/) {
               if (received > maxResponseBytes && !*sizeCapExceeded) {
                 *sizeCapExceeded = true;
-                qCWarning(lcScrapeTimings)
-                    << "ABORT-OVERSIZE" << host << urlPath << "received=" << received
-                    << "cap=" << maxResponseBytes;
+                qCWarning(lcScrapeTimings) << "ABORT-OVERSIZE" << host << urlPath
+                                           << "received=" << received << "cap=" << maxResponseBytes;
                 reply->abort();
               }
             });
   }
 
   connect(reply, &QNetworkReply::finished, this,
-          [this, reply, host, callback = std::move(callback), perReq, urlPath,
-           sizeCapExceeded, expectedContentTypePrefix]() mutable {
+          [this, reply, host, callback = std::move(callback), perReq, urlPath, sizeCapExceeded,
+           expectedContentTypePrefix]() mutable {
             const qint64 ms = perReq->elapsed();
             // Definitive HTTP/2 readout. The connect-side attribute we
             // set asks Qt to *try* h2, but the actual negotiation can
@@ -315,8 +318,8 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                 // doesn't loop on a server that's deliberately flooding.
                 const bool oversizedResponse =
                     reply->error() == QNetworkReply::OperationCanceledError && *sizeCapExceeded;
-                const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError &&
-                                      !*sizeCapExceeded;
+                const bool timedOut =
+                    reply->error() == QNetworkReply::OperationCanceledError && !*sizeCapExceeded;
                 ErrorCode errorCode = ErrorCode::DatabaseQueryFailed;
                 QString errorMsg = QStringLiteral("HTTP request failed");
                 if (oversizedResponse) {
@@ -349,9 +352,8 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                                           "Scraper::HttpClient::send")
                           .withDetails(QStringLiteral("Expected prefix: %1, got: %2")
                                            .arg(expectedContentTypePrefix,
-                                                contentType.isEmpty()
-                                                    ? QStringLiteral("(none)")
-                                                    : contentType));
+                                                contentType.isEmpty() ? QStringLiteral("(none)")
+                                                                      : contentType));
                   callback(ctx);
                 } else {
                   callback(reply->readAll());

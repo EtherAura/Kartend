@@ -107,12 +107,12 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
     if (img.isNull()) {
       continue;
     }
-    results.append(ArtworkInfo::Result{.widget = info.mediaItem,
-                                       .artworkPath = info.artworkPath,
-                                       .artworkBaseName =
-                                           QFileInfo(info.artworkPath).completeBaseName(),
-                                       .image = img,
-                                       .loadedFromDiskCache = loadedFromDiskCache});
+    results.append(
+        ArtworkInfo::Result{.widget = info.mediaItem,
+                            .artworkPath = info.artworkPath,
+                            .artworkBaseName = QFileInfo(info.artworkPath).completeBaseName(),
+                            .image = img,
+                            .loadedFromDiskCache = loadedFromDiskCache});
   }
   return results;
 }
@@ -203,9 +203,8 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
   // bails if a *future* cancelAll() (or destruction) moves the counter
   // past it. New dispatches after a cancelAll see the post-bump value
   // and run to completion without the prior 50ms-timer race (Kartend-uxo0).
-  const quint64 generation = generationCounter
-                                 ? generationCounter->load(std::memory_order_acquire)
-                                 : quint64{0};
+  const quint64 generation =
+      generationCounter ? generationCounter->load(std::memory_order_acquire) : quint64{0};
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = batch.size();
   auto handler = std::move(onComplete);
@@ -215,40 +214,39 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
                         ? QGuiApplication::primaryScreen()->devicePixelRatio()
                         : qreal{1.0};
 
-  QFuture<void> future = QtConcurrent::run(m_threadPool, [batch = std::move(batch), highPriority,
-                                                          generationCounter, generation,
-                                                          batchItemCount, appReceiver,
-                                                          cacheManager, handler, dpr]() {
-    if (QApplication::closingDown() || !generationCounter ||
-        isCancelledForGeneration(*generationCounter, generation)) {
-      return;
-    }
-    QElapsedTimer timer;
-    timer.start();
-    QList<ArtworkInfo::Result> results =
-        processBatchOnWorker(batch, *generationCounter, generation, cacheManager, dpr);
-    const qint64 elapsedMs = timer.elapsed();
-    if (QApplication::closingDown() || !generationCounter ||
-        isCancelledForGeneration(*generationCounter, generation)) {
-      return;
-    }
-    if (!appReceiver) {
-      return;
-    }
-    QMetaObject::invokeMethod(
-        appReceiver,
-        [results, highPriority, batchItemCount, elapsedMs, generationCounter, generation,
-         handler]() {
-          if (QApplication::closingDown() || !generationCounter ||
-              isCancelledForGeneration(*generationCounter, generation)) {
-            return;
-          }
-          if (handler) {
-            handler(results, batchItemCount, elapsedMs, highPriority);
-          }
-        },
-        Qt::QueuedConnection);
-  });
+  QFuture<void> future = QtConcurrent::run(
+      m_threadPool, [batch = std::move(batch), highPriority, generationCounter, generation,
+                     batchItemCount, appReceiver, cacheManager, handler, dpr]() {
+        if (QApplication::closingDown() || !generationCounter ||
+            isCancelledForGeneration(*generationCounter, generation)) {
+          return;
+        }
+        QElapsedTimer timer;
+        timer.start();
+        QList<ArtworkInfo::Result> results =
+            processBatchOnWorker(batch, *generationCounter, generation, cacheManager, dpr);
+        const qint64 elapsedMs = timer.elapsed();
+        if (QApplication::closingDown() || !generationCounter ||
+            isCancelledForGeneration(*generationCounter, generation)) {
+          return;
+        }
+        if (!appReceiver) {
+          return;
+        }
+        QMetaObject::invokeMethod(
+            appReceiver,
+            [results, highPriority, batchItemCount, elapsedMs, generationCounter, generation,
+             handler]() {
+              if (QApplication::closingDown() || !generationCounter ||
+                  isCancelledForGeneration(*generationCounter, generation)) {
+                return;
+              }
+              if (handler) {
+                handler(results, batchItemCount, elapsedMs, highPriority);
+              }
+            },
+            Qt::QueuedConnection);
+      });
 
   QMutexLocker futureLock(&m_futureMutex);
   m_futures.append(future);
@@ -263,9 +261,8 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
 
   ICacheManager *const cacheManager = m_cacheManager;
   const auto generationCounter = m_currentGeneration;
-  const quint64 generation = generationCounter
-                                 ? generationCounter->load(std::memory_order_acquire)
-                                 : quint64{0};
+  const quint64 generation =
+      generationCounter ? generationCounter->load(std::memory_order_acquire) : quint64{0};
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = paths.size();
   auto handler = std::move(onComplete);
@@ -274,39 +271,38 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
                         ? QGuiApplication::primaryScreen()->devicePixelRatio()
                         : qreal{1.0};
 
-  QFuture<void> future = QtConcurrent::run(m_threadPool, [paths = std::move(paths),
-                                                          generationCounter, generation,
-                                                          batchItemCount, appReceiver, cacheManager,
-                                                          handler, dpr]() {
-    if (QApplication::closingDown() || !generationCounter ||
-        isCancelledForGeneration(*generationCounter, generation)) {
-      return;
-    }
-    QElapsedTimer timer;
-    timer.start();
-    QList<ArtworkPrecacheResult> results =
-        processPrecacheOnWorker(paths, *generationCounter, generation, cacheManager, dpr);
-    const qint64 elapsedMs = timer.elapsed();
-    if (QApplication::closingDown() || !generationCounter ||
-        isCancelledForGeneration(*generationCounter, generation)) {
-      return;
-    }
-    if (!appReceiver) {
-      return;
-    }
-    QMetaObject::invokeMethod(
-        appReceiver,
-        [paths, results, batchItemCount, elapsedMs, generationCounter, generation, handler]() {
-          if (QApplication::closingDown() || !generationCounter ||
-              isCancelledForGeneration(*generationCounter, generation)) {
-            return;
-          }
-          if (handler) {
-            handler(paths, results, batchItemCount, elapsedMs);
-          }
-        },
-        Qt::QueuedConnection);
-  });
+  QFuture<void> future =
+      QtConcurrent::run(m_threadPool, [paths = std::move(paths), generationCounter, generation,
+                                       batchItemCount, appReceiver, cacheManager, handler, dpr]() {
+        if (QApplication::closingDown() || !generationCounter ||
+            isCancelledForGeneration(*generationCounter, generation)) {
+          return;
+        }
+        QElapsedTimer timer;
+        timer.start();
+        QList<ArtworkPrecacheResult> results =
+            processPrecacheOnWorker(paths, *generationCounter, generation, cacheManager, dpr);
+        const qint64 elapsedMs = timer.elapsed();
+        if (QApplication::closingDown() || !generationCounter ||
+            isCancelledForGeneration(*generationCounter, generation)) {
+          return;
+        }
+        if (!appReceiver) {
+          return;
+        }
+        QMetaObject::invokeMethod(
+            appReceiver,
+            [paths, results, batchItemCount, elapsedMs, generationCounter, generation, handler]() {
+              if (QApplication::closingDown() || !generationCounter ||
+                  isCancelledForGeneration(*generationCounter, generation)) {
+                return;
+              }
+              if (handler) {
+                handler(paths, results, batchItemCount, elapsedMs);
+              }
+            },
+            Qt::QueuedConnection);
+      });
 
   QMutexLocker futureLock(&m_futureMutex);
   m_futures.append(future);

@@ -356,18 +356,23 @@ target_link_options(kartend PRIVATE
 )
 
 # LTO objects in the per-area OBJECT libs are unreadable to a non-LTO link
-# step, so every consumer (the main exe AND the integration test binary)
-# must link with the matching LTO and linker flags. With the kartend_lib
-# INTERFACE aggregator deleted (Kartend-w1wv), apply the link options
-# directly to every consumer instead of propagating them through the
-# aggregator's INTERFACE_LINK_OPTIONS.
+# step, so every consumer (main exe + integration tests + the small
+# tests/test_*.cpp binaries that link a subset of the per-area libs) must
+# link with the matching LTO and linker flags. With the kartend_lib
+# INTERFACE aggregator deleted (Kartend-w1wv), the previous propagation
+# path (aggregator's INTERFACE_LINK_OPTIONS) is gone. Hang the options
+# off kartend_utils's INTERFACE_LINK_OPTIONS instead — every per-area lib
+# PUBLIC-links kartend_utils per the DAG in src/CMakeLists.txt, so any
+# consumer linking ANY area lib transitively inherits these flags through
+# the chain. Tested under clang-18 Release where small test binaries link
+# direct area-lib .o subsets (Kartend-eyzv).
 set(KARTEND_LTO_LINK_OPTIONS
   $<$<CONFIG:Release>:-flto=auto>
 )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
 endif()
-target_link_options(kartend PRIVATE ${KARTEND_LTO_LINK_OPTIONS})
+target_link_options(kartend_utils INTERFACE ${KARTEND_LTO_LINK_OPTIONS})
 
 # PGO: applied to each area lib (must come AFTER target_compile_options
 # above used genex substitution — applying via separate target_*_options calls

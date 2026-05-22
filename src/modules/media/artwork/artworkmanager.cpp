@@ -7,8 +7,8 @@
 #include "artworkwidgetregistry.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
-#include "icachemanager.h"
 #include "extensionutils.h"
+#include "icachemanager.h"
 #include "interactionstateholder.h"
 #include "itemartwork.h"
 #include "itemwidget.h"
@@ -122,10 +122,10 @@ auto maybeTriggerCacheSave(ArtworkManager *self, ICacheManager *cacheManager) ->
 // creation moves to setupReferences (the dispatcher needs the cache pointer,
 // which now comes from m_ctx).
 ArtworkManager::ArtworkManager(QObject *parent)
-    : QObject(parent), collections(nullptr),
-      currentCollectionIndex(nullptr), stackedWidget(nullptr), itemsPage(nullptr),
-      gridContainer(nullptr), m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr),
-      m_persistentLoadTimer(nullptr), m_cacheTimer(nullptr), m_silentLoadingActive(false),
+    : QObject(parent), collections(nullptr), currentCollectionIndex(nullptr),
+      stackedWidget(nullptr), itemsPage(nullptr), gridContainer(nullptr),
+      m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr), m_persistentLoadTimer(nullptr),
+      m_cacheTimer(nullptr), m_silentLoadingActive(false),
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
       m_continuousSilentLoad(false), m_persistentSilentLoad(false),
@@ -739,8 +739,7 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
   if (perfTrace) {
     qCDebug(lcPerfTrace).nospace()
         << "applyResultsToUi: totalMs=" << perfTimer.elapsed() << " applied=" << applied
-        << " skipped=" << skipped << " processed=" << processed
-        << " size=" << batchResults.size();
+        << " skipped=" << skipped << " processed=" << processed << " size=" << batchResults.size();
   }
 }
 

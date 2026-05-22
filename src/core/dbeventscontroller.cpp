@@ -149,8 +149,7 @@ void DbEventsController::onScanItemsProgress(int itemsProcessed, int totalItems)
   }
   if (totalItems > 0) {
     // Indexing phase - we know the total
-    overlay->setMessage(
-        QString("Indexing %1 of %2 items...").arg(itemsProcessed).arg(totalItems));
+    overlay->setMessage(QString("Indexing %1 of %2 items...").arg(itemsProcessed).arg(totalItems));
     overlay->setProgress(itemsProcessed, totalItems);
   } else {
     // Scanning phase - total unknown, show count found so far

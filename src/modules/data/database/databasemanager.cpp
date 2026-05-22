@@ -96,8 +96,7 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   // the atomic flip on its own thread instead of the GUI thread
   // touching the worker directly. Future-proofs against a maintainer
   // adding non-atomic cancellation state to QueryManager.
-  connect(this, &DatabaseManager::cancelScanRequested, m_worker,
-          &QueryManager::requestCancelScan);
+  connect(this, &DatabaseManager::cancelScanRequested, m_worker, &QueryManager::requestCancelScan);
   connect(this, &DatabaseManager::cancelScanRequested, m_scanWorker,
           &QueryManager::requestCancelScan);
 
@@ -605,7 +604,7 @@ ItemMetadataStore::ItemMetadata DatabaseManager::loadItemMetadata(const QString 
 
 QHash<QString, ItemMetadataStore::ItemMetadata>
 DatabaseManager::loadItemMetadataBatch(const QString &collectionUuid,
-                                        const QStringList &paths) const {
+                                       const QStringList &paths) const {
   QHash<QString, ItemMetadataStore::ItemMetadata> out;
   out.reserve(paths.size());
 

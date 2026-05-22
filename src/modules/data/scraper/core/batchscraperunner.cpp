@@ -674,7 +674,8 @@ void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
             if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
               pending.dispatchedAtMs = QDateTime::currentMSecsSinceEpoch();
             }
-            self->m_pendingWrites.insert(requestId, std::move(pending));
+            // QHash::insert takes const T&, so std::move was a no-op here.
+            self->m_pendingWrites.insert(requestId, pending);
 
             // Queued cross-thread invocation. The worker handles the
             // load → merge → save against its own connection and

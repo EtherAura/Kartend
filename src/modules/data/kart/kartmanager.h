@@ -67,8 +67,7 @@ struct KartManagerSetup {
 /// fall outside any safe root so the caller can surface a confirmation
 /// dialog before registering the collection.
 [[nodiscard]] QList<SuspiciousKartPath>
-collectSuspiciousKartPaths(const CollectionConfig &cfg,
-                           const QSet<QString> &trustedLauncherPaths);
+collectSuspiciousKartPaths(const CollectionConfig &cfg, const QSet<QString> &trustedLauncherPaths);
 
 class KartManager : public QObject {
   Q_OBJECT

@@ -92,8 +92,7 @@ bool PlaylistManager::initialize() {
   cfg.enableWalWithFallback = false;
   cfg.setSynchronousNormal = false;
   cfg.busyTimeoutMs = 0;
-  MediaDbConnectionInit::applyPragmas(m_db, cfg,
-                                      QStringLiteral("PlaylistManager::initialize"));
+  MediaDbConnectionInit::applyPragmas(m_db, cfg, QStringLiteral("PlaylistManager::initialize"));
 
   // Create the playlist tables locally (idempotent CREATE TABLE IF NOT EXISTS)
   // rather than re-running the full schema migration suite. The full migration

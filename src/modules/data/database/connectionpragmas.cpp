@@ -30,10 +30,10 @@ void applyPragmas(QSqlDatabase &db, const PragmaConfig &cfg, const QString &logg
                      .withDetails(query.lastError().text());
       ErrorUtils::logError(err);
       if (!query.exec("PRAGMA journal_mode = DELETE")) {
-        auto fallbackErr = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                                 "Failed to set DELETE journal mode",
-                                                 loggingContext)
-                               .withDetails(query.lastError().text());
+        auto fallbackErr =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                  "Failed to set DELETE journal mode", loggingContext)
+                .withDetails(query.lastError().text());
         ErrorUtils::logError(fallbackErr);
       }
     }
