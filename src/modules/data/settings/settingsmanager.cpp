@@ -87,6 +87,10 @@ bool runKeychainJobBounded(QKeychain::Job &job, const char *opName) {
     loop.quit();
   });
   job.start();
+  // Watchdog: QKeychain has no built-in timeout. If the platform secret
+  // service daemon stalls (GNOME Keyring on first-unlock prompt, KWallet
+  // not running, etc.), this timer fires and quits the bounded loop so
+  // the caller falls back to plaintext storage instead of wedging forever.
   QTimer::singleShot(kKeychainTimeoutMs, &loop, &QEventLoop::quit);
   loop.exec();
   if (!finished) {
