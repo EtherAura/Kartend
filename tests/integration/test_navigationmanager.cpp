@@ -7,15 +7,14 @@
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 
-#include <QApplication>
-#include <QDialog>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QLabel>
 #include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QTest>
-#include <QTimer>
 #include <QWidget>
 
 namespace {
@@ -30,31 +29,6 @@ CollectionConfig makeCollectionStub(const QString &name, int parentIndex = -1) {
   // descendants), which is exactly the unwind-on-failure path we want to
   // exercise.
   return cfg;
-}
-
-// Schedules repeated attempts to dismiss whatever modal QDialog ends up
-// active. NavigationManager::onMediaLibraryError calls
-// ErrorDialog::showError which spins a nested event loop via dialog.exec();
-// the timer fires inside that loop and accepts the dialog so exec() returns.
-//
-// We poll because exec() may not have brought the dialog up yet when the
-// first tick fires. ~50 retries * 5ms gives a 250ms ceiling, well above the
-// realistic show latency on the offscreen platform plugin.
-void scheduleDismissActiveModal(int retries = 50, int intervalMs = 5) {
-  if (retries <= 0) {
-    return;
-  }
-  QTimer::singleShot(intervalMs, [retries, intervalMs]() {
-    if (auto *modal = QApplication::activeModalWidget()) {
-      if (auto *dlg = qobject_cast<QDialog *>(modal)) {
-        dlg->accept();
-      } else {
-        modal->close();
-      }
-      return;
-    }
-    scheduleDismissActiveModal(retries - 1, intervalMs);
-  });
 }
 
 } // namespace
@@ -162,10 +136,10 @@ void TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget() {
       ErrorUtils::ErrorCode::DatabaseQueryFailed, QStringLiteral("integration test forced error"),
       QStringLiteral("TestNavigationManager"));
 
-  // ErrorDialog::showError runs dialog.exec(), so we must dismiss the modal
-  // from inside that nested loop. The timer is scheduled before the slot
-  // call so the dispatcher fires it as soon as exec()'s loop picks it up.
-  scheduleDismissActiveModal();
+  // test_main.cpp installs an ErrorPresentation override that no-ops the
+  // modal, so onMediaLibraryError returns synchronously without spinning a
+  // nested QDialog::exec() loop. We just assert on the noItemsWidget tree
+  // the slot builds in m_gridContainer (Kartend-hlnl).
   nav->onMediaLibraryError(error);
 
   // The stale sentinel was removed via deleteLater(); pump the queue so the

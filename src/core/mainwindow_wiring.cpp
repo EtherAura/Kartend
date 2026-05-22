@@ -144,13 +144,13 @@
 #include "databasemanager.h"
 #include "dbeventscontroller.h"
 #include "detailspanemanager.h"
-#include "scrapercontroller.h"
-#include "errordialog.h"
+#include "errorpresentation.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "navigationmanager.h"
+#include "scrapercontroller.h"
 #include "scrolleventscontroller.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
@@ -260,9 +260,10 @@ void MainWindow::connectDatabaseManager() {
                    &NavigationManager::onMediaLibraryError);
   // NavigationManager raises media-library errors as a signal; MainWindow owns
   // the ErrorDialog so the input layer stays free of UI-chrome includes.
-  QObject::connect(
-      nav, &NavigationManager::mediaLibraryErrorRaised, this,
-      [this](const ErrorUtils::ErrorContext &error) { ErrorDialog::showError(window(), error); });
+  QObject::connect(nav, &NavigationManager::mediaLibraryErrorRaised, this,
+                   [this](const ErrorUtils::ErrorContext &error) {
+                     ErrorPresentation::showError(window(), error);
+                   });
 
   // DatabaseManager → ScrollManager
   QObject::connect(db, &DatabaseManager::visualIndexForPathLoaded, scroll,
@@ -289,10 +290,8 @@ void MainWindow::connectDatabaseManager() {
                    &DbEventsController::refreshTitleCountsIfActive);
   QObject::connect(db, &DatabaseManager::itemsLoaded, decCtl,
                    &DbEventsController::refreshFilterToolbarOnItemsLoaded);
-  QObject::connect(db, &DatabaseManager::scanProgress, decCtl,
-                   &DbEventsController::onScanProgress);
-  QObject::connect(db, &DatabaseManager::scanStarting, decCtl,
-                   &DbEventsController::onScanStarting);
+  QObject::connect(db, &DatabaseManager::scanProgress, decCtl, &DbEventsController::onScanProgress);
+  QObject::connect(db, &DatabaseManager::scanStarting, decCtl, &DbEventsController::onScanStarting);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
                    &DbEventsController::onCollectionScanCompletedStartup);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,

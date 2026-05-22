@@ -8,6 +8,7 @@
  * Qt does not officially support.
  */
 
+#include "errorpresentation.h"
 #include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
 #include "test_detailspane_coverflow.h"
@@ -54,6 +55,21 @@ int main(int argc, char *argv[]) {
   }
 
   QApplication app(argc, argv);
+
+  // Replace the modal ErrorDialog with a no-op presenter for every test in
+  // this binary (Kartend-hlnl). The wiring at mainwindow_wiring.cpp routes
+  // NavigationManager::mediaLibraryErrorRaised through
+  // ErrorPresentation::showError; tests that exercise that signal path
+  // (e.g. TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget)
+  // would otherwise spin a nested QDialog::exec() loop they then have to
+  // race-dismiss inside a tight 250 ms window. The stub captures nothing —
+  // tests assert on the slot's UI side-effects (the noItemsWidget tree the
+  // NavigationManager builds) rather than on the dialog itself.
+  ErrorPresentation::setShowErrorOverride(
+      [](QWidget * /*parent*/, const ErrorUtils::ErrorContext & /*ctx*/) {});
+  ErrorPresentation::setShowCriticalErrorOverride([](QWidget * /*parent*/,
+                                                     const ErrorUtils::ErrorContext & /*ctx*/,
+                                                     bool /*allowContinue*/) { return true; });
 
   int status = 0;
   {
