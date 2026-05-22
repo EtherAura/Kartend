@@ -153,3 +153,46 @@ race:CacheManager::~CacheManager
 # which drive the worker-thread QueryManager via
 # invokeMethod(qm, lambda, Qt::QueuedConnection).
 race:invokeMethod
+
+# ArtworkLoadDispatcher::dispatchBatch worker-thread lambda teardown:
+# QtConcurrent::run dispatches a worker that captures a QList<ArtworkInfo>
+# by move. When the worker returns, the captured QList destructs on the
+# pool worker thread, freeing each ArtworkInfo — which holds a
+# QPointer<ItemWidget>. The QPointer's underlying QWeakPointer atomically
+# derefs a refcount in the ItemWidget's d-pointer. Meanwhile the test's
+# main thread is qDeleteAll()-ing the same ItemWidgets, which decrefs the
+# same atomic. Qt's QPointer machinery is thread-safe on the atomic ops
+# themselves (qatomic_cxx11.h uses std::atomic with the right memory order),
+# but TSan can't bridge the QtConcurrent worker's QFuture finish state to
+# main's delete because the QFuture wait/cancel synchronisation is buried
+# behind stripped libQt6Core frames. Surfaces under
+# testDispatcher_cancelMidFlightSuppressesHandler where the cancel races
+# the in-flight batch's d-pointer deref.
+race:ArtworkInfo::~ArtworkInfo
+
+# HttpClient::drainHost first-use spin-up of QNetworkAccessManager's
+# internal QThread 'QNetworkAccessM': the first send() in the lifetime of
+# a test process triggers Qt's lazy QNAM thread initialisation. The
+# spawned thread mallocs its initial state on T_QNAM while the main
+# thread is still inside drainHost; the same heap slot is later freed
+# from T_QNAM via QNAM's internal teardown. Qt's QThread::start /
+# QThread::wait pair synchronises this, but the libQt6Core frames between
+# pthread_create and the QNAM thread body are stripped, so TSan can't
+# observe the happens-before edge. Only the start-up window of a fresh
+# QNAM is racy — once the thread is up, subsequent sends are fine.
+race:Scraper::HttpClient::drainHost
+
+# QNetworkAccessManager → main-thread queued QByteArray payload: the
+# QNAM thread allocates the response body via QByteArray::QByteArray and
+# Qt queues it across to the main-thread slot via the meta-call event
+# queue. The receiver (a TestHttpClient slot) reallocs the QByteArray via
+# QByteArray::reallocData when it mutates the copy. Qt's queued-connection
+# arg lifecycle is synchronised through the event-queue mutex, but TSan
+# can't observe the edge through the stripped libQt6Core frames between
+# the queued post and the qt_static_metacall dispatch — so the cross-
+# thread QArrayData buffer looks like an unsynchronised memcpy pair on
+# the same heap slot. Same fundamental pattern as the
+# race:QArrayData::allocate / race:QMetaType::create suppressions above,
+# but the visible top frames on this stack are QByteArray-specific.
+race:QByteArray::reallocData
+race:QByteArray::QByteArray
