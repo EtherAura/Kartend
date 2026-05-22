@@ -17,6 +17,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
@@ -106,6 +107,14 @@ using ErrorUtils::Result;
 auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
                                        const QString &collectionName, const QString &filePath)
     -> ErrorUtils::Result<LaunchCommand> {
+  // Reject collection names that would inject `..`, `/`, or `\` segments into
+  // the `%collection%` substitution. Defence-in-depth against malicious or
+  // mistyped names entering via kart import or settings edits.
+  auto nameValidation = PathUtils::validateCollectionNameForSubstitution(collectionName);
+  if (nameValidation.isError()) {
+    return nameValidation.error();
+  }
+
   auto expandOnly = [&](const QString &text) -> QString {
     QString out = text;
     out.replace("%collection%", collectionName, Qt::CaseInsensitive);
@@ -337,6 +346,17 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;
 
+  // Cleanup guard for the extracted directory. Dismissed only on a successful
+  // launch path; any earlier return below (validation failure, missing
+  // launcher binary, failed startDetached) removes the extracted directory so
+  // /tmp does not accumulate orphaned archive contents.
+  QString extractedDir;
+  auto cleanupExtraction = qScopeGuard([&extractedDir]() {
+    if (!extractedDir.isEmpty()) {
+      QDir(extractedDir).removeRecursively();
+    }
+  });
+
   if (collection.archive.extractArchives && !collection.archive.extractedExtension.isEmpty() &&
       isArchiveFile(filePath)) {
     qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
@@ -351,6 +371,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       return;
     }
     launchFilePath = extractResult.value();
+    extractedDir = QFileInfo(launchFilePath).absolutePath();
     qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
   }
 
@@ -385,9 +406,14 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
 
   const QString launcherPath = launcherPathResult.value();
 
-  // TOCTOU mitigation: Re-validate launcher right before execution.
-  // This reduces the window between validation and execution, though
-  // cannot fully eliminate the race on systems without atomic exec.
+  // TOCTOU mitigation: re-validate launcher right before execution. This
+  // closes most of the validate-vs-exec window but cannot fully eliminate it
+  // on POSIX systems — Linux has no atomic open-and-exec, so a symlink swap
+  // between this check and QProcess::start() below is theoretically possible.
+  // Acceptable because the user-supplied launcherPath is sourced from
+  // settings.ini (under the user's own control) and validation rejects
+  // non-canonical paths; a meaningful exploit requires a local attacker who
+  // can already mutate the user's config directory.
   QFileInfo launcherCheck(launcherPath);
   if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
     QMessageBox::critical(
@@ -410,6 +436,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       // increment play_count + last_played as soon as the
       // tracked child has been spawned. Session duration is recorded
       // separately when runtimeFinished fires.
+      cleanupExtraction.dismiss();
       recordSuccessfulLaunch(filePath, collectionUuid);
       return;
     }
@@ -438,6 +465,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // detached launches can't measure session duration (we don't
   // own the child PID), but we still record the launch event. Time-played
   // remains zero until the user enables runtime detection.
+  cleanupExtraction.dismiss();
   recordSuccessfulLaunch(filePath, collectionUuid);
 }
 

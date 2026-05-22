@@ -35,7 +35,10 @@
 #include <qt6keychain/keychain.h>
 #endif
 
+#include "settingskeys.h"
 #include <QLoggingCategory>
+
+namespace keys = kartend::settings::keys;
 Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 #define debugLog(msg) qCDebug(lcSettingsManager) << msg
 
@@ -66,15 +69,42 @@ constexpr const char *kKeychainService = "io.github.EtherAura.Kartend.scrapers";
 // fallback explicitly so the caller can see the boundary and so the
 // migration logic isn't confused by QKeychain doubling up its own
 // plaintext copy.
+// Cap nested QEventLoop::exec() so an unresponsive secret service daemon
+// can't wedge the GUI thread. 5s is generous for a local keychain RPC; the
+// startup/save callers degrade to a "keychain unavailable" failure path on
+// timeout.
+constexpr int kKeychainTimeoutMs = 5000;
+
+// Runs the QKeychain job to completion with a bounded event loop. Returns
+// true if the job finished within the timeout, false if the timer fired
+// first. Either way the caller still inspects job.error() — on a real
+// timeout we synthesize a warning so users see the daemon stall.
+bool runKeychainJobBounded(QKeychain::Job &job, const char *opName) {
+  QEventLoop loop;
+  bool finished = false;
+  QObject::connect(&job, &QKeychain::Job::finished, &loop, [&loop, &finished]() {
+    finished = true;
+    loop.quit();
+  });
+  job.start();
+  QTimer::singleShot(kKeychainTimeoutMs, &loop, &QEventLoop::quit);
+  loop.exec();
+  if (!finished) {
+    qWarning() << "SettingsManager: keychain" << opName << "timed out after" << kKeychainTimeoutMs
+               << "ms";
+  }
+  return finished;
+}
+
 QString syncReadKeychain(const QString &key, bool *ok) {
   const QString service = QLatin1String(kKeychainService);
   QKeychain::ReadPasswordJob job(service);
   job.setAutoDelete(false);
   job.setKey(key);
-  QEventLoop loop;
-  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
-  job.start();
-  loop.exec();
+  if (!runKeychainJobBounded(job, "read")) {
+    if (ok) *ok = false;
+    return {};
+  }
   if (job.error() == QKeychain::NoError) {
     if (ok) *ok = true;
     return job.textData();
@@ -89,10 +119,9 @@ bool syncWriteKeychain(const QString &key, const QString &value) {
   job.setAutoDelete(false);
   job.setKey(key);
   job.setTextData(value);
-  QEventLoop loop;
-  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
-  job.start();
-  loop.exec();
+  if (!runKeychainJobBounded(job, "write")) {
+    return false;
+  }
   return job.error() == QKeychain::NoError;
 }
 
@@ -101,10 +130,9 @@ bool syncDeleteKeychain(const QString &key) {
   QKeychain::DeletePasswordJob job(service);
   job.setAutoDelete(false);
   job.setKey(key);
-  QEventLoop loop;
-  QObject::connect(&job, &QKeychain::Job::finished, &loop, &QEventLoop::quit);
-  job.start();
-  loop.exec();
+  if (!runKeychainJobBounded(job, "delete")) {
+    return false;
+  }
   // EntryNotFound on a delete is expected (key was already gone) — treat
   // as success so a re-save without the key doesn't log a warning.
   return job.error() == QKeychain::NoError || job.error() == QKeychain::EntryNotFound;
@@ -173,223 +201,230 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     return value;
   };
 
-  s.beginGroup("General");
+  s.beginGroup(keys::kGroupGeneral);
   // Pre-flight: detect future-versioned INIs so a stale build doesn't
   // silently drop unknown fields without leaving a breadcrumb. v0
   // (key missing) is the legacy path — load every current key with its
   // declared default. Real migration switches will hang off this in a
   // later schemaVersion bump.
-  const int loadedSchemaVersion = s.value("schemaVersion", 0).toInt();
+  const int loadedSchemaVersion = s.value(keys::kSchemaVersion, 0).toInt();
   if (loadedSchemaVersion > kSettingsSchemaVersion) {
     qCWarning(lcSettingsManager)
         << "Settings INI was written with schemaVersion" << loadedSchemaVersion
         << "but this build only understands up to" << kSettingsSchemaVersion
         << "— unknown keys will be ignored on load and overwritten on save.";
   }
-  settings.rememberSelection = s.value("rememberSelection", true).toBool();
-  settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
-  settings.selectItemOnHover = s.value("selectItemOnHover", false).toBool();
-  settings.pixmapCacheSizeMB = s.value("pixmapCacheSizeMB", 50).toInt();
+  settings.rememberSelection = s.value(keys::kRememberSelection, true).toBool();
+  settings.wrapNavigation = s.value(keys::kWrapNavigation, false).toBool();
+  settings.selectItemOnHover = s.value(keys::kSelectItemOnHover, false).toBool();
+  settings.pixmapCacheSizeMB = s.value(keys::kPixmapCacheSizeMB, 50).toInt();
   // Clamp to reasonable range: 10MB - 500MB
   settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
   settings.videoThumbnailExtractionTimeoutMs =
-      s.value("videoThumbnailExtractionTimeoutMs", 4000).toInt();
+      s.value(keys::kVideoThumbnailExtractionTimeoutMs, 4000).toInt();
   // Clamp to keep slow-system tuning useful while preventing the queue from
   // stalling indefinitely on a misconfigured value.
   settings.videoThumbnailExtractionTimeoutMs =
       qBound(1000, settings.videoThumbnailExtractionTimeoutMs, 30000);
   // Load timing settings (direct ms/count values)
-  settings.keyboardRepeatIntervalMs = s.value("keyboardRepeatIntervalMs", 260).toInt();
-  settings.keyboardRepeatDelayMs = s.value("keyboardRepeatDelayMs", 260).toInt();
-  settings.clickHoldDelayMs = s.value("clickHoldDelayMs", 500).toInt();
-  settings.clickHoldRepeatIntervalMs = s.value("clickHoldRepeatIntervalMs", 320).toInt();
-  settings.listKeyboardRepeatIntervalMs = s.value("listKeyboardRepeatIntervalMs", 50).toInt();
-  settings.listClickHoldRepeatIntervalMs = s.value("listClickHoldRepeatIntervalMs", 80).toInt();
-  settings.mouseWheelRows = s.value("mouseWheelRows", 1).toInt();
-  settings.scrollAnimationDurationMs = s.value("scrollAnimationDurationMs", 1500).toInt();
-  settings.scrollVelocityMultiplier = s.value("scrollVelocityMultiplier", 1.0).toDouble();
+  settings.keyboardRepeatIntervalMs = s.value(keys::kKeyboardRepeatIntervalMs, 260).toInt();
+  settings.keyboardRepeatDelayMs = s.value(keys::kKeyboardRepeatDelayMs, 260).toInt();
+  settings.clickHoldDelayMs = s.value(keys::kClickHoldDelayMs, 500).toInt();
+  settings.clickHoldRepeatIntervalMs = s.value(keys::kClickHoldRepeatIntervalMs, 320).toInt();
+  settings.listKeyboardRepeatIntervalMs = s.value(keys::kListKeyboardRepeatIntervalMs, 50).toInt();
+  settings.listClickHoldRepeatIntervalMs =
+      s.value(keys::kListClickHoldRepeatIntervalMs, 80).toInt();
+  settings.mouseWheelRows = s.value(keys::kMouseWheelRows, 1).toInt();
+  settings.scrollAnimationDurationMs = s.value(keys::kScrollAnimationDurationMs, 1500).toInt();
+  settings.scrollVelocityMultiplier = s.value(keys::kScrollVelocityMultiplier, 1.0).toDouble();
   // Clamp to a safe range: 0.25× - 5.0× so the multiplier can't stall or
   // saturate the animation pipeline.
   settings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
   // Load text appearance settings
-  settings.titleTintSaturation = s.value("titleTintSaturation", 180).toInt();
-  settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
-  settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
+  settings.titleTintSaturation = s.value(keys::kTitleTintSaturation, 180).toInt();
+  settings.titleTintLightness = s.value(keys::kTitleTintLightness, 60).toInt();
+  settings.titleBaseColor = s.value(keys::kTitleBaseColor, QString()).toString();
   // opt-in title overlay on placeholder art
-  settings.showTitleInPlaceholder = s.value("showTitleInPlaceholder", false).toBool();
+  settings.showTitleInPlaceholder = s.value(keys::kShowTitleInPlaceholder, false).toBool();
 
   // global UI font. Empty family / 0 size = platform default.
   // No clamp on point size beyond Qt's own validation; the spinbox in the
   // settings dialog limits user input to a sane range.
-  settings.globalUiFontFamily = s.value("globalUiFontFamily", QString()).toString();
-  settings.globalUiFontPointSize = s.value("globalUiFontPointSize", 0).toInt();
+  settings.globalUiFontFamily = s.value(keys::kGlobalUiFontFamily, QString()).toString();
+  settings.globalUiFontPointSize = s.value(keys::kGlobalUiFontPointSize, 0).toInt();
 
   // runtime text zoom. Persisted as percent so a hand-edited
   // value reads obviously; clamped to [50, 300] to keep typography legible
   // and avoid absurdly tiny / huge widget sizes that the layout pipeline
   // wasn't designed for.
-  settings.uiTextZoomPercent = qBound(50, s.value("uiTextZoomPercent", 100).toInt(), 300);
+  settings.uiTextZoomPercent = qBound(50, s.value(keys::kUiTextZoomPercent, 100).toInt(), 300);
 
   // preview video volume (0-100). Clamped on read so a
   // hand-edited out-of-range value can't mute audio permanently or push
   // QAudioOutput into undefined territory.
-  settings.previewVideoVolume = qBound(0, s.value("previewVideoVolume", 100).toInt(), 100);
+  settings.previewVideoVolume = qBound(0, s.value(keys::kPreviewVideoVolume, 100).toInt(), 100);
 
   // startup video. Stored even when disabled so the user can
   // keep a path configured and toggle it off temporarily.
-  settings.startupVideoEnabled = s.value("startupVideoEnabled", false).toBool();
-  settings.startupVideoPath =
-      sanitizeLoadedPath(s.value("startupVideoPath", QString()).toString(), "startupVideoPath");
+  settings.startupVideoEnabled = s.value(keys::kStartupVideoEnabled, false).toBool();
+  settings.startupVideoPath = sanitizeLoadedPath(
+      s.value(keys::kStartupVideoPath, QString()).toString(), "startupVideoPath");
 
   // Controls: keyboard bindings
-  settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
-  settings.keyNavRight = s.value("keyNavRight", static_cast<int>(Qt::Key_Right)).toInt();
-  settings.keyNavUp = s.value("keyNavUp", static_cast<int>(Qt::Key_Up)).toInt();
-  settings.keyNavDown = s.value("keyNavDown", static_cast<int>(Qt::Key_Down)).toInt();
-  settings.keyConfirm = s.value("keyConfirm", static_cast<int>(Qt::Key_Return)).toInt();
-  settings.keyBack = s.value("keyBack", static_cast<int>(Qt::Key_Escape)).toInt();
-  settings.keySearch = s.value("keySearch", static_cast<int>(Qt::Key_Slash)).toInt();
+  settings.keyNavLeft = s.value(keys::kKeyNavLeft, static_cast<int>(Qt::Key_Left)).toInt();
+  settings.keyNavRight = s.value(keys::kKeyNavRight, static_cast<int>(Qt::Key_Right)).toInt();
+  settings.keyNavUp = s.value(keys::kKeyNavUp, static_cast<int>(Qt::Key_Up)).toInt();
+  settings.keyNavDown = s.value(keys::kKeyNavDown, static_cast<int>(Qt::Key_Down)).toInt();
+  settings.keyConfirm = s.value(keys::kKeyConfirm, static_cast<int>(Qt::Key_Return)).toInt();
+  settings.keyBack = s.value(keys::kKeyBack, static_cast<int>(Qt::Key_Escape)).toInt();
+  settings.keySearch = s.value(keys::kKeySearch, static_cast<int>(Qt::Key_Slash)).toInt();
   settings.keyAlphabeticBack =
-      s.value("keyAlphabeticBack", static_cast<int>(Qt::Key_PageUp)).toInt();
+      s.value(keys::kKeyAlphabeticBack, static_cast<int>(Qt::Key_PageUp)).toInt();
   settings.keyAlphabeticForward =
-      s.value("keyAlphabeticForward", static_cast<int>(Qt::Key_PageDown)).toInt();
-  settings.keyJumpFirst = s.value("keyJumpFirst", static_cast<int>(Qt::Key_Home)).toInt();
-  settings.keyJumpLast = s.value("keyJumpLast", static_cast<int>(Qt::Key_End)).toInt();
+      s.value(keys::kKeyAlphabeticForward, static_cast<int>(Qt::Key_PageDown)).toInt();
+  settings.keyJumpFirst = s.value(keys::kKeyJumpFirst, static_cast<int>(Qt::Key_Home)).toInt();
+  settings.keyJumpLast = s.value(keys::kKeyJumpLast, static_cast<int>(Qt::Key_End)).toInt();
   // detail-page key (opens DetailPageOverlay).
-  settings.keyItemDetails = s.value("keyItemDetails", static_cast<int>(Qt::Key_I)).toInt();
-  settings.keyHomeView = s.value("keyHomeView", 0).toInt();
+  settings.keyItemDetails = s.value(keys::kKeyItemDetails, static_cast<int>(Qt::Key_I)).toInt();
+  settings.keyHomeView = s.value(keys::kKeyHomeView, 0).toInt();
 
   // Controls: gamepad bindings
-  settings.gamepadUseDpad = s.value("gamepadUseDpad", true).toBool();
-  settings.gamepadUseLeftStick = s.value("gamepadUseLeftStick", true).toBool();
-  settings.gamepadConfirmButton = s.value("gamepadConfirmButton", QString("A")).toString();
-  settings.gamepadBackButton = s.value("gamepadBackButton", QString("B")).toString();
+  settings.gamepadUseDpad = s.value(keys::kGamepadUseDpad, true).toBool();
+  settings.gamepadUseLeftStick = s.value(keys::kGamepadUseLeftStick, true).toBool();
+  settings.gamepadConfirmButton = s.value(keys::kGamepadConfirmButton, QString("A")).toString();
+  settings.gamepadBackButton = s.value(keys::kGamepadBackButton, QString("B")).toString();
   settings.gamepadToggleSidebarButton =
-      s.value("gamepadToggleSidebarButton", QString("Y")).toString();
+      s.value(keys::kGamepadToggleSidebarButton, QString("Y")).toString();
 
   // artwork-cycle modifier. Coerce hand-edited junk back to Shift
   // so the gesture is always reachable; allow only the single-modifier flags
   // we expose in the settings UI.
   settings.artworkCycleModifier = SettingsHelpers::coerceArtworkCycleModifier(
-      s.value("artworkCycleModifier", static_cast<int>(Qt::ShiftModifier)).toInt());
+      s.value(keys::kArtworkCycleModifier, static_cast<int>(Qt::ShiftModifier)).toInt());
 
   // Sort preferences
   settings.sortMode = SettingsHelpers::coerceSortMode(
-      s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt());
-  settings.excludeSubfoldersFromSort = s.value("excludeSubfoldersFromSort", false).toBool();
+      s.value(keys::kSortMode, static_cast<int>(SortMode::NameAscending)).toInt());
+  settings.excludeSubfoldersFromSort = s.value(keys::kExcludeSubfoldersFromSort, false).toBool();
   // collection categorization filters. Defaults are "no filter"
   // so an upgrading user sees all subcollections as before until they pick a
   // type or toggle the hide button on the toolbar.
-  settings.collectionTypeFilter = s.value("collectionTypeFilter", QString()).toString().trimmed();
-  settings.hideSubcollectionTiles = s.value("hideSubcollectionTiles", false).toBool();
-  settings.listCollectionColumnWidth = s.value("listCollectionColumnWidth", 150).toInt();
-  settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
-  settings.startupCollection = s.value("startupCollection", QString()).toString();
-  settings.useHomeView = s.value("useHomeView", false).toBool();
-  settings.homeViewLabel = s.value("homeViewLabel", QString()).toString();
-  settings.homeViewIcon = s.value("homeViewIcon", QString()).toString();
-  settings.retroarchConfigPath = s.value("retroarchConfigPath", QString()).toString();
+  settings.collectionTypeFilter =
+      s.value(keys::kCollectionTypeFilter, QString()).toString().trimmed();
+  settings.hideSubcollectionTiles = s.value(keys::kHideSubcollectionTiles, false).toBool();
+  settings.listCollectionColumnWidth = s.value(keys::kListCollectionColumnWidth, 150).toInt();
+  settings.listArtworkColumnWidth = s.value(keys::kListArtworkColumnWidth, 32).toInt();
+  settings.startupCollection = s.value(keys::kStartupCollection, QString()).toString();
+  settings.useHomeView = s.value(keys::kUseHomeView, false).toBool();
+  settings.homeViewLabel = s.value(keys::kHomeViewLabel, QString()).toString();
+  settings.homeViewIcon = s.value(keys::kHomeViewIcon, QString()).toString();
+  settings.retroarchConfigPath = s.value(keys::kRetroarchConfigPath, QString()).toString();
 
   // Attract mode
-  settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
+  settings.attractModeEnabled = s.value(keys::kAttractModeEnabled, false).toBool();
   settings.attractModeIdleTimeoutSec = qBound(
       UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-      s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC).toInt(),
+      s.value(keys::kAttractModeIdleTimeoutSec, UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC)
+          .toInt(),
       UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
-  settings.attractModeAutoScrollEnabled = s.value("attractModeAutoScrollEnabled", true).toBool();
-  settings.attractModeScrollSpeed = qBound(
-      UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-      s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX).toDouble(),
-      UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+  settings.attractModeAutoScrollEnabled =
+      s.value(keys::kAttractModeAutoScrollEnabled, true).toBool();
+  settings.attractModeScrollSpeed =
+      qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
+             s.value(keys::kAttractModeScrollSpeed, UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX)
+                 .toDouble(),
+             UIConstants::Attract::MAX_SCROLL_SPEED_PX);
   settings.attractModeAdvanceSelectionEnabled =
-      s.value("attractModeAdvanceSelectionEnabled", false).toBool();
+      s.value(keys::kAttractModeAdvanceSelectionEnabled, false).toBool();
   settings.attractModeAdvanceSelectionIntervalSec =
       qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
-             s.value("attractModeAdvanceSelectionIntervalSec",
+             s.value(keys::kAttractModeAdvanceSelectionIntervalSec,
                      UIConstants::Attract::DEFAULT_ADVANCE_INTERVAL_SEC)
                  .toInt(),
              UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
   settings.attractModeAdvanceSelectionRandom =
-      s.value("attractModeAdvanceSelectionRandom", false).toBool();
+      s.value(keys::kAttractModeAdvanceSelectionRandom, false).toBool();
 
   // Marquee / secondary monitor — opt-in. Mode is clamped to the known
   // range so a hand-edited INI with a bogus value doesn't propagate into
   // the runtime (defaults to 0 = item artwork).
-  settings.marqueeEnabled = s.value("marqueeEnabled", false).toBool();
-  settings.marqueeScreenName = s.value("marqueeScreenName").toString();
-  settings.marqueeMode = qBound(0, s.value("marqueeMode", 0).toInt(), 2);
+  settings.marqueeEnabled = s.value(keys::kMarqueeEnabled, false).toBool();
+  settings.marqueeScreenName = s.value(keys::kMarqueeScreenName).toString();
+  settings.marqueeMode = qBound(0, s.value(keys::kMarqueeMode, 0).toInt(), 2);
 
   // Splash screens
-  settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
-  settings.resumeFocusSplashEnabled = s.value("resumeFocusSplashEnabled", true).toBool();
-  settings.bootSplashTitle = s.value("bootSplashTitle").toString();
-  settings.bootSplashSubtitle = s.value("bootSplashSubtitle").toString();
-  settings.resumeFocusSplashTitle = s.value("resumeFocusSplashTitle").toString();
-  settings.resumeFocusSplashSubtitle = s.value("resumeFocusSplashSubtitle").toString();
+  settings.bootSplashEnabled = s.value(keys::kBootSplashEnabled, true).toBool();
+  settings.resumeFocusSplashEnabled = s.value(keys::kResumeFocusSplashEnabled, true).toBool();
+  settings.bootSplashTitle = s.value(keys::kBootSplashTitle).toString();
+  settings.bootSplashSubtitle = s.value(keys::kBootSplashSubtitle).toString();
+  settings.resumeFocusSplashTitle = s.value(keys::kResumeFocusSplashTitle).toString();
+  settings.resumeFocusSplashSubtitle = s.value(keys::kResumeFocusSplashSubtitle).toString();
 
   // Runtime detection — opt-in
-  settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
+  settings.runtimeDetectionEnabled = s.value(keys::kRuntimeDetectionEnabled, false).toBool();
 
   // First-run wizard gate — defaults false so a fresh install gets the
   // wizard on next launch.
-  settings.firstRunComplete = s.value("firstRunComplete", false).toBool();
+  settings.firstRunComplete = s.value(keys::kFirstRunComplete, false).toBool();
 
   // Launch history. Default is enabled with a 500-row cap so
   // a fresh install starts logging immediately; the user disables in
   // Settings → General. Negative caps land in the file via hand-edit only;
   // qBound clamps them to a sane window so trim never deletes the whole
   // table by accident.
-  settings.historyEnabled = s.value("historyEnabled", true).toBool();
-  settings.historyMaxEntries = qBound(10, s.value("historyMaxEntries", 500).toInt(), 50000);
+  settings.historyEnabled = s.value(keys::kHistoryEnabled, true).toBool();
+  settings.historyMaxEntries = qBound(10, s.value(keys::kHistoryMaxEntries, 500).toInt(), 50000);
 
   // View-mode toggles. Defaults match the.ui defaults so an
   // upgrading install sees no change until the user toggles F8/F10/F11.
-  settings.showMenuBar = s.value("showMenuBar", true).toBool();
-  settings.showToolbar = s.value("showToolbar", true).toBool();
-  settings.fullscreen = s.value("fullscreen", false).toBool();
+  settings.showMenuBar = s.value(keys::kShowMenuBar, true).toBool();
+  settings.showToolbar = s.value(keys::kShowToolbar, true).toBool();
+  settings.fullscreen = s.value(keys::kFullscreen, false).toBool();
 
   // Customizable toolbar. Default visibility is "shown" so an
   // upgrading user sees the toolbar exactly as before; custom text strings
   // default to empty (use the .ui label).
-  settings.toolbarShowGridViewButton = s.value("toolbarShowGridViewButton", true).toBool();
-  settings.toolbarShowListViewButton = s.value("toolbarShowListViewButton", true).toBool();
+  settings.toolbarShowGridViewButton = s.value(keys::kToolbarShowGridViewButton, true).toBool();
+  settings.toolbarShowListViewButton = s.value(keys::kToolbarShowListViewButton, true).toBool();
   settings.toolbarShowCoverFlowViewButton =
-      s.value("toolbarShowCoverFlowViewButton", true).toBool();
+      s.value(keys::kToolbarShowCoverFlowViewButton, true).toBool();
   settings.toolbarShowHorizontalViewButton =
-      s.value("toolbarShowHorizontalViewButton", true).toBool();
+      s.value(keys::kToolbarShowHorizontalViewButton, true).toBool();
   settings.toolbarShowHideSubcollectionsButton =
-      s.value("toolbarShowHideSubcollectionsButton", true).toBool();
-  settings.toolbarShowTypeFilter = s.value("toolbarShowTypeFilter", true).toBool();
-  settings.toolbarShowTitleFilter = s.value("toolbarShowTitleFilter", true).toBool();
-  settings.toolbarShowSearchModeButton = s.value("toolbarShowSearchModeButton", true).toBool();
-  settings.toolbarShowSearchBar = s.value("toolbarShowSearchBar", true).toBool();
-  settings.toolbarGridViewButtonText = s.value("toolbarGridViewButtonText", QString()).toString();
-  settings.toolbarListViewButtonText = s.value("toolbarListViewButtonText", QString()).toString();
+      s.value(keys::kToolbarShowHideSubcollectionsButton, true).toBool();
+  settings.toolbarShowTypeFilter = s.value(keys::kToolbarShowTypeFilter, true).toBool();
+  settings.toolbarShowTitleFilter = s.value(keys::kToolbarShowTitleFilter, true).toBool();
+  settings.toolbarShowSearchModeButton = s.value(keys::kToolbarShowSearchModeButton, true).toBool();
+  settings.toolbarShowSearchBar = s.value(keys::kToolbarShowSearchBar, true).toBool();
+  settings.toolbarGridViewButtonText =
+      s.value(keys::kToolbarGridViewButtonText, QString()).toString();
+  settings.toolbarListViewButtonText =
+      s.value(keys::kToolbarListViewButtonText, QString()).toString();
   settings.toolbarCoverFlowViewButtonText =
-      s.value("toolbarCoverFlowViewButtonText", QString()).toString();
+      s.value(keys::kToolbarCoverFlowViewButtonText, QString()).toString();
   settings.toolbarHorizontalViewButtonText =
-      s.value("toolbarHorizontalViewButtonText", QString()).toString();
+      s.value(keys::kToolbarHorizontalViewButtonText, QString()).toString();
   settings.toolbarHideSubcollectionsButtonText =
-      s.value("toolbarHideSubcollectionsButtonText", QString()).toString();
-  settings.toolbarTitleFilterText = s.value("toolbarTitleFilterText", QString()).toString();
+      s.value(keys::kToolbarHideSubcollectionsButtonText, QString()).toString();
+  settings.toolbarTitleFilterText = s.value(keys::kToolbarTitleFilterText, QString()).toString();
   s.endGroup();
 
   // launcher presets live at the top level (outside [General])
   // so they remain a clear, named section the user can hand-edit. Stored as
   // a QSettings array so size is implicit.
   settings.launcherPresets.clear();
-  const int presetCount = s.beginReadArray("Launchers");
+  const int presetCount = s.beginReadArray(keys::kGroupLaunchers);
   settings.launcherPresets.reserve(presetCount);
   for (int i = 0; i < presetCount; ++i) {
     s.setArrayIndex(i);
     LauncherPreset preset;
-    preset.id = s.value("id").toString();
-    preset.name = s.value("name").toString();
-    preset.launcherPath = sanitizeLoadedPath(s.value("launcherPath").toString(),
+    preset.id = s.value(keys::kId).toString();
+    preset.name = s.value(keys::kName).toString();
+    preset.launcherPath = sanitizeLoadedPath(s.value(keys::kLauncherPath).toString(),
                                              QString("Launchers[%1].launcherPath").arg(i));
-    preset.corePath = sanitizeLoadedPath(s.value("corePath").toString(),
+    preset.corePath = sanitizeLoadedPath(s.value(keys::kCorePath).toString(),
                                          QString("Launchers[%1].corePath").arg(i));
-    preset.launchParameters = s.value("launchParameters").toString();
+    preset.launchParameters = s.value(keys::kLaunchParameters).toString();
     // Drop entries with no id — they can't be referenced and would shadow
     // valid presets if a hand-edit accidentally cleared the field.
     if (!preset.id.trimmed().isEmpty()) {
@@ -411,7 +446,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // credential (will be migrated to the keychain on next save) or
   // came from a build without keychain support.
   settings.scraperCredentials.clear();
-  s.beginGroup("Scrapers");
+  s.beginGroup(keys::kGroupScrapers);
   for (const QString &fullKey : s.allKeys()) {
     const int slash = fullKey.indexOf('/');
     if (slash <= 0 || slash >= fullKey.size() - 1) {
@@ -447,29 +482,31 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // [ScraperOptions] group rather than under [Scrapers] so the
   // credential key-walk above doesn't pick them up as malformed
   // provider/field pairs.
-  s.beginGroup("ScraperOptions");
+  s.beginGroup(keys::kGroupScraperOptions);
   settings.scraperOptions.preset = static_cast<GeneralSettings::ScraperPreset>(
-      s.value("preset", static_cast<int>(GeneralSettings::ScraperPreset::Balanced)).toInt());
+      s.value(keys::kPreset, static_cast<int>(GeneralSettings::ScraperPreset::Balanced)).toInt());
   settings.scraperOptions.mediaMaxDimension =
-      qBound(0, s.value("mediaMaxDimension", 1024).toInt(), 8192);
-  settings.scraperOptions.mediaConcurrency = qBound(1, s.value("mediaConcurrency", 2).toInt(), 16);
+      qBound(0, s.value(keys::kMediaMaxDimension, 1024).toInt(), 8192);
+  settings.scraperOptions.mediaConcurrency =
+      qBound(1, s.value(keys::kMediaConcurrency, 2).toInt(), 16);
   settings.scraperOptions.mediaThrottleMs =
-      qBound(0, s.value("mediaThrottleMs", 100).toInt(), 5000);
+      qBound(0, s.value(keys::kMediaThrottleMs, 100).toInt(), 5000);
   settings.scraperOptions.batchItemConcurrency =
-      qBound(1, s.value("batchItemConcurrency", 4).toInt(), 16);
+      qBound(1, s.value(keys::kBatchItemConcurrency, 4).toInt(), 16);
   settings.scraperOptions.rescrapeMode = static_cast<GeneralSettings::ScraperRescrapeMode>(
-      s.value("rescrapeMode", static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing))
+      s.value(keys::kRescrapeMode,
+              static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing))
           .toInt());
   // Clamp 0..365 — defensive against hand-edited INIs. 0 disables the
   // time gate (skip every already-scraped item); 365 is a year, which
   // is the longest "refresh window" we expect anyone to want.
   settings.scraperOptions.skipRecentScrapeDays =
-      qBound(0, s.value("skipRecentScrapeDays", 30).toInt(), 365);
-  settings.scraperOptions.preferJpgOutput = s.value("preferJpgOutput", false).toBool();
-  settings.scraperOptions.scrapeAutoResume = s.value("scrapeAutoResume", false).toBool();
-  settings.scraperOptions.scrapeLogging = s.value("scrapeLogging", false).toBool();
+      qBound(0, s.value(keys::kSkipRecentScrapeDays, 30).toInt(), 365);
+  settings.scraperOptions.preferJpgOutput = s.value(keys::kPreferJpgOutput, false).toBool();
+  settings.scraperOptions.scrapeAutoResume = s.value(keys::kScrapeAutoResume, false).toBool();
+  settings.scraperOptions.scrapeLogging = s.value(keys::kScrapeLogging, false).toBool();
   settings.scraperOptions.preferredScraperRegion =
-      s.value("preferredRegion", QStringLiteral("us")).toString().trimmed().toLower();
+      s.value(keys::kPreferredRegion, QStringLiteral("us")).toString().trimmed().toLower();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -627,132 +664,136 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
-  s.beginGroup("General");
+  s.beginGroup(keys::kGroupGeneral);
   // Stamp the schema sentinel first so any later partial-write failure
   // still leaves the version marker visible to the next load (the
   // QSaveFile work tracked separately will plug the partial-write hole).
-  s.setValue("schemaVersion", kSettingsSchemaVersion);
-  s.setValue("rememberSelection", m_generalSettings.rememberSelection);
-  s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
-  s.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
-  s.setValue("pixmapCacheSizeMB", m_generalSettings.pixmapCacheSizeMB);
-  s.setValue("videoThumbnailExtractionTimeoutMs",
+  s.setValue(keys::kSchemaVersion, kSettingsSchemaVersion);
+  s.setValue(keys::kRememberSelection, m_generalSettings.rememberSelection);
+  s.setValue(keys::kWrapNavigation, m_generalSettings.wrapNavigation);
+  s.setValue(keys::kSelectItemOnHover, m_generalSettings.selectItemOnHover);
+  s.setValue(keys::kPixmapCacheSizeMB, m_generalSettings.pixmapCacheSizeMB);
+  s.setValue(keys::kVideoThumbnailExtractionTimeoutMs,
              m_generalSettings.videoThumbnailExtractionTimeoutMs);
-  s.setValue("keyboardRepeatIntervalMs", m_generalSettings.keyboardRepeatIntervalMs);
-  s.setValue("keyboardRepeatDelayMs", m_generalSettings.keyboardRepeatDelayMs);
-  s.setValue("clickHoldDelayMs", m_generalSettings.clickHoldDelayMs);
-  s.setValue("clickHoldRepeatIntervalMs", m_generalSettings.clickHoldRepeatIntervalMs);
-  s.setValue("listKeyboardRepeatIntervalMs", m_generalSettings.listKeyboardRepeatIntervalMs);
-  s.setValue("listClickHoldRepeatIntervalMs", m_generalSettings.listClickHoldRepeatIntervalMs);
-  s.setValue("mouseWheelRows", m_generalSettings.mouseWheelRows);
-  s.setValue("scrollAnimationDurationMs", m_generalSettings.scrollAnimationDurationMs);
-  s.setValue("scrollVelocityMultiplier", m_generalSettings.scrollVelocityMultiplier);
-  s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
-  s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
-  s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
+  s.setValue(keys::kKeyboardRepeatIntervalMs, m_generalSettings.keyboardRepeatIntervalMs);
+  s.setValue(keys::kKeyboardRepeatDelayMs, m_generalSettings.keyboardRepeatDelayMs);
+  s.setValue(keys::kClickHoldDelayMs, m_generalSettings.clickHoldDelayMs);
+  s.setValue(keys::kClickHoldRepeatIntervalMs, m_generalSettings.clickHoldRepeatIntervalMs);
+  s.setValue(keys::kListKeyboardRepeatIntervalMs, m_generalSettings.listKeyboardRepeatIntervalMs);
+  s.setValue(keys::kListClickHoldRepeatIntervalMs, m_generalSettings.listClickHoldRepeatIntervalMs);
+  s.setValue(keys::kMouseWheelRows, m_generalSettings.mouseWheelRows);
+  s.setValue(keys::kScrollAnimationDurationMs, m_generalSettings.scrollAnimationDurationMs);
+  s.setValue(keys::kScrollVelocityMultiplier, m_generalSettings.scrollVelocityMultiplier);
+  s.setValue(keys::kTitleTintSaturation, m_generalSettings.titleTintSaturation);
+  s.setValue(keys::kTitleTintLightness, m_generalSettings.titleTintLightness);
+  s.setValue(keys::kTitleBaseColor, m_generalSettings.titleBaseColor);
 
-  s.setValue("showTitleInPlaceholder", m_generalSettings.showTitleInPlaceholder);
+  s.setValue(keys::kShowTitleInPlaceholder, m_generalSettings.showTitleInPlaceholder);
   // global UI font
-  s.setValue("globalUiFontFamily", m_generalSettings.globalUiFontFamily);
-  s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);
+  s.setValue(keys::kGlobalUiFontFamily, m_generalSettings.globalUiFontFamily);
+  s.setValue(keys::kGlobalUiFontPointSize, m_generalSettings.globalUiFontPointSize);
   // runtime text zoom
-  s.setValue("uiTextZoomPercent", m_generalSettings.uiTextZoomPercent);
+  s.setValue(keys::kUiTextZoomPercent, m_generalSettings.uiTextZoomPercent);
   // preview video volume
-  s.setValue("previewVideoVolume", m_generalSettings.previewVideoVolume);
+  s.setValue(keys::kPreviewVideoVolume, m_generalSettings.previewVideoVolume);
   // startup video
-  s.setValue("startupVideoEnabled", m_generalSettings.startupVideoEnabled);
-  s.setValue("startupVideoPath", m_generalSettings.startupVideoPath);
-  s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
-  s.setValue("keyNavRight", m_generalSettings.keyNavRight);
-  s.setValue("keyNavUp", m_generalSettings.keyNavUp);
-  s.setValue("keyNavDown", m_generalSettings.keyNavDown);
-  s.setValue("keyConfirm", m_generalSettings.keyConfirm);
-  s.setValue("keyBack", m_generalSettings.keyBack);
-  s.setValue("keySearch", m_generalSettings.keySearch);
-  s.setValue("keyAlphabeticBack", m_generalSettings.keyAlphabeticBack);
-  s.setValue("keyAlphabeticForward", m_generalSettings.keyAlphabeticForward);
-  s.setValue("keyJumpFirst", m_generalSettings.keyJumpFirst);
-  s.setValue("keyJumpLast", m_generalSettings.keyJumpLast);
-  s.setValue("keyItemDetails", m_generalSettings.keyItemDetails);
-  s.setValue("keyHomeView", m_generalSettings.keyHomeView);
-  s.setValue("gamepadUseDpad", m_generalSettings.gamepadUseDpad);
-  s.setValue("gamepadUseLeftStick", m_generalSettings.gamepadUseLeftStick);
-  s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
-  s.setValue("gamepadBackButton", m_generalSettings.gamepadBackButton);
-  s.setValue("gamepadToggleSidebarButton", m_generalSettings.gamepadToggleSidebarButton);
-  s.setValue("artworkCycleModifier", m_generalSettings.artworkCycleModifier);
-  s.setValue("sortMode", static_cast<int>(m_generalSettings.sortMode));
-  s.setValue("excludeSubfoldersFromSort", m_generalSettings.excludeSubfoldersFromSort);
+  s.setValue(keys::kStartupVideoEnabled, m_generalSettings.startupVideoEnabled);
+  s.setValue(keys::kStartupVideoPath, m_generalSettings.startupVideoPath);
+  s.setValue(keys::kKeyNavLeft, m_generalSettings.keyNavLeft);
+  s.setValue(keys::kKeyNavRight, m_generalSettings.keyNavRight);
+  s.setValue(keys::kKeyNavUp, m_generalSettings.keyNavUp);
+  s.setValue(keys::kKeyNavDown, m_generalSettings.keyNavDown);
+  s.setValue(keys::kKeyConfirm, m_generalSettings.keyConfirm);
+  s.setValue(keys::kKeyBack, m_generalSettings.keyBack);
+  s.setValue(keys::kKeySearch, m_generalSettings.keySearch);
+  s.setValue(keys::kKeyAlphabeticBack, m_generalSettings.keyAlphabeticBack);
+  s.setValue(keys::kKeyAlphabeticForward, m_generalSettings.keyAlphabeticForward);
+  s.setValue(keys::kKeyJumpFirst, m_generalSettings.keyJumpFirst);
+  s.setValue(keys::kKeyJumpLast, m_generalSettings.keyJumpLast);
+  s.setValue(keys::kKeyItemDetails, m_generalSettings.keyItemDetails);
+  s.setValue(keys::kKeyHomeView, m_generalSettings.keyHomeView);
+  s.setValue(keys::kGamepadUseDpad, m_generalSettings.gamepadUseDpad);
+  s.setValue(keys::kGamepadUseLeftStick, m_generalSettings.gamepadUseLeftStick);
+  s.setValue(keys::kGamepadConfirmButton, m_generalSettings.gamepadConfirmButton);
+  s.setValue(keys::kGamepadBackButton, m_generalSettings.gamepadBackButton);
+  s.setValue(keys::kGamepadToggleSidebarButton, m_generalSettings.gamepadToggleSidebarButton);
+  s.setValue(keys::kArtworkCycleModifier, m_generalSettings.artworkCycleModifier);
+  s.setValue(keys::kSortMode, static_cast<int>(m_generalSettings.sortMode));
+  s.setValue(keys::kExcludeSubfoldersFromSort, m_generalSettings.excludeSubfoldersFromSort);
   // collection categorization toolbar state
-  s.setValue("collectionTypeFilter", m_generalSettings.collectionTypeFilter);
-  s.setValue("hideSubcollectionTiles", m_generalSettings.hideSubcollectionTiles);
-  s.setValue("listCollectionColumnWidth", m_generalSettings.listCollectionColumnWidth);
-  s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
-  s.setValue("startupCollection", m_generalSettings.startupCollection);
-  s.setValue("useHomeView", m_generalSettings.useHomeView);
-  s.setValue("homeViewLabel", m_generalSettings.homeViewLabel);
-  s.setValue("homeViewIcon", m_generalSettings.homeViewIcon);
-  s.setValue("retroarchConfigPath", m_generalSettings.retroarchConfigPath);
-  s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
-  s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
-  s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
-  s.setValue("firstRunComplete", m_generalSettings.firstRunComplete);
-  s.setValue("historyEnabled", m_generalSettings.historyEnabled);
-  s.setValue("historyMaxEntries", m_generalSettings.historyMaxEntries);
-  s.setValue("attractModeAutoScrollEnabled", m_generalSettings.attractModeAutoScrollEnabled);
-  s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
-  s.setValue("attractModeAdvanceSelectionEnabled",
+  s.setValue(keys::kCollectionTypeFilter, m_generalSettings.collectionTypeFilter);
+  s.setValue(keys::kHideSubcollectionTiles, m_generalSettings.hideSubcollectionTiles);
+  s.setValue(keys::kListCollectionColumnWidth, m_generalSettings.listCollectionColumnWidth);
+  s.setValue(keys::kListArtworkColumnWidth, m_generalSettings.listArtworkColumnWidth);
+  s.setValue(keys::kStartupCollection, m_generalSettings.startupCollection);
+  s.setValue(keys::kUseHomeView, m_generalSettings.useHomeView);
+  s.setValue(keys::kHomeViewLabel, m_generalSettings.homeViewLabel);
+  s.setValue(keys::kHomeViewIcon, m_generalSettings.homeViewIcon);
+  s.setValue(keys::kRetroarchConfigPath, m_generalSettings.retroarchConfigPath);
+  s.setValue(keys::kAttractModeEnabled, m_generalSettings.attractModeEnabled);
+  s.setValue(keys::kAttractModeIdleTimeoutSec, m_generalSettings.attractModeIdleTimeoutSec);
+  s.setValue(keys::kRuntimeDetectionEnabled, m_generalSettings.runtimeDetectionEnabled);
+  s.setValue(keys::kFirstRunComplete, m_generalSettings.firstRunComplete);
+  s.setValue(keys::kHistoryEnabled, m_generalSettings.historyEnabled);
+  s.setValue(keys::kHistoryMaxEntries, m_generalSettings.historyMaxEntries);
+  s.setValue(keys::kAttractModeAutoScrollEnabled, m_generalSettings.attractModeAutoScrollEnabled);
+  s.setValue(keys::kAttractModeScrollSpeed, m_generalSettings.attractModeScrollSpeed);
+  s.setValue(keys::kAttractModeAdvanceSelectionEnabled,
              m_generalSettings.attractModeAdvanceSelectionEnabled);
-  s.setValue("attractModeAdvanceSelectionIntervalSec",
+  s.setValue(keys::kAttractModeAdvanceSelectionIntervalSec,
              m_generalSettings.attractModeAdvanceSelectionIntervalSec);
-  s.setValue("attractModeAdvanceSelectionRandom",
+  s.setValue(keys::kAttractModeAdvanceSelectionRandom,
              m_generalSettings.attractModeAdvanceSelectionRandom);
   // Marquee secondary-monitor display
-  s.setValue("marqueeEnabled", m_generalSettings.marqueeEnabled);
-  s.setValue("marqueeScreenName", m_generalSettings.marqueeScreenName);
-  s.setValue("marqueeMode", m_generalSettings.marqueeMode);
-  s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
-  s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
-  s.setValue("bootSplashTitle", m_generalSettings.bootSplashTitle);
-  s.setValue("bootSplashSubtitle", m_generalSettings.bootSplashSubtitle);
-  s.setValue("resumeFocusSplashTitle", m_generalSettings.resumeFocusSplashTitle);
-  s.setValue("resumeFocusSplashSubtitle", m_generalSettings.resumeFocusSplashSubtitle);
+  s.setValue(keys::kMarqueeEnabled, m_generalSettings.marqueeEnabled);
+  s.setValue(keys::kMarqueeScreenName, m_generalSettings.marqueeScreenName);
+  s.setValue(keys::kMarqueeMode, m_generalSettings.marqueeMode);
+  s.setValue(keys::kBootSplashEnabled, m_generalSettings.bootSplashEnabled);
+  s.setValue(keys::kResumeFocusSplashEnabled, m_generalSettings.resumeFocusSplashEnabled);
+  s.setValue(keys::kBootSplashTitle, m_generalSettings.bootSplashTitle);
+  s.setValue(keys::kBootSplashSubtitle, m_generalSettings.bootSplashSubtitle);
+  s.setValue(keys::kResumeFocusSplashTitle, m_generalSettings.resumeFocusSplashTitle);
+  s.setValue(keys::kResumeFocusSplashSubtitle, m_generalSettings.resumeFocusSplashSubtitle);
   // View-mode toggles
-  s.setValue("showMenuBar", m_generalSettings.showMenuBar);
-  s.setValue("showToolbar", m_generalSettings.showToolbar);
-  s.setValue("fullscreen", m_generalSettings.fullscreen);
+  s.setValue(keys::kShowMenuBar, m_generalSettings.showMenuBar);
+  s.setValue(keys::kShowToolbar, m_generalSettings.showToolbar);
+  s.setValue(keys::kFullscreen, m_generalSettings.fullscreen);
   // Customizable toolbar
-  s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
-  s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
-  s.setValue("toolbarShowCoverFlowViewButton", m_generalSettings.toolbarShowCoverFlowViewButton);
-  s.setValue("toolbarShowHorizontalViewButton", m_generalSettings.toolbarShowHorizontalViewButton);
-  s.setValue("toolbarShowHideSubcollectionsButton",
+  s.setValue(keys::kToolbarShowGridViewButton, m_generalSettings.toolbarShowGridViewButton);
+  s.setValue(keys::kToolbarShowListViewButton, m_generalSettings.toolbarShowListViewButton);
+  s.setValue(keys::kToolbarShowCoverFlowViewButton,
+             m_generalSettings.toolbarShowCoverFlowViewButton);
+  s.setValue(keys::kToolbarShowHorizontalViewButton,
+             m_generalSettings.toolbarShowHorizontalViewButton);
+  s.setValue(keys::kToolbarShowHideSubcollectionsButton,
              m_generalSettings.toolbarShowHideSubcollectionsButton);
-  s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
-  s.setValue("toolbarShowTitleFilter", m_generalSettings.toolbarShowTitleFilter);
-  s.setValue("toolbarShowSearchModeButton", m_generalSettings.toolbarShowSearchModeButton);
-  s.setValue("toolbarShowSearchBar", m_generalSettings.toolbarShowSearchBar);
-  s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
-  s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
-  s.setValue("toolbarCoverFlowViewButtonText", m_generalSettings.toolbarCoverFlowViewButtonText);
-  s.setValue("toolbarHorizontalViewButtonText", m_generalSettings.toolbarHorizontalViewButtonText);
-  s.setValue("toolbarHideSubcollectionsButtonText",
+  s.setValue(keys::kToolbarShowTypeFilter, m_generalSettings.toolbarShowTypeFilter);
+  s.setValue(keys::kToolbarShowTitleFilter, m_generalSettings.toolbarShowTitleFilter);
+  s.setValue(keys::kToolbarShowSearchModeButton, m_generalSettings.toolbarShowSearchModeButton);
+  s.setValue(keys::kToolbarShowSearchBar, m_generalSettings.toolbarShowSearchBar);
+  s.setValue(keys::kToolbarGridViewButtonText, m_generalSettings.toolbarGridViewButtonText);
+  s.setValue(keys::kToolbarListViewButtonText, m_generalSettings.toolbarListViewButtonText);
+  s.setValue(keys::kToolbarCoverFlowViewButtonText,
+             m_generalSettings.toolbarCoverFlowViewButtonText);
+  s.setValue(keys::kToolbarHorizontalViewButtonText,
+             m_generalSettings.toolbarHorizontalViewButtonText);
+  s.setValue(keys::kToolbarHideSubcollectionsButtonText,
              m_generalSettings.toolbarHideSubcollectionsButtonText);
-  s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);
+  s.setValue(keys::kToolbarTitleFilterText, m_generalSettings.toolbarTitleFilterText);
   s.endGroup();
 
   // persist launcher presets as a top-level [Launchers] array.
   // beginWriteArray clears any existing entries with the same prefix, so a
   // preset removed via the dialog doesn't linger as a stale row.
-  s.beginWriteArray("Launchers", m_generalSettings.launcherPresets.size());
+  s.beginWriteArray(keys::kGroupLaunchers, m_generalSettings.launcherPresets.size());
   for (int i = 0; i < m_generalSettings.launcherPresets.size(); ++i) {
     s.setArrayIndex(i);
     const LauncherPreset &preset = m_generalSettings.launcherPresets[i];
-    s.setValue("id", preset.id);
-    s.setValue("name", preset.name);
-    s.setValue("launcherPath", preset.launcherPath);
-    s.setValue("corePath", preset.corePath);
-    s.setValue("launchParameters", preset.launchParameters);
+    s.setValue(keys::kId, preset.id);
+    s.setValue(keys::kName, preset.name);
+    s.setValue(keys::kLauncherPath, preset.launcherPath);
+    s.setValue(keys::kCorePath, preset.corePath);
+    s.setValue(keys::kLaunchParameters, preset.launchParameters);
   }
   s.endArray();
 
@@ -770,14 +811,14 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
 #ifdef KARTEND_HAVE_QTKEYCHAIN
   QStringList preWipeKeys;
   {
-    s.beginGroup("Scrapers");
+    s.beginGroup(keys::kGroupScrapers);
     preWipeKeys = s.allKeys();
     s.endGroup();
   }
   QSet<QString> retainedKeys;
 #endif
-  s.remove(QStringLiteral("Scrapers"));
-  s.beginGroup("Scrapers");
+  s.remove(keys::kGroupScrapers);
+  s.beginGroup(keys::kGroupScrapers);
   for (auto pIt = m_generalSettings.scraperCredentials.constBegin();
        pIt != m_generalSettings.scraperCredentials.constEnd(); ++pIt) {
     const QString &providerId = pIt.key();
@@ -822,19 +863,19 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
 
   // Scraper performance + behavior options. Wipe the group first so
   // a "Reset to defaults" round-trip doesn't leave stale custom keys.
-  s.remove(QStringLiteral("ScraperOptions"));
-  s.beginGroup("ScraperOptions");
-  s.setValue("preset", static_cast<int>(m_generalSettings.scraperOptions.preset));
-  s.setValue("mediaMaxDimension", m_generalSettings.scraperOptions.mediaMaxDimension);
-  s.setValue("mediaConcurrency", m_generalSettings.scraperOptions.mediaConcurrency);
-  s.setValue("mediaThrottleMs", m_generalSettings.scraperOptions.mediaThrottleMs);
-  s.setValue("batchItemConcurrency", m_generalSettings.scraperOptions.batchItemConcurrency);
-  s.setValue("rescrapeMode", static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
-  s.setValue("skipRecentScrapeDays", m_generalSettings.scraperOptions.skipRecentScrapeDays);
-  s.setValue("preferJpgOutput", m_generalSettings.scraperOptions.preferJpgOutput);
-  s.setValue("scrapeAutoResume", m_generalSettings.scraperOptions.scrapeAutoResume);
-  s.setValue("scrapeLogging", m_generalSettings.scraperOptions.scrapeLogging);
-  s.setValue("preferredRegion", m_generalSettings.scraperOptions.preferredScraperRegion);
+  s.remove(keys::kGroupScraperOptions);
+  s.beginGroup(keys::kGroupScraperOptions);
+  s.setValue(keys::kPreset, static_cast<int>(m_generalSettings.scraperOptions.preset));
+  s.setValue(keys::kMediaMaxDimension, m_generalSettings.scraperOptions.mediaMaxDimension);
+  s.setValue(keys::kMediaConcurrency, m_generalSettings.scraperOptions.mediaConcurrency);
+  s.setValue(keys::kMediaThrottleMs, m_generalSettings.scraperOptions.mediaThrottleMs);
+  s.setValue(keys::kBatchItemConcurrency, m_generalSettings.scraperOptions.batchItemConcurrency);
+  s.setValue(keys::kRescrapeMode, static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
+  s.setValue(keys::kSkipRecentScrapeDays, m_generalSettings.scraperOptions.skipRecentScrapeDays);
+  s.setValue(keys::kPreferJpgOutput, m_generalSettings.scraperOptions.preferJpgOutput);
+  s.setValue(keys::kScrapeAutoResume, m_generalSettings.scraperOptions.scrapeAutoResume);
+  s.setValue(keys::kScrapeLogging, m_generalSettings.scraperOptions.scrapeLogging);
+  s.setValue(keys::kPreferredRegion, m_generalSettings.scraperOptions.preferredScraperRegion);
   s.endGroup();
 
   s.sync();

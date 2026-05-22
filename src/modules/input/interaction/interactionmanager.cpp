@@ -478,7 +478,6 @@ void InteractionManager::trySelectWidget(int index, const QList<int> &subcollect
     handleSuccessfulSelection(index);
   } else {
     scrollMgr()->updateVirtualView();
-    QApplication::processEvents();
     constexpr int kSelectRetryBaseMs = 30;
     constexpr int kSelectRetryStepMs = 30;
     int delay = kSelectRetryBaseMs + (attempt * kSelectRetryStepMs);

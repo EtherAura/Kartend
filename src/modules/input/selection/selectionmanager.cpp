@@ -78,26 +78,32 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
 }
 
 bool SelectionManager::isRestoringSelection() const {
+  assertMainThread();
   return state()->selectionRestore().restoring;
 }
 
 int SelectionManager::targetRestoreIndex() const {
+  assertMainThread();
   return state()->selectionRestore().targetIndex;
 }
 
 void SelectionManager::setRestoringSelection(bool restoring) {
+  assertMainThread();
   state()->selectionRestore().restoring = restoring;
 }
 
 void SelectionManager::setTargetRestoreIndex(int index) {
+  assertMainThread();
   state()->selectionRestore().targetIndex = index;
 }
 
 void SelectionManager::setForceImmediateCenter(bool force) {
+  assertMainThread();
   state()->selectionRestore().forceImmediateCenter = force;
 }
 
 bool SelectionManager::forceImmediateCenter() const {
+  assertMainThread();
   return state()->selectionRestore().forceImmediateCenter;
 }
 

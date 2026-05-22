@@ -32,6 +32,7 @@ target_sources(kartend_utils PRIVATE
   loggingcategories.h
   propertyutils.h
   scrapelogger.h
+  settingskeys.h
   settingsutils.h
   setuputils.h
   stateutils.h

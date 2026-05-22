@@ -6,6 +6,7 @@
 #include <QPixmap>
 #include <QPropertyAnimation>
 #include <QRect>
+#include <QTimer>
 
 #include "ui_itemwidget.h"
 #include <QString>
@@ -16,7 +17,6 @@ class QEnterEvent;
 class QPaintEvent;
 class QShowEvent;
 class QResizeEvent;
-class QTimer;
 class QPushButton;
 
 class ItemWidget : public QWidget {
@@ -182,7 +182,7 @@ private:
   void drawTitleOnPlaceholder(QPixmap &pixmap, qreal dpr = 1.0) const;
   void setupPulseAnimation();
   void startPulseAnimation();
-  QTimer *m_pulseDelayTimer;
+  QTimer m_pulseDelayTimer; // Kartend-a911.6: value member
   QElapsedTimer m_lastClickTimer;
   QPoint m_lastClickPos;
   static constexpr int DOUBLE_CLICK_TIMEOUT_MS = 300;

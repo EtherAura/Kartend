@@ -91,8 +91,7 @@ ItemWidget::ItemWidget(QWidget *parent)
 
       ,
       m_itemWidth(UIConstants::Item::DEFAULT_WIDTH),
-      m_itemHeight(UIConstants::Item::DEFAULT_HEIGHT), triangleIndicator(nullptr),
-      m_pulseDelayTimer(nullptr) {
+      m_itemHeight(UIConstants::Item::DEFAULT_HEIGHT), triangleIndicator(nullptr) {
   Ui::ItemWidget itemUi;
   itemUi.setupUi(this);
   setMouseTracking(true);
@@ -119,10 +118,9 @@ ItemWidget::ItemWidget(QWidget *parent)
   }
   applyTitleTint();
 
-  m_pulseDelayTimer = new QTimer(this);
-  m_pulseDelayTimer->setSingleShot(true);
-  m_pulseDelayTimer->setInterval(UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
-  connect(m_pulseDelayTimer, &QTimer::timeout, this, &ItemWidget::startPulseAnimation);
+  m_pulseDelayTimer.setSingleShot(true);
+  m_pulseDelayTimer.setInterval(UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
+  connect(&m_pulseDelayTimer, &QTimer::timeout, this, &ItemWidget::startPulseAnimation);
 }
 
 ItemWidget::~ItemWidget() {
@@ -131,11 +129,7 @@ ItemWidget::~ItemWidget() {
     delete pulseAnimation;
     pulseAnimation = nullptr;
   }
-  if (m_pulseDelayTimer) {
-    m_pulseDelayTimer->stop();
-    delete m_pulseDelayTimer;
-    m_pulseDelayTimer = nullptr;
-  }
+  m_pulseDelayTimer.stop();
   storedPixmap = QPixmap();
 }
 
@@ -385,8 +379,8 @@ void ItemWidget::applyDeselectedUiEffects() {
   if (pulseAnimation && pulseAnimation->state() == QAbstractAnimation::Running) {
     pulseAnimation->stop();
   }
-  if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
-    m_pulseDelayTimer->stop();
+  if (m_pulseDelayTimer.isActive()) {
+    m_pulseDelayTimer.stop();
   }
   m_pulseOpacity = UIConstants::Animation::PULSE_OPACITY_LOW;
 

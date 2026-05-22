@@ -39,6 +39,19 @@ public:
   /// Process-wide singleton. Lazily constructed on first call.
   /// Lifetime tied to QApplication; safe to call from any main-thread
   /// context after QApplication exists.
+  ///
+  /// The QApplication-scoped lifetime is intentional, not an oversight.
+  /// HttpClient owns a single QNetworkAccessManager + the per-host rate
+  /// limit + the in-flight queue; tying that state to ApplicationManager
+  /// (which can in principle be torn down and rebuilt mid-process for
+  /// headless kart import/export) would invalidate every queued request
+  /// and rebuild the QNAM connection pool on each cycle. Since QApplication
+  /// lives for the entire process and is destroyed exactly once at exit,
+  /// the singleton naturally outlives every consumer.
+  ///
+  /// instance() Q_ASSERTs qApp is alive — if you call it before QApplication
+  /// construction or after `QCoreApplication::quit()` has completed, the
+  /// assertion fires in debug builds.
   static HttpClient *instance();
 
   using ResponseCallback = std::function<void(ErrorUtils::Result<QByteArray> response)>;

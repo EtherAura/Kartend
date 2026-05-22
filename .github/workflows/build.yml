@@ -431,6 +431,14 @@ jobs:
         # allowlisted in the script. Build-independent, <1s.
         run: python3 .scripts/check-test-mapping.py
 
+      - name: Shellcheck
+        # Lint all .scripts/*.sh at warning level. Ubuntu 24.04 ships
+        # shellcheck 0.9.0 which is the same baseline developers can run
+        # locally via apt or the koalaman/shellcheck docker image.
+        run: |
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck -S warning .scripts/*.sh
+
       - name: Run maintenance build script
         run: |
           bash .scripts/build.sh --maintenance --format-check

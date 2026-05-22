@@ -114,10 +114,9 @@ void DetailsPaneMetadataView::ensureDetailsSection() {
   // pane's lifetime; it's a no-op when the inner card fits the
   // viewport. clearDetailsSection snaps the scroll position back to 0
   // so each new selection starts at the top.
-  m_host->m_metadataAutoScrollTimer = new QTimer(this);
-  m_host->m_metadataAutoScrollTimer->setInterval(120);
+  m_host->m_metadataAutoScrollTimer.setInterval(120);
   m_host->m_metadataAutoScrollPause = 16;
-  connect(m_host->m_metadataAutoScrollTimer, &QTimer::timeout, this, [this]() {
+  connect(&m_host->m_metadataAutoScrollTimer, &QTimer::timeout, this, [this]() {
     if (!m_host || !m_host->m_metadataScroll) return;
     auto *bar = m_host->m_metadataScroll->verticalScrollBar();
     if (!bar || bar->maximum() <= 0) {
@@ -135,7 +134,7 @@ void DetailsPaneMetadataView::ensureDetailsSection() {
     }
     bar->setValue(bar->value() + 1);
   });
-  m_host->m_metadataAutoScrollTimer->start();
+  m_host->m_metadataAutoScrollTimer.start();
 }
 
 void DetailsPaneMetadataView::clearDetailsSection() {

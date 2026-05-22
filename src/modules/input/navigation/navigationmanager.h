@@ -324,7 +324,8 @@ private:
   // folder navigation, settings changes, search clear). If it fires repeatedly
   // in quick succession, the repeated cleanup + delayed reload can result in
   // a persistent blank grid and high CPU from churn.
-  QTimer *m_safeReloadTimer = nullptr;
+  QTimer m_safeReloadTimer; // Kartend-a911.5: value member
+  bool m_safeReloadTimerInited = false;
   int m_pendingSafeReloadCollectionIndex = -1;
 
   // Active query context for the current items view (count + on-demand ranges).

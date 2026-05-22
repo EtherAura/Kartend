@@ -492,4 +492,18 @@ set(CPACK_SOURCE_IGNORE_FILES
   "\\\\.swp$"
   "~$"
 )
+
+# Debian (.deb) generator config. Selected at pack time with `cpack -G DEB`.
+# Exercised by .scripts/test-install-ubuntu.sh, which builds a .deb here and
+# then verifies it installs cleanly in a fresh ubuntu:24.04 container.
+# SHLIBDEPS=ON walks the installed ELF with `dpkg-shlibdeps` to discover the
+# exact runtime libQt6Core/libSDL2/etc package names — saves us from chasing
+# the libqt6*6t64 renames that landed in noble's time_t transition.
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "EtherAura <https://github.com/EtherAura>")
+set(CPACK_DEBIAN_PACKAGE_SECTION "kde")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
 include(CPack)

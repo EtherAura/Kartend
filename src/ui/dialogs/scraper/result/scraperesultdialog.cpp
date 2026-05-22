@@ -159,8 +159,8 @@ void ScrapeResultDialog::hideEvent(QHideEvent *event) {
   // *invisible* UI doesn't keep running — service still ticks, but we
   // don't burn CPU updating widgets nobody can see. The itemCompleted
   // slot also short-circuits its pixmap-scale work via isVisible().
-  if (m_liveTickTimer) m_liveTickTimer->stop();
-  if (m_marqueeTimer) m_marqueeTimer->stop();
+  m_liveTickTimer.stop();
+  m_marqueeTimer.stop();
   if (g_visibleInstanceCount > 0) {
     --g_visibleInstanceCount;
   }
@@ -176,8 +176,8 @@ void ScrapeResultDialog::showEvent(QShowEvent *event) {
   // these timers on the running-service path; this branch just covers
   // a plain show() after a hide().
   if (m_service && m_service->isActive()) {
-    if (m_liveTickTimer && !m_liveTickTimer->isActive()) m_liveTickTimer->start();
-    if (m_marqueeTimer && !m_marqueeTimer->isActive()) m_marqueeTimer->start();
+    if (m_liveTickTimerInited && !m_liveTickTimer.isActive()) m_liveTickTimer.start();
+    if (m_marqueeTimerInited && !m_marqueeTimer.isActive()) m_marqueeTimer.start();
   }
 }
 

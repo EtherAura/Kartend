@@ -21,11 +21,10 @@
 #include "collectionutils.h"
 #include "detailpagemanager.h"
 #include "detailspane.h"
-#include "firstrunwizard.h"
+#include "dialogcontroller.h"
 #include "gridwidthdebouncer.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
-#include "itemartworklinksdialog.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
@@ -37,7 +36,6 @@
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
-#include "scrapercredentialsdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "toolbarcontroller.h"
@@ -45,14 +43,11 @@
 
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
-#include "isettingsdialog.h"
 #include "isettingsmanager.h"
 #include "nowplayingoverlay.h"
 #include "overlaylayermanager.h"
 #include "sessionmanager.h"
-#include "settingsdialog.h"
 #include "settingsutils.h"
-#include "shortcutsdialog.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
 #include "textzoomhud.h"
@@ -65,37 +60,16 @@
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
-std::function<std::unique_ptr<ISettingsDialog>(QWidget *, const QList<CollectionConfig> &, int,
-                                               std::function<void(const QList<CollectionConfig> &)>,
-                                               std::function<void(int)>)>
-MainWindow::makeSettingsDialogFactory() {
-  return [](QWidget *parent, const QList<CollectionConfig> &initialCollections, int initialIndex,
-            std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
-            std::function<void(int)> onRescanRequired) -> std::unique_ptr<ISettingsDialog> {
-    auto dlg = std::make_unique<SettingsDialog>(parent, initialCollections, initialIndex);
-    // Wire the concrete Qt signals here — they cannot cross to the neutral
-    // ISettingsDialog interface. The dialog object is the connection context
-    // so each connection is torn down with the dialog.
-    if (onCollectionSaved) {
-      QObject::connect(dlg.get(), &SettingsDialog::collectionSaved, dlg.get(),
-                       std::move(onCollectionSaved));
-    }
-    if (onRescanRequired) {
-      QObject::connect(dlg.get(), &SettingsDialog::rescanRequired, dlg.get(),
-                       std::move(onRescanRequired));
-    }
-    return dlg;
-  };
-}
+// Factory body moved to DialogController::makeSettingsDialogFactory.
 
 void MainWindow::setupUI() {
   setAcceptDrops(true);
 
   // Managers are initialized by ApplicationManager in the constructor
-  getSessionManager()->initialize();
+  m_appManager->getSessionManager()->initialize();
 
   // Load settings (INI is small — keep eager).
-  getSettingsManager()->loadCollections(m_collections);
+  m_appManager->getSettingsManager()->loadCollections(m_collections);
 
   // Kartend-s241: full resyncPlaylistCollections is deferred to a post-
   // showEvent QTimer below, because PlaylistManager::loadAll() hits SQLite
@@ -105,7 +79,7 @@ void MainWindow::setupUI() {
   // m_appContext.hierarchyCache via the context, and they ran before the
   // deferred resync would fire. Empty cache with no playlists is the
   // correct startup state; the deferred call appends playlists + rebuilds.
-  if (PlaylistManager *playlistManager = getPlaylistManager()) {
+  if (PlaylistManager *playlistManager = m_appManager->getPlaylistManager()) {
     playlistManager->initialize();
     QObject::connect(playlistManager, &PlaylistManager::playlistsChanged, this,
                      [this]() { resyncPlaylistCollections(); });
@@ -117,7 +91,7 @@ void MainWindow::setupUI() {
   // signal-driven updates and produce a half-built collection list.
   QTimer::singleShot(0, this, [this]() { resyncPlaylistCollections(); });
 
-  getSettingsManager()->loadGeneralSettings(m_generalSettings);
+  m_appManager->getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
   // publish the persisted text-zoom multiplier into the static
   // before any widget is constructed below — the upcoming applyGlobalUiFont
@@ -149,32 +123,33 @@ void MainWindow::setupUI() {
           if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
-          if (getSettingsManager()) {
-            getSettingsManager()->saveCollections(m_collections);
+          if (m_appManager->getSettingsManager()) {
+            m_appManager->getSettingsManager()->saveCollections(m_collections);
           }
         },
         [this]() {
           if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
-          if (!getScrollManager()) {
+          if (!m_appManager->getScrollManager()) {
             return;
           }
-          getScrollManager()->preCalculateLayout();
-          getScrollManager()->forceVirtualViewUpdate();
+          m_appManager->getScrollManager()->preCalculateLayout();
+          m_appManager->getScrollManager()->forceVirtualViewUpdate();
         },
         [this]() {
           if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
-          if (!getScrollManager()) {
+          if (!m_appManager->getScrollManager()) {
             return;
           }
-          getScrollManager()->updateVirtualView();
-          if (getArtworkManager()) {
-            getArtworkManager()->updateViewportArtwork();
+          m_appManager->getScrollManager()->updateVirtualView();
+          if (m_appManager->getArtworkManager()) {
+            m_appManager->getArtworkManager()->updateViewportArtwork();
           }
-          getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex, m_collections);
+          m_appManager->getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex,
+                                                                      m_collections);
         });
   }
 
@@ -238,8 +213,8 @@ void MainWindow::showEvent(QShowEvent *event) {
     if (m_isShuttingDown || QApplication::closingDown()) {
       return;
     }
-    if (getDatabaseManager()) {
-      getDatabaseManager()->purgeOrphanCollectionData(m_collections);
+    if (m_appManager->getDatabaseManager()) {
+      m_appManager->getDatabaseManager()->purgeOrphanCollectionData(m_collections);
     }
   });
 }
@@ -352,10 +327,10 @@ void MainWindow::applyPixmapCacheBudget(int megabytes) {
   // QPixmapCache::setCacheLimit takes KB; our settings store MB.
   QPixmapCache::setCacheLimit(megabytes * 1024);
   // CacheManager::artworkCache budget is owned by the manager itself —
-  // before getCacheManager() is wired up (very early startup), the
+  // before m_appManager->getCacheManager() is wired up (very early startup), the
   // CacheManager holds its construction-time legacy default and will
   // pick up the user value on the next call.
-  if (auto *cm = getCacheManager()) {
+  if (auto *cm = m_appManager->getCacheManager()) {
     cm->setArtworkCacheBudgetMB(megabytes);
   }
 }
@@ -385,23 +360,28 @@ void MainWindow::initializeAppContext() {
 
   // Top-level managers — registered eagerly so ctx is fully populated before
   // any manager's setupReferences() runs.
-  m_appContext.managers.scrollManager = getScrollManager();
-  m_appContext.managers.artworkManager = getArtworkManager();
-  m_appContext.managers.settingsManager = getSettingsManager();
-  m_appContext.managers.sessionManager = getSessionManager();
-  m_appContext.managers.detailsPaneManager = getDetailsPaneManager();
-  m_appContext.managers.detailPageManager = getDetailPageManager();
-  m_appContext.managers.databaseManager = getDatabaseManager();
-  m_appContext.managers.navigationManager = getNavigationManager();
-  m_appContext.managers.interactionManager = getInteractionManager();
-  m_appContext.managers.playlistManager = getPlaylistManager();
-  m_appContext.managers.cacheManager = getCacheManager();
+  m_appContext.managers.scrollManager = m_appManager->getScrollManager();
+  if (auto *sm = m_appManager->getScrollManager()) {
+    // ScrollManager's ctor already wired m_filterManager off DataSourceCoordinator,
+    // so this alias is non-null the moment ScrollManager exists (Kartend-yeik).
+    m_appContext.managers.filterManager = sm->filterManager();
+  }
+  m_appContext.managers.artworkManager = m_appManager->getArtworkManager();
+  m_appContext.managers.settingsManager = m_appManager->getSettingsManager();
+  m_appContext.managers.sessionManager = m_appManager->getSessionManager();
+  m_appContext.managers.detailsPaneManager = m_appManager->getDetailsPaneManager();
+  m_appContext.managers.detailPageManager = m_appManager->getDetailPageManager();
+  m_appContext.managers.databaseManager = m_appManager->getDatabaseManager();
+  m_appContext.managers.navigationManager = m_appManager->getNavigationManager();
+  m_appContext.managers.interactionManager = m_appManager->getInteractionManager();
+  m_appContext.managers.playlistManager = m_appManager->getPlaylistManager();
+  m_appContext.managers.cacheManager = m_appManager->getCacheManager();
 
   // InteractionManager-owned sub-managers exist as soon as InteractionManager
   // is constructed (its ctor allocates them via std::make_unique). Register
   // them here, before any setupReferences() runs, so dependents can resolve
   // siblings exclusively through ctx.
-  if (auto *im = getInteractionManager()) {
+  if (auto *im = m_appManager->getInteractionManager()) {
     m_appContext.managers.animationManager = im->animationManager();
     m_appContext.managers.selectionManager = im->selectionManager();
     m_appContext.managers.viewportManager = im->viewportManager();
@@ -420,13 +400,13 @@ void MainWindow::createMenuBar() {
   MenuControllerContext ctx;
   ctx.mainWindow = this;
   ctx.ui = ui;
-  ctx.getNavigationManager = [this]() { return getNavigationManager(); };
-  ctx.getSettingsManager = [this]() { return getSettingsManager(); };
-  ctx.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
-  ctx.getScrollManager = [this]() { return getScrollManager(); };
-  ctx.getArtworkManager = [this]() { return getArtworkManager(); };
-  ctx.getDatabaseManager = [this]() { return getDatabaseManager(); };
-  ctx.getInteractionManager = [this]() { return getInteractionManager(); };
+  ctx.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
+  ctx.getSettingsManager = [this]() { return m_appManager->getSettingsManager(); };
+  ctx.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
+  ctx.getScrollManager = [this]() { return m_appManager->getScrollManager(); };
+  ctx.getArtworkManager = [this]() { return m_appManager->getArtworkManager(); };
+  ctx.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
+  ctx.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
   ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   ctx.getCollections = [this]() { return &m_collections; };
   ctx.getGeneralSettings = [this]() { return &m_generalSettings; };
@@ -441,36 +421,37 @@ void MainWindow::createMenuBar() {
   };
   ctx.onSetViewType = [this](ViewType viewType) { setViewType(viewType); };
   ctx.onLaunchItem = [this](const QString &filePath, int collectionIndex) {
-    if (auto *im = getInteractionManager()) {
+    if (auto *im = m_appManager->getInteractionManager()) {
       im->launchItemWithCollection(filePath, collectionIndex);
     }
   };
   ctx.onOpenSettings = [this]() {
-    if (getSettingsManager()) {
+    if (m_appManager->getSettingsManager()) {
       SettingsDialogContext context;
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &currentCollectionIndex;
-      context.detailsPaneManager = getDetailsPaneManager();
-      context.scrollManager = getScrollManager();
-      context.navigationManager = getNavigationManager();
-      context.databaseManager = getDatabaseManager();
-      context.createSettingsDialog = makeSettingsDialogFactory();
-      getSettingsManager()->openSettingsDialog(context);
+      context.detailsPaneManager = m_appManager->getDetailsPaneManager();
+      context.scrollManager = m_appManager->getScrollManager();
+      context.navigationManager = m_appManager->getNavigationManager();
+      context.databaseManager = m_appManager->getDatabaseManager();
+      context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+      m_appManager->getSettingsManager()->openSettingsDialog(context);
     }
   };
   ctx.onShowAbout = [this]() { showAbout(); };
   ctx.onAdjustGridWidth = [this](int delta) { adjustGridWidth(delta); };
   ctx.onImportKart = [this]() {
-    if (auto *km = getKartManager()) km->importInteractive();
+    if (auto *km = m_appManager->getKartManager()) km->importInteractive();
   };
   ctx.onExportKart = [this]() {
-    if (auto *km = getKartManager()) km->exportCollectionInteractive(currentCollectionIndex);
+    if (auto *km = m_appManager->getKartManager())
+      km->exportCollectionInteractive(currentCollectionIndex);
   };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
-    ScraperCredentialsDialog dialog(&m_generalSettings, getSettingsManager(), this);
-    dialog.exec();
+    m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
+                                                    m_appManager->getSettingsManager());
   };
   ctx.onRunBatchScrape = [this]() { openScraperDialog(); };
 
@@ -490,7 +471,8 @@ void MainWindow::adjustGridWidth(int delta) {
   // alt is configured non-zero, the alt is the active field; otherwise the
   // primary gridWidth is. Sidebar shrinking state is cached on ScrollManager so
   // we don't have to recompute the predicate here.
-  const bool useAltField = getScrollManager() && getScrollManager()->sidebarShrinkingActive() &&
+  const bool useAltField = m_appManager->getScrollManager() &&
+                           m_appManager->getScrollManager()->sidebarShrinkingActive() &&
                            config.gridLayout.gridWidthSidebarHidden > 0;
   int &activeField =
       useAltField ? config.gridLayout.gridWidthSidebarHidden : config.gridLayout.gridWidth;
@@ -511,13 +493,13 @@ void MainWindow::adjustGridWidth(int delta) {
   // holds the shortcut.
   if (m_gridWidthDebouncer) {
     m_gridWidthDebouncer->triggerSave();
-  } else if (getSettingsManager()) {
-    getSettingsManager()->saveCollections(m_collections);
+  } else if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveCollections(m_collections);
   }
 
   // Apply the change to the UI using the same flow as settings dialog
-  if (getScrollManager()) {
-    getScrollManager()->updateGridWidth(newWidth);
+  if (m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->updateGridWidth(newWidth);
 
     // Coalesce expensive layout + artwork refresh for repeated adjustments.
     if (m_gridWidthDebouncer) {
@@ -540,8 +522,8 @@ void MainWindow::setViewType(ViewType viewType) {
   config.viewType = viewType;
 
   // Persist the change immediately
-  if (getSettingsManager()) {
-    getSettingsManager()->saveCollections(m_collections);
+  if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveCollections(m_collections);
   }
 
   // Update view-mode button checked state and label.
@@ -553,14 +535,14 @@ void MainWindow::setViewType(ViewType viewType) {
 
   // Trigger a full layout refresh - viewType affects widget dimensions and
   // layout
-  if (getScrollManager()) {
-    getScrollManager()->updateViewType(viewType);
+  if (m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->updateViewType(viewType);
   }
 }
 
 void MainWindow::setupSidebar() {
-  if (getDetailsPaneManager()) {
-    getDetailsPaneManager()->setupSidebar();
+  if (m_appManager->getDetailsPaneManager()) {
+    m_appManager->getDetailsPaneManager()->setupSidebar();
 
     DetailsPaneManagerSetup setup;
     setup.ctx = &m_appContext;
@@ -572,28 +554,14 @@ void MainWindow::setupSidebar() {
     setup.contentWidget = m_mainContentWidget;
     // Kartend-n8kh: the artwork-links dialog runs from here so the media
     // layer (DetailsPaneManager) doesn't #include itemartworklinksdialog.h.
-    setup.runArtworkLinksDialog =
-        [this](const ItemArtworkLinksInput &in) -> std::optional<QHash<QString, QString>> {
-      ItemArtworkLinksDialog dialog(this);
-      dialog.setItemTitle(in.itemTitle);
-      dialog.setTypeRows(in.standardTypes, in.customTypes);
-      dialog.setOverrides(in.overrides);
-      if (!in.autoResolvedPaths.isEmpty()) {
-        dialog.setAutoResolvedPaths(in.autoResolvedPaths);
-      }
-      if (!in.browseStartDir.isEmpty()) {
-        dialog.setBrowseStartDirectory(in.browseStartDir);
-      }
-      if (dialog.exec() != QDialog::Accepted) {
-        return std::nullopt;
-      }
-      return dialog.overrides();
+    setup.runArtworkLinksDialog = [this](const ItemArtworkLinksInput &in) {
+      return m_dialogController->runArtworkLinksDialog(in);
     };
 
-    getDetailsPaneManager()->setupReferences(setup);
+    m_appManager->getDetailsPaneManager()->setupReferences(setup);
 
-    QObject::connect(getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this,
-                     [this](bool visible) {
+    QObject::connect(m_appManager->getDetailsPaneManager(),
+                     &DetailsPaneManager::sidebarVisibilityChanged, this, [this](bool visible) {
                        if (ui->actionShowSidebar) {
                          ui->actionShowSidebar->blockSignals(true);
                          ui->actionShowSidebar->setChecked(visible);
@@ -631,9 +599,7 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::showFirstRunWizard() {
-  FirstRunWizard wizard(this);
-  wizard.exec();
-  const auto result = wizard.result();
+  const auto result = m_dialogController->runFirstRunWizard();
 
   if (result.accepted && !result.pickedConfig.mediaDirectory.isEmpty()) {
     // Mirrors the post-add sequence in setupInitialTimersEmptyCollections:
@@ -641,13 +607,13 @@ void MainWindow::showFirstRunWizard() {
     // would leave the freshly-created collection invisible until the next
     // restart.
     m_collections.append(result.pickedConfig);
-    if (getSettingsManager()) {
-      getSettingsManager()->saveCollections(m_collections);
+    if (m_appManager->getSettingsManager()) {
+      m_appManager->getSettingsManager()->saveCollections(m_collections);
     }
     rebuildHierarchyCache();
-    if (getNavigationManager()) {
+    if (m_appManager->getNavigationManager()) {
       currentCollectionIndex = m_collections.size() - 1;
-      getNavigationManager()->showCollectionItems(currentCollectionIndex);
+      m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
     }
   }
 
@@ -655,14 +621,14 @@ void MainWindow::showFirstRunWizard() {
   // picking a folder. They saw the wizard; auto-launching it again would
   // be obnoxious. Re-running stays available via Help → Setup Wizard…
   m_generalSettings.firstRunComplete = true;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
+  if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }
 }
 
 void MainWindow::setupArtworkManager() {
-  if (!getArtworkManager()) return;
-  ArtworkManager &artMgr = *getArtworkManager();
+  if (!m_appManager->getArtworkManager()) return;
+  ArtworkManager &artMgr = *m_appManager->getArtworkManager();
 
   // Kartend-davi: setupReferences must precede initializeCache because the
   // manager now reads its CacheManager through ctx instead of caching a
@@ -675,21 +641,21 @@ void MainWindow::setupArtworkManager() {
 }
 
 void MainWindow::setupLastSelectedIndices() {
-  if (!getSessionManager()) return;
+  if (!m_appManager->getSessionManager()) return;
 
   for (int i = 0; i < m_collections.size(); ++i) {
-    int sel = getSessionManager()->getLastSelectedIndex(m_collections[i].name);
+    int sel = m_appManager->getSessionManager()->getLastSelectedIndex(m_collections[i].name);
     if (sel < 0) {
       QString hierarchical = CollectionUtils::hierarchicalNameFor(m_collections[i], m_collections);
       if (!hierarchical.isEmpty() && hierarchical != m_collections[i].name) {
-        int hSel = getSessionManager()->getLastSelectedIndex(hierarchical);
+        int hSel = m_appManager->getSessionManager()->getLastSelectedIndex(hierarchical);
         if (hSel >= 0) {
           sel = hSel;
         }
       }
     }
     if (sel >= 0) {
-      getSettingsManager()->setLastSelectedItem(i, sel);
+      m_appManager->getSettingsManager()->setLastSelectedItem(i, sel);
     }
   }
 }
@@ -702,15 +668,15 @@ void MainWindow::setupEventFilters() {
   ScrollManagerSetup setup;
   setup.ctx = &m_appContext;
 
-  getScrollManager()->setupReferences(setup);
+  m_appManager->getScrollManager()->setupReferences(setup);
 
   if (ui->itemScrollArea) {
-    ui->itemScrollArea->installEventFilter(getInteractionManager());
+    ui->itemScrollArea->installEventFilter(m_appManager->getInteractionManager());
     if (ui->itemScrollArea->viewport()) {
-      ui->itemScrollArea->viewport()->installEventFilter(getInteractionManager());
+      ui->itemScrollArea->viewport()->installEventFilter(m_appManager->getInteractionManager());
     }
   }
   if (gridContainer) {
-    gridContainer->installEventFilter(getInteractionManager());
+    gridContainer->installEventFilter(m_appManager->getInteractionManager());
   }
 }

@@ -40,12 +40,8 @@ SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings,
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 
 MouseManager::~MouseManager() {
-  if (m_mouseHoldTimer) {
-    m_mouseHoldTimer->stop();
-  }
-  if (m_clickHoldTimer) {
-    m_clickHoldTimer->stop();
-  }
+  m_mouseHoldTimer.stop();
+  m_clickHoldTimer.stop();
 }
 
 void MouseManager::setupReferences(const MouseManagerSetup &setup) {
@@ -92,23 +88,23 @@ void MouseManager::startClickHoldTimer(const QPoint &clickPos, int selectedItemI
   m_clickHoldGridWidth = gridWidth;
   m_clickHoldTotalItems = totalItems;
 
-  if (!m_clickHoldTimer) {
-    m_clickHoldTimer = new QTimer(this);
-    m_clickHoldTimer->setSingleShot(true);
-    connect(m_clickHoldTimer, &QTimer::timeout, this, &MouseManager::onClickHoldTimerTimeout);
+  if (!m_clickHoldTimerInited) {
+    m_clickHoldTimer.setSingleShot(true);
+    connect(&m_clickHoldTimer, &QTimer::timeout, this, &MouseManager::onClickHoldTimerTimeout);
+    m_clickHoldTimerInited = true;
   }
   int delay = m_generalSettings ? m_generalSettings->clickHoldDelayMs : 500;
-  m_clickHoldTimer->start(delay);
+  m_clickHoldTimer.start(delay);
 }
 
 void MouseManager::stopClickHoldTimer() {
-  if (m_clickHoldTimer && m_clickHoldTimer->isActive()) {
-    m_clickHoldTimer->stop();
+  if (m_clickHoldTimer.isActive()) {
+    m_clickHoldTimer.stop();
   }
 }
 
 bool MouseManager::isClickHoldTimerActive() const {
-  return m_clickHoldTimer && m_clickHoldTimer->isActive();
+  return m_clickHoldTimer.isActive();
 }
 
 void MouseManager::onClickHoldTimerTimeout() {
@@ -154,9 +150,9 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
   m_cachedGridWidth = gridWidth;
   m_cachedSelectedIndex = selectedItemIndex;
 
-  if (!m_mouseHoldTimer) {
-    m_mouseHoldTimer = new QTimer(this);
-    connect(m_mouseHoldTimer, &QTimer::timeout, this, &MouseManager::onMouseHoldScrollStep);
+  if (!m_mouseHoldTimerInited) {
+    connect(&m_mouseHoldTimer, &QTimer::timeout, this, &MouseManager::onMouseHoldScrollStep);
+    m_mouseHoldTimerInited = true;
   }
 
   // Try horizontal hold first
@@ -194,7 +190,7 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
   } else {
     interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
   }
-  m_mouseHoldTimer->start(interval);
+  m_mouseHoldTimer.start(interval);
 
   // Signal that hold scrolling started
   if (state) {
@@ -208,7 +204,8 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
 }
 
 bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemIndex) {
-  if (!m_clickHoldHorizontalEligible || m_mouseHoldHorizontalDirection == 0 || !m_mouseHoldTimer) {
+  if (!m_clickHoldHorizontalEligible || m_mouseHoldHorizontalDirection == 0 ||
+      !m_mouseHoldTimerInited) {
     return false;
   }
   if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
@@ -248,7 +245,7 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemI
   } else {
     interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
   }
-  m_mouseHoldTimer->start(interval);
+  m_mouseHoldTimer.start(interval);
 
   // Signal properties
   if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
@@ -265,9 +262,7 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemI
 }
 
 void MouseManager::stopMouseHoldScrolling() {
-  if (m_mouseHoldTimer) {
-    m_mouseHoldTimer->stop();
-  }
+  m_mouseHoldTimer.stop();
 
   bool wasScrolling = m_mouseHoldScrolling;
 

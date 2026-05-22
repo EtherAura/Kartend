@@ -17,3 +17,13 @@ leak:gst_device_monitor_new
 leak:gst_device_monitor_add_filter
 leak:libgstreamermediaplugin.so
 leak:QPlatformMediaIntegration::instance
+
+# ScanWorkController's QThreadPool is intentionally abandoned at exit (its
+# ~QThreadPool() blocks for in-flight scan tasks; DatabaseManager teardown
+# can't afford that wait). The pool plus the cancellation-token shared_ptr
+# control block held by m_token leak as an indirect chain — bounded to one
+# per DatabaseManager construction. Same pattern as the QThreadPool
+# suppression above; this entry covers leak frames that LSan attributes
+# to ScanWorkController directly rather than the pool ctor (Kartend-dw0j).
+leak:ScanWorkController
+leak:ScanService::ScanService

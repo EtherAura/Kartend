@@ -2,13 +2,13 @@
 #define ARROWKEYSCROLLHELPER_H
 
 #include <QObject>
+#include <QTimer>
 
 struct GeneralSettings;
 
 class QScrollArea;
 class QScrollBar;
 class QPropertyAnimation;
-class QTimer;
 class InteractionStateHolder;
 class ScrollEventHandler;
 
@@ -77,7 +77,7 @@ private:
   InteractionStateHolder *m_state = nullptr;
   ScrollEventHandler *m_scrollEventHandler = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
-  QTimer *m_updateTimer = nullptr;
+  QTimer m_updateTimer; // Kartend-a911.5: value member; lifetime tracks owner
 
   // Cached metrics
   int m_itemHeight = 0;

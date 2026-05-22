@@ -36,13 +36,13 @@ void TestMainWindowSmoke::testTopLevelManagersAreWired() {
   QVERIFY(win);
 
   QVERIFY(win->getApplicationManager());
-  QVERIFY(win->getSettingsManager());
-  QVERIFY(win->getSessionManager());
-  QVERIFY(win->getCacheManager());
-  QVERIFY(win->getArtworkManager());
-  QVERIFY(win->getDatabaseManager());
-  QVERIFY(win->getScrollManager());
-  QVERIFY(win->getNavigationManager());
-  QVERIFY(win->getInteractionManager());
-  QVERIFY(win->getDetailsPaneManager());
+  QVERIFY(win->getApplicationManager()->getSettingsManager());
+  QVERIFY(win->getApplicationManager()->getSessionManager());
+  QVERIFY(win->getApplicationManager()->getCacheManager());
+  QVERIFY(win->getApplicationManager()->getArtworkManager());
+  QVERIFY(win->getApplicationManager()->getDatabaseManager());
+  QVERIFY(win->getApplicationManager()->getScrollManager());
+  QVERIFY(win->getApplicationManager()->getNavigationManager());
+  QVERIFY(win->getApplicationManager()->getInteractionManager());
+  QVERIFY(win->getApplicationManager()->getDetailsPaneManager());
 }

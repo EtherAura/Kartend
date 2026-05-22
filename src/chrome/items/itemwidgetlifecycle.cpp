@@ -34,8 +34,8 @@ void ItemWidget::resetForReuse() {
     }
     m_pulseOpacity = UIConstants::Animation::PULSE_OPACITY_LOW;
   }
-  if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
-    m_pulseDelayTimer->stop();
+  if (m_pulseDelayTimer.isActive()) {
+    m_pulseDelayTimer.stop();
   }
 
   m_isSubcollection = false;

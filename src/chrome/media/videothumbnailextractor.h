@@ -6,11 +6,11 @@
 #include <QPixmap>
 #include <QQueue>
 #include <QString>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QAudioOutput;
 class QMediaPlayer;
-class QTimer;
 class QVideoSink;
 QT_END_NAMESPACE
 
@@ -80,7 +80,7 @@ private:
   QString m_currentPath;
   bool m_seekedForCurrent = false;
   int m_timeoutMs = 4000;
-  QTimer *m_timeoutTimer = nullptr;
+  QTimer m_timeoutTimer; // Kartend-a911.6: value member
 };
 
 #endif // VIDEOTHUMBNAILEXTRACTOR_H

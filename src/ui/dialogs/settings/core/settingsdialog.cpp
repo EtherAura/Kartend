@@ -173,10 +173,10 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
           [this](const QString &c) {
             auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-            if (!mainWindow || !mainWindow->getSettingsManager()) return;
+            auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
+            if (!sm) return;
             mainWindow->generalSettings().titleBaseColor = c;
-            auto result = mainWindow->getSettingsManager()->saveGeneralSettings(
-                mainWindow->generalSettings());
+            auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
             if (result.isError()) {
               ErrorDialog::showError(this, result.error());
@@ -192,12 +192,12 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     // QObject::parent() — explicit because the enclosing constructor's
     // own `parent` argument is in scope and shadows the member function.
     auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-    if (!mainWindow || !mainWindow->getSettingsManager()) {
+    auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
+    if (!sm) {
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;
-    auto result =
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
+    auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
     mainWindow->applyGlobalUiFontFromSettings();
     if (result.isError()) {
       ErrorDialog::showError(this, result.error());
@@ -210,12 +210,12 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
     auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-    if (!mainWindow || !mainWindow->getSettingsManager()) {
+    auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
+    if (!sm) {
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;
-    auto result =
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->generalSettings());
+    auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
     if (result.isError()) {
       ErrorDialog::showError(this, result.error());
     }

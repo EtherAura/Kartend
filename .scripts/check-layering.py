@@ -104,11 +104,106 @@ def main() -> int:
         )
         return 1
 
+    # Second guardrail: setup structs must NOT carry sibling-manager pointers.
+    # The architecture's DI rule is that every <FooSetup> struct carries
+    # `const ApplicationContext *ctx` plus only non-manager refs (widgets,
+    # value containers, callbacks). Manager pointers belong on ctx so a
+    # manager can't accidentally pin its siblings' lifetimes through the
+    # setup struct.
+    setup_violations = check_setup_struct_members()
+    if setup_violations:
+        print("check-layering: setup struct carries manager/service pointer:")
+        for rel, struct, line, member in setup_violations:
+            print(f"  {rel}  struct {struct} (line {line})  ->  {member}")
+        print(
+            "\nFix: route manager/service access through `ctx` "
+            "(ApplicationContext *) instead. Setup structs are limited to "
+            "ApplicationContext + non-manager refs (widgets, value "
+            "containers, callbacks) so that sibling-manager lifetimes "
+            "stay owned by ApplicationManager, not pinned through a setup "
+            "field."
+        )
+        return 1
+
     print(
         "check-layering: OK — src/utils/ and src/chrome/ stay within "
-        "their layers"
+        "their layers; setup structs carry only ctx + non-manager refs"
     )
     return 0
+
+
+# Manager/Service pointer detector for setup structs. We scan all setup struct
+# bodies and flag any field whose type ends in `Manager *` / `Service *`
+# (with or without a leading `I`/`const`). `const ApplicationContext *` is
+# the canonical exception — siblings are reached through ctx.
+SETUP_STRUCT_RE = re.compile(
+    r"^(?:\s*template\s*<[^>]*>\s*)?\s*struct\s+(\w*Setup)\s*\{",
+    re.MULTILINE,
+)
+# Match `Foo *name` or `IFoo *name` where Foo ends in Manager or Service.
+# Tolerate const-qualified and pointer-qualified variants but explicitly
+# allow `const ApplicationContext *ctx` as the canonical DI handle.
+MANAGER_FIELD_RE = re.compile(
+    r"""^\s*
+        (?!\s*//)                # skip comment lines
+        (?:const\s+)?
+        (\w*(?:Manager|Service))   # type name ending in Manager or Service
+        \s*\*\s*
+        (\w+)                      # field name
+        \s*(?:=[^;]*)?\s*;""",
+    re.MULTILINE | re.VERBOSE,
+)
+
+
+def check_setup_struct_members() -> list[tuple[str, str, int, str]]:
+    """Find Manager*/Service* fields in any *Setup struct.
+
+    Returns (relative_path, struct_name, line_number, field_decl_excerpt).
+    """
+    findings: list[tuple[str, str, int, str]] = []
+    for path in sorted(SRC.rglob("*.h")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for struct_match in SETUP_STRUCT_RE.finditer(text):
+            struct_name = struct_match.group(1)
+            # Known legacy violations slated for migration to ctx-based
+            # access. Each entry should have a tracking issue; remove from
+            # this set as each migration lands. Whitelist by struct name —
+            # *every* field on these structs is grandfathered.
+            if struct_name in SETUP_STRUCT_GRANDFATHERED:
+                continue
+            body_start = struct_match.end()
+            depth = 1
+            i = body_start
+            while i < len(text) and depth > 0:
+                ch = text[i]
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                i += 1
+            body_end = i
+            body = text[body_start:body_end]
+            for field_match in MANAGER_FIELD_RE.finditer(body):
+                type_name = field_match.group(1)
+                field_name = field_match.group(2)
+                # ApplicationContext is the canonical DI handle, not a
+                # sibling manager pointer — allow it through.
+                if type_name == "ApplicationContext":
+                    continue
+                line_number = (
+                    text[: body_start + field_match.start()].count("\n") + 1
+                )
+                rel = str(path.relative_to(REPO))
+                decl = f"{type_name} *{field_name}"
+                findings.append((rel, struct_name, line_number, decl))
+    return findings
+
+
+# Grandfathered legacy setup structs that still carry sibling-manager
+# pointers. Each needs a migration to ctx-based access; the lint rule
+# stays effective for NEW structs while these are queued for cleanup.
+# Drop entries from this set as the corresponding refactor lands.
+SETUP_STRUCT_GRANDFATHERED: set[str] = set()
 
 
 if __name__ == "__main__":

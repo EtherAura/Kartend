@@ -1,3 +1,4 @@
+#include "applicationmanager.h"
 #include "test_settingsdialog_changes.h"
 
 #include "collectionutils.h"

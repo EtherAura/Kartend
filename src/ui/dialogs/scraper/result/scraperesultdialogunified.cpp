@@ -16,6 +16,7 @@
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
 #include "singleitemview.h"
+#include "uiconstants/dialog.h"
 
 #include <limits>
 #include <QCheckBox>
@@ -131,7 +132,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_unifiedPage = new QWidget(m_dlg->m_modeStack);
   auto *root = new QVBoxLayout(m_dlg->m_unifiedPage);
   root->setContentsMargins(8, 8, 8, 8);
-  root->setSpacing(8);
+  root->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
   // ── Top: collection tree (left) + items list (right) ────────────
   auto *splitter = new QSplitter(Qt::Horizontal, m_dlg->m_unifiedPage);
@@ -139,7 +140,8 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
 
   m_dlg->m_collectionTree = new QTreeWidget(splitter);
   m_dlg->m_collectionTree->setHeaderLabel(tr("Collections"));
-  m_dlg->m_collectionTree->setMinimumWidth(220);
+  m_dlg->m_collectionTree->setMinimumWidth(
+      UIConstants::ScrapeResultDialog::COLLECTION_TREE_MIN_WIDTH);
   m_dlg->m_collectionTree->setRootIsDecorated(true);
   m_dlg->m_collectionTree->setAnimated(true);
   m_dlg->m_collectionTree->header()->setStretchLastSection(true);
@@ -240,7 +242,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_liveMetadataGroup = new QGroupBox(tr("Currently scraping"), m_dlg->m_unifiedPage);
   auto *metaOuter = new QVBoxLayout(m_dlg->m_liveMetadataGroup);
   metaOuter->setContentsMargins(8, 8, 8, 8);
-  metaOuter->setSpacing(6);
+  metaOuter->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
   // ── Interactive candidate picker row ──────────────────────────────
   // Visible only while the service is waiting on the user to pick a
   // candidate (interactive mode). Selecting a row re-fetches detail
@@ -250,10 +252,10 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_interactiveCandidateRow = new QWidget(m_dlg->m_liveMetadataGroup);
   auto *candRow = new QHBoxLayout(m_dlg->m_interactiveCandidateRow);
   candRow->setContentsMargins(0, 0, 0, 0);
-  candRow->setSpacing(6);
+  candRow->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
   auto *candLbl = new QLabel(tr("Candidate:"), m_dlg->m_interactiveCandidateRow);
   candLbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  candLbl->setMinimumWidth(78);
+  candLbl->setMinimumWidth(UIConstants::ScrapeResultDialog::CANDIDATE_LABEL_MIN_WIDTH);
   candRow->addWidget(candLbl);
   m_dlg->m_interactiveCandidateCombo = new QComboBox(m_dlg->m_interactiveCandidateRow);
   m_dlg->m_interactiveCandidateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -285,11 +287,11 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   auto *metaGridHost = new QWidget(m_dlg->m_liveMetadataGroup);
   auto *metaCol = new QVBoxLayout(metaGridHost);
   metaCol->setContentsMargins(0, 0, 0, 0);
-  metaCol->setSpacing(6);
+  metaCol->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
 
   // Uniform label width across every row so labels visually align.
-  constexpr int kLabelW = 90;
-  constexpr int kValueChipW = 90;
+  constexpr int kLabelW = UIConstants::ScrapeResultDialog::META_LABEL_WIDTH;
+  constexpr int kValueChipW = UIConstants::ScrapeResultDialog::META_VALUE_CHIP_WIDTH;
 
   auto makeFieldEdit = [this](bool bold = false) {
     auto *edit = new QLineEdit(m_dlg->m_liveMetadataGroup);
@@ -327,8 +329,10 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   // ── Description row: top-aligned label + multi-line browser ───
   m_dlg->m_liveMetadataDescription = new QTextBrowser(m_dlg->m_liveMetadataGroup);
   m_dlg->m_liveMetadataDescription->setOpenExternalLinks(true);
-  m_dlg->m_liveMetadataDescription->setMinimumHeight(80);
-  m_dlg->m_liveMetadataDescription->setMaximumHeight(110);
+  m_dlg->m_liveMetadataDescription->setMinimumHeight(
+      UIConstants::ScrapeResultDialog::DESCRIPTION_MIN_HEIGHT);
+  m_dlg->m_liveMetadataDescription->setMaximumHeight(
+      UIConstants::ScrapeResultDialog::DESCRIPTION_MAX_HEIGHT);
   m_dlg->m_liveMetadataDescription->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
   {
     auto *row = new QHBoxLayout();
@@ -496,9 +500,10 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_liveThumbsStrip->setWrapping(false);
   m_dlg->m_liveThumbsStrip->setMovement(QListView::Static);
   m_dlg->m_liveThumbsStrip->setSelectionMode(QAbstractItemView::NoSelection);
-  m_dlg->m_liveThumbsStrip->setMaximumHeight(108);
+  m_dlg->m_liveThumbsStrip->setMaximumHeight(
+      UIConstants::ScrapeResultDialog::THUMBS_STRIP_MAX_HEIGHT);
   m_dlg->m_liveThumbsStrip->setUniformItemSizes(true);
-  m_dlg->m_liveThumbsStrip->setSpacing(2);
+  m_dlg->m_liveThumbsStrip->setSpacing(UIConstants::ScrapeResultDialog::THUMBS_STRIP_SPACING);
   // Slightly larger than icon so items fit snugly with minimal gap.
   m_dlg->m_liveThumbsStrip->setGridSize(QSize(100, 100));
   m_dlg->m_liveThumbsStrip->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -771,21 +776,21 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
     // Start the 1-second live tick (the scrapeStarted handler missed
     // this run because we connected after it already fired).
     m_dlg->m_rateSamples.clear();
-    if (!m_dlg->m_liveTickTimer) {
-      m_dlg->m_liveTickTimer = new QTimer(this);
-      m_dlg->m_liveTickTimer->setInterval(1000);
-      connect(m_dlg->m_liveTickTimer, &QTimer::timeout, this,
+    if (!m_dlg->m_liveTickTimerInited) {
+      m_dlg->m_liveTickTimer.setInterval(1000);
+      connect(&m_dlg->m_liveTickTimer, &QTimer::timeout, this,
               &ScrapeResultDialogUnified::updateUnifiedProgressLabel);
+      m_dlg->m_liveTickTimerInited = true;
     }
-    m_dlg->m_liveTickTimer->start();
-    if (!m_dlg->m_marqueeTimer) {
-      m_dlg->m_marqueeTimer = new QTimer(this);
-      m_dlg->m_marqueeTimer->setInterval(150);
-      connect(m_dlg->m_marqueeTimer, &QTimer::timeout, this,
+    m_dlg->m_liveTickTimer.start();
+    if (!m_dlg->m_marqueeTimerInited) {
+      m_dlg->m_marqueeTimer.setInterval(150);
+      connect(&m_dlg->m_marqueeTimer, &QTimer::timeout, this,
               &ScrapeResultDialogUnified::tickValueMarquees);
+      m_dlg->m_marqueeTimerInited = true;
     }
     m_dlg->m_marqueePauseTicks.clear();
-    m_dlg->m_marqueeTimer->start();
+    m_dlg->m_marqueeTimer.start();
     // Sync the Live view from the service's current snapshot so the
     // user immediately sees where the scrape is sitting instead of
     // waiting for the next signal tick.
@@ -1130,23 +1135,23 @@ void ScrapeResultDialogUnified::onServiceScrapeStarted(int total) {
   // prior runs in this session) stay visible — values clear naturally
   // as each item rewrites them.
   m_dlg->m_rateSamples.clear();
-  if (!m_dlg->m_liveTickTimer) {
-    m_dlg->m_liveTickTimer = new QTimer(this);
-    m_dlg->m_liveTickTimer->setInterval(1000);
-    connect(m_dlg->m_liveTickTimer, &QTimer::timeout, this,
+  if (!m_dlg->m_liveTickTimerInited) {
+    m_dlg->m_liveTickTimer.setInterval(1000);
+    connect(&m_dlg->m_liveTickTimer, &QTimer::timeout, this,
             &ScrapeResultDialogUnified::updateUnifiedProgressLabel);
+    m_dlg->m_liveTickTimerInited = true;
   }
-  m_dlg->m_liveTickTimer->start();
+  m_dlg->m_liveTickTimer.start();
   // Value-marquee timer: scrolls overflowing chip text L→R then wraps.
   // Lazy-init on first scrapeStart.
-  if (!m_dlg->m_marqueeTimer) {
-    m_dlg->m_marqueeTimer = new QTimer(this);
-    m_dlg->m_marqueeTimer->setInterval(150);
-    connect(m_dlg->m_marqueeTimer, &QTimer::timeout, this,
+  if (!m_dlg->m_marqueeTimerInited) {
+    m_dlg->m_marqueeTimer.setInterval(150);
+    connect(&m_dlg->m_marqueeTimer, &QTimer::timeout, this,
             &ScrapeResultDialogUnified::tickValueMarquees);
+    m_dlg->m_marqueeTimerInited = true;
   }
   m_dlg->m_marqueePauseTicks.clear();
-  m_dlg->m_marqueeTimer->start();
+  m_dlg->m_marqueeTimer.start();
   updateUnifiedProgressLabel();
 }
 
@@ -1272,8 +1277,8 @@ void ScrapeResultDialogUnified::onServicePickerNeeded(
 void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperService::Summary &s) {
   qCInfo(lcDialogTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
                           << "skipped=" << s.skipped << "errors=" << s.errors;
-  if (m_dlg->m_liveTickTimer) m_dlg->m_liveTickTimer->stop();
-  if (m_dlg->m_marqueeTimer) m_dlg->m_marqueeTimer->stop();
+  m_dlg->m_liveTickTimer.stop();
+  m_dlg->m_marqueeTimer.stop();
   m_dlg->m_marqueePauseTicks.clear();
   if (m_dlg->m_interactiveCandidateRow) m_dlg->m_interactiveCandidateRow->hide();
   // Reset phase so a subsequent Scrape click isn't rejected by the

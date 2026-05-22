@@ -1,5 +1,8 @@
 # Building
 
+> See [Build modes](#build-modes) below for the full flag matrix
+> (`--debug`, `--maintenance`, `--sanitize`, …).
+
 ## Dependencies
 
 ### Gentoo
@@ -9,38 +12,68 @@ emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld \
   dev-qt/qtbase:6 dev-qt/qtmultimedia:6 dev-qt/qttools:6 dev-util/ccache
 ```
 
-## Build Script Options
+## Build modes
 
-The build script (`.scripts/build.sh`) supports the following options:
+The build script (`.scripts/build.sh`) is the canonical entry point for
+every build. The table below enumerates **every** flag it parses, what it
+does, when to reach for it, and what it leaves behind.
 
-| Flag | Description |
-|------|-------------|
-| *(default)* | Uses Ninja if available, uses incremental builds, uses `ccache` if installed |
-| `--debug` | Debug build with symbols and linker map file |
-| `--sanitize` | Debug build with ASan/UBSan enabled |
-| `--maintenance` | Enables `-Werror`, runs clang-tidy, cppcheck, and code formatting checks |
-| `--apply-fixes` | Auto-apply clang-tidy fixes (requires `--maintenance`) |
-| `--format-check` | Check code formatting without applying changes (requires `--maintenance`) |
-| `--format-apply` | Auto-apply clang-format fixes (requires `--maintenance`) |
-| `--tests` | Configure with `-DKARTEND_BUILD_TESTS=ON` |
-| `--run-tests` | Run `ctest` after a successful build (requires `--tests`) |
-| `--coverage` | gcov instrumentation (`-DKARTEND_ENABLE_COVERAGE=ON`). Implies `--debug` + `--tests`. Pair with `--run-tests`, then capture via `lcov --capture --directory <build_dir> -o coverage.info` and `genhtml coverage.info -o coverage-html/` to produce a browsable report. |
-| `--pgo` | Two-pass Profile-Guided Optimization build |
-| `--pgo-generate` | First PGO pass: generate profile data |
-| `--pgo-use` | Second PGO pass: optimize using collected profile |
-| `--ninja` | Force Ninja generator |
-| `--make` | Force Unix Makefiles generator |
-| `--incremental` | Reuse existing build directory (default) |
-| `--clean` | Remove the build directory before configuring |
-| `--keep-builds` | Keep other build directories (skip auto-prune) |
-| `--reports` | Assemble reports into `.backups/reports` (off by default) |
-| `--archive` | Create `.backups/*.tar.gz` source archives (off by default) |
-| `--no-ccache` | Disable ccache even if installed |
-| `--clang` | Force Clang/LLD toolchain for a release build (default: system compiler) |
-| `--install` | Run `cmake --install` after build (auto-elevates with sudo/doas) |
-| `--uninstall` | Remove files from the most recent install (reads `install_manifest.txt`) |
-| `--prefix=PATH` | Pass `-DCMAKE_INSTALL_PREFIX=PATH` to configure |
-| `--jobs=N` | Override `-j` parallelism for the build step (default: `nproc`) |
+### Build-type flags
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| *(none)* | Release build. | Default for routine work and CI. | Writes `build/<gen>-release/`; honors `ccache`. |
+| `--debug` | Debug build (keeps `qDebug`/`qWarning` output, no `-O`, symbols on). | Local development; reproducing a runtime bug; before stepping in a debugger. | Writes `build/<gen>-debug/`; emits a linker map at `.backups/reports/kartend.map`; binaries are large and unoptimized. |
+| `--relwithdebinfo` | Release-with-debug-symbols build. | Profiling a release binary; producing a perf/`gdb`-friendly artifact without the cost of `--debug`. | Writes `build/<gen>-relwithdebinfo/`. |
+| `--sanitize` (alias `--sanitizers`) | Debug build + ASan/UBSan instrumentation. | Investigating a use-after-free, uninit-read, signed-overflow, or undefined-behavior crash. **Not** for routine work — binaries run noticeably slower. | Writes `build/<gen>-sanitize/`; runtime ~2–3× slower; sanitizer reports go to stderr. |
+| `--maintenance` | Release build + static-analysis pipeline (clang-tidy, cppcheck, IWYU, clang-format). | Pre-push hygiene; CI-style lint pass. | Writes `build/<gen>-maintenance/`; lint reports go to `build/<gen>-maintenance/logs/`; **enables `-Werror`** — warnings break the build. |
+| `--coverage` | gcov-instrumented build. **Implies `--debug --tests`.** | Measuring test coverage; investigating uncovered branches. | Writes `.gcno`/`.gcda` files into the build dir; binaries run slower; coverage is meaningless unless you also pass `--run-tests` to populate counters. |
+| `--pgo` | Two-pass PGO: instrumented build, runs the binary to collect a profile, rebuilds optimized against the profile. | Releasing a tuned binary; before measuring final perf. | Writes `build/<gen>-release-pgo/` and `build/<gen>-release-pgo/pgo_profiles/`; wipes the profile dir before the generate pass so stale `.profraw` from a previous run can't bias the optimised build; first pass binary is slow (instrumented). |
+| `--pgo-generate` | Just the PGO generate pass (instrumented build, no second pass). | Manual two-pass workflow when you want to control profile collection yourself. | Same dir as `--pgo`; wipes `pgo_profiles/` before configure so the upcoming user run produces only fresh profiles; leaves an instrumented binary. |
+| `--pgo-use` | Just the PGO use pass (consumes existing profile in the build dir's `pgo_profiles/`). | Companion to `--pgo-generate` after you've collected a profile. | Same dir as `--pgo`; fails if the profile dir is empty. Does NOT wipe — that's the generate pass's job. |
+
+### Lint / format flags (require `--maintenance`)
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| `--apply-fixes` | Apply safe clang-tidy auto-fixes in-place. | Cleaning up after a large refactor when the lint report is repetitive. | **Modifies tracked source files**; the auto-fixer has been known to mangle `src/utils/collectionutils.h` and headers under `src/ui/uiconstants/` — inspect `git diff` after. |
+| `--format-check` | clang-format dry-run; non-zero exit if anything would change. | CI gate; pre-push verification. | No file writes. |
+| `--format-apply` | clang-format in-place. | Routine pre-push cleanup. | **Modifies tracked source files**. Requires clang-format 19 on PATH (the system v21 drifts). |
+
+### Test flags
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| `--tests` | Configure with `-DKARTEND_BUILD_TESTS=ON`. | Whenever you need a test binary to exist. | Builds the test executables; no test execution by itself. |
+| `--run-tests` | Run `ctest` after a successful build. Requires `--tests`. | Routine "did I break anything" check after edits. | Executes the full suite; test logs go to `build/<gen>-*/Testing/`. |
+
+### Install flags
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| `--install` | `cmake --install` after the build. | Installing a system-wide build. | **Auto-elevates with `sudo`/`doas`** when the prefix needs root; honors `DESTDIR`. |
+| `--uninstall` | Run the `uninstall` target on the most recent build dir. | Reverting a `--install`. | Reads `install_manifest.txt`; **deletes installed files**. |
+| `--prefix=PATH` | `-DCMAKE_INSTALL_PREFIX=PATH`. | Non-default install target (e.g. `~/.local`). | Only affects subsequent `--install`. |
+
+### Generator / build-dir flags
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| `--ninja` | Force Ninja generator. | When Ninja is installed but you want to be explicit. | Build dir prefix becomes `build/ninja-*`. |
+| `--make` | Force Unix Makefiles generator. | Ninja missing or incompatible. | Build dir prefix becomes `build/make-*`. |
+| `--incremental` | Reuse existing build dir (default). | Default. | None — describes the default. |
+| `--clean` | `rm -rf` the build dir before configuring. | Suspected stale cache; after large `CMakeLists.txt` edits. | **Deletes the build directory.** |
+| `--keep-builds` | Don't prune other script-created build dirs. | Keeping `--debug` and `--release` dirs side-by-side. | Skips the auto-prune that runs by default. |
+| `--jobs=N` | Override build parallelism (default: `nproc`). | Constrained CI agents; avoiding OOM on big TUs. | None. |
+
+### Reporting / dependency flags
+
+| Flag | Purpose | When to use | Side effects |
+|------|---------|-------------|--------------|
+| `--archive` | Create a source `.tar.gz` under `.backups/`. | Producing a release artifact. | Writes `.backups/kartend-<version>.tar.gz`. |
+| `--reports` | Assemble source/UI reports under `.backups/reports/`. | Generating diagnostic bundles. | Writes `.backups/reports/`. |
+| `--no-ccache` | Disable `ccache` even if installed. | Debugging compiler-cache misses; suspected stale cached objects. | First build is slower; subsequent builds are slower than the ccache-enabled default. |
+| `--clang` | Force Clang/LLD for release builds (default: system compiler). | Reproducing a Clang-only warning/CI failure. | None beyond toolchain selection. |
 
 ### Output Directories
 

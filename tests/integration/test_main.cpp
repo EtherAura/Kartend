@@ -16,8 +16,16 @@
 #include "test_mainwindow_smoke.h"
 #include "test_navigationmanager.h"
 #include "test_scrollmanager.h"
+#include "test_filtermanager.h"
+#include "test_searchmanager.h"
+#include "test_selectiondisplaymanager.h"
+#include "test_detailspanemanager.h"
+#include "test_attractmanager.h"
+#include "test_detailpagemanager.h"
+#include "test_selectionoverlaymanager.h"
 #include "test_settingsdialog_changes.h"
 #include "test_settingsdialog_scope.h"
+#include "test_virtualcontainermanager.h"
 
 #include <QApplication>
 #include <QStandardPaths>
@@ -119,6 +127,46 @@ int main(int argc, char *argv[]) {
   {
     TestScrollManager sm;
     status |= QTest::qExec(&sm, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestSelectionOverlayManager som;
+    status |= QTest::qExec(&som, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestVirtualContainerManager vcm;
+    status |= QTest::qExec(&vcm, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestFilterManager fm;
+    status |= QTest::qExec(&fm, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestSearchManager search;
+    status |= QTest::qExec(&search, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestSelectionDisplayManager selectionDisplay;
+    status |= QTest::qExec(&selectionDisplay, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestDetailsPaneManager detailsPane;
+    status |= QTest::qExec(&detailsPane, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestAttractManager attract;
+    status |= QTest::qExec(&attract, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestDetailPageManager detailPage;
+    status |= QTest::qExec(&detailPage, argc, argv);
   }
   drainGlobalThreadPool();
   return status;

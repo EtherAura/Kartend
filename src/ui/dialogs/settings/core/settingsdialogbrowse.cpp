@@ -145,6 +145,13 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
 
   // Create subcollections for each subdirectory
   for (const QString &subdir : subdirs) {
+    // QDir::entryList already strips '.' and '..' but a malicious filesystem
+    // (or a future change to how subdirs is built) could feed us a name that
+    // would inject a traversal segment at launch time. Skip unsafe names
+    // here so the import is silent on bad input rather than failing later.
+    if (PathUtils::validateCollectionNameForSubstitution(subdir).isError()) {
+      continue;
+    }
     CollectionConfig newCollection = templateConfig;
     newCollection.name = subdir;
     newCollection.parentCollectionIndex = parentIndex;

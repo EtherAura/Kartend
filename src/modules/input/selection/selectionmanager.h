@@ -4,10 +4,12 @@
 #include "collectionutils.h"
 #include "iselectionmanager.h"
 #include "setuputils.h"
+#include <QCoreApplication>
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
 #include <QString>
+#include <QThread>
 
 class ItemWidget;
 class IScrollManager;
@@ -57,6 +59,12 @@ struct SelectionManagerSetup {
  * and provides operations for selecting, clearing, and restoring selections.
  * Coordinates with ScrollManager for widget lookups and DetailsPaneManager for
  * metadata updates.
+ *
+ * Threading: main-thread-only. Every method on this class mutates or reads
+ * InteractionStateHolder and m_selected* fields without locking; cross-thread
+ * access would race. The selectionRestore state mutators / readers assert
+ * thread affinity in debug builds; release builds rely on the invariant being
+ * upheld by callers.
  */
 // QObject must be the first base; ISelectionManager is a plain (non-QObject)
 // role interface — single-QObject-base multiple inheritance.
@@ -234,6 +242,15 @@ private:
   }
   [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+
+  // Debug-only main-thread invariant guard for selectionRestore mutators /
+  // readers. Compiles out in release; in debug catches accidental cross-thread
+  // calls before they corrupt InteractionStateHolder under no lock.
+  static void assertMainThread() {
+    Q_ASSERT_X(QCoreApplication::instance() == nullptr ||
+                   QThread::currentThread() == QCoreApplication::instance()->thread(),
+               "SelectionManager", "SelectionManager state accessors are main-thread-only");
   }
 
   IDetailsPane *m_MetadataSidebar = nullptr;

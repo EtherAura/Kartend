@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <QObject>
+#include <QPointer>
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -62,9 +63,9 @@ private:
   void onPrecalcStage();
   void onFinalizeStage();
 
-  TimerUtils::DebouncedTimer *m_saveTimer = nullptr;
-  TimerUtils::DebouncedTimer *m_precalcTimer = nullptr;
-  TimerUtils::DebouncedTimer *m_finalizeTimer = nullptr;
+  QPointer<TimerUtils::DebouncedTimer> m_saveTimer;
+  QPointer<TimerUtils::DebouncedTimer> m_precalcTimer;
+  QPointer<TimerUtils::DebouncedTimer> m_finalizeTimer;
 
   StageCallback m_onSave;
   StageCallback m_onPrecalc;

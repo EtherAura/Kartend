@@ -50,6 +50,8 @@ private slots:
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
   void testBuildLaunchCommand_retroArch_usesCorePath();
   void testBuildLaunchCommand_allowsAmpersandMediaPath();
+  void testBuildLaunchCommand_rejectsCollectionPathTraversal_data();
+  void testBuildLaunchCommand_rejectsCollectionPathTraversal();
 
   // Multi-launcher tests
   void testLauncherCount_singlePrimary();
@@ -395,6 +397,31 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_rejectsCollectionPathTraversal_data() {
+  QTest::addColumn<QString>("collectionName");
+  QTest::newRow("dotdot-slash") << QStringLiteral("../etc");
+  QTest::newRow("slash-prefix") << QStringLiteral("/etc/passwd");
+  QTest::newRow("backslash") << QStringLiteral("foo\\bar");
+  QTest::newRow("plain-dotdot") << QStringLiteral("..");
+  QTest::newRow("empty") << QString();
+}
+
+void TestLaunchManager::testBuildLaunchCommand_rejectsCollectionPathTraversal() {
+  QFETCH(QString, collectionName);
+
+  LauncherConfig launcher;
+  launcher.launcherPath = "/tmp/launchers/%collection%/runner";
+  launcher.corePath = "";
+  launcher.launchParameters = "";
+
+  auto result =
+      LaunchManager::buildLaunchCommand(launcher, collectionName, "/tmp/media/file.bin");
+  QVERIFY2(result.isError(),
+           "Expected buildLaunchCommand to refuse a collection name that injects "
+           "path traversal or separators into the %collection% substitution");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
 }
 
 void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {

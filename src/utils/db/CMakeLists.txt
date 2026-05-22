@@ -7,6 +7,7 @@ target_sources(kartend_utils PRIVATE
   smartfilter.cpp
   smartplaylistevaluator.cpp
   usagestatsstore.cpp
+  batchsizes.h
   dbmigrations.h
   historystore.h
   itemartwork.h

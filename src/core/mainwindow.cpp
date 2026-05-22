@@ -24,20 +24,17 @@
 #include "artworkmanager.h"
 #include "attractmanager.h"
 #include "collectionutils.h"
-#include "createsmartplaylistdialog.h"
-#include "customfieldsdialog.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
+#include "dialogcontroller.h"
 #include "eventmanager.h"
 #include "gridwidthdebouncer.h"
 #include "icachemanager.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
-#include "itemartworklinksdialog.h"
 #include "kartmanager.h"
-#include "kartmergedialog.h"
-#include "kartprogressdialog.h"
 #include "kartreader.h"
+#include "titlecountshelpers.h"
 
 #include "dbeventscontroller.h"
 #include "detailspane.h"
@@ -45,7 +42,6 @@
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
-#include "launcherchooserdialog.h"
 #include "launchmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
@@ -58,14 +54,11 @@
 #include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrapercontroller.h"
-#include "scraperesultdialog.h"
 #include "scraperservice.h"
 #include "scrolleventscontroller.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
-#include "settingsdialog.h"
 #include "settingsutils.h"
-#include "shortcutsdialog.h"
 #include "splashoverlay.h"
 #include "startupvideooverlay.h"
 #include "stringutils.h"
@@ -100,6 +93,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_scrollEventsController = std::make_unique<ScrollEventsController>(nullptr);
   m_dbEventsController = std::make_unique<DbEventsController>(nullptr);
   m_scraperController = std::make_unique<ScraperController>(nullptr);
+  m_dialogController = std::make_unique<DialogController>(this);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
   // against a live instance. The manager owns no widgets — overlays remain
@@ -122,7 +116,8 @@ bool MainWindow::event(QEvent *event) {
       // or settings dialog taking focus — re-entering the main window
       // afterwards is not a "welcome back" moment.
       if (!QApplication::activeModalWidget() && !QApplication::activePopupWidget() &&
-          !ScrapeResultDialog::isAnyInstanceVisible() && !SettingsDialog::isAnyInstanceVisible()) {
+          !DialogController::anyScrapeResultDialogVisible() &&
+          !DialogController::anySettingsDialogVisible()) {
         m_windowWasInactive = true;
       }
       break;
@@ -130,8 +125,9 @@ bool MainWindow::event(QEvent *event) {
       if (m_windowWasInactive) {
         m_windowWasInactive = false;
         if (m_startupSplashHandled && !QApplication::activeModalWidget() &&
-            !QApplication::activePopupWidget() && !ScrapeResultDialog::isAnyInstanceVisible() &&
-            !SettingsDialog::isAnyInstanceVisible()) {
+            !QApplication::activePopupWidget() &&
+            !DialogController::anyScrapeResultDialogVisible() &&
+            !DialogController::anySettingsDialogVisible()) {
           showFocusReturnSplash();
         }
       }
@@ -145,7 +141,8 @@ bool MainWindow::event(QEvent *event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
-  if ((getInteractionManager()) && getInteractionManager()->handleGlobalKeyPress(event)) {
+  if ((m_appManager->getInteractionManager()) &&
+      m_appManager->getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
   QMainWindow::keyPressEvent(event);
@@ -257,7 +254,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
 
 void MainWindow::dropEvent(QDropEvent *event) {
   if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) return;
-  auto *km = getKartManager();
+  auto *km = m_appManager->getKartManager();
   if (!km) return;
   for (const QUrl &url : event->mimeData()->urls()) {
     if (!url.isLocalFile()) continue;
@@ -289,8 +286,8 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 
   QMainWindow::resizeEvent(event);
 
-  if (getArtworkManager()) {
-    if (auto *timerCoordinator = getArtworkManager()->getTimerCoordinator()) {
+  if (m_appManager->getArtworkManager()) {
+    if (auto *timerCoordinator = m_appManager->getArtworkManager()->getTimerCoordinator()) {
       timerCoordinator->scheduleLayoutUpdate();
     }
   }
@@ -299,143 +296,21 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   // Defer re-centering until after resize animation completes -
   // prevents visual jump during resize drag
   QTimer::singleShot(UIConstants::Timing::RESIZE_RECENTER_DELAY_MS, this, [this]() {
-    if (!QApplication::closingDown() && getInteractionManager()) {
-      getInteractionManager()->recenterCurrentSelection();
+    if (!QApplication::closingDown() && m_appManager->getInteractionManager()) {
+      m_appManager->getInteractionManager()->recenterCurrentSelection();
     }
   });
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
-  return (getInteractionManager()) ? getInteractionManager()->eventFilter(watched, event)
-                                   : QMainWindow::eventFilter(watched, event);
+  return (m_appManager->getInteractionManager())
+             ? m_appManager->getInteractionManager()->eventFilter(watched, event)
+             : QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::refreshTitleCounts() {
-  if (!getDatabaseManager()) {
-    return;
-  }
-
-  // Don't update title bar with counts while a scan is in progress
-  // (the scan progress handler sets the title instead)
-  if (m_loadingOverlay && m_loadingOverlay->isActive()) {
-    return;
-  }
-
-  int cur = currentCollectionIndex;
-  if (cur < 0 || cur >= m_collections.size()) {
-    setWindowTitle(qApp->applicationName());
-    return;
-  }
-
-  auto cachedRecursiveCountForIndex = [this](int collectionIndex) -> qint64 {
-    if (!getSessionManager()) {
-      return -1;
-    }
-    if (collectionIndex < 0 || collectionIndex >= m_collections.size()) {
-      return -1;
-    }
-    qint64 direct = -1;
-    qint64 recursive = -1;
-    if (!getSessionManager()->getCollectionCounts(m_collections[collectionIndex], m_collections,
-                                                  direct, recursive)) {
-      return -1;
-    }
-    return recursive;
-  };
-
-  // Appends " — N subfolders, M subcollections" to @p title when @p cur has
-  // any direct children. Used by both the subfolder and the collection
-  // branches below.
-  auto appendChildPartsSuffix = [this, cur](QString &title) {
-    const int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
-    const int directSubcollectionCount =
-        CollectionUtils::directChildrenOf(cur, m_collections).size();
-    QStringList childParts;
-    if (directSubfolderCount > 0) {
-      childParts << QString("%1 subfolders").arg(directSubfolderCount);
-    }
-    if (directSubcollectionCount > 0) {
-      childParts << QString("%1 subcollections").arg(directSubcollectionCount);
-    }
-    if (!childParts.isEmpty()) {
-      title += QString(" — %1").arg(childParts.join(", "));
-    }
-  };
-
-  // Check if we're in a subfolder
-  const QString &subfolder = m_collections[cur].folderBrowsing.currentSubfolder;
-  if (!subfolder.isEmpty() && getScrollManager()) {
-    // In a subfolder: show "SubfolderName (subfolderCount/collectionCount
-    // Items)"
-    QString subfolderName = subfolder;
-    int lastSlash = subfolder.lastIndexOf('/');
-    if (lastSlash >= 0) {
-      subfolderName = subfolder.mid(lastSlash + 1);
-    }
-
-    const int subfolderItemCount = getScrollManager()->getTotalItems();
-    const qint64 collectionCount = cachedRecursiveCountForIndex(cur);
-    QString counts;
-    if (collectionCount >= 0) {
-      counts = QString("(%1/%2 Items)")
-                   .arg(StringUtils::formatCountNumber(subfolderItemCount))
-                   .arg(StringUtils::formatCountNumber(collectionCount));
-    } else {
-      counts = QString("(%1 Items)").arg(StringUtils::formatCountNumber(subfolderItemCount));
-    }
-
-    QString title = QString("%1 %2").arg(subfolderName, counts);
-    appendChildPartsSuffix(title);
-    setWindowTitle(title);
-    return;
-  }
-
-  // Not in subfolder: show collection hierarchy counts
-  QVector<int> chain;
-  int walk = cur;
-  while (walk >= 0 && walk < m_collections.size()) {
-    chain.append(walk);
-    int parentIndex = m_collections[walk].parentCollectionIndex;
-    if (parentIndex < 0) {
-      break;
-    }
-    walk = parentIndex;
-  }
-
-  // When showAllSubcollectionItems is enabled, the displayed items include all
-  // descendant items. Use the actual view count for the current collection
-  // rather than the cached recursive count (which may not include flattened
-  // items).
-  const bool showAllItems = m_collections[cur].showAllSubcollectionItems;
-  const int viewTotalItems = getScrollManager() ? getScrollManager()->getTotalItems() : -1;
-
-  QStringList parts;
-  bool anyKnown = false;
-  for (int i = 0; i < chain.size(); ++i) {
-    int idx = chain[i];
-    qint64 countVal = -1;
-    if (i == 0 && showAllItems && viewTotalItems >= 0) {
-      countVal = viewTotalItems;
-    } else {
-      countVal = cachedRecursiveCountForIndex(idx);
-    }
-    if (countVal >= 0) {
-      anyKnown = true;
-      parts << StringUtils::formatCountNumber(countVal);
-    } else {
-      parts << QStringLiteral("…");
-    }
-  }
-
-  const QString base = m_collections[cur].name;
-  QString counts;
-  if (anyKnown) {
-    counts = QString("(%1 Items)").arg(parts.size() == 1 ? parts.first() : parts.join('/'));
-  }
-
-  QString title = counts.isEmpty() ? base : QString("%1 %2").arg(base, counts);
-  appendChildPartsSuffix(title);
-  setWindowTitle(title);
+  TitleCountsHelpers::refreshTitleCounts(this, m_appContext, m_collections, currentCollectionIndex,
+                                         m_loadingOverlay);
 }
 
 // Wires managers and signals; ensures sidebar metadata is refreshed when the
@@ -457,257 +332,6 @@ void MainWindow::setupManagerConnections() {
 
   wireDetailPageManager();
   wireKartManager();
-}
-
-void MainWindow::wireInteractionManager() {
-  InteractionManagerSetup setup;
-  setup.ctx = &m_appContext; // Managers and UI elements from shared context
-
-  // Kartend-n8kh: the input layer's right-click menu used to construct
-  // CreateSmartPlaylistDialog / CustomFieldsDialog directly, taking an
-  // upward input -> ui edge. The dialogs now run via these closures
-  // supplied here in the UI layer; InteractionManager just invokes
-  // them and reads the result.
-  setup.runSmartPlaylistDialog = [this](const QString &initialName,
-                                        const std::optional<SmartFilter::Filter> &initialFilter)
-      -> std::optional<SmartPlaylistEdit> {
-    CreateSmartPlaylistDialog dialog(this);
-    if (!initialName.isEmpty()) {
-      dialog.setInitialName(initialName);
-    }
-    if (initialFilter.has_value()) {
-      dialog.setInitialFilter(*initialFilter);
-    }
-    if (dialog.exec() != QDialog::Accepted) {
-      return std::nullopt;
-    }
-    SmartPlaylistEdit out;
-    out.name = dialog.name();
-    out.filter = dialog.filter();
-    return out;
-  };
-  setup.runCustomFieldsDialog = [this](const QString &itemTitle,
-                                       const ItemMetadataStore::CustomFieldList &initial)
-      -> std::optional<ItemMetadataStore::CustomFieldList> {
-    CustomFieldsDialog dialog(this);
-    dialog.setItemTitle(itemTitle);
-    dialog.setFields(initial);
-    if (dialog.exec() != QDialog::Accepted) {
-      return std::nullopt;
-    }
-    return dialog.fields();
-  };
-
-  loadingLabel = ui->loadingLabel;
-
-  // ctx is already fully populated by initializeAppContext() — InteractionManager
-  // and its owned sub-managers were registered eagerly so every setupReferences()
-  // call below can resolve siblings exclusively through ctx.
-  getInteractionManager()->setupReferences(setup);
-
-  // when runtime detection is enabled, the LaunchManager spawns
-  // a tracked QProcess and emits started/finished signals. Show a "Now
-  // Playing" overlay while the child runs and raise the window when it exits.
-  if (auto *launch = getInteractionManager()->launchManager()) {
-    connect(launch, &LaunchManager::runtimeStarted, this,
-            [this](const QString & /*filePath*/, const QString &displayName) {
-              if (m_nowPlayingOverlay) {
-                m_nowPlayingOverlay->showOverlay(displayName);
-              }
-              // stop the sidebar's preview video so its audio
-              // doesn't compete with the launched application's audio.
-              if (m_MetadataSidebar) {
-                m_MetadataSidebar->pausePreviewVideo();
-              }
-              // suspend attract mode for the duration of the
-              // launch — the idle timer would otherwise fire under the
-              // launched app and start scrolling unseen.
-              if (auto *interaction = getInteractionManager()) {
-                if (auto *attract = interaction->attractManager()) {
-                  attract->setSuspended(true);
-                }
-              }
-            });
-    connect(launch, &LaunchManager::runtimeFinished, this, [this](const QString & /*filePath*/) {
-      if (m_nowPlayingOverlay) {
-        m_nowPlayingOverlay->hideOverlay();
-      }
-      // lift the attract suspension. setSuspended(false)
-      // re-arms a fresh idle countdown so attract waits the full timeout
-      // instead of kicking in the instant the launch ends.
-      if (auto *interaction = getInteractionManager()) {
-        if (auto *attract = interaction->attractManager()) {
-          attract->setSuspended(false);
-        }
-      }
-      // Bring Kartend back to the foreground when the tracked child
-      // exits — the user expects "return on close" behavior.
-      raise();
-      activateWindow();
-    });
-  }
-
-  // EventManager gates item-grid input while a modal scrape dialog is up,
-  // and LaunchManager prompts a launcher chooser for multi-launcher
-  // collections. Both dialog types live in the UI layer, so MainWindow
-  // injects the callbacks rather than the input module including the
-  // dialog headers.
-  if (auto *interaction = getInteractionManager()) {
-    if (auto *events = interaction->eventManager()) {
-      events->setModalScrapeDialogVisiblePredicate(
-          []() { return ScrapeResultDialog::isAnyInstanceVisible(); });
-    }
-    if (auto *launch = interaction->launchManager()) {
-      launch->setChooseLauncherCallback([this](const QString &collectionName,
-                                               const QStringList &launcherNames, int defaultIndex) {
-        return LauncherChooserDialog::choose(window(), collectionName, launcherNames, defaultIndex);
-      });
-    }
-  }
-}
-
-void MainWindow::wireNavigationManager() {
-  NavigationManagerSetup navSetup;
-  navSetup.ctx = &m_appContext; // Managers and UI elements from shared context
-
-  // Callbacks (not in context)
-  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
-  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
-
-  getNavigationManager()->setupReferences(navSetup);
-}
-
-void MainWindow::wireDetailPageManager() {
-  // detail page wiring. The overlay was created in
-  // mainwindow_setup.cpp and parented to ui->centralwidget so it can cover
-  // the entire window. Hand it to DetailPageManager along with the sidebar
-  // and DB so the manager can build payloads. Keyboard signal lives on
-  // InteractionManager's owned KeyboardManager.
-  if (auto *detail = getDetailPageManager()) {
-    DetailPageManagerSetup detailSetup;
-    detailSetup.ctx = &m_appContext;
-    detailSetup.overlay = m_detailPageOverlay;
-    detail->setupReferences(detailSetup);
-
-    if (auto *kb = getInteractionManager() ? getInteractionManager()->keyboardManager() : nullptr) {
-      connect(kb, &KeyboardManager::requestItemDetails, detail,
-              &DetailPageManager::showForCurrentSelection);
-    }
-
-    // Toolbar entry — clicking the ℹ button opens the detail page for the
-    // current selection (same code path as the keyboard shortcut). No-op
-    // when nothing is selected; DetailPageManager guards on context validity.
-    if (ui->detailPageButton) {
-      connect(ui->detailPageButton, &QPushButton::clicked, detail,
-              &DetailPageManager::showForCurrentSelection);
-    }
-
-    // Lower the sidebar while the detail page is up — same rationale as
-    // bug #7 for the artwork preview overlay (without this,
-    // raise() calls during the overlay's lifetime would re-stack the
-    // sidebar on top).
-    if (m_detailPageOverlay) {
-      connect(m_detailPageOverlay, &DetailPageOverlay::visibilityChanged, this, [this](bool v) {
-        if (auto *sb = getDetailsPaneManager()) {
-          sb->setOverlayActive(v);
-        }
-      });
-
-      // Kartend-n8kh: this connect previously lived in DetailPageManager
-      // (data/media layer), which required #including the concrete
-      // DetailPageOverlay header for the signal symbol. Moved here so the
-      // manager sees only IDetailPageOverlay. QDesktopServices is the
-      // same hand-off the sidebar uses for manuals so both surfaces
-      // respect the user's xdg-open / Finder default handler.
-      connect(m_detailPageOverlay, &DetailPageOverlay::manualRequested, this,
-              [](const QString &manualPath) {
-                if (!manualPath.isEmpty()) {
-                  QDesktopServices::openUrl(QUrl::fromLocalFile(manualPath));
-                }
-              });
-    }
-  }
-}
-
-void MainWindow::wireKartManager() {
-  if (auto *km = getKartManager()) {
-    kart::KartManagerSetup kartSetup;
-    kartSetup.settingsManager = getSettingsManager();
-    kartSetup.getCollections = [this]() { return &m_collections; };
-    kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
-    kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
-    // Kartend-a3ir: the interactive merge dialog lives in the UI layer
-    // and is constructed here. KartManager (data layer) just invokes the
-    // closure with the conflicting metadata and uses the returned
-    // ConflictResolution. The dialog parents to `this` so it modals
-    // correctly over the main window.
-    kartSetup.mergeResolver = [this](const QString &itemPath,
-                                     const ItemMetadataStore::ItemMetadata &existing,
-                                     const ItemMetadataStore::ItemMetadata &incoming) {
-      KartMergeDialog dlg(itemPath, existing, incoming, this);
-      kart::ConflictResolution r;
-      if (dlg.exec() == QDialog::Accepted) {
-        r.choice = dlg.choice();
-        r.policy = dlg.policy();
-        r.applyToAll = dlg.applyToAll();
-      } else {
-        r.choice = kart::MergeChoice::Skip;
-      }
-      return r;
-    };
-    // Kartend-s6mj: interactive confirmation when an imported .kart carries
-    // launcher / icon / placeholder paths outside the safe allowlist. The
-    // user sees one (field, path) entry per row and must opt in via the
-    // non-default "Import anyway" button. Cancel is default to make the
-    // safe choice the easy one (a malicious .kart's launcherPath=/bin/sh
-    // would otherwise execute on the next Launch click).
-    kartSetup.suspiciousPathConfirmer =
-        [this](const QList<kart::SuspiciousKartPath> &suspicious) -> bool {
-      QStringList lines;
-      lines.reserve(suspicious.size());
-      for (const auto &[field, path] : suspicious) {
-        lines.append(QStringLiteral("• %1: %2").arg(field, path));
-      }
-      QMessageBox box(this);
-      box.setIcon(QMessageBox::Warning);
-      box.setWindowTitle(tr("Import Kart — suspicious paths"));
-      box.setText(tr("This .kart references paths outside the safe-prefix "
-                     "allowlist (your home directory, /usr/bin, /usr/local/bin, "
-                     "/opt). Continuing will register these paths and they may "
-                     "be executed on a later Launch click."));
-      box.setInformativeText(lines.join(QLatin1Char('\n')));
-      auto *importAnyway = box.addButton(tr("Import anyway"), QMessageBox::AcceptRole);
-      auto *cancel = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
-      box.setDefaultButton(cancel);
-      box.exec();
-      return box.clickedButton() == importAnyway;
-    };
-    km->setupReferences(kartSetup);
-
-    connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {
-      if (auto *sm = getSettingsManager()) {
-        sm->saveCollections(m_collections);
-      }
-    });
-
-    // KartManager is a data-layer manager and no longer #includes the
-    // KartProgressDialog (a ui/ type). It emits a kartProgressStarted signal
-    // when a long import/export begins; the owner builds the dialog here and
-    // wires the remaining progress/lifecycle signals to it. The dialog is the
-    // connection context for those onward hops, so they tear down when it
-    // closes (WA_DeleteOnClose). cancelRequested routes back to KartManager.
-    connect(km, &kart::KartManager::kartProgressStarted, this, [this, km](const QString &title) {
-      auto *dlg = new KartProgressDialog(title, this);
-      dlg->setAttribute(Qt::WA_DeleteOnClose);
-      connect(km, &kart::KartManager::kartProgressFraction, dlg, &KartProgressDialog::setFraction);
-      connect(km, &kart::KartManager::kartProgressEntry, dlg, &KartProgressDialog::setEntryName);
-      connect(km, &kart::KartManager::kartProgressFinished, dlg, &KartProgressDialog::markFinished);
-      connect(km, &kart::KartManager::kartProgressFailed, dlg, &QDialog::reject);
-      connect(dlg, &KartProgressDialog::cancelRequested, km,
-              &kart::KartManager::cancelActiveKartOperation);
-      dlg->show();
-    });
-  }
 }
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
@@ -732,13 +356,16 @@ void MainWindow::updateItemPositionLabel() {
   if (!ui->itemPositionLabel) {
     return;
   }
-  const int total = getScrollManager() ? getScrollManager()->getTotalItems() : 0;
+  const int total =
+      m_appManager->getScrollManager() ? m_appManager->getScrollManager()->getTotalItems() : 0;
   if (total <= 0) {
     ui->itemPositionLabel->clear();
     ui->itemPositionLabel->setVisible(false);
     return;
   }
-  const int sel = getInteractionManager() ? getInteractionManager()->currentSelectedIndex() : -1;
+  const int sel = m_appManager->getInteractionManager()
+                      ? m_appManager->getInteractionManager()->currentSelectedIndex()
+                      : -1;
   if (sel < 0) {
     ui->itemPositionLabel->setText(QString("%1").arg(total));
   } else {
@@ -756,7 +383,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Flush any pending grid-width persistence before shutdown so the final
   // user-adjusted width is not lost when closing immediately after changes.
-  if (m_gridWidthDebouncer && m_gridWidthDebouncer->hasPendingSave() && getSettingsManager()) {
+  if (m_gridWidthDebouncer && m_gridWidthDebouncer->hasPendingSave() &&
+      m_appManager->getSettingsManager()) {
     m_gridWidthDebouncer->flushPendingSave();
   }
 
@@ -767,29 +395,29 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Remove event filters first to prevent further processing
   if (ui->itemScrollArea) {
-    ui->itemScrollArea->removeEventFilter(getInteractionManager());
+    ui->itemScrollArea->removeEventFilter(m_appManager->getInteractionManager());
     if (ui->itemScrollArea->viewport()) {
-      ui->itemScrollArea->viewport()->removeEventFilter(getInteractionManager());
+      ui->itemScrollArea->viewport()->removeEventFilter(m_appManager->getInteractionManager());
     }
   }
   if (gridContainer) {
-    gridContainer->removeEventFilter(getInteractionManager());
+    gridContainer->removeEventFilter(m_appManager->getInteractionManager());
   }
 
   // Persist current viewport/selection state before blocking signals.
   // This ensures the cached viewport is available for fast startup on next
   // launch.
-  if (getNavigationManager()) {
-    getNavigationManager()->prepareForShutdown();
+  if (m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->prepareForShutdown();
   }
 
   // Block signals early to prevent cascading updates during shutdown
-  if (getInteractionManager()) {
-    getInteractionManager()->blockSignals(true);
-    getInteractionManager()->clearSelection();
+  if (m_appManager->getInteractionManager()) {
+    m_appManager->getInteractionManager()->blockSignals(true);
+    m_appManager->getInteractionManager()->clearSelection();
   }
-  if (getScrollManager()) {
-    getScrollManager()->blockSignals(true);
+  if (m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->blockSignals(true);
   }
 
   currentCollectionIndex = -1;
@@ -839,7 +467,7 @@ void MainWindow::resyncPlaylistCollections() {
                                      [](const CollectionConfig &c) { return c.isPlaylist; }),
                       m_collections.end());
 
-  PlaylistManager *playlistManager = getPlaylistManager();
+  PlaylistManager *playlistManager = m_appManager->getPlaylistManager();
   if (!playlistManager) {
     rebuildHierarchyCache();
     return;
@@ -890,40 +518,18 @@ void MainWindow::resyncPlaylistCollections() {
   rebuildHierarchyCache();
 }
 
-// Delegated Getters
-DetailsPaneManager *MainWindow::getDetailsPaneManager() const {
-  return m_appManager->getDetailsPaneManager();
-}
-ISettingsManager *MainWindow::getSettingsManager() const {
+// Manager accessors removed — callers go through m_appManager (internal) or
+// mainWindow->applicationManager()->getXxxManager() (external).
+// The three accessors below are kept because they implement IMainWindow's
+// pure-virtuals — that interface is the data/ui-facing handle and won't be
+// removed in this pass. Names dropped the "get" prefix per Kartend-5wuk.1
+// so a grep for 'mainWindow->getXxxManager' outside this file is clean.
+ISettingsManager *MainWindow::settingsManager() const {
   return m_appManager->getSettingsManager();
 }
-IDatabaseManager *MainWindow::getDatabaseManager() const {
-  return m_appManager->getDatabaseManager();
-}
-ScrollManager *MainWindow::getScrollManager() const {
+ScrollManager *MainWindow::scrollManager() const {
   return m_appManager->getScrollManager();
 }
-NavigationManager *MainWindow::getNavigationManager() const {
-  return m_appManager->getNavigationManager();
-}
-InteractionManager *MainWindow::getInteractionManager() const {
+InteractionManager *MainWindow::interactionManager() const {
   return m_appManager->getInteractionManager();
-}
-kart::KartManager *MainWindow::getKartManager() const {
-  return m_appManager->getKartManager();
-}
-SessionManager *MainWindow::getSessionManager() const {
-  return m_appManager->getSessionManager();
-}
-ArtworkManager *MainWindow::getArtworkManager() const {
-  return m_appManager->getArtworkManager();
-}
-CacheManager *MainWindow::getCacheManager() const {
-  return m_appManager->getCacheManager();
-}
-PlaylistManager *MainWindow::getPlaylistManager() const {
-  return m_appManager->getPlaylistManager();
-}
-DetailPageManager *MainWindow::getDetailPageManager() const {
-  return m_appManager->getDetailPageManager();
 }

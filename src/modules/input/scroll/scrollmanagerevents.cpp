@@ -36,9 +36,6 @@ void ScrollManager::onScrollChanged() {
   if (m_destroying) {
     return;
   }
-  if (!m_scrollTimer) {
-    return;
-  }
 
   // Prevent reentrant scroll handling which can occur when scroll animations
   // trigger valueChanged signals during processing
@@ -62,8 +59,8 @@ void ScrollManager::onScrollChanged() {
 
 void ScrollManager::handleProgrammaticScroll() {
   notifyUserActivity();
-  if (!m_scrollTimer->isActive()) {
-    m_scrollTimer->start();
+  if (!m_scrollTimer.isActive()) {
+    m_scrollTimer.start();
   }
 }
 
@@ -133,8 +130,8 @@ void ScrollManager::finalizeScrollChanges() {
   });
 
   notifyUserActivity();
-  if (!m_scrollTimer->isActive()) {
-    m_scrollTimer->start();
+  if (!m_scrollTimer.isActive()) {
+    m_scrollTimer.start();
   }
 }
 

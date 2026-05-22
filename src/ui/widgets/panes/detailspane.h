@@ -1,17 +1,23 @@
 #ifndef DETAILSPANE_H
 #define DETAILSPANE_H
 
+// Kartend-dk2c.3 (audit-2026-05-22 — included-cull pass): pulled QFrame,
+// QLabel, QPointer, QScrollArea, QVBoxLayout out of the public header. They
+// were only needed by pointer-member declarations, which forward-declare
+// fine. QFont stays because m_appearance.font is a value member that needs
+// the complete type. Kept QString / QStringList / QList because they appear
+// in by-value method parameters that downstream callers expect to "just
+// work" off this header. The full pane-extraction (ArtworkPane /
+// MetadataPane / GalleryPane) is queued under Kartend-dk2c.7.
 #include <functional>
 #include <QDateTime>
 #include <QFont>
-#include <QFrame>
 #include <QLabel>
 #include <QList>
 #include <QPointer>
-#include <QScrollArea>
 #include <QString>
 #include <QStringList>
-#include <QVBoxLayout>
+#include <QTimer>
 #include <QWidget>
 
 #include "collectionutils.h"
@@ -29,10 +35,11 @@ class DetailsPaneResizeGrip;
 template <typename T> class QFutureWatcher;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
+class QFrame;
 class QHBoxLayout;
 class QPushButton;
+class QScrollArea;
 class QTabBar;
-class QTimer;
 QT_END_NAMESPACE
 
 class DetailsPane : public QWidget, public IDetailsPane {
@@ -447,7 +454,7 @@ private:
   /// Owned, restarted on every clearDetailsSection so it tracks the
   /// freshly-rebuilt content rather than the previous selection's
   /// scroll range.
-  class QTimer *m_metadataAutoScrollTimer = nullptr;
+  QTimer m_metadataAutoScrollTimer; // Kartend-a911.6: value member
   /// Ticks remaining before the next scroll step; used to pause briefly
   /// at the top + bottom of each cycle.
   int m_metadataAutoScrollPause = 0;

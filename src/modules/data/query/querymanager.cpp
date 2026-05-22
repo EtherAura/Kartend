@@ -49,15 +49,23 @@ QueryManager::QueryManager(ISessionManager *sessionManager, const QString &conne
   qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
 
   // Forward the scan subsystem's signals so external listeners (DatabaseManager)
-  // keep connecting to QueryManager unchanged. m_scanService lives on the same
-  // thread, so these are direct connections — no signal-timing change.
-  connect(&m_scanService, &ScanService::errorOccurred, this, &QueryManager::errorOccurred);
-  connect(&m_scanService, &ScanService::scanStarting, this, &QueryManager::scanStarting);
-  connect(&m_scanService, &ScanService::scanItemsProgress, this, &QueryManager::scanItemsProgress);
+  // keep connecting to QueryManager unchanged. m_scanService is a value member
+  // of QueryManager so both objects live on the same thread (the database
+  // worker thread); Qt::DirectConnection is explicit so this stays correct if
+  // a future maintainer adds a moveToThread for m_scanService — the build
+  // would still link but the connection would route through the worker
+  // thread's event loop, and we'd want a deliberate switch to QueuedConnection
+  // at that point.
+  connect(&m_scanService, &ScanService::errorOccurred, this, &QueryManager::errorOccurred,
+          Qt::DirectConnection);
+  connect(&m_scanService, &ScanService::scanStarting, this, &QueryManager::scanStarting,
+          Qt::DirectConnection);
+  connect(&m_scanService, &ScanService::scanItemsProgress, this, &QueryManager::scanItemsProgress,
+          Qt::DirectConnection);
   connect(&m_scanService, &ScanService::collectionScanCompleted, this,
-          &QueryManager::collectionScanCompleted);
+          &QueryManager::collectionScanCompleted, Qt::DirectConnection);
   connect(&m_scanService, &ScanService::collectionScanSummary, this,
-          &QueryManager::collectionScanSummary);
+          &QueryManager::collectionScanSummary, Qt::DirectConnection);
 }
 
 QueryManager::~QueryManager() {

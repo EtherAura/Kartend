@@ -19,6 +19,7 @@ class QWidget;
 QT_END_NAMESPACE
 
 class ISettingsManager;
+struct ApplicationContext;
 
 namespace KartWriter {
 class Writer;
@@ -39,7 +40,10 @@ using SuspiciousKartPath = QPair<QString, QString>;
 using SuspiciousPathConfirmer = std::function<bool(const QList<SuspiciousKartPath> &)>;
 
 struct KartManagerSetup {
-  ISettingsManager *settingsManager = nullptr;
+  /// ctx is the canonical source for sibling managers — Kartend-phyc dropped
+  /// the prior ISettingsManager *settingsManager field; reads now go through
+  /// ctx->settingsManager() at call sites.
+  const ApplicationContext *ctx = nullptr;
   std::function<QList<CollectionConfig> *()> getCollections;
   std::function<QList<LauncherPreset>()> getLauncherPresets;
   std::function<QWidget *()> getParentWindow;

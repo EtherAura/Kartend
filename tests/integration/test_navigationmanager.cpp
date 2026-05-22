@@ -1,5 +1,6 @@
 #include "test_navigationmanager.h"
 
+#include "applicationmanager.h"
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "mainwindow.h"
@@ -36,7 +37,7 @@ CollectionConfig makeCollectionStub(const QString &name, int parentIndex = -1) {
 void TestNavigationManager::testOnCollectionSelectedClearsNavigationStack() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  NavigationManager *nav = win->getNavigationManager();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
   QVERIFY(nav);
 
   // Pre-load the stack so we can observe the clear() in onCollectionSelected.
@@ -60,7 +61,7 @@ void TestNavigationManager::testOnCollectionSelectedClearsNavigationStack() {
 void TestNavigationManager::testOnSubcollectionEnteredIgnoresOutOfRangeIndex() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  NavigationManager *nav = win->getNavigationManager();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   // Seed a single in-range entry so we can assert that the only rejected
   // call paths are the out-of-range ones.
@@ -81,7 +82,7 @@ void TestNavigationManager::testOnSubcollectionEnteredIgnoresOutOfRangeIndex() {
 void TestNavigationManager::testOnSubcollectionEnteredUnwindsPushOnNavigationFailure() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  NavigationManager *nav = win->getNavigationManager();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Parent")));
   win->m_collections.append(makeCollectionStub(QStringLiteral("Child"), /*parentIndex=*/0));
@@ -103,7 +104,7 @@ void TestNavigationManager::testOnSubcollectionEnteredUnwindsPushOnNavigationFai
 void TestNavigationManager::testOnSubcollectionEnteredSkipsPushWhenNoCurrentCollection() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  NavigationManager *nav = win->getNavigationManager();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Solo")));
   win->currentCollectionIndex = -1; // pre-startup: nothing selected yet
@@ -121,7 +122,7 @@ void TestNavigationManager::testOnSubcollectionEnteredSkipsPushWhenNoCurrentColl
 void TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  NavigationManager *nav = win->getNavigationManager();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
   QWidget *gridContainer = win->gridContainer;
   QVERIFY(gridContainer);
 

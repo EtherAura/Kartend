@@ -76,18 +76,12 @@ using CustomFieldsDialogRunner = std::function<std::optional<ItemMetadataStore::
     const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
 
 struct InteractionManagerSetup {
-  // Optional: shared context for common fields
+  // ctx is the single source of truth for sibling managers. Per Kartend-mxn4
+  // the per-manager pointer fields and their fallback getters were removed
+  // — no setup-site populated them and InteractionManager already reaches
+  // every sibling via m_ctx->xxxManager() (see scrollMgr() / databaseMgr() /
+  // etc. accessors lower in this header).
   const ApplicationContext *ctx = nullptr;
-
-  // Manager dependencies (can be overridden or taken from ctx)
-  IScrollManager *scrollManager = nullptr;
-  IDetailsPaneManager *detailsPaneManager = nullptr;
-  IDetailPageManager *detailPageManager = nullptr;
-  ISettingsManager *settingsManager = nullptr;
-  IDatabaseManager *databaseManager = nullptr;
-  INavigationManager *navigationManager = nullptr;
-  ISessionManager *sessionManager = nullptr;
-  IArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
   IDetailsPane *sidebar = nullptr;
@@ -112,16 +106,6 @@ struct InteractionManagerSetup {
   /// from MainWindow setup wiring.
   SmartPlaylistDialogRunner runSmartPlaylistDialog;
   CustomFieldsDialogRunner runCustomFieldsDialog;
-
-  // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_MGR_SAME(IScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_MGR_SAME(IDetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
-  SETUP_GETTER_INLINE_MGR_SAME(IDetailPageManager *, DetailPageManager, detailPageManager)
-  SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_MGR_SAME(INavigationManager *, NavigationManager, navigationManager)
-  SETUP_GETTER_INLINE_MGR_SAME(ISessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_MGR_SAME(IArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)

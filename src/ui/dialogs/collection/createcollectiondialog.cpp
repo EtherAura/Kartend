@@ -19,6 +19,7 @@
 
 #include "collectionutils.h"
 #include "metadataproviderregistry.h"
+#include "pathutils.h"
 #include "retroarchutils.h"
 #include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
@@ -202,11 +203,24 @@ void CreateCollectionDialog::buildUi() {
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   root->addWidget(buttons);
 
-  // A collection with no name is meaningless — gate OK on it rather than
-  // rejecting after the fact.
+  // A collection with no name is meaningless, and a name containing path
+  // separators / `..` would silently fail at launch time because
+  // `%collection%` expansion would inject a traversal segment into the
+  // resolved launcher arguments — gate OK on both checks rather than
+  // rejecting at launch.
   m_okButton->setEnabled(false);
   connect(m_nameEdit, &QLineEdit::textChanged, this, [this](const QString &text) {
-    m_okButton->setEnabled(!text.trimmed().isEmpty());
+    const QString trimmed = text.trimmed();
+    auto validation = PathUtils::validateCollectionNameForSubstitution(trimmed);
+    if (validation.isError()) {
+      m_okButton->setEnabled(false);
+      m_nameEdit->setToolTip(
+          tr("Display name for the collection. Cannot contain '/', '\\\\', or '..' — "
+             "these would be substituted into launcher paths as a traversal segment."));
+    } else {
+      m_okButton->setEnabled(true);
+      m_nameEdit->setToolTip(tr("Display name for the collection. Required."));
+    }
     // The collection name carries the platform tag autodetect scores
     // against — re-resolve the ScreenScraper system as the user types.
     syncScreenscraperSystemToName();

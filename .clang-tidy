@@ -1,5 +1,57 @@
 # Clang-Tidy Configuration for Kartend
-# Focuses on actionable warnings, disabling noisy style checks
+# Focuses on actionable warnings, disabling noisy style checks.
+#
+# Quarterly review note: scan the disabled-check list below and try
+# re-enabling one or two each quarter. Project hygiene improves over time
+# and what was noisy six months ago may be tractable now. The exclusions
+# should NOT be considered permanent.
+#
+# Rationale for each disabled check (grouped by family):
+#
+# modernize-*:
+#   -modernize-use-trailing-return-type       — stylistic, codebase prefers leading return type
+#   -modernize-use-designated-initializers    — Qt structs predate C99-style designated init
+#   -modernize-use-nodiscard                  — [[nodiscard]] only on getters/factories by convention
+#   -modernize-return-braced-init-list        — readability tradeoff with explicit type
+#   -modernize-use-ranges                     — Qt 6.4 (CI pin) std::ranges support is partial
+#
+# readability-*:
+#   -readability-implicit-bool-conversion     — project rule: implicit-null is preferred
+#   -readability-identifier-length            — single-char loop vars / template params are fine
+#   -readability-magic-numbers                — UIConstants/* covers high-traffic numbers; the rest is noise
+#   -readability-braces-around-statements     — short single-line if/while are idiomatic Qt
+#   -readability-else-after-return            — stylistic
+#   -readability-named-parameter              — overrides with unused params are fine
+#   -readability-uppercase-literal-suffix     — Qt headers leak lowercase l/L suffixes
+#   -readability-redundant-access-specifiers  — Qt MOC sometimes inserts extras
+#   -readability-simplify-boolean-expr        — codebase prefers explicit forms in conditional chains
+#   -readability-identifier-naming            — Qt naming (m_ prefix, camelCase methods) clashes with most lint configurations
+#   -readability-math-missing-parentheses     — overly cautious on idiomatic expressions
+#   -readability-use-std-min-max              — qBound/qMin/qMax are fine in Qt code
+#   -readability-function-cognitive-complexity — many legit "switch on enum" functions trip it
+#   -readability-static-definition-in-anonymous-namespace — anonymous namespaces are the canonical static replacement here
+#   -readability-convert-member-functions-to-static — many slot-like methods stay member for signal/slot connection
+#   -readability-function-size                — long functions in dialog setup are intentional
+#
+# performance-*:
+#   -performance-enum-size                    — Qt enums often use int by API contract
+#   -performance-avoid-endl                   — qDebug() endl is wired into Qt logging
+#   -performance-no-automatic-move            — false positives on Qt copy-on-write containers
+#
+# misc-*:
+#   -misc-non-private-member-variables-in-classes — Qt UI generated classes have public members
+#   -misc-const-correctness                   — too noisy on Qt's many non-const slot signatures
+#   -misc-use-anonymous-namespace             — codebase mixes file-static and anonymous-namespace
+#   -misc-include-cleaner                     — Qt umbrella headers like <QtWidgets> are intentional
+#   -misc-no-recursion                        — recursive helpers (collection tree walks) are correct
+#   -misc-use-internal-linkage                — same as anonymous-namespace; the codebase mixes styles
+#
+# bugprone-* (the noisy ones):
+#   -bugprone-easily-swappable-parameters     — too aggressive for Qt's parameter conventions
+#   -bugprone-branch-clone                    — duplicate branches in switch are often intentional
+#   -bugprone-narrowing-conversions           — Qt's int↔qsizetype churn would flood the report
+#   -bugprone-macro-parentheses               — debugLog() macros need to remain unparenthesised
+#   -bugprone-implicit-widening-of-multiplication-result — int*int into qint64 is the common pattern
 
 # Start with all checks disabled, then enable specific categories
 Checks: "-*,clang-analyzer-*,bugprone-*,performance-*,modernize-*,readability-*,misc-*,-modernize-use-trailing-return-type,-modernize-use-designated-initializers,-modernize-use-nodiscard,-modernize-return-braced-init-list,-modernize-use-ranges,-readability-implicit-bool-conversion,-readability-identifier-length,-readability-magic-numbers,-readability-braces-around-statements,-readability-else-after-return,-readability-named-parameter,-readability-uppercase-literal-suffix,-readability-redundant-access-specifiers,-readability-simplify-boolean-expr,-readability-identifier-naming,-readability-math-missing-parentheses,-readability-use-std-min-max,-readability-function-cognitive-complexity,-readability-static-definition-in-anonymous-namespace,-readability-convert-member-functions-to-static,-readability-function-size,-performance-enum-size,-performance-avoid-endl,-performance-no-automatic-move,-misc-non-private-member-variables-in-classes,-misc-const-correctness,-misc-use-anonymous-namespace,-misc-include-cleaner,-misc-no-recursion,-misc-use-internal-linkage,-bugprone-easily-swappable-parameters,-bugprone-branch-clone,-bugprone-narrowing-conversions,-bugprone-macro-parentheses,-bugprone-implicit-widening-of-multiplication-result"

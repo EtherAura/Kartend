@@ -12,14 +12,11 @@
 #include <QTimer>
 
 ArrowKeyScrollHelper::ArrowKeyScrollHelper(QObject *parent) : QObject(parent) {
-  m_updateTimer = new QTimer(this);
-  m_updateTimer->setSingleShot(true);
+  m_updateTimer.setSingleShot(true);
 }
 
 ArrowKeyScrollHelper::~ArrowKeyScrollHelper() {
-  if (m_updateTimer) {
-    m_updateTimer->stop();
-  }
+  m_updateTimer.stop();
 }
 
 void ArrowKeyScrollHelper::setItemMetrics(int itemHeight, int verticalSpacing, int margins) {
@@ -29,10 +26,6 @@ void ArrowKeyScrollHelper::setItemMetrics(int itemHeight, int verticalSpacing, i
 }
 
 void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex, bool extendedHold) {
-  if (!m_updateTimer) {
-    return;
-  }
-
   bool suppressArrowCenter = m_state && m_state->arrow().suppressArrowCenter;
   bool userScrollActiveProp = m_state && m_state->scroll().userScrollActive;
   bool programmatic = m_state && m_state->scroll().programmaticScroll;
@@ -54,7 +47,7 @@ void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex, bool extendedHold) 
     static constexpr int ARROW_KEY_UPDATE_DELAY_NORMAL_MS = 8;
     const int delayMs =
         extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
-    m_updateTimer->start(delayMs);
+    m_updateTimer.start(delayMs);
   }
 
   Q_UNUSED(selectedIndex)

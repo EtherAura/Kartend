@@ -68,8 +68,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
                                   .gridContainer = m_gridContainer,
                                   .context = &m_context,
                                   .collections = m_collections,
-                                  .dataManager = m_dataManager,
-                                  .filterManager = m_filterManager});
+                                  .dataManager = m_dataManager});
   }
 
   // Snapshot sibling-manager pointers for setter-based handoff to helpers.
@@ -98,7 +97,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionDisplay->setSelectionCoordinator(m_selectionCoordinator.get());
     m_selectionDisplay->setArrowKeyScrollHelper(m_arrowKeyScrollHelper.get());
     m_selectionDisplay->setInteractionState(state);
-    m_selectionDisplay->setArrowKeyViewUpdateTimer(m_arrowKeyViewUpdateTimer);
+    m_selectionDisplay->setArrowKeyViewUpdateTimer(&m_arrowKeyViewUpdateTimer);
     m_selectionDisplay->setEnsureWidgetCallback([this](int idx) { ensureWidgetForIndex(idx); });
     m_selectionDisplay->setItemPositionCallback([this](int idx) { return getItemPosition(idx); });
     m_selectionDisplay->setTotalItemsProvider([this] { return m_totalItems; });

@@ -10,6 +10,7 @@
 #include "dbeventscontroller.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "dialogcontroller.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idatabasemanager.h"
@@ -20,6 +21,7 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
+#include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
@@ -34,8 +36,9 @@ void MainWindow::setupInitialTimers() {
   // Defer initial horizontal centering until after the first show event so
   // the scroll area has accurate viewport metrics to center against.
   QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
-    if (getScrollManager()) {
-      getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex, m_collections);
+    if (m_appManager->getScrollManager()) {
+      m_appManager->getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex,
+                                                                  m_collections);
     }
   });
 
@@ -87,40 +90,48 @@ void MainWindow::setupInitialTimersEmptyCollections() {
       return;
     }
 
+    const QString trimmed = name.trimmed();
+    if (PathUtils::validateCollectionNameForSubstitution(trimmed).isError()) {
+      QMessageBox::warning(this, tr("Invalid Collection Name"),
+                           tr("Collection names cannot contain '/', '\\\\', or '..'. "
+                              "Please restart the application to try again."));
+      return;
+    }
+
     // Create the first collection with the given name
     CollectionConfig newCollection;
-    newCollection.name = name.trimmed();
+    newCollection.name = trimmed;
     newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
     newCollection.parentCollectionIndex = -1;
     newCollection.isSubcollection = false;
     m_collections.append(newCollection);
 
     // Save the new collection
-    if (getSettingsManager()) {
-      getSettingsManager()->saveCollections(m_collections);
+    if (m_appManager->getSettingsManager()) {
+      m_appManager->getSettingsManager()->saveCollections(m_collections);
     }
 
     // Rebuild hierarchy cache with the new collection
     rebuildHierarchyCache();
 
     // Now open settings dialog for the user to configure the collection
-    if (getSettingsManager()) {
+    if (m_appManager->getSettingsManager()) {
       currentCollectionIndex = 0;
       SettingsDialogContext context;
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &currentCollectionIndex;
-      context.detailsPaneManager = getDetailsPaneManager();
-      context.scrollManager = getScrollManager();
-      context.navigationManager = getNavigationManager();
-      context.databaseManager = getDatabaseManager();
-      context.createSettingsDialog = makeSettingsDialogFactory();
-      getSettingsManager()->openSettingsDialog(context);
+      context.detailsPaneManager = m_appManager->getDetailsPaneManager();
+      context.scrollManager = m_appManager->getScrollManager();
+      context.navigationManager = m_appManager->getNavigationManager();
+      context.databaseManager = m_appManager->getDatabaseManager();
+      context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+      m_appManager->getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {
         currentCollectionIndex = 0;
-        if (getNavigationManager()) {
-          getNavigationManager()->showCollectionItems(0);
+        if (m_appManager->getNavigationManager()) {
+          m_appManager->getNavigationManager()->showCollectionItems(0);
         }
       }
     }
@@ -136,11 +147,11 @@ void MainWindow::setupInitialTimersWithCollections() {
     // wins so a CLI override (--collection) or per-launch override still works.
     const QString startupName = m_generalSettings.startupCollection.trimmed();
     if (m_generalSettings.useHomeView && startupName.isEmpty()) {
-      if (getNavigationManager()) {
+      if (m_appManager->getNavigationManager()) {
         if (m_dbEventsController) {
           m_dbEventsController->setSuppressStartupScanOverlays(true);
         }
-        getNavigationManager()->loadRootView();
+        m_appManager->getNavigationManager()->loadRootView();
       }
       return;
     }
@@ -167,13 +178,13 @@ void MainWindow::setupInitialTimersWithCollections() {
       rootIndex = 0;
     }
     if (rootIndex >= 0) {
-      if (getNavigationManager()) {
+      if (m_appManager->getNavigationManager()) {
         // The initial fetchItemCount path may trigger a rescan; keep the UI
         // navigable by suppressing any blocking overlay for this startup scan.
         if (m_dbEventsController) {
           m_dbEventsController->setSuppressStartupScanOverlays(true);
         }
-        getNavigationManager()->showCollectionItems(rootIndex);
+        m_appManager->getNavigationManager()->showCollectionItems(rootIndex);
       }
     }
   });

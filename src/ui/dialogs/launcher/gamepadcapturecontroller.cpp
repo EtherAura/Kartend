@@ -13,11 +13,8 @@
 namespace {
 GamepadManager *resolveGamepadManager(QObject *parent) {
   auto *mainWindow = dynamic_cast<IMainWindow *>(parent);
-  if (!mainWindow || !mainWindow->getInteractionManager() ||
-      !mainWindow->getInteractionManager()->gamepadManager()) {
-    return nullptr;
-  }
-  return mainWindow->getInteractionManager()->gamepadManager();
+  auto *interaction = mainWindow ? mainWindow->interactionManager() : nullptr;
+  return interaction ? interaction->gamepadManager() : nullptr;
 }
 } // namespace
 

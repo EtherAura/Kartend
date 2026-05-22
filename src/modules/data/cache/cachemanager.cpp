@@ -89,7 +89,6 @@ CacheManager::~CacheManager() {
   }
   delete m_timerContext;
   m_timerContext = nullptr;
-  m_debouncedSaveTimer = nullptr;
 
   // Cooperative shutdown: cancel + bounded drain. The disk-I/O lambda
   // captured the cancellation token by shared_ptr value, so in-flight

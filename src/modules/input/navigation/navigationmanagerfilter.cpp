@@ -183,11 +183,11 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
   qCDebug(lcSearchDiag) << "safeReloadCollection requested idx=" << collectionIndex;
   qCWarning(lcScanFlow) << "safeReloadCollection requested idx=" << collectionIndex;
 
-  if (!m_safeReloadTimer) {
-    m_safeReloadTimer = new QTimer(this);
-    m_safeReloadTimer->setSingleShot(true);
+  if (!m_safeReloadTimerInited) {
+    m_safeReloadTimer.setSingleShot(true);
+    m_safeReloadTimerInited = true;
 
-    QObject::connect(m_safeReloadTimer, &QTimer::timeout, this, [this]() {
+    QObject::connect(&m_safeReloadTimer, &QTimer::timeout, this, [this]() {
       const int pendingIndex = m_pendingSafeReloadCollectionIndex;
       m_pendingSafeReloadCollectionIndex = -1;
 
@@ -270,7 +270,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
 
   m_pendingSafeReloadCollectionIndex = collectionIndex;
 
-  const bool alreadyScheduled = m_safeReloadTimer->isActive();
+  const bool alreadyScheduled = m_safeReloadTimer.isActive();
   if (!alreadyScheduled) {
     persistCurrentSelection();
     // We're about to rebuild the items view. Clear any stale selection-restore
@@ -298,5 +298,5 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
                         << m_pendingSafeReloadCollectionIndex;
 
   // Wait for cleanup to complete and coalesce repeated reload requests.
-  m_safeReloadTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);
+  m_safeReloadTimer.start(UIConstants::Timing::MEDIUM_DELAY_MS);
 }

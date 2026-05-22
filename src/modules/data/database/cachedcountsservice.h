@@ -6,10 +6,10 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 
 #include "collectionutils.h"
 
-class QTimer;
 class ISessionManager;
 
 /// Owns the debounced async cached-count update flow that lives between
@@ -56,7 +56,7 @@ private slots:
 
 private:
   ISessionManager *m_sessionManager;
-  QTimer *m_timer;
+  QTimer m_timer; // Kartend-a911.6: value member; lifetime tracks owner
   quint64 m_generation = 0;
   quint64 m_inFlightGeneration = 0;
   QList<CollectionConfig> m_pendingCollections;

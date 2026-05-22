@@ -54,10 +54,9 @@ void VideoThumbnailExtractor::ensureMediaPipeline() {
   connect(m_sink, &QVideoSink::videoFrameChanged, this,
           [this](const QVideoFrame &) { onVideoFrame(); });
 
-  m_timeoutTimer = new QTimer(this);
-  m_timeoutTimer->setSingleShot(true);
-  m_timeoutTimer->setInterval(m_timeoutMs);
-  connect(m_timeoutTimer, &QTimer::timeout, this, [this]() { finishCurrent({}); });
+  m_timeoutTimer.setSingleShot(true);
+  m_timeoutTimer.setInterval(m_timeoutMs);
+  connect(&m_timeoutTimer, &QTimer::timeout, this, [this]() { finishCurrent({}); });
 }
 
 void VideoThumbnailExtractor::setExtractionTimeoutMs(int ms) {
@@ -66,9 +65,7 @@ void VideoThumbnailExtractor::setExtractionTimeoutMs(int ms) {
   // m_timeoutMs at construction time, so deferred extractors pick up the
   // value automatically. Update an existing timer in-place so a user nudging
   // the spinbox sees the change on the next request.
-  if (m_timeoutTimer) {
-    m_timeoutTimer->setInterval(m_timeoutMs);
-  }
+  m_timeoutTimer.setInterval(m_timeoutMs);
 }
 
 VideoThumbnailExtractor::~VideoThumbnailExtractor() {
@@ -126,7 +123,7 @@ void VideoThumbnailExtractor::processNext() {
 
   m_player->stop();
   m_player->setSource(QUrl::fromLocalFile(m_currentPath));
-  m_timeoutTimer->start();
+  m_timeoutTimer.start();
 }
 
 void VideoThumbnailExtractor::onMediaStatusChanged(int status) {
@@ -174,7 +171,7 @@ void VideoThumbnailExtractor::finishCurrent(const QPixmap &pixmap) {
   if (m_currentPath.isEmpty()) {
     return;
   }
-  m_timeoutTimer->stop();
+  m_timeoutTimer.stop();
   m_player->stop();
   m_player->setSource(QUrl());
 

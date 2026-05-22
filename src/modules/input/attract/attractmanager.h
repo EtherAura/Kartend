@@ -116,11 +116,14 @@ private:
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 
-  // Timers (owned via Qt parent)
-  QTimer *m_idleTimer = nullptr;
-  QTimer *m_scrollTimer = nullptr;
-  QTimer *m_bouncePauseTimer = nullptr;
-  QTimer *m_advanceSelectionTimer = nullptr;
+  // Timers — value members (Kartend-a911.5). Lifetime tracks the owner;
+  // no QObject parent set, which is fine because nothing relies on
+  // findChild<QTimer*>() to discover them and AttractManager is never
+  // moved across threads.
+  QTimer m_idleTimer;
+  QTimer m_scrollTimer;
+  QTimer m_bouncePauseTimer;
+  QTimer m_advanceSelectionTimer;
 
   // State
   bool m_attractActive = false;

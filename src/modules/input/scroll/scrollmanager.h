@@ -205,6 +205,12 @@ public:
   void primeLayoutFor(const CollectionConfig &config) override;
   void setInitialScrollIndex(int index) override;
 
+  /// Kartend-yeik: expose the FilterManager owned by m_dataSource so the
+  /// ApplicationContext seed (initializeAppContext) and sibling scroll-side
+  /// helpers like CoverFlowController can read filter state through ctx
+  /// instead of holding their own setup-struct pointer.
+  [[nodiscard]] FilterManager *filterManager() const { return m_filterManager; }
+
 signals:
   void subcollectionEntered(int subcollectionIndex);
   void virtualFolderEntered(const QString &folderPath);
@@ -348,8 +354,8 @@ private:
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;
-  QTimer *m_scrollTimer = nullptr; // Throttle timer (not debounce)
-  QTimer *m_arrowKeyViewUpdateTimer = nullptr;
+  QTimer m_scrollTimer; // Throttle timer (Kartend-a911.5: value member)
+  QTimer m_arrowKeyViewUpdateTimer;
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;

@@ -25,6 +25,14 @@ set(INTEGRATION_TEST_SOURCES
   test_detailspane_coverflow.cpp
   test_settingsdialog_changes.cpp
   test_scrollmanager.cpp
+  test_selectionoverlaymanager.cpp
+  test_virtualcontainermanager.cpp
+  test_filtermanager.cpp
+  test_searchmanager.cpp
+  test_selectiondisplaymanager.cpp
+  test_detailspanemanager.cpp
+  test_attractmanager.cpp
+  test_detailpagemanager.cpp
 )
 
 set(INTEGRATION_TEST_HEADERS
@@ -38,6 +46,14 @@ set(INTEGRATION_TEST_HEADERS
   test_detailspane_coverflow.h
   test_settingsdialog_changes.h
   test_scrollmanager.h
+  test_selectionoverlaymanager.h
+  test_virtualcontainermanager.h
+  test_filtermanager.h
+  test_searchmanager.h
+  test_selectiondisplaymanager.h
+  test_detailspanemanager.h
+  test_attractmanager.h
+  test_detailpagemanager.h
   mocks/mockdatabasemanager.h
   mocks/mockedmainwindowfixture.h
   mocks/mocksettingsmanager.h

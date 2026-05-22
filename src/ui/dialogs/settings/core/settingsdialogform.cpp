@@ -393,7 +393,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 
 ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
-  if ((mainWindow) && (mainWindow->getSettingsManager())) {
+  if (mainWindow && mainWindow->settingsManager()) {
     GeneralSettings &mwSettings = mainWindow->generalSettings();
     // Splash / GeneralSettings fields owned by their respective panels —
     // already in m_generalSettings; mirror the whole struct's relevant
@@ -528,14 +528,14 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
         m_generalSettings.toolbarHideSubcollectionsButtonText;
     mwSettings.toolbarTitleFilterText = m_generalSettings.toolbarTitleFilterText;
 
-    auto saveResult = mainWindow->getSettingsManager()->saveGeneralSettings(mwSettings);
+    auto saveResult = mainWindow->settingsManager()->saveGeneralSettings(mwSettings);
     m_generalSettings = mwSettings;
 
     // Apply showTitleInPlaceholder to ItemWidget + repaint visible widgets,
     // since this used to be a live-apply side-effect and the panel pattern
     // makes the field deferred-save.
     ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
-    if (auto *scrollManager = mainWindow->getScrollManager()) {
+    if (auto *scrollManager = mainWindow->scrollManager()) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
       for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
         if (auto *widget = it.value()) {
@@ -547,7 +547,7 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     // Push the new attract-mode tunables (idle timeout, scroll speed, advance-
     // selection toggle/interval) into AttractManager so a runtime change applies
     // without restarting attract mode.
-    if (auto *interaction = mainWindow->getInteractionManager()) {
+    if (auto *interaction = mainWindow->interactionManager()) {
       if (auto *attract = interaction->attractManager()) {
         attract->reloadSettings();
       }
@@ -562,7 +562,7 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     mainWindow->applyToolbarCustomization();
 
     // Refresh all visible widgets to apply text appearance changes immediately
-    ScrollManager *scrollManager = mainWindow->getScrollManager();
+    ScrollManager *scrollManager = mainWindow->scrollManager();
     if (scrollManager) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
       for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {

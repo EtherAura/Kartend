@@ -18,9 +18,11 @@
 // the user's choice; KartManager itself never knows the dialog type. The
 // one-way progress dialog uses the kartProgress* signal family for the
 // same reason (see the header).
+#include "applicationcontext.h"
 #include "isettingsmanager.h"
 #include "kartreader.h"
 #include "kartwriter.h"
+#include "pathutils.h"
 
 namespace kart {
 
@@ -128,6 +130,21 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   if (cfg.name.isEmpty()) {
     cfg.name = result.manifest.name;
   }
+  // Reject manifests whose collection name would inject a traversal segment
+  // into '%collection%' substitution at launch time. The launch-side check
+  // in LaunchManager::buildLaunchCommand catches this too, but failing here
+  // surfaces the error with the import flow instead of silently importing a
+  // collection whose first launch always fails.
+  auto nameValidation = PathUtils::validateCollectionNameForSubstitution(cfg.name);
+  if (nameValidation.isError()) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           "Kart manifest carries an unsafe collection name",
+                                           "KartManager::finalizeImport")
+        .withDetails(QString("Collection '%1' contains '/', '\\', or '..' — "
+                             "those would inject a path traversal into the "
+                             "launcher arguments at launch time.")
+                         .arg(cfg.name));
+  }
   cfg.mediaDirectory = QDir(result.destDir).filePath("media");
   cfg.artworkDirectory = QDir(result.destDir).filePath("artwork");
   cfg.videoDirectory = QDir(result.destDir).filePath("video");
@@ -154,7 +171,8 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   }
 
   if (registerCollection) {
-    if (!m_setup.settingsManager || !m_setup.getCollections) {
+    ISettingsManager *settings = m_setup.ctx ? m_setup.ctx->settingsManager() : nullptr;
+    if (!settings || !m_setup.getCollections) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
                                              "KartManager not wired to settings/collections list",
                                              "KartManager::finalizeImport");
@@ -178,7 +196,7 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
     }
     cfg.name = uniqueName;
     collections->append(cfg);
-    m_setup.settingsManager->saveCollections(*collections);
+    settings->saveCollections(*collections);
   }
 
   const QString collectionUuid =

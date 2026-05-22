@@ -43,8 +43,21 @@ public:
   [[nodiscard]] bool hasArtworkFor(ItemWidget *widget) const;
   [[nodiscard]] QString pathFor(ItemWidget *widget) const;
 
+  /// Append @p info to the pending queue. Kartend-b8qe.3 added backpressure:
+  /// coalesces with any existing entry for the same (widget, artworkPath)
+  /// pair to dedupe rapid-scroll re-queueing, and evicts the oldest entry
+  /// (FIFO) once the queue would exceed kMaxPending — caps growth during
+  /// long rapid scrolls past 5000+ items.
   void enqueuePending(const ArtworkInfo &info);
   [[nodiscard]] bool isPendingFor(ItemWidget *widget, const QString &path) const;
+  [[nodiscard]] int pendingCount() const;
+
+  /// Kartend-b8qe.3: upper bound on m_pending after coalesce/append. Chosen
+  /// generously to cover an oversized viewport plus its prefetch window
+  /// without false-positively dropping a load the user actually needs.
+  /// FIFO-evicted on overflow inside enqueuePending — oldest entries are
+  /// most likely already off-screen during a long scroll.
+  static constexpr int kMaxPending = 300;
 
   /// Snapshot the pending queue and clear it atomically — caller may then
   /// partition / process / write back. setPending() restores whatever

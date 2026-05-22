@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#include "applicationmanager.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
 #include "isettingsmanager.h"
@@ -99,8 +100,8 @@ void MainWindow::setupPreviewVolumeSlider() {
     }
     m_generalSettings.previewVideoVolume = value;
     VideoPreviewWidget::setGlobalVolume(value);
-    if (getSettingsManager()) {
-      getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    if (m_appManager->getSettingsManager()) {
+      m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
     }
   });
 }
@@ -119,21 +120,21 @@ void MainWindow::applyTextZoom(int percent) {
   }
   TextZoom::setPercent(clamped);
   m_generalSettings.uiTextZoomPercent = clamped;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
+  if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }
   // Re-push the global font with the new multiplier baked in.
   applyGlobalUiFont(m_generalSettings);
   // Re-run sidebar appearance so its font baselines pick up the new zoom.
-  if (getDetailsPaneManager()) {
-    getDetailsPaneManager()->applySidebarStateForCollection(currentCollectionIndex);
+  if (m_appManager->getDetailsPaneManager()) {
+    m_appManager->getDetailsPaneManager()->applySidebarStateForCollection(currentCollectionIndex);
   }
   // Tear down + rebuild the virtual scroll content so item widgets are
   // re-instantiated with the new scaled fontSize. Coverflow uses the same
   // scroll module entry point, so this covers grid, list, and 3D modes.
-  if (getScrollManager()) {
-    getScrollManager()->preCalculateLayout();
-    getScrollManager()->forceVirtualViewUpdate();
+  if (m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->preCalculateLayout();
+    m_appManager->getScrollManager()->forceVirtualViewUpdate();
   }
 }
 

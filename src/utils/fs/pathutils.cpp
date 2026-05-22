@@ -137,6 +137,30 @@ Result<void> validatePathSecurity(const QString &path) {
   return Result<void>::success();
 }
 
+Result<void> validateCollectionNameForSubstitution(const QString &collectionName) {
+  if (collectionName.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Collection name is empty",
+                               "PathUtils::validateCollectionNameForSubstitution");
+  }
+  if (collectionName.contains('/') || collectionName.contains('\\')) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Collection name contains path separators",
+                               "PathUtils::validateCollectionNameForSubstitution")
+        .withDetails(QString("Collection '%1'").arg(collectionName));
+  }
+  // Reject `..` as a whole-segment value to prevent path-traversal injection
+  // through `%collection%` substitution. We split on the only separators we
+  // accept above (none), so a literal `..` anywhere in the name is the only
+  // way it could become a traversal segment after substitution.
+  if (collectionName == QStringLiteral("..") || collectionName == QStringLiteral(".")) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Collection name resolves to a relative path segment",
+                               "PathUtils::validateCollectionNameForSubstitution")
+        .withDetails(QString("Collection '%1'").arg(collectionName));
+  }
+  return Result<void>::success();
+}
+
 Result<QString> expandAndValidateCliPath(const QString &raw, const QString &optionName) {
   const QString expanded = expandPathWithoutExistenceCheck(raw);
   if (expanded.isEmpty()) {

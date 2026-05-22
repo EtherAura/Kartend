@@ -10,6 +10,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPixmap>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QTimer>
@@ -104,7 +105,7 @@ private:
   // Debounced save timer plumbing (keeps frequent cache changes from causing
   // repeated PNG encodes and metadata writes during active scrolling).
   QObject *m_timerContext = nullptr;
-  QTimer *m_debouncedSaveTimer = nullptr;
+  QPointer<QTimer> m_debouncedSaveTimer;
   // Kartend-gro2: coalesce cross-thread timer-start posts so a flood of
   // scheduleSaveToDisk() calls during initial cache fill produces at most one
   // outstanding QueuedConnection invokeMethod task.

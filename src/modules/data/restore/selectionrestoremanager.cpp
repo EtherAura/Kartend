@@ -3,7 +3,9 @@
 
 #include <memory>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QLineEdit>
+#include <QThread>
 #include <QTimer>
 
 #include "applicationcontext.h"
@@ -64,6 +66,10 @@ auto SelectionRestoreCoordinator::shouldRestoreSelection() const -> bool {
 }
 
 auto SelectionRestoreCoordinator::getSelectionRestoreIndex(int collectionIndex) const -> int {
+  Q_ASSERT_X(QCoreApplication::instance() == nullptr ||
+                 QThread::currentThread() == QCoreApplication::instance()->thread(),
+             "SelectionRestoreCoordinator::getSelectionRestoreIndex",
+             "SelectionRestoreCoordinator is main-thread-only");
   if (!scrollMgr() || !m_collections) {
     return -1;
   }

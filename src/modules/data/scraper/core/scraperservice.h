@@ -6,6 +6,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -327,7 +328,7 @@ private:
   // Debounced persistence. m_persistTimer is single-shot; each
   // schedulePersist() (re)starts the timer and sets m_persistDirty.
   // Timeout calls flushPendingPersist() which does the real write.
-  QTimer *m_persistTimer = nullptr;
+  QPointer<QTimer> m_persistTimer;
   bool m_persistDirty = false;
 
   // Multi-instance guard. Held for the lifetime of an active run so a

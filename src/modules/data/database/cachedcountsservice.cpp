@@ -8,17 +8,17 @@
 
 CachedCountsService::CachedCountsService(ISessionManager *sessionManager, int debounceMs,
                                          QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager), m_timer(new QTimer(this)) {
-  m_timer->setSingleShot(true);
-  m_timer->setInterval(debounceMs);
-  connect(m_timer, &QTimer::timeout, this, &CachedCountsService::onTimerFired);
+    : QObject(parent), m_sessionManager(sessionManager) {
+  m_timer.setSingleShot(true);
+  m_timer.setInterval(debounceMs);
+  connect(&m_timer, &QTimer::timeout, this, &CachedCountsService::onTimerFired);
 }
 
 void CachedCountsService::requestUpdate(const QList<CollectionConfig> &allCollections,
                                         const QStringList &uuids) {
   m_pendingCollections = allCollections;
   m_pendingUuids = uuids;
-  m_timer->start();
+  m_timer.start();
 }
 
 void CachedCountsService::onTimerFired() {

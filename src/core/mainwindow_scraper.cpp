@@ -11,6 +11,7 @@
 // because MarqueeController is owned by MainWindow and these are the only
 // other entry points in this file's surface area.
 
+#include "applicationmanager.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "scrapercontroller.h"

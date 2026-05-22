@@ -8,6 +8,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
@@ -85,6 +86,10 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails(uniqueDir);
   }
 
+  // Atomic-on-failure: every error path below leaves the extraction dir clean.
+  // Dismissed on the successful return so the cache directory persists.
+  auto cleanupTargetDir = qScopeGuard([&uniqueDir]() { QDir(uniqueDir).removeRecursively(); });
+
   // Use system tools to extract (7z is most universal)
   QStringList extractors = {"7z", "unzip", "bsdtar"};
   QString extractor;
@@ -140,6 +145,7 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails(QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
   }
 
+  cleanupTargetDir.dismiss();
   qCDebug(lcLaunchManager) << "Extracted target file:" << targetFile;
   return targetFile;
 }

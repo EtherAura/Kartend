@@ -69,6 +69,10 @@ and want to dig into a feature, the index below is grouped by purpose.
 
 ### Reference
 
+- **[Scraper Credentials & Keychain](Keychain.md)** — how Kartend stores
+  scraper passwords/API keys in the OS keychain, what the `@keychain`
+  sentinel in `settings.ini` means, how to install the dependency on each
+  platform, plaintext fallback
 - **[Settings Dialog](Settings-Dialog.md)** — anatomy of the dialog,
   scope selector, apply-to-selected, propagation rules, every tab
 - **[Toolbar & Menus](Toolbar-and-Menus.md)** — items-page toolbar,

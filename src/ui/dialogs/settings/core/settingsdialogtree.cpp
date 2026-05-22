@@ -20,6 +20,7 @@
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "isettingsmanager.h"
+#include "pathutils.h"
 #include "settingsdialog.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
@@ -515,6 +516,14 @@ void SettingsDialog::duplicateCollection() {
   const QString name = nameEdit->text().trimmed();
   if (name.isEmpty()) {
     QMessageBox::warning(this, tr("Duplicate Collection"), tr("Collection name cannot be empty."));
+    return;
+  }
+  auto nameValidation = PathUtils::validateCollectionNameForSubstitution(name);
+  if (nameValidation.isError()) {
+    QMessageBox::warning(
+        this, tr("Invalid Collection Name"),
+        tr("Collection names cannot contain '/', '\\\\', or '..' — those would inject a "
+           "traversal segment into the launcher path when '%%collection%%' is substituted."));
     return;
   }
   for (const auto &existing : collections) {

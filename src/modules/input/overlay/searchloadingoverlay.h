@@ -5,8 +5,8 @@
 #include <QObject>
 #include <QPointer>
 #include <QPropertyAnimation>
+#include <QTimer>
 #include <QWidget>
-class QTimer;
 class OverlayZOrderRegistry;
 
 /**
@@ -56,7 +56,7 @@ private:
   QPointer<QLabel> m_label;
   QPointer<QPropertyAnimation> m_fadeAnimation;
   QPointer<QPropertyAnimation> m_pulseAnimation;
-  QTimer *m_pulseTimer = nullptr;
+  QTimer m_pulseTimer; // Kartend-a911.5: value member; lifetime tracks owner
   bool m_pulseDimming = true;
   OverlayZOrderRegistry *m_layerManager = nullptr;
 };

@@ -161,14 +161,16 @@ private:
   bool m_wheelScrolling = false;
 
   // Click hold timer (initiates hold scrolling after delay)
-  QTimer *m_clickHoldTimer = nullptr;
+  QTimer m_clickHoldTimer; // Kartend-a911.5: value member
+  bool m_clickHoldTimerInited = false;
   QPoint m_clickHoldPos;
   int m_clickHoldSelectedIndex = -1;
   int m_clickHoldGridWidth = 0;
   int m_clickHoldTotalItems = 0;
 
   // Hold scrolling state
-  QTimer *m_mouseHoldTimer = nullptr;
+  QTimer m_mouseHoldTimer; // Kartend-a911.5: value member
+  bool m_mouseHoldTimerInited = false;
   bool m_mouseHoldScrolling = false;
   int m_mouseHoldDirection = 0;
   bool m_mouseHoldHorizontal = false;

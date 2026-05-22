@@ -1,3 +1,4 @@
+#include "applicationmanager.h"
 #include "test_applysettingsdialog.h"
 
 #include "applysettingsdialog.h"

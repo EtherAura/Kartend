@@ -28,7 +28,9 @@ struct CoverFlowControllerSetup {
   const CollectionContext *context = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
   ScrollDataStore *dataManager = nullptr;
-  FilterManager *filterManager = nullptr;
+  // Kartend-yeik: removed FilterManager *filterManager; CoverFlowController
+  // now reads filter state via m_ctx->filterManager(), which the
+  // initializeAppContext seed populates from ScrollManager.
 };
 
 /**
@@ -91,6 +93,10 @@ private:
   void resolveAndPushVideo(int visualIndex);
   void resolveAndPushGallery(int visualIndex);
 
+  /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old
+  /// m_filterManager pointer-as-setup-struct-field pattern.
+  [[nodiscard]] FilterManager *filterMgr() const;
+
   // Borrowed dependencies — never owned, never deleted through these.
   const ApplicationContext *m_ctx = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
@@ -98,7 +104,6 @@ private:
   const CollectionContext *m_context = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
   ScrollDataStore *m_dataManager = nullptr;
-  FilterManager *m_filterManager = nullptr;
 
   // The carousel widget is parented to the items-page content widget, not to
   // this controller — Qt owns its lifetime. Raw pointer, never deleted here.

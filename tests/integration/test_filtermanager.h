@@ -1,0 +1,30 @@
+/**
+ * @file test_filtermanager.h
+ * @brief Integration tests for FilterManager's public filter surface.
+ *
+ * Construction-only and source-data-only paths can be tested without a
+ * full MainWindowFixture because FilterManager exposes setSourceData /
+ * setCollections / setHierarchyCache as a self-contained DI seam. These
+ * tests exercise the apply / clear / index-mapping API in that mode.
+ */
+
+#ifndef KARTEND_TESTS_TEST_FILTERMANAGER_H
+#define KARTEND_TESTS_TEST_FILTERMANAGER_H
+
+#include <QObject>
+
+class TestFilterManager : public QObject {
+  Q_OBJECT
+
+private slots:
+  void testInitialStateIsUnfiltered();
+  void testSetSourceDataLeavesUnfilteredCountInvariant();
+  void testApplyEmptyFilterIsNoOp();
+  void testApplyCaseInsensitiveSubstringFilter();
+  void testApplyFilterEmitsFilterChanged();
+  void testClearFilterRestoresUnfilteredView();
+  void testGetActualIndexBoundsCheck();
+  void testHideMissingArtworkFlagToggles();
+};
+
+#endif // KARTEND_TESTS_TEST_FILTERMANAGER_H

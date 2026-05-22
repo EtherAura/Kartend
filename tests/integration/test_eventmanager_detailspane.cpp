@@ -1,3 +1,4 @@
+#include "applicationmanager.h"
 #include "test_eventmanager_detailspane.h"
 
 #include "detailspanemanager.h"
@@ -13,7 +14,7 @@ void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
   QVERIFY(win);
-  InteractionManager *im = win->getInteractionManager();
+  InteractionManager *im = win->interactionManager();
   QVERIFY(im);
   EventManager *em = im->eventManager();
   QVERIFY2(em, "InteractionManager must own a constructed EventManager after MainWindow setup");
@@ -22,7 +23,7 @@ void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
 void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_flipsVisibilityAndEmits() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  DetailsPaneManager *mgr = win->getDetailsPaneManager();
+  DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
 
   const bool initial = mgr->isSidebarVisible();
@@ -39,7 +40,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_flipsVisibili
 void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_doubleToggleRestoresInitialState() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  DetailsPaneManager *mgr = win->getDetailsPaneManager();
+  DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
 
   const bool initial = mgr->isSidebarVisible();
@@ -51,7 +52,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_doubleToggleR
 void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_overridesVisibilityWhileSet() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  DetailsPaneManager *mgr = win->getDetailsPaneManager();
+  DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
 
   // Force the persisted state to "visible" so the override has something to
@@ -86,7 +87,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_overridesV
 void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_redundantSetIsNoOp() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  DetailsPaneManager *mgr = win->getDetailsPaneManager();
+  DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
 
   // First call sets the override (and emits); second identical call must be
@@ -102,7 +103,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_redundantS
 void TestEventManagerDetailsPane::detailsPaneManager_toggleClearsExternallyHidden() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
-  DetailsPaneManager *mgr = win->getDetailsPaneManager();
+  DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
 
   // Establish externally-hidden state then deliberately toggle. Per

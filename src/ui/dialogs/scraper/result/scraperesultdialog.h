@@ -9,6 +9,7 @@
 #include <QList>
 #include <QSet>
 #include <QString>
+#include <QTimer>
 
 #include "batchscraperunner.h"
 #include "collectionutils.h"
@@ -363,7 +364,8 @@ private:
   /// snaps back to cursor 0. Cells without entries are in the
   /// advancing phase.
   QHash<class QLineEdit *, int> m_marqueePauseTicks;
-  class QTimer *m_marqueeTimer = nullptr;
+  QTimer m_marqueeTimer; // Kartend-a911.6: value member
+  bool m_marqueeTimerInited = false;
 
   /// Provider-supplied health/load message surfaced before Apply.
   /// Populated from MetadataLookupProvider::fetchHealthStatus on
@@ -455,7 +457,8 @@ private:
   /// fresh between item-event signals (a slow download can leave the
   /// label stale otherwise). Started when the service goes active,
   /// stopped on scrapeFinished.
-  class QTimer *m_liveTickTimer = nullptr;
+  QTimer m_liveTickTimer; // Kartend-a911.6: value member
+  bool m_liveTickTimerInited = false;
   int m_unifiedItemsCompletedAcross = 0;
   int m_unifiedScrapedTotal = 0;
   int m_unifiedSkippedTotal = 0;

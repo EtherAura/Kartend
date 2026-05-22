@@ -5,6 +5,7 @@
 #include <QList>
 #include <QString>
 
+class ApplicationManager;
 class ISettingsManager;
 class InteractionManager;
 class ScrollManager;
@@ -52,14 +53,25 @@ public:
   [[nodiscard]] virtual GeneralSettings &generalSettings() = 0;
   [[nodiscard]] virtual const GeneralSettings &generalSettings() const = 0;
 
-  /// Sibling manager accessors the ui-layer settings dialogs reach for to
-  /// persist edits, push live-apply side effects, and capture gamepad
-  /// bindings. Promoted to the interface to break the ui->core mainwindow.h
-  /// include cycle — concrete return types are forward-declared above, so
-  /// callers bring their own concrete header when they actually deref.
-  [[nodiscard]] virtual ISettingsManager *getSettingsManager() const = 0;
-  [[nodiscard]] virtual InteractionManager *getInteractionManager() const = 0;
-  [[nodiscard]] virtual ScrollManager *getScrollManager() const = 0;
+  /// New-style routing point. Callers reach sibling managers by going through
+  /// the ApplicationManager (e.g. mainWindow->applicationManager()->getXxx()).
+  /// Forward-declared so this header stays lean; .cpp callers include the
+  /// ApplicationManager header where needed.
+  [[nodiscard]] virtual ApplicationManager *applicationManager() const = 0;
+
+  /// Sibling manager accessors used by ui-layer settings dialogs to persist
+  /// edits, push live-apply side effects, and capture gamepad bindings.
+  /// Promoted to the interface to break the ui->core mainwindow.h include
+  /// cycle — concrete return types are forward-declared above, so callers
+  /// bring their own concrete header when they actually deref.
+  ///
+  /// Kartend-5wuk.1: renamed from getXxxManager() so a grep for
+  /// 'mainWindow->get.*Manager' catches only legacy per-manager call sites
+  /// inside src/core/mainwindow*.cpp (which the audit exempts). External
+  /// callers route through these without dragging in applicationmanager.h.
+  [[nodiscard]] virtual ISettingsManager *settingsManager() const = 0;
+  [[nodiscard]] virtual InteractionManager *interactionManager() const = 0;
+  [[nodiscard]] virtual ScrollManager *scrollManager() const = 0;
 
   /// Apply this window's current GeneralSettings to the global QApplication
   /// font. Thin instance shim over MainWindow's static applyGlobalUiFont so

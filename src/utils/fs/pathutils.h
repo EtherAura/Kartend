@@ -36,6 +36,16 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 /// Returns success if path is safe, or an error context describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
+/// Validates a collection name before it is substituted into a launcher
+/// template via `%collection%`. Rejects names that could inject path
+/// traversal once substituted — i.e. names containing `/`, `\`, or any
+/// segment equal to `..`. Empty names are rejected too. This is the
+/// defence-in-depth check at the launch-command seam; definition-time
+/// validation in the settings dialog and kart importer is tracked
+/// separately.
+[[nodiscard]] ErrorUtils::Result<void>
+validateCollectionNameForSubstitution(const QString &collectionName);
+
 /// CLI-seam path sanitizer: expands ~/%collection% (without requiring the
 /// result to exist) then runs validatePathSecurity. Used by both
 /// CliArgs::parseStartupArguments (unit-testable parse() path) and

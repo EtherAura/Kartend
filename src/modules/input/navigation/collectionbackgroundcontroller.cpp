@@ -301,13 +301,13 @@ void CollectionBackgroundController::onItemsScrolled() {
     return;
   }
 
-  if (!m_parallaxThrottle) {
-    m_parallaxThrottle = new QTimer(this);
-    m_parallaxThrottle->setSingleShot(true);
-    connect(m_parallaxThrottle, &QTimer::timeout, this,
+  if (!m_parallaxThrottleInited) {
+    m_parallaxThrottle.setSingleShot(true);
+    connect(&m_parallaxThrottle, &QTimer::timeout, this,
             &CollectionBackgroundController::applyParallaxOffset);
+    m_parallaxThrottleInited = true;
   }
-  if (m_parallaxThrottle->isActive()) {
+  if (m_parallaxThrottle.isActive()) {
     // An update is already queued; the timeout will pick up the latest
     // scroll value when it fires.
     return;
@@ -315,7 +315,7 @@ void CollectionBackgroundController::onItemsScrolled() {
   applyParallaxOffset();
   // ~60Hz throttle. Higher cadence wastes QSS rebuilds; lower starts to
   // feel laggy on fast scrolls.
-  m_parallaxThrottle->start(16);
+  m_parallaxThrottle.start(16);
 }
 
 void CollectionBackgroundController::applyParallaxOffset() {

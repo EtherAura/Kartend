@@ -1,3 +1,4 @@
+#include "applicationmanager.h"
 #include "test_detailspane_coverflow.h"
 
 #include "coverflowwidget.h"

@@ -1,0 +1,150 @@
+name: Nightly TSan
+
+# Runs the ThreadSanitizer build + full ctest suite once per day on main, in
+# addition to the per-PR TSan job in build.yml. Catches data races that only
+# manifest under sustained or cold-cache timing — the per-PR run uses cached
+# ccache state and runs the same tests, so a race triggered only by a fresh
+# environment (or by tests interacting across many runs) may slip past it.
+#
+# A failure here opens a GitHub Issue tagged `tsan-nightly` so it stays
+# visible even when nobody is watching the Actions tab.
+
+on:
+  schedule:
+    # 03:17 UTC daily. Avoids the on-the-hour congestion windows that crowd
+    # GitHub-hosted runner queues.
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly-tsan
+  cancel-in-progress: false
+
+jobs:
+  thread-sanitizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-deps
+        with:
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+
+      - name: Start dummy pulseaudio
+        # Same null-sink trick as build.yml's thread-sanitizer job — Qt 6.4
+        # PulseAudio backend SIGILLs in release when pa_context_connect fails
+        # on bare runners with no audio device.
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          if command -v pactl >/dev/null 2>&1; then
+            pactl info || echo "::warning::pactl info failed; pulse daemon likely not running"
+          fi
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+
+      - name: Cache ccache
+        # Restore-keys deliberately includes the per-PR tsan key so the cold
+        # cache scenario isn't entirely cold — we still benefit from
+        # incremental compile of unchanged TUs. The cron-suffixed primary key
+        # is unique per nightly run so concurrent invocations don't collide.
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-tsan-nightly-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-tsan-nightly-
+            ${{ runner.os }}-ccache-tsan-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
+
+      - name: Configure CMake (Debug + TSan)
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          mkdir -p build/TSan
+          cd build/TSan
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_ENABLE_TSAN=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/TSan
+          cmake --build . --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Run Tests (TSan)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
+        run: |
+          cd build/TSan
+          ctest --output-on-failure
+
+      - name: Upload test logs on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-tsan-logs-${{ github.run_id }}
+          path: |
+            build/TSan/Testing/Temporary/LastTest.log
+            build/TSan/Testing/Temporary/LastTestsFailed.log
+          retention-days: 30
+
+      - name: File or update tracking issue on failure
+        # On failure, file/update a single rolling 'Nightly TSan failing'
+        # issue. Subsequent failures append a comment with the failing run
+        # URL so the issue collects history without flooding the tracker.
+        if: ${{ failure() && github.event_name == 'schedule' }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = 'Nightly TSan failing';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `Nightly TSan job failed.\n\nRun: ${runUrl}\nSHA: ${context.sha}`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'tsan-nightly',
+              per_page: 100,
+            });
+            const existing = issues.find(i => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: `${body}\n\nThis issue tracks recurring nightly TSan failures. It will receive a comment for each subsequent failed run; close it once the underlying race is fixed.`,
+                labels: ['tsan-nightly'],
+              });
+            }

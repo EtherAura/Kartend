@@ -6,6 +6,9 @@
 #include <QHash>
 #include <QObject>
 
+class ApplicationManager;
+class INavigationManager;
+class ISettingsManager;
 class MainWindow;
 class QAction;
 class QLineEdit;
@@ -87,6 +90,14 @@ public:
   [[nodiscard]] QAction *searchModeAction() const { return m_searchModeAction; }
 
 private:
+  // Cached helpers: avoid re-chaining mainWindow→applicationManager→XxxManager
+  // on every menu rebuild and click. Populated lazily through
+  // applicationManager() / settingsMgr() / navMgr() since at initialize() time
+  // the ApplicationManager may not have wired its child managers yet.
+  [[nodiscard]] ApplicationManager *applicationManager() const;
+  [[nodiscard]] ISettingsManager *settingsMgr() const;
+  [[nodiscard]] INavigationManager *navMgr() const;
+
   MainWindow *m_mainWindow = nullptr;
   QToolButton *m_viewModeButton = nullptr;
   QToolButton *m_filterButton = nullptr;

@@ -64,7 +64,14 @@ void CoverFlowController::setupReferences(const CoverFlowControllerSetup &setup)
   m_context = setup.context;
   m_collections = setup.collections;
   m_dataManager = setup.dataManager;
-  m_filterManager = setup.filterManager;
+}
+
+// Kartend-yeik: route FilterManager reads through ctx instead of holding a
+// cached setup-struct pointer. ctx is seeded once in initializeAppContext;
+// every accessor below is null-safe so the controller still no-ops cleanly
+// when the filter isn't wired (headless smoke tests, early shutdown).
+FilterManager *CoverFlowController::filterMgr() const {
+  return m_ctx ? m_ctx->filterManager() : nullptr;
 }
 
 bool CoverFlowController::isActive() const {
@@ -290,8 +297,8 @@ void CoverFlowController::resolveAndPushVideo(int visualIndex) {
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   // Only media items have preview videos — subcollection / virtual-folder
   // cards never carry one.
-  const bool filtered = m_filterManager && m_filterManager->isFiltered();
-  const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
+  const bool filtered = filterMgr() && filterMgr()->isFiltered();
+  const int actualIndex = filtered ? filterMgr()->getActualIndex(visualIndex) : visualIndex;
   if (actualIndex < 0 || !m_dataManager->isMediaIndex(actualIndex)) {
     m_widget->setVideoPathForIndex(visualIndex, QString());
     return;
@@ -335,8 +342,8 @@ void CoverFlowController::resolveAndPushGallery(int visualIndex) {
     return;
   }
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
-  const bool filtered = m_filterManager && m_filterManager->isFiltered();
-  const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
+  const bool filtered = filterMgr() && filterMgr()->isFiltered();
+  const int actualIndex = filtered ? filterMgr()->getActualIndex(visualIndex) : visualIndex;
   // Subcollection / virtual-folder cards have no per-item artwork variants
   // — clear the gallery so the toolbar disappears for those entries.
   if (actualIndex < 0 || !m_dataManager->isMediaIndex(actualIndex)) {
@@ -458,13 +465,13 @@ void CoverFlowController::rebuildCards() {
   // selection-side code addresses items by *filtered* index, so the
   // carousel must mirror that ordering — otherwise card[N] and selection N
   // refer to different items and most of the carousel is unreachable.
-  const bool filtered = m_filterManager && m_filterManager->isFiltered();
-  const int total = filtered ? m_filterManager->filteredCount() : m_dataManager->totalItemCount();
+  const bool filtered = filterMgr() && filterMgr()->isFiltered();
+  const int total = filtered ? filterMgr()->filteredCount() : m_dataManager->totalItemCount();
   QList<CoverFlowCardData> cards;
   cards.reserve(total);
 
   for (int visualIndex = 0; visualIndex < total; ++visualIndex) {
-    const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
+    const int actualIndex = filtered ? filterMgr()->getActualIndex(visualIndex) : visualIndex;
     CoverFlowCardData card;
     if (actualIndex < 0) {
       cards.append(card);

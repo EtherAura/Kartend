@@ -190,11 +190,11 @@ reports_dir="$backups_dir/reports"
 # Colors
 setup_colors() {
   if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors || echo 0)" -ge 8 ]; then
-    RESET="$(tput sgr0)"; BOLD="$(tput bold)"
+    RESET="$(tput sgr0)"
     RED="$(tput setaf 1)"; GREEN="$(tput setaf 2)"; YELLOW="$(tput setaf 3)"
-    BLUE="$(tput setaf 4)"; MAGENTA="$(tput setaf 5)"; CYAN="$(tput setaf 6)"
+    MAGENTA="$(tput setaf 5)"; CYAN="$(tput setaf 6)"
   else
-    RESET=""; BOLD=""; RED=""; GREEN=""; YELLOW=""; BLUE=""; MAGENTA=""; CYAN=""
+    RESET=""; RED=""; GREEN=""; YELLOW=""; MAGENTA=""; CYAN=""
   fi
 }
 setup_colors
@@ -256,6 +256,10 @@ if $uninstall_only; then
   if $needs_elevation; then
     if command -v sudo >/dev/null 2>&1; then
       [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+      # SC2024: sudo's own stdin/stdout/stderr are what we want pointed at the
+      # tty so the password prompt is visible. This is the priming step's
+      # whole purpose.
+      # shellcheck disable=SC2024
       sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
       sudo -E cmake --build "$uninstall_dir" --target uninstall
     elif command -v doas >/dev/null 2>&1; then
@@ -281,7 +285,6 @@ ALL_STEPS=()
 NEXT_STEP_IDX=0
 CURRENT_STEP_IDX=-1
 CURRENT_STEP_DESC=""
-EXTRA_TAB=""
 
 # Failure state
 FAILED=false
@@ -291,7 +294,6 @@ FAILED_LOGFILE=""
 FAILED_STEP_IDX=-1
 
 # Soft-failure flags (non-fatal notices)
-CLANG_TIDY_FAILED=false
 IWYU_FAILED=false
 IWYU_SUGGESTED=false
 CPPCHECK_WARNED=false
@@ -501,6 +503,7 @@ do_cmake_install() {
     # doesn't collide with the progress indicator. Prime sudo so the prompt
     # appears even when stderr is captured by the run_step harness.
     [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+    # shellcheck disable=SC2024
     sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
     sudo -E "$cmake_exe" --install "$bdir"
   elif command -v doas >/dev/null 2>&1; then
@@ -1272,6 +1275,12 @@ if $pgo_build; then
   if ! $use_ccache; then
     cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
+  # Wipe any stale .profraw files from a prior --pgo run so the user's
+  # instrumented exercise produces a fresh profile set. Without this, an
+  # incremental rebuild keeps the previous run's .profraw files alongside
+  # the new ones, and the PGO use pass would merge biased data into the
+  # optimised build.
+  rm -rf "$build_dir/pgo_profiles"
   run_step "Configure PGO generate" "$logs_dir/configure.log" cmake "${cmake_args[@]}"
   run_step "Build PGO generate" "$logs_dir/build.log" cmake --build "$build_dir"
 
@@ -1431,6 +1440,11 @@ if ! $pgo_build; then
     cmake_args+=(-DKARTEND_USE_PGO=ON)
     if $pgo_generate; then
       cmake_args+=(-DKARTEND_PGO_GENERATE=ON)
+      # Standalone --pgo-generate path: wipe stale .profraw before instrumented
+      # configure so the upcoming user run produces only fresh profiles.
+      # Matches the cleanup the combined --pgo flow does just before its
+      # "Configure PGO generate" step.
+      rm -rf "$build_dir/pgo_profiles"
     elif $pgo_use; then
       cmake_args+=(-DKARTEND_PGO_USE=ON)
     fi

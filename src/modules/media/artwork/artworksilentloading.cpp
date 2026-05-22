@@ -87,20 +87,20 @@ void ArtworkManager::preloadArtworkForCollection() {
     return;
   }
 
-  if (m_silentLoadTimer && !m_silentLoadTimer->isActive()) {
-    m_silentLoadTimer->start();
+  if (!m_silentLoadTimer.isActive()) {
+    m_silentLoadTimer.start();
   }
 
-  if (!m_persistentLoadTimer) {
-    m_persistentLoadTimer = new QTimer(this);
-    m_persistentLoadTimer->setSingleShot(false);
-    m_persistentLoadTimer->setInterval(UIConstants::Artwork::PERSISTENT_SILENT_LOAD_INTERVAL_MS);
-    connect(m_persistentLoadTimer, &QTimer::timeout, this,
+  if (!m_persistentLoadTimerInited) {
+    m_persistentLoadTimer.setSingleShot(false);
+    m_persistentLoadTimer.setInterval(UIConstants::Artwork::PERSISTENT_SILENT_LOAD_INTERVAL_MS);
+    connect(&m_persistentLoadTimer, &QTimer::timeout, this,
             &ArtworkManager::processPersistentSilentLoad);
+    m_persistentLoadTimerInited = true;
   }
 
   m_persistentSilentLoad = true;
-  m_persistentLoadTimer->start();
+  m_persistentLoadTimer.start();
 }
 
 // Stops silent loading and clears pending state
@@ -108,11 +108,11 @@ void ArtworkManager::stopSilentLoading() {
   m_silentLoadingActive = false;
   m_continuousSilentLoad = false;
 
-  if (m_silentLoadTimer && m_silentLoadTimer->isActive()) {
-    m_silentLoadTimer->stop();
+  if (m_silentLoadTimer.isActive()) {
+    m_silentLoadTimer.stop();
   }
-  if (m_persistentLoadTimer && m_persistentLoadTimer->isActive()) {
-    m_persistentLoadTimer->stop();
+  if (m_persistentLoadTimer.isActive()) {
+    m_persistentLoadTimer.stop();
   }
   m_persistentSilentLoad = false;
 
@@ -166,9 +166,7 @@ void ArtworkManager::onSilentPrecacheBatchComplete(const QStringList &requestedP
 // Performs persistent low-frequency caching over the artwork list
 void ArtworkManager::processPersistentSilentLoad() {
   if (!m_persistentSilentLoad || m_pathCatalog.isExhausted()) {
-    if (m_persistentLoadTimer) {
-      m_persistentLoadTimer->stop();
-    }
+    m_persistentLoadTimer.stop();
     m_persistentSilentLoad = false;
     return;
   }
@@ -208,8 +206,8 @@ void ArtworkManager::processPersistentSilentLoad() {
   if (!m_silentLoadingActive && isUserIdle() && !m_pathCatalog.isExhausted()) {
     m_silentLoadingActive = true;
     m_continuousSilentLoad = true;
-    if (m_silentLoadTimer && !m_silentLoadTimer->isActive()) {
-      m_silentLoadTimer->start();
+    if (!m_silentLoadTimer.isActive()) {
+      m_silentLoadTimer.start();
     }
   }
 }
@@ -257,12 +255,10 @@ void ArtworkManager::processContinuousSilentLoad() {
         }
       });
 
-  if (m_silentLoadTimer) {
-    if (isUserIdle()) {
-      m_silentLoadTimer->setInterval(UIConstants::Artwork::SILENT_LOAD_INTERVAL_MS);
-    } else {
-      m_silentLoadTimer->setInterval(UIConstants::Timing::LONG_DELAY_MS);
-    }
+  if (isUserIdle()) {
+    m_silentLoadTimer.setInterval(UIConstants::Artwork::SILENT_LOAD_INTERVAL_MS);
+  } else {
+    m_silentLoadTimer.setInterval(UIConstants::Timing::LONG_DELAY_MS);
   }
 }
 

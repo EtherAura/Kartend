@@ -1,12 +1,12 @@
 #ifndef TEXTZOOMHUD_H
 #define TEXTZOOMHUD_H
 
+#include <QTimer>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
 class QPropertyAnimation;
-class QTimer;
 QT_END_NAMESPACE
 
 class OverlayZOrderRegistry;
@@ -39,7 +39,7 @@ private:
 
   QLabel *m_label = nullptr;
   QPropertyAnimation *m_fadeAnimation = nullptr;
-  QTimer *m_holdTimer = nullptr;
+  QTimer m_holdTimer; // Kartend-a911.6: value member
   OverlayZOrderRegistry *m_layerManager = nullptr;
 };
 

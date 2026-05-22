@@ -6,6 +6,7 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include "batchsizes.h"
 #include "loggingcategories.h"
 #include <algorithm>
 #include <QCryptographicHash>
@@ -69,9 +70,7 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   // Wrap in transaction for much faster batch inserts
   m_db.transaction();
 
-  // Insert UUIDs in batches to stay under SQLite variable limit
-  // Each row has 1 column, so batch size can be up to 999
-  constexpr int BATCH_SIZE = 500;
+  constexpr int BATCH_SIZE = KartendDb::BatchSizes::UuidListBatch;
 
   for (int batchStart = 0; batchStart < uuids.size(); batchStart += BATCH_SIZE) {
     const int batchEnd = qMin(batchStart + BATCH_SIZE, uuids.size());
@@ -489,8 +488,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     }
   }
 
-  // Insert in batches for efficiency
-  constexpr int INSERT_BATCH_SIZE = 500;
+  constexpr int INSERT_BATCH_SIZE = KartendDb::BatchSizes::PathInsertBatch;
   QStringList paths;
   QStringList pathUuids;
   paths.reserve(INSERT_BATCH_SIZE);

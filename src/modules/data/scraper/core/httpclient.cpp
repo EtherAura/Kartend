@@ -7,6 +7,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSslConfiguration>
+#include <QSslSocket>
 #include <QTimer>
 #include <QUrlQuery>
 
@@ -17,6 +19,11 @@
 // the Qt event loop and freeze the UI. Enable via
 // `QT_LOGGING_RULES=kartend.scrape.timings.debug=true` when diagnosing.
 Q_LOGGING_CATEGORY(lcScrapeTimings, "kartend.scrape.timings", QtWarningMsg)
+
+// Always-on logging for HTTP layer health: SSL config on first request,
+// non-trivial socket-level errors. Kept distinct from lcScrapeTimings so it
+// survives the timings-category's default Warning-only filter.
+Q_LOGGING_CATEGORY(lcScraperHttp, "kartend.scraper.http")
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -71,6 +78,10 @@ QString redactedUrlForLog(const QUrl &url) {
 } // namespace
 
 HttpClient *HttpClient::instance() {
+  Q_ASSERT_X(QCoreApplication::instance() != nullptr, "HttpClient::instance",
+             "HttpClient::instance() called before QApplication construction or "
+             "after QCoreApplication::quit() completed. The singleton's lifetime "
+             "is tied to QApplication — see HttpClient header for rationale.");
   static HttpClient *s_instance = nullptr;
   if (!s_instance) {
     // Parent to qApp so the QObject lives for the application lifetime
@@ -106,8 +117,36 @@ void HttpClient::clearPending() {
   // we want drainHost() to see the right count after they decrement.
 }
 
+namespace {
+// One-shot SSL config snapshot, run lazily on the first HttpClient::get() so
+// users diagnosing scraper connectivity have a record of which OpenSSL build,
+// CA bundle, and verify policy is in effect on this machine. Empty CA bundle
+// surfaces as qWarning so a missing system cert store doesn't fail silently
+// when QNetworkAccessManager falls back to no-verify on some Qt versions.
+void logSslConfigOnce() {
+  static bool logged = false;
+  if (logged) {
+    return;
+  }
+  logged = true;
+  const QSslConfiguration cfg = QSslConfiguration::defaultConfiguration();
+  qCInfo(lcScraperHttp).nospace() << "SSL supportsSsl=" << QSslSocket::supportsSsl()
+                                  << " runtimeVersion=" << QSslSocket::sslLibraryVersionString()
+                                  << " buildVersion=" << QSslSocket::sslLibraryBuildVersionString()
+                                  << " peerVerifyMode=" << cfg.peerVerifyMode()
+                                  << " caCertCount=" << cfg.caCertificates().size();
+  if (cfg.caCertificates().isEmpty()) {
+    qCWarning(lcScraperHttp)
+        << "SSL default CA certificate store is empty — scraper HTTPS requests "
+           "may fail or fall back to no-verify. Install your distribution's "
+           "ca-certificates package (Debian/Ubuntu) or update Qt's openssl backend.";
+  }
+}
+} // namespace
+
 void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
                      qint64 maxResponseBytes, const QString &expectedContentTypePrefix) {
+  logSslConfigOnce();
   if (!url.isValid()) {
     if (callback) {
       callback(ErrorContext::error(ErrorCode::InvalidArgument, "Invalid request URL",

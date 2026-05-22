@@ -8,6 +8,9 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QtGlobal>
+#include "settingskeys.h"
+
+namespace keys = kartend::settings::keys;
 
 namespace KartendTest {
 
@@ -42,8 +45,8 @@ MainWindowFixture::MainWindowFixture() {
   // Tests that specifically want to exercise the wizard can clear this.
   {
     QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
-    s.beginGroup(QStringLiteral("General"));
-    s.setValue(QStringLiteral("firstRunComplete"), true);
+    s.beginGroup(keys::kGroupGeneral);
+    s.setValue(keys::kFirstRunComplete, true);
     s.endGroup();
     s.sync();
   }

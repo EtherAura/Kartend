@@ -2,6 +2,7 @@
 #include "settingsutils.h"
 #include "errorutils.h"
 #include "pathutils.h"
+#include "settingskeys.h"
 #include <algorithm>
 #include <QDir>
 #include <QFile>
@@ -10,6 +11,8 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextStream>
+
+namespace keys = kartend::settings::keys;
 
 namespace {
 bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
@@ -215,7 +218,7 @@ auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Resul
                            .arg(sourcePath)
                            .arg(static_cast<int>(probe.status())));
     }
-    if (!probe.childGroups().contains("General")) {
+    if (!probe.childGroups().contains(keys::kGroupGeneral)) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::ConfigLoadFailed,
                                              "Selected file is missing the [General] section",
                                              "SettingsUtils::importConfig")

@@ -4,10 +4,10 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
 
 #include "itemwidget.h"
 class QWidget;
-class QTimer;
 
 // Metrics for monitoring widget pool performance
 struct WidgetPoolMetrics {
@@ -105,7 +105,8 @@ private:
   int m_itemsPerRow = 0;
 
   // Async prewarm state
-  QTimer *m_prewarmTimer = nullptr;
+  QTimer m_prewarmTimer; // Kartend-a911.5: value member
+  bool m_prewarmTimerInited = false;
   int m_prewarmTargetSize = 0;
   static constexpr int PREWARM_BATCH_SIZE = 3; // Widgets per timer tick
 

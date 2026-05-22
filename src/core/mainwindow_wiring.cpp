@@ -5,6 +5,14 @@
 // QObject::connect() call uses a member-function pointer (no inline lambdas)
 // so the manager graph can be read top-to-bottom and grep'd mechanically.
 //
+// Convention: high-frequency signals (DatabaseManager::itemsLoaded /
+// itemsRangeLoaded, ScrollManager scroll/sort/filter signals, ArtworkManager
+// TimerUtils::Coordinator viewport/layout signals) use Qt::UniqueConnection
+// so that if a `connect*Manager()` ever runs a second time (dynamic
+// reconfiguration, test re-init), the duplicate connection is silently
+// skipped instead of firing the slot twice per emit. New connects to these
+// senders should follow the same pattern.
+//
 // The slot handlers that those connections target live in companion TUs
 // extracted by responsibility:
 //
@@ -139,6 +147,7 @@
 #include <QScrollBar>
 #include <QTimer>
 
+#include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
@@ -167,14 +176,14 @@
 // =====================================================================
 
 void MainWindow::onArtworkViewportUpdateRequested() {
-  if (!QApplication::closingDown() && getArtworkManager()) {
-    getArtworkManager()->updateViewportArtwork();
+  if (!QApplication::closingDown() && m_appManager->getArtworkManager()) {
+    m_appManager->getArtworkManager()->updateViewportArtwork();
   }
 }
 
 void MainWindow::onArtworkLayoutUpdateRequested() {
-  if (!QApplication::closingDown() && getScrollManager()) {
-    getScrollManager()->handleLayoutChange();
+  if (!QApplication::closingDown() && m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->handleLayoutChange();
   }
 }
 
@@ -201,11 +210,13 @@ void MainWindow::onInteractionSelectionChanged(int /*index*/) {
 }
 
 void MainWindow::onSidebarVisibilityChanged(bool visible) {
-  if (visible && getDetailsPaneManager() && getScrollManager() && getInteractionManager()) {
-    int sel = getInteractionManager()->currentSelectedIndex();
+  if (visible && m_appManager->getDetailsPaneManager() && m_appManager->getScrollManager() &&
+      m_appManager->getInteractionManager()) {
+    int sel = m_appManager->getInteractionManager()->currentSelectedIndex();
     if (sel >= 0) {
-      ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-      getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
+      ItemWidget *widgetPtr =
+          m_appManager->getScrollManager()->getActiveWidgets().value(sel, nullptr);
+      m_appManager->getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
     }
   }
   // Push the "sidebar hidden AND would shrink" predicate into ScrollManager so
@@ -216,22 +227,24 @@ void MainWindow::onSidebarVisibilityChanged(bool visible) {
   // Delay metrics recalculation to allow sidebar animation to complete before
   // recalculating grid layout dimensions.
   QTimer::singleShot(UIConstants::DetailsPane::METRICS_RECALC_DELAY_MS, this, [this]() {
-    if (getScrollManager()) {
-      getScrollManager()->recalculateContainerMetrics();
+    if (m_appManager->getScrollManager()) {
+      m_appManager->getScrollManager()->recalculateContainerMetrics();
     }
   });
 }
 
 void MainWindow::onSidebarLayoutChanged() {
-  if (getScrollManager()) {
-    getScrollManager()->recalculateContainerMetrics();
+  if (m_appManager->getScrollManager()) {
+    m_appManager->getScrollManager()->recalculateContainerMetrics();
   }
-  if (getDetailsPaneManager() && getScrollManager() && getInteractionManager() &&
-      getDetailsPaneManager()->isSidebarVisible()) {
-    int sel = getInteractionManager()->currentSelectedIndex();
+  if (m_appManager->getDetailsPaneManager() && m_appManager->getScrollManager() &&
+      m_appManager->getInteractionManager() &&
+      m_appManager->getDetailsPaneManager()->isSidebarVisible()) {
+    int sel = m_appManager->getInteractionManager()->currentSelectedIndex();
     if (sel >= 0) {
-      ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-      getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
+      ItemWidget *widgetPtr =
+          m_appManager->getScrollManager()->getActiveWidgets().value(sel, nullptr);
+      m_appManager->getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
     }
   }
 }
@@ -242,20 +255,21 @@ void MainWindow::onSidebarLayoutChanged() {
 // =====================================================================
 
 void MainWindow::connectDatabaseManager() {
-  auto *db = getDatabaseManager();
-  auto *nav = getNavigationManager();
-  auto *scroll = getScrollManager();
-  auto *settings = getSettingsManager();
-  auto *details = getDetailsPaneManager();
+  auto *db = m_appManager->getDatabaseManager();
+  auto *nav = m_appManager->getNavigationManager();
+  auto *scroll = m_appManager->getScrollManager();
+  auto *settings = m_appManager->getSettingsManager();
+  auto *details = m_appManager->getDetailsPaneManager();
 
   // DatabaseManager → NavigationManager
-  QObject::connect(db, &DatabaseManager::itemsLoaded, nav, &NavigationManager::onItemsLoaded);
+  QObject::connect(db, &DatabaseManager::itemsLoaded, nav, &NavigationManager::onItemsLoaded,
+                   Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::itemCountLoadedWithToken, nav,
-                   &NavigationManager::onItemCountLoaded);
+                   &NavigationManager::onItemCountLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, nav,
-                   &NavigationManager::onBackgroundCollectionScanCompleted);
+                   &NavigationManager::onBackgroundCollectionScanCompleted, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::itemsRangeLoaded, nav,
-                   &NavigationManager::onItemsRangeLoaded);
+                   &NavigationManager::onItemsRangeLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::errorOccurred, nav,
                    &NavigationManager::onMediaLibraryError);
   // NavigationManager raises media-library errors as a signal; MainWindow owns
@@ -274,8 +288,8 @@ void MainWindow::connectDatabaseManager() {
   // callback the controller reads back is already resolved above.
   DbEventsControllerContext dec;
   dec.getLoadingOverlay = [this]() { return m_loadingOverlay; };
-  dec.getNavigationManager = [this]() { return getNavigationManager(); };
-  dec.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
+  dec.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
+  dec.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
   dec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   dec.getCollections = [this]() -> const QList<CollectionConfig> * { return &m_collections; };
   dec.refreshTitleCounts = [this]() { refreshTitleCounts(); };
@@ -289,7 +303,7 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(db, &DatabaseManager::cachedCountsUpdated, decCtl,
                    &DbEventsController::refreshTitleCountsIfActive);
   QObject::connect(db, &DatabaseManager::itemsLoaded, decCtl,
-                   &DbEventsController::refreshFilterToolbarOnItemsLoaded);
+                   &DbEventsController::refreshFilterToolbarOnItemsLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::scanProgress, decCtl, &DbEventsController::onScanProgress);
   QObject::connect(db, &DatabaseManager::scanStarting, decCtl, &DbEventsController::onScanStarting);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
@@ -322,20 +336,20 @@ void MainWindow::connectDatabaseManager() {
     sc.getGeneralSettings = [this]() { return &m_generalSettings; };
     sc.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
     sc.getApplicationContext = [this]() -> const ApplicationContext * { return &m_appContext; };
-    sc.getDatabaseManager = [this]() { return getDatabaseManager(); };
-    sc.getNavigationManager = [this]() { return getNavigationManager(); };
-    sc.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
-    sc.getInteractionManager = [this]() { return getInteractionManager(); };
-    sc.getScrollManager = [this]() { return getScrollManager(); };
+    sc.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
+    sc.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
+    sc.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
+    sc.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
+    sc.getScrollManager = [this]() { return m_appManager->getScrollManager(); };
     m_scraperController->setContext(sc);
   }
 }
 
 void MainWindow::connectScrollManager() {
-  auto *scroll = getScrollManager();
-  auto *nav = getNavigationManager();
-  auto *interaction = getInteractionManager();
-  auto *artwork = getArtworkManager();
+  auto *scroll = m_appManager->getScrollManager();
+  auto *nav = m_appManager->getNavigationManager();
+  auto *interaction = m_appManager->getInteractionManager();
+  auto *artwork = m_appManager->getArtworkManager();
 
   // ScrollManager → NavigationManager
   QObject::connect(scroll, &ScrollManager::subcollectionEntered, nav,
@@ -343,7 +357,7 @@ void MainWindow::connectScrollManager() {
   QObject::connect(scroll, &ScrollManager::virtualFolderEntered, nav,
                    &NavigationManager::onVirtualFolderEntered);
   QObject::connect(scroll, &ScrollManager::requestItemsRange, nav,
-                   &NavigationManager::fetchItemsRange);
+                   &NavigationManager::fetchItemsRange, Qt::UniqueConnection);
 
   // ScrollManager → InteractionManager (expand-mode artwork preview launch)
   if (interaction) {
@@ -355,41 +369,43 @@ void MainWindow::connectScrollManager() {
   // Kartend-hzef). Context is wired here because every manager pointer
   // the controller needs is already resolved above.
   ScrollEventsControllerContext sec;
-  sec.getNavigationManager = [this]() { return getNavigationManager(); };
-  sec.getInteractionManager = [this]() { return getInteractionManager(); };
-  sec.getScrollManager = [this]() { return getScrollManager(); };
-  sec.getSettingsManager = [this]() { return getSettingsManager(); };
-  sec.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
-  sec.getDatabaseManager = [this]() { return getDatabaseManager(); };
+  sec.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
+  sec.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
+  sec.getScrollManager = [this]() { return m_appManager->getScrollManager(); };
+  sec.getSettingsManager = [this]() { return m_appManager->getSettingsManager(); };
+  sec.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
+  sec.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
   sec.getGeneralSettings = [this]() { return &m_generalSettings; };
   sec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   m_scrollEventsController->setContext(sec);
 
   auto *secCtl = m_scrollEventsController.get();
   QObject::connect(scroll, &ScrollManager::sortModeChangeRequested, secCtl,
-                   &ScrollEventsController::onSortModeChangeRequested);
+                   &ScrollEventsController::onSortModeChangeRequested, Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::selectItemByIndex, secCtl,
-                   &ScrollEventsController::onSelectItemByIndex);
+                   &ScrollEventsController::onSelectItemByIndex, Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::coverFlowActiveChanged, secCtl,
-                   &ScrollEventsController::onCoverFlowActiveChanged);
+                   &ScrollEventsController::onCoverFlowActiveChanged, Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::artworkPreviewVisibilityChanged, secCtl,
-                   &ScrollEventsController::onArtworkPreviewVisibilityChanged);
+                   &ScrollEventsController::onArtworkPreviewVisibilityChanged,
+                   Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::coverFlowItemActivated, secCtl,
-                   &ScrollEventsController::onCoverFlowItemActivated);
+                   &ScrollEventsController::onCoverFlowItemActivated, Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::listColumnWidthChanged, secCtl,
-                   &ScrollEventsController::onListColumnWidthChanged);
+                   &ScrollEventsController::onListColumnWidthChanged, Qt::UniqueConnection);
   QObject::connect(scroll, &ScrollManager::listArtworkColumnWidthChanged, secCtl,
-                   &ScrollEventsController::onListArtworkColumnWidthChanged);
-  QObject::connect(scroll, &ScrollManager::filterChanged, this, &MainWindow::onScrollFilterChanged);
+                   &ScrollEventsController::onListArtworkColumnWidthChanged, Qt::UniqueConnection);
+  QObject::connect(scroll, &ScrollManager::filterChanged, this, &MainWindow::onScrollFilterChanged,
+                   Qt::UniqueConnection);
 
   // ArtworkManager::TimerCoordinator → MainWindow
   if (artwork) {
     QObject::connect(artwork->getTimerCoordinator(),
                      &TimerUtils::Coordinator::viewportUpdateRequested, this,
-                     &MainWindow::onArtworkViewportUpdateRequested);
+                     &MainWindow::onArtworkViewportUpdateRequested, Qt::UniqueConnection);
     QObject::connect(artwork->getTimerCoordinator(),
                      &TimerUtils::Coordinator::layoutUpdateRequested, this,
-                     &MainWindow::onArtworkLayoutUpdateRequested);
+                     &MainWindow::onArtworkLayoutUpdateRequested, Qt::UniqueConnection);
   }
 
   // InteractionManager → MainWindow
@@ -400,7 +416,7 @@ void MainWindow::connectScrollManager() {
 }
 
 void MainWindow::connectSidebarManager() {
-  auto *details = getDetailsPaneManager();
+  auto *details = m_appManager->getDetailsPaneManager();
   // DetailsPaneManager → MainWindow
   QObject::connect(details, &DetailsPaneManager::sidebarVisibilityChanged, this,
                    &MainWindow::onSidebarVisibilityChanged);
@@ -409,26 +425,26 @@ void MainWindow::connectSidebarManager() {
 }
 
 void MainWindow::updateScrollManagerSidebarShrinking() {
-  if (!getScrollManager() || !getDetailsPaneManager()) {
+  if (!m_appManager->getScrollManager() || !m_appManager->getDetailsPaneManager()) {
     return;
   }
   // Use DetailsPaneManager's tracked index rather than MainWindow::currentCollectionIndex
   // because this can be called from inside applySidebarStateForCollection (via
   // its sidebarVisibilityChanged emission) before MainWindow has caught up to
   // the new index after a collection switch.
-  const int idx = getDetailsPaneManager()->currentCollectionIndex();
+  const int idx = m_appManager->getDetailsPaneManager()->currentCollectionIndex();
   if (idx < 0 || idx >= m_collections.size()) {
-    getScrollManager()->setSidebarShrinkingActive(false);
+    m_appManager->getScrollManager()->setSidebarShrinkingActive(false);
     return;
   }
   const CollectionConfig &collection = m_collections[idx];
   // Overlay mode never shrinks the grid (the sidebar floats over content), so
   // the alt gridWidth only applies in Expand mode while the sidebar is hidden.
   if (collection.sidebar.sidebarMode != DetailsPaneMode::Expand) {
-    getScrollManager()->setSidebarShrinkingActive(false);
+    m_appManager->getScrollManager()->setSidebarShrinkingActive(false);
     return;
   }
-  const bool sidebarHidden = !getDetailsPaneManager()->isSidebarVisible();
+  const bool sidebarHidden = !m_appManager->getDetailsPaneManager()->isSidebarVisible();
   // The pane only shrinks the grid along its own dock axis. A vertical-axis
   // dock (Top/Bottom) takes height, so vertical-scrolling views (Grid/List/
   // CoverFlow) — whose layout dimension is items-per-row, i.e. horizontal —
@@ -443,16 +459,18 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
   const bool relevantAxisIsHorizontal = (collection.viewType != ViewType::Horizontal);
   const bool paneAffectsRelevantAxis =
       relevantAxisIsHorizontal ? !paneIsHorizontalDock : paneIsHorizontalDock;
-  getScrollManager()->setSidebarShrinkingActive(sidebarHidden || !paneAffectsRelevantAxis);
+  m_appManager->getScrollManager()->setSidebarShrinkingActive(sidebarHidden ||
+                                                              !paneAffectsRelevantAxis);
 }
 
 void MainWindow::connectSearchComponents() {
   // Search-mode toggle lives inside the QLineEdit as a QAction owned by the
   // ToolbarController. Wire it to InteractionManager's existing toggle slot
   // so the cycling behavior remains identical to the legacy QPushButton.
-  if (m_toolbarController && m_toolbarController->searchModeAction() && getInteractionManager()) {
+  if (m_toolbarController && m_toolbarController->searchModeAction() &&
+      m_appManager->getInteractionManager()) {
     QObject::connect(m_toolbarController->searchModeAction(), &QAction::triggered,
-                     getInteractionManager(), &InteractionManager::toggleSearchMode);
+                     m_appManager->getInteractionManager(), &InteractionManager::toggleSearchMode);
   }
 }
 
@@ -469,15 +487,15 @@ void MainWindow::connectFilterToolbar() {
 }
 
 void MainWindow::connectScrollBars() const {
-  if (!ui->itemScrollArea || !getNavigationManager()) {
+  if (!ui->itemScrollArea || !m_appManager->getNavigationManager()) {
     return;
   }
   if (const QScrollBar *vScrollBar = ui->itemScrollArea->verticalScrollBar()) {
-    QObject::connect(vScrollBar, &QScrollBar::valueChanged, getNavigationManager(),
+    QObject::connect(vScrollBar, &QScrollBar::valueChanged, m_appManager->getNavigationManager(),
                      &NavigationManager::onViewportChanged);
   }
   if (const QScrollBar *hScrollBar = ui->itemScrollArea->horizontalScrollBar()) {
-    QObject::connect(hScrollBar, &QScrollBar::valueChanged, getNavigationManager(),
+    QObject::connect(hScrollBar, &QScrollBar::valueChanged, m_appManager->getNavigationManager(),
                      &NavigationManager::onViewportChanged);
   }
 }

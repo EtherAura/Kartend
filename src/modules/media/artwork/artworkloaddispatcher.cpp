@@ -81,6 +81,13 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
                                                 const std::atomic<quint64> &generationCounter,
                                                 quint64 capturedGeneration,
                                                 ICacheManager *cacheManager, qreal dpr) {
+  // Worker-only contract: QImage is reentrant, QPixmap is not. Any code path
+  // that reaches here on the GUI thread would risk a future maintainer
+  // constructing QPixmap below, which Qt explicitly forbids off the main
+  // thread.
+  Q_ASSERT_X(QThread::currentThread() != QCoreApplication::instance()->thread(),
+             "processBatchOnWorker",
+             "Artwork decode must run on a worker thread, not the GUI thread");
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
   for (const ArtworkInfo &info : batch) {
@@ -111,6 +118,7 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
         ArtworkInfo::Result{.widget = info.mediaItem,
                             .artworkPath = info.artworkPath,
                             .artworkBaseName = QFileInfo(info.artworkPath).completeBaseName(),
+                            .widgetIdentity = info.widgetIdentity,
                             .image = img,
                             .loadedFromDiskCache = loadedFromDiskCache});
   }
@@ -121,6 +129,10 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
                                                      const std::atomic<quint64> &generationCounter,
                                                      quint64 capturedGeneration,
                                                      ICacheManager *cacheManager, qreal dpr) {
+  // Worker-only contract — see processBatchOnWorker.
+  Q_ASSERT_X(QThread::currentThread() != QCoreApplication::instance()->thread(),
+             "processPrecacheOnWorker",
+             "Artwork precache decode must run on a worker thread, not the GUI thread");
   QList<ArtworkPrecacheResult> results;
   results.reserve(paths.size());
   for (const QString &artworkPath : paths) {

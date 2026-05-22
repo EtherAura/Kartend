@@ -29,17 +29,16 @@ SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const GeneralSettings *, GeneralS
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
-AttractManager::AttractManager(QObject *parent)
-    : QObject(parent), m_idleTimer(new QTimer(this)), m_scrollTimer(new QTimer(this)),
-      m_bouncePauseTimer(new QTimer(this)), m_advanceSelectionTimer(new QTimer(this)) {
-  m_idleTimer->setSingleShot(true);
-  m_scrollTimer->setTimerType(Qt::PreciseTimer);
-  m_bouncePauseTimer->setSingleShot(true);
+AttractManager::AttractManager(QObject *parent) : QObject(parent) {
+  m_idleTimer.setSingleShot(true);
+  m_scrollTimer.setTimerType(Qt::PreciseTimer);
+  m_bouncePauseTimer.setSingleShot(true);
 
-  connect(m_idleTimer, &QTimer::timeout, this, &AttractManager::onIdleTimeout);
-  connect(m_scrollTimer, &QTimer::timeout, this, &AttractManager::onScrollTick);
-  connect(m_bouncePauseTimer, &QTimer::timeout, this, &AttractManager::onBouncePauseFinished);
-  connect(m_advanceSelectionTimer, &QTimer::timeout, this, &AttractManager::onAdvanceSelectionTick);
+  connect(&m_idleTimer, &QTimer::timeout, this, &AttractManager::onIdleTimeout);
+  connect(&m_scrollTimer, &QTimer::timeout, this, &AttractManager::onScrollTick);
+  connect(&m_bouncePauseTimer, &QTimer::timeout, this, &AttractManager::onBouncePauseFinished);
+  connect(&m_advanceSelectionTimer, &QTimer::timeout, this,
+          &AttractManager::onAdvanceSelectionTick);
 }
 
 AttractManager::~AttractManager() = default;
@@ -63,7 +62,7 @@ bool AttractManager::isEnabled() const {
 void AttractManager::reloadSettings() {
   if (!m_generalSettings) {
     stopAttract();
-    m_idleTimer->stop();
+    m_idleTimer.stop();
     return;
   }
 
@@ -72,18 +71,18 @@ void AttractManager::reloadSettings() {
   const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
                                 m_generalSettings->attractModeIdleTimeoutSec,
                                 UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
-  m_idleTimer->setInterval(timeoutSec * 1000);
+  m_idleTimer.setInterval(timeoutSec * 1000);
 
   // Sync the advance-selection interval too so a live settings change is
   // reflected without restarting attract mode.
   const int advanceSec = qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
                                 m_generalSettings->attractModeAdvanceSelectionIntervalSec,
                                 UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
-  m_advanceSelectionTimer->setInterval(advanceSec * 1000);
+  m_advanceSelectionTimer.setInterval(advanceSec * 1000);
 
   if (!m_generalSettings->attractModeEnabled) {
     stopAttract();
-    m_idleTimer->stop();
+    m_idleTimer.stop();
     return;
   }
 
@@ -92,24 +91,24 @@ void AttractManager::reloadSettings() {
   // restart.
   if (m_attractActive) {
     if (m_generalSettings->attractModeAutoScrollEnabled) {
-      if (!m_scrollTimer->isActive() && !m_bouncePaused) {
-        m_scrollTimer->start(UIConstants::Attract::SCROLL_TICK_INTERVAL_MS);
+      if (!m_scrollTimer.isActive() && !m_bouncePaused) {
+        m_scrollTimer.start(UIConstants::Attract::SCROLL_TICK_INTERVAL_MS);
       }
     } else {
-      m_scrollTimer->stop();
-      m_bouncePauseTimer->stop();
+      m_scrollTimer.stop();
+      m_bouncePauseTimer.stop();
       m_bouncePaused = false;
     }
     if (m_generalSettings->attractModeAdvanceSelectionEnabled) {
-      if (!m_advanceSelectionTimer->isActive()) {
-        m_advanceSelectionTimer->start();
+      if (!m_advanceSelectionTimer.isActive()) {
+        m_advanceSelectionTimer.start();
       }
     } else {
-      m_advanceSelectionTimer->stop();
+      m_advanceSelectionTimer.stop();
     }
     // If both sub-features were turned off mid-session, exit attract mode and
     // arm the idle countdown so it can re-enter once one is enabled again.
-    if (!m_scrollTimer->isActive() && !m_advanceSelectionTimer->isActive()) {
+    if (!m_scrollTimer.isActive() && !m_advanceSelectionTimer.isActive()) {
       stopAttract();
       resetIdleTimer();
     }
@@ -142,7 +141,7 @@ void AttractManager::setSuspended(bool suspended) {
     if (m_attractActive) {
       stopAttract();
     }
-    m_idleTimer->stop();
+    m_idleTimer.stop();
   } else {
     // On resume, treat the user as freshly active so attract waits the
     // full timeout before kicking in (avoids attract starting the instant
@@ -168,9 +167,9 @@ void AttractManager::resetIdleTimer() {
     const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
                                   m_generalSettings->attractModeIdleTimeoutSec,
                                   UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
-    m_idleTimer->setInterval(timeoutSec * 1000);
+    m_idleTimer.setInterval(timeoutSec * 1000);
   }
-  m_idleTimer->start();
+  m_idleTimer.start();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,7 +225,7 @@ void AttractManager::startAttract() {
   m_scrollAccumulator = 0.0;
 
   if (wantScroll && scrollable) {
-    m_scrollTimer->start(UIConstants::Attract::SCROLL_TICK_INTERVAL_MS);
+    m_scrollTimer.start(UIConstants::Attract::SCROLL_TICK_INTERVAL_MS);
   }
   startAdvanceSelectionTimerIfEnabled();
 
@@ -241,7 +240,7 @@ void AttractManager::startAdvanceSelectionTimerIfEnabled() {
   const int advanceSec = qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
                                 m_generalSettings->attractModeAdvanceSelectionIntervalSec,
                                 UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
-  m_advanceSelectionTimer->start(advanceSec * 1000);
+  m_advanceSelectionTimer.start(advanceSec * 1000);
 }
 
 void AttractManager::stopAttract() {
@@ -251,9 +250,9 @@ void AttractManager::stopAttract() {
 
   m_attractActive = false;
   m_bouncePaused = false;
-  m_scrollTimer->stop();
-  m_bouncePauseTimer->stop();
-  m_advanceSelectionTimer->stop();
+  m_scrollTimer.stop();
+  m_bouncePauseTimer.stop();
+  m_advanceSelectionTimer.stop();
 
   qCDebug(lcAttractManager) << "Attract mode stopped";
   emit attractStopped();
@@ -304,7 +303,7 @@ void AttractManager::onScrollTick() {
   if (pos.hitMax || pos.hitMin) {
     m_scrollAccumulator = 0.0;
     m_bouncePaused = true;
-    m_bouncePauseTimer->start(UIConstants::Attract::BOUNCE_PAUSE_MS);
+    m_bouncePauseTimer.start(UIConstants::Attract::BOUNCE_PAUSE_MS);
     return;
   }
 
@@ -337,7 +336,7 @@ void AttractManager::onAdvanceSelectionTick() {
     return;
   }
   if (!m_generalSettings || !m_generalSettings->attractModeAdvanceSelectionEnabled) {
-    m_advanceSelectionTimer->stop();
+    m_advanceSelectionTimer.stop();
     return;
   }
   IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;

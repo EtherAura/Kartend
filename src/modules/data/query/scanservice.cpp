@@ -22,11 +22,13 @@
 // declared there.
 #include "scanservice.h"
 
+#include "batchsizes.h"
 #include "preparedstatementcache.h"
 
 #include <atomic>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -64,14 +66,27 @@ using namespace QueryManagerInternal;
 // Shared constants for all scan phases
 // ============================================================================
 namespace {
-constexpr int BATCH_SIZE = 199;
-constexpr int COMMIT_INTERVAL_BATCHES = 500;
+constexpr int BATCH_SIZE = KartendDb::BatchSizes::FilesystemScanBatch;
+constexpr int COMMIT_INTERVAL_BATCHES = KartendDb::BatchSizes::ScanCommitInterval;
 constexpr int PROGRESS_REPORT_INTERVAL = 50000;
-// 7 cols/row (collection_id, collection_uuid, path, rel_path, name,
-// last_modified, date_added) -> 142*7=994 binds, under SQLite's 999
-// SQLITE_LIMIT_VARIABLE_NUMBER. Keep this in sync with the column count of the
-// upsert in commitStagedScanResults.
-constexpr int APPLY_BATCH_SIZE = 142;
+constexpr int APPLY_BATCH_SIZE = KartendDb::BatchSizes::StagedScanApplyBatch;
+
+// Kartend-a911.2: executes a prepared query and logs a DatabaseQueryFailed
+// warning on failure. Returns nullopt on success, the constructed
+// ErrorContext on failure (already logged) so callers that also need to
+// emit errorOccurred or unwind control flow can do so without rebuilding
+// the error. Centralises bind-count diagnostics + lastError forwarding
+// across the scan pipeline.
+[[nodiscard]] std::optional<ErrorContext>
+execAndLog(QSqlQuery &query, const QString &failureMessage, const QString &callerLocation) {
+  if (query.exec()) {
+    return std::nullopt;
+  }
+  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, failureMessage, callerLocation)
+                 .withDetails(query.lastError().text());
+  ErrorUtils::logError(err);
+  return err;
+}
 
 // Kartend-7axx: the four scan/save pipelines all open-coded the same
 // throttle pattern (lambda over a QElapsedTimer + a lastEmitMs cursor).
@@ -178,13 +193,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
       QSqlQuery &update = m_cache.get(QuerySQL::UPDATE_COLLECTION_EXT_SIGNATURE);
       update.addBindValue(currentSignature);
       update.addBindValue(uuid);
-      if (!update.exec()) {
-        auto err =
-            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                  "Failed to backfill ext_signature", "ScanService::needsRescan")
-                .withDetails(update.lastError().text());
-        ErrorUtils::logError(err);
-      }
+      (void)execAndLog(update, "Failed to backfill ext_signature", "ScanService::needsRescan");
     } else {
       return true;
     }
@@ -245,12 +254,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
       meta.bindValue(0, lastScannedIso);
       meta.bindValue(1, seeded);
       meta.bindValue(2, uuid);
-      if (!meta.exec()) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to seed dir_signature", "ScanService::needsRescan")
-                       .withDetails(meta.lastError().text());
-        ErrorUtils::logError(err);
-      }
+      (void)execAndLog(meta, "Failed to seed dir_signature", "ScanService::needsRescan");
     }
   } else {
     // Flat collections: directory mtime is a sufficient cheap proxy for
@@ -264,11 +268,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
   QSqlQuery &newer = m_cache.get(QuerySQL::ITEMS_MODIFIED_COUNT);
   newer.bindValue(0, uuid);
   newer.bindValue(1, lastScanned.toString(Qt::ISODate));
-  if (!newer.exec()) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to count modified items", "ScanService::needsRescan")
-                   .withDetails(newer.lastError().text());
-    ErrorUtils::logError(err);
+  if (execAndLog(newer, "Failed to count modified items", "ScanService::needsRescan")) {
     return false;
   }
 
@@ -888,13 +888,9 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
       QSqlQuery &sel = m_cache.get(QuerySQL::SELECT_STAGED_SCAN_RESULTS);
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
-      if (!sel.exec()) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to read staged scan results",
-                                         "ScanService::commitStagedScanResults")
-                       .withDetails(sel.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
+      if (auto err = execAndLog(sel, "Failed to read staged scan results",
+                                "ScanService::commitStagedScanResults")) {
+        emit errorOccurred(*err);
         upsertOk = false;
         break;
       }
@@ -962,13 +958,9 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
         ins.addBindValue(lastModified[i]);
         ins.addBindValue(nowEpochSec);
       }
-      if (!ins.exec()) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to apply staged scan results",
-                                         "ScanService::commitStagedScanResults")
-                       .withDetails(ins.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
+      if (auto err = execAndLog(ins, "Failed to apply staged scan results",
+                                "ScanService::commitStagedScanResults")) {
+        emit errorOccurred(*err);
         upsertOk = false;
         break;
       }

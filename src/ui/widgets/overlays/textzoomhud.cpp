@@ -53,10 +53,9 @@ TextZoomHud::TextZoomHud(QWidget *parent) : QWidget(parent) {
   m_fadeAnimation = new QPropertyAnimation(opacityEffect, "opacity", this);
   m_fadeAnimation->setDuration(UIConstants::Overlay::TEXT_ZOOM_HUD_FADE_DURATION_MS);
 
-  m_holdTimer = new QTimer(this);
-  m_holdTimer->setSingleShot(true);
-  m_holdTimer->setInterval(UIConstants::Overlay::TEXT_ZOOM_HUD_HOLD_DURATION_MS);
-  QObject::connect(m_holdTimer, &QTimer::timeout, this, [this]() { scheduleHide(); });
+  m_holdTimer.setSingleShot(true);
+  m_holdTimer.setInterval(UIConstants::Overlay::TEXT_ZOOM_HUD_HOLD_DURATION_MS);
+  QObject::connect(&m_holdTimer, &QTimer::timeout, this, [this]() { scheduleHide(); });
 
   if (parent) {
     parent->installEventFilter(this);
@@ -96,7 +95,7 @@ void TextZoomHud::showZoom(int percent) {
     raise();
   }
 
-  m_holdTimer->start();
+  m_holdTimer.start();
 }
 
 void TextZoomHud::scheduleHide() {
@@ -118,7 +117,7 @@ void TextZoomHud::scheduleHide() {
   QObject::connect(
       m_fadeAnimation, &QPropertyAnimation::finished, this,
       [this]() {
-        if (!m_holdTimer->isActive()) {
+        if (!m_holdTimer.isActive()) {
           QWidget::hide();
         }
       },

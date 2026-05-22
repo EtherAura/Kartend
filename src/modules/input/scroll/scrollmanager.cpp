@@ -167,16 +167,14 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
   // m_selectionState raw alias was set up above.
 
   // Throttle timer - only fires once per interval, ignores subsequent triggers
-  m_scrollTimer = new QTimer(this);
-  m_scrollTimer->setSingleShot(true);
-  m_scrollTimer->setInterval(UIConstants::Timing::SCROLL_THROTTLE_DELAY_MS);
-  connect(m_scrollTimer, &QTimer::timeout, this, &ScrollManager::onThrottledUpdate);
+  m_scrollTimer.setSingleShot(true);
+  m_scrollTimer.setInterval(UIConstants::Timing::SCROLL_THROTTLE_DELAY_MS);
+  connect(&m_scrollTimer, &QTimer::timeout, this, &ScrollManager::onThrottledUpdate);
 
   // Arrow key view update timer - delegates to helper
-  m_arrowKeyViewUpdateTimer = new QTimer(this);
-  m_arrowKeyViewUpdateTimer->setSingleShot(true);
-  m_arrowKeyViewUpdateTimer->setInterval(UIConstants::Keyboard::VIEW_UPDATE_INTERVAL_MS);
-  connect(m_arrowKeyViewUpdateTimer, &QTimer::timeout, this, &ScrollManager::onArrowKeyViewUpdate);
+  m_arrowKeyViewUpdateTimer.setSingleShot(true);
+  m_arrowKeyViewUpdateTimer.setInterval(UIConstants::Keyboard::VIEW_UPDATE_INTERVAL_MS);
+  connect(&m_arrowKeyViewUpdateTimer, &QTimer::timeout, this, &ScrollManager::onArrowKeyViewUpdate);
 
   // Debounce timer - restarts on each trigger, fires after inactivity
   m_userScrollIdleTimer =
@@ -225,7 +223,7 @@ ScrollManager::~ScrollManager() {
   m_destroying = true;
   disconnectScrollEvents();
 
-  TimerUtils::stopAndDisconnectTimers({m_scrollTimer, m_arrowKeyViewUpdateTimer});
+  TimerUtils::stopAndDisconnectTimers({&m_scrollTimer, &m_arrowKeyViewUpdateTimer});
 
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {

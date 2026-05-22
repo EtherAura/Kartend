@@ -27,6 +27,35 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 4. Ensure `build.sh --maintenance` passes (format, lint, and build checks).
 5. Open a pull request with a clear description of the changes.
 
+### Quarterly lint review
+
+The `.clang-tidy` file disables a number of `modernize-*` / `readability-*` /
+`misc-*` checks that were too noisy at one point in the project's history.
+Each disabled check carries an inline rationale comment, but the codebase
+moves fast and what was unworkable six months ago may be tractable now.
+Maintainers: scan the disabled-check list each quarter and try re-enabling
+one or two that look ripe. Even partial wins (a handful of cleanups followed
+by re-enabling a check) compound over time.
+
+### Optional pre-commit hook
+
+An opt-in git pre-commit hook lives in `.scripts/git-hooks/pre-commit`. It
+runs `clang-format --dry-run --Werror` on every staged `.cpp`/`.h` file and
+exits non-zero if any drift, so a `git commit` fails fast instead of letting
+the same drift surface in CI's `--maintenance --format-check`. The hook also
+checks version-string consistency across `VERSION`, `PKGBUILD`, the ebuild
+filename, and the AppStream metainfo so a version bump can't be partial.
+
+Install with:
+
+```
+.scripts/git-hooks/install.sh
+```
+
+If the hook ever needs to be bypassed for an emergency commit, use
+`git commit --no-verify` — but please don't habituate; the same checks run
+in CI and will catch the drift there.
+
 ## Code Style
 
 - 2-space indentation, 100 column limit
@@ -35,6 +64,7 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 - UI constants go in the topical `src/ui/uiconstants/<area>.h` subheader (e.g. `grid.h`, `dialog.h`, `icons.h`) — no magic numbers
 - Use `[[nodiscard]]` on const getters and factory functions
 - See [docs/architecture.md](docs/architecture.md), [docs/building.md](docs/building.md), and the rules baked into `.clang-format` / `.clang-tidy` for full conventions
+- Debugging: [docs/dev-debugging.md](docs/dev-debugging.md) covers logging-category filters (`lcPerfTrace`, `lcSearchDiag`, …), ASan / TSan / UBSan triage, attaching GDB/LLDB, Valgrind/heaptrack recipes, the Qt-specific crash patterns that come up most, and the rationale for the `QTimer::singleShot` "why" comment rule.
 
 ## Architecture
 

@@ -711,6 +711,36 @@ target_link_libraries(test_databasemanager
 )
 add_test(NAME DatabaseManager COMMAND test_databasemanager)
 
+# CachedCountsService: stale-completion drop via monotonic generation token.
+# Small surface — only needs the service TU, the session interface header,
+# and collectionutils for CollectionConfig.
+add_executable(test_cachedcountsservice
+  modules/database/test_cachedcountsservice.cpp
+  ${SRC_DIR}/modules/data/database/cachedcountsservice.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_cachedcountsservice PRIVATE
+  ${SRC_DIR}
+  ${SRC_DIR}/api
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_cachedcountsservice
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME CachedCountsService COMMAND test_cachedcountsservice)
+
 # ArtworkManager tests (cancellation, dedup, QPointer race)
 add_executable(test_artworkmanager
   modules/artwork/test_artworkmanager.cpp

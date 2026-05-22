@@ -6,6 +6,8 @@
 // TUs that managed the same widgets through MainWindow::* members.
 #include "toolbarcontroller.h"
 
+#include "applicationmanager.h"
+#include "inavigationmanager.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
@@ -34,6 +36,20 @@ void ToolbarController::initialize(const Setup &setup) {
   m_filterButton = setup.filterButton;
   m_homeButton = setup.homeButton;
   m_searchBar = setup.searchBar;
+}
+
+ApplicationManager *ToolbarController::applicationManager() const {
+  return m_mainWindow ? m_mainWindow->applicationManager() : nullptr;
+}
+
+ISettingsManager *ToolbarController::settingsMgr() const {
+  auto *app = applicationManager();
+  return app ? app->getSettingsManager() : nullptr;
+}
+
+INavigationManager *ToolbarController::navMgr() const {
+  auto *app = applicationManager();
+  return app ? app->getNavigationManager() : nullptr;
 }
 
 void ToolbarController::setupViewModeButton() {
@@ -143,8 +159,8 @@ void ToolbarController::setupHomeButton() {
   }
   MainWindow *mw = m_mainWindow;
   QObject::connect(m_homeButton, &QToolButton::clicked, this, [mw]() {
-    if (mw && mw->getNavigationManager()) {
-      mw->getNavigationManager()->loadRootView();
+    if (mw && mw->getApplicationManager()->getNavigationManager()) {
+      mw->getApplicationManager()->getNavigationManager()->loadRootView();
     }
   });
 }
@@ -205,12 +221,11 @@ void ToolbarController::refreshFilterToolbar() {
           return;
         }
         m_mainWindow->m_generalSettings.collectionTypeFilter = chosen;
-        if (m_mainWindow->getSettingsManager()) {
-          m_mainWindow->getSettingsManager()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+        if (settingsMgr()) {
+          settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
         }
-        if (m_mainWindow->getNavigationManager() && m_mainWindow->currentCollectionIndex >= 0) {
-          m_mainWindow->getNavigationManager()->safeReloadCollection(
-              m_mainWindow->currentCollectionIndex);
+        if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
+          navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
         }
       } else if (role == FilterRole::TitleToggle) {
         if (m_mainWindow->currentCollectionIndex < 0 ||
@@ -223,12 +238,11 @@ void ToolbarController::refreshFilterToolbar() {
           return;
         }
         c.filter.titleExclusionEnabled = checked;
-        if (m_mainWindow->getSettingsManager()) {
-          m_mainWindow->getSettingsManager()->saveCollections(m_mainWindow->m_collections);
+        if (settingsMgr()) {
+          settingsMgr()->saveCollections(m_mainWindow->m_collections);
         }
-        if (m_mainWindow->getNavigationManager()) {
-          m_mainWindow->getNavigationManager()->safeReloadCollection(
-              m_mainWindow->currentCollectionIndex);
+        if (navMgr()) {
+          navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
         }
       } else if (role == FilterRole::TitleEdit) {
         showTitleFilterEditor();
@@ -285,8 +299,8 @@ void ToolbarController::refreshFilterToolbar() {
     if (!matchedPrevious) {
       allAction->setChecked(true);
       m_mainWindow->m_generalSettings.collectionTypeFilter.clear();
-      if (m_mainWindow->getSettingsManager()) {
-        m_mainWindow->getSettingsManager()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+      if (settingsMgr()) {
+        settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
       }
     }
 
@@ -380,12 +394,11 @@ void ToolbarController::showTitleFilterEditor() {
   if (!parsed.isEmpty() && !c.filter.titleExclusionEnabled) {
     c.filter.titleExclusionEnabled = true;
   }
-  if (m_mainWindow->getSettingsManager()) {
-    m_mainWindow->getSettingsManager()->saveCollections(m_mainWindow->m_collections);
+  if (settingsMgr()) {
+    settingsMgr()->saveCollections(m_mainWindow->m_collections);
   }
   refreshFilterToolbar();
-  if (m_mainWindow->getNavigationManager() && m_mainWindow->currentCollectionIndex >= 0) {
-    m_mainWindow->getNavigationManager()->safeReloadCollection(
-        m_mainWindow->currentCollectionIndex);
+  if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
+    navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
   }
 }

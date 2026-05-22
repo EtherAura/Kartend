@@ -124,8 +124,7 @@ auto maybeTriggerCacheSave(ArtworkManager *self, ICacheManager *cacheManager) ->
 ArtworkManager::ArtworkManager(QObject *parent)
     : QObject(parent), collections(nullptr), currentCollectionIndex(nullptr),
       stackedWidget(nullptr), itemsPage(nullptr), gridContainer(nullptr),
-      m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr), m_persistentLoadTimer(nullptr),
-      m_cacheTimer(nullptr), m_silentLoadingActive(false),
+      m_timerCoordinator(nullptr), m_silentLoadingActive(false),
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
       m_continuousSilentLoad(false), m_persistentSilentLoad(false),
@@ -143,22 +142,20 @@ ArtworkManager::ArtworkManager(QObject *parent)
   m_dispatcher = new ArtworkLoadDispatcher(nullptr, this);
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
-  m_silentLoadTimer = new QTimer(this);
-  m_silentLoadTimer->setSingleShot(false);
-  m_silentLoadTimer->setInterval(UIConstants::Artwork::SILENT_LOAD_INTERVAL_MS);
-  connect(m_silentLoadTimer, &QTimer::timeout, this, &ArtworkManager::processContinuousSilentLoad);
+  m_silentLoadTimer.setSingleShot(false);
+  m_silentLoadTimer.setInterval(UIConstants::Artwork::SILENT_LOAD_INTERVAL_MS);
+  connect(&m_silentLoadTimer, &QTimer::timeout, this, &ArtworkManager::processContinuousSilentLoad);
 
-  m_cacheTimer = new QTimer(this);
-  m_cacheTimer->setObjectName("artCacheTimer");
-  m_cacheTimer->setInterval(UIConstants::Cache::SAVE_INTERVAL_MS);
-  connect(m_cacheTimer, &QTimer::timeout, this, [this]() {
+  m_cacheTimer.setObjectName("artCacheTimer");
+  m_cacheTimer.setInterval(UIConstants::Cache::SAVE_INTERVAL_MS);
+  connect(&m_cacheTimer, &QTimer::timeout, this, [this]() {
     if (!QApplication::closingDown()) {
       if (auto *cache = cacheMgr()) {
         cache->scheduleSaveToDisk(UIConstants::Cache::QUICK_SAVE_DELAY_MS);
       }
     }
   });
-  m_cacheTimer->start();
+  m_cacheTimer.start();
 }
 
 ICacheManager *ArtworkManager::cacheMgr() const {
@@ -173,7 +170,7 @@ ArtworkManager::~ArtworkManager() {
     m_dispatcher->cancelAll();
   }
 
-  TimerUtils::stopAndDisconnectTimers({m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
+  TimerUtils::stopAndDisconnectTimers({&m_cacheTimer, &m_silentLoadTimer, &m_persistentLoadTimer});
   if (m_timerCoordinator) {
     m_timerCoordinator->stopAllTimers();
     disconnect(m_timerCoordinator, nullptr, nullptr, nullptr);
@@ -330,7 +327,14 @@ void ArtworkManager::updateViewportArtwork() {
   std::tie(immediateItems, extendedItems, remainingItems) =
       partitionByViewport(localPending, gridContainer, vps, isLoaded);
 
-  m_widgetRegistry->setPending(std::move(remainingItems));
+  // Kartend-b8qe.3: drop remainingItems (out-of-extended-window) instead of
+  // storing them back as pending. Items scrolled out of the extended preload
+  // window during this update get cancelled; if the user scrolls back into
+  // them, configureArtworkForWidget will re-enqueue via addPendingArtwork on
+  // the next widget configure pass. Trading a small redundant enqueue on
+  // back-scroll for an unbounded queue under long rapid forward-scroll.
+  const int droppedOutOfWindow = remainingItems.size();
+  Q_UNUSED(droppedOutOfWindow)
 
   qint64 afterPartition = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
@@ -344,7 +348,8 @@ void ArtworkManager::updateViewportArtwork() {
   qCDebug(lcPerfTrace) << "updateViewportArtwork: totalMs=" << perfTimer.elapsed()
                        << "partitionMs=" << afterPartition << "pending=" << localPending.size()
                        << "immediate=" << immediateItems.size()
-                       << "extended=" << extendedItems.size();
+                       << "extended=" << extendedItems.size()
+                       << "droppedOutOfWindow=" << droppedOutOfWindow;
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 
@@ -353,12 +358,8 @@ void ArtworkManager::updateViewportArtwork() {
 
 // Build artwork path list for current collection (and descendants if enabled)
 void ArtworkManager::clearWidgetReferences() {
-  if (m_silentLoadTimer) {
-    m_silentLoadTimer->stop();
-  }
-  if (m_persistentLoadTimer) {
-    m_persistentLoadTimer->stop();
-  }
+  m_silentLoadTimer.stop();
+  m_persistentLoadTimer.stop();
 
   m_widgetRegistry->blockSignalsAndClearAll();
   // drop any per-item artwork-type overrides when widgets are torn down — a
@@ -496,8 +497,20 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artwor
     return;
   }
 
-  m_widgetRegistry->enqueuePending(
-      ArtworkInfo{.mediaItem = QPointer<ItemWidget>(widget), .artworkPath = artworkPath});
+  // Capture the widget's identity *now* so applyResultsToUi can detect
+  // cross-collection recycling that shares a basename (Kartend-j0lb.8).
+  // Item widgets carry the absolute file path; subcollection / virtual-folder
+  // widgets carry their item name (the only identifier they have).
+  QString widgetIdentity;
+  if (widget->isSubcollection() || widget->isVirtualFolder()) {
+    widgetIdentity = widget->getItemName();
+  } else {
+    widgetIdentity = widget->getFilePath();
+  }
+
+  m_widgetRegistry->enqueuePending(ArtworkInfo{.mediaItem = QPointer<ItemWidget>(widget),
+                                               .artworkPath = artworkPath,
+                                               .widgetIdentity = widgetIdentity});
 
   if (!shouldDefer) {
     scheduleViewportUpdate();
@@ -634,6 +647,7 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
       ArtworkInfo info;
       info.mediaItem = r.widget;
       info.artworkPath = r.artworkPath;
+      info.widgetIdentity = r.widgetIdentity;
       requeued.append(info);
     }
     if (!requeued.isEmpty()) {
@@ -684,29 +698,40 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     // Widgets are pooled / recycled across item / subcollection / virtual
     // folder roles. Without this stale-identity check, an in-flight artwork
     // load queued for the previous role would clobber the new role's pixmap.
-    QString widgetBaseName;
+    //
+    // The strict path (Kartend-j0lb.8): compare the widget's *current* identity
+    // against the snapshot captured at dispatch. For item widgets that's the
+    // absolute media path, which differs across collections even when two
+    // items share a basename (the cross-collection same-basename leak the
+    // basename-only check missed during all-collections search). Falls back
+    // to the basename comparison when the dispatched ArtworkInfo predates
+    // this field — keeps any caller that constructs ArtworkInfo without
+    // populating widgetIdentity from a hard skip.
+    QString widgetIdentity;
     if (widget->isSubcollection() || widget->isVirtualFolder()) {
-      widgetBaseName = widget->getItemName();
+      widgetIdentity = widget->getItemName();
     } else {
-      const QString widgetFilePath = widget->getFilePath();
-      if (widgetFilePath.isEmpty()) {
+      widgetIdentity = widget->getFilePath();
+    }
+    if (widgetIdentity.isEmpty()) {
+      ++skipped;
+      continue;
+    }
+    if (!result.widgetIdentity.isEmpty()) {
+      if (widgetIdentity != result.widgetIdentity) {
         ++skipped;
         continue;
       }
-      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
-    }
-    if (widgetBaseName.isEmpty()) {
-      ++skipped;
-      continue;
-    }
-    // Kartend-gro2: prefer the worker-precomputed basename; fall back to the
-    // ad-hoc QFileInfo derivation if a producer somewhere hasn't been updated.
-    const QString artworkBaseName = result.artworkBaseName.isEmpty()
-                                        ? QFileInfo(result.artworkPath).completeBaseName()
-                                        : result.artworkBaseName;
-    if (widgetBaseName != artworkBaseName) {
-      ++skipped;
-      continue;
+    } else {
+      // Legacy fallback: compare basenames. ArtworkLoadDispatcher precomputes
+      // result.artworkBaseName off the GUI thread (artworkloaddispatcher.cpp).
+      const QString widgetBaseName = (widget->isSubcollection() || widget->isVirtualFolder())
+                                         ? widgetIdentity
+                                         : QFileInfo(widgetIdentity).completeBaseName();
+      if (widgetBaseName != result.artworkBaseName) {
+        ++skipped;
+        continue;
+      }
     }
 
     m_widgetRegistry->markLoaded(widget, result.artworkPath);

@@ -21,8 +21,11 @@
 #include <QStringList>
 
 #include "settingsdialog.h"
+#include "settingskeys.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants/icons.h"
+
+namespace keys = kartend::settings::keys;
 
 namespace {
 // Page index lives in Qt::UserRole; -1 marks a non-selectable group header.
@@ -262,17 +265,16 @@ void SettingsDialog::onSettingsSearchTextChanged(const QString &text) {
 
 void SettingsDialog::restoreDialogState() {
   QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
-  settings.beginGroup(QStringLiteral("SettingsDialog"));
-  const QByteArray geometry = settings.value(QStringLiteral("geometry")).toByteArray();
+  settings.beginGroup(keys::kGroupSettingsDialog);
+  const QByteArray geometry = settings.value(keys::kGeometry).toByteArray();
   if (!geometry.isEmpty()) {
     restoreGeometry(geometry);
   }
-  const QByteArray splitterState = settings.value(QStringLiteral("splitterState")).toByteArray();
+  const QByteArray splitterState = settings.value(keys::kSplitterState).toByteArray();
   if (!splitterState.isEmpty()) {
     ui->mainSplitter->restoreState(splitterState);
   }
-  const QByteArray navSplitterState =
-      settings.value(QStringLiteral("navSplitterState")).toByteArray();
+  const QByteArray navSplitterState = settings.value(keys::kNavSplitterState).toByteArray();
   if (!navSplitterState.isEmpty()) {
     ui->navSplitter->restoreState(navSplitterState);
   }
@@ -281,9 +283,9 @@ void SettingsDialog::restoreDialogState() {
 
 void SettingsDialog::saveDialogState() {
   QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
-  settings.beginGroup(QStringLiteral("SettingsDialog"));
-  settings.setValue(QStringLiteral("geometry"), saveGeometry());
-  settings.setValue(QStringLiteral("splitterState"), ui->mainSplitter->saveState());
-  settings.setValue(QStringLiteral("navSplitterState"), ui->navSplitter->saveState());
+  settings.beginGroup(keys::kGroupSettingsDialog);
+  settings.setValue(keys::kGeometry, saveGeometry());
+  settings.setValue(keys::kSplitterState, ui->mainSplitter->saveState());
+  settings.setValue(keys::kNavSplitterState, ui->navSplitter->saveState());
   settings.endGroup();
 }

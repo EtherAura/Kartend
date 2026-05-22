@@ -33,6 +33,13 @@ class QJsonObject;
 struct ArtworkInfo {
   QPointer<ItemWidget> mediaItem;
   QString artworkPath;
+  /// Identity snapshot of the widget at dispatch time. For item widgets this
+  /// is the absolute media file path; for subcollection / virtual-folder
+  /// widgets it's the item name. Captured here so applyResultsToUi can detect
+  /// cross-collection recycling that the basename check alone misses — two
+  /// collections each holding an item named "Tetris" would share a basename
+  /// but never share an absolute path (Kartend-j0lb.8).
+  QString widgetIdentity;
 
   struct Result {
     QPointer<ItemWidget> widget;
@@ -41,6 +48,10 @@ struct ArtworkInfo {
     // stale-identity check doesn't construct a QFileInfo per result inside
     // its per-tick loop.
     QString artworkBaseName;
+    /// Echoed from the dispatched ArtworkInfo so applyResultsToUi can compare
+    /// against the widget's *current* identity to detect mid-flight recycling
+    /// across collections that share a basename (Kartend-j0lb.8).
+    QString widgetIdentity;
     QImage image;
     bool loadedFromDiskCache = false;
   };
@@ -187,9 +198,10 @@ private:
   UIReferences ui;
 
   TimerUtils::Coordinator *m_timerCoordinator;
-  QTimer *m_silentLoadTimer;
-  QTimer *m_persistentLoadTimer;
-  QTimer *m_cacheTimer;
+  QTimer m_silentLoadTimer; // Kartend-a911.6: value member
+  QTimer m_persistentLoadTimer;
+  bool m_persistentLoadTimerInited = false;
+  QTimer m_cacheTimer;
 
   /// Catalog of artwork file paths discovered for the active
   /// collection plus the silent-load progression state (cursor + the

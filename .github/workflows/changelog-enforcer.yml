@@ -1,0 +1,93 @@
+name: CHANGELOG Enforcer
+
+# Fails a pull request if it touches user-visible code (src/ outside tests/)
+# without adding a corresponding entry under [Unreleased] in CHANGELOG.md.
+# Doc-only, test-only, and CI-only PRs are auto-exempted by the path check;
+# anything else can opt out by adding the `no-changelog` label.
+#
+# Rationale: CHANGELOG.md has lagged code several times in the past
+# (Kartend-pbed); manual discipline is fragile. This gate is a lightweight,
+# label-overridable backstop that runs in a fraction of a second so it
+# doesn't slow the per-PR matrix.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changelog-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need the merge base to diff against the PR's target branch.
+          fetch-depth: 0
+
+      - name: Check for CHANGELOG entry
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+
+          # Opt-out: PR carries the `no-changelog` label.
+          if printf '%s' "$PR_LABELS" | grep -q '"no-changelog"'; then
+            echo "::notice::PR has the 'no-changelog' label — skipping CHANGELOG check."
+            exit 0
+          fi
+
+          BASE_SHA="$(git rev-parse "origin/${BASE_REF}")"
+          MERGE_BASE="$(git merge-base "${BASE_SHA}" HEAD)"
+
+          CHANGED=$(git diff --name-only "${MERGE_BASE}" HEAD)
+          echo "Changed files since merge base ${MERGE_BASE}:"
+          printf '  %s\n' $CHANGED
+
+          # Decide if the PR touches user-visible code:
+          # - any src/ file outside src/.../tests subdirs counts
+          # - tests/, docs/, .github/, .scripts/, CONTRIBUTING.md, CHANGELOG.md
+          #   itself, top-level configs are exempt
+          USER_VISIBLE=0
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            case "$path" in
+              src/*)
+                # Exclude any path that has 'tests' as a path segment
+                # (currently kartend has no tests inside src/, but stay
+                # future-proof).
+                if printf '%s' "$path" | grep -qE '(^|/)tests(/|$)'; then
+                  continue
+                fi
+                USER_VISIBLE=1
+                ;;
+            esac
+          done <<<"$CHANGED"
+
+          if [ "$USER_VISIBLE" -eq 0 ]; then
+            echo "::notice::PR doesn't touch user-visible code — CHANGELOG entry not required."
+            exit 0
+          fi
+
+          # Verify CHANGELOG.md is in the diff AND that the diff added at
+          # least one line beneath the [Unreleased] header. A no-op edit
+          # (e.g., trailing whitespace) shouldn't count.
+          if ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::PR modifies user-visible code under src/ but does not update CHANGELOG.md."
+            echo "Add an entry under [Unreleased], or apply the 'no-changelog' label for refactor-only / internal changes."
+            exit 1
+          fi
+
+          ADDED=$(git diff "${MERGE_BASE}" HEAD -- CHANGELOG.md \
+            | awk '/^\+\+\+ / { in_file = 1; next } in_file && /^\+[^+]/ { print }' \
+            | grep -cE '^\+[^[:space:]]' || true)
+          if [ "$ADDED" -eq 0 ]; then
+            echo "::error::CHANGELOG.md is modified but no new non-whitespace lines were added. Add a real entry under [Unreleased]."
+            exit 1
+          fi
+
+          echo "::notice::CHANGELOG.md updated with ${ADDED} new line(s)."

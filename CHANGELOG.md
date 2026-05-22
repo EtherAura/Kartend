@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Coverage floor in `.github/workflows/coverage.yml` raised from 26%/35%
+  (lines/functions) to 33%/42% — milestone 1 of Kartend-l44o.1 following
+  the addition of per-manager integration test suites for SearchManager,
+  SelectionDisplayManager, DetailsPaneManager, AttractManager, and
+  DetailPageManager (45 new test methods on top of the FilterManager /
+  VirtualContainerManager / SelectionOverlayManager suites that already
+  landed). Local gcov-15 measurement: 35.79% lines / 46.87% functions
 - CI `install-deps` composite action now calls `apt-get install` directly
   instead of wrapping `awalsh128/cache-apt-pkgs-action@v1`. The wrapper
   pinned `actions/cache/restore@v4` (Node 20), which GitHub forces off

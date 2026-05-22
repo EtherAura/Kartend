@@ -29,9 +29,8 @@ const QString LABEL_STYLE = QStringLiteral("color: rgba(180, 180, 180, 180);"
 } // namespace
 
 SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent) : QObject(parent) {
-  m_pulseTimer = new QTimer(this);
-  m_pulseTimer->setInterval(PULSE_INTERVAL_MS);
-  connect(m_pulseTimer, &QTimer::timeout, this, [this]() {
+  m_pulseTimer.setInterval(PULSE_INTERVAL_MS);
+  connect(&m_pulseTimer, &QTimer::timeout, this, [this]() {
     if (m_label && m_label->graphicsEffect()) {
       auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_label->graphicsEffect());
       if (effect) {
@@ -194,11 +193,11 @@ void SearchLoadingOverlay::updateGeometry() {
 
 void SearchLoadingOverlay::startPulseAnimation() {
   m_pulseDimming = true;
-  m_pulseTimer->start();
+  m_pulseTimer.start();
 }
 
 void SearchLoadingOverlay::stopPulseAnimation() {
-  m_pulseTimer->stop();
+  m_pulseTimer.stop();
   if (m_pulseAnimation) {
     m_pulseAnimation->stop();
     m_pulseAnimation = nullptr;

@@ -66,7 +66,31 @@ QString ArtworkWidgetRegistry::pathFor(ItemWidget *widget) const {
 
 void ArtworkWidgetRegistry::enqueuePending(const ArtworkInfo &info) {
   QMutexLocker locker(&m_mutex);
+
+  // Kartend-b8qe.3 coalesce: if an entry for the same (widget, artworkPath)
+  // is already pending, skip the append — rapid scroll past the same item
+  // would otherwise queue dozens of identical requests that all do the same
+  // disk read on the worker pool.
+  for (const auto &existing : m_pending) {
+    if (existing.mediaItem == info.mediaItem && existing.artworkPath == info.artworkPath) {
+      return;
+    }
+  }
+
+  // Kartend-b8qe.3 cap: hard limit on queue depth so a long rapid scroll
+  // doesn't pile up thousands of stale requests. Drop the oldest entry on
+  // overflow — older entries are most likely already off-screen by the time
+  // the queue fills, so FIFO eviction trades stale work for current work.
+  if (m_pending.size() >= kMaxPending) {
+    m_pending.removeFirst();
+  }
+
   m_pending.append(info);
+}
+
+int ArtworkWidgetRegistry::pendingCount() const {
+  QMutexLocker locker(&m_mutex);
+  return m_pending.size();
 }
 
 bool ArtworkWidgetRegistry::isPendingFor(ItemWidget *widget, const QString &path) const {

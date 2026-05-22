@@ -4,12 +4,12 @@
 #include "collectionutils.h"
 #include <QList>
 #include <QObject>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QLineEdit;
 class QMenuBar;
 class QScrollArea;
-class QTimer;
 class QWidget;
 QT_END_NAMESPACE
 
@@ -95,7 +95,8 @@ private:
   BackdropBlurOverlay *m_toolbarBlur = nullptr;
   // throttle for parallax stylesheet rebuilds. Lazy-created on first scroll
   // while parallax is active. Caps QSS updates at ~60Hz.
-  QTimer *m_parallaxThrottle = nullptr;
+  QTimer m_parallaxThrottle; // Kartend-a911.5: value member; lifetime tracks owner
+  bool m_parallaxThrottleInited = false;
   bool m_scrollListenerConnected = false;
 };
 

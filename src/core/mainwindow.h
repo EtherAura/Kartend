@@ -51,10 +51,10 @@ class DetailPageManager;
 class MenuController;
 class MarqueeController;
 class DbEventsController;
+class DialogController;
 class ScraperController;
 class ScrollEventsController;
 class TextZoomHud;
-class ISettingsDialog;
 class OverlayZOrderRegistry;
 
 namespace kart {
@@ -115,18 +115,18 @@ public:
   [[nodiscard]] DetailsPane *getMetadataSidebar() const { return m_MetadataSidebar; }
 
   // Delegated Getters
-  [[nodiscard]] DetailsPaneManager *getDetailsPaneManager() const;
-  [[nodiscard]] ISettingsManager *getSettingsManager() const override;
-  [[nodiscard]] IDatabaseManager *getDatabaseManager() const;
-  [[nodiscard]] ScrollManager *getScrollManager() const override;
-  [[nodiscard]] NavigationManager *getNavigationManager() const;
-  [[nodiscard]] InteractionManager *getInteractionManager() const override;
-  [[nodiscard]] SessionManager *getSessionManager() const;
-  [[nodiscard]] ArtworkManager *getArtworkManager() const;
-  [[nodiscard]] kart::KartManager *getKartManager() const;
-  [[nodiscard]] CacheManager *getCacheManager() const;
-  [[nodiscard]] PlaylistManager *getPlaylistManager() const;
-  [[nodiscard]] DetailPageManager *getDetailPageManager() const;
+  // Manager accessors removed (Kartend-pefm). External callers route through
+  // mainWindow->applicationManager()->getXxxManager(); internal callers
+  // use m_appManager directly. These three remain because they implement
+  // IMainWindow's pure-virtual accessors. Renamed without the "get" prefix
+  // so external grep for legacy 'mainWindow->getXxxManager' returns clean
+  // outside src/core/mainwindow*.cpp (Kartend-5wuk.1).
+  [[nodiscard]] ApplicationManager *applicationManager() const override {
+    return m_appManager.get();
+  }
+  [[nodiscard]] ISettingsManager *settingsManager() const override;
+  [[nodiscard]] ScrollManager *scrollManager() const override;
+  [[nodiscard]] InteractionManager *interactionManager() const override;
 
   /// Re-runs the playlist synthesis pass: drops any prior
   /// playlist-backed CollectionConfigs from m_collections, queries the live
@@ -275,6 +275,9 @@ private:
   std::unique_ptr<ScrollEventsController> m_scrollEventsController;
   std::unique_ptr<DbEventsController> m_dbEventsController;
   std::unique_ptr<ScraperController> m_scraperController;
+  /// Owns dialog construction so MainWindow doesn't need to #include every
+  /// dialog header. See dialogcontroller.{h,cpp}.
+  std::unique_ptr<DialogController> m_dialogController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -297,17 +300,6 @@ private:
   // persisted to ~/.config/Kartend/pending-scrape.json by the service.
 
   void setupManagerConnections();
-
-  /// Build the factory the data-layer SettingsDialogController uses to
-  /// construct + signal-wire the concrete SettingsDialog. Lives on MainWindow
-  /// because only the ui/ side may name SettingsDialog and its Qt signals;
-  /// the controller drives the result through the neutral ISettingsDialog
-  /// interface. Both openSettingsDialog call sites assign the result into
-  /// SettingsDialogContext::createSettingsDialog.
-  [[nodiscard]] std::function<std::unique_ptr<ISettingsDialog>(
-      QWidget *, const QList<CollectionConfig> &, int,
-      std::function<void(const QList<CollectionConfig> &)>, std::function<void(int)>)>
-  makeSettingsDialogFactory();
 
   void updateWindowTitleWithFilter(int visible, int total);
   /// Refreshes the itemPositionLabel in the top bar with the current

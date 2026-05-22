@@ -240,13 +240,12 @@ void WidgetPoolManager::prewarmAsync() {
   }
 
   // Create timer if needed
-  if (!m_prewarmTimer) {
-    m_prewarmTimer = new QTimer(this);
-    m_prewarmTimer->setInterval(0); // Next event loop iteration
-    connect(m_prewarmTimer, &QTimer::timeout, this, [this]() {
+  if (!m_prewarmTimerInited) {
+    m_prewarmTimer.setInterval(0); // Next event loop iteration
+    connect(&m_prewarmTimer, &QTimer::timeout, this, [this]() {
       pruneNullEntries(m_pool);
       if (!m_widgetParent || m_pool.size() >= m_prewarmTargetSize) {
-        m_prewarmTimer->stop();
+        m_prewarmTimer.stop();
         return;
       }
 
@@ -262,19 +261,20 @@ void WidgetPoolManager::prewarmAsync() {
 
       // Stop when done
       if (m_pool.size() >= m_prewarmTargetSize) {
-        m_prewarmTimer->stop();
+        m_prewarmTimer.stop();
       }
     });
+    m_prewarmTimerInited = true;
   }
 
-  if (!m_prewarmTimer->isActive()) {
-    m_prewarmTimer->start();
+  if (!m_prewarmTimer.isActive()) {
+    m_prewarmTimer.start();
   }
 }
 
 void WidgetPoolManager::stopPrewarm() {
-  if (m_prewarmTimer && m_prewarmTimer->isActive()) {
-    m_prewarmTimer->stop();
+  if (m_prewarmTimer.isActive()) {
+    m_prewarmTimer.stop();
   }
 }
 
