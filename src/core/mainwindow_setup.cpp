@@ -111,6 +111,10 @@ void MainWindow::setupUI() {
                      [this]() { resyncPlaylistCollections(); });
   }
   rebuildHierarchyCache();
+  // Defer playlist resync one event-loop tick so the freshly built hierarchy
+  // cache has settled before resyncPlaylistCollections() reads it. Running
+  // synchronously here would race rebuildHierarchyCache's downstream
+  // signal-driven updates and produce a half-built collection list.
   QTimer::singleShot(0, this, [this]() { resyncPlaylistCollections(); });
 
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
@@ -226,6 +230,10 @@ void MainWindow::showEvent(QShowEvent *event) {
   }
   m_deferredStartupDone = true;
 
+  // Defer the orphan purge off the showEvent's critical path so the window
+  // paints (and the user sees the first frame) before the multi-second
+  // table scan starts. Running synchronously inside showEvent blocks paint
+  // and produces a visibly-frozen window on large libraries.
   QTimer::singleShot(0, this, [this]() {
     if (m_isShuttingDown || QApplication::closingDown()) {
       return;
