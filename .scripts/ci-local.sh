@@ -22,6 +22,15 @@
 #   .scripts/ci-local.sh prune           # wipe the persistent act state (volumes + cache)
 #   .scripts/ci-local.sh -- <act args>   # raw passthrough, e.g. .scripts/ci-local.sh -- -j build --verbose
 #
+# Faster Docker-direct variants (skip act overhead — same image, much quicker
+# iteration when chasing CI failures). Require `docker build -f
+# .scripts/Dockerfile.ci -t kartend-ci .` once; subcommands assume the image
+# exists and re-use the warm cache.
+#   .scripts/ci-local.sh docker:tidy     # maintenance-check via kartend-ci
+#   .scripts/ci-local.sh docker:build    # Release+clang build + ctest via kartend-ci
+#   .scripts/ci-local.sh docker:tsan     # TSan build + ctest via kartend-ci
+#   .scripts/ci-local.sh docker:all      # docker:tidy + docker:build + docker:tsan in sequence
+#
 # Why prune exists:
 #   `act` creates one named Docker volume per job+matrix cell (e.g.
 #   `act-Build-and-Test-build-<hash>`) and REUSES it on subsequent runs.
@@ -225,6 +234,65 @@ case "$ARG" in
   tidy|maintenance|maintenance-check)
     prune_act_volumes "$(volume_pattern_for "$ARG")"
     exec "$ACT_BIN" -j maintenance-check "$@"
+    ;;
+
+  # docker:* subcommands — bypass act entirely, use the kartend-ci image
+  # (Dockerfile.ci) directly. Faster turn-around than act since there's no
+  # workflow YAML parsing, artifact mock server, or job-volume bookkeeping;
+  # but skips the GitHub Actions surface (env vars, services, matrix
+  # expansion) so it only reproduces the *build/lint/test* surface of a job.
+  # Most CI failures are in that surface, so this is the right tool for
+  # iterating on "why does my push fail CI" without paying act's overhead.
+  #
+  # The image (kartend-ci) is built once via `docker build -f
+  # .scripts/Dockerfile.ci -t kartend-ci .` — re-running auto-skips when the
+  # cache is warm. Subcommands here assume the image already exists; build
+  # it explicitly if `docker images kartend-ci` is empty.
+  docker:tidy|docker:maintenance|docker:maintenance-check)
+    info "running kartend-ci maintenance-check (clang-tidy + format + IWYU + cppcheck)"
+    info "this matches the CI maintenance-check job exactly — same image, same Qt, same clang version"
+    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+      ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
+      cd /src
+      rm -rf build/ninja-maintenance
+      bash .scripts/build.sh --maintenance --format-check
+      rc=$?
+      echo
+      echo "=== clang-tidy promoted errors ==="
+      grep "error:" build/ninja-maintenance/logs/clang-tidy.log 2>/dev/null | head -20 || echo "(none)"
+      echo "=== clang-format drift ==="
+      cat build/ninja-maintenance/logs/clang-format.log 2>/dev/null | head -40
+      exit $rc
+    '
+    ;;
+
+  docker:build|docker:release|docker:release-clang)
+    info "running kartend-ci Release+clang build (matches CI's build (Release, clang) matrix cell)"
+    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+      cd /src
+      rm -rf build/Release-clang
+      cmake -S . -B build/Release-clang -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+      cmake --build build/Release-clang --parallel
+      QT_QPA_PLATFORM=offscreen ctest --test-dir build/Release-clang --output-on-failure
+    '
+    ;;
+
+  docker:tsan|docker:thread-sanitizer)
+    info "running kartend-ci TSan build (matches CI thread-sanitizer job)"
+    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+      cd /src
+      pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
+      rm -rf build/TSan
+      cmake -S . -B build/TSan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON
+      cmake --build build/TSan --parallel
+      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/.tsan_suppressions.txt ctest --test-dir build/TSan --output-on-failure
+    '
+    ;;
+
+  docker:all)
+    info "running kartend-ci docker:tidy then docker:build then docker:tsan in sequence (~30 min total)"
+    "$0" docker:tidy && "$0" docker:build && "$0" docker:tsan
+    exit $?
     ;;
 
   all|"")
