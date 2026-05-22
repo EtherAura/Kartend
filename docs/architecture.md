@@ -53,9 +53,12 @@ src/
 │   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
 │   └── media/           # Artwork pipeline, detail pages
 │       ├── artwork/     # Async artwork loading with QtConcurrent
-│       ├── detailpage/  # Detail-page coordinator
-│       └── detailspane/ # Metadata / details side pane
+│       └── detailpage/  # Detail-page coordinator
 ├── ui/                  # UI components and constants
+│   ├── controllers/     # Controllers that orchestrate UI widgets but stay
+│   │   │                # at the ui/ layer (e.g. DetailsPaneManager, moved
+│   │   │                # out of modules/media/ in Kartend-uk5z)
+│   │   └── detailspanemanager/
 │   ├── dialogs/         # Dialogs grouped by domain: settings/ (further
 │   │                    # split into core/ + appearance/ + behavior/ +
 │   │                    # artwork/ + launchers/ + collections/ per
@@ -99,7 +102,7 @@ src/
 | `cachemanager` | Manages in-memory pixmap cache with LRU eviction and optional disk persistence. |
 | `sessionmanager` | Persists and restores selection state and item counts across application sessions. |
 | `settingsmanager` | Handles config file I/O, collection settings, and the settings dialog interface. |
-| `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). |
+| `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). Lives at `src/ui/controllers/detailspanemanager/` since Kartend-uk5z — a controller for a ui-layer widget (DetailsPane), at the ui/ layer. |
 | `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
 | `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
 | `datasourcemanager` | Owns FilterManager, ScrollDataManager, PreSearchStateManager, and SearchLoadingOverlay (helper extracted from ScrollManager). |

@@ -178,21 +178,13 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# Aggregator INTERFACE library that pulls every per-area OBJECT lib into the
-# main executable + integration test harness. The per-area libs (kartend_utils,
-# kartend_api, kartend_chrome, kartend_data, kartend_input, kartend_media,
-# kartend_behavior, kartend_ui, kartend_core) are declared in
-# src/CMakeLists.txt with a PUBLIC target_link_libraries DAG that enforces
-# downward-only edges at the library level. Replaces the prior monolithic
-# OBJECT library that hid module boundaries behind a single target.
-set(KARTEND_LIB_TARGET kartend_lib)
-add_library(${KARTEND_LIB_TARGET} INTERFACE)
-
 add_subdirectory(src)
 
 # Convenience handle for the per-area OBJECT libs declared in
 # src/CMakeLists.txt. Used by the blocks below to apply compile / link
-# options uniformly across every area.
+# options uniformly across every area, and to wire every .o file into the
+# executable + integration-test binary (OBJECT libs don't propagate through
+# INTERFACE_LINK_LIBRARIES — the .o pull-in must be explicit per consumer).
 set(KARTEND_AREA_LIBS
   kartend_utils
   kartend_api
@@ -207,15 +199,7 @@ set(KARTEND_AREA_LIBS
 
 add_executable(kartend ${SRC_DIR}/core/main.cpp)
 
-# Link every per-area OBJECT lib directly so their .o files end up in the
-# executable. OBJECT libraries do NOT propagate through INTERFACE_LINK_-
-# LIBRARIES — ${KARTEND_LIB_TARGET} aggregates them for documentation /
-# usage-requirement plumbing, but the actual .o pull-in must be explicit
-# here (and in the integration-test binary; see tests/integration/CMakeLists.txt).
-target_link_libraries(kartend PRIVATE
-  ${KARTEND_LIB_TARGET}
-  ${KARTEND_AREA_LIBS}
-)
+target_link_libraries(kartend PRIVATE ${KARTEND_AREA_LIBS})
 
 set(KARTEND_TRANSLATION_INSTALL_SUBDIR "${APP_NAME}/translations")
 set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
@@ -373,19 +357,17 @@ target_link_options(kartend PRIVATE
 
 # LTO objects in the per-area OBJECT libs are unreadable to a non-LTO link
 # step, so every consumer (the main exe AND the integration test binary)
-# must link with the matching LTO and linker flags. Surface the minimum set
-# as INTERFACE_LINK_OPTIONS on the aggregator so they propagate automatically
-# to anything that links ${KARTEND_LIB_TARGET}.
+# must link with the matching LTO and linker flags. With the kartend_lib
+# INTERFACE aggregator deleted (Kartend-w1wv), apply the link options
+# directly to every consumer instead of propagating them through the
+# aggregator's INTERFACE_LINK_OPTIONS.
+set(KARTEND_LTO_LINK_OPTIONS
+  $<$<CONFIG:Release>:-flto=auto>
+)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  target_link_options(${KARTEND_LIB_TARGET} INTERFACE
-    $<$<CONFIG:Release>:-flto=auto>
-    $<$<CONFIG:Release>:-fuse-ld=lld>
-  )
-else()
-  target_link_options(${KARTEND_LIB_TARGET} INTERFACE
-    $<$<CONFIG:Release>:-flto=auto>
-  )
+  list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
 endif()
+target_link_options(kartend PRIVATE ${KARTEND_LTO_LINK_OPTIONS})
 
 # PGO: applied to each area lib (must come AFTER target_compile_options
 # above used genex substitution — applying via separate target_*_options calls

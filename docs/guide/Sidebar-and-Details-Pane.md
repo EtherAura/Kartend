@@ -281,7 +281,7 @@ serif details pane.
 ## For developers
 
 - Sidebar UI: [src/ui/widgets/panes/detailspane.ui](../../src/ui/widgets/panes/) +
-  [src/modules/media/detailspane/](../../src/modules/media/detailspane/)
+  [src/ui/controllers/detailspanemanager/](../../src/ui/controllers/detailspanemanager/)
   (`DetailsPaneManager`).
 - Visibility & external-hide flag: `DetailsPaneManager` keeps both
   the persisted `sidebarVisible` and an in-memory "external hide"

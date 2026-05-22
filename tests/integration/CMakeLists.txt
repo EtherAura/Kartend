@@ -4,15 +4,13 @@
 # (ApplicationManager, NavigationManager, ScrollManager, InteractionManager
 # and friends) because they pull in the full MainWindow widget graph and
 # cross-manager wiring. Instead, those tests run inside this single shared
-# integration binary, which links the ${KARTEND_LIB_TARGET} INTERFACE
-# aggregator (which transitively pulls every kartend_<area> OBJECT lib) so
-# it sees every TU and AUTOMOC/AUTOUIC artifact already generated for the
-# main executable.
+# integration binary, which links every per-area kartend_<area> OBJECT lib
+# directly so it sees every TU and AUTOMOC/AUTOUIC artifact already generated
+# for the main executable.
 #
 # Add new test source files to INTEGRATION_TEST_SOURCES below. All tests share
 # one binary because per-test executables would each pay the ~140-TU link cost
-# of the full kartend_lib closure (which is now a thin aggregator wrapping
-# nine per-area OBJECT libs declared in src/CMakeLists.txt).
+# of the full per-area closure declared in src/CMakeLists.txt.
 
 set(INTEGRATION_TEST_SOURCES
   test_main.cpp
@@ -50,18 +48,18 @@ add_executable(test_integration
   ${INTEGRATION_TEST_HEADERS}
 )
 
-# The OBJECT library propagates its PUBLIC include directories, compile
-# definitions, and Qt link dependencies, so this binary needs no extra wiring
-# to see the kartend source tree.
+# Each per-area OBJECT lib publishes its own PUBLIC include directories,
+# compile definitions, and Qt link dependencies through the inter-area DAG
+# declared in src/CMakeLists.txt, so listing every area pulls in the full
+# include + Qt surface. OBJECT libs don't propagate through
+# INTERFACE_LINK_LIBRARIES, so the executable + this binary both list every
+# area directly (matches kartend's link line in the top-level CMakeLists).
 target_link_libraries(test_integration
   PRIVATE
-    ${KARTEND_LIB_TARGET}
-    # OBJECT libs don't propagate through INTERFACE_LINK_LIBRARIES on the
-    # aggregator, so list every per-area lib directly to pull in their .o
-    # files (matches the executable's link line in the top-level CMakeLists).
     ${KARTEND_AREA_LIBS}
     Qt6::Test
 )
+target_link_options(test_integration PRIVATE ${KARTEND_LTO_LINK_OPTIONS})
 
 # AUTOUIC generates ui_*.h headers next to the consuming target's autogen
 # directory. With the per-area OBJECT lib split, each area that owns a

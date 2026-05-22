@@ -106,7 +106,7 @@ leaving a test folder behind after deleting a module, fails the lint.
 | `src/modules/input/widgetpool/` | `tests/modules/widgetpool/` |
 | `src/modules/media/artwork/` | `tests/modules/artwork/` |
 | `src/modules/media/detailpage/` | `tests/modules/detailpage/` |
-| `src/modules/media/detailspane/` | *(integration-only — `tests/integration/test_eventmanager_detailspane.cpp`, `test_detailspane_coverflow.cpp`)* |
+| `src/ui/controllers/detailspanemanager/` | *(integration-only — `tests/integration/test_eventmanager_detailspane.cpp`, `test_detailspane_coverflow.cpp`; moved from `src/modules/media/detailspane/` in Kartend-uk5z)* |
 
 Integration-only features (no `tests/modules/<feature>/`) are listed in
 `INTEGRATION_ONLY` inside `check-test-mapping.py`; new additions there
@@ -156,25 +156,31 @@ Pure unit tests are not viable for managers that include `ui_*.h` headers and
 reference the full MainWindow widget graph (`ApplicationManager`,
 `NavigationManager`, `ScrollManager`, `InteractionManager`, etc.). Those
 managers run inside a **single shared integration binary** at
-`tests/integration/test_integration` so we pay the full kartend_lib link
-closure once instead of per test.
+`tests/integration/test_integration` so we pay the full per-area `OBJECT`-lib
+link closure once instead of per test.
 
 ### Architecture
 
-- `kartend_lib` — top-level CMake `OBJECT` library that compiles every Kartend
-  source file (everything except `src/core/main.cpp`). It owns `PUBLIC`
-  include directories, compile definitions, and Qt link dependencies, so any
-  consumer of the library inherits them.
+- **Per-area `OBJECT` libraries** declared in `src/CMakeLists.txt`:
+  `kartend_utils`, `kartend_api`, `kartend_chrome`, `kartend_data`,
+  `kartend_input`, `kartend_media`, `kartend_behavior`, `kartend_ui`,
+  `kartend_core`. Each lib publishes its own `PUBLIC` include directories
+  and links upward to its dependencies via `target_link_libraries(<area>
+  PUBLIC <dep>)`, forming a CMake-enforced layering DAG (utils → api →
+  chrome → data → input/media → ui → behavior → core). Replaced the prior
+  `kartend_lib` INTERFACE aggregator in Kartend-w1wv.
 - `kartend` (executable) — `src/core/main.cpp` plus
-  `target_link_libraries(kartend PRIVATE kartend_lib)`.
-- `tests/integration/test_integration` — Qt Test binary that also links
-  `kartend_lib` and adds the `kartend_lib_autogen/include` path so it can see
-  AUTOUIC-generated `ui_*.h` headers.
+  `target_link_libraries(kartend PRIVATE ${KARTEND_AREA_LIBS})`. OBJECT libs
+  don't propagate `.o` files through `INTERFACE_LINK_LIBRARIES`, so every
+  consumer enumerates the area libs directly.
+- `tests/integration/test_integration` — Qt Test binary that links the same
+  per-area libs and adds the `kartend_{chrome,core,ui}_autogen/include`
+  paths so it can see AUTOUIC-generated `ui_*.h` headers.
 
-LTO link options for Release builds are set as `INTERFACE` link options on
-`kartend_lib`, so both the executable and the test harness link with the
-matching `-flto=auto` (and `-fuse-ld=lld` under Clang) without each consumer
-needing to know about it.
+LTO link options for Release builds live in the `KARTEND_LTO_LINK_OPTIONS`
+list at the top-level CMakeLists.txt and are applied directly to both the
+executable and the integration-test binary (`-flto=auto`, plus
+`-fuse-ld=lld` under Clang).
 
 ### MainWindowFixture
 
@@ -223,7 +229,7 @@ example to copy from.
 
 ### Why Not Per-Manager Test Binaries?
 
-Each integration test binary statically pulls the full `kartend_lib` closure
+Each integration test binary statically pulls the full per-area-libs closure
 (~140 TUs, full Qt Widgets/Sql/Concurrent link). One binary per manager would
 balloon CI link time and disk usage. The shared-binary trade-off is that all
 tests share a single `QApplication` and process, so a hard crash in one slot

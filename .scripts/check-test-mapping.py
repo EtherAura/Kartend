@@ -36,8 +36,11 @@ TESTS_MODULES = REPO / "tests" / "modules"
 INTEGRATION_ONLY: set[str] = {
     "application",  # src/modules/behavior/application — ApplicationManager
                     # exercised by tests/integration/test_applicationmanager_lifecycle.cpp
-    "detailspane",  # src/modules/media/detailspane — DetailsPaneManager
-                    # exercised by test_eventmanager_detailspane / test_detailspane_coverflow
+    # DetailsPaneManager moved out of src/modules/media/detailspane/ to
+    # src/ui/controllers/detailspanemanager/ in Kartend-uk5z. It still lacks
+    # unit tests (integration-only via test_eventmanager_detailspane /
+    # test_detailspane_coverflow), but it's no longer a src/modules feature,
+    # so no INTEGRATION_ONLY entry is needed.
 }
 
 

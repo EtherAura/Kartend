@@ -1858,7 +1858,6 @@ add_executable(test_settingsmigration
 )
 target_link_libraries(test_settingsmigration
   PRIVATE
-    ${KARTEND_LIB_TARGET}
     ${KARTEND_AREA_LIBS}
     Qt6::Core
     Qt6::Gui
@@ -2094,9 +2093,9 @@ target_link_libraries(test_detailpagehelpers
 add_test(NAME DetailPageHelpers COMMAND test_detailpagehelpers)
 
 # Integration test harness for UI-coordinator managers.
-# Only built when the kartend_lib OBJECT library is available (i.e. when
+# Only built when the per-area OBJECT libs are available (i.e. when
 # tests/CMakeLists.txt is added from the top-level CMakeLists.txt rather than
-# configured stand-alone).
-if (TARGET ${KARTEND_LIB_TARGET})
+# configured stand-alone). kartend_core is a representative sentinel.
+if (TARGET kartend_core)
   add_subdirectory(integration)
 endif()
