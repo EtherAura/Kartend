@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook for Kartend.
+#
+# Runs the three fast Python lint scripts that gate the CI build job.
+# All three are pure-Python, no Docker, no Qt — they finish in well under
+# a second combined, so the cost-per-push is negligible compared to the
+# round-trip of letting CI catch them.
+#
+#   1. check-layering.py            — foundation layer (src/utils/, src/chrome/)
+#                                     can't reach upward into src/modules|ui|core
+#   2. check-singleshot-comments.py — every QTimer::singleShot must carry
+#                                     a preceding 'why' comment
+#   3. check-test-mapping.py        — src/modules/<feature>/ must have a
+#                                     matching tests/modules/<feature>/
+#
+# Install with: .scripts/git-hooks/install.sh
+#
+# Bypass for emergencies: git push --no-verify (but please don't habituate).
+#
+# This script runs from any cwd; it cd's to the repo root itself.
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+red()    { printf '\033[31m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+
+if ! command -v python3 >/dev/null 2>&1; then
+  yellow "Skipping pre-push lints: python3 not on PATH."
+  exit 0
+fi
+
+fail=0
+
+for check in check-layering.py check-singleshot-comments.py check-test-mapping.py; do
+  script=".scripts/${check}"
+  if [ ! -f "$script" ]; then
+    yellow "Skipping ${check}: not found."
+    continue
+  fi
+  if ! python3 "$script"; then
+    fail=1
+  fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  red "Pre-push lint(s) failed. Fix the issue above, or push with --no-verify if you really mean it."
+  exit 1
+fi
+
+green "Pre-push lints passed."
+exit 0

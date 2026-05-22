@@ -57,21 +57,21 @@ fi
 if [ -f VERSION ]; then
   CANONICAL="$(tr -d '[:space:]' < VERSION)"
 
-  if [ -f PKGBUILD ]; then
-    PKGVER="$(awk -F= '/^pkgver=/ { print $2; exit }' PKGBUILD)"
+  if [ -f packaging/PKGBUILD ]; then
+    PKGVER="$(awk -F= '/^pkgver=/ { print $2; exit }' packaging/PKGBUILD)"
     if [ "$PKGVER" != "$CANONICAL" ]; then
-      red "PKGBUILD pkgver='$PKGVER' but VERSION='$CANONICAL'"
+      red "packaging/PKGBUILD pkgver='$PKGVER' but VERSION='$CANONICAL'"
       fail=1
     fi
   fi
 
-  if ! ls "kartend-${CANONICAL}.ebuild" >/dev/null 2>&1; then
-    red "ebuild filename mismatch: expected kartend-${CANONICAL}.ebuild, found:"
-    ls kartend-*.ebuild 2>/dev/null | sed 's/^/  /' || echo "  (none)"
+  if ! ls "packaging/kartend-${CANONICAL}.ebuild" >/dev/null 2>&1; then
+    red "ebuild filename mismatch: expected packaging/kartend-${CANONICAL}.ebuild, found:"
+    ls packaging/kartend-*.ebuild 2>/dev/null | sed 's/^/  /' || echo "  (none)"
     fail=1
   fi
 
-  METAINFO="src/assets/io.github.EtherAura.Kartend.metainfo.xml"
+  METAINFO="packaging/io.github.EtherAura.Kartend.metainfo.xml"
   if [ -f "$METAINFO" ]; then
     METAVER="$(awk 'match($0, /<release[[:space:]]+version="([^"]+)"/, a) { print a[1]; exit }' "$METAINFO")"
     if [ "$METAVER" != "$CANONICAL" ]; then
