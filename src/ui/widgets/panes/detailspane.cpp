@@ -37,8 +37,8 @@
 #include "detailspane.h"
 
 #include "detailspaneartwork.h"
-#include "detailspanemetadataview.h"
 #include "detailspanegalleryview.h"
+#include "detailspanemetadataview.h"
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
@@ -852,14 +852,6 @@ void DetailsPane::loadArtwork(const QString &baseName, const QString &artworkDir
 }
 
 // Apply horzontal scrolling policy
-void DetailsPane::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
-  if (ui->scrollArea) {
-    ui->scrollArea->setHorizontalScrollBarPolicy(policy);
-    ui->scrollArea->updateGeometry();
-    QApplication::processEvents();
-  }
-}
-
 void DetailsPane::showArtworkOnly() {
   if (m_artworkController) m_artworkController->showArtworkOnly();
 }

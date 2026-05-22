@@ -167,7 +167,6 @@ public:
   void clearMetadata() override;
   [[nodiscard]] QWidget *asWidget() override { return this; }
   [[nodiscard]] const QWidget *asWidget() const override { return this; }
-  void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
   /// bug #5: silences the sidebar's preview video and cancels any
   /// pending start so it doesn't keep playing while a fullscreen overlay
   /// (artwork preview / expand mode) shows its own video. Soft-pause via

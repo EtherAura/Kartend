@@ -460,7 +460,16 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
   };
 
   bool wasInLayout = inAnyLayout();
-  m_DetailsPane->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+  // Note (Kartend-x1u1): the previous version re-set
+  //   m_DetailsPane->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff)
+  // here on every call. The wrapper inside DetailsPane chained a
+  // QApplication::processEvents() after the policy assignment, which under
+  // the offscreen QPA on Qt 6.10.3 re-entered the layout system through the
+  // missing propagateSizeHints() path and never returned. The policy is
+  // already AlwaysOff from detailspane.ui + the DetailsPane constructor, no
+  // code path flips it, so the per-update reset was redundant — and the
+  // DetailsPane public wrapper has been removed along with the call.
 
   // cover flow takes the full viewport — render as if
   // m_sidebarVisible were false but skip the persistence step below so the
