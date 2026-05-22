@@ -112,8 +112,7 @@ void BatchScrapeProgressView::onProgress(int done, int total, const QString &cur
   m_currentLabel->setText(currentName.isEmpty() ? tr("Scraping…")
                                                 : tr("Now scraping: %1").arg(currentName));
 
-  const qint64 elapsedMs =
-      std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
+  const qint64 elapsedMs = std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
   QString etaStr = QStringLiteral("—");
   if (done > 0 && total > done) {
     const qint64 etaMs =

@@ -5,11 +5,11 @@
 #include "scraperesultdialog.h"
 
 #include "applicationcontext.h"
+#include "batchprogressview.h"
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
-#include "result/batchprogressview.h"
-#include "result/singleitemview.h"
 #include "scraperesultdialogunified.h"
+#include "singleitemview.h"
 
 #include <limits>
 #include <QCheckBox>
@@ -76,45 +76,14 @@ constexpr int DIALOG_WIDTH = 900;
 constexpr int DIALOG_HEIGHT = 780;
 
 // FlowLayout extracted to flowlayout.{h,cpp} (Kartend-3fkz step 1).
-
-QString renderDetailHtml(const Scraper::ScrapedItem &item) {
-  // Keep the markup minimal — no inline styles, palette-aware via Qt's
-  // text rendering. Field rows skipped when empty so the panel stays
-  // honest about what the provider returned.
-  QString html = QStringLiteral("<h3>%1</h3>").arg(item.title.toHtmlEscaped());
-  auto row = [&](const QString &label, const QString &value) {
-    if (!value.trimmed().isEmpty()) {
-      html +=
-          QStringLiteral("<p><b>%1:</b> %2</p>").arg(label.toHtmlEscaped(), value.toHtmlEscaped());
-    }
-  };
-  row(QObject::tr("Publisher"), item.publisher);
-  row(QObject::tr("Released"), item.releaseDate);
-  row(QObject::tr("Genre"), item.genre);
-  row(QObject::tr("Developer"), item.developer);
-  if (item.runtimeSeconds > 0) {
-    row(QObject::tr("Runtime"), QString::number(item.runtimeSeconds) + QStringLiteral("s"));
-  }
-  if (!item.description.trimmed().isEmpty()) {
-    html += QStringLiteral("<p>%1</p>").arg(item.description.toHtmlEscaped());
-  }
-  if (!item.customFields.isEmpty()) {
-    html += QStringLiteral("<p style='color:gray'><b>%1:</b></p><ul>").arg(QObject::tr("Other"));
-    for (auto it = item.customFields.constBegin(); it != item.customFields.constEnd(); ++it) {
-      html += QStringLiteral("<li><b>%1:</b> %2</li>")
-                  .arg(it.key().toHtmlEscaped(), it.value().toHtmlEscaped());
-    }
-    html += QStringLiteral("</ul>");
-  }
-  return html;
-}
+// renderDetailHtml + the detail HTML payload moved into SingleItemScrapeView
+// alongside the candidate-selection flow (Kartend-xvci step 4).
 
 } // namespace
 
 ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
                                        QList<Scraper::ScrapeCandidate> candidates, QWidget *parent)
-    : QDialog(parent), m_provider(provider), m_candidates(std::move(candidates)),
-      m_unified(std::make_unique<ScrapeResultDialogUnified>(this)) {
+    : QDialog(parent), m_unified(std::make_unique<ScrapeResultDialogUnified>(this)) {
   setWindowTitle(tr("Scraper"));
   setModal(true);
   resize(DIALOG_WIDTH, DIALOG_HEIGHT);
@@ -125,46 +94,28 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
   setMinimumSize(640, 520);
   buildUi();
 
-  for (const auto &c : m_candidates) {
-    auto *item = new QListWidgetItem(m_singleItemView->candidateList());
-    QString label = c.displayName;
-    if (!c.subtitle.isEmpty()) {
-      label += QStringLiteral("\n  ") + c.subtitle;
-    }
-    if (c.matchScore >= 0) {
-      label += QStringLiteral("  (%1)").arg(c.matchScore);
-    }
-    item->setText(label);
-  }
-  if (!m_candidates.isEmpty()) {
-    m_singleItemView->candidateList()->setCurrentRow(0);
-  }
-  // ScreenScraper's jeuInfos.php returns exactly one matched game per
-  // request — the candidate list ends up with one entry and the user
-  // has nothing to choose between. Hide the panel entirely in that
-  // case to claim the horizontal room for the description / media
-  // checkboxes. Multi-candidate providers (MusicBrainz / OpenLibrary
-  // / TMDB) keep the list since picking between candidates is the
-  // whole point of their search response.
-  if (m_singleItemView->candidateList() && m_candidates.size() <= 1) {
-    m_singleItemView->candidateList()->hide();
-  }
+  // Hand the candidate list + cache + fetch driver to the view. This
+  // populates m_candidateList, hides it on single-result responses, and
+  // pre-selects row 0 so the user sees a detail immediately. Provider
+  // ownership moved into the view in Kartend-xvci step 4 — the view
+  // also owns m_detailCache and the candidate-selection slot.
+  m_singleItemView->setProviderAndCandidates(provider, std::move(candidates));
 
   // Provider health probe — fired once on dialog open. Default
   // implementation is a noop, so non-SS providers stay quiet. The
   // QPointer guard handles the case where the user dismisses the
   // dialog before the async probe lands.
-  if (m_provider) {
+  if (provider) {
     QPointer<ScrapeResultDialog> guard(this);
-    m_provider->fetchHealthStatus([guard](MetadataLookupProvider::HealthStatus status) {
+    provider->fetchHealthStatus([guard](MetadataLookupProvider::HealthStatus status) {
       if (guard.isNull()) return;
       if (status.humanStatus.isEmpty() && !status.refuseScrape) return;
       guard->m_singleItemView->healthLabel()->setText(status.humanStatus);
       guard->m_singleItemView->healthLabel()->show();
       if (status.refuseScrape) {
         guard->m_healthBlocksApply = true;
-        // Even when a candidate gets selected later,
-        // onCandidateSelected re-checks m_healthBlocksApply before
+        // Even when a candidate gets selected later, the host's
+        // detailLoaded handler re-checks m_healthBlocksApply before
         // re-enabling Apply. The toolTip points the user at what
         // the Apply gate is waiting on.
         guard->m_applyButton->setEnabled(false);
@@ -383,8 +334,23 @@ void ScrapeResultDialog::buildUi() {
   // ── Single-item page ────────────────────────────────────────────
   m_singleItemView = new SingleItemScrapeView(m_modeStack);
   m_modeStack->addWidget(m_singleItemView);
-  connect(m_singleItemView, &SingleItemScrapeView::candidateRowChanged, this,
-          &ScrapeResultDialog::onCandidateSelected);
+  // Apply-button state follows the view's detail-load lifecycle. The
+  // host owns the Apply button (the view is mode-agnostic) and gates it
+  // on the health-blocks-apply flag set by the provider's health probe.
+  // When the unified-interactive flow is the active picker, the same
+  // detailLoaded also drives the live-metadata panel via the unified
+  // controller (Kartend-xvci step 5 dispatch).
+  connect(m_singleItemView, &SingleItemScrapeView::detailLoaded, this,
+          [this](const Scraper::ScrapedItem &item) {
+            m_applyButton->setEnabled(!m_healthBlocksApply);
+            if (m_mode == Mode::Unified && m_unifiedPhase == UnifiedPhase::InteractivePicking) {
+              m_unified->applyScrapedItemToLive(item);
+            }
+          });
+  connect(m_singleItemView, &SingleItemScrapeView::detailFailed, this,
+          [this]() { m_applyButton->setEnabled(false); });
+  connect(m_singleItemView, &SingleItemScrapeView::detailLoading, this,
+          [this]() { m_applyButton->setEnabled(false); });
 
   // ── Batch progress page ─────────────────────────────────────────
   m_batchView = new BatchScrapeProgressView(m_modeStack);
@@ -540,90 +506,22 @@ void ScrapeResultDialog::onScrapeClicked() {
   m_unified->onScrapeClicked();
 }
 
-void ScrapeResultDialog::onCandidateSelected(int row) {
-  m_currentRow = row;
-  if (row < 0 || row >= m_candidates.size()) {
-    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Empty);
-    m_applyButton->setEnabled(false);
-    return;
-  }
-
-  // Cache hit — re-render without an HTTP roundtrip.
-  if (m_detailCache.contains(row)) {
-    m_currentDetail = m_detailCache.value(row);
-    m_singleItemView->detailText()->setHtml(renderDetailHtml(m_currentDetail));
-    m_singleItemView->populateMediaCheckboxes(m_currentDetail);
-    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
-    m_applyButton->setEnabled(!m_healthBlocksApply);
-    return;
-  }
-
-  m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Loading);
-  m_applyButton->setEnabled(false);
-
-  if (!m_provider) {
-    return;
-  }
-  const Scraper::ScrapeCandidate cand = m_candidates[row];
-  m_provider->fetchDetail(cand, [this, row, cand](ErrorUtils::Result<Scraper::ScrapedItem> result) {
-    // Bail if the user moved on to a different candidate while we
-    // were waiting — only update the UI when we're still showing
-    // the row this callback is for.
-    if (m_currentRow != row) {
-      return;
-    }
-    if (result.isError()) {
-      m_singleItemView->detailText()->setHtml(QStringLiteral("<p style='color:red'>%1</p>")
-                                                  .arg(result.error().message.toHtmlEscaped()));
-      m_singleItemView->mediaList()->clear();
-      m_singleItemView->clearMediaRows();
-      m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
-      m_applyButton->setEnabled(false);
-      return;
-    }
-    m_currentDetail = result.value();
-    m_detailCache.insert(row, m_currentDetail);
-    m_singleItemView->detailText()->setHtml(renderDetailHtml(m_currentDetail));
-    m_singleItemView->populateMediaCheckboxes(m_currentDetail);
-    m_singleItemView->setDetailPage(SingleItemScrapeView::DetailStackPage::Detail);
-    m_applyButton->setEnabled(!m_healthBlocksApply);
-  });
-}
-
 void ScrapeResultDialog::onApply() {
-  if (m_currentDetail.title.isEmpty()) {
+  if (!m_singleItemView->hasDetail()) {
     return;
   }
-  m_result.item = m_currentDetail;
+  const Scraper::ScrapedItem &currentDetail = m_singleItemView->currentDetail();
+  m_result.item = currentDetail;
   m_result.downloads.clear();
 
+  // Mode-keyed media selection. Unified-Interactive has no per-item
+  // checkbox panel in the live view (Kartend-xvci step 5 moved the
+  // filter into ScrapeResultDialogUnified); legacy single-item / batch
+  // walks the SingleItemScrapeView's media checkboxes.
   QList<Scraper::MediaAsset> selected;
   if (m_mode == Mode::Unified && m_unifiedPhase == UnifiedPhase::InteractivePicking) {
-    // Unified interactive Apply: there's no per-item media checkbox
-    // panel in this view, so derive the asset list from the setup-
-    // view media-type checkboxes (same filter auto-mode uses). Each
-    // matching MediaAsset from the current detail is queued for the
-    // download pass below.
-    QSet<QString> filter;
-    for (auto it = m_mediaTypeChecks.constBegin(); it != m_mediaTypeChecks.constEnd(); ++it) {
-      if (it.key() == QLatin1String("_metadata")) continue;
-      if (it.value()->isChecked()) filter.insert(it.key().toLower());
-    }
-    for (const auto &asset : m_currentDetail.media) {
-      if (!asset.url.isValid()) continue;
-      if (filter.isEmpty()) {
-        // Empty filter falls back to "front cover only" — same
-        // legacy behaviour BatchScrapeRunner uses.
-        if (asset.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
-          selected.append(asset);
-          break;
-        }
-      } else if (filter.contains(asset.type.toLower())) {
-        selected.append(asset);
-      }
-    }
+    selected = m_unified->selectInteractiveMediaForApply(currentDetail);
   } else {
-    // Legacy single-item / batch path — checkbox-driven media list.
     for (const auto &row : m_singleItemView->mediaRows()) {
       if (row.first->isChecked()) {
         selected.append(row.second);
@@ -631,7 +529,8 @@ void ScrapeResultDialog::onApply() {
     }
   }
 
-  if (selected.isEmpty() || !m_provider) {
+  MetadataLookupProvider *provider = m_singleItemView->provider();
+  if (selected.isEmpty() || !provider) {
     m_unified->finishCurrentApply();
     return;
   }
@@ -734,7 +633,7 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
         qCInfo(lcDialogTimings) << "DIALOG hash-hint" << asset.type << "from" << existingPerGame;
       }
     }
-    m_provider->fetchMediaBytes(
+    m_singleItemView->provider()->fetchMediaBytes(
         fetchUrl, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
           if (guard.isNull()) return; // dialog gone — drop the reply
           qCInfo(lcDialogTimings) << "DIALOG complete" << asset.type << asset.label

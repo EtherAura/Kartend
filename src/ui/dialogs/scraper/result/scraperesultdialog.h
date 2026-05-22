@@ -206,7 +206,6 @@ protected:
   void showEvent(QShowEvent *event) override;
 
 private slots:
-  void onCandidateSelected(int row);
   void onApply();
   void onCollectionTreeCurrentChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
   void onCollectionCheckChanged(QTreeWidgetItem *item, int column);
@@ -259,13 +258,10 @@ private:
   // m_unified; state stays here so the trampolines and the legacy
   // SingleItem/Batch paths keep their existing direct access.
 
-  MetadataLookupProvider *m_provider = nullptr;
-  QList<Scraper::ScrapeCandidate> m_candidates;
-  // Cached detail per candidate row so re-clicking doesn't refetch.
-  QHash<int, Scraper::ScrapedItem> m_detailCache;
-  // Loading state for the currently-selected candidate.
-  int m_currentRow = -1;
-  Scraper::ScrapedItem m_currentDetail;
+  // m_provider, m_candidates, m_detailCache, m_currentRow, m_currentDetail
+  // moved into SingleItemScrapeView in Kartend-xvci step 4. The view drives
+  // candidate selection + detail fetching; the host reads currentDetail()
+  // in onApply and toggles m_applyButton on detailLoaded / detailFailed.
 
   QPushButton *m_applyButton = nullptr;
   QPushButton *m_scrapeButton = nullptr;

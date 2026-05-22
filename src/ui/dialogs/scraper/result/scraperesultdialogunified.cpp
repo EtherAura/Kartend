@@ -12,10 +12,10 @@
 #include "scraperesultdialog.h"
 
 #include "applicationcontext.h"
+#include "batchprogressview.h"
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
-#include "result/batchprogressview.h"
-#include "result/singleitemview.h"
+#include "singleitemview.h"
 
 #include <limits>
 #include <QCheckBox>
@@ -98,6 +98,34 @@ QString prettifyCustomKey(const QString &key) {
   return r;
 }
 } // namespace
+
+QList<Scraper::MediaAsset> ScrapeResultDialogUnified::selectInteractiveMediaForApply(
+    const Scraper::ScrapedItem &detail) const {
+  // Derive the asset list from the setup-view media-type checkboxes
+  // (same filter auto-mode uses). Each matching MediaAsset from the
+  // candidate detail is queued for the host's download pass.
+  QSet<QString> filter;
+  for (auto it = m_dlg->m_mediaTypeChecks.constBegin(); it != m_dlg->m_mediaTypeChecks.constEnd();
+       ++it) {
+    if (it.key() == QLatin1String("_metadata")) continue;
+    if (it.value()->isChecked()) filter.insert(it.key().toLower());
+  }
+  QList<Scraper::MediaAsset> selected;
+  for (const auto &asset : detail.media) {
+    if (!asset.url.isValid()) continue;
+    if (filter.isEmpty()) {
+      // Empty filter falls back to "front cover only" — same legacy
+      // behaviour BatchScrapeRunner uses.
+      if (asset.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
+        selected.append(asset);
+        break;
+      }
+    } else if (filter.contains(asset.type.toLower())) {
+      selected.append(asset);
+    }
+  }
+  return selected;
+}
 
 void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_unifiedPage = new QWidget(m_dlg->m_modeStack);
@@ -230,10 +258,19 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_interactiveCandidateCombo = new QComboBox(m_dlg->m_interactiveCandidateRow);
   m_dlg->m_interactiveCandidateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   candRow->addWidget(m_dlg->m_interactiveCandidateCombo, /*stretch=*/1);
+  // Combobox is the visible candidate picker in the unified live view;
+  // the SingleItemScrapeView's QListWidget is the data owner. Forward
+  // selection to the view's list so its onCandidateSelected drives the
+  // detail fetch (Kartend-xvci step 4) — the host's detailLoaded
+  // dispatch then calls applyScrapedItemToLive + enables Apply.
   connect(m_dlg->m_interactiveCandidateCombo, qOverload<int>(&QComboBox::currentIndexChanged), this,
           [this](int idx) {
-            if (m_dlg->m_unifiedPhase == ScrapeResultDialog::UnifiedPhase::InteractivePicking) {
-              interactiveFetchDetail(idx);
+            if (m_dlg->m_unifiedPhase != ScrapeResultDialog::UnifiedPhase::InteractivePicking) {
+              return;
+            }
+            auto *list = m_dlg->m_singleItemView->candidateList();
+            if (list && idx >= 0 && idx < list->count()) {
+              list->setCurrentRow(idx);
             }
           });
   m_dlg->m_interactiveCandidateRow->hide();
@@ -623,29 +660,6 @@ void ScrapeResultDialogUnified::applyScrapedItemToLive(const Scraper::ScrapedIte
   setFromStart(m_dlg->m_liveMetadataSource, item.sourceProviderId);
   m_dlg->m_liveMetadataDescription->setText(item.description);
   populateCustomFields(item.customFields);
-}
-
-void ScrapeResultDialogUnified::interactiveFetchDetail(int idx) {
-  if (idx < 0 || idx >= m_dlg->m_candidates.size()) return;
-  if (!m_dlg->m_provider) return;
-  if (m_dlg->m_applyButton) m_dlg->m_applyButton->setEnabled(false);
-  const auto cand = m_dlg->m_candidates[idx];
-  m_dlg->m_currentRow = idx;
-  QPointer<ScrapeResultDialog> guard(m_dlg);
-  m_dlg->m_provider->fetchDetail(cand, [guard, idx](ErrorUtils::Result<Scraper::ScrapedItem> r) {
-    if (guard.isNull()) return;
-    // Ignore stale callbacks if the user
-    // switched candidates while this fetch
-    // was in flight.
-    if (guard->m_currentRow != idx) return;
-    if (r.isError()) {
-      QMessageBox::warning(guard, tr("Scrape failed"), r.error().message);
-      return;
-    }
-    guard->m_currentDetail = r.value();
-    guard->m_unified->applyScrapedItemToLive(r.value());
-    if (guard->m_applyButton) guard->m_applyButton->setEnabled(true);
-  });
 }
 
 void ScrapeResultDialogUnified::populateCustomFields(const QHash<QString, QString> &fields) {
@@ -1227,34 +1241,32 @@ void ScrapeResultDialogUnified::onServicePickerNeeded(
   m_dlg->m_interactiveProvider = provider;
   m_dlg->m_interactiveItems = {itemPath};
   m_dlg->m_interactiveCursor = 0;
-  m_dlg->m_provider = provider.get();
-  m_dlg->m_candidates = candidates;
-  m_dlg->m_detailCache.clear();
-  m_dlg->m_currentRow = -1;
-  m_dlg->m_currentDetail = Scraper::ScrapedItem();
   m_dlg->m_singleItemView->clearMediaRows();
-  // Populate the candidate combo; block signals during the refill so
-  // the first-row change doesn't trigger a stray detail fetch before
-  // we explicitly call it below.
+  // Populate the candidate combo from the lookup result. Block signals
+  // during the refill so the first-row change doesn't trigger a stray
+  // detail fetch before the view's setProviderAndCandidates below
+  // installs the matching candidate-list state.
   {
     QSignalBlocker blocker(m_dlg->m_interactiveCandidateCombo);
     m_dlg->m_interactiveCandidateCombo->clear();
-    for (const auto &c : m_dlg->m_candidates) {
+    for (const auto &c : candidates) {
       QString label = c.displayName;
       if (!c.subtitle.isEmpty()) label += QStringLiteral(" — ") + c.subtitle;
       if (c.matchScore >= 0) label += QStringLiteral("  (%1)").arg(c.matchScore);
       m_dlg->m_interactiveCandidateCombo->addItem(label);
     }
   }
-  m_dlg->m_interactiveCandidateRow->setVisible(m_dlg->m_candidates.size() > 0);
+  m_dlg->m_interactiveCandidateRow->setVisible(candidates.size() > 0);
   if (m_dlg->m_applyButton) {
     m_dlg->m_applyButton->show();
     m_dlg->m_applyButton->setEnabled(false);
   }
   if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->hide();
-  // Fetch detail for the first candidate to populate the live fields.
-  // Apply enables when detail lands.
-  if (!m_dlg->m_candidates.isEmpty()) interactiveFetchDetail(0);
+  // Hand the candidate list + provider to the view so its candidate-
+  // selection slot fetches detail for row 0 and emits detailLoaded —
+  // the host's signal dispatch then calls applyScrapedItemToLive +
+  // enables Apply (Kartend-xvci step 4/5).
+  m_dlg->m_singleItemView->setProviderAndCandidates(provider.get(), candidates);
 }
 
 void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperService::Summary &s) {
@@ -1764,36 +1776,21 @@ void ScrapeResultDialogUnified::interactiveOnLookupResult(
     interactiveNextItem();
     return;
   }
-  // Flip to the single-item picker page for this item. Reuses the
-  // existing candidate-picker UI by overwriting m_dlg->m_provider /
-  // m_dlg->m_candidates and re-running the candidate-list population the
-  // ctor would normally do. After the user clicks Apply or Cancel we
-  // catch the result via interactiveOnApplied / interactiveOnSkipped.
+  // Flip to the single-item picker page for this item. Hand the
+  // candidate list to the view (Kartend-xvci step 4) — its
+  // setProviderAndCandidates populates the list widget, hides the
+  // panel on single-result responses, pre-selects row 0, and the
+  // resulting onCandidateSelected fetches detail. After the user
+  // clicks Apply or Cancel we catch the result via interactiveOnApplied
+  // / interactiveOnSkipped.
   m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractivePicking;
-  m_dlg->m_provider = m_dlg->m_interactiveProvider.get();
-  m_dlg->m_candidates = result.value();
-  m_dlg->m_detailCache.clear();
-  m_dlg->m_currentRow = -1;
-  m_dlg->m_currentDetail = Scraper::ScrapedItem();
   m_dlg->m_singleItemView->clearMediaRows();
-  m_dlg->m_singleItemView->candidateList()->clear();
-  for (const auto &c : m_dlg->m_candidates) {
-    auto *item = new QListWidgetItem(m_dlg->m_singleItemView->candidateList());
-    QString label = c.displayName;
-    if (!c.subtitle.isEmpty()) label += QStringLiteral("\n  ") + c.subtitle;
-    if (c.matchScore >= 0) label += QStringLiteral("  (%1)").arg(c.matchScore);
-    item->setText(label);
-  }
-  if (m_dlg->m_singleItemView->candidateList() && m_dlg->m_candidates.size() <= 1) {
-    m_dlg->m_singleItemView->candidateList()->hide();
-  } else {
-    m_dlg->m_singleItemView->candidateList()->show();
-  }
   m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_singleItemView);
   m_dlg->m_applyButton->show();
   m_dlg->m_applyButton->setEnabled(false);
   if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->hide();
-  if (!m_dlg->m_candidates.isEmpty()) m_dlg->m_singleItemView->candidateList()->setCurrentRow(0);
+  m_dlg->m_singleItemView->setProviderAndCandidates(m_dlg->m_interactiveProvider.get(),
+                                                    result.value());
 }
 
 void ScrapeResultDialogUnified::interactiveOnApplied() {

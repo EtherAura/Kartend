@@ -89,8 +89,17 @@ public:
   void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
   void appendThumbAsync(const QString &path);
   void tickValueMarquees();
-  void interactiveFetchDetail(int idx);
   void populateCustomFields(const QHash<QString, QString> &fields);
+
+  /// Derive the media-asset list for the Unified-Interactive Apply path
+  /// (Kartend-xvci step 5). The unified flow has no per-item media
+  /// checkbox panel — the user picked types via the setup-view media-
+  /// type checkboxes, and Apply has to filter the candidate detail's
+  /// `media` list against that selection. Pre-step-5 the host's onApply
+  /// inlined this branch; the move keeps unified-only state
+  /// (m_mediaTypeChecks) inside the unified class.
+  [[nodiscard]] QList<Scraper::MediaAsset>
+  selectInteractiveMediaForApply(const Scraper::ScrapedItem &detail) const;
 
 private:
   ScrapeResultDialog *m_dlg = nullptr;

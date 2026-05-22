@@ -1,10 +1,13 @@
 #include "singleitemview.h"
 
+#include "metadatalookupprovider.h"
+
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPointer>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTextBrowser>
@@ -28,6 +31,35 @@ int pageToIndex(SingleItemScrapeView::DetailStackPage page) {
   return kStackEmptyIndex;
 }
 
+QString renderDetailHtml(const Scraper::ScrapedItem &item) {
+  QString html = QStringLiteral("<h3>%1</h3>").arg(item.title.toHtmlEscaped());
+  auto row = [&](const QString &label, const QString &value) {
+    if (!value.trimmed().isEmpty()) {
+      html +=
+          QStringLiteral("<p><b>%1:</b> %2</p>").arg(label.toHtmlEscaped(), value.toHtmlEscaped());
+    }
+  };
+  row(QObject::tr("Publisher"), item.publisher);
+  row(QObject::tr("Released"), item.releaseDate);
+  row(QObject::tr("Genre"), item.genre);
+  row(QObject::tr("Developer"), item.developer);
+  if (item.runtimeSeconds > 0) {
+    row(QObject::tr("Runtime"), QString::number(item.runtimeSeconds) + QStringLiteral("s"));
+  }
+  if (!item.description.trimmed().isEmpty()) {
+    html += QStringLiteral("<p>%1</p>").arg(item.description.toHtmlEscaped());
+  }
+  if (!item.customFields.isEmpty()) {
+    html += QStringLiteral("<p style='color:gray'><b>%1:</b></p><ul>").arg(QObject::tr("Other"));
+    for (auto it = item.customFields.constBegin(); it != item.customFields.constEnd(); ++it) {
+      html += QStringLiteral("<li><b>%1:</b> %2</li>")
+                  .arg(it.key().toHtmlEscaped(), it.value().toHtmlEscaped());
+    }
+    html += QStringLiteral("</ul>");
+  }
+  return html;
+}
+
 } // namespace
 
 SingleItemScrapeView::SingleItemScrapeView(QWidget *parent) : QWidget(parent) {
@@ -39,7 +71,7 @@ SingleItemScrapeView::SingleItemScrapeView(QWidget *parent) : QWidget(parent) {
   m_candidateList = new QListWidget(splitter);
   m_candidateList->setMinimumWidth(220);
   connect(m_candidateList, &QListWidget::currentRowChanged, this,
-          &SingleItemScrapeView::candidateRowChanged);
+          &SingleItemScrapeView::onCandidateSelected);
   splitter->addWidget(m_candidateList);
 
   auto *rightContainer = new QWidget(splitter);
@@ -101,6 +133,98 @@ SingleItemScrapeView::SingleItemScrapeView(QWidget *parent) : QWidget(parent) {
 
 void SingleItemScrapeView::setDetailPage(DetailStackPage page) {
   m_detailStack->setCurrentIndex(pageToIndex(page));
+}
+
+void SingleItemScrapeView::setProviderAndCandidates(MetadataLookupProvider *provider,
+                                                    QList<Scraper::ScrapeCandidate> candidates) {
+  m_provider = provider;
+  m_candidates = std::move(candidates);
+  m_detailCache.clear();
+  m_currentRow = -1;
+  m_currentDetail = {};
+
+  m_candidateList->clear();
+  for (const auto &c : m_candidates) {
+    auto *item = new QListWidgetItem(m_candidateList);
+    QString label = c.displayName;
+    if (!c.subtitle.isEmpty()) {
+      label += QStringLiteral("\n  ") + c.subtitle;
+    }
+    if (c.matchScore >= 0) {
+      label += QStringLiteral("  (%1)").arg(c.matchScore);
+    }
+    item->setText(label);
+  }
+  if (!m_candidates.isEmpty()) {
+    m_candidateList->setCurrentRow(0);
+  } else {
+    setDetailPage(DetailStackPage::Empty);
+    emit detailFailed();
+  }
+  // ScreenScraper's jeuInfos.php returns exactly one matched game per
+  // request — the candidate list ends up with one entry and the user
+  // has nothing to choose between. Hide the panel entirely in that
+  // case to claim the horizontal room for the description / media
+  // checkboxes. Multi-candidate providers (MusicBrainz / OpenLibrary
+  // / TMDB) keep the list since picking between candidates is the
+  // whole point of their search response.
+  m_candidateList->setVisible(m_candidates.size() > 1);
+}
+
+void SingleItemScrapeView::onCandidateSelected(int row) {
+  m_currentRow = row;
+  if (row < 0 || row >= m_candidates.size()) {
+    setDetailPage(DetailStackPage::Empty);
+    emit detailFailed();
+    return;
+  }
+
+  // Cache hit — re-render without an HTTP roundtrip.
+  if (m_detailCache.contains(row)) {
+    m_currentDetail = m_detailCache.value(row);
+    m_detailText->setHtml(renderDetailHtml(m_currentDetail));
+    populateMediaCheckboxes(m_currentDetail);
+    setDetailPage(DetailStackPage::Detail);
+    emit detailLoaded(m_currentDetail);
+    return;
+  }
+
+  setDetailPage(DetailStackPage::Loading);
+  emit detailLoading();
+
+  if (!m_provider) {
+    return;
+  }
+  const Scraper::ScrapeCandidate cand = m_candidates[row];
+  // QPointer guard: fetchDetail may complete after the view (and the
+  // owning dialog) is destroyed — e.g. user cancels mid-fetch and the
+  // caller closes exec(). Without the guard the callback would touch
+  // a freed `this`.
+  QPointer<SingleItemScrapeView> guard(this);
+  m_provider->fetchDetail(cand, [guard, row](ErrorUtils::Result<Scraper::ScrapedItem> result) {
+    if (guard.isNull()) return;
+    // Bail if the user moved on to a different candidate while we
+    // were waiting — only update the UI when we're still showing
+    // the row this callback is for.
+    if (guard->m_currentRow != row) {
+      return;
+    }
+    if (result.isError()) {
+      guard->m_detailText->setHtml(QStringLiteral("<p style='color:red'>%1</p>")
+                                       .arg(result.error().message.toHtmlEscaped()));
+      guard->m_mediaList->clear();
+      guard->clearMediaRows();
+      guard->setDetailPage(DetailStackPage::Detail);
+      emit guard->detailFailed();
+      return;
+    }
+    guard->m_currentDetail = result.value();
+    guard->m_detailCache.insert(row, guard->m_currentDetail);
+    guard->m_detailText->setHtml(renderDetailHtml(guard->m_currentDetail));
+    guard->populateMediaCheckboxes(guard->m_currentDetail);
+    guard->setDetailPage(DetailStackPage::Detail);
+    emit guard->detailLoaded(guard->m_currentDetail);
+  });
 }
 
 void SingleItemScrapeView::populateMediaCheckboxes(const Scraper::ScrapedItem &item) {

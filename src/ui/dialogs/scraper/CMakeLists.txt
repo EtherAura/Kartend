@@ -2,21 +2,21 @@ target_sources(kartend_ui PRIVATE
   flowlayout.cpp
   mediatypecheckboxbuilder.cpp
   result/batchprogressview.cpp
+  result/scraperesultdialog.cpp
+  result/scraperesultdialogunified.cpp
   result/singleitemview.cpp
   scrapejobgrouping.cpp
   scrapercredentialsdialog.cpp
   scrapercredentialspanel.cpp
-  scraperesultdialog.cpp
-  scraperesultdialogunified.cpp
   scrapersettingspanel.cpp
   flowlayout.h
   mediatypecheckboxbuilder.h
   result/batchprogressview.h
+  result/scraperesultdialog.h
+  result/scraperesultdialogunified.h
   result/singleitemview.h
   scrapejobgrouping.h
   scrapercredentialsdialog.h
   scrapercredentialspanel.h
-  scraperesultdialog.h
-  scraperesultdialogunified.h
   scrapersettingspanel.h
 )
