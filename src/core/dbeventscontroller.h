@@ -17,10 +17,10 @@
 // controller.
 
 #include <functional>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 
 class DetailsPaneManager;
 class LoadingOverlay;

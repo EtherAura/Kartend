@@ -118,8 +118,8 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
   sctx.collections = collections;
   sctx.ctx = appCtx;
   sctx.generalSettings = generalSettings;
-  sctx.providerBuilder =
-      [collections, generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+  sctx.providerBuilder = [collections,
+                          generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
     if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
     auto registry = MetadataProviderRegistry::builtIn(
         [generalSettings]() -> const GeneralSettings * { return generalSettings; },
@@ -129,9 +129,9 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
         });
     return pickLookupProvider(registry, (*collections)[idx]);
   };
-  sctx.applyResult = [this, collections, generalSettings](
-                         int collectionIndex, const QString &filePath,
-                         const ScrapeResultDialog::Result &result) {
+  sctx.applyResult = [this, collections,
+                      generalSettings](int collectionIndex, const QString &filePath,
+                                       const ScrapeResultDialog::Result &result) {
     if (!CollectionUtils::isValidIndex(collectionIndex, collections)) return;
     IDatabaseManager *innerDb = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
     if (!innerDb || !generalSettings) return;
@@ -193,9 +193,9 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
           ArtworkUtils::clearDirectoryCache();
           NavigationManager *nav =
               m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr;
-          QList<CollectionConfig> *cols =
-              m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
-          const int curIdx = m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+          QList<CollectionConfig> *cols = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+          const int curIdx =
+              m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
           if (nav && CollectionUtils::isValidIndex(curIdx, cols)) {
             nav->safeReloadCollection(curIdx);
           }
@@ -237,8 +237,8 @@ void ScraperController::promptResumePendingScrapeIfAny() {
   srvCtx.ctx = appCtx;
   srvCtx.generalSettings = generalSettings;
   srvCtx.collections = collections;
-  srvCtx.providerBuilder =
-      [collections, generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+  srvCtx.providerBuilder = [collections,
+                            generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
     if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
     auto registry = MetadataProviderRegistry::builtIn(
         [generalSettings]() -> const GeneralSettings * { return generalSettings; },
