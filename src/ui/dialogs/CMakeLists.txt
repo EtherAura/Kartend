@@ -1,9 +1,11 @@
 target_sources(kartend_ui PRIVATE
+  bindingvisualizerdialog.cpp
   commandpalettedialog.cpp
   errordialog.cpp
   firstrunwizard.cpp
   shortcutsdialog.cpp
   statisticsdialog.cpp
+  bindingvisualizerdialog.h
   commandpalettedialog.h
   errordialog.h
   firstrunwizard.h

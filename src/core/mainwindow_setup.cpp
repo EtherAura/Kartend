@@ -21,6 +21,7 @@
 #include "artworkcandidates.h"
 #include "artworkmanager.h"
 #include "artworkwizarddialog.h"
+#include "bindingvisualizerdialog.h"
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
@@ -32,6 +33,7 @@
 #include "detailpagemanager.h"
 #include "detailspane.h"
 #include "dialogcontroller.h"
+#include "gamepadmanager.h"
 #include "gridwidthdebouncer.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
@@ -473,6 +475,7 @@ void MainWindow::createMenuBar() {
   ctx.onBulkEdit = [this]() { bulkEditInteractive(); };
   ctx.onReviewMissingMetadata = [this]() { reviewMissingMetadataInteractive(); };
   ctx.onArtworkWizard = [this]() { artworkWizardInteractive(); };
+  ctx.onShowBindings = [this]() { showBindingVisualizer(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1190,6 +1193,18 @@ void MainWindow::artworkWizardInteractive() {
   if (m_appManager->getNavigationManager()) {
     m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
   }
+}
+
+void MainWindow::showBindingVisualizer() {
+  // Pull the live gamepad manager so capture-mode hand-off is wired
+  // automatically. Settings come from m_generalSettings (the live
+  // user-edited copy) so the dialog reflects rebinds without a restart.
+  GamepadManager *gp = nullptr;
+  if (auto *interaction = m_appManager->getInteractionManager()) {
+    gp = interaction->gamepadManager();
+  }
+  BindingVisualizerDialog dialog(&m_generalSettings, gp, this);
+  dialog.exec();
 }
 
 void MainWindow::setupArtworkManager() {

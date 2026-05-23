@@ -149,6 +149,7 @@ void MenuController::setupMenuBar() {
   setupActionBulkEdit();
   setupActionReviewMissingMetadata();
   setupActionArtworkWizard();
+  setupActionBindingVisualizer();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -793,6 +794,20 @@ void MenuController::setupActionArtworkWizard() {
   }
   connect(m_artworkWizardAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onArtworkWizard) m_ctx.onArtworkWizard();
+  });
+}
+
+void MenuController::setupActionBindingVisualizer() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  // Sits in the Help menu next to Usage Statistics / Shortcuts since
+  // it's a read-only diagnostic surface for the user's input config.
+  m_bindingVisualizerAction = new QAction(tr("Binding Visualizer..."), this);
+  m_ctx.mainWindow->addAction(m_bindingVisualizerAction);
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_bindingVisualizerAction);
+  }
+  connect(m_bindingVisualizerAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowBindings) m_ctx.onShowBindings();
   });
 }
 

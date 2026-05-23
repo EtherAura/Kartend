@@ -431,6 +431,11 @@ private:
   /// skips, and the choice is persisted as a per-item override.
   void artworkWizardInteractive();
 
+  /// Opens the read-only binding visualizer (Help → Binding
+  /// Visualizer…). Shows the current keyboard + gamepad mappings and
+  /// highlights the matching row when the user presses an input.
+  void showBindingVisualizer();
+
   /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
   /// the command palette. Called once during setupUI alongside the
   /// other application shortcuts.
