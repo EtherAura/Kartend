@@ -50,58 +50,80 @@ to `5000` if you want a lot more history without filling the database.
 
 ## Statistics Dialog
 
-Open via **Help → Statistics**. Tabbed dialog:
+Open via **Help → Statistics**. The window title is **Usage
+Statistics**. Tabbed dialog:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ Statistics                                                 │
+│ Usage Statistics                                           │
 │                                                            │
-│ Total items: 1234         Total launches: 5678             │
-│ Total time played: 42h 31m   (or "Disabled" if runtime    │
-│                              detection is off)             │
+│ Total items:                 1,234                         │
+│ Items launched at least once:  421                         │
+│ Played in last 7 days:          63                         │
+│ Total launches:              5,678                         │
+│ Total time played:           42h 31m                       │
 │                                                            │
-│ ┌── Most Played ─ Recently Played ─ By Collection ──────┐  │
-│ │ ── History ──┐                                        │  │
-│ ├────────────────────────────────────────────────────┐  │  │
-│ │  (tab content)                                      │  │  │
-│ │                                                     │  │  │
-│ │                                                     │  │  │
-│ └────────────────────────────────────────────────────┘  │  │
+│ (Time played is only tracked when Runtime Detection        │
+│  is enabled in Settings → General → Runtime Detection.)    │
 │                                                            │
-│ [ Reset usage stats… ]              [ Close ]             │
+│ ┌ Most played │ Recently played │ Never played │           │
+│ │ By collection │ History ───────────────────┐ │           │
+│ ├──────────────────────────────────────────────┤           │
+│ │  (tab content)                               │           │
+│ └──────────────────────────────────────────────┘           │
+│                                                            │
+│ [ Reset usage stats… ]      [ Refresh ]   [ Close ]        │
 └────────────────────────────────────────────────────────────┘
 ```
 
 ### Header row
 
+A small grid above the tabs with running totals:
+
 | Field | Source |
 |-------|--------|
 | Total items | Sum of items across all collections |
+| Items launched at least once | Count of items with `play_count > 0` |
+| Played in last 7 days | Count of distinct items with a `launch_history` row in the past 7 days |
 | Total launches | Sum of `play_count` across all items |
-| Total time played | Sum of `duration_seconds` across all `launch_history` rows |
+| Total time played | Sum of `duration_seconds` across all `launch_history` rows. **Shows "Disabled" when [`runtimeDetectionEnabled=false`](Splash-and-Now-Playing.md#runtime-detection)** — and the inline note explains how to turn it on. |
 
-When `runtimeDetectionEnabled=false`, "Total time played" shows
-`Disabled — enable runtime detection in Settings to track time` instead
-of a duration.
-
-### Most Played tab
+### Most played tab
 
 Tree view of items, sorted by `play_count` descending. Columns:
 
-- Item name (with collection icon)
-- Play count
-- Time played (or `—` if not tracked)
-- Last played
+| Column | Source |
+|--------|--------|
+| Item | Item name |
+| Collection | Owning collection (with icon) |
+| Plays | `items.play_count` |
+| Time | Sum of `duration_seconds` (or `—` if runtime detection is off) |
+| Last played | `items.last_played` timestamp |
 
 Click a row to see the item highlighted in its collection. Double-click
 launches the item directly from the dialog.
 
-### Recently Played tab
+### Recently played tab
 
-Same shape, sorted by `last_played` descending. Useful as a quick
-"return to what I was doing yesterday" view.
+Same item / collection columns, sorted by `last_played` descending,
+with **Last played** as the second column for at-a-glance scanning.
+Useful as a quick "return to what I was doing yesterday" view.
 
-### By Collection tab
+### Never played tab
+
+Items with zero recorded launches. Two-column tree:
+
+| Column | Source |
+|--------|--------|
+| Item | Item name |
+| Collection | Owning collection |
+
+Above the tree, a short summary line shows the count and a hint that
+these are good candidates for a *Never launched* [Smart
+Playlist](Smart-Playlists.md#never-launched) if you want a persistent
+backlog tile.
+
+### By collection tab
 
 Per-collection summary:
 
@@ -110,30 +132,44 @@ Per-collection summary:
 | Collection | Name (with icon) |
 | Items | Count of items in the collection |
 | Launches | Sum of `play_count` for items in this collection |
-| Time played | Sum of `duration_seconds` for items in this collection |
-| Avg / item | Time played / number of items launched |
+| Time | Sum of `duration_seconds` for items in this collection (or `—` if not tracked) |
 
-Sortable by any column. Useful for "which collection do I actually use
-the most?"
+Sortable by any column. Useful for "which collection do I actually
+use the most?"
 
 ### History tab
 
 Chronological log of every launch row in `launch_history`. Columns:
 
-- Timestamp
-- Collection
-- Item name
-- Duration (or `—` if not tracked)
+| Column | Source |
+|--------|--------|
+| Launched at | Timestamp |
+| Item | Item name |
+| Collection | Owning collection |
+| Path | Absolute file path at launch time |
 
 Above the table:
 
 | Control | Effect |
 |---------|--------|
-| **Record history** checkbox | Live toggle for `historyEnabled`. Saves to settings on click. |
+| **Record launch history** checkbox | Live toggle for `historyEnabled`. Saves to settings immediately on click. |
+| **Entries:** label | Live count of rows in the table |
 | **Clear history…** button | Confirm prompt → drops all `launch_history` rows. Play counts and last-played remain. |
+
+When history recording is off, an inline note explains that existing
+entries are still listed (until cleared).
 
 The History tab is the only place where you can clear history without
 also resetting play counts.
+
+### Footer controls
+
+- **Reset usage stats…** — red / cautionary; see
+  [Reset usage stats](#reset-usage-stats) below.
+- **Refresh** — re-runs every query against the database. Use after
+  launching items mid-dialog if the counts haven't updated yet.
+- **Close** — dismisses the dialog (it's modeless; you can leave it
+  open while you browse the grid).
 
 ## Reset usage stats
 
