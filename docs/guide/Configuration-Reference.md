@@ -224,7 +224,7 @@ the primary screen and logs a warning.
 |-----|------|---------|-------------|
 | `marqueeEnabled` | bool | `false` | Master toggle for the secondary marquee window. |
 | `marqueeScreenName` | string | empty | `QScreen::name()` of the target screen (e.g. `HDMI-A-1`). Empty = primary screen. |
-| `marqueeMode` | enum | `0` | `0` = selected item's artwork; `1` = current collection's icon. |
+| `marqueeMode` | enum | `0` | `0` = selected item's artwork; `1` = current collection's icon; `2` = video / attract loop (item's preview video, falling back to the collection's `backgroundVideo`). See [Marquee](Marquee.md). |
 
 ### RetroArch integration
 
