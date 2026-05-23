@@ -46,31 +46,40 @@ Open via right-click → **Edit custom fields…** (Custom Fields Dialog).
 
 ### Custom Fields Dialog
 
-```
-┌────────────────────────────────────────────┐
-│ Custom Fields — <item name>                │
-│                                            │
-│  Field          │  Value                   │
-│  ───────────────┼─────────────────────     │
-│  rating         │  ★★★★☆                  │
-│  status         │  in progress             │
-│  notes          │  great soundtrack        │
-│                                            │
-│  + Add field    × Remove                   │
-│                                            │
-│            [ Cancel ]    [ Save ]          │
-└────────────────────────────────────────────┘
-```
+Window title: **Edit custom fields**. A two-column table — **Key** and
+**Value** — with two buttons:
 
-- **Add field** — appends a new blank row.
-- **Remove** — drops the selected row.
-- **Save** — persists to the database; the sidebar refreshes
-  immediately.
+| Button | Effect |
+|--------|--------|
+| **Add** | Appends a new blank row and immediately puts the Key cell into edit mode so you can start typing the field name. |
+| **Remove** | Drops the selected row. (Single-row selection.) |
 
-Field names are case-sensitive; values are free-form text. There's no
-validation — store URLs, multi-line text (limited rendering), star
-ratings as Unicode characters, whatever. The sidebar's metadata
-section displays each pair as a row.
+Both cells are directly editable in place — double-click, single-click
+on a selected row, or just start typing to enter edit mode. Pressing
+**Save** persists every row to the database; the sidebar refreshes
+immediately.
+
+Empty rows (no key) are dropped silently on save. Field names are
+case-sensitive; values are free-form text. There's no validation —
+store URLs, multi-line text (limited rendering), star ratings as
+Unicode characters, whatever. The sidebar's metadata section displays
+each pair as a row.
+
+```
+┌──────────────────────────────────────────────────┐
+│ Edit custom fields                               │
+│ Custom fields for: <item name>                   │
+│ ┌────────────┬─────────────────────────────────┐ │
+│ │ Key        │ Value                           │ │
+│ ├────────────┼─────────────────────────────────┤ │
+│ │ rating     │ ★★★★☆                          │ │
+│ │ status     │ in progress                     │ │
+│ │ notes      │ great soundtrack                │ │
+│ └────────────┴─────────────────────────────────┘ │
+│  [Add]  [Remove]                                 │
+│                            [Cancel]   [Save]     │
+└──────────────────────────────────────────────────┘
+```
 
 ### Persistence
 
@@ -125,6 +134,60 @@ extensions=mobi,epub
 ~/library/Some Book.mobi
 ~/library/manuals/Some Book.pdf   ← auto-discovered as the manual
 ```
+
+## DAT-file identification (ROM collections)
+
+For collections of ROMs or other hash-identifiable media, Kartend can
+read **DAT files** (No-Intro / Redump / TOSEC Logiqx, or MAME
+`listxml`) and use the canonical title from the DAT in place of the
+filename. Useful when:
+
+- Your files are stored with cryptic short names (`smb1u.nes`) and
+  you want clean titles in the grid.
+- You're scraping ScreenScraper.fr and want hash-based matching for
+  region/revision accuracy (the [Scraper](Scraper.md) page covers the
+  scrape side).
+
+### Configuring DAT files
+
+Per-collection, in **Settings → Collection → Scraper** (or by hand in
+`kartend.cfg`):
+
+```ini
+[Arcade ROMs]
+datFilePaths\1\path=~/dats/MAME 0.265.dat
+datFilePaths\2\path=~/dats/No-Intro NES.dat
+```
+
+Each entry is one DAT file. Order matters: DATs are walked in list
+order and **the first hash hit wins**. Put your most-specific DATs
+first, fallbacks last.
+
+The legacy single-path key `datFilePath` is still read for
+backward-compat, but new writes go to the `datFilePaths` array — see
+[Configuration Reference](Configuration-Reference.md#scraper-overrides).
+
+### What gets matched
+
+Kartend hashes each item file (CRC32 / MD5 / SHA-1, whichever the DAT
+exposes) and looks up the hash in the parsed DAT cache. A match
+contributes:
+
+- **Canonical title** — replaces the filename-derived display title.
+- **Region / revision tags** — surfaced in metadata where the DAT
+  provides them.
+- **Hash anchor** — feeds the scraper's hash-based search when one is
+  available (e.g. ScreenScraper).
+
+A miss is silent — the item keeps its filename-derived title and
+proceeds normally through any other scrape steps.
+
+### Performance
+
+The DAT parse cache (on disk, per-DAT-file mtime) means parsing only
+happens when a DAT file changes; subsequent launches use the cached
+representation. For very large MAME `listxml` DATs the first launch
+after a DAT update can take several seconds while the cache rebuilds.
 
 ## Item artwork links
 
