@@ -12,12 +12,20 @@ depends=(
   'glibc'
   'qt6-base'
   'qt6-multimedia'
-  'qt6-gamepad'
+  # qt6-gamepad was dropped from the Arch repos when QtGamepad was deprecated
+  # upstream. The CMake build wraps it in `find_package(... QUIET)` and falls
+  # back to the SDL2 gamepad backend, so listing it here just makes pacman
+  # refuse the install. SDL2 is the working gamepad path on Arch.
   'sdl2'
 )
 makedepends=(
   'cmake'
   'ninja'
+  # Provides Qt6LinguistTools (lupdate/lrelease + cmake module), which the
+  # top-level CMakeLists.txt lists in QT_REQUIRED_COMPONENTS for .ts → .qm
+  # translation compilation. Build-time only; runtime needs only qt6-base's
+  # QTranslator for loading the compiled .qm files.
+  'qt6-tools'
 )
 checkdepends=()
 source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/Kartend-${pkgver}.tar.gz")
