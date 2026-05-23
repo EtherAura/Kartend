@@ -29,10 +29,33 @@ linked from [Home](Home.md).
 ## 1. First launch
 
 After installing (see [building.md](../building.md)) launch Kartend from
-your application menu, or run `kartend` from a terminal. On first launch
-you'll see an empty main window and the **Empty State** widget guiding
-you toward Settings. Kartend hasn't written any state yet; that happens
-when you save your first collection.
+your application menu, or run `kartend` from a terminal.
+
+### The First-Run Wizard
+
+The first launch opens a three-page setup wizard. Cancel it and
+you'll land on the empty main window described below; complete it and
+you'll start with one collection already configured.
+
+| Page | What it asks for |
+|------|------------------|
+| **Welcome** | Nothing — just an intro to what Kartend is. **Next**. |
+| **Pick a media folder** | A **Collection name** (e.g. *Videos*, *Audiobooks*, *Reference*) and a **Media folder** path. Use the **Browse…** button to pick a directory; the folder is scanned recursively (subfolders become subcollections). |
+| **All set** | A confirmation page. **Finish** creates the collection, kicks off the initial scan, and writes `~/.config/kartend/kartend.cfg`. |
+
+The wizard sets `firstRunComplete=true` in `[General]` after it
+finishes *or* is cancelled, so it won't auto-launch again. To re-run
+it later, choose **Help → Setup Wizard…** from the menu; the
+`firstRunComplete` flag stays set (the auto-launch is intentionally
+one-shot).
+
+### Without the wizard
+
+If you skipped or already completed the wizard, the main window is
+empty and the **Empty State** widget points you toward Settings.
+Kartend hasn't written any persistent state yet; that happens when
+you save your first collection (next section, or section 2 below if
+you skipped the wizard).
 
 Per-user state lives at:
 
