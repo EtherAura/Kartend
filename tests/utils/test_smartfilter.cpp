@@ -28,8 +28,10 @@ void TestSmartFilter::kindTagRoundTrip_coversEveryKind() {
   // surfaces the mismatch immediately.
   const SmartFilter::Kind kinds[] = {
       SmartFilter::Kind::RecentlyLaunched, SmartFilter::Kind::TopPlayed,
-      SmartFilter::Kind::NeverPlayed, SmartFilter::Kind::ByExtension,
-      SmartFilter::Kind::HasArtwork, SmartFilter::Kind::ByDateAdded};
+      SmartFilter::Kind::NeverPlayed,      SmartFilter::Kind::ByExtension,
+      SmartFilter::Kind::HasArtwork,       SmartFilter::Kind::ByDateAdded,
+      SmartFilter::Kind::Pinned,           SmartFilter::Kind::Hidden,
+      SmartFilter::Kind::ContinueLater};
   for (auto k : kinds) {
     const QString tag = SmartFilter::kindToTag(k);
     QVERIFY2(!tag.isEmpty() && tag != "invalid", qPrintable(QString("tag: %1").arg(tag)));
@@ -112,8 +114,7 @@ void TestSmartFilter::byDateAdded_roundTripsDaysParam() {
 
   auto parsed = SmartFilter::fromJson(json);
   QVERIFY(parsed.isOk());
-  QCOMPARE(static_cast<int>(parsed.value().kind),
-           static_cast<int>(SmartFilter::Kind::ByDateAdded));
+  QCOMPARE(static_cast<int>(parsed.value().kind), static_cast<int>(SmartFilter::Kind::ByDateAdded));
   QCOMPARE(parsed.value().days, 14);
 }
 

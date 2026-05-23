@@ -53,6 +53,7 @@ private slots:
   void runtimeSecondsNullableRoundTrip();
   void launcherIndexNullableRoundTrip();
   void ratingNullableRoundTrip();
+  void stateFlagsRoundTrip();
   void saveRejectsEmptyPath();
   void parseTagsHandlesEmptyAndMalformed();
   void parseTagsPreservesOrderAndDedupes();
@@ -106,6 +107,9 @@ void TestItemMetadata::isNotEmptyForAnyPopulatedField() {
            [](ItemMetadata &m) { m.notes = "N"; },
            [](ItemMetadata &m) { m.sourceUrl = "https://example.org"; },
            [](ItemMetadata &m) { m.rating = 0; },
+           [](ItemMetadata &m) { m.isPinned = true; },
+           [](ItemMetadata &m) { m.isHidden = true; },
+           [](ItemMetadata &m) { m.continueLater = true; },
        }) {
     ItemMetadata m;
     mutate(m);
@@ -334,6 +338,39 @@ void TestItemMetadata::ratingNullableRoundTrip() {
   m.rating = -1;
   QVERIFY(ItemMetadataStore::save(db, m).isOk());
   QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().rating, -1);
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::stateFlagsRoundTrip() {
+  // Per-item state flags (pinned / hidden / continue-later) must round-trip
+  // through save/load without bleeding into one another, and the cleared
+  // state must persist back as 0 — otherwise a "Pin then unpin" sequence
+  // would leak the pinned state forward.
+  const QString conn = "im_state_flags";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/p";
+  m.isPinned = true;
+  m.isHidden = false;
+  m.continueLater = true;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+
+  ItemMetadata r = ItemMetadataStore::load(db, "uuid-1", "/p").value();
+  QVERIFY(r.isPinned);
+  QVERIFY(!r.isHidden);
+  QVERIFY(r.continueLater);
+
+  // Toggle each independently and confirm the others stay put.
+  m.isPinned = false;
+  m.isHidden = true;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  r = ItemMetadataStore::load(db, "uuid-1", "/p").value();
+  QVERIFY(!r.isPinned);
+  QVERIFY(r.isHidden);
+  QVERIFY(r.continueLater); // unchanged
 
   closeAndRemove(db, conn);
 }

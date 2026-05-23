@@ -24,6 +24,9 @@ enum class Kind {
   ByExtension,      // params.extensions
   HasArtwork,       // no params (all items with non-empty artwork_path)
   ByDateAdded,      // params.days (recency window — items added within last N days)
+  Pinned,           // no params — items where item_metadata.is_pinned = 1
+  Hidden,           // no params — items where item_metadata.is_hidden = 1
+  ContinueLater,    // no params — items where item_metadata.continue_later = 1
 };
 
 struct Filter {

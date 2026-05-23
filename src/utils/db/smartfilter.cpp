@@ -27,6 +27,9 @@ constexpr const char *TAG_NEVER = "never_played";
 constexpr const char *TAG_BY_EXT = "by_extension";
 constexpr const char *TAG_HAS_ARTWORK = "has_artwork";
 constexpr const char *TAG_BY_DATE_ADDED = "by_date_added";
+constexpr const char *TAG_PINNED = "pinned";
+constexpr const char *TAG_HIDDEN = "hidden";
+constexpr const char *TAG_CONTINUE_LATER = "continue_later";
 
 QString tr(const char *s) {
   return QCoreApplication::translate("SmartFilter", s);
@@ -48,6 +51,12 @@ QString kindToTag(Kind kind) {
     return QString::fromLatin1(TAG_HAS_ARTWORK);
   case Kind::ByDateAdded:
     return QString::fromLatin1(TAG_BY_DATE_ADDED);
+  case Kind::Pinned:
+    return QString::fromLatin1(TAG_PINNED);
+  case Kind::Hidden:
+    return QString::fromLatin1(TAG_HIDDEN);
+  case Kind::ContinueLater:
+    return QString::fromLatin1(TAG_CONTINUE_LATER);
   }
   // Unreachable in well-formed code; return a sentinel rather than
   // unhandled-switch UB so round-trip tests catch a missing case at the
@@ -62,6 +71,9 @@ ErrorUtils::Result<Kind> tagToKind(const QString &tag) {
   if (tag == QLatin1String(TAG_BY_EXT)) return Kind::ByExtension;
   if (tag == QLatin1String(TAG_HAS_ARTWORK)) return Kind::HasArtwork;
   if (tag == QLatin1String(TAG_BY_DATE_ADDED)) return Kind::ByDateAdded;
+  if (tag == QLatin1String(TAG_PINNED)) return Kind::Pinned;
+  if (tag == QLatin1String(TAG_HIDDEN)) return Kind::Hidden;
+  if (tag == QLatin1String(TAG_CONTINUE_LATER)) return Kind::ContinueLater;
   return ErrorContext::error(ErrorCode::InvalidArgument, "Unknown smart-filter kind tag",
                              "SmartFilter::tagToKind")
       .withDetails(QStringLiteral("Tag: '%1'").arg(tag));
@@ -146,6 +158,12 @@ QString humanLabel(const Filter &filter) {
     return tr("Has artwork");
   case Kind::ByDateAdded:
     return tr("Added in last %1 days").arg(filter.days);
+  case Kind::Pinned:
+    return tr("Pinned");
+  case Kind::Hidden:
+    return tr("Hidden");
+  case Kind::ContinueLater:
+    return tr("Continue later");
   }
   return tr("Unknown filter");
 }

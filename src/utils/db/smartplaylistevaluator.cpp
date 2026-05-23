@@ -213,6 +213,40 @@ QList<Match> evalHasArtwork(QSqlDatabase &db) {
   return out;
 }
 
+QList<Match> evalStateFlag(QSqlDatabase &db, const char *column, const char *origin) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open", origin));
+    return out;
+  }
+  // Inner join keys (collection_uuid, path) which both item_metadata and
+  // items share; the (collection_uuid, path) pair is unique on item_metadata
+  // by the v5 constraint and on items by the v1 unique index, so the join
+  // doesn't multiply rows.
+  const QString sql = QStringLiteral("SELECT items.collection_uuid, items.path FROM items "
+                                     "INNER JOIN item_metadata ON "
+                                     "items.collection_uuid = item_metadata.collection_uuid "
+                                     "AND items.path = item_metadata.path "
+                                     "WHERE item_metadata.") +
+                      QString::fromLatin1(column) +
+                      QStringLiteral(" = 1 ORDER BY items.name COLLATE NOCASE ASC");
+  QSqlQuery q(db);
+  if (!q.exec(sql)) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run state-flag smart query", origin)
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
 } // namespace
 
 QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
@@ -229,6 +263,12 @@ QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
     return evalHasArtwork(db);
   case SmartFilter::Kind::ByDateAdded:
     return evalByDateAdded(db, filter.days);
+  case SmartFilter::Kind::Pinned:
+    return evalStateFlag(db, "is_pinned", "SmartPlaylistEvaluator::evalPinned");
+  case SmartFilter::Kind::Hidden:
+    return evalStateFlag(db, "is_hidden", "SmartPlaylistEvaluator::evalHidden");
+  case SmartFilter::Kind::ContinueLater:
+    return evalStateFlag(db, "continue_later", "SmartPlaylistEvaluator::evalContinueLater");
   }
   return {};
 }

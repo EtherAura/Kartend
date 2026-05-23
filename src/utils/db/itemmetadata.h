@@ -67,6 +67,13 @@ struct ItemMetadata {
   /// Personal rating 0..10 (rendered as five half-stars in the UI).
   /// Negative means "unset" (the column is NULLable).
   int rating = -1;
+  /// User state flags (item_metadata v15). All default to false on rows
+  /// without an explicit toggle. Favorites are not stored here — they
+  /// continue to live as a reserved playlist (ensureFavoritesPlaylist) so
+  /// existing membership-based browse code keeps working.
+  bool isPinned = false;
+  bool isHidden = false;
+  bool continueLater = false;
   /// Optional override for the per-item manual file.
   QString manualPath;
   /// Optional per-item launcher override. When >= 0, indexes

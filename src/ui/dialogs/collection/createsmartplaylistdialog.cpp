@@ -31,6 +31,9 @@ constexpr int PAGE_NEVER = 2;
 constexpr int PAGE_BY_EXTENSION = 3;
 constexpr int PAGE_HAS_ARTWORK = 4;
 constexpr int PAGE_BY_DATE_ADDED = 5;
+constexpr int PAGE_PINNED = 6;
+constexpr int PAGE_HIDDEN = 7;
+constexpr int PAGE_CONTINUE_LATER = 8;
 
 constexpr int DAYS_MIN = 1;
 constexpr int DAYS_MAX = 3650;
@@ -50,6 +53,12 @@ int kindToPage(SmartFilter::Kind k) {
     return PAGE_HAS_ARTWORK;
   case SmartFilter::Kind::ByDateAdded:
     return PAGE_BY_DATE_ADDED;
+  case SmartFilter::Kind::Pinned:
+    return PAGE_PINNED;
+  case SmartFilter::Kind::Hidden:
+    return PAGE_HIDDEN;
+  case SmartFilter::Kind::ContinueLater:
+    return PAGE_CONTINUE_LATER;
   }
   return PAGE_RECENT;
 }
@@ -66,6 +75,12 @@ SmartFilter::Kind pageToKind(int page) {
     return SmartFilter::Kind::HasArtwork;
   case PAGE_BY_DATE_ADDED:
     return SmartFilter::Kind::ByDateAdded;
+  case PAGE_PINNED:
+    return SmartFilter::Kind::Pinned;
+  case PAGE_HIDDEN:
+    return SmartFilter::Kind::Hidden;
+  case PAGE_CONTINUE_LATER:
+    return SmartFilter::Kind::ContinueLater;
   case PAGE_RECENT:
   default:
     return SmartFilter::Kind::RecentlyLaunched;
@@ -106,6 +121,9 @@ void CreateSmartPlaylistDialog::buildUI() {
   m_kindCombo->addItem(tr("By extension"), PAGE_BY_EXTENSION);
   m_kindCombo->addItem(tr("Has artwork"), PAGE_HAS_ARTWORK);
   m_kindCombo->addItem(tr("Recently added"), PAGE_BY_DATE_ADDED);
+  m_kindCombo->addItem(tr("Pinned"), PAGE_PINNED);
+  m_kindCombo->addItem(tr("Hidden"), PAGE_HIDDEN);
+  m_kindCombo->addItem(tr("Continue later"), PAGE_CONTINUE_LATER);
   form->addRow(tr("Criterion:"), m_kindCombo);
 
   root->addLayout(form);
@@ -183,6 +201,27 @@ void CreateSmartPlaylistDialog::buildUI() {
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_DATE_ADDED, page);
   }
+  // State-flag pages (Pinned / Hidden / Continue later). Each takes no
+  // parameters — the filter is "all items where the matching boolean is 1".
+  // Hint text doubles as the page content so the dialog isn't blank.
+  const auto buildStateFlagPage = [this](int pageIndex, const QString &description) {
+    auto *page = new QWidget(m_paramsStack);
+    auto *l = new QVBoxLayout(page);
+    auto *note = new QLabel(description, page);
+    note->setWordWrap(true);
+    note->setStyleSheet("color: palette(mid); font-style: italic;");
+    l->addWidget(note);
+    l->addStretch();
+    m_paramsStack->insertWidget(pageIndex, page);
+  };
+  buildStateFlagPage(PAGE_PINNED, tr("Includes every item you've pinned via the right-click "
+                                     "menu. Pinned items aggregate across all collections."));
+  buildStateFlagPage(PAGE_HIDDEN, tr("Includes every item you've marked as hidden. Useful for "
+                                     "reviewing or restoring items removed from the default "
+                                     "browse view."));
+  buildStateFlagPage(PAGE_CONTINUE_LATER,
+                     tr("Includes every item you've flagged as 'continue later'. Useful for "
+                        "tracking items you've started but haven't finished."));
 
   root->addWidget(m_paramsStack);
 
@@ -237,6 +276,9 @@ void CreateSmartPlaylistDialog::setInitialFilter(const SmartFilter::Filter &filt
     m_extensionsEdit->setText(filter.extensions.join(QStringLiteral(", ")));
     break;
   case SmartFilter::Kind::HasArtwork:
+  case SmartFilter::Kind::Pinned:
+  case SmartFilter::Kind::Hidden:
+  case SmartFilter::Kind::ContinueLater:
     break;
   case SmartFilter::Kind::ByDateAdded:
     m_dateAddedDaysSpin->setValue(filter.days);
@@ -276,6 +318,9 @@ SmartFilter::Filter CreateSmartPlaylistDialog::filter() const {
     break;
   }
   case SmartFilter::Kind::HasArtwork:
+  case SmartFilter::Kind::Pinned:
+  case SmartFilter::Kind::Hidden:
+  case SmartFilter::Kind::ContinueLater:
     break;
   case SmartFilter::Kind::ByDateAdded:
     f.days = m_dateAddedDaysSpin->value();

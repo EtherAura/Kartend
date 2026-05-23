@@ -211,6 +211,14 @@ public:
   // the override and re-enable the multi-launcher chooser at launch.
   void setItemLauncherOverride(const QString &filePath, int launcherIndex);
 
+  // Per-item state flag toggles (item_metadata.is_pinned / is_hidden /
+  // continue_later). Each reads the current row, flips the relevant flag,
+  // stamps source='user', persists, and refreshes the sidebar so the new
+  // state surfaces immediately.
+  void toggleItemPinned(const QString &filePath);
+  void toggleItemHidden(const QString &filePath);
+  void toggleItemContinueLater(const QString &filePath);
+
   // ─── Playlist context-menu handlers ────────────────────────
   // Prompts for a playlist name, creates the playlist, and adds the given
   // (srcUuid, filePath) reference. Cancelling the prompt is a no-op; an empty

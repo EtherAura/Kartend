@@ -30,8 +30,8 @@ bool ItemMetadata::isEmpty() const {
   return title.isEmpty() && description.isEmpty() && genre.isEmpty() && developer.isEmpty() &&
          publisher.isEmpty() && releaseDate.isEmpty() && contentRating.isEmpty() &&
          players.isEmpty() && runtimeSeconds < 0 && tags.isEmpty() && customFields.isEmpty() &&
-         notes.isEmpty() && sourceUrl.isEmpty() && rating < 0 && manualPath.isEmpty() &&
-         launcherIndex < 0;
+         notes.isEmpty() && sourceUrl.isEmpty() && rating < 0 && !isPinned && !isHidden &&
+         !continueLater && manualPath.isEmpty() && launcherIndex < 0;
 }
 
 namespace {
@@ -39,7 +39,8 @@ namespace {
 constexpr const char *SELECT_SQL =
     "SELECT title, description, genre, developer, publisher, release_date, "
     "content_rating, players, runtime_seconds, tags, custom_fields, "
-    "manual_path, launcher_index, source, updated_at, notes, rating, source_url "
+    "manual_path, launcher_index, source, updated_at, notes, rating, source_url, "
+    "is_pinned, is_hidden, continue_later "
     "FROM item_metadata WHERE collection_uuid = ? AND path = ?";
 
 constexpr const char *UPSERT_SQL =
@@ -47,8 +48,8 @@ constexpr const char *UPSERT_SQL =
     "collection_uuid, path, title, description, genre, developer, publisher, "
     "release_date, content_rating, players, runtime_seconds, tags, "
     "custom_fields, manual_path, launcher_index, source, updated_at, "
-    "notes, rating, source_url"
-    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "notes, rating, source_url, is_pinned, is_hidden, continue_later"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
     "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
     "title=excluded.title, description=excluded.description, "
     "genre=excluded.genre, developer=excluded.developer, "
@@ -59,7 +60,8 @@ constexpr const char *UPSERT_SQL =
     "launcher_index=excluded.launcher_index, "
     "source=excluded.source, updated_at=excluded.updated_at, "
     "notes=excluded.notes, rating=excluded.rating, "
-    "source_url=excluded.source_url";
+    "source_url=excluded.source_url, is_pinned=excluded.is_pinned, "
+    "is_hidden=excluded.is_hidden, continue_later=excluded.continue_later";
 
 constexpr const char *DELETE_SQL =
     "DELETE FROM item_metadata WHERE collection_uuid = ? AND path = ?";
@@ -136,6 +138,9 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   const QVariant ratingVar = q.value(16);
   metadata.rating = ratingVar.isNull() ? -1 : ratingVar.toInt();
   metadata.sourceUrl = q.value(17).toString();
+  metadata.isPinned = q.value(18).toInt() != 0;
+  metadata.isHidden = q.value(19).toInt() != 0;
+  metadata.continueLater = q.value(20).toInt() != 0;
   return metadata;
 }
 
@@ -164,7 +169,8 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
     QString sql = QStringLiteral(
         "SELECT path, title, description, genre, developer, publisher, release_date, "
         "content_rating, players, runtime_seconds, tags, custom_fields, "
-        "manual_path, launcher_index, source, updated_at, notes, rating, source_url "
+        "manual_path, launcher_index, source, updated_at, notes, rating, source_url, "
+        "is_pinned, is_hidden, continue_later "
         "FROM item_metadata WHERE collection_uuid = ? AND path IN (");
     for (qsizetype i = 0; i < chunkLen; ++i) {
       if (i > 0) sql.append(QLatin1Char(','));
@@ -215,6 +221,9 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
       const QVariant ratingVar = q.value(17);
       md.rating = ratingVar.isNull() ? -1 : ratingVar.toInt();
       md.sourceUrl = q.value(18).toString();
+      md.isPinned = q.value(19).toInt() != 0;
+      md.isHidden = q.value(20).toInt() != 0;
+      md.continueLater = q.value(21).toInt() != 0;
       out.insert(md.path, md);
     }
   }
@@ -273,6 +282,9 @@ ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   q.addBindValue(nullableString(metadata.notes));
   q.addBindValue(nullableRating(metadata.rating));
   q.addBindValue(nullableString(metadata.sourceUrl));
+  q.addBindValue(metadata.isPinned ? 1 : 0);
+  q.addBindValue(metadata.isHidden ? 1 : 0);
+  q.addBindValue(metadata.continueLater ? 1 : 0);
 
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to upsert item_metadata",

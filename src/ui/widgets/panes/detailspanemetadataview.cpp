@@ -403,6 +403,23 @@ void DetailsPaneMetadataView::setExtendedMetadata(const ItemMetadataStore::ItemM
   // suppressed inside appendDetailRow so unset fields don't clutter the
   // sidebar with blank rows.
   appendDetailRow(QObject::tr("Your rating"), DetailsPane::formatPersonalRating(metadata.rating));
+  // Per-item state flags — only render the row when set so unflagged items
+  // don't get three blank lines pushed onto the sidebar. The chip text
+  // matches the context-menu wording (Pin / Hide / Continue later) so the
+  // visual + textual affordances stay consistent.
+  QStringList stateChips;
+  if (metadata.isPinned) {
+    stateChips << QObject::tr("Pinned");
+  }
+  if (metadata.continueLater) {
+    stateChips << QObject::tr("Continue later");
+  }
+  if (metadata.isHidden) {
+    stateChips << QObject::tr("Hidden");
+  }
+  if (!stateChips.isEmpty()) {
+    appendDetailRow(QObject::tr("State"), stateChips.join(QStringLiteral("  ·  ")));
+  }
   appendDetailRow(QObject::tr("Source"), metadata.sourceUrl, /*wrap=*/true);
   appendDetailRow(QObject::tr("Notes"), metadata.notes, /*wrap=*/true);
 

@@ -108,6 +108,47 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     QObject::connect(editMetadataAction, &QAction::triggered, this,
                      [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
 
+    // --- Per-item state flag toggles (Pin / Hide / Continue later) ---
+    // Read the current flags once so each menu label reflects the
+    // current state ("Pin" vs "Unpin"). The owning collection's uuid is
+    // resolved via the same fallback the editItemMetadata path uses, so
+    // the toggle hits the same (collection_uuid, path) key the read
+    // pipeline returns. uuid.isEmpty() means we can't resolve a stable
+    // key — skip the flag group entirely rather than offering actions
+    // that would silently no-op.
+    int flagOwningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
+    if (flagOwningIndex < 0) {
+      flagOwningIndex = *m_currentCollectionIndex;
+    }
+    QString flagUuid;
+    bool isPinned = false;
+    bool isHidden = false;
+    bool continueLater = false;
+    if (CollectionUtils::isValidIndex(flagOwningIndex, m_collections)) {
+      const CollectionConfig &flagOwning = (*m_collections)[flagOwningIndex];
+      const QString flagMediaDir =
+          PathUtils::validateAndExpandPath(flagOwning.mediaDirectory, flagOwning.name);
+      flagUuid = CollectionUtils::computeCollectionUuid(flagOwning.name, flagMediaDir);
+      if (!flagUuid.isEmpty()) {
+        const auto flagMeta = databaseMgr()->loadItemMetadata(flagUuid, filePath);
+        isPinned = flagMeta.isPinned;
+        isHidden = flagMeta.isHidden;
+        continueLater = flagMeta.continueLater;
+      }
+    }
+    if (!flagUuid.isEmpty()) {
+      QAction *pinAction = menu.addAction(isPinned ? tr("Unpin") : tr("Pin to top"));
+      QObject::connect(pinAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemPinned(filePath); });
+      QAction *continueAction = menu.addAction(continueLater ? tr("Clear continue-later marker")
+                                                             : tr("Mark as continue later"));
+      QObject::connect(continueAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemContinueLater(filePath); });
+      QAction *hideAction = menu.addAction(isHidden ? tr("Unhide") : tr("Hide"));
+      QObject::connect(hideAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemHidden(filePath); });
+    }
+
     // --- Look up online (Stage 1: URL providers only) ---
     // Submenu of metadata providers applicable to the current
     // collection's type — picks open the user's browser to a search
@@ -722,6 +763,81 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
     return;
   }
   if (detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+namespace {
+
+/// Resolves the (collection_uuid, path) key for a media item, picking the
+/// item's owning collection (which may differ from the displayed one in
+/// showAllSubcollectionItems mode). Returns an empty string when the
+/// resolution fails so callers can early-out instead of writing a row
+/// keyed by a stale collection.
+QString resolveOwningUuid(IDatabaseManager *db, QList<CollectionConfig> *collections,
+                          int *currentCollectionIndex, const QString &filePath) {
+  if (!db || !collections || !currentCollectionIndex) {
+    return {};
+  }
+  int owningIndex = db->getCollectionIndexForFile(filePath);
+  if (owningIndex < 0) {
+    owningIndex = *currentCollectionIndex;
+  }
+  if (!CollectionUtils::isValidIndex(owningIndex, collections)) {
+    return {};
+  }
+  const CollectionConfig &owning = (*collections)[owningIndex];
+  const QString expandedMediaDir =
+      PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+  return CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+}
+
+} // namespace
+
+void InteractionManager::toggleItemPinned(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.isPinned = !md.isPinned;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+void InteractionManager::toggleItemHidden(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.isHidden = !md.isHidden;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+void InteractionManager::toggleItemContinueLater(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.continueLater = !md.continueLater;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
     detailsPaneMgr()->refreshSidebarMetadataImmediate();
   }
 }
