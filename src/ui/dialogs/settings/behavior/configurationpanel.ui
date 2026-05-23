@@ -11,62 +11,76 @@
    <item>
     <widget class="QGroupBox" name="configHierarchyGroupBox">
      <property name="title"><string>Hierarchy</string></property>
-     <!-- Two label/field pairs share one row (two-column section). -->
-     <layout class="QGridLayout" name="configHierarchyFormLayout">
+     <layout class="QFormLayout" name="configHierarchyFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_parentCollection"><property name="text"><string>Parent Collection:</string></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_parentCollection"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Parent Collection:</string></property></widget></item>
       <item row="0" column="1">
-       <layout class="QHBoxLayout" name="parentCollectionLayout">
-        <item>
-         <widget class="QComboBox" name="parentCollectionComboBox">
-          <property name="minimumWidth"><number>140</number></property>
-          <property name="toolTip"><string>Select parent collection to make this a subcollection</string></property>
-         </widget>
-        </item>
+       <widget class="QComboBox" name="parentCollectionComboBox">
+        <property name="maximumWidth"><number>320</number></property>
+        <property name="toolTip"><string>Select parent collection to make this a subcollection</string></property>
+       </widget>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="label_linkedParents"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Linked Parents:</string></property></widget></item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="linkedParentsLayout">
         <item>
          <widget class="QPushButton" name="editLinkedParentsButton">
           <property name="toolTip"><string>Manage additional parents this collection appears under in the tree</string></property>
-          <property name="text"><string>Linked Parents...</string></property>
+          <property name="text"><string>Edit linked parents…</string></property>
          </widget>
         </item>
+        <item><spacer name="linkedParentsSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="0" column="2"><widget class="QLabel" name="label_collectionType"><property name="text"><string>Media Type:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QComboBox" name="collectionTypeComboBox"><property name="minimumWidth"><number>140</number></property><property name="editable"><bool>true</bool></property><property name="toolTip"><string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="label_collectionType"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Media Type:</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="collectionTypeComboBox">
+        <property name="maximumWidth"><number>320</number></property>
+        <property name="editable"><bool>true</bool></property>
+        <property name="toolTip"><string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string></property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="configContentGroupBox">
      <property name="title"><string>Content Source</string></property>
-     <!-- Two label/field pairs share one row (two-column section). -->
-     <layout class="QGridLayout" name="configContentFormLayout">
+     <layout class="QFormLayout" name="configContentFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_romDir"><property name="text"><string>Content:</string></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_romDir"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Content:</string></property></widget></item>
       <item row="0" column="1">
        <layout class="QHBoxLayout" name="contentDirLayout">
-        <item><widget class="QLineEdit" name="mediaDirLineEdit"/></item>
+        <item><widget class="QLineEdit" name="mediaDirLineEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
         <item><widget class="QPushButton" name="browseMediaDirButton"><property name="text"><string>Browse</string></property></widget></item>
-        <item><widget class="QPushButton" name="recursiveImportContentButton"><property name="toolTip"><string>Create subcollections matching the directory structure</string></property><property name="text"><string>Recursive Import...</string></property></widget></item>
+        <item><spacer name="contentDirSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="0" column="2"><widget class="QLabel" name="label_fileExtensions"><property name="text"><string>File Extensions:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QLineEdit" name="fileExtensionsLineEdit"><property name="toolTip"><string>Comma-separated list of file extensions to include</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_recursiveImport"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Recursive Import:</string></property></widget></item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="recursiveImportLayout">
+        <item><widget class="QPushButton" name="recursiveImportContentButton"><property name="toolTip"><string>Create subcollections matching the directory structure</string></property><property name="text"><string>Recursive Import…</string></property></widget></item>
+        <item><spacer name="recursiveImportSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item row="2" column="0"><widget class="QLabel" name="label_fileExtensions"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>File Extensions:</string></property></widget></item>
+      <item row="2" column="1"><widget class="QLineEdit" name="fileExtensionsLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Comma-separated list of file extensions to include</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="configBehaviorGroupBox">
      <property name="title"><string>Behavior</string></property>
-     <layout class="QGridLayout" name="configBehaviorFormLayout">
-      <property name="horizontalSpacing"><number>16</number></property>
-      <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_expandMode"><property name="text"><string>Expand Mode:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QCheckBox" name="expandModeCheckBox"><property name="toolTip"><string>Two-stage activation: first double-click or Enter expands the artwork preview; a second activation on the same item launches it.</string></property><property name="text"><string/></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="label_showAllSubcollectionItems"><property name="text"><string>Show All Subcollection Items:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox"><property name="toolTip"><string>Mix items from subcollections with parent collection items, sorted alphabetically</string></property><property name="text"><string/></property></widget></item>
+     <layout class="QVBoxLayout" name="configBehaviorFormLayout">
+      <property name="spacing"><number>6</number></property>
+      <item><widget class="QCheckBox" name="expandModeCheckBox"><property name="text"><string>Expand mode (two-stage activation)</string></property><property name="toolTip"><string>Two-stage activation: first double-click or Enter expands the artwork preview; a second activation on the same item launches it.</string></property></widget></item>
+      <item><widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox"><property name="text"><string>Show all subcollection items together</string></property><property name="toolTip"><string>Mix items from subcollections with parent collection items, sorted alphabetically</string></property></widget></item>
      </layout>
     </widget>
    </item>
@@ -76,24 +90,25 @@
      <layout class="QVBoxLayout" name="configScrapersOuterLayout">
       <property name="spacing"><number>6</number></property>
       <item>
-       <layout class="QGridLayout" name="configScrapersFormLayout">
+       <layout class="QFormLayout" name="configScrapersFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
-        <item row="0" column="0"><widget class="QLabel" name="label_scraperProvider"><property name="text"><string>Metadata Scraper:</string></property></widget></item>
-        <item row="0" column="1"><widget class="QComboBox" name="scraperProviderComboBox"><property name="minimumWidth"><number>140</number></property><property name="toolTip"><string>Metadata scraper for this collection. Automatic resolves a provider by matching the collection type; pick one explicitly to scrape a custom-typed collection.</string></property></widget></item>
-        <item row="0" column="2"><widget class="QLabel" name="label_screenscraperHashArchive"><property name="text"><string>Hash Inner ROM in Archives:</string></property></widget></item>
-        <item row="0" column="3"><widget class="QCheckBox" name="screenscraperHashArchiveCheckBox"><property name="toolTip"><string>When the scraped item is a .zip / .7z / etc., extract it and hash the inner ROM rather than the outer archive — much higher ScreenScraper match accuracy. Turn off to skip the extraction cost for huge archives.</string></property><property name="text"><string/></property></widget></item>
-        <item row="0" column="4"><widget class="QLabel" name="label_screenscraperSystem"><property name="text"><string>ScreenScraper System:</string></property></widget></item>
-        <item row="0" column="5"><widget class="QComboBox" name="screenscraperSystemComboBox"><property name="minimumWidth"><number>140</number></property><property name="toolTip"><string>Override ScreenScraper.fr's per-collection system id. Leave on Auto-detect to let Kartend pick from the collection's name / type / extensions.</string></property></widget></item>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+        <item row="0" column="0"><widget class="QLabel" name="label_scraperProvider"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Metadata Scraper:</string></property></widget></item>
+        <item row="0" column="1"><widget class="QComboBox" name="scraperProviderComboBox"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Metadata scraper for this collection. Automatic resolves a provider by matching the collection type; pick one explicitly to scrape a custom-typed collection.</string></property></widget></item>
+        <item row="1" column="0"><widget class="QLabel" name="label_screenscraperSystem"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>ScreenScraper System:</string></property></widget></item>
+        <item row="1" column="1"><widget class="QComboBox" name="screenscraperSystemComboBox"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Override ScreenScraper.fr's per-collection system id. Leave on Auto-detect to let Kartend pick from the collection's name / type / extensions.</string></property></widget></item>
+        <item row="2" column="0" colspan="2"><widget class="QCheckBox" name="screenscraperHashArchiveCheckBox"><property name="text"><string>Hash inner ROM in archives (ScreenScraper)</string></property><property name="toolTip"><string>When the scraped item is a .zip / .7z / etc., extract it and hash the inner ROM rather than the outer archive — much higher ScreenScraper match accuracy. Turn off to skip the extraction cost for huge archives.</string></property></widget></item>
        </layout>
       </item>
       <item>
-       <!-- Full-width: the DAT file list needs the room. -->
        <layout class="QFormLayout" name="configScrapersDatFormLayout">
-        <property name="horizontalSpacing"><number>8</number></property>
+        <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
         <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-        <item row="0" column="0"><widget class="QLabel" name="label_datFiles"><property name="text"><string>DAT Files:</string></property><property name="alignment"><set>Qt::AlignmentFlag::AlignTop|Qt::AlignmentFlag::AlignRight</set></property></widget></item>
+        <item row="0" column="0"><widget class="QLabel" name="label_datFiles"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>DAT Files:</string></property></widget></item>
         <item row="0" column="1">
          <layout class="QVBoxLayout" name="datFilesLayout">
           <item>

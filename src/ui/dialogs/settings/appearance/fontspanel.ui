@@ -20,19 +20,39 @@
        </widget>
       </item>
       <item>
-       <!-- Two label/field pairs share one row (two-column section). -->
-       <layout class="QGridLayout" name="globalUiFontFormLayout">
+       <layout class="QFormLayout" name="globalUiFontFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
         <item row="0" column="0">
-         <widget class="QLabel" name="globalUiFontFamilyLabel">
-          <property name="text"><string>Font Family:</string></property>
+         <widget class="QLabel" name="globalUiFontSizeLabel">
+          <property name="minimumSize"><size><width>200</width><height>0</height></size></property>
+          <property name="text"><string>Font Size:</string></property>
          </widget>
         </item>
         <item row="0" column="1">
+         <widget class="QSpinBox" name="globalUiFontSizeSpinBox">
+          <property name="maximumWidth"><number>120</number></property>
+          <property name="toolTip"><string>Point size for the application font. 0 = platform default.</string></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>72</number></property>
+          <property name="value"><number>0</number></property>
+          <property name="suffix"><string> pt</string></property>
+          <property name="specialValueText"><string>Default</string></property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="globalUiFontFamilyLabel">
+          <property name="minimumSize"><size><width>200</width><height>0</height></size></property>
+          <property name="text"><string>Font Family:</string></property>
+         </widget>
+        </item>
+        <item row="1" column="1">
          <layout class="QHBoxLayout" name="globalUiFontFamilyLayout">
           <item>
            <widget class="QLineEdit" name="globalUiFontFamilyEdit">
+            <property name="maximumWidth"><number>320</number></property>
             <property name="placeholderText"><string>System Default</string></property>
             <property name="toolTip"><string>Font family name (e.g. "Noto Sans", "DejaVu Sans"). Empty falls back to the platform default.</string></property>
            </widget>
@@ -43,23 +63,8 @@
             <property name="toolTip"><string>Pick a font family</string></property>
            </widget>
           </item>
+          <item><spacer name="globalUiFontFamilySpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
          </layout>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="globalUiFontSizeLabel">
-          <property name="text"><string>Font Size:</string></property>
-         </widget>
-        </item>
-        <item row="0" column="3">
-         <widget class="QSpinBox" name="globalUiFontSizeSpinBox">
-          <property name="maximumWidth"><number>100</number></property>
-          <property name="toolTip"><string>Point size for the application font. 0 = platform default.</string></property>
-          <property name="minimum"><number>0</number></property>
-          <property name="maximum"><number>72</number></property>
-          <property name="value"><number>0</number></property>
-          <property name="suffix"><string> pt</string></property>
-          <property name="specialValueText"><string>Default</string></property>
-         </widget>
         </item>
        </layout>
       </item>

@@ -187,6 +187,11 @@ private:
   /// the context header, and indexes settings for search. Implementation in
   /// settingsdialognav.cpp.
   void setupNavigation();
+  /// Walks every QStackedWidget page and pins line edits / combos / key
+  /// edits / spin boxes / push buttons to uniform widths so the dialog has
+  /// a consistent column rhythm across panels written in .ui and in code.
+  /// Skips the nav rail and the dialog footer.
+  void applyUniformPageWidgetSizing();
   /// Refreshes the context header (icon + title + collection subtitle) for
   /// the currently selected nav row.
   void updateContextHeader();

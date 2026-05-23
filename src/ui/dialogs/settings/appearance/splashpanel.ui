@@ -10,82 +10,32 @@
    <item>
     <widget class="QGroupBox" name="bootSplashGroupBox">
      <property name="title"><string>Boot Splash</string></property>
-     <layout class="QGridLayout" name="bootSplashFormLayout">
+     <layout class="QFormLayout" name="bootSplashFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0">
-       <widget class="QLabel" name="bootSplashLabel">
-        <property name="text"><string>Show on Startup:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QCheckBox" name="bootSplashCheckBox">
-        <property name="toolTip"><string>Show the splash screen when Kartend starts</string></property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="bootSplashTitleLabel">
-        <property name="text"><string>Title:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="3">
-       <widget class="QLineEdit" name="bootSplashTitleLineEdit">
-        <property name="placeholderText"><string>Kartend</string></property>
-        <property name="toolTip"><string>Title shown on the boot splash. Leave empty to use the application name.</string></property>
-       </widget>
-      </item>
-      <item row="0" column="4">
-       <widget class="QLabel" name="bootSplashSubtitleLabel">
-        <property name="text"><string>Subtitle:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="5">
-       <widget class="QLineEdit" name="bootSplashSubtitleLineEdit">
-        <property name="placeholderText"><string>Preparing your media collections</string></property>
-        <property name="toolTip"><string>Subtitle shown on the boot splash. Leave empty to use the default.</string></property>
-       </widget>
-      </item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="bootSplashTitleLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Title:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="bootSplashTitleLineEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>Kartend</string></property><property name="toolTip"><string>Title shown on the boot splash. Leave empty to use the application name.</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="bootSplashSubtitleLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Subtitle:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLineEdit" name="bootSplashSubtitleLineEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>Preparing your media collections</string></property><property name="toolTip"><string>Subtitle shown on the boot splash. Leave empty to use the default.</string></property></widget></item>
+      <item row="2" column="0" colspan="2"><widget class="QCheckBox" name="bootSplashCheckBox"><property name="text"><string>Show boot splash on startup</string></property><property name="toolTip"><string>Show the splash screen when Kartend starts</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="resumeFocusSplashGroupBox">
      <property name="title"><string>Resume Focus Splash</string></property>
-     <layout class="QGridLayout" name="resumeFocusSplashFormLayout">
+     <layout class="QFormLayout" name="resumeFocusSplashFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0">
-       <widget class="QLabel" name="resumeFocusSplashLabel">
-        <property name="text"><string>Show on Focus Return:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QCheckBox" name="resumeFocusSplashCheckBox">
-        <property name="toolTip"><string>Show the splash screen when Kartend regains focus after being inactive</string></property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="resumeFocusSplashTitleLabel">
-        <property name="text"><string>Title:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="3">
-       <widget class="QLineEdit" name="resumeFocusSplashTitleLineEdit">
-        <property name="placeholderText"><string>Welcome back</string></property>
-        <property name="toolTip"><string>Title shown on the resume-focus splash. Leave empty to use the default.</string></property>
-       </widget>
-      </item>
-      <item row="0" column="4">
-       <widget class="QLabel" name="resumeFocusSplashSubtitleLabel">
-        <property name="text"><string>Subtitle:</string></property>
-       </widget>
-      </item>
-      <item row="0" column="5">
-       <widget class="QLineEdit" name="resumeFocusSplashSubtitleLineEdit">
-        <property name="placeholderText"><string>(none)</string></property>
-        <property name="toolTip"><string>Optional subtitle shown under the resume-focus splash title. Leave empty for none.</string></property>
-       </widget>
-      </item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="resumeFocusSplashTitleLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Title:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="resumeFocusSplashTitleLineEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>Welcome back</string></property><property name="toolTip"><string>Title shown on the resume-focus splash. Leave empty to use the default.</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="resumeFocusSplashSubtitleLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Subtitle:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLineEdit" name="resumeFocusSplashSubtitleLineEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(none)</string></property><property name="toolTip"><string>Optional subtitle shown under the resume-focus splash title. Leave empty for none.</string></property></widget></item>
+      <item row="2" column="0" colspan="2"><widget class="QCheckBox" name="resumeFocusSplashCheckBox"><property name="text"><string>Show on focus return</string></property><property name="toolTip"><string>Show the splash screen when Kartend regains focus after being inactive</string></property></widget></item>
      </layout>
     </widget>
    </item>

@@ -8,10 +8,12 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFont>
 #include <QFormLayout>
-#include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
 #include <QPointer>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -19,6 +21,30 @@
 #include <QVBoxLayout>
 
 namespace {
+
+// Value-column widget width caps shared across the settings dialog so
+// numeric fields and dropdowns don't stretch into oversized lozenges.
+// Mirrors the per-.ui maximumWidth values in the rest of the panels.
+constexpr int kSpinMaxWidth = 120;
+constexpr int kComboMaxWidth = 320;
+// Minimum width of the label column. Matches the `minimumSize` set on
+// every QLabel in the other settings panels so label edges line up
+// across groupboxes even when their label text is short.
+constexpr int kLabelMinWidth = 200;
+
+// Walk every row in the form, set the same minimum width on each
+// label widget. QFormLayout::addRow(QString, …) auto-creates a QLabel
+// that defaults to its text's sizeHint, so short labels collapse left
+// of long ones. A uniform min width keeps the label column aligned.
+void uniformLabelColumn(QFormLayout *form) {
+  for (int row = 0; row < form->rowCount(); ++row) {
+    QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
+    if (!item) continue;
+    if (auto *label = qobject_cast<QLabel *>(item->widget())) {
+      label->setMinimumWidth(kLabelMinWidth);
+    }
+  }
+}
 
 // Preset snapshots — switching the combo to anything other than Custom
 // stamps these onto the three numeric fields. Custom leaves the user's
@@ -61,61 +87,62 @@ ScraperSettingsPanel::~ScraperSettingsPanel() = default;
 void ScraperSettingsPanel::buildLayout() {
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
+  root->setSpacing(8);
 
-  auto *form = new QFormLayout;
-  form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  // ── Performance group ─────────────────────────────────────────
+  // Rows ordered by widget type: dropdown first, then spin boxes,
+  // then checkbox, then the Detect button + result label. The
+  // explainer paragraph sits at the bottom of the group so the
+  // form rows above stay tightly aligned.
+  auto *perfGroup = new QGroupBox(tr("Performance"), this);
+  auto *perfForm = new QFormLayout(perfGroup);
+  perfForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  perfForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
 
-  m_presetCombo = new QComboBox(this);
+  m_presetCombo = new QComboBox(perfGroup);
   m_presetCombo->addItem(tr("Fastest"), static_cast<int>(GeneralSettings::ScraperPreset::Fastest));
   m_presetCombo->addItem(tr("Balanced"),
                          static_cast<int>(GeneralSettings::ScraperPreset::Balanced));
   m_presetCombo->addItem(tr("Best Quality"),
                          static_cast<int>(GeneralSettings::ScraperPreset::BestQuality));
   m_presetCombo->addItem(tr("Custom"), static_cast<int>(GeneralSettings::ScraperPreset::Custom));
+  m_presetCombo->setMaximumWidth(kComboMaxWidth);
   m_presetCombo->setToolTip(tr("Fastest favors small downloads + high parallelism. Best Quality "
                                "requests original-resolution assets. Custom unlocks the three "
                                "numeric fields below."));
-  form->addRow(tr("Preset:"), m_presetCombo);
+  perfForm->addRow(tr("Preset:"), m_presetCombo);
 
-  m_maxDimSpin = new QSpinBox(this);
+  m_maxDimSpin = new QSpinBox(perfGroup);
   m_maxDimSpin->setRange(0, 8192);
   m_maxDimSpin->setSingleStep(64);
   m_maxDimSpin->setSpecialValueText(tr("Original (full resolution)"));
   m_maxDimSpin->setSuffix(tr(" px"));
+  m_maxDimSpin->setMaximumWidth(kSpinMaxWidth);
   m_maxDimSpin->setToolTip(tr("Maximum width/height the scraper asks the provider for. "
                               "0 = full resolution. Server-side resizing dramatically "
                               "speeds up downloads but loses detail."));
-  form->addRow(tr("Image max dimension:"), m_maxDimSpin);
+  perfForm->addRow(tr("Image max dimension:"), m_maxDimSpin);
 
-  m_concurrencySpin = new QSpinBox(this);
+  m_concurrencySpin = new QSpinBox(perfGroup);
   m_concurrencySpin->setRange(1, 16);
+  m_concurrencySpin->setMaximumWidth(kSpinMaxWidth);
   m_concurrencySpin->setToolTip(tr("Number of media downloads that can run at the same time. "
                                    "Higher values saturate bandwidth faster but risk hitting "
                                    "the provider's per-account thread cap."));
-  form->addRow(tr("Concurrent media downloads:"), m_concurrencySpin);
+  perfForm->addRow(tr("Concurrent media downloads:"), m_concurrencySpin);
 
-  m_throttleSpin = new QSpinBox(this);
+  m_throttleSpin = new QSpinBox(perfGroup);
   m_throttleSpin->setRange(0, 5000);
   m_throttleSpin->setSingleStep(25);
   m_throttleSpin->setSuffix(tr(" ms"));
+  m_throttleSpin->setMaximumWidth(kSpinMaxWidth);
   m_throttleSpin->setToolTip(tr("Minimum gap between consecutive media-download starts. "
                                 "Higher values throttle the scraper; 0 disables pacing."));
-  form->addRow(tr("Throttle between starts:"), m_throttleSpin);
+  perfForm->addRow(tr("Throttle between starts:"), m_throttleSpin);
 
-  // JPG output checkbox — opted in by Fastest, opt-out elsewhere. JPG
-  // re-encoding by SS shrinks images to roughly a third of the PNG
-  // size at the cost of some fidelity (visible mostly on box art with
-  // sharp text). Independent of mediaMaxDimension so a user can ask
-  // for full-res JPG too.
-  m_preferJpgCheck = new QCheckBox(tr("Prefer JPG output (smaller, lossy)"), this);
-  m_preferJpgCheck->setToolTip(tr("Asks ScreenScraper to re-encode images as JPG instead of PNG. "
-                                  "Roughly 3-5x smaller for typical scrape sizes; introduces "
-                                  "JPEG artifacts so it's off by default for Balanced and "
-                                  "Best Quality. Has no effect on videos or manuals."));
-  form->addRow(QString(), m_preferJpgCheck);
-
-  m_batchItemSpin = new QSpinBox(this);
+  m_batchItemSpin = new QSpinBox(perfGroup);
   m_batchItemSpin->setRange(1, 16);
+  m_batchItemSpin->setMaximumWidth(kSpinMaxWidth);
   m_batchItemSpin->setToolTip(tr("How many items can be scraped in parallel during a batch "
                                  "scrape. 1 = strictly serial (one item at a time). "
                                  "4-8 matches Skyscraper-style worker pools and is the biggest "
@@ -125,20 +152,39 @@ void ScraperSettingsPanel::buildLayout() {
                                  "(one in-flight ROM per thread). Setting this to your account's "
                                  "thread allowance matches SS's intended workload model. Click "
                                  "Detect below to read your current allowance from ssuserInfos."));
-  form->addRow(tr("Batch: items in parallel:"), m_batchItemSpin);
+  perfForm->addRow(tr("Batch: items in parallel:"), m_batchItemSpin);
+
+  // JPG output checkbox — opted in by Fastest, opt-out elsewhere. JPG
+  // re-encoding by SS shrinks images to roughly a third of the PNG
+  // size at the cost of some fidelity (visible mostly on box art with
+  // sharp text). Independent of mediaMaxDimension so a user can ask
+  // for full-res JPG too.
+  m_preferJpgCheck = new QCheckBox(tr("Prefer JPG output (smaller, lossy)"), perfGroup);
+  m_preferJpgCheck->setToolTip(tr("Asks ScreenScraper to re-encode images as JPG instead of PNG. "
+                                  "Roughly 3-5x smaller for typical scrape sizes; introduces "
+                                  "JPEG artifacts so it's off by default for Balanced and "
+                                  "Best Quality. Has no effect on videos or manuals."));
+  perfForm->addRow(QString(), m_preferJpgCheck);
 
   // Detect-threads row: a button kicks off ssuserInfos.php; the label
   // next to it shows the parsed result (or the SS-side error) once
   // the reply lands. Lets premium users see exactly which tier SS is
   // granting them without having to scrape a real ROM first.
   auto *detectRow = new QHBoxLayout;
-  m_detectButton = new QPushButton(tr("Detect from SS account"), this);
-  m_detectedThreadsLabel = new QLabel(tr("(not yet detected)"), this);
-  m_detectedThreadsLabel->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_detectButton = new QPushButton(tr("Detect from SS account"), perfGroup);
+  m_detectedThreadsLabel = new QLabel(tr("(not yet detected)"), perfGroup);
+  // PlaceholderText foreground role gives the muted-secondary feel the
+  // original mid-palette stylesheet aimed at, but with enough contrast
+  // to stay readable. Reused below for the explainer paragraph and the
+  // re-scrape warning.
+  m_detectedThreadsLabel->setForegroundRole(QPalette::PlaceholderText);
+  QFont detectedFont = m_detectedThreadsLabel->font();
+  detectedFont.setItalic(true);
+  m_detectedThreadsLabel->setFont(detectedFont);
   m_detectedThreadsLabel->setWordWrap(true);
   detectRow->addWidget(m_detectButton);
   detectRow->addWidget(m_detectedThreadsLabel, /*stretch=*/1);
-  form->addRow(QString(), detectRow);
+  perfForm->addRow(QString(), detectRow);
 
   // Explainer block for interactive-vs-batch concurrency semantics.
   // The two knobs solve different problems: mediaConcurrency
@@ -156,17 +202,23 @@ void ScraperSettingsPanel::buildLayout() {
                                   "whole-collection batch scrape. SS's documented 'thread' "
                                   "model puts one ROM in flight per thread, so set this to "
                                   "your account's thread allowance for best wallclock."),
-                               this);
+                               perfGroup);
   explainer->setWordWrap(true);
-  explainer->setStyleSheet("color: palette(mid); padding: 4px 0px;");
-  form->addRow(explainer);
+  explainer->setForegroundRole(QPalette::PlaceholderText);
+  perfForm->addRow(explainer);
 
-  auto *separator = new QFrame(this);
-  separator->setFrameShape(QFrame::HLine);
-  separator->setFrameShadow(QFrame::Sunken);
-  form->addRow(separator);
+  root->addWidget(perfGroup);
 
-  m_rescrapeCombo = new QComboBox(this);
+  // ── Re-scrape & metadata group ──────────────────────────────
+  // Same widget-type ordering: dropdowns first, spin box next,
+  // checkboxes last. The warning + skip-window pair sit under
+  // their owning combo so the conditional show/hide stays local.
+  auto *behaviorGroup = new QGroupBox(tr("Re-scrape && Metadata"), this);
+  auto *behaviorForm = new QFormLayout(behaviorGroup);
+  behaviorForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  behaviorForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+
+  m_rescrapeCombo = new QComboBox(behaviorGroup);
   m_rescrapeCombo->addItem(tr("Overwrite — replace existing assets"),
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::Overwrite));
   m_rescrapeCombo->addItem(tr("Fill missing — keep existing, only download what's missing"),
@@ -178,53 +230,28 @@ void ScraperSettingsPanel::buildLayout() {
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::UpdateChanged));
   m_rescrapeCombo->addItem(tr("Skip — don't re-scrape items that already have metadata"),
                            static_cast<int>(GeneralSettings::ScraperRescrapeMode::Skip));
+  m_rescrapeCombo->setMaximumWidth(kComboMaxWidth);
   m_rescrapeCombo->setToolTip(tr("Per-asset policy: applied independently to each cover / "
                                  "screenshot / fanart / etc. so a new asset still downloads "
                                  "even when other assets are kept."));
-  form->addRow(tr("Re-scrape policy:"), m_rescrapeCombo);
+  behaviorForm->addRow(tr("Re-scrape policy:"), m_rescrapeCombo);
 
   // The warning under the combo only shows when UpdateChanged is
   // selected. The mode has to download every asset anyway so it can
-  // compare bytes — meaningfully slower than FillMissing.
+  // compare bytes — meaningfully slower than FillMissing. Bold + italic
+  // gives emphasis without relying on the highlight role (a vivid
+  // selection color that read as garish next to ordinary text).
   m_rescrapeWarning = new QLabel(tr("⚠ Update changed still pays the full download cost for every "
                                     "asset (the bytes have to land in memory before they can be "
                                     "compared). Use Fill missing for the fast path."),
-                                 this);
+                                 behaviorGroup);
   m_rescrapeWarning->setWordWrap(true);
-  m_rescrapeWarning->setStyleSheet("color: palette(highlight); font-style: italic;");
+  QFont warningFont = m_rescrapeWarning->font();
+  warningFont.setBold(true);
+  warningFont.setItalic(true);
+  m_rescrapeWarning->setFont(warningFont);
   m_rescrapeWarning->hide();
-  form->addRow(m_rescrapeWarning);
-
-  // Refresh-window gate that pairs with both Skip and Fill missing.
-  // Under Skip the filter drops items with any metadata; under
-  // Fill missing it drops items whose checked fields are all already
-  // on disk. The spinbox lets users mark items as eligible for
-  // refresh once they pass the chosen age. 0 disables the window
-  // (legacy: skip covered items regardless of age). Range 0..365 —
-  // matches SettingsManager's clamp. Visible only when Skip or Fill
-  // missing is the active rescrape mode; the label toggles in
-  // lockstep so the form layout stays clean.
-  m_skipRecentDaysSpin = new QSpinBox(this);
-  m_skipRecentDaysSpin->setRange(0, 365);
-  m_skipRecentDaysSpin->setSingleStep(1);
-  m_skipRecentDaysSpin->setSuffix(tr(" days"));
-  m_skipRecentDaysSpin->setSpecialValueText(tr("Always skip (no refresh)"));
-  m_skipRecentDaysSpin->setToolTip(
-      tr("Skip and Fill missing modes drop items whose data is already "
-         "on disk — Skip if any metadata is present, Fill missing if "
-         "every ticked checkbox in the scrape dialog has a file. Set "
-         "this to a number of days to let those items become eligible "
-         "for re-scraping after the chosen age — e.g. 30 means items "
-         "covered longer than 30 days ago will refresh on the next "
-         "batch.\n\n"
-         "Items without a readable scrape timestamp (sidecar-only "
-         "imports, hand-edited entries) stay skipped regardless of "
-         "the window. 0 disables the window entirely so every covered "
-         "item is skipped."));
-  m_skipRecentDaysLabel = new QLabel(tr("Refresh items scraped before:"), this);
-  form->addRow(m_skipRecentDaysLabel, m_skipRecentDaysSpin);
-  m_skipRecentDaysLabel->hide();
-  m_skipRecentDaysSpin->hide();
+  behaviorForm->addRow(m_rescrapeWarning);
 
   // Fallback region for ScreenScraper's region-keyed fields. Each
   // scraped item first honours its own matched-ROM region — a Japanese
@@ -232,7 +259,7 @@ void ScraperSettingsPanel::buildLayout() {
   // what to fall back to when the item's region has no entry. Free-text
   // fields (description, genres, ...) ignore this and follow the
   // application language instead. Data is the SS region shortname.
-  m_regionCombo = new QComboBox(this);
+  m_regionCombo = new QComboBox(behaviorGroup);
   m_regionCombo->addItem(tr("World"), QStringLiteral("wor"));
   m_regionCombo->addItem(tr("USA"), QStringLiteral("us"));
   m_regionCombo->addItem(tr("Europe"), QStringLiteral("eu"));
@@ -245,18 +272,52 @@ void ScraperSettingsPanel::buildLayout() {
   m_regionCombo->addItem(tr("Brazil"), QStringLiteral("br"));
   m_regionCombo->addItem(tr("Australia"), QStringLiteral("au"));
   m_regionCombo->addItem(tr("Korea"), QStringLiteral("kr"));
+  m_regionCombo->setMaximumWidth(kComboMaxWidth);
   m_regionCombo->setToolTip(tr("Each scraped item uses its own region for the title, release "
                                "date, and box art. This region is only the fallback for items "
                                "whose own region has no entry. Descriptions and other text "
                                "always follow the application language."));
-  form->addRow(tr("Fallback region:"), m_regionCombo);
+  behaviorForm->addRow(tr("Fallback region:"), m_regionCombo);
+
+  // Refresh-window gate that pairs with both Skip and Fill missing.
+  // Under Skip the filter drops items with any metadata; under
+  // Fill missing it drops items whose checked fields are all already
+  // on disk. The spinbox lets users mark items as eligible for
+  // refresh once they pass the chosen age. 0 disables the window
+  // (legacy: skip covered items regardless of age). Range 0..365 —
+  // matches SettingsManager's clamp. Visible only when Skip or Fill
+  // missing is the active rescrape mode; the label toggles in
+  // lockstep so the form layout stays clean.
+  m_skipRecentDaysSpin = new QSpinBox(behaviorGroup);
+  m_skipRecentDaysSpin->setRange(0, 365);
+  m_skipRecentDaysSpin->setSingleStep(1);
+  m_skipRecentDaysSpin->setSuffix(tr(" days"));
+  m_skipRecentDaysSpin->setSpecialValueText(tr("Always skip (no refresh)"));
+  m_skipRecentDaysSpin->setMaximumWidth(kSpinMaxWidth);
+  m_skipRecentDaysSpin->setToolTip(
+      tr("Skip and Fill missing modes drop items whose data is already "
+         "on disk — Skip if any metadata is present, Fill missing if "
+         "every ticked checkbox in the scrape dialog has a file. Set "
+         "this to a number of days to let those items become eligible "
+         "for re-scraping after the chosen age — e.g. 30 means items "
+         "covered longer than 30 days ago will refresh on the next "
+         "batch.\n\n"
+         "Items without a readable scrape timestamp (sidecar-only "
+         "imports, hand-edited entries) stay skipped regardless of "
+         "the window. 0 disables the window entirely so every covered "
+         "item is skipped."));
+  m_skipRecentDaysLabel = new QLabel(tr("Refresh items scraped before:"), behaviorGroup);
+  behaviorForm->addRow(m_skipRecentDaysLabel, m_skipRecentDaysSpin);
+  m_skipRecentDaysLabel->hide();
+  m_skipRecentDaysSpin->hide();
 
   // Auto-resume toggle (Kartend-1uvp). Off by default — first-time users
   // see the modal Resume / Discard prompt on next launch after an
   // interrupted scrape, which teaches them the recovery path. Power
   // users running unattended overnight batches flip this on so a crash
   // + relaunch self-heals without a dialog blocking the resume.
-  m_autoResumeCheck = new QCheckBox(tr("Silently resume interrupted scrapes on next launch"), this);
+  m_autoResumeCheck =
+      new QCheckBox(tr("Silently resume interrupted scrapes on next launch"), behaviorGroup);
   m_autoResumeCheck->setToolTip(
       tr("If a scrape is interrupted (process exit / crash mid-batch), "
          "Kartend writes a snapshot of the queue to "
@@ -265,12 +326,12 @@ void ScraperSettingsPanel::buildLayout() {
          "discard the snapshot.\n"
          "• On: the queue resumes silently, and the Scraper window is "
          "raised so the Live view + Cancel/Close buttons are reachable."));
-  form->addRow(QString(), m_autoResumeCheck);
+  behaviorForm->addRow(QString(), m_autoResumeCheck);
 
   // Scrape logging toggle. Off by default — diagnostic logging has a
   // per-message disk-write cost, so it is opt-in for users debugging a
   // misbehaving or crashed scrape.
-  m_scrapeLoggingCheck = new QCheckBox(tr("Enable scrape logging"), this);
+  m_scrapeLoggingCheck = new QCheckBox(tr("Enable scrape logging"), behaviorGroup);
   m_scrapeLoggingCheck->setToolTip(tr("Records detailed scrape activity to a log file so a scrape "
                                       "that crashes or stalls can be diagnosed afterwards (a "
                                       "windowed build has no visible console output).\n\n"
@@ -278,9 +339,12 @@ void ScraperSettingsPanel::buildLayout() {
                                       "The file is size-capped; the previous run rolls over to "
                                       "scrape.log.old. Leave off for normal use.")
                                        .arg(ScrapeLogger::logFilePath()));
-  form->addRow(QString(), m_scrapeLoggingCheck);
+  behaviorForm->addRow(QString(), m_scrapeLoggingCheck);
 
-  root->addLayout(form);
+  uniformLabelColumn(perfForm);
+  uniformLabelColumn(behaviorForm);
+
+  root->addWidget(behaviorGroup);
   root->addStretch(1);
 }
 

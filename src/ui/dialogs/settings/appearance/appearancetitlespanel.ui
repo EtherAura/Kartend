@@ -11,16 +11,19 @@
    <item>
     <widget class="QGroupBox" name="appearanceTitlesFontGroupBox">
      <property name="title"><string>Font</string></property>
-     <layout class="QGridLayout" name="appearanceTitlesFontFormLayout">
+     <layout class="QFormLayout" name="appearanceTitlesFontFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_titles"><property name="text"><string>Font Size:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QSpinBox" name="fontSizeSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Font size for item titles</string></property><property name="minimum"><number>8</number></property><property name="maximum"><number>72</number></property><property name="value"><number>12</number></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="label_customFont"><property name="text"><string>Custom Font:</string></property></widget></item>
-      <item row="0" column="3">
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_titles"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Font Size:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QSpinBox" name="fontSizeSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Font size for item titles</string></property><property name="minimum"><number>8</number></property><property name="maximum"><number>72</number></property><property name="value"><number>12</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_customFont"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Custom Font:</string></property></widget></item>
+      <item row="1" column="1">
        <layout class="QHBoxLayout" name="customFontLayout">
-        <item><widget class="QLineEdit" name="customFontEdit"><property name="toolTip"><string>Custom font family for item titles (leave empty for system default)</string></property><property name="placeholderText"><string>System Default</string></property></widget></item>
+        <item><widget class="QLineEdit" name="customFontEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Custom font family for item titles (leave empty for system default)</string></property><property name="placeholderText"><string>System Default</string></property></widget></item>
         <item><widget class="QPushButton" name="browseFontButton"><property name="text"><string>Browse...</string></property><property name="toolTip"><string>Select a font family</string></property></widget></item>
+        <item><spacer name="customFontSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
      </layout>
@@ -29,11 +32,10 @@
    <item>
     <widget class="QGroupBox" name="appearanceTitlesVisibilityGroupBox">
      <property name="title"><string>Visibility</string></property>
-     <layout class="QGridLayout" name="appearanceTitlesVisibilityLayout">
-      <property name="horizontalSpacing"><number>16</number></property>
-      <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0" colspan="2"><widget class="QCheckBox" name="hideTitlesCheckBox"><property name="toolTip"><string>Hide titles for this collection</string></property><property name="text"><string>Hide Titles</string></property></widget></item>
-      <item row="0" column="2" colspan="2"><widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox"><property name="toolTip"><string>Hide titles for subcollections</string></property><property name="text"><string>Hide Subcollection Titles</string></property></widget></item>
+     <layout class="QVBoxLayout" name="appearanceTitlesVisibilityLayout">
+      <property name="spacing"><number>6</number></property>
+      <item><widget class="QCheckBox" name="hideTitlesCheckBox"><property name="toolTip"><string>Hide titles for this collection</string></property><property name="text"><string>Hide titles</string></property></widget></item>
+      <item><widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox"><property name="toolTip"><string>Hide titles for subcollections</string></property><property name="text"><string>Hide subcollection titles</string></property></widget></item>
      </layout>
     </widget>
    </item>

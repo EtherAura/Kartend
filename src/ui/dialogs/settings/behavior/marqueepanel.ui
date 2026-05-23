@@ -19,41 +19,26 @@
        </widget>
       </item>
       <item>
-       <layout class="QGridLayout" name="marqueeFormLayout">
+       <layout class="QFormLayout" name="marqueeFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
-        <item row="0" column="0">
-         <widget class="QLabel" name="marqueeEnabledLabel">
-          <property name="text"><string>Enabled:</string></property>
-         </widget>
-        </item>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+        <item row="0" column="0"><widget class="QLabel" name="marqueeScreenLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Screen:</string></property></widget></item>
         <item row="0" column="1">
-         <widget class="QCheckBox" name="marqueeEnabledCheckBox">
-          <property name="toolTip"><string>Open a frameless window on the selected screen showing the current item's artwork (or the active collection's icon).</string></property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="marqueeScreenLabel">
-          <property name="text"><string>Screen:</string></property>
-         </widget>
-        </item>
-        <item row="0" column="3">
          <widget class="QComboBox" name="marqueeScreenComboBox">
-          <property name="minimumWidth"><number>140</number></property>
+          <property name="maximumWidth"><number>320</number></property>
           <property name="toolTip"><string>Which physical screen to display the marquee on. If the chosen screen is unplugged later, Kartend falls back to the primary screen.</string></property>
          </widget>
         </item>
-        <item row="0" column="4">
-         <widget class="QLabel" name="marqueeModeLabel">
-          <property name="text"><string>Display:</string></property>
-         </widget>
-        </item>
-        <item row="0" column="5">
+        <item row="1" column="0"><widget class="QLabel" name="marqueeModeLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Display:</string></property></widget></item>
+        <item row="1" column="1">
          <widget class="QComboBox" name="marqueeModeComboBox">
-          <property name="minimumWidth"><number>140</number></property>
+          <property name="maximumWidth"><number>320</number></property>
           <property name="toolTip"><string>What the marquee shows. Item Artwork follows your selection; Collection Icon shows the current collection's icon (useful as a stable banner that doesn't flicker as you scroll).</string></property>
          </widget>
         </item>
+        <item row="2" column="0" colspan="2"><widget class="QCheckBox" name="marqueeEnabledCheckBox"><property name="text"><string>Enable secondary marquee window</string></property><property name="toolTip"><string>Open a frameless window on the selected screen showing the current item's artwork (or the active collection's icon).</string></property></widget></item>
        </layout>
       </item>
      </layout>

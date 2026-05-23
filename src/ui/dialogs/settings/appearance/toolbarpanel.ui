@@ -18,82 +18,42 @@
        </widget>
       </item>
       <item>
-       <!-- Nine button toggles in a three-by-three grid (three-column section). -->
-       <layout class="QGridLayout" name="toolbarFormLayout">
+       <!-- Each button entry split into separate visibility checkbox row and custom text row. -->
+       <layout class="QFormLayout" name="toolbarFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
-        <item row="0" column="0">
-         <widget class="QLabel" name="toolbarGridViewLabel"><property name="text"><string>Grid View Button:</string></property></widget>
-        </item>
-        <item row="0" column="1">
-         <layout class="QHBoxLayout" name="toolbarGridViewLayout">
-          <item><widget class="QCheckBox" name="toolbarGridViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarGridViewTextEdit"><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="toolbarListViewLabel"><property name="text"><string>List View Button:</string></property></widget>
-        </item>
-        <item row="0" column="3">
-         <layout class="QHBoxLayout" name="toolbarListViewLayout">
-          <item><widget class="QCheckBox" name="toolbarListViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarListViewTextEdit"><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="0" column="4">
-         <widget class="QLabel" name="toolbarCoverFlowViewLabel"><property name="text"><string>Cover Flow View Button:</string></property></widget>
-        </item>
-        <item row="0" column="5">
-         <layout class="QHBoxLayout" name="toolbarCoverFlowViewLayout">
-          <item><widget class="QCheckBox" name="toolbarCoverFlowViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarCoverFlowViewTextEdit"><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="toolbarHorizontalViewLabel"><property name="text"><string>Horizontal View Button:</string></property></widget>
-        </item>
-        <item row="1" column="1">
-         <layout class="QHBoxLayout" name="toolbarHorizontalViewLayout">
-          <item><widget class="QCheckBox" name="toolbarHorizontalViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarHorizontalViewTextEdit"><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="1" column="2">
-         <widget class="QLabel" name="toolbarHideSubcollectionsLabel"><property name="text"><string>Hide Subcollections Button:</string></property></widget>
-        </item>
-        <item row="1" column="3">
-         <layout class="QHBoxLayout" name="toolbarHideSubcollectionsLayout">
-          <item><widget class="QCheckBox" name="toolbarHideSubcollectionsVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarHideSubcollectionsTextEdit"><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="1" column="4">
-         <widget class="QLabel" name="toolbarTypeFilterLabel"><property name="text"><string>Type Filter Dropdown:</string></property></widget>
-        </item>
-        <item row="1" column="5">
-         <widget class="QCheckBox" name="toolbarTypeFilterVisibleCheckBox"><property name="text"><string>Show</string></property></widget>
-        </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="toolbarTitleFilterLabel"><property name="text"><string>Title Filter Button:</string></property></widget>
-        </item>
-        <item row="2" column="1">
-         <layout class="QHBoxLayout" name="toolbarTitleFilterLayout">
-          <item><widget class="QCheckBox" name="toolbarTitleFilterVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
-          <item><widget class="QLineEdit" name="toolbarTitleFilterTextEdit"><property name="placeholderText"><string>Filter (default)</string></property><property name="toolTip"><string>Custom label for the title-filter button; leave blank to keep the default.</string></property></widget></item>
-         </layout>
-        </item>
-        <item row="2" column="2">
-         <widget class="QLabel" name="toolbarSearchModeLabel"><property name="text"><string>Search Mode Button:</string></property></widget>
-        </item>
-        <item row="2" column="3">
-         <widget class="QCheckBox" name="toolbarSearchModeVisibleCheckBox"><property name="text"><string>Show</string></property></widget>
-        </item>
-        <item row="2" column="4">
-         <widget class="QLabel" name="toolbarSearchBarLabel"><property name="text"><string>Search Bar:</string></property></widget>
-        </item>
-        <item row="2" column="5">
-         <widget class="QCheckBox" name="toolbarSearchBarVisibleCheckBox"><property name="text"><string>Show</string></property></widget>
-        </item>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+        <item row="0" column="0"><widget class="QLabel" name="toolbarGridViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Grid View Button:</string></property></widget></item>
+        <item row="0" column="1"><widget class="QCheckBox" name="toolbarGridViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="1" column="0"><widget class="QLabel" name="toolbarGridViewTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Grid View Custom Text:</string></property></widget></item>
+        <item row="1" column="1"><widget class="QLineEdit" name="toolbarGridViewTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
+        <item row="2" column="0"><widget class="QLabel" name="toolbarListViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>List View Button:</string></property></widget></item>
+        <item row="2" column="1"><widget class="QCheckBox" name="toolbarListViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="3" column="0"><widget class="QLabel" name="toolbarListViewTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>List View Custom Text:</string></property></widget></item>
+        <item row="3" column="1"><widget class="QLineEdit" name="toolbarListViewTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
+        <item row="4" column="0"><widget class="QLabel" name="toolbarCoverFlowViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Cover Flow View Button:</string></property></widget></item>
+        <item row="4" column="1"><widget class="QCheckBox" name="toolbarCoverFlowViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="5" column="0"><widget class="QLabel" name="toolbarCoverFlowViewTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Cover Flow Custom Text:</string></property></widget></item>
+        <item row="5" column="1"><widget class="QLineEdit" name="toolbarCoverFlowViewTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
+        <item row="6" column="0"><widget class="QLabel" name="toolbarHorizontalViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Horizontal View Button:</string></property></widget></item>
+        <item row="6" column="1"><widget class="QCheckBox" name="toolbarHorizontalViewVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="7" column="0"><widget class="QLabel" name="toolbarHorizontalViewTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Horizontal View Custom Text:</string></property></widget></item>
+        <item row="7" column="1"><widget class="QLineEdit" name="toolbarHorizontalViewTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
+        <item row="8" column="0"><widget class="QLabel" name="toolbarHideSubcollectionsLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Hide Subcollections Button:</string></property></widget></item>
+        <item row="8" column="1"><widget class="QCheckBox" name="toolbarHideSubcollectionsVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="9" column="0"><widget class="QLabel" name="toolbarHideSubcollectionsTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Hide Subcollections Custom Text:</string></property></widget></item>
+        <item row="9" column="1"><widget class="QLineEdit" name="toolbarHideSubcollectionsTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>(default)</string></property><property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property></widget></item>
+        <item row="10" column="0"><widget class="QLabel" name="toolbarTitleFilterLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Title Filter Button:</string></property></widget></item>
+        <item row="10" column="1"><widget class="QCheckBox" name="toolbarTitleFilterVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="11" column="0"><widget class="QLabel" name="toolbarTitleFilterTextLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Title Filter Custom Text:</string></property></widget></item>
+        <item row="11" column="1"><widget class="QLineEdit" name="toolbarTitleFilterTextEdit"><property name="maximumWidth"><number>320</number></property><property name="placeholderText"><string>Filter (default)</string></property><property name="toolTip"><string>Custom label for the title-filter button; leave blank to keep the default.</string></property></widget></item>
+        <item row="12" column="0"><widget class="QLabel" name="toolbarTypeFilterLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Type Filter Dropdown:</string></property></widget></item>
+        <item row="12" column="1"><widget class="QCheckBox" name="toolbarTypeFilterVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="13" column="0"><widget class="QLabel" name="toolbarSearchModeLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Search Mode Button:</string></property></widget></item>
+        <item row="13" column="1"><widget class="QCheckBox" name="toolbarSearchModeVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="14" column="0"><widget class="QLabel" name="toolbarSearchBarLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Search Bar:</string></property></widget></item>
+        <item row="14" column="1"><widget class="QCheckBox" name="toolbarSearchBarVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
        </layout>
       </item>
       <item>

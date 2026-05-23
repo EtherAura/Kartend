@@ -12,27 +12,15 @@
      <property name="title"><string>Attract Mode Settings</string></property>
      <layout class="QVBoxLayout" name="attractContentLayout">
       <item>
-       <layout class="QGridLayout" name="attractFormLayout">
+       <layout class="QFormLayout" name="attractFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
-        <item row="0" column="0">
-         <widget class="QLabel" name="attractModeLabel">
-          <property name="text"><string>Enabled:</string></property>
-         </widget>
-        </item>
+        <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+        <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+        <item row="0" column="0"><widget class="QLabel" name="attractIdleTimeoutLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Idle Timeout:</string></property></widget></item>
         <item row="0" column="1">
-         <widget class="QCheckBox" name="attractModeCheckBox">
-          <property name="toolTip"><string>Automatically scroll through items after an idle timeout</string></property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="attractIdleTimeoutLabel">
-          <property name="text"><string>Idle Timeout:</string></property>
-         </widget>
-        </item>
-        <item row="0" column="3">
          <widget class="QSpinBox" name="attractIdleTimeoutSpinBox">
-          <property name="maximumWidth"><number>100</number></property>
+          <property name="maximumWidth"><number>120</number></property>
           <property name="toolTip"><string>Seconds of inactivity before attract mode activates (10-3600)</string></property>
           <property name="suffix"><string> s</string></property>
           <property name="minimum"><number>10</number></property>
@@ -40,25 +28,10 @@
           <property name="value"><number>120</number></property>
          </widget>
         </item>
-        <item row="0" column="4">
-         <widget class="QLabel" name="attractAutoScrollLabel">
-          <property name="text"><string>Auto Scroll:</string></property>
-         </widget>
-        </item>
-        <item row="0" column="5">
-         <widget class="QCheckBox" name="attractAutoScrollCheckBox">
-          <property name="toolTip"><string>Smoothly scroll the viewport up and down while attract mode is active</string></property>
-          <property name="checked"><bool>true</bool></property>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="attractScrollSpeedLabel">
-          <property name="text"><string>Scroll Speed:</string></property>
-         </widget>
-        </item>
+        <item row="1" column="0"><widget class="QLabel" name="attractScrollSpeedLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Scroll Speed:</string></property></widget></item>
         <item row="1" column="1">
          <widget class="QDoubleSpinBox" name="attractScrollSpeedSpinBox">
-          <property name="maximumWidth"><number>100</number></property>
+          <property name="maximumWidth"><number>120</number></property>
           <property name="toolTip"><string>Scroll speed in pixels per frame during attract mode (0.1-10). Sub-pixel speeds accumulate per frame for very slow scroll (e.g. one page in 30+ seconds).</string></property>
           <property name="suffix"><string> px</string></property>
           <property name="decimals"><number>1</number></property>
@@ -68,24 +41,10 @@
           <property name="value"><double>1.0</double></property>
          </widget>
         </item>
-        <item row="1" column="2">
-         <widget class="QLabel" name="attractAdvanceSelectionLabel">
-          <property name="text"><string>Advance Selection:</string></property>
-         </widget>
-        </item>
-        <item row="1" column="3">
-         <widget class="QCheckBox" name="attractAdvanceSelectionCheckBox">
-          <property name="toolTip"><string>Also cycle through items by changing the selection on its own timer while attract mode is active</string></property>
-         </widget>
-        </item>
-        <item row="1" column="4">
-         <widget class="QLabel" name="attractAdvanceIntervalLabel">
-          <property name="text"><string>Advance Interval:</string></property>
-         </widget>
-        </item>
-        <item row="1" column="5">
+        <item row="2" column="0"><widget class="QLabel" name="attractAdvanceIntervalLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Advance Interval:</string></property></widget></item>
+        <item row="2" column="1">
          <widget class="QSpinBox" name="attractAdvanceIntervalSpinBox">
-          <property name="maximumWidth"><number>100</number></property>
+          <property name="maximumWidth"><number>120</number></property>
           <property name="toolTip"><string>Seconds between selection advances during attract mode (1-600)</string></property>
           <property name="suffix"><string> s</string></property>
           <property name="minimum"><number>1</number></property>
@@ -93,16 +52,10 @@
           <property name="value"><number>5</number></property>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="attractAdvanceRandomLabel">
-          <property name="text"><string>Random Order:</string></property>
-         </widget>
-        </item>
-        <item row="2" column="1" colspan="5">
-         <widget class="QCheckBox" name="attractAdvanceRandomCheckBox">
-          <property name="toolTip"><string>When advancing the selection, pick a random item instead of the next sequential one</string></property>
-         </widget>
-        </item>
+        <item row="3" column="0" colspan="2"><widget class="QCheckBox" name="attractModeCheckBox"><property name="text"><string>Enable attract mode</string></property><property name="toolTip"><string>Automatically scroll through items after an idle timeout</string></property></widget></item>
+        <item row="4" column="0" colspan="2"><widget class="QCheckBox" name="attractAutoScrollCheckBox"><property name="text"><string>Auto scroll viewport</string></property><property name="toolTip"><string>Smoothly scroll the viewport up and down while attract mode is active</string></property><property name="checked"><bool>true</bool></property></widget></item>
+        <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="attractAdvanceSelectionCheckBox"><property name="text"><string>Advance selection</string></property><property name="toolTip"><string>Also cycle through items by changing the selection on its own timer while attract mode is active</string></property></widget></item>
+        <item row="6" column="0" colspan="2"><widget class="QCheckBox" name="attractAdvanceRandomCheckBox"><property name="text"><string>Random order</string></property><property name="toolTip"><string>When advancing the selection, pick a random item instead of the next sequential one</string></property></widget></item>
        </layout>
       </item>
       <item>

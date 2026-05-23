@@ -11,15 +11,15 @@
    <item>
     <widget class="QGroupBox" name="appearanceViewGroupBox">
      <property name="title"><string>View</string></property>
-     <!-- Three label/field pairs share one row (three-column section);
-          field columns are stretched in code so the pairs fill the width. -->
-     <layout class="QGridLayout" name="appearanceViewGridLayout">
+     <layout class="QFormLayout" name="appearanceViewGridLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_viewType"><property name="text"><string>View Type:</string></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_viewType"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>View Type:</string></property></widget></item>
       <item row="0" column="1">
        <widget class="QComboBox" name="viewTypeComboBox">
-        <property name="minimumWidth"><number>140</number></property>
+        <property name="maximumWidth"><number>320</number></property>
         <property name="toolTip"><string>Display items as a grid with artwork, a simple list, a 3D cover-flow carousel, or a horizontally-scrolling grid</string></property>
         <item><property name="text"><string>Grid</string></property></item>
         <item><property name="text"><string>List</string></property></item>
@@ -27,65 +27,57 @@
         <item><property name="text"><string>Horizontal</string></property></item>
        </widget>
       </item>
-      <item row="0" column="2"><widget class="QLabel" name="label_horizontalAlignment"><property name="text"><string>Alignment:</string></property></widget></item>
-      <item row="0" column="3">
+      <item row="1" column="0"><widget class="QLabel" name="label_horizontalAlignment"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Alignment:</string></property></widget></item>
+      <item row="1" column="1">
        <widget class="QComboBox" name="horizontalAlignmentComboBox">
-        <property name="minimumWidth"><number>140</number></property>
+        <property name="maximumWidth"><number>320</number></property>
         <property name="toolTip"><string>Horizontal alignment of collection grid (Left, Center, Right)</string></property>
         <item><property name="text"><string>Left</string></property></item>
         <item><property name="text"><string>Center</string></property></item>
         <item><property name="text"><string>Right</string></property></item>
        </widget>
       </item>
-      <item row="0" column="5"><widget class="QCheckBox" name="hideMissingArtworkCheckBox"><property name="text"><string>Hide items without artwork</string></property><property name="toolTip"><string>When enabled, media items whose artwork lookup returns no match are hidden from the items page. Subcollections and virtual folders are unaffected.</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="appearanceGridSizingGroupBox">
      <property name="title"><string>Grid Sizing</string></property>
-     <!-- Two value/alternate pairs share one row (two-column section). -->
-     <layout class="QGridLayout" name="appearanceGridSizingGridLayout">
+     <!-- Each spin box on its own row; the "/ pane hidden" variant is a separate option, not a sibling. -->
+     <layout class="QFormLayout" name="appearanceGridSizingGridLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_gridLayout"><property name="text"><string>Grid Width:</string></property></widget></item>
-      <item row="0" column="1">
-       <layout class="QHBoxLayout" name="gridWidthLayout">
-        <item><widget class="QSpinBox" name="gridWidthSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Number of artwork items per row (no upper cap)</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>4</number></property></widget></item>
-        <item><widget class="QLabel" name="label_gridWidthSidebarHidden"><property name="text"><string>/ pane hidden:</string></property><property name="toolTip"><string>Alternate items-per-row used when the details pane is hidden in Expand mode. 0 inherits Grid Width. (Overlay mode always uses Grid Width — the floating pane doesn't shrink the grid.)</string></property></widget></item>
-        <item><widget class="QSpinBox" name="gridWidthSidebarHiddenSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Items-per-row when the details pane is hidden in Expand mode (no upper cap). 0 falls back to Grid Width.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
-        <item><spacer name="gridWidthSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
-       </layout>
-      </item>
-      <item row="0" column="2"><widget class="QLabel" name="label_horizontalGridHeight"><property name="text"><string>Horizontal Height:</string></property><property name="toolTip"><string>Items per column when the view type is set to Horizontal. 0 inherits Grid Width.</string></property></widget></item>
-      <item row="0" column="3">
-       <layout class="QHBoxLayout" name="horizontalGridHeightLayout">
-        <item><widget class="QSpinBox" name="horizontalGridHeightSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Items per column for Horizontal view (no upper cap). 0 falls back to Grid Width.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
-        <item><widget class="QLabel" name="label_horizontalGridHeightSidebarHidden"><property name="text"><string>/ pane hidden:</string></property><property name="toolTip"><string>Alternate items-per-column for Horizontal view when the details pane is hidden in Expand mode. 0 inherits Horizontal Height.</string></property></widget></item>
-        <item><widget class="QSpinBox" name="horizontalGridHeightSidebarHiddenSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Items per column for Horizontal view when the details pane is hidden in Expand mode (no upper cap). 0 falls back to Horizontal Height.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
-        <item><spacer name="horizontalGridHeightSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
-       </layout>
-      </item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_gridLayout"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Grid Width:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QSpinBox" name="gridWidthSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Number of artwork items per row (no upper cap)</string></property><property name="minimum"><number>1</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>4</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_gridWidthSidebarHidden"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Grid Width (pane hidden):</string></property><property name="toolTip"><string>Alternate items-per-row used when the details pane is hidden in Expand mode. 0 inherits Grid Width. (Overlay mode always uses Grid Width — the floating pane doesn't shrink the grid.)</string></property></widget></item>
+      <item row="1" column="1"><widget class="QSpinBox" name="gridWidthSidebarHiddenSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Items-per-row when the details pane is hidden in Expand mode (no upper cap). 0 falls back to Grid Width.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="label_horizontalGridHeight"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Horizontal Height:</string></property><property name="toolTip"><string>Items per column when the view type is set to Horizontal. 0 inherits Grid Width.</string></property></widget></item>
+      <item row="2" column="1"><widget class="QSpinBox" name="horizontalGridHeightSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Items per column for Horizontal view (no upper cap). 0 falls back to Grid Width.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="label_horizontalGridHeightSidebarHidden"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Horizontal Height (pane hidden):</string></property><property name="toolTip"><string>Alternate items-per-column for Horizontal view when the details pane is hidden in Expand mode. 0 inherits Horizontal Height.</string></property></widget></item>
+      <item row="3" column="1"><widget class="QSpinBox" name="horizontalGridHeightSidebarHiddenSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Items per column for Horizontal view when the details pane is hidden in Expand mode (no upper cap). 0 falls back to Horizontal Height.</string></property><property name="specialValueText"><string>auto</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>2147483647</number></property><property name="value"><number>0</number></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="appearanceItemDimsGroupBox">
      <property name="title"><string>Item Dimensions</string></property>
-     <!-- Five values: three on the first row, two on the second. -->
-     <layout class="QGridLayout" name="appearanceItemDimsGridLayout">
+     <layout class="QFormLayout" name="appearanceItemDimsGridLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_hSpace"><property name="text"><string>Horizontal Spacing:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QSpinBox" name="horizontalSpacingSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>150</number></property><property name="value"><number>120</number></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="label_vSpace"><property name="text"><string>Vertical Spacing:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QSpinBox" name="verticalSpacingSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Vertical spacing adjustment (0 = tightest, 150 = loosest)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>150</number></property><property name="value"><number>120</number></property></widget></item>
-      <item row="0" column="4"><widget class="QLabel" name="label_cornerRadius"><property name="text"><string>Corner Radius:</string></property></widget></item>
-      <item row="0" column="5"><widget class="QSpinBox" name="cornerRadiusSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Corner radius for item artwork in pixels (0 = square)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>0</number></property></widget></item>
-      <item row="1" column="0"><widget class="QLabel" name="label_itemLayout"><property name="text"><string>Item Width:</string></property></widget></item>
-      <item row="1" column="1"><widget class="QSpinBox" name="itemWidthSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Width of collection items in pixels</string></property><property name="minimum"><number>100</number></property><property name="maximum"><number>400</number></property><property name="value"><number>220</number></property></widget></item>
-      <item row="1" column="2"><widget class="QLabel" name="label_itemHeight"><property name="text"><string>Item Height:</string></property></widget></item>
-      <item row="1" column="3" colspan="3"><widget class="QSpinBox" name="itemHeightSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Height of collection items in pixels</string></property><property name="minimum"><number>100</number></property><property name="maximum"><number>400</number></property><property name="value"><number>245</number></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_itemLayout"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Item Width:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QSpinBox" name="itemWidthSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Width of collection items in pixels</string></property><property name="minimum"><number>100</number></property><property name="maximum"><number>400</number></property><property name="value"><number>220</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_itemHeight"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Item Height:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QSpinBox" name="itemHeightSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Height of collection items in pixels</string></property><property name="minimum"><number>100</number></property><property name="maximum"><number>400</number></property><property name="value"><number>245</number></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="label_hSpace"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Horizontal Spacing:</string></property></widget></item>
+      <item row="2" column="1"><widget class="QSpinBox" name="horizontalSpacingSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>150</number></property><property name="value"><number>120</number></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="label_vSpace"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Vertical Spacing:</string></property></widget></item>
+      <item row="3" column="1"><widget class="QSpinBox" name="verticalSpacingSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Vertical spacing adjustment (0 = tightest, 150 = loosest)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>150</number></property><property name="value"><number>120</number></property></widget></item>
+      <item row="4" column="0"><widget class="QLabel" name="label_cornerRadius"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Corner Radius:</string></property></widget></item>
+      <item row="4" column="1"><widget class="QSpinBox" name="cornerRadiusSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Corner radius for item artwork in pixels (0 = square)</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>0</number></property></widget></item>
      </layout>
     </widget>
    </item>

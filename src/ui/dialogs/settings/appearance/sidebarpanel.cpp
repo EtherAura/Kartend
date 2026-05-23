@@ -14,11 +14,18 @@
 #include <QFileInfo>
 #include <QFontDialog>
 #include <QLineEdit>
+#include <QPalette>
 #include <QPushButton>
 #include <QSpinBox>
 
 SidebarPanel::SidebarPanel(QWidget *parent) : QWidget(parent), ui(new Ui::SidebarPanel) {
   ui->setupUi(this);
+
+  // The "Editing: …" status label uses the secondary text role so it
+  // reads muted-but-legible across light/dark themes. Previously a
+  // hard-coded palette(mid) inline stylesheet made it nearly invisible
+  // on the active KDE color scheme.
+  ui->sidebarActiveCollectionLabel->setForegroundRole(QPalette::PlaceholderText);
 
   // Position-driven width/height visibility — Right/Left exposes Width,
   // Top/Bottom exposes Height. Lock checkbox stays visible regardless.

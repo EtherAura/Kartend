@@ -11,55 +11,69 @@
    <item>
     <widget class="QGroupBox" name="launcherExecutableGroupBox">
      <property name="title"><string>Executable</string></property>
-     <!-- Four label/field pairs in a two-by-two grid (two-column section). -->
-     <layout class="QGridLayout" name="launcherExecutableFormLayout">
+     <layout class="QFormLayout" name="launcherExecutableFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_launcher"><property name="text"><string>Launcher:</string></property></widget></item>
-      <item row="0" column="1">
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_launcherName"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Launcher Name:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="launcherNameLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string></property><property name="placeholderText"><string>Display label (defaults to executable name)</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_launcher"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Launcher:</string></property></widget></item>
+      <item row="1" column="1">
        <layout class="QHBoxLayout" name="launcherLayout">
-        <item><widget class="QLineEdit" name="launcherLineEdit"/></item>
+        <item><widget class="QLineEdit" name="launcherLineEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
         <item><widget class="QPushButton" name="browseLauncherButton"><property name="text"><string>Browse</string></property></widget></item>
+        <item><spacer name="launcherSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="0" column="2"><widget class="QLabel" name="label_core"><property name="text"><string>Core Path:</string></property></widget></item>
-      <item row="0" column="3">
+      <item row="2" column="0"><widget class="QLabel" name="label_corePreset"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Detected Core:</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="coreComboBox">
+        <property name="maximumWidth"><number>320</number></property>
+        <property name="toolTip"><string>Cores detected in your RetroArch install — pick one to fill the path.</string></property>
+       </widget>
+      </item>
+      <item row="3" column="0"><widget class="QLabel" name="label_core"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Core Path:</string></property></widget></item>
+      <item row="3" column="1">
        <layout class="QHBoxLayout" name="coreLayout">
-        <item><widget class="QComboBox" name="coreComboBox"><property name="toolTip"><string>Cores detected in your RetroArch install — pick one to fill the path.</string></property></widget></item>
-        <item><widget class="QLineEdit" name="coreLineEdit"><property name="toolTip"><string>Path to libretro core file</string></property></widget></item>
+        <item><widget class="QLineEdit" name="coreLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Path to libretro core file</string></property></widget></item>
         <item><widget class="QPushButton" name="browseCoreButton"><property name="text"><string>Browse</string></property></widget></item>
+        <item><spacer name="coreSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="1" column="0"><widget class="QLabel" name="label_launchParams"><property name="text"><string>Launch Parameters:</string></property></widget></item>
-      <item row="1" column="1"><widget class="QLineEdit" name="launchParamsLineEdit"><property name="toolTip"><string>Additional command-line parameters for the launcher</string></property><property name="placeholderText"><string>Optional parameters (e.g., -fullscreen, -config file.cfg)</string></property></widget></item>
-      <item row="1" column="2"><widget class="QLabel" name="label_launcherName"><property name="text"><string>Launcher Name:</string></property></widget></item>
-      <item row="1" column="3"><widget class="QLineEdit" name="launcherNameLineEdit"><property name="toolTip"><string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string></property><property name="placeholderText"><string>Display label (defaults to executable name)</string></property></widget></item>
+      <item row="4" column="0"><widget class="QLabel" name="label_launchParams"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Launch Parameters:</string></property></widget></item>
+      <item row="4" column="1"><widget class="QLineEdit" name="launchParamsLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Additional command-line parameters for the launcher</string></property><property name="placeholderText"><string>Optional parameters (e.g., -fullscreen, -config file.cfg)</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="launcherArchiveGroupBox">
      <property name="title"><string>Archive Handling</string></property>
-     <layout class="QGridLayout" name="launcherArchiveFormLayout">
+     <layout class="QFormLayout" name="launcherArchiveFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_extractArchives"><property name="text"><string>Extract Archives:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QCheckBox" name="extractArchivesCheckBox"><property name="toolTip"><string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string></property><property name="text"><string/></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="label_extractedExtension"><property name="text"><string>Launch Extension:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QLineEdit" name="extractedExtensionLineEdit"><property name="toolTip"><string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string></property><property name="placeholderText"><string>e.g., .cue, .bin, .iso</string></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_extractedExtension"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Launch Extension:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="extractedExtensionLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string></property><property name="placeholderText"><string>e.g., .cue, .bin, .iso</string></property></widget></item>
+      <item row="1" column="0" colspan="2"><widget class="QCheckBox" name="extractArchivesCheckBox"><property name="text"><string>Extract archives to a temp directory before launch</string></property><property name="toolTip"><string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="launcherMultipleGroupBox">
      <property name="title"><string>Multiple Launchers</string></property>
-     <layout class="QGridLayout" name="launcherMultipleFormLayout">
+     <layout class="QFormLayout" name="launcherMultipleFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_additionalLaunchers"><property name="text"><string>Additional Launchers:</string></property></widget></item>
-      <item row="0" column="1" colspan="5">
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_defaultLauncher"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Default Launcher:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QComboBox" name="defaultLauncherComboBox"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Pre-selected launcher in the chooser dialog. Single-launcher collections ignore this setting.</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_additionalLaunchers"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Additional Launchers:</string></property></widget></item>
+      <item row="1" column="1">
        <layout class="QHBoxLayout" name="additionalLaunchersLayout">
-        <item><widget class="QListWidget" name="additionalLaunchersList"><property name="toolTip"><string>Extra launchers beyond the primary. When more than one launcher is configured, picking an item shows a chooser dialog at launch.</string></property></widget></item>
+        <item><widget class="QListWidget" name="additionalLaunchersList"><property name="maximumSize"><size><width>16777215</width><height>140</height></size></property><property name="toolTip"><string>Extra launchers beyond the primary. When more than one launcher is configured, picking an item shows a chooser dialog at launch.</string></property></widget></item>
         <item>
          <layout class="QVBoxLayout" name="additionalLaunchersButtons">
           <item><widget class="QPushButton" name="addAdditionalLauncherButton"><property name="text"><string>Add…</string></property></widget></item>
@@ -75,8 +89,6 @@
         </item>
        </layout>
       </item>
-      <item row="1" column="0"><widget class="QLabel" name="label_defaultLauncher"><property name="text"><string>Default Launcher:</string></property></widget></item>
-      <item row="1" column="1" colspan="5"><widget class="QComboBox" name="defaultLauncherComboBox"><property name="toolTip"><string>Pre-selected launcher in the chooser dialog. Single-launcher collections ignore this setting.</string></property></widget></item>
      </layout>
     </widget>
    </item>

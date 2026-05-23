@@ -5,16 +5,22 @@
 #include <initializer_list>
 #include <QAbstractButton>
 #include <QByteArray>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFont>
+#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QIcon>
+#include <QKeySequenceEdit>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPalette>
+#include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QString>
@@ -133,8 +139,72 @@ void SettingsDialog::setupNavigation() {
     }
   }
 
+  applyUniformPageWidgetSizing();
+
   // Geometry / splitter restore comes after setSizes() so a saved layout wins.
   restoreDialogState();
+}
+
+void SettingsDialog::applyUniformPageWidgetSizing() {
+  // Uniform width constants applied to every page in the QStackedWidget.
+  // Mirrors the per-.ui constants and the kSpinMaxWidth / kComboMaxWidth /
+  // kLabelMinWidth values in the programmatic scraper panels — kept in
+  // sync so the visual rhythm doesn't drift as panels migrate between
+  // .ui and code.
+  constexpr int kFieldWidth = 320;    // line edits, combos, key-sequence edits
+  constexpr int kSpinWidth = 120;     // spin boxes (numbers don't need 320)
+  constexpr int kButtonMinWidth = 96; // helper buttons get a uniform floor
+  constexpr int kLabelMinWidth = 200; // form-row labels share a column
+
+  // Only touch widgets that live under a page in the QStackedWidget —
+  // skips the nav rail (search bar, category list) and the dialog footer
+  // (Save / OK / Cancel) so their sizing stays bespoke.
+  for (int p = 0; p < ui->pageStack->count(); ++p) {
+    QWidget *page = ui->pageStack->widget(p);
+    if (!page) continue;
+
+    for (auto *edit : page->findChildren<QLineEdit *>()) {
+      edit->setMinimumWidth(kFieldWidth);
+      edit->setMaximumWidth(kFieldWidth);
+    }
+    for (auto *combo : page->findChildren<QComboBox *>()) {
+      combo->setMinimumWidth(kFieldWidth);
+      combo->setMaximumWidth(kFieldWidth);
+    }
+    for (auto *spin : page->findChildren<QSpinBox *>()) {
+      spin->setMinimumWidth(kSpinWidth);
+      spin->setMaximumWidth(kSpinWidth);
+    }
+    for (auto *spin : page->findChildren<QDoubleSpinBox *>()) {
+      spin->setMinimumWidth(kSpinWidth);
+      spin->setMaximumWidth(kSpinWidth);
+    }
+    for (auto *keyEdit : page->findChildren<QKeySequenceEdit *>()) {
+      keyEdit->setMinimumWidth(kFieldWidth);
+      keyEdit->setMaximumWidth(kFieldWidth);
+    }
+    // Buttons get a floor, not a cap — long-text action buttons (Recursive
+    // Import…, Load color scheme…, Export placeholder PNGs…) still grow to
+    // fit their label, while short helpers (Browse, Pick, Detect, Add,
+    // Remove, Edit) snap to the uniform 96 px column.
+    for (auto *button : page->findChildren<QPushButton *>()) {
+      button->setMinimumWidth(kButtonMinWidth);
+    }
+
+    // Label column: every QFormLayout's LabelRole widget gets the same
+    // minimum width so labels align across groupboxes even when their
+    // text is short. The .ui files set this on the QLabel itself; this
+    // catches labels QFormLayout auto-creates from string addRow().
+    for (auto *form : page->findChildren<QFormLayout *>()) {
+      for (int row = 0; row < form->rowCount(); ++row) {
+        QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
+        if (!item) continue;
+        if (auto *label = qobject_cast<QLabel *>(item->widget())) {
+          label->setMinimumWidth(kLabelMinWidth);
+        }
+      }
+    }
+  }
 }
 
 void SettingsDialog::onNavigationRowChanged() {

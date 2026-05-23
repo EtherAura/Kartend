@@ -10,72 +10,77 @@
    <item>
     <widget class="QGroupBox" name="keyboardControlsGroupBox">
      <property name="title"><string>Keyboard</string></property>
-     <!-- Eight shortcuts, two per row (two-column section). -->
-     <layout class="QGridLayout" name="keyboardControlsFormLayout">
+     <layout class="QFormLayout" name="keyboardControlsFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="keyNavUpLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Move Up:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QKeySequenceEdit" name="keyNavUpEdit"/></item>
-      <item row="0" column="2"><widget class="QLabel" name="keyNavDownLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Move Down:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QKeySequenceEdit" name="keyNavDownEdit"/></item>
-      <item row="1" column="0"><widget class="QLabel" name="keyNavLeftLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Move Left:</string></property></widget></item>
-      <item row="1" column="1"><widget class="QKeySequenceEdit" name="keyNavLeftEdit"/></item>
-      <item row="1" column="2"><widget class="QLabel" name="keyNavRightLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Move Right:</string></property></widget></item>
-      <item row="1" column="3"><widget class="QKeySequenceEdit" name="keyNavRightEdit"/></item>
-      <item row="2" column="0"><widget class="QLabel" name="keyConfirmLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Confirm:</string></property></widget></item>
-      <item row="2" column="1"><widget class="QKeySequenceEdit" name="keyConfirmEdit"/></item>
-      <item row="2" column="2"><widget class="QLabel" name="keyBackLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Back:</string></property></widget></item>
-      <item row="2" column="3"><widget class="QKeySequenceEdit" name="keyBackEdit"/></item>
-      <item row="3" column="0"><widget class="QLabel" name="keySearchLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Search:</string></property></widget></item>
-      <item row="3" column="1"><widget class="QKeySequenceEdit" name="keySearchEdit"/></item>
-      <item row="3" column="2"><widget class="QLabel" name="keyHomeViewLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Home View:</string></property><property name="toolTip"><string>Jump to the synthetic Home view from any depth. Only honored when Use Home View is enabled.</string></property></widget></item>
-      <item row="3" column="3"><widget class="QKeySequenceEdit" name="keyHomeViewEdit"/></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="keyNavUpLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Move Up:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QKeySequenceEdit" name="keyNavUpEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="keyNavDownLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Move Down:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QKeySequenceEdit" name="keyNavDownEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="keyNavLeftLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Move Left:</string></property></widget></item>
+      <item row="2" column="1"><widget class="QKeySequenceEdit" name="keyNavLeftEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="keyNavRightLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Move Right:</string></property></widget></item>
+      <item row="3" column="1"><widget class="QKeySequenceEdit" name="keyNavRightEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="4" column="0"><widget class="QLabel" name="keyConfirmLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Confirm:</string></property></widget></item>
+      <item row="4" column="1"><widget class="QKeySequenceEdit" name="keyConfirmEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="5" column="0"><widget class="QLabel" name="keyBackLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Back:</string></property></widget></item>
+      <item row="5" column="1"><widget class="QKeySequenceEdit" name="keyBackEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="6" column="0"><widget class="QLabel" name="keySearchLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Search:</string></property></widget></item>
+      <item row="6" column="1"><widget class="QKeySequenceEdit" name="keySearchEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="7" column="0"><widget class="QLabel" name="keyHomeViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Home View:</string></property><property name="toolTip"><string>Jump to the synthetic Home view from any depth. Only honored when Use Home View is enabled.</string></property></widget></item>
+      <item row="7" column="1"><widget class="QKeySequenceEdit" name="keyHomeViewEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="gamepadControlsGroupBox">
      <property name="title"><string>Gamepad</string></property>
-     <!-- Five fields, two per row (two-column section). -->
-     <layout class="QGridLayout" name="gamepadControlsFormLayout">
+     <layout class="QFormLayout" name="gamepadControlsFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="gamepadConfirmButtonLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Confirm Button:</string></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="gamepadConfirmButtonLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Confirm Button:</string></property></widget></item>
       <item row="0" column="1">
        <layout class="QHBoxLayout" name="gamepadConfirmButtonLayout">
-        <item><widget class="QLineEdit" name="gamepadConfirmButtonLineEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
+        <item><widget class="QLineEdit" name="gamepadConfirmButtonLineEdit"><property name="maximumWidth"><number>320</number></property><property name="readOnly"><bool>true</bool></property></widget></item>
         <item><widget class="QPushButton" name="detectGamepadConfirmButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
+        <item><spacer name="gamepadConfirmButtonSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="0" column="2"><widget class="QLabel" name="gamepadBackButtonLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Back Button:</string></property></widget></item>
-      <item row="0" column="3">
-       <layout class="QHBoxLayout" name="gamepadBackButtonLayout">
-        <item><widget class="QLineEdit" name="gamepadBackButtonLineEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
-        <item><widget class="QPushButton" name="detectGamepadBackButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
-       </layout>
-      </item>
-      <item row="1" column="0"><widget class="QLabel" name="gamepadToggleSidebarButtonLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Toggle Details Pane:</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="gamepadBackButtonLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Back Button:</string></property></widget></item>
       <item row="1" column="1">
-       <layout class="QHBoxLayout" name="gamepadToggleSidebarButtonLayout">
-        <item><widget class="QLineEdit" name="gamepadToggleSidebarButtonLineEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
-        <item><widget class="QPushButton" name="detectGamepadToggleSidebarButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
+       <layout class="QHBoxLayout" name="gamepadBackButtonLayout">
+        <item><widget class="QLineEdit" name="gamepadBackButtonLineEdit"><property name="maximumWidth"><number>320</number></property><property name="readOnly"><bool>true</bool></property></widget></item>
+        <item><widget class="QPushButton" name="detectGamepadBackButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
+        <item><spacer name="gamepadBackButtonSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="1" column="2"><widget class="QLabel" name="gamepadUseDpadLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Use D-pad:</string></property></widget></item>
-      <item row="1" column="3"><widget class="QCheckBox" name="gamepadUseDpadCheckBox"/></item>
-      <item row="2" column="0"><widget class="QLabel" name="gamepadUseLeftStickLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Use Left Stick:</string></property></widget></item>
-      <item row="2" column="1" colspan="3"><widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"/></item>
+      <item row="2" column="0"><widget class="QLabel" name="gamepadToggleSidebarButtonLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Toggle Details Pane:</string></property></widget></item>
+      <item row="2" column="1">
+       <layout class="QHBoxLayout" name="gamepadToggleSidebarButtonLayout">
+        <item><widget class="QLineEdit" name="gamepadToggleSidebarButtonLineEdit"><property name="maximumWidth"><number>320</number></property><property name="readOnly"><bool>true</bool></property></widget></item>
+        <item><widget class="QPushButton" name="detectGamepadToggleSidebarButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
+        <item><spacer name="gamepadToggleSidebarButtonSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item row="3" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseDpadCheckBox"><property name="text"><string>Use D-pad for navigation</string></property></widget></item>
+      <item row="4" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"><property name="text"><string>Use left stick for navigation</string></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="mouseControlsGroupBox">
      <property name="title"><string>Mouse</string></property>
-     <layout class="QGridLayout" name="mouseControlsFormLayout">
+     <layout class="QFormLayout" name="mouseControlsFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="artworkCycleModifierLabel"><property name="minimumSize"><size><width>160</width><height>0</height></size></property><property name="text"><string>Cycle Artwork Modifier:</string></property><property name="toolTip"><string>Modifier combined with middle-click on a grid/list item to cycle through its available artwork types. Plain middle-click stays bound to the media preview overlay.</string></property></widget></item>
-      <item row="0" column="1"><widget class="QComboBox" name="artworkCycleModifierComboBox"/></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="artworkCycleModifierLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Cycle Artwork Modifier:</string></property><property name="toolTip"><string>Modifier combined with middle-click on a grid/list item to cycle through its available artwork types. Plain middle-click stays bound to the media preview overlay.</string></property></widget></item>
+      <item row="0" column="1"><widget class="QComboBox" name="artworkCycleModifierComboBox"><property name="maximumWidth"><number>320</number></property></widget></item>
      </layout>
     </widget>
    </item>

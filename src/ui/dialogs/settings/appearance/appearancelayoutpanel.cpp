@@ -6,7 +6,6 @@
 #include "uiconstants/grid.h"
 #include "uiconstants/viewport.h"
 
-#include <QCheckBox>
 #include <QComboBox>
 #include <QSpinBox>
 
@@ -17,8 +16,6 @@ AppearanceLayoutPanel::AppearanceLayoutPanel(QWidget *parent)
   const auto onCombo = QOverload<int>::of(&QComboBox::currentIndexChanged);
 
   connect(ui->viewTypeComboBox, onCombo, this, [this](int) { emit changed(); });
-  connect(ui->hideMissingArtworkCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { emit changed(); });
   connect(ui->horizontalAlignmentComboBox, onCombo, this, [this](int) { emit changed(); });
   connect(ui->gridWidthSpinBox, onSpin, this, [this](int) { emit changed(); });
   connect(ui->gridWidthSidebarHiddenSpinBox, onSpin, this, [this](int) { emit changed(); });
@@ -47,7 +44,6 @@ void AppearanceLayoutPanel::load() {
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadIntoIndex(ui->viewTypeComboBox, static_cast<int>(config.viewType));
-  SettingsFormBinding::loadInto(ui->hideMissingArtworkCheckBox, config.hideMissingArtwork);
   SettingsFormBinding::loadIntoIndex(ui->horizontalAlignmentComboBox,
                                      static_cast<int>(config.horizontalAlignment));
   SettingsFormBinding::loadInto(ui->gridWidthSpinBox, config.gridLayout.gridWidth);
@@ -68,7 +64,6 @@ void AppearanceLayoutPanel::load() {
 
 void AppearanceLayoutPanel::clear() {
   ui->viewTypeComboBox->setCurrentIndex(0);
-  ui->hideMissingArtworkCheckBox->setChecked(false);
   ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
   ui->gridWidthSidebarHiddenSpinBox->setValue(0);
@@ -88,7 +83,6 @@ void AppearanceLayoutPanel::save() const {
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.viewType = static_cast<ViewType>(ui->viewTypeComboBox->currentIndex());
-  config.hideMissingArtwork = ui->hideMissingArtworkCheckBox->isChecked();
   config.horizontalAlignment =
       static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex());
   config.gridLayout.gridWidth = ui->gridWidthSpinBox->value();
@@ -107,7 +101,6 @@ bool AppearanceLayoutPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
   if (ui->viewTypeComboBox->currentIndex() != static_cast<int>(o.viewType)) return true;
-  if (ui->hideMissingArtworkCheckBox->isChecked() != o.hideMissingArtwork) return true;
   if (ui->horizontalAlignmentComboBox->currentIndex() != static_cast<int>(o.horizontalAlignment))
     return true;
   if (ui->gridWidthSpinBox->value() != o.gridLayout.gridWidth) return true;

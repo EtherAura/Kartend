@@ -11,13 +11,15 @@
    <item>
     <widget class="QGroupBox" name="appearanceListSizingGroupBox">
      <property name="title"><string>List View Sizing</string></property>
-     <layout class="QGridLayout" name="appearanceListSizingFormLayout">
+     <layout class="QFormLayout" name="appearanceListSizingFormLayout">
       <property name="horizontalSpacing"><number>16</number></property>
       <property name="verticalSpacing"><number>6</number></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_listFontSize"><property name="text"><string>Text Size:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QSpinBox" name="listFontSizeSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Font size for list view text (6-48 pt)</string></property><property name="minimum"><number>6</number></property><property name="maximum"><number>48</number></property><property name="value"><number>12</number></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="label_listRowHeight"><property name="text"><string>Row Height:</string></property></widget></item>
-      <item row="0" column="3"><widget class="QSpinBox" name="listRowHeightSpinBox"><property name="maximumWidth"><number>100</number></property><property name="toolTip"><string>Height of each row in list view (20-100 px)</string></property><property name="minimum"><number>20</number></property><property name="maximum"><number>100</number></property><property name="value"><number>32</number></property></widget></item>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_listFontSize"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Text Size:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QSpinBox" name="listFontSizeSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Font size for list view text (6-48 pt)</string></property><property name="minimum"><number>6</number></property><property name="maximum"><number>48</number></property><property name="value"><number>12</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_listRowHeight"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Row Height:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QSpinBox" name="listRowHeightSpinBox"><property name="maximumWidth"><number>120</number></property><property name="toolTip"><string>Height of each row in list view (20-100 px)</string></property><property name="minimum"><number>20</number></property><property name="maximum"><number>100</number></property><property name="value"><number>32</number></property></widget></item>
      </layout>
     </widget>
    </item>

@@ -6,8 +6,27 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QLayoutItem>
 #include <QLineEdit>
 #include <QVBoxLayout>
+
+namespace {
+constexpr int kLabelMinWidth = 200;
+constexpr int kLineEditMaxWidth = 320;
+
+// Set a uniform min width on every label in a QFormLayout so the
+// label column aligns with the other settings panels. Walks the
+// LabelRole items rather than tracking each addRow call.
+void uniformLabelColumn(QFormLayout *form) {
+  for (int row = 0; row < form->rowCount(); ++row) {
+    QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
+    if (!item) continue;
+    if (auto *label = qobject_cast<QLabel *>(item->widget())) {
+      label->setMinimumWidth(kLabelMinWidth);
+    }
+  }
+}
+} // namespace
 
 ScraperCredentialsPanel::ScraperCredentialsPanel(QWidget *parent) : QWidget(parent) {
   rebuildLayout();
@@ -47,6 +66,8 @@ void ScraperCredentialsPanel::rebuildLayout() {
   if (showTmdb) {
     auto *tmdbGroup = new QGroupBox(tr("The Movie Database (TMDB)"), this);
     auto *tmdbForm = new QFormLayout(tmdbGroup);
+    tmdbForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    tmdbForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     auto *tmdbHelp =
         new QLabel(tr("Sign up free at themoviedb.org → Settings → API → "
                       "<b>API Read Access Token (v4 auth)</b>. Paste the token below."),
@@ -56,6 +77,7 @@ void ScraperCredentialsPanel::rebuildLayout() {
     tmdbForm->addRow(tmdbHelp);
     addField(tmdbForm, QStringLiteral("tmdb"), QStringLiteral("api_token"), tr("API token:"),
              /*sensitive=*/true, QStringLiteral("eyJhbGciOiJIUzI1NiJ9..."));
+    uniformLabelColumn(tmdbForm);
     root->addWidget(tmdbGroup);
   }
 
@@ -67,6 +89,8 @@ void ScraperCredentialsPanel::rebuildLayout() {
   if (showSs) {
     auto *ssGroup = new QGroupBox(tr("ScreenScraper.fr"), this);
     auto *ssForm = new QFormLayout(ssGroup);
+    ssForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    ssForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     auto *ssHelp = new QLabel(tr("Sign in with your own ScreenScraper.fr account at "
                                  "<a href=\"https://www.screenscraper.fr/membreinscription.php\">"
                                  "screenscraper.fr/membreinscription.php</a>. Premium members "
@@ -82,6 +106,7 @@ void ScraperCredentialsPanel::rebuildLayout() {
     addField(ssForm, QStringLiteral("screenscraper"), QStringLiteral("user_password"),
              tr("Password:"),
              /*sensitive=*/true);
+    uniformLabelColumn(ssForm);
     root->addWidget(ssGroup);
   }
 
@@ -98,6 +123,10 @@ void ScraperCredentialsPanel::addField(QFormLayout *form, const QString &provide
   if (sensitive) {
     edit->setEchoMode(QLineEdit::Password);
   }
+  // Cap value width so usernames and API tokens don't stretch into
+  // oversized lozenges across the dialog. Long tokens still scroll
+  // within the field.
+  edit->setMaximumWidth(kLineEditMaxWidth);
   form->addRow(label, edit);
   m_fields.insert(providerId + QLatin1Char('/') + fieldName, edit);
   // Live-mutate the model + emit changed so the dialog's deferred-save

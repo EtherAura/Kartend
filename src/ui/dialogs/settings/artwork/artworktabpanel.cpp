@@ -8,6 +8,7 @@
 #include "ui_artworktabpanel.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QCursor>
 #include <QFileDialog>
 #include <QFrame>
@@ -30,6 +31,11 @@ ArtworkTabPanel::ArtworkTabPanel(QWidget *parent) : QWidget(parent), ui(new Ui::
        {ui->artworkDirLineEdit, ui->placeholderArtworkLineEdit, ui->customArtworkTypesLineEdit}) {
     connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { emit changed(); });
   }
+  // hideMissingArtwork was a Layout-tab toggle; moved here because the
+  // setting drives which media items actually surface in the items
+  // page (an artwork-completeness filter, not a layout knob).
+  connect(ui->hideMissingArtworkCheckBox, &QCheckBox::toggled, this,
+          [this](bool) { emit changed(); });
 
   // Insert the warmer button just above the bottom spacer so it sits below
   // the Customization group without disturbing Designer-managed widgets.
@@ -80,12 +86,14 @@ void ArtworkTabPanel::load() {
   SettingsFormBinding::loadInto(ui->placeholderArtworkLineEdit, config.placeholderArtwork);
   SettingsFormBinding::loadInto(ui->customArtworkTypesLineEdit,
                                 config.customArtworkTypes.join(", "));
+  SettingsFormBinding::loadInto(ui->hideMissingArtworkCheckBox, config.hideMissingArtwork);
 }
 
 void ArtworkTabPanel::clear() {
   ui->artworkDirLineEdit->clear();
   ui->placeholderArtworkLineEdit->clear();
   ui->customArtworkTypesLineEdit->clear();
+  ui->hideMissingArtworkCheckBox->setChecked(false);
 }
 
 void ArtworkTabPanel::save() const {
@@ -103,6 +111,7 @@ void ArtworkTabPanel::save() const {
   config.placeholderArtwork = ui->placeholderArtworkLineEdit->text();
 
   config.customArtworkTypes = parseCustomArtworkTypes();
+  config.hideMissingArtwork = ui->hideMissingArtworkCheckBox->isChecked();
 }
 
 bool ArtworkTabPanel::hasChanges() const {
@@ -113,6 +122,7 @@ bool ArtworkTabPanel::hasChanges() const {
   // Compare against the parsed-and-deduped form so a stylistic comma-spacing
   // tweak ("a, b" vs "a,b") doesn't register as dirty.
   if (parseCustomArtworkTypes() != o.customArtworkTypes) return true;
+  if (ui->hideMissingArtworkCheckBox->isChecked() != o.hideMissingArtwork) return true;
   return false;
 }
 
