@@ -441,6 +441,11 @@ private:
   /// hierarchy cache, and navigates to the new collection.
   void runNewLibraryWizard();
 
+  /// Opens the presentation-profile registry dialog. Loads the on-disk
+  /// profile list, mutates it via the dialog buttons (save / apply /
+  /// delete), and persists on close.
+  void managePresentationProfilesInteractive();
+
   /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
   /// the command palette. Called once during setupUI alongside the
   /// other application shortcuts.

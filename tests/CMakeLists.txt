@@ -215,6 +215,23 @@ target_link_libraries(test_themepreset
 )
 add_test(NAME ThemePreset COMMAND test_themepreset)
 
+# PresentationProfile tests (Kartend-6pp5). JSON round-trip + apply + registry.
+add_executable(test_presentationprofile
+  utils/test_presentationprofile.cpp
+  ${SRC_DIR}/utils/app/collection/presentationprofile.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_presentationprofile PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_presentationprofile
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME PresentationProfile COMMAND test_presentationprofile)
+
 # CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
 add_executable(test_collectionhealth
   utils/test_collectionhealth.cpp

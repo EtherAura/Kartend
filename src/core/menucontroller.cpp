@@ -151,6 +151,7 @@ void MenuController::setupMenuBar() {
   setupActionArtworkWizard();
   setupActionBindingVisualizer();
   setupActionNewLibraryWizard();
+  setupActionPresentationProfiles();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -821,6 +822,18 @@ void MenuController::setupActionNewLibraryWizard() {
   }
   connect(m_newLibraryWizardAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onNewLibraryWizard) m_ctx.onNewLibraryWizard();
+  });
+}
+
+void MenuController::setupActionPresentationProfiles() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_presentationProfilesAction = new QAction(tr("Presentation Profiles..."), this);
+  m_ctx.mainWindow->addAction(m_presentationProfilesAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_presentationProfilesAction);
+  }
+  connect(m_presentationProfilesAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onPresentationProfiles) m_ctx.onPresentationProfiles();
   });
 }
 

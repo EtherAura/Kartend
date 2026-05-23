@@ -25,6 +25,7 @@
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
+#include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
@@ -54,6 +55,7 @@
 #include "navigationmanager.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
+#include "presentationprofilesdialog.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
@@ -478,6 +480,7 @@ void MainWindow::createMenuBar() {
   ctx.onArtworkWizard = [this]() { artworkWizardInteractive(); };
   ctx.onShowBindings = [this]() { showBindingVisualizer(); };
   ctx.onNewLibraryWizard = [this]() { runNewLibraryWizard(); };
+  ctx.onPresentationProfiles = [this]() { managePresentationProfilesInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1228,6 +1231,44 @@ void MainWindow::runNewLibraryWizard() {
   if (m_appManager->getNavigationManager()) {
     currentCollectionIndex = m_collections.size() - 1;
     m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
+  }
+}
+
+void MainWindow::managePresentationProfilesInteractive() {
+  const QString registryPath = SettingsUtils::getPresentationProfilesPath();
+  auto loaded = PresentationProfileIO::loadRegistry(registryPath);
+  if (loaded.isError()) {
+    QMessageBox::warning(this, tr("Presentation profiles — could not load"),
+                         loaded.error().message);
+    return;
+  }
+  QList<PresentationProfile> profiles = loaded.value();
+  const QList<PresentationProfile> original = profiles;
+
+  // Apply closure: write the picked profile onto m_generalSettings,
+  // persist via SettingsManager, and reapply marquee + attract
+  // behaviour so the change is visible immediately.
+  auto onApply = [this](const PresentationProfile &profile) {
+    PresentationProfileIO::applyTo(profile, m_generalSettings);
+    if (m_appManager->getSettingsManager()) {
+      m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    }
+    // Marquee window respects the live settings on each (re)apply; we
+    // call the same hook the Settings dialog uses so the change is
+    // visible without restart.
+    applyMarqueeSettings();
+  };
+
+  PresentationProfilesDialog dialog(this);
+  dialog.setRegistry(&profiles, &m_generalSettings, std::move(onApply));
+  dialog.exec();
+
+  if (profiles != original) {
+    auto saved = PresentationProfileIO::saveRegistry(profiles, registryPath);
+    if (saved.isError()) {
+      QMessageBox::warning(this, tr("Presentation profiles — could not save"),
+                           saved.error().message);
+    }
   }
 }
 

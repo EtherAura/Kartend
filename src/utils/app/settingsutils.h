@@ -18,6 +18,9 @@ public:
   /// writes via QSaveFile + syncDirectory; we do not pre-create an empty
   /// file so a fresh install stays clean.
   [[nodiscard]] static auto getLayoutProfilesPath() -> QString;
+  /// Path to the JSON file storing presentation / attract-mode
+  /// profiles (Kartend-6pp5). Sibling to kartend.cfg.
+  [[nodiscard]] static auto getPresentationProfilesPath() -> QString;
   [[nodiscard]] static auto getFormat() -> QSettings::Format;
   /// Restrict kartend.cfg to user-only read+write (0600). The INI carries
   /// scraper credentials in cleartext under [Scrapers]; default umask on

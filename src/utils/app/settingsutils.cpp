@@ -110,6 +110,11 @@ auto SettingsUtils::getLayoutProfilesPath() -> QString {
   return info.absoluteDir().absoluteFilePath("layout_profiles.json");
 }
 
+auto SettingsUtils::getPresentationProfilesPath() -> QString {
+  const QFileInfo info(getConfigPath());
+  return info.absoluteDir().absoluteFilePath("presentation_profiles.json");
+}
+
 auto SettingsUtils::tightenConfigPermissions() -> void {
   const QString path = getConfigPath();
   if (!QFile::exists(path)) {
