@@ -920,6 +920,33 @@ void DetailsPane::setManualFile(const QString &manualPath) {
   if (m_metadataView) m_metadataView->setManualFile(manualPath);
 }
 
+QString DetailsPane::formatPersonalRating(int rating) {
+  if (rating < 0) {
+    return {};
+  }
+  const int clamped = std::clamp(rating, 0, 10);
+  const int fullStars = clamped / 2;
+  const bool halfStar = (clamped % 2) != 0;
+  const int emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+
+  QString glyphs;
+  glyphs.reserve(5);
+  for (int i = 0; i < fullStars; ++i) {
+    glyphs.append(QChar(0x2605)); // ★
+  }
+  if (halfStar) {
+    glyphs.append(QChar(0x00BD)); // ½ — placed where the half star would be.
+  }
+  for (int i = 0; i < emptyStars; ++i) {
+    glyphs.append(QChar(0x2606)); // ☆
+  }
+
+  const double stars = clamped / 2.0;
+  const QString fraction =
+      QString::number(stars, 'f', stars == int(stars) ? 0 : 1) + QStringLiteral(" / 5");
+  return QStringLiteral("%1 (%2)").arg(glyphs, fraction);
+}
+
 QString DetailsPane::formatTags(const QString &raw) {
   // Accept either a JSON array string or a comma-separated list. We do not
   // pull in QJsonDocument here to keep this widget lightweight; the Details

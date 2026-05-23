@@ -10,9 +10,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -28,7 +30,8 @@ bool ItemMetadata::isEmpty() const {
   return title.isEmpty() && description.isEmpty() && genre.isEmpty() && developer.isEmpty() &&
          publisher.isEmpty() && releaseDate.isEmpty() && contentRating.isEmpty() &&
          players.isEmpty() && runtimeSeconds < 0 && tags.isEmpty() && customFields.isEmpty() &&
-         manualPath.isEmpty() && launcherIndex < 0;
+         notes.isEmpty() && sourceUrl.isEmpty() && rating < 0 && manualPath.isEmpty() &&
+         launcherIndex < 0;
 }
 
 namespace {
@@ -36,15 +39,16 @@ namespace {
 constexpr const char *SELECT_SQL =
     "SELECT title, description, genre, developer, publisher, release_date, "
     "content_rating, players, runtime_seconds, tags, custom_fields, "
-    "manual_path, launcher_index, source, updated_at "
+    "manual_path, launcher_index, source, updated_at, notes, rating, source_url "
     "FROM item_metadata WHERE collection_uuid = ? AND path = ?";
 
 constexpr const char *UPSERT_SQL =
     "INSERT INTO item_metadata ("
     "collection_uuid, path, title, description, genre, developer, publisher, "
     "release_date, content_rating, players, runtime_seconds, tags, "
-    "custom_fields, manual_path, launcher_index, source, updated_at"
-    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "custom_fields, manual_path, launcher_index, source, updated_at, "
+    "notes, rating, source_url"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
     "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
     "title=excluded.title, description=excluded.description, "
     "genre=excluded.genre, developer=excluded.developer, "
@@ -53,7 +57,9 @@ constexpr const char *UPSERT_SQL =
     "runtime_seconds=excluded.runtime_seconds, tags=excluded.tags, "
     "custom_fields=excluded.custom_fields, manual_path=excluded.manual_path, "
     "launcher_index=excluded.launcher_index, "
-    "source=excluded.source, updated_at=excluded.updated_at";
+    "source=excluded.source, updated_at=excluded.updated_at, "
+    "notes=excluded.notes, rating=excluded.rating, "
+    "source_url=excluded.source_url";
 
 constexpr const char *DELETE_SQL =
     "DELETE FROM item_metadata WHERE collection_uuid = ? AND path = ?";
@@ -71,6 +77,12 @@ QVariant nullableRuntime(int seconds) {
 // the column round-trips cleanly via SELECT's isNull() check below.
 QVariant nullableLauncherIndex(int index) {
   return index < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(index);
+}
+
+// Rating uses the same -1 == NULL contract as launcher_index. Stored 0-10 so
+// the UI's half-star widget round-trips without a floating-point hop.
+QVariant nullableRating(int rating) {
+  return rating < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(rating);
 }
 
 } // namespace
@@ -120,6 +132,10 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   metadata.launcherIndex = launcherIdx.isNull() ? -1 : launcherIdx.toInt();
   metadata.source = q.value(13).toString();
   metadata.updatedAt = q.value(14).toString();
+  metadata.notes = q.value(15).toString();
+  const QVariant ratingVar = q.value(16);
+  metadata.rating = ratingVar.isNull() ? -1 : ratingVar.toInt();
+  metadata.sourceUrl = q.value(17).toString();
   return metadata;
 }
 
@@ -148,7 +164,7 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
     QString sql = QStringLiteral(
         "SELECT path, title, description, genre, developer, publisher, release_date, "
         "content_rating, players, runtime_seconds, tags, custom_fields, "
-        "manual_path, launcher_index, source, updated_at "
+        "manual_path, launcher_index, source, updated_at, notes, rating, source_url "
         "FROM item_metadata WHERE collection_uuid = ? AND path IN (");
     for (qsizetype i = 0; i < chunkLen; ++i) {
       if (i > 0) sql.append(QLatin1Char(','));
@@ -195,6 +211,10 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
       md.launcherIndex = launcherIdx.isNull() ? -1 : launcherIdx.toInt();
       md.source = q.value(14).toString();
       md.updatedAt = q.value(15).toString();
+      md.notes = q.value(16).toString();
+      const QVariant ratingVar = q.value(17);
+      md.rating = ratingVar.isNull() ? -1 : ratingVar.toInt();
+      md.sourceUrl = q.value(18).toString();
       out.insert(md.path, md);
     }
   }
@@ -250,6 +270,9 @@ ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   q.addBindValue(nullableLauncherIndex(metadata.launcherIndex));
   q.addBindValue(nullableString(metadata.source));
   q.addBindValue(updatedAt);
+  q.addBindValue(nullableString(metadata.notes));
+  q.addBindValue(nullableRating(metadata.rating));
+  q.addBindValue(nullableString(metadata.sourceUrl));
 
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to upsert item_metadata",
@@ -360,6 +383,57 @@ QString resolveManualFile(const QString &overridePath, const QString &baseName,
     return {};
   }
   return findManualForBaseName(baseName, manualDirectory);
+}
+
+QStringList parseTags(const QString &json) {
+  QStringList result;
+  const QString trimmed = json.trimmed();
+  if (trimmed.isEmpty()) {
+    return result;
+  }
+  QJsonParseError err{};
+  const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isArray()) {
+    return result;
+  }
+  const QJsonArray arr = doc.array();
+  // Case-insensitive de-duplication preserves the first-seen casing so the
+  // user's original capitalization survives a save/reload round-trip.
+  QSet<QString> seen;
+  for (const auto &val : arr) {
+    const QString tag = val.toString().trimmed();
+    if (tag.isEmpty()) {
+      continue;
+    }
+    const QString lower = tag.toLower();
+    if (seen.contains(lower)) {
+      continue;
+    }
+    seen.insert(lower);
+    result.append(tag);
+  }
+  return result;
+}
+
+QString serializeTags(const QStringList &tags) {
+  QJsonArray arr;
+  QSet<QString> seen;
+  for (const QString &tag : tags) {
+    const QString trimmed = tag.trimmed();
+    if (trimmed.isEmpty()) {
+      continue;
+    }
+    const QString lower = trimmed.toLower();
+    if (seen.contains(lower)) {
+      continue;
+    }
+    seen.insert(lower);
+    arr.append(trimmed);
+  }
+  if (arr.isEmpty()) {
+    return {};
+  }
+  return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
 QString serializeCustomFields(const CustomFieldList &fields) {

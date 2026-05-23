@@ -71,6 +71,11 @@ public:
   [[nodiscard]] static QString formatFileSize(qint64 bytes);
   [[nodiscard]] static QString formatRuntime(int seconds);
   [[nodiscard]] static QString formatTags(const QString &raw);
+  /// Renders a personal rating (0-10 internal, half-star precision) as a
+  /// glyph string with a parenthetical fraction, e.g. "★★★★☆ (3.5 / 5)".
+  /// Returns an empty string for the "unrated" sentinel (-1) so the
+  /// Details section can skip the row entirely.
+  [[nodiscard]] static QString formatPersonalRating(int rating);
   [[nodiscard]] static QString formatLastScanned(const QDateTime &lastScanned);
 
   /// Install a predicate the video-preview start timer consults before

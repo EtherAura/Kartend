@@ -398,6 +398,13 @@ void DetailsPaneMetadataView::setExtendedMetadata(const ItemMetadataStore::ItemM
   appendDetailRow(QObject::tr("Players"), metadata.players);
   appendDetailRow(QObject::tr("Runtime"), DetailsPane::formatRuntime(metadata.runtimeSeconds));
   appendDetailRow(QObject::tr("Tags"), DetailsPane::formatTags(metadata.tags));
+  // Personal curation fields. Labeled "Your rating" so it's distinct from
+  // the scraper-provided content rating row above. Empty values are
+  // suppressed inside appendDetailRow so unset fields don't clutter the
+  // sidebar with blank rows.
+  appendDetailRow(QObject::tr("Your rating"), DetailsPane::formatPersonalRating(metadata.rating));
+  appendDetailRow(QObject::tr("Source"), metadata.sourceUrl, /*wrap=*/true);
+  appendDetailRow(QObject::tr("Notes"), metadata.notes, /*wrap=*/true);
 
   // User-defined custom fields. Rendered after the structured
   // fields so they appear as a contiguous block at the bottom of Details.

@@ -16,11 +16,11 @@
 
 #include "artworkutils.h"
 #include "collectionutils.h"
-// Kartend-n8kh: createsmartplaylistdialog.h / customfieldsdialog.h are no
-// longer #included here. The two dialogs are launched via owner-supplied
-// closures (InteractionManagerSetup::runSmartPlaylistDialog /
-// runCustomFieldsDialog) so the data layer doesn't need the ui/ dialog
-// headers for the symbols. The runners themselves live in MainWindow.
+// The two dialogs (createsmartplaylistdialog.h / editmetadatadialog.h) are
+// launched via owner-supplied closures (InteractionManagerSetup::run*) so
+// the input layer doesn't need the ui/ dialog headers for the symbols. The
+// runners themselves live in MainWindow. EditMetadataPayload's full
+// definition lives in itemmetadata.h, included below.
 #include "idatabasemanager.h"
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
@@ -99,14 +99,14 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
   });
 
-  // --- Edit custom fields (, media items only) ---
+  // --- Edit per-item metadata (media items only) ---
   if (isMediaItem && !filePath.isEmpty() && databaseMgr() && m_collections &&
       m_currentCollectionIndex) {
     menu.addSeparator();
-    QAction *customFieldsAction = menu.addAction(tr("Edit custom fields..."));
+    QAction *editMetadataAction = menu.addAction(tr("Edit metadata..."));
     const QString itemName = widget->getItemName();
-    QObject::connect(customFieldsAction, &QAction::triggered, this,
-                     [this, filePath, itemName]() { editCustomFields(filePath, itemName); });
+    QObject::connect(editMetadataAction, &QAction::triggered, this,
+                     [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
 
     // --- Look up online (Stage 1: URL providers only) ---
     // Submenu of metadata providers applicable to the current
@@ -588,7 +588,7 @@ void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
   }
 }
 
-void InteractionManager::editCustomFields(const QString &filePath, const QString &itemName) {
+void InteractionManager::editItemMetadata(const QString &filePath, const QString &itemName) {
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
@@ -615,16 +615,27 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
 
-  if (!m_runCustomFieldsDialog) {
+  if (!m_runEditMetadataDialog) {
     return;
   }
-  auto edited = m_runCustomFieldsDialog(
-      itemName, ItemMetadataStore::parseCustomFields(metadata.customFields));
+
+  EditMetadataPayload initial;
+  initial.notes = metadata.notes;
+  initial.tags = ItemMetadataStore::parseTags(metadata.tags);
+  initial.rating = metadata.rating;
+  initial.sourceUrl = metadata.sourceUrl;
+  initial.customFields = ItemMetadataStore::parseCustomFields(metadata.customFields);
+
+  auto edited = m_runEditMetadataDialog(itemName, initial);
   if (!edited.has_value()) {
     return;
   }
 
-  metadata.customFields = ItemMetadataStore::serializeCustomFields(*edited);
+  metadata.notes = edited->notes;
+  metadata.tags = ItemMetadataStore::serializeTags(edited->tags);
+  metadata.rating = edited->rating;
+  metadata.sourceUrl = edited->sourceUrl;
+  metadata.customFields = ItemMetadataStore::serializeCustomFields(edited->customFields);
   // Mark the row as user-edited so future scraper integrations can decide
   // whether to overwrite. Existing rows from a scraper keep their source
   // until the user touches them via this dialog.
@@ -645,7 +656,7 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
-  // Resolve the owning collection the same way editCustomFields does so the
+  // Resolve the owning collection the same way editItemMetadata does so the
   // (uuid, path) key matches across showAllSubcollectionItems navigation.
   int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
   if (owningIndex < 0) {
@@ -667,7 +678,7 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   metadata.path = filePath;
   metadata.manualPath = manualPath;
   // User-driven edit: stamp the source so future scrapers know this row was
-  // touched by the user (matches editCustomFields behavior).
+  // touched by the user (matches editItemMetadata behavior).
   metadata.source = QStringLiteral("user");
   if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;

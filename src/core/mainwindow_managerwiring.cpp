@@ -42,7 +42,7 @@ void MainWindow::wireInteractionManager() {
   setup.ctx = &m_appContext; // Managers and UI elements from shared context
 
   // The input layer's right-click menu used to construct
-  // CreateSmartPlaylistDialog / CustomFieldsDialog directly, taking an
+  // CreateSmartPlaylistDialog / EditMetadataDialog directly, taking an
   // upward input -> ui edge. The dialogs now run via these closures
   // supplied here in the UI layer; InteractionManager just invokes them
   // and reads the result. The actual dialog construction lives in
@@ -51,9 +51,9 @@ void MainWindow::wireInteractionManager() {
                                         const std::optional<SmartFilter::Filter> &initialFilter) {
     return m_dialogController->runSmartPlaylistDialog(initialName, initialFilter);
   };
-  setup.runCustomFieldsDialog = [this](const QString &itemTitle,
-                                       const ItemMetadataStore::CustomFieldList &initial) {
-    return m_dialogController->runCustomFieldsDialog(itemTitle, initial);
+  setup.runEditMetadataDialog = [this](const QString &itemTitle,
+                                       const EditMetadataPayload &initial) {
+    return m_dialogController->runEditMetadataDialog(itemTitle, initial);
   };
 
   loadingLabel = ui->loadingLabel;

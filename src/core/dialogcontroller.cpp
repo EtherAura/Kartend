@@ -1,6 +1,6 @@
 #include "dialogcontroller.h"
 #include "createsmartplaylistdialog.h"
-#include "customfieldsdialog.h"
+#include "editmetadatadialog.h"
 #include "firstrunwizard.h"
 #include "itemartworklinksdialog.h"
 #include "kartmanager.h"
@@ -37,16 +37,16 @@ DialogController::runSmartPlaylistDialog(const QString &initialName,
   return out;
 }
 
-std::optional<ItemMetadataStore::CustomFieldList>
-DialogController::runCustomFieldsDialog(const QString &itemTitle,
-                                        const ItemMetadataStore::CustomFieldList &initial) {
-  CustomFieldsDialog dialog(m_parent);
+std::optional<EditMetadataPayload>
+DialogController::runEditMetadataDialog(const QString &itemTitle,
+                                        const EditMetadataPayload &initial) {
+  EditMetadataDialog dialog(m_parent);
   dialog.setItemTitle(itemTitle);
-  dialog.setFields(initial);
+  dialog.setPayload(initial);
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
-  return dialog.fields();
+  return dialog.payload();
 }
 
 kart::ConflictResolution

@@ -11,6 +11,7 @@ target_sources(kartend_ui PRIVATE
 
 add_subdirectory(settings)
 add_subdirectory(collection)
+add_subdirectory(item)
 add_subdirectory(launcher)
 add_subdirectory(scraper)
 add_subdirectory(kart)

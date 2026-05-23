@@ -19,6 +19,25 @@ namespace ItemMetadataStore {
 /// sidebar regardless of the order rows were edited.
 using CustomFieldList = QList<QPair<QString, QString>>;
 
+} // namespace ItemMetadataStore
+
+/// Editable subset of `ItemMetadata` ferried across the
+/// EditMetadataDialog ↔ InteractionManager boundary. Lives here (next to
+/// ItemMetadata + parseCustomFields) so both the ui and input layers can
+/// see the full type without crossing layer headers.
+struct EditMetadataPayload {
+  QString notes;
+  /// Display-order tag list (the dialog parses the comma-separated input
+  /// into trimmed, dedup'd entries before this struct is returned).
+  QStringList tags;
+  /// -1 = unrated; 0-10 = half-star precision.
+  int rating = -1;
+  QString sourceUrl;
+  ItemMetadataStore::CustomFieldList customFields;
+};
+
+namespace ItemMetadataStore {
+
 /// Extended per-item metadata stored in the `item_metadata` table.
 ///
 /// Keyed on (collection_uuid, path). All structured fields are optional so
@@ -41,6 +60,13 @@ struct ItemMetadata {
   QString tags;
   /// JSON object string for user-defined key/value pairs.
   QString customFields;
+  /// Free-form user-authored notes (multi-line). Empty means "unset".
+  QString notes;
+  /// Optional source URL (where the user discovered / acquired the item).
+  QString sourceUrl;
+  /// Personal rating 0..10 (rendered as five half-stars in the UI).
+  /// Negative means "unset" (the column is NULLable).
+  int rating = -1;
   /// Optional override for the per-item manual file.
   QString manualPath;
   /// Optional per-item launcher override. When >= 0, indexes
@@ -82,6 +108,19 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
 /// no matching row exists.
 [[nodiscard]] ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
                                               const QString &path);
+
+/// Parses the `tags` JSON string into a deduplicated, trimmed string list.
+/// Returns an empty list when the input is empty, malformed, or not a JSON
+/// array. Non-string values are coerced via `QJsonValue::toString()`. Order is
+/// preserved (so the editor can round-trip the user's chosen ordering).
+[[nodiscard]] QStringList parseTags(const QString &json);
+
+/// Serializes a tag list to a compact JSON array string. Trims and drops
+/// empty entries and case-insensitive duplicates so toggling the same tag
+/// twice in the editor doesn't produce duplicate JSON entries. Returns an
+/// empty string when the result has no entries, so empty payloads round-trip
+/// to NULL in the DB.
+[[nodiscard]] QString serializeTags(const QStringList &tags);
 
 /// Parses the `custom_fields` JSON string into an ordered key/value list.
 /// Returns an empty list when the input is empty, malformed, or not a JSON

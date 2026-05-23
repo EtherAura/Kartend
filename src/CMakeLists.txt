@@ -185,6 +185,7 @@ target_include_directories(kartend_ui PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/detailspanemanager
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/collection
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/item
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/kart
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/launcher
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/scraper

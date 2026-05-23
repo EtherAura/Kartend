@@ -70,10 +70,11 @@ struct SmartPlaylistEdit {
 using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
     const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter)>;
 
-/// Runs the modal CustomFieldsDialog seeded with the item's title and
-/// current custom fields. Returns the edited fields, or nullopt on cancel.
-using CustomFieldsDialogRunner = std::function<std::optional<ItemMetadataStore::CustomFieldList>(
-    const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
+/// Runs the modal EditMetadataDialog seeded with the item's title and the
+/// current curation payload (notes, tags, rating, source URL, custom
+/// fields). Returns the edited payload, or nullopt on cancel.
+using EditMetadataDialogRunner = std::function<std::optional<EditMetadataPayload>(
+    const QString &itemTitle, const EditMetadataPayload &initial)>;
 
 struct InteractionManagerSetup {
   // ctx is the single source of truth for sibling managers. Per Kartend-mxn4
@@ -105,7 +106,7 @@ struct InteractionManagerSetup {
   /// data->ui edge is gone — the UI layer provides the runner closure
   /// from MainWindow setup wiring.
   SmartPlaylistDialogRunner runSmartPlaylistDialog;
-  CustomFieldsDialogRunner runCustomFieldsDialog;
+  EditMetadataDialogRunner runEditMetadataDialog;
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -195,10 +196,10 @@ public:
   void stopScrollAnimations() override;
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
-  // Opens the custom-fields editor for the given media item.
-  // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
-  // the sidebar so new fields render immediately.
-  void editCustomFields(const QString &filePath, const QString &itemName);
+  // Opens the per-item metadata editor (notes, tags, rating, source URL,
+  // custom fields). Persists changes via DatabaseManager::saveItemMetadata()
+  // and refreshes the sidebar so new fields render immediately.
+  void editItemMetadata(const QString &filePath, const QString &itemName);
   // Sets or clears the per-item manual override for a media item
   // Stored in `item_metadata.manual_path`; passing an empty
   // path clears the override and re-enables auto-discovery in the
@@ -411,7 +412,7 @@ private:
   // (MainWindow setup wiring), so the data-layer manager never #includes
   // the dialog header for the symbols.
   SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
-  CustomFieldsDialogRunner m_runCustomFieldsDialog;
+  EditMetadataDialogRunner m_runEditMetadataDialog;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
