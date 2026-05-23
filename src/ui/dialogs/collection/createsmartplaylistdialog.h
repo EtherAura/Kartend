@@ -2,6 +2,8 @@
 #define CREATESMARTPLAYLISTDIALOG_H
 
 #include <QDialog>
+#include <QList>
+#include <QPair>
 #include <QString>
 
 #include "smartfilter.h"
@@ -33,6 +35,13 @@ public:
   void setInitialName(const QString &name);
   void setInitialFilter(const SmartFilter::Filter &filter);
 
+  /// Display-name + uuid pair for the ByCollection picker. Caller passes
+  /// the live collection list (excluding playlists, which can't host a
+  /// smart filter anchored on their own uuid). Must be called before
+  /// exec(); subsequent calls replace the previous list.
+  using CollectionEntry = QPair<QString, QString>; // (displayName, uuid)
+  void setCollectionList(const QList<CollectionEntry> &collections);
+
   /// Trimmed name (empty when the user accepted with a blank field —
   /// caller should validate before persisting).
   [[nodiscard]] QString name() const;
@@ -60,6 +69,8 @@ private:
   QLineEdit *m_extensionsEdit = nullptr;
   QLabel *m_hasArtworkNote = nullptr;
   QSpinBox *m_dateAddedDaysSpin = nullptr;
+  QComboBox *m_collectionCombo = nullptr;
+  QLineEdit *m_titleSearchEdit = nullptr;
 };
 
 #endif // CREATESMARTPLAYLISTDIALOG_H

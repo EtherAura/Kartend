@@ -34,6 +34,10 @@ constexpr int PAGE_BY_DATE_ADDED = 5;
 constexpr int PAGE_PINNED = 6;
 constexpr int PAGE_HIDDEN = 7;
 constexpr int PAGE_CONTINUE_LATER = 8;
+constexpr int PAGE_BY_COLLECTION = 9;
+constexpr int PAGE_BY_TITLE_SEARCH = 10;
+constexpr int PAGE_MISSING_ARTWORK = 11;
+constexpr int PAGE_FAVORITE = 12;
 
 constexpr int DAYS_MIN = 1;
 constexpr int DAYS_MAX = 3650;
@@ -59,6 +63,14 @@ int kindToPage(SmartFilter::Kind k) {
     return PAGE_HIDDEN;
   case SmartFilter::Kind::ContinueLater:
     return PAGE_CONTINUE_LATER;
+  case SmartFilter::Kind::ByCollection:
+    return PAGE_BY_COLLECTION;
+  case SmartFilter::Kind::ByTitleSearch:
+    return PAGE_BY_TITLE_SEARCH;
+  case SmartFilter::Kind::MissingArtwork:
+    return PAGE_MISSING_ARTWORK;
+  case SmartFilter::Kind::Favorite:
+    return PAGE_FAVORITE;
   }
   return PAGE_RECENT;
 }
@@ -81,6 +93,14 @@ SmartFilter::Kind pageToKind(int page) {
     return SmartFilter::Kind::Hidden;
   case PAGE_CONTINUE_LATER:
     return SmartFilter::Kind::ContinueLater;
+  case PAGE_BY_COLLECTION:
+    return SmartFilter::Kind::ByCollection;
+  case PAGE_BY_TITLE_SEARCH:
+    return SmartFilter::Kind::ByTitleSearch;
+  case PAGE_MISSING_ARTWORK:
+    return SmartFilter::Kind::MissingArtwork;
+  case PAGE_FAVORITE:
+    return SmartFilter::Kind::Favorite;
   case PAGE_RECENT:
   default:
     return SmartFilter::Kind::RecentlyLaunched;
@@ -124,6 +144,10 @@ void CreateSmartPlaylistDialog::buildUI() {
   m_kindCombo->addItem(tr("Pinned"), PAGE_PINNED);
   m_kindCombo->addItem(tr("Hidden"), PAGE_HIDDEN);
   m_kindCombo->addItem(tr("Continue later"), PAGE_CONTINUE_LATER);
+  m_kindCombo->addItem(tr("By collection"), PAGE_BY_COLLECTION);
+  m_kindCombo->addItem(tr("Title contains…"), PAGE_BY_TITLE_SEARCH);
+  m_kindCombo->addItem(tr("Missing artwork"), PAGE_MISSING_ARTWORK);
+  m_kindCombo->addItem(tr("Favorites"), PAGE_FAVORITE);
   form->addRow(tr("Criterion:"), m_kindCombo);
 
   root->addLayout(form);
@@ -222,6 +246,50 @@ void CreateSmartPlaylistDialog::buildUI() {
   buildStateFlagPage(PAGE_CONTINUE_LATER,
                      tr("Includes every item you've flagged as 'continue later'. Useful for "
                         "tracking items you've started but haven't finished."));
+  // ByCollection — pick a specific source collection by uuid via combobox.
+  // The combobox is populated by setCollectionList() before exec(); we
+  // leave it empty here so the dialog still constructs cleanly when the
+  // caller forgets to populate (the evaluator returns no matches in that
+  // case, so the failure is obvious instead of silent).
+  {
+    auto *page = new QWidget(m_paramsStack);
+    auto *l = new QFormLayout(page);
+    m_collectionCombo = new QComboBox(page);
+    m_collectionCombo->setPlaceholderText(tr("Pick a collection…"));
+    l->addRow(tr("Collection:"), m_collectionCombo);
+    auto *hint = new QLabel(tr("Includes every item in the selected source collection. "
+                               "Useful for aggregating one collection's items inside a "
+                               "playlist alongside others."),
+                            page);
+    hint->setWordWrap(true);
+    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    l->addRow(hint);
+    m_paramsStack->insertWidget(PAGE_BY_COLLECTION, page);
+  }
+  // ByTitleSearch — simple substring search against items.name. SQL LIKE
+  // is ASCII-case-insensitive by default; multibyte titles round-trip
+  // case-sensitively (acceptable for an MVP — see follow-up if relevant).
+  {
+    auto *page = new QWidget(m_paramsStack);
+    auto *l = new QFormLayout(page);
+    m_titleSearchEdit = new QLineEdit(page);
+    m_titleSearchEdit->setPlaceholderText(tr("e.g. 'concert' or 'Episode 1'"));
+    l->addRow(tr("Title contains:"), m_titleSearchEdit);
+    auto *hint =
+        new QLabel(tr("Matches items whose title contains the text above (case-insensitive "
+                      "for ASCII characters). Empty text matches nothing."),
+                   page);
+    hint->setWordWrap(true);
+    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    l->addRow(hint);
+    m_paramsStack->insertWidget(PAGE_BY_TITLE_SEARCH, page);
+  }
+  buildStateFlagPage(PAGE_MISSING_ARTWORK,
+                     tr("Includes every item without a real cover image — useful as a "
+                        "to-scrape worklist."));
+  buildStateFlagPage(PAGE_FAVORITE,
+                     tr("Includes every item present in the Favorites playlist. Combine "
+                        "with another search to see your favorited subset by type or tag."));
 
   root->addWidget(m_paramsStack);
 
@@ -279,10 +347,35 @@ void CreateSmartPlaylistDialog::setInitialFilter(const SmartFilter::Filter &filt
   case SmartFilter::Kind::Pinned:
   case SmartFilter::Kind::Hidden:
   case SmartFilter::Kind::ContinueLater:
+  case SmartFilter::Kind::MissingArtwork:
+  case SmartFilter::Kind::Favorite:
     break;
   case SmartFilter::Kind::ByDateAdded:
     m_dateAddedDaysSpin->setValue(filter.days);
     break;
+  case SmartFilter::Kind::ByCollection:
+    if (m_collectionCombo) {
+      const int idx = m_collectionCombo->findData(filter.collectionUuid);
+      if (idx >= 0) {
+        m_collectionCombo->setCurrentIndex(idx);
+      }
+    }
+    break;
+  case SmartFilter::Kind::ByTitleSearch:
+    if (m_titleSearchEdit) {
+      m_titleSearchEdit->setText(filter.titleSearch);
+    }
+    break;
+  }
+}
+
+void CreateSmartPlaylistDialog::setCollectionList(const QList<CollectionEntry> &collections) {
+  if (!m_collectionCombo) {
+    return;
+  }
+  m_collectionCombo->clear();
+  for (const auto &pair : collections) {
+    m_collectionCombo->addItem(pair.first, pair.second);
   }
 }
 
@@ -321,9 +414,21 @@ SmartFilter::Filter CreateSmartPlaylistDialog::filter() const {
   case SmartFilter::Kind::Pinned:
   case SmartFilter::Kind::Hidden:
   case SmartFilter::Kind::ContinueLater:
+  case SmartFilter::Kind::MissingArtwork:
+  case SmartFilter::Kind::Favorite:
     break;
   case SmartFilter::Kind::ByDateAdded:
     f.days = m_dateAddedDaysSpin->value();
+    break;
+  case SmartFilter::Kind::ByCollection:
+    if (m_collectionCombo) {
+      f.collectionUuid = m_collectionCombo->currentData().toString();
+    }
+    break;
+  case SmartFilter::Kind::ByTitleSearch:
+    if (m_titleSearchEdit) {
+      f.titleSearch = m_titleSearchEdit->text().trimmed();
+    }
     break;
   }
   return f;

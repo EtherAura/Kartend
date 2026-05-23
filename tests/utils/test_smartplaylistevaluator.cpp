@@ -109,6 +109,11 @@ private slots:
   void stateFlag_pinnedReturnsOnlyPinned();
   void stateFlag_hiddenIsIndependentOfPinned();
   void stateFlag_continueLaterReturnsOnlyMarked();
+  void byCollection_returnsOnlyMatchingUuid();
+  void byCollection_emptyUuidReturnsNothing();
+  void byTitleSearch_substringCaseInsensitive();
+  void byTitleSearch_emptyNeedleReturnsNothing();
+  void missingArtwork_returnsNullOrEmptyArtwork();
   void evaluate_unopenedDb_returnsEmptyWithoutCrashing();
 };
 
@@ -345,6 +350,104 @@ void TestSmartPlaylistEvaluator::stateFlag_continueLaterReturnsOnlyMarked() {
   auto out = SmartPlaylistEvaluator::evaluate(db, f);
   QCOMPARE(out.size(), 1);
   QCOMPARE(out.first().path, QStringLiteral("/a/alpha.mp4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byCollection_returnsOnlyMatchingUuid() {
+  const QString conn = "spl_by_collection";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+
+  insertItem(db, "uuid-A", "First", "/a/first.mp4");
+  insertItem(db, "uuid-A", "Second", "/a/second.mp4");
+  insertItem(db, "uuid-B", "Third", "/b/third.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByCollection;
+  f.collectionUuid = "uuid-A";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 2);
+  for (const auto &m : out) {
+    QCOMPARE(m.collectionUuid, QStringLiteral("uuid-A"));
+  }
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byCollection_emptyUuidReturnsNothing() {
+  // Unsaved dialog state (empty uuid) must NOT silently return the whole
+  // library — a default-constructed filter at startup would surface every
+  // item across every collection, which looks like a bug.
+  const QString conn = "spl_by_collection_empty";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "uuid-A", "First", "/a/first.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByCollection;
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QVERIFY(out.isEmpty());
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byTitleSearch_substringCaseInsensitive() {
+  const QString conn = "spl_title_search";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "Concert at the Park", "/a/concert.mp4");
+  insertItem(db, "u1", "Studio Session", "/a/studio.mp4");
+  // ASCII LIKE is case-insensitive by default in SQLite; "concert" should
+  // match "Concert at the Park" but not "Studio Session".
+  insertItem(db, "u1", "Stage Concert Special", "/a/special.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByTitleSearch;
+  f.titleSearch = "concert";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 2);
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byTitleSearch_emptyNeedleReturnsNothing() {
+  const QString conn = "spl_title_search_empty";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "First", "/a/first.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByTitleSearch;
+  // Whitespace-only needle counts as empty (trimmed).
+  f.titleSearch = "   ";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QVERIFY(out.isEmpty());
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::missingArtwork_returnsNullOrEmptyArtwork() {
+  const QString conn = "spl_missing_artwork";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "Has", "/a/has.mp4", 0, QString(), "/art/has.jpg");
+  insertItem(db, "u1", "Missing", "/a/missing.mp4", 0, QString(), QString());
+  // Empty string is also "no artwork" — the scanner can leave the column
+  // empty (not just NULL) when the lookup misses.
+  QSqlQuery upd(db);
+  QVERIFY(upd.exec("UPDATE items SET artwork_path = '' WHERE path = '/a/missing.mp4'"));
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::MissingArtwork;
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().path, QStringLiteral("/a/missing.mp4"));
 
   closeAndRemove(db, conn);
 }

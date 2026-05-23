@@ -48,8 +48,9 @@ void MainWindow::wireInteractionManager() {
   // and reads the result. The actual dialog construction lives in
   // DialogController so this TU doesn't need the dialog headers.
   setup.runSmartPlaylistDialog = [this](const QString &initialName,
-                                        const std::optional<SmartFilter::Filter> &initialFilter) {
-    return m_dialogController->runSmartPlaylistDialog(initialName, initialFilter);
+                                        const std::optional<SmartFilter::Filter> &initialFilter,
+                                        const SmartPlaylistCollectionEntries &collections) {
+    return m_dialogController->runSmartPlaylistDialog(initialName, initialFilter, collections);
   };
   setup.runEditMetadataDialog = [this](const QString &itemTitle,
                                        const EditMetadataPayload &initial) {

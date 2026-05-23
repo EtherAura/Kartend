@@ -544,7 +544,8 @@ void InteractionManager::createSmartPlaylistDialog() {
   if (!playlistMgr() || !m_runSmartPlaylistDialog) {
     return;
   }
-  auto edit = m_runSmartPlaylistDialog(QString(), std::nullopt);
+  auto edit =
+      m_runSmartPlaylistDialog(QString(), std::nullopt, collectSmartPlaylistCollectionEntries());
   if (!edit.has_value() || edit->name.isEmpty()) {
     return;
   }
@@ -568,7 +569,8 @@ void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
                          loaded.error().message);
     return;
   }
-  auto edit = m_runSmartPlaylistDialog(currentName, loaded.value());
+  auto edit = m_runSmartPlaylistDialog(currentName, loaded.value(),
+                                       collectSmartPlaylistCollectionEntries());
   if (!edit.has_value()) {
     return;
   }
@@ -793,6 +795,29 @@ QString resolveOwningUuid(IDatabaseManager *db, QList<CollectionConfig> *collect
 }
 
 } // namespace
+
+SmartPlaylistCollectionEntries InteractionManager::collectSmartPlaylistCollectionEntries() const {
+  SmartPlaylistCollectionEntries out;
+  if (!m_collections) {
+    return out;
+  }
+  out.reserve(m_collections->size());
+  for (const CollectionConfig &cfg : *m_collections) {
+    // Playlists are virtual collections — anchoring a smart filter on
+    // their uuid would recurse through the smart-playlist evaluator and
+    // produce surprising results. Skip them.
+    if (cfg.isPlaylist) {
+      continue;
+    }
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    if (uuid.isEmpty()) {
+      continue;
+    }
+    out.append({cfg.name, uuid});
+  }
+  return out;
+}
 
 void InteractionManager::toggleItemPinned(const QString &filePath) {
   const QString uuid =

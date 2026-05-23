@@ -20,8 +20,12 @@ DialogController::~DialogController() = default;
 
 std::optional<SmartPlaylistEdit>
 DialogController::runSmartPlaylistDialog(const QString &initialName,
-                                         const std::optional<SmartFilter::Filter> &initialFilter) {
+                                         const std::optional<SmartFilter::Filter> &initialFilter,
+                                         const SmartPlaylistCollectionEntries &collectionEntries) {
   CreateSmartPlaylistDialog dialog(m_parent);
+  // Populate the ByCollection picker before setInitialFilter so the
+  // initial-selection lookup can find the saved uuid in the combo.
+  dialog.setCollectionList(collectionEntries);
   if (!initialName.isEmpty()) {
     dialog.setInitialName(initialName);
   }

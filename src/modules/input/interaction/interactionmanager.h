@@ -67,8 +67,14 @@ struct SmartPlaylistEdit {
 /// InteractionManager pop the dialog without #including its header — the
 /// UI layer supplies a closure that builds the dialog with the right
 /// parent and reads back the result.
+/// (displayName, uuid) pairs the smart-playlist dialog uses to populate
+/// the ByCollection picker. Built fresh at each invocation so it tracks
+/// the live collection list.
+using SmartPlaylistCollectionEntries = QList<QPair<QString, QString>>;
+
 using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
-    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter)>;
+    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter,
+    const SmartPlaylistCollectionEntries &collections)>;
 
 /// Runs the modal EditMetadataDialog seeded with the item's title and the
 /// current curation payload (notes, tags, rating, source URL, custom
@@ -218,6 +224,13 @@ public:
   void toggleItemPinned(const QString &filePath);
   void toggleItemHidden(const QString &filePath);
   void toggleItemContinueLater(const QString &filePath);
+
+  // Builds the live (displayName, uuid) list fed to the smart-playlist
+  // dialog's ByCollection picker. Playlists are skipped because anchoring
+  // a smart filter on a playlist's synthetic uuid would yield a recursive
+  // dependency. Built fresh on each open so collection renames / additions
+  // are picked up.
+  [[nodiscard]] SmartPlaylistCollectionEntries collectSmartPlaylistCollectionEntries() const;
 
   // ─── Playlist context-menu handlers ────────────────────────
   // Prompts for a playlist name, creates the playlist, and adds the given

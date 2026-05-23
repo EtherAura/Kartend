@@ -27,6 +27,10 @@ enum class Kind {
   Pinned,           // no params — items where item_metadata.is_pinned = 1
   Hidden,           // no params — items where item_metadata.is_hidden = 1
   ContinueLater,    // no params — items where item_metadata.continue_later = 1
+  ByCollection,     // params.collectionUuid (single collection)
+  ByTitleSearch,    // params.titleSearch (substring match on items.name)
+  MissingArtwork,   // no params (items.artwork_path NULL or empty)
+  Favorite,         // no params — items present in the reserved Favorites playlist
 };
 
 struct Filter {
@@ -42,6 +46,13 @@ struct Filter {
   /// to [1, 3650] downstream so a stray hand-edit can't make the playlist
   /// scan the entire history of the universe.
   int days = 30;
+  /// Collection uuid for the ByCollection kind. Empty means "no collection
+  /// selected" — the evaluator returns no matches rather than every item,
+  /// so an unsaved dialog state can't accidentally surface the whole library.
+  QString collectionUuid;
+  /// Needle for the ByTitleSearch kind. Compared via LIKE %?% against the
+  /// items.name column. Empty means no matches (same rationale as above).
+  QString titleSearch;
 };
 
 /// String tag used in the JSON payload's "kind" field. Stable across

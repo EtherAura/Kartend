@@ -41,10 +41,14 @@ public:
   ~DialogController() override;
 
   /// Runs CreateSmartPlaylistDialog modally, seeded with the given
-  /// name + filter. Returns the edited values, or nullopt on cancel.
+  /// name + filter. `collectionEntries` populates the ByCollection
+  /// picker — pass the live (displayName, uuid) list from the caller's
+  /// CollectionConfig array. Returns the edited values, or nullopt on
+  /// cancel.
   [[nodiscard]] std::optional<SmartPlaylistEdit>
   runSmartPlaylistDialog(const QString &initialName,
-                         const std::optional<SmartFilter::Filter> &initialFilter);
+                         const std::optional<SmartFilter::Filter> &initialFilter,
+                         const SmartPlaylistCollectionEntries &collectionEntries);
 
   /// Runs EditMetadataDialog modally, seeded with the given item title
   /// + existing payload (notes, tags, rating, source URL, custom fields).
