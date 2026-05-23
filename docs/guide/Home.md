@@ -72,6 +72,9 @@ and want to dig into a feature, the index below is grouped by purpose.
 
 ### Reference
 
+- **[Scraper](Scraper.md)** — fetching metadata and artwork from TMDB,
+  MusicBrainz, OpenLibrary, ScreenScraper; batch scrape, rescrape
+  modes, DAT lookup, quotas, resume after crash
 - **[Scraper Credentials & Keychain](Keychain.md)** — how Kartend stores
   scraper passwords/API keys in the OS keychain, what the `@keychain`
   sentinel in `settings.ini` means, how to install the dependency on each

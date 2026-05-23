@@ -1,5 +1,9 @@
 # Scraper Credentials & the OS Keychain
 
+This page covers credential storage. For the scrape workflow itself —
+single-item vs batch, rescrape modes, DAT-based identification, ROM
+quotas, resume-after-crash — see [Scraper](Scraper.md).
+
 Kartend stores the credentials you enter for online metadata scrapers
 (usernames, passwords, API keys) in the operating system's secure
 credential store whenever it can. The plaintext fields in
