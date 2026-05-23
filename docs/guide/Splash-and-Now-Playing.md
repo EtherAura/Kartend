@@ -44,6 +44,25 @@ within 200–500 ms.
 There's no per-collection theming for the boot splash today (the
 overlay is global and runs before any collection is selected).
 
+### Customizing the splash text
+
+The title and subtitle default to the app name and a built-in tagline.
+Override either to taste:
+
+```ini
+[General]
+bootSplashTitle=Welcome to my cabinet
+bootSplashSubtitle=Loading…
+```
+
+| Key | Default | Note |
+|-----|---------|------|
+| `bootSplashTitle` | App display name | Used verbatim — no `%1` substitution. To include the app name, type it. |
+| `bootSplashSubtitle` | Built-in tagline | Empty string preserves the default. |
+
+Leave a key empty (or unset) to fall back to the default. The same
+font and colors apply regardless of the source.
+
 ## Startup video
 
 A one-time intro video played at launch — branded splash, distributor
@@ -92,6 +111,22 @@ pipeline to re-warm before the user starts navigating.
 When **runtime detection** is enabled, the resume-focus splash is also
 the transition out of the [Now Playing](#now-playing-overlay) overlay
 when the launched process exits.
+
+### Customizing the splash text
+
+```ini
+[General]
+resumeFocusSplashTitle=Back!
+resumeFocusSplashSubtitle=Pick your next one.
+```
+
+| Key | Default | Note |
+|-----|---------|------|
+| `resumeFocusSplashTitle` | Localized **Welcome back** | Used verbatim — no `%1` substitution. |
+| `resumeFocusSplashSubtitle` | Built-in default | Empty string preserves the default. |
+
+Both keys are localizable by the operator — they're not auto-translated,
+so type the text in whatever language your install uses.
 
 ## Now Playing overlay
 
