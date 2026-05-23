@@ -93,12 +93,58 @@ the gallery; populate them via per-item manual links (next section).
 ## Manual per-item links
 
 When auto-discovery picks the wrong image, or when you want to attach
-art to a custom type, use **manual links**:
+art to a custom type, use **manual links**.
 
-- Right-click an item → **Edit artwork links…** opens the
-  [Item Artwork Links Dialog](Item-Metadata.md#item-artwork-links-dialog).
-- Add an entry per type: pick the type, browse to the file.
-- Remove an entry to fall back to auto-discovery for that type.
+### Opening the dialog
+
+Right-click an item → **Edit artwork links…** opens the **Artwork
+links** dialog. It's also reachable from the
+[detail page](Item-Metadata.md#detail-page) action bar.
+
+### What it shows
+
+A table with one row per artwork type — both standard
+(`cover`, `box`, `screenshot`, `fanart`, `logo`, …) and any
+[custom types](#custom-artwork-types) you've added to this collection.
+Each row has:
+
+| Column | Purpose |
+|--------|---------|
+| **Type** | Display label of the artwork type. Read-only; ordered standard-types-first. |
+| **Override path** | The file Kartend uses for this type. Editable directly (paste an absolute path), or use **Browse…** to pick. Empty for unlinked rows. |
+| **Browse** | Opens a file picker rooted at the collection's `artworkDirectory` when possible. |
+| **Clear** | Removes the override for that row. |
+
+### Linking a file
+
+1. Find the row for the type you want to override.
+2. Click **Browse** and pick the image, *or* type/paste an absolute
+   path into the **Override path** cell.
+3. Click **Save**. The sidebar gallery refreshes immediately.
+
+The image doesn't have to live anywhere near the collection's
+`artworkDirectory` — overrides accept any absolute path.
+
+### Clearing a link
+
+Click **Clear** on the row, then **Save**. The effect depends on the
+row's type:
+
+- **Standard types** fall back to auto-discovery for that type — if a
+  matching file exists in `artworkDirectory`, it reappears in the
+  gallery.
+- **Custom types** stay hidden until a file is set again (custom types
+  have no auto-discovery).
+
+### How overrides interact with auto-discovery
+
+An override always wins over auto-discovery for the same `(item,
+type)` pair. The interaction summary:
+
+| Type kind | Override set | Override cleared |
+|-----------|--------------|------------------|
+| Standard | Override wins | Auto-discovery resumes |
+| Custom | Override wins | Slot disappears from the gallery |
 
 Manual links live in the database (`item_artwork` table), keyed by
 `(collection_uuid, source_path, artwork_type)`. They survive rescans,

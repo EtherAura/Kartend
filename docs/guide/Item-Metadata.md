@@ -142,21 +142,14 @@ gallery).
 
 ### Item Artwork Links Dialog
 
-A list of `(artwork_type, image_file)` rows. Add an entry for each
-type you want to override; Kartend will use the linked file instead of
-whatever auto-discovery would have found for that type.
-
-| Action | Effect |
-|--------|--------|
-| **Add** | Append a row. Pick a type from the dropdown (standard + custom), then browse to the image. |
-| **Remove** | Drop the row. Auto-discovery resumes for that type. |
-| **Save** | Persist; sidebar gallery refreshes. |
+The dialog presents one row per artwork type (standard + custom),
+each with a path field, a **Browse** button, and a **Clear** button.
+See [Artwork → Manual per-item links](Artwork.md#manual-per-item-links)
+for the full walkthrough — opening, linking, clearing, and how
+overrides interact with auto-discovery.
 
 Stored in the `item_artwork` table:
 `(collection_uuid, source_path, artwork_type, artwork_file)`.
-
-See [Artwork → Manual per-item links](Artwork.md#manual-per-item-links)
-for the conceptual model.
 
 ## Per-item launcher override
 
