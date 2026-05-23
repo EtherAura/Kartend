@@ -361,8 +361,9 @@ view-mode and sidebar position changes.
 ### Reparent half a tree
 
 Drag and drop in the tree. For larger reorganizations, edit the INI
-file directly: change `parentCollectionIndex` for each collection and
-restart.
+file directly: rename the `[Parent > Child]` section header for each
+collection to point at the new parent (the section header *is* the
+parent record — there's no separate key to flip), then restart.
 
 ### Disable propagation for a specific tab
 

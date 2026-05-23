@@ -81,7 +81,6 @@ collectionIcon=~/Pictures/icons/video.png
 
 [Video > Films]
 name=Films
-parentCollectionIndex=0
 mediaDirectory=~/Videos/Films
 launcherPath=/usr/bin/mpv
 launchParameters=--fullscreen
@@ -89,16 +88,16 @@ extensions=mkv,mp4,avi,webm
 
 [Video > TV Shows]
 name=TV Shows
-parentCollectionIndex=0
 mediaDirectory=~/Videos/TV
 launcherPath=/usr/bin/mpv
 launchParameters=--fullscreen --no-resume-playback
 extensions=mkv,mp4,avi
 ```
 
-Subcollections reference their parent by index (`parentCollectionIndex`)
-which Kartend normalizes against the section list at load — re-ordering
-collections in the dialog rewrites these automatically.
+Subcollections record their parent in the `[Parent > Child]` section
+header itself — there's no separate parent-pointer key. Renaming or
+reordering collections in the Settings Dialog rewrites the headers
+automatically.
 
 ## What a shell collection *can* still have
 

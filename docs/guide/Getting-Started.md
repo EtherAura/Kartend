@@ -194,11 +194,13 @@ gridWidth=4
 
 [Documents > Reports]
 name=Reports
-parentCollectionIndex=0
 mediaDirectory=~/Documents/Reports
 launcherPath=/usr/bin/xdg-open
 extensions=pdf,docx
 ```
+
+The `[Parent > Child]` section header is the entire on-disk record of
+the relationship — there's no separate parent-pointer key to set.
 
 Pressing `Enter` on a subcollection tile opens it; `Escape` returns to
 the parent. Drag-and-drop in the Settings tree reparents collections

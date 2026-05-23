@@ -72,7 +72,10 @@ The Settings Dialog's left-hand tree is the control surface.
 
 ## Hierarchies (parents and subcollections)
 
-A subcollection's INI section name is `Parent > Child`:
+A subcollection's parent is encoded in its **section header** — the
+name follows the pattern `Parent > Child` (with `> ` space-padded as
+the separator). That's the entire on-disk mechanism; there is no
+separate parent-pointer key:
 
 ```ini
 [Documents]
@@ -81,22 +84,21 @@ gridWidth=4
 
 [Documents > Reports]
 name=Reports
-parentCollectionIndex=0
 mediaDirectory=~/Documents/Reports
 launcherPath=/usr/bin/xdg-open
 extensions=pdf,docx
 
 [Documents > Presentations]
 name=Presentations
-parentCollectionIndex=0
 mediaDirectory=~/Documents/Presentations
 launcherPath=/usr/bin/xdg-open
 extensions=pptx,pdf,odp
 ```
 
-`parentCollectionIndex` is the **0-based index** of the parent in the
-collection list. The Settings Dialog manages this for you; you only
-need to know about it if you're hand-editing.
+The Settings Dialog rewrites these section headers when you reparent
+a collection. To reparent by hand, rename the section header — for
+example, `[Documents > Reports]` → `[Archive > Reports]` to move
+`Reports` under `Archive`, then restart Kartend.
 
 ### Drag-and-drop reparenting
 
@@ -113,17 +115,17 @@ everything in `Music`" without drilling into each sub-genre.
 
 ## Linked parents (alias parents)
 
-A collection has **one** primary parent (`parentCollectionIndex`) but
-can also have any number of **linked parents** — alias references that
-make the collection appear as a tile under each linked parent without
-duplicating its config or items.
+A collection has **one** primary parent (encoded in its
+`[Parent > Child]` section header) but can also have any number of
+**linked parents** — alias references that make the collection appear
+as a tile under each linked parent without duplicating its config or
+items.
 
 Use it for cross-cutting groupings:
 
 ```ini
-[Concert Recordings]
+[Video > Concert Recordings]
 mediaDirectory=~/Videos/Concerts
-parentCollectionIndex=2          ; primary: under "Video"
 additionalParentNames=Audio      ; also appears under "Audio"
 launcherPath=/usr/bin/mpv
 ```
@@ -255,11 +257,14 @@ Every collection key, grouped by purpose:
 
 ### Hierarchy
 
+The primary parent is encoded in the `[Parent > Child]` **section
+header**, not in a key. The in-memory `parentCollectionIndex` and
+`isSubcollection` fields you may see in source code are derived from
+the section structure at load time and are not INI keys.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `parentCollectionIndex` | int | `-1` | Index of primary parent. -1 = root. |
-| `additionalParentNames` | csv | empty | Linked-parent collection names. |
-| `isSubcollection` | bool | derived | Set automatically when parent set. |
+| `additionalParentNames` | csv | empty | Linked secondary parent collection names. |
 
 ### Content / scanning
 
@@ -303,9 +308,10 @@ For the master list see [Configuration Reference](Configuration-Reference.md).
 - Linked-parent rewrites on rename are in
   [src/ui/dialogs/settings/core/settingsdialogtree.cpp](../../src/ui/dialogs/settings/core/settingsdialogtree.cpp).
 - Virtual subfolder collections are synthesized at scan time by
-  `QueryManager`; they have `isSubcollection=true` but no INI section
-  and no UUID. Look for `currentSubfolder` in
-  `collectionutils.h` to follow the runtime-only field that drives them.
-- Playlists are also synthesized as virtual collections (with
-  `isPlaylist=true`); see
+  `QueryManager`; their in-memory `isSubcollection` flag is set but
+  they have no INI section and no UUID. Look for `currentSubfolder`
+  in `collectionutils.h` to follow the runtime-only field that
+  drives them.
+- Playlists are also synthesized as virtual collections (with the
+  in-memory `isPlaylist` flag set); see
   [Playlists & Favorites](Playlists-and-Favorites.md) for the schema.
