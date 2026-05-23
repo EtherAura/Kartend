@@ -66,6 +66,7 @@ struct MenuControllerContext {
   std::function<void()> onReviewMissingMetadata;
   std::function<void()> onArtworkWizard;
   std::function<void()> onShowBindings;
+  std::function<void()> onNewLibraryWizard;
   std::function<void()> onShowFirstRunWizard;
   std::function<void()> onShowScraperCredentials;
   std::function<void()> onRunBatchScrape;
@@ -133,6 +134,7 @@ private:
   QAction *m_reviewMissingMetadataAction = nullptr;
   QAction *m_artworkWizardAction = nullptr;
   QAction *m_bindingVisualizerAction = nullptr;
+  QAction *m_newLibraryWizardAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
   QActionGroup *m_layoutActionGroup = nullptr;
   QActionGroup *m_orientationActionGroup = nullptr;
@@ -199,6 +201,7 @@ private:
   void setupActionReviewMissingMetadata();
   void setupActionArtworkWizard();
   void setupActionBindingVisualizer();
+  void setupActionNewLibraryWizard();
   void setupRecentMenu();
   void setupMostLaunchedMenu();
   void setupLayoutActions();

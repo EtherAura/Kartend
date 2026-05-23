@@ -43,6 +43,7 @@
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "layoutprofilesdialog.h"
+#include "libraryonboardingwizard.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
@@ -476,6 +477,7 @@ void MainWindow::createMenuBar() {
   ctx.onReviewMissingMetadata = [this]() { reviewMissingMetadataInteractive(); };
   ctx.onArtworkWizard = [this]() { artworkWizardInteractive(); };
   ctx.onShowBindings = [this]() { showBindingVisualizer(); };
+  ctx.onNewLibraryWizard = [this]() { runNewLibraryWizard(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1205,6 +1207,28 @@ void MainWindow::showBindingVisualizer() {
   }
   BindingVisualizerDialog dialog(&m_generalSettings, gp, this);
   dialog.exec();
+}
+
+void MainWindow::runNewLibraryWizard() {
+  LibraryOnboardingWizard wizard(this);
+  if (wizard.exec() != QDialog::Accepted) {
+    return;
+  }
+  auto result = wizard.result();
+  if (!result.accepted || result.pickedConfig.mediaDirectory.isEmpty()) {
+    return;
+  }
+  // Same persist-and-navigate sequence the first-run wizard uses:
+  // append → save → rebuild hierarchy → navigate.
+  m_collections.append(result.pickedConfig);
+  if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveCollections(m_collections);
+  }
+  rebuildHierarchyCache();
+  if (m_appManager->getNavigationManager()) {
+    currentCollectionIndex = m_collections.size() - 1;
+    m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
+  }
 }
 
 void MainWindow::setupArtworkManager() {

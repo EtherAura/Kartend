@@ -150,6 +150,7 @@ void MenuController::setupMenuBar() {
   setupActionReviewMissingMetadata();
   setupActionArtworkWizard();
   setupActionBindingVisualizer();
+  setupActionNewLibraryWizard();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -808,6 +809,18 @@ void MenuController::setupActionBindingVisualizer() {
   }
   connect(m_bindingVisualizerAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onShowBindings) m_ctx.onShowBindings();
+  });
+}
+
+void MenuController::setupActionNewLibraryWizard() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_newLibraryWizardAction = new QAction(tr("New Library Wizard..."), this);
+  m_ctx.mainWindow->addAction(m_newLibraryWizardAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_newLibraryWizardAction);
+  }
+  connect(m_newLibraryWizardAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onNewLibraryWizard) m_ctx.onNewLibraryWizard();
   });
 }
 
