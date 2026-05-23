@@ -107,6 +107,14 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     const QString itemName = widget->getItemName();
     QObject::connect(editMetadataAction, &QAction::triggered, this,
                      [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
+    // Preview the launch command without spawning the launcher. Surfaces
+    // resolved paths, archive-extraction behaviour, and any validation
+    // warnings the dry-run picked up.
+    if (m_runLaunchPreviewDialog) {
+      QAction *previewAction = menu.addAction(tr("Preview launch command..."));
+      QObject::connect(previewAction, &QAction::triggered, this,
+                       [this, filePath, itemName]() { previewLaunchCommand(filePath, itemName); });
+    }
 
     // --- Per-item state flag toggles (Pin / Hide / Continue later) ---
     // Read the current flags once so each menu label reflects the
@@ -817,6 +825,60 @@ SmartPlaylistCollectionEntries InteractionManager::collectSmartPlaylistCollectio
     out.append({cfg.name, uuid});
   }
   return out;
+}
+
+void InteractionManager::previewLaunchCommand(const QString &filePath, const QString &itemName) {
+  if (!m_runLaunchPreviewDialog || !m_collections || !m_currentCollectionIndex) {
+    return;
+  }
+  if (!databaseMgr()) {
+    return;
+  }
+  // Resolve the owning collection the same way every other per-item action
+  // does — the displayed collection may not own the file (e.g.
+  // showAllSubcollectionItems mode).
+  int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
+  if (owningIndex < 0) {
+    owningIndex = *m_currentCollectionIndex;
+  }
+  if (!CollectionUtils::isValidIndex(owningIndex, m_collections)) {
+    return;
+  }
+  const CollectionConfig &owning = (*m_collections)[owningIndex];
+
+  // Pick the launcher index the same way launchItem would: per-item
+  // override wins, then default-launcher, then 0. We don't pop the chooser
+  // dialog here — the preview is meant to be a fast read-only surface, so
+  // the user gets to see what would happen with the most likely launcher.
+  // If they want a different one, they can pick via "Always launch with…".
+  int launcherIndex = -1;
+  if (owning.launcher.launcherCount() > 0) {
+    const QString expandedMediaDir =
+        PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+    if (!uuid.isEmpty()) {
+      const auto md = databaseMgr()->loadItemMetadata(uuid, filePath);
+      if (md.launcherIndex >= 0 && md.launcherIndex < owning.launcher.launcherCount()) {
+        launcherIndex = md.launcherIndex;
+      }
+    }
+    if (launcherIndex < 0) {
+      launcherIndex =
+          std::clamp(owning.launcher.defaultLauncherIndex, 0, owning.launcher.launcherCount() - 1);
+    }
+  } else {
+    launcherIndex = 0;
+  }
+
+  const LauncherConfig launcher = LauncherUtils::resolvePreset(
+      owning.launcher.launcherAt(launcherIndex),
+      m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+  const QString launcherName = launcher.name.trimmed().isEmpty()
+                                   ? owning.launcher.launcherDisplayName(launcherIndex)
+                                   : launcher.name.trimmed();
+
+  const auto preview = LaunchManager::previewLaunchCommand(owning, launcher, filePath);
+  m_runLaunchPreviewDialog(itemName, launcherName, filePath, preview);
 }
 
 void InteractionManager::toggleItemPinned(const QString &filePath) {

@@ -56,6 +56,11 @@ public:
   [[nodiscard]] std::optional<EditMetadataPayload>
   runEditMetadataDialog(const QString &itemTitle, const EditMetadataPayload &initial);
 
+  /// Pops a modal LaunchPreviewDialog seeded with the supplied preview.
+  /// Read-only — no user input is round-tripped back to the caller.
+  void runLaunchPreviewDialog(const QString &itemTitle, const QString &launcherName,
+                              const QString &filePath, const LaunchPreview &preview);
+
   /// Runs KartMergeDialog modally and returns the resolution. On reject
   /// the resolution carries MergeChoice::Skip.
   [[nodiscard]] kart::ConflictResolution

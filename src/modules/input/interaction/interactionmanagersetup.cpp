@@ -73,6 +73,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   // headless contexts; the call sites guard before invoking.
   m_runSmartPlaylistDialog = setup.runSmartPlaylistDialog;
   m_runEditMetadataDialog = setup.runEditMetadataDialog;
+  m_runLaunchPreviewDialog = setup.runLaunchPreviewDialog;
 
   // Setup SearchManager with its dependencies
   if (m_searchManager) {

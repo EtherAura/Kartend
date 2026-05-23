@@ -6,6 +6,7 @@
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
 #include "itemmetadata.h"
+#include "launchmanager.h" // LaunchPreview struct
 #include "setuputils.h"
 #include "smartfilter.h"
 #include <functional>
@@ -82,6 +83,13 @@ using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>
 using EditMetadataDialogRunner = std::function<std::optional<EditMetadataPayload>(
     const QString &itemTitle, const EditMetadataPayload &initial)>;
 
+/// Pops the launch-preview / dry-run dialog. Read-only, side-effect-free —
+/// the caller resolves the LaunchPreview ahead of time and hands the
+/// fully-baked struct in, so this closure just renders.
+using LaunchPreviewDialogRunner =
+    std::function<void(const QString &itemTitle, const QString &launcherName,
+                       const QString &filePath, const LaunchPreview &preview)>;
+
 struct InteractionManagerSetup {
   // ctx is the single source of truth for sibling managers. Per Kartend-mxn4
   // the per-manager pointer fields and their fallback getters were removed
@@ -113,6 +121,7 @@ struct InteractionManagerSetup {
   /// from MainWindow setup wiring.
   SmartPlaylistDialogRunner runSmartPlaylistDialog;
   EditMetadataDialogRunner runEditMetadataDialog;
+  LaunchPreviewDialogRunner runLaunchPreviewDialog;
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -206,6 +215,12 @@ public:
   // custom fields). Persists changes via DatabaseManager::saveItemMetadata()
   // and refreshes the sidebar so new fields render immediately.
   void editItemMetadata(const QString &filePath, const QString &itemName);
+
+  // Opens the read-only launch-preview / dry-run dialog. Resolves the
+  // launcher (incl. preset + per-item override), builds the command via
+  // LaunchManager::previewLaunchCommand, and hands the result to the
+  // owner-supplied dialog runner. No external process is spawned.
+  void previewLaunchCommand(const QString &filePath, const QString &itemName);
   // Sets or clears the per-item manual override for a media item
   // Stored in `item_metadata.manual_path`; passing an empty
   // path clears the override and re-enables auto-discovery in the
@@ -434,6 +449,7 @@ private:
   // the dialog header for the symbols.
   SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
   EditMetadataDialogRunner m_runEditMetadataDialog;
+  LaunchPreviewDialogRunner m_runLaunchPreviewDialog;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;

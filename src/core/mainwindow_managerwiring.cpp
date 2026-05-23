@@ -56,6 +56,10 @@ void MainWindow::wireInteractionManager() {
                                        const EditMetadataPayload &initial) {
     return m_dialogController->runEditMetadataDialog(itemTitle, initial);
   };
+  setup.runLaunchPreviewDialog = [this](const QString &itemTitle, const QString &launcherName,
+                                        const QString &filePath, const LaunchPreview &preview) {
+    m_dialogController->runLaunchPreviewDialog(itemTitle, launcherName, filePath, preview);
+  };
 
   loadingLabel = ui->loadingLabel;
 

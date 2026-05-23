@@ -7,6 +7,7 @@
 #include "kartmergedialog.h"
 #include "kartprogressdialog.h"
 #include "launcherchooserdialog.h"
+#include "launchpreviewdialog.h"
 #include "scrapercredentialsdialog.h"
 #include "scraperesultdialog.h"
 #include "settingsdialog.h"
@@ -39,6 +40,14 @@ DialogController::runSmartPlaylistDialog(const QString &initialName,
   out.name = dialog.name();
   out.filter = dialog.filter();
   return out;
+}
+
+void DialogController::runLaunchPreviewDialog(const QString &itemTitle, const QString &launcherName,
+                                              const QString &filePath,
+                                              const LaunchPreview &preview) {
+  LaunchPreviewDialog dialog(m_parent);
+  dialog.setPreview(itemTitle, launcherName, filePath, preview);
+  dialog.exec();
 }
 
 std::optional<EditMetadataPayload>
