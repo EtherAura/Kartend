@@ -18,6 +18,8 @@
 #include "animationmanager.h"
 #include "applicationmanager.h"
 #include "artworkmanager.h"
+#include "bulkedit.h"
+#include "bulkeditdialog.h"
 #include "cachemanager.h"
 #include "collection/themepreset.h"
 #include "collectionhealth.h"
@@ -460,6 +462,7 @@ void MainWindow::createMenuBar() {
   ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
   ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
   ctx.onNavigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
+  ctx.onBulkEdit = [this]() { bulkEditInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -864,6 +867,91 @@ void MainWindow::navigateToItem(const QString &filePath) {
                     });
     db->fetchVisualIndexForPath(context, m_collections, filePath);
   }
+}
+
+void MainWindow::bulkEditInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Bulk edit"),
+                             tr("Open a collection before bulk-editing items."));
+    return;
+  }
+  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) {
+    return;
+  }
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+  if (rows.isEmpty()) {
+    QMessageBox::information(this, tr("Bulk edit"), tr("This collection has no items to edit."));
+    return;
+  }
+
+  BulkEditDialog dialog(this);
+  dialog.setScope(cfg.name, rows.size());
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  const auto choice = dialog.result();
+
+  // Confirmation gate — describes the change in user-readable terms
+  // before persistence. The dialog disables Apply when the input is
+  // invalid (e.g. empty tag), but a final yes/no still surfaces here so
+  // an accidental Enter on the picker isn't destructive.
+  const QString actionDescription =
+      BulkEdit::actionRequiresParameter(choice.action)
+          ? tr("%1 \"%2\"").arg(BulkEdit::actionLabel(choice.action), choice.parameter)
+          : BulkEdit::actionLabel(choice.action);
+  const auto confirmation = QMessageBox::question(
+      this, tr("Bulk edit"),
+      tr("%1 across %2 item(s) in \"%3\"?").arg(actionDescription).arg(rows.size()).arg(cfg.name),
+      QMessageBox::Apply | QMessageBox::Cancel, QMessageBox::Cancel);
+  if (confirmation != QMessageBox::Apply) {
+    return;
+  }
+
+  QStringList paths;
+  paths.reserve(rows.size());
+  for (const IDatabaseManager::ItemPathRow &row : rows) {
+    paths.append(row.path);
+  }
+  const auto loaded = db->loadItemMetadataBatch(uuid, paths);
+
+  QList<ItemMetadataStore::ItemMetadata> batch;
+  batch.reserve(paths.size());
+  for (const QString &path : paths) {
+    auto it = loaded.find(path);
+    ItemMetadataStore::ItemMetadata md =
+        it != loaded.end() ? it.value() : ItemMetadataStore::ItemMetadata{};
+    md.collectionUuid = uuid;
+    md.path = path;
+    batch.append(md);
+  }
+
+  const auto changes = BulkEdit::applyAction(choice.action, choice.parameter, batch);
+  int writes = 0;
+  for (const auto &change : changes) {
+    if (!change.changed) {
+      continue;
+    }
+    if (db->saveItemMetadata(change.metadata)) {
+      ++writes;
+    }
+  }
+
+  // Soft reload so the new state (tags, flags, ratings) surfaces in the
+  // sidebar without a collection switch. The grid rendering isn't
+  // affected by these flags until Kartend-elte ships, but the details
+  // pane already reads them.
+  if (m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  }
+  QMessageBox::information(this, tr("Bulk edit"),
+                           tr("Applied to %1 of %2 item(s).").arg(writes).arg(rows.size()));
 }
 
 void MainWindow::setupArtworkManager() {

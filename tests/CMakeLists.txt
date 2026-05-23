@@ -231,6 +231,23 @@ target_link_libraries(test_collectionhealth
 )
 add_test(NAME CollectionHealth COMMAND test_collectionhealth)
 
+# BulkEdit tests (Kartend-hrff). Pure logic over ItemMetadata, no DB.
+add_executable(test_bulkedit
+  utils/test_bulkedit.cpp
+  ${SRC_DIR}/utils/db/bulkedit.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+)
+target_include_directories(test_bulkedit PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_bulkedit
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME BulkEdit COMMAND test_bulkedit)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.

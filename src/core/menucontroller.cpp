@@ -146,6 +146,7 @@ void MenuController::setupMenuBar() {
   setupActionExportTheme();
   setupActionLayoutProfiles();
   setupActionCollectionHealth();
+  setupActionBulkEdit();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -754,6 +755,18 @@ void MenuController::setupActionCollectionHealth() {
   }
   connect(m_collectionHealthAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onShowCollectionHealth) m_ctx.onShowCollectionHealth();
+  });
+}
+
+void MenuController::setupActionBulkEdit() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_bulkEditAction = new QAction(tr("Bulk Edit Items..."), this);
+  m_ctx.mainWindow->addAction(m_bulkEditAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_bulkEditAction);
+  }
+  connect(m_bulkEditAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onBulkEdit) m_ctx.onBulkEdit();
   });
 }
 

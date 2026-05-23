@@ -409,6 +409,11 @@ private:
   /// (e.g. its row survives from a deleted collection). Driven by the
   /// analytics dialog's double-click handler.
   void navigateToItem(const QString &filePath);
+  /// Opens the bulk-edit dialog scoped to all items in the active
+  /// collection. On confirm, fetches per-item metadata via the batch
+  /// loader, applies the chosen action through BulkEdit::applyAction,
+  /// persists every row that actually changed, and refreshes the view.
+  void bulkEditInteractive();
 };
 
 #endif
