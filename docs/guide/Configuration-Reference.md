@@ -341,7 +341,7 @@ secondary linked parents:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `additionalParents` | csv | empty | Linked secondary parents — see [Collections → Linked Parents](Collections.md#linked-parents). |
+| `additionalParents` | array | empty | Linked secondary parents — persisted as a QSettings array (`additionalParents\1\name=…`). See [Collections → Linked Parents](Collections.md#linked-parents). |
 
 ### Launcher
 

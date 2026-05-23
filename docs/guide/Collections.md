@@ -52,9 +52,10 @@ The Settings Dialog's left-hand tree is the control surface.
   tabs. New collections are created at root by default; drag them into a
   parent or set the **Parent Collection** field afterward.
 - **Rename** — double-click the name field on the **Basic** tab, or use
-  the tree's right-click → **Rename**. Renaming updates `name`, INI
-  section header, and any `additionalParentNames` references in
-  collections that use this one as an alias parent.
+  the tree's right-click → **Rename**. Renaming updates `name`, the INI
+  section header, and any linked-parent references in the
+  `additionalParents` array of collections that use this one as an
+  alias parent.
 - **Duplicate** — right-click → **Duplicate**. Opens the Duplicate
   Collection dialog: choose the new name and the parent (sibling /
   child / root). All non-path settings (appearance, launcher config,
@@ -126,13 +127,22 @@ Use it for cross-cutting groupings:
 ```ini
 [Video > Concert Recordings]
 mediaDirectory=~/Videos/Concerts
-additionalParentNames=Audio      ; also appears under "Audio"
+additionalParents\1\name=Audio   ; also appears under "Audio"
+additionalParents\size=1
 launcherPath=/usr/bin/mpv
 ```
 
 > **Where to find this** — Settings Dialog → **Basic** tab → **Linked
-> Parents** (multi-select picker). INI key:
-> `additionalParentNames=Comma,Separated,Names`.
+> Parents** (multi-select picker). Persisted as a QSettings array under
+> the `additionalParents` key — each entry has a `\<n>\name` subkey
+> plus a `\size` count:
+> ```
+> additionalParents\1\name=Audio
+> additionalParents\2\name=Soundtracks
+> additionalParents\size=2
+> ```
+> The dialog is the easier place to edit this — the on-disk form is
+> shown here only so hand-editors recognize it.
 
 Renaming a parent collection automatically rewrites every linked
 reference; deleting one removes the reference from any aliases.
@@ -264,7 +274,7 @@ the section structure at load time and are not INI keys.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `additionalParentNames` | csv | empty | Linked secondary parent collection names. |
+| `additionalParents` | array | empty | Linked secondary parent collection names. Persisted as a QSettings array (`additionalParents\1\name=…`). |
 
 ### Content / scanning
 
