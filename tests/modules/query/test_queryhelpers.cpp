@@ -1,6 +1,7 @@
 #include <QTest>
 
 #include "queryhelpers.h"
+#include "searchqueryparser.h"
 
 class TestQueryHelpers : public QObject {
   Q_OBJECT
@@ -47,6 +48,17 @@ private slots:
   void placeholderList_negative_returnsEmpty();
   void placeholderList_one_returnsSingleQuestionMark();
   void placeholderList_three_returnsCommaSeparated();
+
+  // buildSearchTokenClauses
+  void tokenClauses_emptyQuery_returnsEmpty();
+  void tokenClauses_playedTrue_appendsPlayCountClause();
+  void tokenClauses_playedFalse_handlesNullPlayCount();
+  void tokenClauses_missingArtwork_buildsNullOrEmptyClause();
+  void tokenClauses_hasArtwork_buildsNonNullClause();
+  void tokenClauses_tag_buildsCorrelatedExistsAndBindsQuotedSubstring();
+  void tokenClauses_multipleTags_andTogether();
+  void tokenClauses_favoriteTrue_joinsReservedPlaylist();
+  void tokenClauses_aliasPrefix_qualifiesItemColumns();
 };
 
 void TestQueryHelpers::fts_emptyInput_returnsEmpty() {
@@ -54,31 +66,26 @@ void TestQueryHelpers::fts_emptyInput_returnsEmpty() {
 }
 
 void TestQueryHelpers::fts_whitespaceOnly_returnsEmpty() {
-  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("   \t  ")),
-           QString());
+  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("   \t  ")), QString());
 }
 
 void TestQueryHelpers::fts_punctuationOnly_returnsEmpty() {
-  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("!!!---@@@")),
-           QString());
+  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("!!!---@@@")), QString());
 }
 
 void TestQueryHelpers::fts_singleTerm_appendsStar() {
-  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("zelda")),
-           QStringLiteral("zelda*"));
+  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("zelda")), QStringLiteral("zelda*"));
 }
 
 void TestQueryHelpers::fts_multipleTerms_joinedWithAnd() {
-  QCOMPARE(
-      QueryHelpers::buildFtsPrefixQuery(QStringLiteral("super mario world")),
-      QStringLiteral("super* AND mario* AND world*"));
+  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("super mario world")),
+           QStringLiteral("super* AND mario* AND world*"));
 }
 
 void TestQueryHelpers::fts_punctuationCollapsed() {
   // Apostrophes, hyphens, periods → spaces between tokens
-  QCOMPARE(
-      QueryHelpers::buildFtsPrefixQuery(QStringLiteral("super-mario.bros")),
-      QStringLiteral("super* AND mario* AND bros*"));
+  QCOMPARE(QueryHelpers::buildFtsPrefixQuery(QStringLiteral("super-mario.bros")),
+           QStringLiteral("super* AND mario* AND bros*"));
 }
 
 void TestQueryHelpers::fts_unicodeRetained() {
@@ -100,8 +107,7 @@ void TestQueryHelpers::display_underscoresReplaced() {
 
 void TestQueryHelpers::display_collapsedWhitespace() {
   // simplified() trims and collapses; underscores → spaces first.
-  QCOMPARE(QueryHelpers::displayNameForBase(QStringLiteral("a__b___c")),
-           QStringLiteral("a b c"));
+  QCOMPARE(QueryHelpers::displayNameForBase(QStringLiteral("a__b___c")), QStringLiteral("a b c"));
 }
 
 void TestQueryHelpers::display_emptyInput_returnsEmpty() {
@@ -122,8 +128,7 @@ void TestQueryHelpers::priority_bracketed_returns0() {
 }
 
 void TestQueryHelpers::priority_paren_returns0() {
-  QCOMPARE(QueryHelpers::characterSortPriority(QStringLiteral("(USA) game")),
-           0);
+  QCOMPARE(QueryHelpers::characterSortPriority(QStringLiteral("(USA) game")), 0);
 }
 
 void TestQueryHelpers::priority_apostrophePrefixDigit_returns2() {
@@ -217,6 +222,87 @@ void TestQueryHelpers::placeholderList_one_returnsSingleQuestionMark() {
 
 void TestQueryHelpers::placeholderList_three_returnsCommaSeparated() {
   QCOMPARE(QueryHelpers::placeholderList(3), QStringLiteral("?, ?, ?"));
+}
+
+void TestQueryHelpers::tokenClauses_emptyQuery_returnsEmpty() {
+  SearchQueryParser::SearchQuery q;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QVERIFY(out.sql.isEmpty());
+  QVERIFY(out.binds.isEmpty());
+}
+
+void TestQueryHelpers::tokenClauses_playedTrue_appendsPlayCountClause() {
+  SearchQueryParser::SearchQuery q;
+  q.played = SearchQueryParser::TriState::True;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QCOMPARE(out.sql, QStringLiteral(" AND play_count > 0"));
+  QVERIFY(out.binds.isEmpty());
+}
+
+void TestQueryHelpers::tokenClauses_playedFalse_handlesNullPlayCount() {
+  // Newly-scanned items have play_count NULL (until the first launch
+  // updates it). Without the NULL branch, `play_count = 0` would skip them.
+  SearchQueryParser::SearchQuery q;
+  q.played = SearchQueryParser::TriState::False;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QCOMPARE(out.sql, QStringLiteral(" AND (play_count IS NULL OR play_count = 0)"));
+  QVERIFY(out.binds.isEmpty());
+}
+
+void TestQueryHelpers::tokenClauses_missingArtwork_buildsNullOrEmptyClause() {
+  SearchQueryParser::SearchQuery q;
+  q.missingArtwork = SearchQueryParser::TriState::True;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QCOMPARE(out.sql, QStringLiteral(" AND (artwork_path IS NULL OR artwork_path = '')"));
+}
+
+void TestQueryHelpers::tokenClauses_hasArtwork_buildsNonNullClause() {
+  SearchQueryParser::SearchQuery q;
+  q.missingArtwork = SearchQueryParser::TriState::False;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QCOMPARE(out.sql, QStringLiteral(" AND artwork_path IS NOT NULL AND artwork_path != ''"));
+}
+
+void TestQueryHelpers::tokenClauses_tag_buildsCorrelatedExistsAndBindsQuotedSubstring() {
+  // Tag bind is `%"jazz"%` (lowercased, surrounded by escaped JSON quotes)
+  // so it matches the storage shape produced by serializeTags without
+  // matching a tag named "jazzy" by accident.
+  SearchQueryParser::SearchQuery q;
+  q.requiredTags << "Jazz";
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QVERIFY(out.sql.contains(QStringLiteral("EXISTS (SELECT 1 FROM item_metadata m")));
+  QVERIFY(out.sql.contains(QStringLiteral("LOWER(m.tags) LIKE ?")));
+  QCOMPARE(out.binds.size(), 1);
+  QCOMPARE(out.binds.first().toString(), QStringLiteral("%\"jazz\"%"));
+}
+
+void TestQueryHelpers::tokenClauses_multipleTags_andTogether() {
+  // Each tag adds its own EXISTS subquery — typing `tag:rock tag:live`
+  // returns items tagged with BOTH (AND), not EITHER.
+  SearchQueryParser::SearchQuery q;
+  q.requiredTags << "rock" << "live";
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QCOMPARE(out.sql.count(QStringLiteral("EXISTS (SELECT 1 FROM item_metadata")), 2);
+  QCOMPARE(out.binds.size(), 2);
+}
+
+void TestQueryHelpers::tokenClauses_favoriteTrue_joinsReservedPlaylist() {
+  SearchQueryParser::SearchQuery q;
+  q.favorite = SearchQueryParser::TriState::True;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QString());
+  QVERIFY(out.sql.contains(QStringLiteral("playlist_items pi")));
+  QVERIFY(out.sql.contains(QStringLiteral("pl.reserved_kind = 'favorites'")));
+  // No binds — the reserved-kind literal is embedded in the SQL.
+  QVERIFY(out.binds.isEmpty());
+}
+
+void TestQueryHelpers::tokenClauses_aliasPrefix_qualifiesItemColumns() {
+  // Cache builder calls with alias "i" when its SELECT joins items i;
+  // the helper must respect the alias so play_count etc. don't collide.
+  SearchQueryParser::SearchQuery q;
+  q.played = SearchQueryParser::TriState::True;
+  const auto out = QueryHelpers::buildSearchTokenClauses(q, QStringLiteral("i"));
+  QCOMPARE(out.sql, QStringLiteral(" AND i.play_count > 0"));
 }
 
 QTEST_APPLESS_MAIN(TestQueryHelpers)

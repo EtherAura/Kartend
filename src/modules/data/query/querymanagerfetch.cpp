@@ -22,6 +22,7 @@
 #include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
+#include "searchqueryparser.h"
 #include "uiconstants/database.h"
 
 using ErrorUtils::ErrorCode;
@@ -32,6 +33,8 @@ using QueryManagerInternal::displayNameForBase;
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
 
+using QueryHelpers::buildSearchTokenClauses;
+using QueryHelpers::SearchTokenClauses;
 using QueryManagerInternal::buildFtsPrefixQuery;
 
 int QueryManager::fetchItemCountImpl(const CollectionContext &context,
@@ -78,6 +81,18 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     return 0;
   }
   const QString trimmedFilter = filter.trimmed();
+  // Parse out structured tokens (played:, tag:, missing:artwork, favorite:)
+  // so the FTS / LIKE portion only sees the free-text remainder. Unknown
+  // tokens are stripped from the free text too — they go into
+  // parsedQuery.unknownTokens for the caller (SearchManager) to surface as
+  // a non-disruptive log warning.
+  const SearchQueryParser::SearchQuery parsedQuery = SearchQueryParser::parse(trimmedFilter);
+  const QString freeText = parsedQuery.freeText.trimmed();
+  const SearchTokenClauses tokenClauses = buildSearchTokenClauses(parsedQuery, QStringLiteral(""));
+  if (!parsedQuery.unknownTokens.isEmpty()) {
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: unknown search tokens (ignored):"
+                          << parsedQuery.unknownTokens;
+  }
 
   // refresh the playlist scope temp table when it's stale so the
   // EXISTS clause appended below filters against the right (uuid, path) set.
@@ -106,8 +121,8 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     m_itemsFtsReady = isItemsFtsReadyFromDb();
     qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: FTS ready =" << m_itemsFtsReady;
   }
-  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-                               ? buildFtsPrefixQuery(trimmedFilter)
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !freeText.isEmpty())
+                               ? buildFtsPrefixQuery(freeText)
                                : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
@@ -160,22 +175,29 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     // In a subfolder - show only items whose rel_path starts with subfolder/
     sql += " AND COALESCE(rel_path, path) LIKE ?";
   } else if (ctx.config.folderBrowsing.includeContentSubfolders &&
-             !ctx.config.folderBrowsing.showAllSubfolderItems && trimmedFilter.isEmpty()) {
+             !ctx.config.folderBrowsing.showAllSubfolderItems && freeText.isEmpty() &&
+             tokenClauses.sql.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //
-    // When a search filter is active, include subfolder items so search can
-    // find matches even in \"virtual folders only\" collections.
+    // When a search filter (free text OR structured tokens) is active,
+    // include subfolder items so search can find matches even in
+    // "virtual folders only" collections.
     sql += " AND COALESCE(rel_path, path) NOT LIKE '%/%'";
   }
   // If showAllSubfolderItems is true, we don't filter - all items are shown
   // mixed together
 
-  if (!trimmedFilter.isEmpty()) {
+  if (!freeText.isEmpty()) {
     if (!useFts) {
       sql += " AND name LIKE ?";
     }
   }
+
+  // Append parsed structured-token clauses (played / tag / missing:artwork
+  // / favorite). Each is its own AND/EXISTS fragment built by the helper so
+  // adding a token never reshapes the surrounding SQL.
+  sql += tokenClauses.sql;
 
   // narrow to playlist members. Composing this as an EXISTS
   // clause keeps it orthogonal to the existing filter / FTS / temp-table
@@ -202,8 +224,11 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
   if (!subfolder.isEmpty()) {
     query.bindValue(bindPos++, subfolder + "/%");
   }
-  if (!trimmedFilter.isEmpty() && !useFts) {
-    query.bindValue(bindPos++, "%" + trimmedFilter + "%");
+  if (!freeText.isEmpty() && !useFts) {
+    query.bindValue(bindPos++, "%" + freeText + "%");
+  }
+  for (const QVariant &v : tokenClauses.binds) {
+    query.bindValue(bindPos++, v);
   }
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: executing SQL, useFts=" << useFts

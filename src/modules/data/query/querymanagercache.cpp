@@ -21,8 +21,10 @@
 #include <random>
 
 #include "errorutils.h"
+#include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
+#include "searchqueryparser.h"
 #include "smartfilter.h"
 #include "smartplaylistevaluator.h"
 
@@ -306,6 +308,12 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   // Build the sorted result set once and insert with position numbers
   // This is the expensive operation, but we only do it once per collection load
   const QString trimmedFilter = filter.trimmed();
+  // Parse out structured tokens so the cache builder applies the same
+  // filter shape as fetchItemCount + fetchItemsRange. Cache invalidation
+  // continues to key on raw `trimmedFilter` (computeSortCacheHash) so a
+  // change in token expression rebuilds the cache.
+  const SearchQueryParser::SearchQuery parsedQuery = SearchQueryParser::parse(trimmedFilter);
+  const QString freeText = parsedQuery.freeText.trimmed();
 
   bool useTempTable = uuids.size() > MAX_UUIDS_FOR_IN_CLAUSE;
   if (useTempTable && !ensureQueryUuidsPopulated(uuids)) {
@@ -325,14 +333,21 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   // slow-path fetchItemsRange. Mixing FTS-prefix counting with LIKE-substring
   // cache building leaves a count > cache-size mismatch, surfacing as blank
   // placeholder tiles at the tail of the result grid.
-  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-                               ? buildFtsPrefixQuery(trimmedFilter)
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !freeText.isEmpty())
+                               ? buildFtsPrefixQuery(freeText)
                                : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
+  // Token clauses use the aliased "i." prefix when the SELECT joins items
+  // (date/size/collection sort modes) and bare column names otherwise.
+  const QString tokenItemsAlias =
+      (needsCollectionJoin || needsItemsTable) ? QStringLiteral("i") : QString();
+  const QueryHelpers::SearchTokenClauses tokenClauses =
+      QueryHelpers::buildSearchTokenClauses(parsedQuery, tokenItemsAlias);
+
   QString sql;
   QString filterClause;
-  if (!trimmedFilter.isEmpty() && !useFts) {
+  if (!freeText.isEmpty() && !useFts) {
     filterClause =
         (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
@@ -395,6 +410,11 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     }
   }
 
+  // Append parsed token clauses (played / tag / missing:artwork / favorite)
+  // before the ORDER BY so the cached result set matches what
+  // fetchItemCount/fetchItemsRange would produce for the same input.
+  sql += tokenClauses.sql;
+
   // Apply sort order based on sortMode. No GROUP BY anymore, so reference
   // the per-row columns directly instead of MIN/MAX aggregates.
   //
@@ -447,8 +467,11 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
       selectQuery.bindValue(bindPos++, uuid);
     }
   }
-  if (!trimmedFilter.isEmpty() && !useFts) {
-    selectQuery.bindValue(bindPos++, "%" + trimmedFilter + "%");
+  if (!freeText.isEmpty() && !useFts) {
+    selectQuery.bindValue(bindPos++, "%" + freeText + "%");
+  }
+  for (const QVariant &v : tokenClauses.binds) {
+    selectQuery.bindValue(bindPos++, v);
   }
 
   if (!selectQuery.exec()) {

@@ -22,6 +22,7 @@
 #include "pathutils.h"
 #include "queryhelpers.h"
 #include "querymanagerhelpers.h"
+#include "searchqueryparser.h"
 #include "uiconstants/database.h"
 
 using ErrorUtils::ErrorCode;
@@ -90,6 +91,18 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   }
 
   const QString trimmedFilter = filter.trimmed();
+  // Parse structured tokens out of the search bar input. The free-text
+  // portion drives the existing FTS/LIKE path; the token clauses get
+  // appended to the WHERE chain below. Mirrors the symmetric
+  // fetchItemCountImpl call so totals + ranges stay in sync.
+  const SearchQueryParser::SearchQuery parsedQuery = SearchQueryParser::parse(trimmedFilter);
+  const QString freeText = parsedQuery.freeText.trimmed();
+  const QueryHelpers::SearchTokenClauses tokenClauses =
+      QueryHelpers::buildSearchTokenClauses(parsedQuery, QStringLiteral(""));
+  if (!parsedQuery.unknownTokens.isEmpty()) {
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: unknown search tokens (ignored):"
+                          << parsedQuery.unknownTokens;
+  }
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex=" << context.currentIndex
                         << "offset=" << offset << "limit=" << limit << "filter='" << trimmedFilter
@@ -249,8 +262,8 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   if (m_itemsFtsAvailable && !m_itemsFtsReady) {
     m_itemsFtsReady = isItemsFtsReadyFromDb();
   }
-  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-                               ? buildFtsPrefixQuery(trimmedFilter)
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !freeText.isEmpty())
+                               ? buildFtsPrefixQuery(freeText)
                                : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
@@ -315,22 +328,28 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     // In a subfolder - show only items whose rel_path starts with subfolder/
     sql += " AND COALESCE(rel_path, path) LIKE ?";
   } else if (ctx.config.folderBrowsing.includeContentSubfolders &&
-             !ctx.config.folderBrowsing.showAllSubfolderItems && trimmedFilter.isEmpty()) {
+             !ctx.config.folderBrowsing.showAllSubfolderItems && freeText.isEmpty() &&
+             tokenClauses.sql.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //
-    // When a search filter is active, include subfolder items so search can
-    // find matches even in "virtual folders only" collections.
+    // When a search filter (free text OR structured tokens) is active,
+    // include subfolder items so search can find matches even in
+    // "virtual folders only" collections.
     sql += " AND COALESCE(rel_path, path) NOT LIKE '%/%'";
   }
   // If showAllSubfolderItems is true, we don't filter - all items are shown
   // mixed together
 
-  if (!trimmedFilter.isEmpty()) {
+  if (!freeText.isEmpty()) {
     if (!useFts) {
       sql += " AND name LIKE ?";
     }
   }
+
+  // Append parsed structured-token clauses — same helper as fetchItemCount
+  // so totals stay in sync with the rendered tile range.
+  sql += tokenClauses.sql;
 
   // same playlist EXISTS clause as fetchItemCountImpl.
   if (isPlaylist) {
@@ -377,8 +396,11 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   if (!subfolder.isEmpty()) {
     query.bindValue(bindPos++, subfolder + "/%");
   }
-  if (!trimmedFilter.isEmpty() && !useFts) {
-    query.bindValue(bindPos++, "%" + trimmedFilter + "%");
+  if (!freeText.isEmpty() && !useFts) {
+    query.bindValue(bindPos++, "%" + freeText + "%");
+  }
+  for (const QVariant &v : tokenClauses.binds) {
+    query.bindValue(bindPos++, v);
   }
   query.bindValue(bindPos++, limit);
   query.bindValue(bindPos++, offset);

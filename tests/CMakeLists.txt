@@ -187,6 +187,17 @@ target_link_libraries(test_extensionutils
 )
 add_test(NAME ExtensionUtils COMMAND test_extensionutils)
 
+# SearchQueryParser tests (Kartend-9qv2). Pure string -> struct, no DB.
+add_executable(test_searchqueryparser
+  utils/test_searchqueryparser.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
+)
+target_link_libraries(test_searchqueryparser
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.
@@ -396,6 +407,7 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -448,6 +460,7 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -502,6 +515,7 @@ add_executable(test_querymanager_abspath
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -555,6 +569,7 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -605,6 +620,7 @@ add_executable(test_querymanager_shell_collection_sort
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -665,6 +681,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
@@ -1164,6 +1181,7 @@ add_executable(test_batchscraperunner_integration
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
@@ -2001,6 +2019,7 @@ add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 add_executable(test_queryhelpers
   modules/query/test_queryhelpers.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
 )
 target_include_directories(test_queryhelpers PRIVATE
   ${SRC_DIR}/modules/data/query
