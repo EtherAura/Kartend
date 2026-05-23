@@ -8,6 +8,10 @@ The configuration file lives at `~/.config/kartend/kartend.cfg` (see
 [File Locations](File-Locations.md)). Format is standard INI:
 
 - `[General]` — global settings.
+- `[Launchers]` — global launcher-preset registry (QSettings array).
+- `[Scrapers]` — per-provider credential blobs (see
+  [Keychain](Keychain.md)).
+- `[ScraperOptions]` — global scraper performance and behavior options.
 - `[Collection Name]` — one section per top-level collection.
 - `[Parent > Child]` — subcollections, where `> ` (with space) is the
   literal hierarchy separator.
@@ -49,15 +53,18 @@ Settings Dialog are saved immediately.
 | `wrapNavigation` | bool | `false` | Wrap selection at grid edges. |
 | `selectItemOnHover` | bool | `false` | Auto-select when the pointer enters a tile. |
 | `startupCollection` | string | empty | Open this collection on launch. Empty = first root collection. |
-| `useHomeView` | bool | `false` | Open a synthetic Home view at startup that shows one tile per root collection. Takes effect when `startupCollection` is empty. `Back` from any root-level collection returns here. See [Shell Collections](Shell-Collections.md#nesting-shells). |
+| `useHomeView` | bool | `false` | Open a synthetic Home view at startup that shows one tile per root collection. Takes priority over `startupCollection` when both are set. `Back` from any root-level collection returns here. See [Shell Collections](Shell-Collections.md#nesting-shells). |
+| `homeViewLabel` | string | empty | Override the Home view's title and toolbar-button label. Empty = localized **Home**. |
+| `homeViewIcon` | path | empty | Absolute path to a custom Home toolbar-button icon. Empty = themed icon. |
 
 ### Performance & caching
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `pixmapCacheSizeMB` | int | `50` | Qt pixmap cache budget. |
+| `pixmapCacheSizeMB` | int | `50` | Qt pixmap cache budget (10–500). |
 | `scrollAnimationDurationMs` | int | `1500` | Scroll ease duration. |
 | `scrollVelocityMultiplier` | float | `1.0` | Global scroll speed multiplier (0.25–5.0). |
+| `videoThumbnailExtractionTimeoutMs` | int | `4000` | Hard cap per video-thumbnail extraction in ms (1000–30000). After this window a null pixmap is cached so the queue advances. |
 
 ### Keyboard repeat
 
@@ -90,6 +97,7 @@ key-capture widget so you don't need to look these up.
 | `keyJumpFirst` | `Qt::Key_Home` | Jump to first item. |
 | `keyJumpLast` | `Qt::Key_End` | Jump to last item. |
 | `keyItemDetails` | `Qt::Key_I` | Open the full-screen detail page. |
+| `keyHomeView` | `0` (unbound) | Jump directly to the Home view from any nesting depth. Only honored when `useHomeView` is enabled. Default unbound so upgrading installs don't pick up a surprise shortcut. |
 
 See [Input & Controls](Input-and-Controls.md#keyboard) for the user-
 facing names and rebinding workflow.
@@ -183,7 +191,11 @@ visibility keys default to `true`; text overrides default to empty
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `bootSplashEnabled` | bool | `true` | Show splash overlay on launch. |
+| `bootSplashTitle` | string | empty | Override the boot-splash title. Empty = app display name. Used verbatim — no `%1` substitution. |
+| `bootSplashSubtitle` | string | empty | Override the boot-splash subtitle. Empty = built-in default. |
 | `resumeFocusSplashEnabled` | bool | `true` | Show splash when window regains focus after a launched item exits. |
+| `resumeFocusSplashTitle` | string | empty | Override the resume-focus splash title. Empty = localized **Welcome back**. |
+| `resumeFocusSplashSubtitle` | string | empty | Override the resume-focus splash subtitle. Empty = built-in default. |
 | `startupVideoEnabled` | bool | `false` | Play an intro video on launch. |
 | `startupVideoPath` | path | empty | Path to startup video. |
 
@@ -200,6 +212,31 @@ visibility keys default to `true`; text overrides default to empty
 | `runtimeDetectionEnabled` | bool | `false` | Track when launched items run; show **Now Playing** overlay. See [Splash & Now Playing](Splash-and-Now-Playing.md). |
 | `historyEnabled` | bool | `true` | Record launch history. |
 | `historyMaxEntries` | int | `500` | Soft cap on history rows. `≤ 0` = unlimited. |
+
+### Marquee / secondary display
+
+For dual-monitor setups (typically arcade-cabinet toppers). The marquee
+window is frameless, always-on-top, and ignores input focus. If the
+named `QScreen` disappears between sessions, the window falls back to
+the primary screen and logs a warning.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `marqueeEnabled` | bool | `false` | Master toggle for the secondary marquee window. |
+| `marqueeScreenName` | string | empty | `QScreen::name()` of the target screen (e.g. `HDMI-A-1`). Empty = primary screen. |
+| `marqueeMode` | enum | `0` | `0` = selected item's artwork; `1` = current collection's icon. |
+
+### RetroArch integration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `retroarchConfigPath` | path | empty | Override pointing at a RetroArch install so the Core picker can list installed libretro cores. Accepts a `retroarch.cfg` file or a core directory. Empty = probe standard per-OS locations. |
+
+### First-run wizard
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `firstRunComplete` | bool | `false` | Auto-set after the wizard completes or is skipped. Re-running it from **Help → Setup Wizard…** does *not* flip this back; the auto-launch is permanently off once set. |
 
 ### Attract mode
 
@@ -224,6 +261,51 @@ visibility keys default to `true`; text overrides default to empty
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `lastSelectedItems` | hash | empty | Auto-managed map of collection → last selected item index. |
+
+## `[Scrapers]` — credential storage
+
+Per-provider credentials, one INI key per field. Keys take the form
+`<providerId>/<fieldName>=<value>`, e.g.:
+
+```ini
+[Scrapers]
+tmdb/api_token=…
+screenscraper/dev_id=…
+screenscraper/user_password=@keychain
+```
+
+The `@keychain` sentinel means the real value is stored in the OS
+keychain (QtKeychain build) rather than in plaintext. See
+[Keychain](Keychain.md) for the storage model, fallback behavior, and
+per-platform install notes.
+
+## `[ScraperOptions]` — global scraper performance & behavior
+
+Speed/quality preset, per-asset concurrency, throttling, and re-scrape
+policy. Lives in a sibling INI group rather than under `[Scrapers]`
+so the credentials walker doesn't trip on these keys. Tied to a UI
+preset combo in **Settings → Scrapers** (Fastest / Balanced / Best
+Quality / Custom); switching to Custom unlocks the numeric fields.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `preset` | enum | `1` Balanced | `0` Fastest / `1` Balanced / `2` Best Quality / `3` Custom. |
+| `mediaConcurrency` | int | `2` | Parallel downloads per item (1–16). With HTTP/2 enabled, healthy networks can bump this up. |
+| `mediaMaxDimension` | int | `1024` | Max image pixel dimension (0–8192; 0 = full resolution). |
+| `mediaThrottleMs` | int | `100` | Delay between requests in ms (0–5000). |
+| `batchItemConcurrency` | int | `4` | Items scraped in parallel during a batch (1–16). Total in-flight requests = `batchItemConcurrency × mediaConcurrency` — keep the product sane. `1` = strictly serial. |
+| `rescrapeMode` | enum | `1` FillMissing | `0` Overwrite (always replace) / `1` FillMissing (only download what's missing) / `2` UpdateChanged (compare bytes, write if different — slowest) / `3` Skip (skip items already in DB). |
+| `skipRecentScrapeDays` | int | `30` | Refresh window in days used by FillMissing and Skip (0–365). `0` = no time gate (legacy behavior); `N` = re-scrape items last covered more than N days ago. Overwrite and UpdateChanged ignore this. |
+| `preferJpgOutput` | bool | `false` | Ask ScreenScraper to re-encode assets as JPGs. Only sensible on Fastest where bandwidth dominates fidelity. |
+| `scrapeAutoResume` | bool | `false` | Silently resume an interrupted batch on next launch instead of showing the Resume / Discard prompt. Off by default so first-time users see the prompt and learn the recovery path. |
+| `scrapeLogging` | bool | `false` | Raise the `kartend.scrape*` logging categories to debug+info and tee output to a size-capped `scrape.log` in the config directory. The only way to capture scrape diagnostics from a GUI build. |
+| `preferredRegion` | string | `us` | Fallback ScreenScraper region (`us` / `eu` / `jp` / `wor` / …). Items still honor their own matched-ROM region first; this only backstops items with no region entry. |
+
+## `[Launchers]` — global launcher-preset registry
+
+QSettings array of reusable launcher configs (id / name / path / core /
+parameters). Managed from **Settings → Launchers**, referenced from
+per-collection `additionalLaunchers` entries by `presetId`.
 
 ## `[<Collection Name>]` — per-collection settings
 
@@ -250,7 +332,7 @@ display name; renaming a collection rewrites the section header.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `parentCollectionIndex` | int | `-1` | Index of primary parent. -1 = root. |
-| `additionalParentNames` | csv | empty | Linked-parent names. See [Collections → Linked Parents](Collections.md#linked-parents). |
+| `additionalParents` | csv | empty | Linked-parent names. See [Collections → Linked Parents](Collections.md#linked-parents). |
 | `isSubcollection` | bool | derived | Auto-set from parent. |
 
 ### Launcher
@@ -265,6 +347,19 @@ See [Launchers](Launchers.md) for the complete model.
 | `launchParameters` | string | empty | Extra arguments passed before the file path. |
 | `additionalLaunchers` | serialized | empty | Secondary launchers (id / name / path / core / params / presetId). |
 | `defaultLauncherIndex` | int | `0` | Default selection index (0 = primary). |
+
+### Scraper overrides
+
+Pinning a scraper for this collection, overriding ScreenScraper's
+system id, and pointing at DAT files for offline ROM ID all live
+here. See [Scraper](Scraper.md) for the workflow side.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `screenscraperSystemId` | int | `-1` | ScreenScraper.fr `systemeid` override. `-1` = unset (provider autodetects). |
+| `screenscraperHashArchive` | bool | `true` | When the scraped item is an archive (`.zip` / `.7z`), extract and hash the inner file rather than the outer archive bytes. |
+| `datFilePaths` | array | empty | List of DAT-file paths (No-Intro / Redump / TOSEC Logiqx, or MAME listxml) used for offline ROM ID. Walked in order — first hash hit wins. Persisted as a QSettings array (`datFilePaths\1\path=…`). |
+| `datFilePath` | path | empty | **Legacy single-path key**, retained for reading old configs. New writes go to `datFilePaths`. |
 
 ### Content / scanning
 
@@ -445,14 +540,26 @@ hideMissingArtwork=true
 
 ## For developers
 
-- The two structs are `GeneralSettings` and `CollectionConfig` in
-  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
+- The two top-level structs are `GeneralSettings` and `CollectionConfig`.
+  Each lives in its own leaf header under
+  [src/utils/app/collection/](../../src/utils/app/collection/);
+  [collectionutils.h](../../src/utils/app/collectionutils.h) is an
+  umbrella that re-includes them.
+- Per-collection leaf clusters peeled out of the umbrella include
+  `ArchiveOptions`, `CollectionBackground`, `CollectionFilterPreferences`,
+  `FolderBrowsingOptions`, `GridLayoutPreferences`, `LauncherConfig` /
+  `LauncherProfile`, `LauncherPreset`, `ListViewOptions`, `ScraperOverrides`,
+  `SidebarAppearance`.
+- All INI key strings are constants in
+  [src/utils/app/settingskeys.h](../../src/utils/app/settingskeys.h) —
+  changing a value there is a wire-format break, renaming the C++
+  identifier is a refactor.
 - INI read/write happens in
   [src/modules/data/settings/settingsmanager*.cpp](../../src/modules/data/settings/);
   validation is in
   [src/utils/fs/configvalidation.cpp](../../src/utils/fs/configvalidation.cpp).
-- Adding a new key: extend the struct, add load/save in
-  `settingsmanager`, add UI in
+- Adding a new key: extend the struct (or the right leaf header), add
+  load/save in `settingsmanager`, add UI in
   [src/ui/dialogs/settings/](../../src/ui/dialogs/settings/), update
   `applysettingsdialog` if the key should be propagatable, and add a
   row to this page.
