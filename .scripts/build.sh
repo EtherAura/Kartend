@@ -805,13 +805,35 @@ do_cppcheck() {
     echo "skipped: cppcheck not installed"; return 0
   fi
 }
+# Resolve a clang-format binary that matches CI's v19 pin. Ubuntu 24.04 ships
+# v18 and current Arch ships v21; both format differently enough from v19 to
+# produce false-positive drift on commits that pass CI. Returns the resolved
+# path/name on stdout, or empty (rc != 0) if no v19 candidate was found. Kept
+# in sync with .scripts/git-hooks/pre-commit's copy of the same resolver.
+resolve_clang_format_19() {
+  if command -v clang-format-19 >/dev/null 2>&1; then
+    printf 'clang-format-19\n'; return 0
+  fi
+  if [ -x /usr/lib/llvm/19/bin/clang-format ]; then
+    printf '/usr/lib/llvm/19/bin/clang-format\n'; return 0
+  fi
+  if [ -x /usr/local/bin/clang-format ]; then
+    printf '/usr/local/bin/clang-format\n'; return 0
+  fi
+  if command -v clang-format >/dev/null 2>&1 \
+     && clang-format --version 2>/dev/null | grep -qE 'version 19\.'; then
+    printf 'clang-format\n'; return 0
+  fi
+  return 1
+}
 do_clang_format() {
   local srcdir="$1"
-  if command -v clang-format >/dev/null 2>&1; then
+  local cf
+  if cf=$(resolve_clang_format_19); then
     # Check formatting without applying changes, report issues but don't fail
     local issues=0
     while IFS= read -r -d '' file; do
-      if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+      if ! "$cf" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
         echo "Format issue: $file"
         issues=$((issues + 1))
       fi
@@ -819,22 +841,24 @@ do_clang_format() {
     if [ $issues -gt 0 ]; then
       echo "Found $issues files with formatting issues (use --format-apply to fix)"
     else
-      echo "All files properly formatted"
+      echo "All files properly formatted (using $cf)"
     fi
     return 0  # Always return success for quality checks
   else
-    echo "skipped: clang-format not available"; return 0
+    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
   fi
 }
 do_clang_format_apply() {
   local srcdir="$1"
-  if command -v clang-format >/dev/null 2>&1; then
+  local cf
+  if cf=$(resolve_clang_format_19); then
     # Apply formatting fixes to all source files
+    echo "Applying formatting with $cf"
     find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0 | \
-      xargs -0 clang-format --style=file -i
+      xargs -0 "$cf" --style=file -i
     return $?
   else
-    echo "skipped: clang-format not available"; return 0
+    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
   fi
 }
 do_export_symbols() {
