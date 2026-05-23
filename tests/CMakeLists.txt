@@ -231,6 +231,17 @@ target_link_libraries(test_collectionhealth
 )
 add_test(NAME CollectionHealth COMMAND test_collectionhealth)
 
+# FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
+add_executable(test_fuzzymatch
+  utils/test_fuzzymatch.cpp
+  ${SRC_DIR}/utils/text/fuzzymatch.cpp
+)
+target_link_libraries(test_fuzzymatch
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME FuzzyMatch COMMAND test_fuzzymatch)
+
 # BulkEdit tests (Kartend-hrff). Pure logic over ItemMetadata, no DB.
 add_executable(test_bulkedit
   utils/test_bulkedit.cpp

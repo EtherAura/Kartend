@@ -25,6 +25,7 @@
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
 #include "collectionutils.h"
+#include "commandpalettedialog.h"
 #include "detailpagemanager.h"
 #include "detailspane.h"
 #include "dialogcontroller.h"
@@ -193,6 +194,7 @@ void MainWindow::setupUI() {
   // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
   setupTextZoomShortcuts();
   setupVideoPauseShortcut();
+  setupCommandPaletteShortcut();
   setupPreviewVolumeSlider();
   setupInitialTimers();
 }
@@ -952,6 +954,91 @@ void MainWindow::bulkEditInteractive() {
   }
   QMessageBox::information(this, tr("Bulk edit"),
                            tr("Applied to %1 of %2 item(s).").arg(writes).arg(rows.size()));
+}
+
+void MainWindow::openCommandPalette() {
+  QList<CommandPaletteDialog::Command> commands;
+
+  // Collection switch entries. Skip playlists / smart playlists from
+  // the suggestions — they have their own access paths and the palette
+  // would otherwise be dominated by reserved/auto-generated rows.
+  for (int i = 0; i < m_collections.size(); ++i) {
+    const CollectionConfig &cfg = m_collections.at(i);
+    if (cfg.isPlaylist) continue;
+    const int idx = i;
+    commands.append({tr("Collection"), cfg.name, [this, idx]() {
+                       if (m_appManager->getNavigationManager()) {
+                         m_appManager->getNavigationManager()->showCollectionItems(idx);
+                       }
+                     }});
+  }
+
+  // View-mode toggles. Map the live ViewType enum to two simple verbs;
+  // the toolbar already syncs visually once the new mode is set.
+  commands.append(
+      {tr("View"), tr("Switch to grid view"), [this]() {
+         if (auto *menu = m_menuController.get()) {
+           menu->syncLayoutActions(ViewType::Grid);
+         }
+         if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
+           m_collections[currentCollectionIndex].viewType = ViewType::Grid;
+           if (m_appManager->getSettingsManager()) {
+             m_appManager->getSettingsManager()->saveCollections(m_collections);
+           }
+           if (m_appManager->getNavigationManager()) {
+             m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+           }
+         }
+       }});
+  commands.append(
+      {tr("View"), tr("Switch to list view"), [this]() {
+         if (auto *menu = m_menuController.get()) {
+           menu->syncLayoutActions(ViewType::List);
+         }
+         if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
+           m_collections[currentCollectionIndex].viewType = ViewType::List;
+           if (m_appManager->getSettingsManager()) {
+             m_appManager->getSettingsManager()->saveCollections(m_collections);
+           }
+           if (m_appManager->getNavigationManager()) {
+             m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+           }
+         }
+       }});
+
+  // Common tool entries already reachable via menus — surfaced here so
+  // the palette is the single keyboard-driven entry point users learn.
+  commands.append({tr("Tools"), tr("Open settings"), [this]() {
+                     // Mirror ctx.onOpenSettings (mainwindow_setup createMenuBar) so the
+                     // palette opens the same dialog the Settings menu entry uses.
+                     if (auto *settings = m_appManager->getSettingsManager()) {
+                       SettingsDialogContext context;
+                       context.parent = this;
+                       context.collections = &m_collections;
+                       context.currentCollectionIndex = &currentCollectionIndex;
+                       context.detailsPaneManager = m_appManager->getDetailsPaneManager();
+                       context.scrollManager = m_appManager->getScrollManager();
+                       context.navigationManager = m_appManager->getNavigationManager();
+                       context.databaseManager = m_appManager->getDatabaseManager();
+                       context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+                       settings->openSettingsDialog(context);
+                     }
+                   }});
+  commands.append({tr("Tools"), tr("Rescan current collection"), [this]() {
+                     if (currentCollectionIndex >= 0 && m_appManager->getNavigationManager()) {
+                       m_appManager->getNavigationManager()->safeReloadCollection(
+                           currentCollectionIndex);
+                     }
+                   }});
+  commands.append({tr("Tools"), tr("Show collection health…"),
+                   [this]() { showCollectionHealthInteractive(); }});
+  commands.append({tr("Tools"), tr("Bulk edit items…"), [this]() { bulkEditInteractive(); }});
+  commands.append(
+      {tr("Tools"), tr("Layout profiles…"), [this]() { manageLayoutProfilesInteractive(); }});
+
+  CommandPaletteDialog dialog(this);
+  dialog.setCommands(std::move(commands));
+  dialog.exec();
 }
 
 void MainWindow::setupArtworkManager() {

@@ -55,6 +55,17 @@ void MainWindow::setupTextZoomShortcuts() {
   connect(zoomReset, &QAction::triggered, this, [this]() { applyTextZoom(100); });
 }
 
+void MainWindow::setupCommandPaletteShortcut() {
+  auto *paletteAction = new QAction(tr("Command Palette"), this);
+  // Ctrl+Shift+P is the Spotlight / VSCode convention so users don't
+  // have to learn a new chord. Application-context so the palette is
+  // reachable from any focused widget without an explicit Tab-out.
+  paletteAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+  paletteAction->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(paletteAction);
+  connect(paletteAction, &QAction::triggered, this, &MainWindow::openCommandPalette);
+}
+
 void MainWindow::setupVideoPauseShortcut() {
   auto *pauseVideo = new QAction(tr("Pause/Resume Preview Video"), this);
   // Ctrl+K mirrors YouTube's universal pause shortcut. Plain K alone would

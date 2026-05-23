@@ -414,6 +414,15 @@ private:
   /// loader, applies the chosen action through BulkEdit::applyAction,
   /// persists every row that actually changed, and refreshes the view.
   void bulkEditInteractive();
+  /// Opens the global command palette. Builds a fresh command list each
+  /// open so live collections / view-mode / settings entries reflect
+  /// the current state.
+  void openCommandPalette();
+
+  /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
+  /// the command palette. Called once during setupUI alongside the
+  /// other application shortcuts.
+  void setupCommandPaletteShortcut();
 };
 
 #endif

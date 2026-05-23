@@ -1,8 +1,10 @@
 target_sources(kartend_ui PRIVATE
+  commandpalettedialog.cpp
   errordialog.cpp
   firstrunwizard.cpp
   shortcutsdialog.cpp
   statisticsdialog.cpp
+  commandpalettedialog.h
   errordialog.h
   firstrunwizard.h
   shortcutsdialog.h
