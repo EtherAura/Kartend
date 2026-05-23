@@ -1,4 +1,5 @@
 target_sources(kartend_utils PRIVATE
+  collectionhealth.cpp
   dbmigrations.cpp
   historystore.cpp
   itemartwork.cpp
@@ -8,6 +9,7 @@ target_sources(kartend_utils PRIVATE
   smartplaylistevaluator.cpp
   usagestatsstore.cpp
   batchsizes.h
+  collectionhealth.h
   dbmigrations.h
   historystore.h
   itemartwork.h

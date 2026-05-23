@@ -145,6 +145,7 @@ void MenuController::setupMenuBar() {
   setupActionImportTheme();
   setupActionExportTheme();
   setupActionLayoutProfiles();
+  setupActionCollectionHealth();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -730,6 +731,18 @@ void MenuController::setupActionLayoutProfiles() {
   }
   connect(m_layoutProfilesAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onManageLayoutProfiles) m_ctx.onManageLayoutProfiles();
+  });
+}
+
+void MenuController::setupActionCollectionHealth() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_collectionHealthAction = new QAction(tr("Collection Health..."), this);
+  m_ctx.mainWindow->addAction(m_collectionHealthAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_collectionHealthAction);
+  }
+  connect(m_collectionHealthAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowCollectionHealth) m_ctx.onShowCollectionHealth();
   });
 }
 

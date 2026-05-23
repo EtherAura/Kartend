@@ -475,6 +475,38 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
   }
 }
 
+QList<IDatabaseManager::ItemPathRow>
+DatabaseManager::loadAllItemPathsForCollection(const QString &collectionUuid) const {
+  QList<IDatabaseManager::ItemPathRow> out;
+  if (!m_db.isOpen() || collectionUuid.isEmpty()) {
+    return out;
+  }
+  QSqlQuery q(const_cast<QSqlDatabase &>(m_db));
+  if (!q.prepare("SELECT path, artwork_path FROM items WHERE collection_uuid = ? "
+                 "ORDER BY name COLLATE NOCASE ASC")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare item-path enumeration query",
+                                             "DatabaseManager::loadAllItemPathsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to enumerate item paths",
+                                             "DatabaseManager::loadAllItemPathsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    IDatabaseManager::ItemPathRow row;
+    row.path = q.value(0).toString();
+    row.artworkPath = q.value(1).toString();
+    out.append(row);
+  }
+  return out;
+}
+
 void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) {
   // Derive the uuid set to keep. A collection's uuid is
   // hash(name, mediaDir); different scan paths feed either the raw or

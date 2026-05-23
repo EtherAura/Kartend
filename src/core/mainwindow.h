@@ -400,6 +400,10 @@ private:
   /// Opens the layout-profile registry dialog. Loads the on-disk profile
   /// list, mutates it via the dialog buttons, and persists on close.
   void manageLayoutProfilesInteractive();
+  /// Opens the collection-health dashboard for the active collection.
+  /// Runs the CollectionHealth analyzer over the current item list +
+  /// launcher config and pops a read-only summary dialog.
+  void showCollectionHealthInteractive();
 };
 
 #endif

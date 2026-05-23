@@ -129,6 +129,21 @@ public:
   /// of being orphaned under the old uuid.
   virtual void migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) = 0;
 
+  /// Returns every item path stored for the given collection uuid plus
+  /// its artwork_path (empty when no artwork was matched on the last
+  /// scan). Used by the collection-health dashboard for whole-library
+  /// audits where the paginated fetchItemsRange path is too slow. Default
+  /// implementation returns an empty list so mocks aren't forced to grow
+  /// a new override; production DatabaseManager fulfills it via direct SQL.
+  struct ItemPathRow {
+    QString path;
+    QString artworkPath;
+  };
+  [[nodiscard]] virtual QList<ItemPathRow>
+  loadAllItemPathsForCollection(const QString & /*collectionUuid*/) const {
+    return {};
+  }
+
   /// Delete `items` / `collections` rows that belong to no collection
   /// in `liveCollections` — purges orphans left by past renames /
   /// removals so whole-library counts match the live collections.

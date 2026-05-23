@@ -159,6 +159,12 @@ public:
   bool resetAllUsageStats() override;
 
   void migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) override;
+
+  /// Whole-library path + artwork_path enumeration for the
+  /// collection-health dashboard. Single SQL pass against the main-thread
+  /// connection; no caching since the dashboard is a one-shot read.
+  [[nodiscard]] QList<IDatabaseManager::ItemPathRow>
+  loadAllItemPathsForCollection(const QString &collectionUuid) const override;
   void purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) override;
 
   // ──────────────────────────────────────────────────────────────────────────

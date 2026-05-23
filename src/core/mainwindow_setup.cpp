@@ -20,6 +20,8 @@
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collection/themepreset.h"
+#include "collectionhealth.h"
+#include "collectionhealthdialog.h"
 #include "collectionutils.h"
 #include "detailpagemanager.h"
 #include "detailspane.h"
@@ -30,6 +32,7 @@
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
+#include "launchmanager.h"
 #include "layoutprofilesdialog.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
@@ -37,6 +40,7 @@
 #include "menucontroller.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
+#include "pathutils.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
@@ -454,6 +458,7 @@ void MainWindow::createMenuBar() {
   ctx.onImportTheme = [this]() { importThemeInteractive(); };
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
   ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
+  ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -761,6 +766,52 @@ void MainWindow::manageLayoutProfilesInteractive() {
       QMessageBox::warning(this, tr("Layout profiles — could not save"), saved.error().message);
     }
   }
+}
+
+void MainWindow::showCollectionHealthInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Collection health"),
+                             tr("Open a collection before running the health audit."));
+    return;
+  }
+  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+  // Resolve the uuid the same way every other per-item code path does so
+  // the item enumeration finds the rows the rest of the app sees.
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  if (uuid.isEmpty()) {
+    QMessageBox::warning(this, tr("Collection health"),
+                         tr("Could not resolve this collection's identity. "
+                            "Check the media directory in settings."));
+    return;
+  }
+
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) {
+    return;
+  }
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+
+  // Convert to CollectionHealth::ItemPath wire shape. Decoupling the
+  // analyzer's input from IDatabaseManager keeps the analyzer
+  // unit-testable without a real DB.
+  QList<CollectionHealth::ItemPath> healthItems;
+  healthItems.reserve(rows.size());
+  for (const IDatabaseManager::ItemPathRow &row : rows) {
+    healthItems.append({row.path, row.artworkPath});
+  }
+
+  // Launcher validator: defer to LaunchManager's existing path resolver
+  // so what counts as "found" matches what the launch pipeline would
+  // accept at run time.
+  auto validator = [](const QString &path) {
+    return LaunchManager::validateLauncherPath(path).isOk();
+  };
+  const CollectionHealth::Report report = CollectionHealth::analyze(cfg, healthItems, validator);
+
+  CollectionHealthDialog dialog(this);
+  dialog.setReport(cfg.name, report);
+  dialog.exec();
 }
 
 void MainWindow::setupArtworkManager() {

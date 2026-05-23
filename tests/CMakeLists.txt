@@ -215,6 +215,22 @@ target_link_libraries(test_themepreset
 )
 add_test(NAME ThemePreset COMMAND test_themepreset)
 
+# CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
+add_executable(test_collectionhealth
+  utils/test_collectionhealth.cpp
+  ${SRC_DIR}/utils/db/collectionhealth.cpp
+)
+target_include_directories(test_collectionhealth PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_collectionhealth
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME CollectionHealth COMMAND test_collectionhealth)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.
