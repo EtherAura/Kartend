@@ -198,6 +198,23 @@ target_link_libraries(test_searchqueryparser
 )
 add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
 
+# ThemePreset tests (Kartend-y3rg). JSON round-trip + file I/O + apply.
+add_executable(test_themepreset
+  utils/test_themepreset.cpp
+  ${SRC_DIR}/utils/app/collection/themepreset.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_themepreset PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_themepreset
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ThemePreset COMMAND test_themepreset)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.

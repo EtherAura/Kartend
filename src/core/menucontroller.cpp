@@ -142,6 +142,8 @@ void MenuController::setupMenuBar() {
   setupActionOpenRandomItem();
   setupActionImportKart();
   setupActionExportKart();
+  setupActionImportTheme();
+  setupActionExportTheme();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -686,6 +688,35 @@ void MenuController::setupActionExportKart() {
   }
   connect(m_exportKartAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onExportKart) m_ctx.onExportKart();
+  });
+}
+
+// File menu entry for importing a shareable theme preset (.kartend-theme.json).
+// Distinct from Kart import — themes carry only the visual settings, not the
+// collection's media paths / launcher / scraper config, so they can be shared
+// across collections with completely different content.
+void MenuController::setupActionImportTheme() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_importThemeAction = new QAction(tr("Import Theme..."), this);
+  m_ctx.mainWindow->addAction(m_importThemeAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addSeparator();
+    m_ctx.ui->menuFile->addAction(m_importThemeAction);
+  }
+  connect(m_importThemeAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onImportTheme) m_ctx.onImportTheme();
+  });
+}
+
+void MenuController::setupActionExportTheme() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_exportThemeAction = new QAction(tr("Export Current Theme..."), this);
+  m_ctx.mainWindow->addAction(m_exportThemeAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_exportThemeAction);
+  }
+  connect(m_exportThemeAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onExportTheme) m_ctx.onExportTheme();
   });
 }
 

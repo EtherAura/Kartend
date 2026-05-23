@@ -3,6 +3,7 @@ target_sources(kartend_utils PRIVATE
   collection/collectionhierarchycache.cpp
   collection/helpers.cpp
   collection/launcherconfig.cpp
+  collection/themepreset.cpp
   collectionutils.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
@@ -25,6 +26,7 @@ target_sources(kartend_utils PRIVATE
   collection/listviewoptions.h
   collection/scraperoverrides.h
   collection/sidebarappearance.h
+  collection/themepreset.h
   collectiontypes.h
   collectionutils.h
   errorutils.h

@@ -54,6 +54,8 @@ struct MenuControllerContext {
   std::function<void(const QString &filePath, int collectionIndex)> onLaunchItem;
   std::function<void()> onImportKart;
   std::function<void()> onExportKart;
+  std::function<void()> onImportTheme;
+  std::function<void()> onExportTheme;
   std::function<void()> onShowFirstRunWizard;
   std::function<void()> onShowScraperCredentials;
   std::function<void()> onRunBatchScrape;
@@ -113,6 +115,8 @@ private:
   QAction *m_gridWidthDecreaseAction = nullptr;
   QAction *m_importKartAction = nullptr;
   QAction *m_exportKartAction = nullptr;
+  QAction *m_importThemeAction = nullptr;
+  QAction *m_exportThemeAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
   QActionGroup *m_layoutActionGroup = nullptr;
   QActionGroup *m_orientationActionGroup = nullptr;
@@ -171,6 +175,8 @@ private:
   void setupActionOpenRandomItem();
   void setupActionImportKart();
   void setupActionExportKart();
+  void setupActionImportTheme();
+  void setupActionExportTheme();
   void setupRecentMenu();
   void setupMostLaunchedMenu();
   void setupLayoutActions();

@@ -2,6 +2,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QMessageBox>
@@ -18,6 +19,7 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
+#include "collection/themepreset.h"
 #include "collectionutils.h"
 #include "detailpagemanager.h"
 #include "detailspane.h"
@@ -448,6 +450,8 @@ void MainWindow::createMenuBar() {
     if (auto *km = m_appManager->getKartManager())
       km->exportCollectionInteractive(currentCollectionIndex);
   };
+  ctx.onImportTheme = [this]() { importThemeInteractive(); };
+  ctx.onExportTheme = [this]() { exportThemeInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -624,6 +628,88 @@ void MainWindow::showFirstRunWizard() {
   if (m_appManager->getSettingsManager()) {
     m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }
+}
+
+void MainWindow::importThemeInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Import Theme"),
+                             tr("Open a collection before importing a theme."));
+    return;
+  }
+  const QString filePath = QFileDialog::getOpenFileName(
+      this, tr("Import Theme"), QString(),
+      tr("Kartend Theme (*.kartend-theme.json);;JSON (*.json);;All Files (*)"));
+  if (filePath.isEmpty()) {
+    return;
+  }
+  auto imported = ThemePresetIO::importFromFile(filePath);
+  if (imported.isError()) {
+    QMessageBox::warning(this, tr("Import Theme — Failed"), imported.error().message);
+    return;
+  }
+  const ThemePreset preset = imported.value();
+  const CollectionConfig &target = m_collections[currentCollectionIndex];
+  const QStringList changes = ThemePresetIO::describeChanges(preset, target);
+
+  // Confirmation surface: list the clusters that will change so the user
+  // doesn't apply blindly. Empty list short-circuits to a friendly no-op.
+  if (changes.isEmpty()) {
+    QMessageBox::information(this, tr("Import Theme"),
+                             tr("The selected theme matches the current collection — nothing to "
+                                "change."));
+    return;
+  }
+  QString summary = tr("Apply theme \"%1\" to \"%2\"?\n\nWill change:\n  • %3")
+                        .arg(preset.name.isEmpty() ? tr("(unnamed)") : preset.name)
+                        .arg(target.name)
+                        .arg(changes.join(QStringLiteral("\n  • ")));
+  const auto choice =
+      QMessageBox::question(this, tr("Import Theme"), summary,
+                            QMessageBox::Apply | QMessageBox::Cancel, QMessageBox::Cancel);
+  if (choice != QMessageBox::Apply) {
+    return;
+  }
+  CollectionConfig &mutableTarget = m_collections[currentCollectionIndex];
+  ThemePresetIO::applyTo(preset, mutableTarget);
+  if (m_appManager->getSettingsManager()) {
+    m_appManager->getSettingsManager()->saveCollections(m_collections);
+  }
+  // Soft reload so the new appearance values surface immediately without
+  // the user having to switch collections.
+  if (m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  }
+}
+
+void MainWindow::exportThemeInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Export Theme"),
+                             tr("Open a collection before exporting a theme."));
+    return;
+  }
+  const CollectionConfig &source = m_collections[currentCollectionIndex];
+  const ThemePreset preset = ThemePresetIO::fromCollection(source);
+  const QString suggestion =
+      (source.name.isEmpty() ? QStringLiteral("theme") : source.name.trimmed()) +
+      QStringLiteral(".kartend-theme.json");
+  const QString filePath =
+      QFileDialog::getSaveFileName(this, tr("Export Theme"), suggestion,
+                                   tr("Kartend Theme (*.kartend-theme.json);;JSON (*.json)"));
+  if (filePath.isEmpty()) {
+    return;
+  }
+  QString outPath = filePath;
+  // Tag with the canonical extension when the user typed a bare path so
+  // the import-file-filter recognises it next round.
+  if (!outPath.endsWith(QLatin1String(".json"), Qt::CaseInsensitive)) {
+    outPath += QStringLiteral(".kartend-theme.json");
+  }
+  auto exported = ThemePresetIO::exportToFile(preset, outPath);
+  if (exported.isError()) {
+    QMessageBox::warning(this, tr("Export Theme — Failed"), exported.error().message);
+    return;
+  }
+  QMessageBox::information(this, tr("Export Theme"), tr("Theme exported to:\n%1").arg(outPath));
 }
 
 void MainWindow::setupArtworkManager() {

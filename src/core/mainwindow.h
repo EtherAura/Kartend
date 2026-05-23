@@ -389,6 +389,14 @@ private:
   /// never fires twice. Safe to call from both the deferred startup timer
   /// and the Help-menu action.
   void showFirstRunWizard();
+
+  /// Pops a file dialog for the user to pick a *.kartend-theme.json,
+  /// previews the would-be changes against the active collection, then
+  /// applies + saves on confirmation. No-op when no collection is active.
+  void importThemeInteractive();
+  /// Pops a file dialog and writes the active collection's appearance
+  /// fields out as a theme preset.
+  void exportThemeInteractive();
 };
 
 #endif
