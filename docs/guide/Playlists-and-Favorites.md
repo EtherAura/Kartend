@@ -11,6 +11,11 @@ be deleted. Beyond Favorites, you can create any number of user
 playlists, populate them via the right-click context menu, and import
 or export to / from M3U and JSON.
 
+> **Looking for rule-driven playlists?** Smart playlists derive their
+> members from a filter (recently launched, most played, by extension,
+> …) and re-evaluate every time you open them. See
+> [Smart Playlists](Smart-Playlists.md).
+
 > **Where to find this** — Right-click any item → **Add to Playlist ▶**
 > or **Add to Favorites**. Playlist tiles appear at the top level of
 > the collection grid (or wherever they're parented).
@@ -223,6 +228,8 @@ reserved_kind ('' or            source_path
 
 ## Where to next
 
+- [Smart Playlists](Smart-Playlists.md) — rule-driven playlists that
+  re-evaluate on open
 - [Item Metadata](Item-Metadata.md) — custom fields, manual files,
   artwork links per item
 - [Backup & Sharing](Backup-and-Sharing.md) — `.kart` package format

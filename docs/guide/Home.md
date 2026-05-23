@@ -47,6 +47,9 @@ and want to dig into a feature, the index below is grouped by purpose.
 
 - **[Playlists & Favorites](Playlists-and-Favorites.md)** — built-in
   Favorites, custom playlists, M3U / JSON import-export
+- **[Smart Playlists](Smart-Playlists.md)** — rule-driven playlists:
+  recently launched, most played, by extension, by date added, has
+  artwork
 - **[History & Statistics](History-and-Statistics.md)** — launch history,
   per-item play counts, Statistics dialog, runtime detection
 
