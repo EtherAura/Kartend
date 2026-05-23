@@ -138,6 +138,28 @@ void StatisticsDialog::setupUI() {
   m_neverPlayedTree = buildTree({tr("Item"), tr("Collection")});
   m_byCollectionTree = buildTree({tr("Collection"), tr("Items"), tr("Launches"), tr("Time")});
 
+  // Double-click on a per-item row jumps to that item in the grid. The
+  // by-collection tree is intentionally NOT wired — its rows are aggregate
+  // and have no single owning path. The history tree is wired below where
+  // it's constructed (it carries the same per-item path shape).
+  const auto wireRowNavigation = [this](QTreeWidget *tree) {
+    if (!tree) return;
+    QObject::connect(tree, &QTreeWidget::itemDoubleClicked, this,
+                     [this](QTreeWidgetItem *item, int /*column*/) {
+                       if (!item) return;
+                       // Path was stashed on col 0 under UserRole+1 during
+                       // populate*(). UserRole (without +1) is taken by the
+                       // numeric sort key on whichever column it lives on.
+                       const QString path = item->data(0, Qt::UserRole + 1).toString();
+                       if (!path.isEmpty()) {
+                         emit navigateToItemRequested(path);
+                       }
+                     });
+  };
+  wireRowNavigation(m_mostPlayedTree);
+  wireRowNavigation(m_recentlyPlayedTree);
+  wireRowNavigation(m_neverPlayedTree);
+
   m_tabs->addTab(m_mostPlayedTree, tr("Most played"));
   m_tabs->addTab(m_recentlyPlayedTree, tr("Recently played"));
 
@@ -202,6 +224,17 @@ void StatisticsDialog::setupUI() {
   // via the column header but keep that initial order.
   m_historyTree->setSortingEnabled(false);
   historyLayout->addWidget(m_historyTree, 1);
+  // History rows already carry the absolute path in column 3 — wire
+  // double-click navigation through the same handler shape as the other
+  // per-item trees.
+  QObject::connect(m_historyTree, &QTreeWidget::itemDoubleClicked, this,
+                   [this](QTreeWidgetItem *item, int /*column*/) {
+                     if (!item) return;
+                     const QString path = item->data(0, Qt::UserRole + 1).toString();
+                     if (!path.isEmpty()) {
+                       emit navigateToItemRequested(path);
+                     }
+                   });
 
   // Per-tab Clear button: scoped to history so it doesn't sit next to the
   // global Reset (which already covers stats).
@@ -342,6 +375,8 @@ void StatisticsDialog::populateMostPlayed(const QList<UsageStatsStore::ItemUsage
     item->setText(4, UsageStatsStore::formatTimestamp(row.lastPlayed));
     item->setData(4, Qt::UserRole, row.lastPlayed);
     item->setToolTip(0, row.path);
+    // Stash the absolute path for the navigate-on-double-click handler.
+    item->setData(0, Qt::UserRole + 1, row.path);
   }
   m_mostPlayedTree->setSortingEnabled(true);
   m_mostPlayedTree->sortByColumn(2, Qt::DescendingOrder);
@@ -368,6 +403,7 @@ void StatisticsDialog::populateRecentlyPlayed(const QList<UsageStatsStore::ItemU
     item->setText(4, UsageStatsStore::formatDuration(row.totalPlaySeconds));
     item->setData(4, Qt::UserRole, row.totalPlaySeconds);
     item->setToolTip(0, row.path);
+    item->setData(0, Qt::UserRole + 1, row.path);
   }
   m_recentlyPlayedTree->setSortingEnabled(true);
   m_recentlyPlayedTree->sortByColumn(2, Qt::DescendingOrder);
@@ -407,6 +443,7 @@ void StatisticsDialog::populateNeverPlayed(const QList<UsageStatsStore::ItemUsag
     item->setText(0, name);
     item->setText(1, labelForCollectionUuid(row.collectionUuid));
     item->setToolTip(0, row.path);
+    item->setData(0, Qt::UserRole + 1, row.path);
   }
   m_neverPlayedTree->setSortingEnabled(true);
   m_neverPlayedTree->sortByColumn(0, Qt::AscendingOrder);
@@ -517,6 +554,9 @@ void StatisticsDialog::populateHistory(const QList<HistoryStore::HistoryEntry> &
     item->setText(2, labelForCollectionUuid(row.collectionUuid));
     item->setText(3, row.path);
     item->setToolTip(1, row.path);
+    // navigate-on-double-click reads from column 0 / UserRole+1 — keep
+    // the convention even though this tree's path lives in column 3.
+    item->setData(0, Qt::UserRole + 1, row.path);
   }
   m_historyTree->setSortingEnabled(wasSortingEnabled);
   // Default sort by the launched_at column, descending — the store already

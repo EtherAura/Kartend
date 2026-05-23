@@ -404,6 +404,11 @@ private:
   /// Runs the CollectionHealth analyzer over the current item list +
   /// launcher config and pops a read-only summary dialog.
   void showCollectionHealthInteractive();
+  /// Switches to the collection that owns `filePath` and selects the
+  /// item. No-op when the path can't be resolved to a live collection
+  /// (e.g. its row survives from a deleted collection). Driven by the
+  /// analytics dialog's double-click handler.
+  void navigateToItem(const QString &filePath);
 };
 
 #endif

@@ -461,6 +461,17 @@ void MenuController::setupStatisticsAction() {
         const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
         StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr,
                                 m_ctx.mainWindow);
+        // Wire the navigate-on-double-click signal: dismiss the dialog and
+        // hand off to MainWindow's navigation handler. accept() unblocks
+        // exec() so the closure below runs without lingering in the
+        // modal stack.
+        QObject::connect(&dialog, &StatisticsDialog::navigateToItemRequested, &dialog,
+                         [this, &dialog](const QString &filePath) {
+                           dialog.accept();
+                           if (m_ctx.onNavigateToItem) {
+                             m_ctx.onNavigateToItem(filePath);
+                           }
+                         });
         dialog.exec();
       })) {
     return;

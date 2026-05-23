@@ -459,6 +459,7 @@ void MainWindow::createMenuBar() {
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
   ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
   ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
+  ctx.onNavigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -812,6 +813,57 @@ void MainWindow::showCollectionHealthInteractive() {
   CollectionHealthDialog dialog(this);
   dialog.setReport(cfg.name, report);
   dialog.exec();
+}
+
+void MainWindow::navigateToItem(const QString &filePath) {
+  if (filePath.isEmpty()) {
+    return;
+  }
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) {
+    return;
+  }
+  const int owningIndex = db->getCollectionIndexForFile(filePath);
+  if (!CollectionUtils::isValidIndex(owningIndex, &m_collections)) {
+    // Row survives in items table but the owning collection was removed
+    // from kartend.cfg — no live collection to navigate to.
+    QMessageBox::information(
+        this, tr("Open item"),
+        tr("The collection that owns this item is no longer in your library."));
+    return;
+  }
+  // Switch collections only when we're not already viewing the target —
+  // showCollectionItems unconditionally triggers an items reload that
+  // would needlessly bounce the current view.
+  if (owningIndex != currentCollectionIndex && m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->showCollectionItems(owningIndex);
+  }
+  // Ask the DB worker for the item's visual index, then select via the
+  // existing one-shot connection. Using the async path avoids a
+  // synchronous load of the entire collection just to compute one index.
+  CollectionContext context;
+  context.currentIndex = owningIndex;
+  context.config = m_collections[owningIndex];
+  context.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory =
+      PathUtils::validateAndExpandPath(context.config.artworkDirectory, context.config.name);
+  context.artworkDirectory = context.config.artworkDirectory;
+  if (auto *im = m_appManager->getInteractionManager()) {
+    auto *conn = new QMetaObject::Connection;
+    *conn = connect(db, &IDatabaseManager::visualIndexForPathLoaded, this,
+                    [this, conn, filePath, im](int visualIndex, const QString &resultPath) {
+                      if (resultPath != filePath) {
+                        return; // some other path's result — ignore
+                      }
+                      QObject::disconnect(*conn);
+                      delete conn;
+                      if (visualIndex >= 0) {
+                        im->selectItemByIndex(visualIndex, /*allowHorizontalScroll=*/true);
+                      }
+                    });
+    db->fetchVisualIndexForPath(context, m_collections, filePath);
+  }
 }
 
 void MainWindow::setupArtworkManager() {

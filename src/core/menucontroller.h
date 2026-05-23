@@ -52,6 +52,10 @@ struct MenuControllerContext {
   std::function<void(int delta)> onAdjustGridWidth;
   std::function<void(ViewType)> onSetViewType;
   std::function<void(const QString &filePath, int collectionIndex)> onLaunchItem;
+  /// Navigate to an item without launching it — used by the analytics
+  /// dialog's double-click handler. `filePath` is the absolute path; the
+  /// callback resolves the owning collection and selects the item.
+  std::function<void(const QString &filePath)> onNavigateToItem;
   std::function<void()> onImportKart;
   std::function<void()> onExportKart;
   std::function<void()> onImportTheme;
