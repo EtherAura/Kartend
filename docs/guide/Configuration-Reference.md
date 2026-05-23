@@ -329,11 +329,19 @@ display name; renaming a collection rewrites the section header.
 
 ### Hierarchy
 
+The primary parent / child relationship is encoded in the **section
+header** itself — `[Parent > Child]` with `> ` (space-padded) as the
+separator. The in-memory fields `parentCollectionIndex` and
+`isSubcollection` you may see in source code are derived from the
+section structure at load time; they are *not* INI keys and writing
+them by hand has no effect.
+
+The only persisted hierarchy key is `additionalParents`, used for
+secondary linked parents:
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `parentCollectionIndex` | int | `-1` | Index of primary parent. -1 = root. |
-| `additionalParents` | csv | empty | Linked-parent names. See [Collections → Linked Parents](Collections.md#linked-parents). |
-| `isSubcollection` | bool | derived | Auto-set from parent. |
+| `additionalParents` | csv | empty | Linked secondary parents — see [Collections → Linked Parents](Collections.md#linked-parents). |
 
 ### Launcher
 
