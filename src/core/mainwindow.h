@@ -424,6 +424,13 @@ private:
   /// one at a time with Edit / Skip / Close controls.
   void reviewMissingMetadataInteractive();
 
+  /// Opens the artwork-assignment wizard for items in the active
+  /// collection that have no artwork match on disk. Each item shows a
+  /// ranked list of candidate images from the collection's artwork
+  /// directory; the user picks one, browses for a file manually, or
+  /// skips, and the choice is persisted as a per-item override.
+  void artworkWizardInteractive();
+
   /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
   /// the command palette. Called once during setupUI alongside the
   /// other application shortcuts.

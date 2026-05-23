@@ -244,6 +244,18 @@ target_link_libraries(test_metadataqueue
 )
 add_test(NAME MetadataQueue COMMAND test_metadataqueue)
 
+# ArtworkCandidates tests (Kartend-y02i). Pure ranker, no filesystem.
+add_executable(test_artworkcandidates
+  utils/test_artworkcandidates.cpp
+  ${SRC_DIR}/utils/view/artworkcandidates.cpp
+  ${SRC_DIR}/utils/text/fuzzymatch.cpp
+)
+target_link_libraries(test_artworkcandidates
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ArtworkCandidates COMMAND test_artworkcandidates)
+
 # FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
 add_executable(test_fuzzymatch
   utils/test_fuzzymatch.cpp

@@ -2,6 +2,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -17,7 +18,9 @@
 
 #include "animationmanager.h"
 #include "applicationmanager.h"
+#include "artworkcandidates.h"
 #include "artworkmanager.h"
+#include "artworkwizarddialog.h"
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
@@ -32,6 +35,7 @@
 #include "gridwidthdebouncer.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
+#include "itemartwork.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
@@ -468,6 +472,7 @@ void MainWindow::createMenuBar() {
   ctx.onNavigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
   ctx.onBulkEdit = [this]() { bulkEditInteractive(); };
   ctx.onReviewMissingMetadata = [this]() { reviewMissingMetadataInteractive(); };
+  ctx.onArtworkWizard = [this]() { artworkWizardInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1103,6 +1108,85 @@ void MainWindow::reviewMissingMetadataInteractive() {
 
   // Refresh the sidebar so any edits made during the review are visible
   // without a separate collection switch.
+  if (m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  }
+}
+
+void MainWindow::artworkWizardInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Assign missing artwork"),
+                             tr("Open a collection before running the wizard."));
+    return;
+  }
+  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) return;
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  if (uuid.isEmpty()) return;
+  const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+  if (artworkDir.trimmed().isEmpty()) {
+    QMessageBox::information(this, tr("Assign missing artwork"),
+                             tr("This collection has no artwork directory configured."));
+    return;
+  }
+
+  // Queue = items where items.artwork_path is empty / NULL. Pull the
+  // path list, filter, and build the wizard's per-entry record.
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+  QList<ArtworkWizardDialog::Entry> queue;
+  for (const IDatabaseManager::ItemPathRow &row : rows) {
+    if (!row.artworkPath.trimmed().isEmpty()) {
+      continue;
+    }
+    ArtworkWizardDialog::Entry entry;
+    entry.filePath = row.path;
+    entry.collectionUuid = uuid;
+    entry.itemName = QFileInfo(row.path).completeBaseName();
+    queue.append(entry);
+  }
+  if (queue.isEmpty()) {
+    QMessageBox::information(this, tr("Assign missing artwork"),
+                             tr("Every item in \"%1\" already has artwork.").arg(cfg.name));
+    return;
+  }
+
+  // Snapshot the artwork directory listing once. The wizard ranks
+  // candidates per item but re-walking the directory for every entry
+  // would be wasteful — these directories typically contain hundreds of
+  // files and the listing is stable for the wizard's lifetime.
+  QStringList directoryFiles;
+  {
+    QDir dir(artworkDir);
+    const QStringList entries = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    directoryFiles.reserve(entries.size());
+    for (const QString &name : entries) {
+      directoryFiles.append(dir.absoluteFilePath(name));
+    }
+  }
+
+  auto candidatesFor = [directoryFiles](const ArtworkWizardDialog::Entry &entry) {
+    return ArtworkCandidates::rank(entry.itemName, directoryFiles);
+  };
+  auto onPick = [this, db](const ArtworkWizardDialog::Entry &entry, const QString &chosenFilePath) {
+    ItemArtworkStore::ItemArtwork row;
+    row.collectionUuid = entry.collectionUuid;
+    row.path = entry.filePath;
+    // "Front" is the cross-provider primary-cover slot used by the
+    // sidebar gallery and tile renderer; saving here makes the picked
+    // image surface as the item's main artwork immediately.
+    row.artworkType = ItemArtworkStore::StandardTypes::Front;
+    row.manualPath = chosenFilePath;
+    return db->saveItemArtwork(row);
+  };
+
+  ArtworkWizardDialog dialog(this);
+  dialog.setQueue(queue, std::move(candidatesFor), std::move(onPick));
+  dialog.exec();
+
+  // safeReloadCollection so newly-assigned artwork surfaces in the grid
+  // and sidebar without requiring a collection switch.
   if (m_appManager->getNavigationManager()) {
     m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
   }

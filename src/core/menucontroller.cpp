@@ -148,6 +148,7 @@ void MenuController::setupMenuBar() {
   setupActionCollectionHealth();
   setupActionBulkEdit();
   setupActionReviewMissingMetadata();
+  setupActionArtworkWizard();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -780,6 +781,18 @@ void MenuController::setupActionReviewMissingMetadata() {
   }
   connect(m_reviewMissingMetadataAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onReviewMissingMetadata) m_ctx.onReviewMissingMetadata();
+  });
+}
+
+void MenuController::setupActionArtworkWizard() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_artworkWizardAction = new QAction(tr("Assign Missing Artwork..."), this);
+  m_ctx.mainWindow->addAction(m_artworkWizardAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_artworkWizardAction);
+  }
+  connect(m_artworkWizardAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onArtworkWizard) m_ctx.onArtworkWizard();
   });
 }
 
