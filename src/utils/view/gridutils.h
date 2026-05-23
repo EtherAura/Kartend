@@ -1,6 +1,8 @@
 #ifndef GRIDUTILS_H
 #define GRIDUTILS_H
 
+#include <climits>
+
 #include <QtGlobal>
 
 // Qt's QWIDGETSIZE_MAX is 16,777,215 (2^24 - 1), defined in QWidget.
