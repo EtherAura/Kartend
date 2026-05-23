@@ -202,12 +202,34 @@ selected collection. They group:
   control.
 - **Typography** — global font family / size, UI text zoom percent,
   title tints.
-- **Splash screens** — boot, resume-focus, startup video.
+- **Splash screens** — boot, resume-focus, startup video, plus title /
+  subtitle overrides. See [Splash & Now Playing](Splash-and-Now-Playing.md).
 - **Preview video volume** — global.
 - **Runtime detection** — toggle.
 - **Launch history** — enabled, max entries.
 - **Attract mode** — enabled, idle timeout, autoscroll, advance
   selection. See [Attract Mode](Attract-Mode.md).
+- **Marquee** — secondary-monitor topper window: enable, target screen,
+  mode (artwork vs collection icon). See [Marquee](Marquee.md).
+- **Scrapers** — provider credentials (TMDB, MusicBrainz, OpenLibrary,
+  ScreenScraper) and global scraper options (preset, concurrency,
+  throttle, rescrape mode, region, scrape logging, auto-resume). See
+  [Scraper](Scraper.md) and [Keychain](Keychain.md).
+- **Launchers** — the global launcher-preset registry (id / name /
+  path / core / parameters). Referenced by per-collection
+  `additionalLaunchers` entries. See [Launchers](Launchers.md).
+- **Controls** — keyboard / gamepad bindings live-capture, repeat /
+  hold timings. Same surface as the Keyboard, Gamepad, and Mouse
+  categories above, organised together. See
+  [Input & Controls](Input-and-Controls.md).
+- **Home view** — synthetic Home category at startup: enable, custom
+  label, custom icon, keyboard shortcut. See
+  [Shell Collections](Shell-Collections.md#nesting-shells).
+- **RetroArch integration** — optional path to a `retroarch.cfg` /
+  core directory so the Launcher chooser can list libretro cores.
+  See [Launchers](Launchers.md).
+- **First-run wizard** — `firstRunComplete` flag. Reset by Help →
+  Setup Wizard… (which re-runs the wizard interactively).
 - **Startup collection** — name of the collection opened on launch.
 
 Each section is a fold-down so the page stays scannable.
