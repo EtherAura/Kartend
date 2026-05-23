@@ -102,6 +102,14 @@ auto SettingsUtils::getConfigPath() -> QString {
   return appConfigDir.absoluteFilePath("kartend.cfg");
 }
 
+auto SettingsUtils::getLayoutProfilesPath() -> QString {
+  // Sibling to kartend.cfg under the same per-user config dir. Re-using
+  // getConfigPath()'s mkpath ensures the directory exists before the
+  // caller's QSaveFile gets a chance to fail.
+  const QFileInfo info(getConfigPath());
+  return info.absoluteDir().absoluteFilePath("layout_profiles.json");
+}
+
 auto SettingsUtils::tightenConfigPermissions() -> void {
   const QString path = getConfigPath();
   if (!QFile::exists(path)) {

@@ -1,6 +1,8 @@
 // Tests for ThemePresetIO — JSON round-trip, file I/O via QTemporaryDir,
 // schema-version handling, and the apply / describeChanges helpers.
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
 #include <QTemporaryDir>
@@ -21,6 +23,12 @@ private slots:
   void applyToClampsOutOfRangeNumericFields();
   void describeChangesEmptyWhenIdentical();
   void describeChangesReportsModifiedClusters();
+  void registry_emptyFile_returnsEmptyList();
+  void registry_saveAndLoadRoundTrips();
+  void registry_addOrReplace_replacesByCaseInsensitiveName();
+  void registry_addOrReplace_rejectsEmptyName();
+  void registry_removeByName_caseInsensitive();
+  void registry_loadAcceptsBareArrayFormat();
 };
 
 void TestThemePreset::roundTripsThroughJson() {
@@ -171,6 +179,93 @@ void TestThemePreset::describeChangesReportsModifiedClusters() {
   preset.background.backgroundColor = "#222"; // touch background cluster
   const auto changes = ThemePresetIO::describeChanges(preset, cfg);
   QCOMPARE(changes.size(), 2);
+}
+
+void TestThemePreset::registry_emptyFile_returnsEmptyList() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  // File doesn't exist yet — empty list, no error.
+  const auto r = ThemePresetIO::loadRegistry(dir.filePath("missing.json"));
+  QVERIFY(r.isOk());
+  QVERIFY(r.value().isEmpty());
+}
+
+void TestThemePreset::registry_saveAndLoadRoundTrips() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString path = dir.filePath("registry.json");
+
+  ThemePreset a;
+  a.name = "Couch";
+  a.gridLayout.gridWidth = 4;
+  ThemePreset b;
+  b.name = "Desktop";
+  b.gridLayout.gridWidth = 10;
+
+  const auto saved = ThemePresetIO::saveRegistry({a, b}, path);
+  QVERIFY(saved.isOk());
+
+  const auto loaded = ThemePresetIO::loadRegistry(path);
+  QVERIFY(loaded.isOk());
+  QCOMPARE(loaded.value().size(), 2);
+  QCOMPARE(loaded.value().at(0).name, QStringLiteral("Couch"));
+  QCOMPARE(loaded.value().at(1).gridLayout.gridWidth, 10);
+}
+
+void TestThemePreset::registry_addOrReplace_replacesByCaseInsensitiveName() {
+  ThemePreset first;
+  first.name = "Couch";
+  first.gridLayout.gridWidth = 4;
+  ThemePreset second;
+  second.name = "COUCH"; // same name, different case — must replace
+  second.gridLayout.gridWidth = 8;
+
+  const QList<ThemePreset> after = ThemePresetIO::addOrReplace({first}, second);
+  QCOMPARE(after.size(), 1);
+  QCOMPARE(after.first().gridLayout.gridWidth, 8);
+}
+
+void TestThemePreset::registry_addOrReplace_rejectsEmptyName() {
+  // An empty / whitespace-only name would create an un-pickable row in
+  // the layout-profile dialog. Reject defensively even though the dialog
+  // also gates on this.
+  ThemePreset blank;
+  blank.name = "   ";
+  const QList<ThemePreset> after = ThemePresetIO::addOrReplace({}, blank);
+  QVERIFY(after.isEmpty());
+}
+
+void TestThemePreset::registry_removeByName_caseInsensitive() {
+  ThemePreset a;
+  a.name = "Couch";
+  ThemePreset b;
+  b.name = "Desktop";
+  const QList<ThemePreset> after = ThemePresetIO::removeByName({a, b}, "COUCH");
+  QCOMPARE(after.size(), 1);
+  QCOMPARE(after.first().name, QStringLiteral("Desktop"));
+}
+
+void TestThemePreset::registry_loadAcceptsBareArrayFormat() {
+  // An external editor that dropped a bare JSON array (without the
+  // wrapping {"profiles": [...]}) should still load — the load helper
+  // accepts both shapes so the user isn't punished for editing the file.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString path = dir.filePath("bare.json");
+
+  ThemePreset p;
+  p.name = "Marquee";
+  QJsonArray arr;
+  arr.append(ThemePresetIO::toJson(p));
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+  f.close();
+
+  const auto loaded = ThemePresetIO::loadRegistry(path);
+  QVERIFY(loaded.isOk());
+  QCOMPARE(loaded.value().size(), 1);
+  QCOMPARE(loaded.value().first().name, QStringLiteral("Marquee"));
 }
 
 QTEST_MAIN(TestThemePreset)

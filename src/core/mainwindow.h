@@ -397,6 +397,9 @@ private:
   /// Pops a file dialog and writes the active collection's appearance
   /// fields out as a theme preset.
   void exportThemeInteractive();
+  /// Opens the layout-profile registry dialog. Loads the on-disk profile
+  /// list, mutates it via the dialog buttons, and persists on close.
+  void manageLayoutProfilesInteractive();
 };
 
 #endif

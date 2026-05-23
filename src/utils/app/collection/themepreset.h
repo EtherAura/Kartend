@@ -42,6 +42,15 @@ struct ThemePreset {
   ListViewOptions listView;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   QString customFontFamily;
+
+  bool operator==(const ThemePreset &other) const {
+    return name == other.name && description == other.description &&
+           schemaVersion == other.schemaVersion && gridLayout == other.gridLayout &&
+           sidebar == other.sidebar && background == other.background &&
+           listView == other.listView && horizontalAlignment == other.horizontalAlignment &&
+           customFontFamily == other.customFontFamily;
+  }
+  bool operator!=(const ThemePreset &other) const { return !(*this == other); }
 };
 
 namespace ThemePresetIO {
@@ -83,6 +92,34 @@ void applyTo(const ThemePreset &preset, CollectionConfig &target);
 /// avoiding a no-op apply.
 [[nodiscard]] QStringList describeChanges(const ThemePreset &preset,
                                           const CollectionConfig &target);
+
+// ─── Layout profile registry helpers ───────────────────────────────
+// Multi-preset persistence for Kartend-tfux. Stores user-named layout
+// profiles as a JSON array under layout_profiles.json (see
+// SettingsUtils::getLayoutProfilesPath). Profiles are otherwise identical
+// to single ThemePresets — name is the natural key. The registry uses
+// stable JSON keys + the same schemaVersion gate so older builds reading
+// a newer file refuse rather than silently misinterpret.
+
+/// Reads the layout-profiles JSON registry. A missing file returns an
+/// empty list (treated as "no profiles yet"); a malformed file returns an
+/// error so the user can repair / delete it.
+[[nodiscard]] ErrorUtils::Result<QList<ThemePreset>> loadRegistry(const QString &filePath);
+
+/// Atomically writes the layout-profiles registry via QSaveFile.
+[[nodiscard]] ErrorUtils::Result<bool> saveRegistry(const QList<ThemePreset> &profiles,
+                                                    const QString &filePath);
+
+/// Adds @p preset to the registry, replacing any existing entry with the
+/// same trimmed name (case-insensitive). Returns the modified list — the
+/// caller saves it. Empty names are rejected (returns the original list
+/// unchanged) so users can't create an unselectable "(unnamed)" row.
+[[nodiscard]] QList<ThemePreset> addOrReplace(const QList<ThemePreset> &registry,
+                                              const ThemePreset &preset);
+
+/// Removes the first entry matching @p name (case-insensitive, trimmed).
+[[nodiscard]] QList<ThemePreset> removeByName(const QList<ThemePreset> &registry,
+                                              const QString &name);
 
 } // namespace ThemePresetIO
 

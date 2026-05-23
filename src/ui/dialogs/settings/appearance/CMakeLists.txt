@@ -6,6 +6,7 @@ target_sources(kartend_ui PRIVATE
   appearancetitlespanel.cpp
   appearancetoolbarpanel.cpp
   fontspanel.cpp
+  layoutprofilesdialog.cpp
   sidebarpanel.cpp
   splashpanel.cpp
   toolbarpanel.cpp
@@ -16,6 +17,7 @@ target_sources(kartend_ui PRIVATE
   appearancetitlespanel.h
   appearancetoolbarpanel.h
   fontspanel.h
+  layoutprofilesdialog.h
   sidebarpanel.h
   splashpanel.h
   toolbarpanel.h

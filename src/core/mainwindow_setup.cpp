@@ -30,6 +30,7 @@
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
+#include "layoutprofilesdialog.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
@@ -452,6 +453,7 @@ void MainWindow::createMenuBar() {
   };
   ctx.onImportTheme = [this]() { importThemeInteractive(); };
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
+  ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -710,6 +712,55 @@ void MainWindow::exportThemeInteractive() {
     return;
   }
   QMessageBox::information(this, tr("Export Theme"), tr("Theme exported to:\n%1").arg(outPath));
+}
+
+void MainWindow::manageLayoutProfilesInteractive() {
+  const QString registryPath = SettingsUtils::getLayoutProfilesPath();
+  auto loaded = ThemePresetIO::loadRegistry(registryPath);
+  if (loaded.isError()) {
+    QMessageBox::warning(this, tr("Layout profiles — could not load"), loaded.error().message);
+    return;
+  }
+  QList<ThemePreset> profiles = loaded.value();
+
+  // Snapshot of profiles before the dialog so we can detect mutations and
+  // only persist when something actually changed. Avoids unnecessary disk
+  // writes when the user just opens the dialog to browse.
+  const QList<ThemePreset> originalProfiles = profiles;
+
+  // Apply closure: writes the picked preset onto the current collection,
+  // saves the INI, and triggers a soft-reload so the new layout is
+  // visible without a restart. Lives on MainWindow because it has access
+  // to m_collections / SettingsManager / NavigationManager — the dialog
+  // intentionally doesn't touch any of those directly.
+  auto onApply = [this](const ThemePreset &preset) {
+    if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+      return;
+    }
+    CollectionConfig &target = m_collections[currentCollectionIndex];
+    ThemePresetIO::applyTo(preset, target);
+    if (m_appManager->getSettingsManager()) {
+      m_appManager->getSettingsManager()->saveCollections(m_collections);
+    }
+    if (m_appManager->getNavigationManager()) {
+      m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+    }
+  };
+
+  LayoutProfilesDialog dialog(this);
+  const CollectionConfig *current =
+      (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size())
+          ? &m_collections[currentCollectionIndex]
+          : nullptr;
+  dialog.setRegistry(&profiles, current, std::move(onApply));
+  dialog.exec();
+
+  if (profiles != originalProfiles) {
+    auto saved = ThemePresetIO::saveRegistry(profiles, registryPath);
+    if (saved.isError()) {
+      QMessageBox::warning(this, tr("Layout profiles — could not save"), saved.error().message);
+    }
+  }
 }
 
 void MainWindow::setupArtworkManager() {

@@ -144,6 +144,7 @@ void MenuController::setupMenuBar() {
   setupActionExportKart();
   setupActionImportTheme();
   setupActionExportTheme();
+  setupActionLayoutProfiles();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -717,6 +718,18 @@ void MenuController::setupActionExportTheme() {
   }
   connect(m_exportThemeAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onExportTheme) m_ctx.onExportTheme();
+  });
+}
+
+void MenuController::setupActionLayoutProfiles() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_layoutProfilesAction = new QAction(tr("Layout Profiles..."), this);
+  m_ctx.mainWindow->addAction(m_layoutProfilesAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_layoutProfilesAction);
+  }
+  connect(m_layoutProfilesAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onManageLayoutProfiles) m_ctx.onManageLayoutProfiles();
   });
 }
 

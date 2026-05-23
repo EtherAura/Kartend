@@ -356,6 +356,139 @@ ThemePreset fromCollection(const CollectionConfig &source, const QString &name) 
   return p;
 }
 
+ErrorUtils::Result<QList<ThemePreset>> loadRegistry(const QString &filePath) {
+  QList<ThemePreset> out;
+  if (filePath.isEmpty()) {
+    return out;
+  }
+  QFile f(filePath);
+  if (!f.exists()) {
+    // No registry yet — empty list is the honest answer.
+    return out;
+  }
+  if (!f.open(QIODevice::ReadOnly)) {
+    return ErrorContext::error(ErrorCode::FileReadError, "Failed to open layout profile registry",
+                               "ThemePresetIO::loadRegistry")
+        .withDetails(f.errorString());
+  }
+  QJsonParseError err{};
+  const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
+  if (err.error != QJsonParseError::NoError) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Layout profile registry is malformed JSON",
+                               "ThemePresetIO::loadRegistry")
+        .withDetails(err.errorString());
+  }
+  // The registry can either be the bare array (older format) or a wrapped
+  // object with a `profiles` array (current format). Accept both so an
+  // external editor that just dropped in an array still loads.
+  QJsonArray arr;
+  if (doc.isArray()) {
+    arr = doc.array();
+  } else if (doc.isObject() && doc.object().value("profiles").isArray()) {
+    arr = doc.object().value("profiles").toArray();
+  } else {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Layout profile registry root is not an array",
+                               "ThemePresetIO::loadRegistry");
+  }
+  for (const auto &v : arr) {
+    if (!v.isObject()) continue;
+    auto parsed = fromJson(v.toObject());
+    if (parsed.isOk()) {
+      out.append(parsed.value());
+    }
+    // Silently skip individual malformed entries so one broken profile
+    // doesn't render the whole list unloadable. The user can still see
+    // the rest in the dialog and re-save.
+  }
+  return out;
+}
+
+ErrorUtils::Result<bool> saveRegistry(const QList<ThemePreset> &profiles, const QString &filePath) {
+  if (filePath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Cannot save layout profile registry to an empty path",
+                               "ThemePresetIO::saveRegistry");
+  }
+  const QString parentDir = QFileInfo(filePath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Failed to create parent directory for layout profile registry",
+                               "ThemePresetIO::saveRegistry")
+        .withDetails(parentDir);
+  }
+  QJsonArray arr;
+  for (const ThemePreset &p : profiles) {
+    arr.append(toJson(p));
+  }
+  QJsonObject root;
+  root["schemaVersion"] = kCurrentSchemaVersion;
+  root["profiles"] = arr;
+
+  QSaveFile file(filePath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Failed to open layout profile registry for writing",
+                               "ThemePresetIO::saveRegistry")
+        .withDetails(file.errorString());
+  }
+  const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
+  if (file.write(bytes) != bytes.size()) {
+    file.cancelWriting();
+    return ErrorContext::error(ErrorCode::FileWriteError, "Short write on layout profile registry",
+                               "ThemePresetIO::saveRegistry");
+  }
+  if (!file.commit()) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Failed to commit layout profile registry write",
+                               "ThemePresetIO::saveRegistry")
+        .withDetails(file.errorString());
+  }
+  PathUtils::syncDirectory(parentDir);
+  return true;
+}
+
+QList<ThemePreset> addOrReplace(const QList<ThemePreset> &registry, const ThemePreset &preset) {
+  const QString trimmedName = preset.name.trimmed();
+  if (trimmedName.isEmpty()) {
+    // An empty name would create an unselectable row in the picker.
+    // Reject silently — the dialog gates the Save button on a non-blank
+    // name, so this is purely a defence-in-depth check.
+    return registry;
+  }
+  QList<ThemePreset> out;
+  out.reserve(registry.size() + 1);
+  bool replaced = false;
+  for (const ThemePreset &existing : registry) {
+    if (existing.name.trimmed().compare(trimmedName, Qt::CaseInsensitive) == 0) {
+      out.append(preset);
+      replaced = true;
+    } else {
+      out.append(existing);
+    }
+  }
+  if (!replaced) {
+    out.append(preset);
+  }
+  return out;
+}
+
+QList<ThemePreset> removeByName(const QList<ThemePreset> &registry, const QString &name) {
+  const QString trimmed = name.trimmed();
+  if (trimmed.isEmpty()) {
+    return registry;
+  }
+  QList<ThemePreset> out;
+  out.reserve(registry.size());
+  for (const ThemePreset &existing : registry) {
+    if (existing.name.trimmed().compare(trimmed, Qt::CaseInsensitive) != 0) {
+      out.append(existing);
+    }
+  }
+  return out;
+}
+
 QStringList describeChanges(const ThemePreset &preset, const CollectionConfig &target) {
   QStringList changes;
   if (preset.gridLayout != target.gridLayout) {
