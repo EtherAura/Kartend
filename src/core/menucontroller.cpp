@@ -147,6 +147,7 @@ void MenuController::setupMenuBar() {
   setupActionLayoutProfiles();
   setupActionCollectionHealth();
   setupActionBulkEdit();
+  setupActionReviewMissingMetadata();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -767,6 +768,18 @@ void MenuController::setupActionBulkEdit() {
   }
   connect(m_bulkEditAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onBulkEdit) m_ctx.onBulkEdit();
+  });
+}
+
+void MenuController::setupActionReviewMissingMetadata() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_reviewMissingMetadataAction = new QAction(tr("Review Missing Metadata..."), this);
+  m_ctx.mainWindow->addAction(m_reviewMissingMetadataAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_reviewMissingMetadataAction);
+  }
+  connect(m_reviewMissingMetadataAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onReviewMissingMetadata) m_ctx.onReviewMissingMetadata();
   });
 }
 

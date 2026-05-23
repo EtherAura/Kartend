@@ -6,6 +6,7 @@ target_sources(kartend_utils PRIVATE
   itemartwork.cpp
   itemmetadata.cpp
   itemmetadatacache.cpp
+  metadataqueue.cpp
   smartfilter.cpp
   smartplaylistevaluator.cpp
   usagestatsstore.cpp
@@ -17,6 +18,7 @@ target_sources(kartend_utils PRIVATE
   itemartwork.h
   itemmetadata.h
   itemmetadatacache.h
+  metadataqueue.h
   smartfilter.h
   smartplaylistevaluator.h
   usagestatsstore.h

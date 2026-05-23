@@ -63,6 +63,7 @@ struct MenuControllerContext {
   std::function<void()> onManageLayoutProfiles;
   std::function<void()> onShowCollectionHealth;
   std::function<void()> onBulkEdit;
+  std::function<void()> onReviewMissingMetadata;
   std::function<void()> onShowFirstRunWizard;
   std::function<void()> onShowScraperCredentials;
   std::function<void()> onRunBatchScrape;
@@ -127,6 +128,7 @@ private:
   QAction *m_layoutProfilesAction = nullptr;
   QAction *m_collectionHealthAction = nullptr;
   QAction *m_bulkEditAction = nullptr;
+  QAction *m_reviewMissingMetadataAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
   QActionGroup *m_layoutActionGroup = nullptr;
   QActionGroup *m_orientationActionGroup = nullptr;
@@ -190,6 +192,7 @@ private:
   void setupActionLayoutProfiles();
   void setupActionCollectionHealth();
   void setupActionBulkEdit();
+  void setupActionReviewMissingMetadata();
   void setupRecentMenu();
   void setupMostLaunchedMenu();
   void setupLayoutActions();

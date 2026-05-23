@@ -41,6 +41,8 @@
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
+#include "metadataqueue.h"
+#include "metadatareviewdialog.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
@@ -465,6 +467,7 @@ void MainWindow::createMenuBar() {
   ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
   ctx.onNavigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
   ctx.onBulkEdit = [this]() { bulkEditInteractive(); };
+  ctx.onReviewMissingMetadata = [this]() { reviewMissingMetadataInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1039,6 +1042,70 @@ void MainWindow::openCommandPalette() {
   CommandPaletteDialog dialog(this);
   dialog.setCommands(std::move(commands));
   dialog.exec();
+}
+
+void MainWindow::reviewMissingMetadataInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Review missing metadata"),
+                             tr("Open a collection before running the review."));
+    return;
+  }
+  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) return;
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  if (uuid.isEmpty()) return;
+
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+  if (rows.isEmpty()) {
+    QMessageBox::information(this, tr("Review missing metadata"),
+                             tr("This collection has no items to review."));
+    return;
+  }
+  QList<MetadataQueue::InputRow> inputs;
+  inputs.reserve(rows.size());
+  for (const IDatabaseManager::ItemPathRow &row : rows) {
+    MetadataQueue::InputRow input;
+    input.filePath = row.path;
+    input.hasArtworkOnDisk = !row.artworkPath.trimmed().isEmpty();
+    input.itemName = QFileInfo(row.path).completeBaseName();
+    inputs.append(input);
+  }
+  const auto entries = MetadataQueue::build(uuid, inputs, [db](const QString &u, const QString &p) {
+    return db->loadItemMetadata(u, p);
+  });
+  if (entries.isEmpty()) {
+    QMessageBox::information(
+        this, tr("Review missing metadata"),
+        tr("Every item in \"%1\" already has the core metadata fields.").arg(cfg.name));
+    return;
+  }
+
+  // Edit closure: open the existing per-item editor through the
+  // interaction manager (it owns the closure that pops EditMetadataDialog
+  // and persists the result). Returns true when something changed.
+  auto onEdit = [this](const QString &filePath, const QString &itemName) {
+    if (auto *im = m_appManager->getInteractionManager()) {
+      // editItemMetadata is fire-and-forget; we can't tell from its
+      // signature whether the user actually saved. Conservative: assume
+      // an edit attempt counts and let reevaluate filter the queue.
+      im->editItemMetadata(filePath, itemName);
+      return true;
+    }
+    return false;
+  };
+  auto onReload = [db](const QString &u, const QString &p) { return db->loadItemMetadata(u, p); };
+
+  MetadataReviewDialog dialog(this);
+  dialog.setQueue(entries, std::move(onEdit), std::move(onReload));
+  dialog.exec();
+
+  // Refresh the sidebar so any edits made during the review are visible
+  // without a separate collection switch.
+  if (m_appManager->getNavigationManager()) {
+    m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  }
 }
 
 void MainWindow::setupArtworkManager() {

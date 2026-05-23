@@ -419,6 +419,11 @@ private:
   /// the current state.
   void openCommandPalette();
 
+  /// Opens the missing-metadata review queue for the active collection.
+  /// Items lacking title / description / genre / artwork are presented
+  /// one at a time with Edit / Skip / Close controls.
+  void reviewMissingMetadataInteractive();
+
   /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
   /// the command palette. Called once during setupUI alongside the
   /// other application shortcuts.

@@ -231,6 +231,19 @@ target_link_libraries(test_collectionhealth
 )
 add_test(NAME CollectionHealth COMMAND test_collectionhealth)
 
+# MetadataQueue tests (Kartend-gtly). Pure analyzer over a metadata loader closure.
+add_executable(test_metadataqueue
+  utils/test_metadataqueue.cpp
+  ${SRC_DIR}/utils/db/metadataqueue.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+)
+target_link_libraries(test_metadataqueue
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME MetadataQueue COMMAND test_metadataqueue)
+
 # FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
 add_executable(test_fuzzymatch
   utils/test_fuzzymatch.cpp
