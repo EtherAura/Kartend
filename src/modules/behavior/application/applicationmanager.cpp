@@ -210,7 +210,7 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
 
   // 7. Persist cache and session data synchronously. The prior implementation
   // dispatched these via QtConcurrent::run and main.cpp slept 200 ms before
-  // std::quick_exit — on a slow disk or a large session JSON the write was
+  // std::_Exit — on a slow disk or a large session JSON the write was
   // routinely dropped without any indication (Kartend-x2by). The snapshot
   // payloads are bytes-on-the-stack already, so blocking the shutdown thread
   // for the actual write is the only way to guarantee durability before

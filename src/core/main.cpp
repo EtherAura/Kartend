@@ -29,7 +29,13 @@
 
 #include <QSqlDatabase>
 
-auto main(int argc, char *argv[]) -> int {
+// extern "C" linkage is needed on Windows: SDL2's pkg-config injects
+// -Dmain=SDL_main so SDL2main's WinMain can dispatch into our entry
+// point. The renamed `SDL_main` symbol has to be unmangled C for that
+// WinMain (which lives in a C translation unit inside libSDL2main) to
+// resolve it. On non-Windows the rename macro isn't defined, and main
+// has implicit C linkage anyway, so this is a no-op.
+extern "C" auto main(int argc, char *argv[]) -> int {
   // Enable Wayland-native features when running on Wayland
   // This improves integration with compositors like KWin, Sway, Hyprland
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -282,7 +288,7 @@ auto main(int argc, char *argv[]) -> int {
 
   // Smoke-test hook: when KARTEND_SMOKE_TEST_EXIT_MS is set, schedule a
   // graceful quit after the given number of milliseconds and return through
-  // the normal teardown path (no quick_exit) so sanitizers can observe full
+  // the normal teardown path (no _Exit) so sanitizers can observe full
   // destructor execution.
   const QByteArray smokeMsRaw = qgetenv("KARTEND_SMOKE_TEST_EXIT_MS");
   bool smokeTestMode = false;
@@ -294,7 +300,7 @@ auto main(int argc, char *argv[]) -> int {
   }
   if (smokeTestMode) {
     // Smoke-test exit timer: triggers graceful app quit after smokeMs so the
-    // sanitizer CI job exercises full destructor sequencing (no quick_exit).
+    // sanitizer CI job exercises full destructor sequencing (no _Exit).
     QTimer::singleShot(smokeMs, &app, &QCoreApplication::quit);
   }
 
@@ -326,5 +332,9 @@ auto main(int argc, char *argv[]) -> int {
 
   // Force immediate exit to skip Qt's lengthy global thread pool cleanup.
   // Our important work is done; remaining threads are abandoned artwork loads.
-  std::quick_exit(0);
+  // std::_Exit (not std::quick_exit) because MinGW's libstdc++ and MSVC's
+  // STL both omit quick_exit — the underlying Windows CRT has no C11
+  // quick_exit. _Exit has the same effect for us: no atexit, no destructors,
+  // OS reaps the process.
+  std::_Exit(0);
 }

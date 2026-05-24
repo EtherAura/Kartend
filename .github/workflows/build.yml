@@ -463,3 +463,84 @@ jobs:
 
       - name: ccache stats
         run: ccache --show-stats
+
+  # Temporary preview build for the MSVC code path landed alongside the
+  # Windows port. Builds kartend.exe with MSVC + Qt 6.7 LTS, bundles Qt
+  # DLLs via windeployqt, and uploads a downloadable .zip artifact.
+  #
+  # Skipped vs. the full Windows CI in a follow-up issue:
+  #   - No vcpkg → optional deps (zstd, qtkeychain, sdl2) are absent.
+  #     The exe still launches and degrades gracefully: kart compression
+  #     falls back to qCompress (zlib), no SDL2 gamepad, no Windows
+  #     Credential Manager backend for scraper creds.
+  #   - No tests (Qt6::Test not requested in the install-qt-action modules
+  #     list to keep this job fast).
+  #   - No icon (Windows .ico + resources.rc come in a separate bd issue).
+  #
+  # Remove this job once the full Windows CI + release packaging lands.
+  windows-preview-build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Qt 6.7 LTS
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          modules: 'qtmultimedia qtimageformats'
+          cache: true
+
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake (MSVC)
+        # No -DCMAKE_TOOLCHAIN_FILE=vcpkg here — optional deps are
+        # find_package(QUIET); their absence is fine for the preview.
+        # KARTEND_PORTABLE_RELEASE=ON is a no-op on MSVC (vectorization is
+        # on by default at /O2; no -march=native equivalent) but kept for
+        # parity with the eventual release.yml invocation.
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DKARTEND_BUILD_TESTS=OFF `
+            -DKARTEND_ENABLE_CCACHE=OFF `
+            -DKARTEND_PORTABLE_RELEASE=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Stage with windeployqt
+        # windeployqt walks the exe's import table and copies the Qt DLLs,
+        # plugins (platforms\qwindows.dll, imageformats, ...), and qm files
+        # into the directory containing the exe. --release picks the
+        # release-mode DLLs; --no-translations drops Qt's own translations
+        # since the project ships its own.
+        run: |
+          mkdir dist\kartend
+          Copy-Item build\Release\kartend.exe dist\kartend\
+          Copy-Item LICENSE dist\kartend\
+          Copy-Item readme.md dist\kartend\
+          windeployqt --release --no-translations dist\kartend\kartend.exe
+
+      - name: Package preview .zip
+        # Compress-Archive is PowerShell-native and avoids pulling in 7z.
+        # The artifact name carries the run number so multiple preview
+        # downloads from the same branch are distinguishable.
+        run: |
+          $zipName = "kartend-windows-x64-preview-r${env:GITHUB_RUN_NUMBER}.zip"
+          Compress-Archive -Path dist\kartend\* -DestinationPath $zipName
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 14
+          if-no-files-found: error

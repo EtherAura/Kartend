@@ -270,13 +270,21 @@ target_compile_definitions(kartend_utils
 # Additional candidates (-Wcast-align, -Wformat=2, -Wnull-dereference,
 # -Wdouble-promotion, -Wold-style-cast, -Wnon-virtual-dtor) need their
 # own follow-up sweep before enabling.
+# MSVC: /W4 is the closest analogue to -Wall -Wextra; /permissive- enforces
+# standards conformance (no Microsoft extensions). Specific MSVC noise
+# (C4127 from Qt's signal/slot macros, etc.) is left untouched until it
+# actually fires — same don't-suppress-blindly stance as the GCC list.
 foreach(_area ${KARTEND_AREA_LIBS})
-  target_compile_options(${_area} PRIVATE
-    -Wall -Wextra -Wpedantic -Wshadow -Wimplicit-fallthrough)
+  if (MSVC)
+    target_compile_options(${_area} PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(${_area} PRIVATE
+      -Wall -Wextra -Wpedantic -Wshadow -Wimplicit-fallthrough)
+  endif()
 endforeach()
 
 # Keep GCC-only intent with Clang analogue on RISC-V
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
+if (NOT MSVC AND CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
   foreach(_area ${KARTEND_AREA_LIBS})
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       target_compile_options(${_area} PRIVATE -mno-direct-extern-access)
@@ -291,38 +299,70 @@ endif()
 #   RELEASE_PERF_* — high-performance Release-only. -march=native makes the
 #                    binary non-portable, so KARTEND_PORTABLE_RELEASE skips it
 #                    (and -O3/fast-math) for distro packaging.
-set(HARDENING_COMPILE_OPTS -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE)
-set(HARDENING_LINK_OPTS -Wl,-z,now -Wl,-z,relro -pie)
+if (MSVC)
+  # MSVC equivalents of the GNU/ELF hardening set:
+  #   /sdl       — additional security-development-lifecycle checks (extra
+  #                buffer-overflow detection beyond /GS, which is on by
+  #                default)
+  #   /guard:cf  — Control Flow Guard; compile-side and link-side both
+  #                required
+  #   /DYNAMICBASE, /NXCOMPAT, /HIGHENTROPYVA — linker defaults on modern
+  #                MSVC, listed explicitly so the intent mirrors the GNU
+  #                -pie/-Wl,-z,relro/-Wl,-z,now set.
+  # PIE / FORTIFY_SOURCE have no PE/MSVC analogue (ASLR is OS-managed via
+  # /DYNAMICBASE; there's no fortified libc to wrap).
+  set(HARDENING_COMPILE_OPTS /sdl /guard:cf)
+  set(HARDENING_LINK_OPTS /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA)
 
-if (KARTEND_PORTABLE_RELEASE)
-  set(RELEASE_PERF_COMPILE_OPTS -flto=auto -DQT_NO_DEBUG)
-  set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,--gc-sections -Wl,--as-needed)
+  # KARTEND_PORTABLE_RELEASE is a no-op on MSVC — there's no -march=native
+  # equivalent and vectorization is already on at /O2. /GL + /LTCG is the
+  # MSVC LTO pair; the /LTCG companion lives in KARTEND_LTO_LINK_OPTIONS
+  # below so the integration-test exe picks it up too.
+  set(RELEASE_PERF_COMPILE_OPTS /O2 /GL /DQT_NO_DEBUG)
+  set(RELEASE_PERF_LINK_OPTS /LTCG /OPT:REF /OPT:ICF)
 else()
-  # Removed flags (the perf gain on a Qt frontend is in the noise, the risk
-  # is real):
-  #   -ffast-math: defines __FAST_MATH__ which can poison transitive headers
-  #     (some libraries #error on it) and changes IEEE-754 rounding;
-  #     -fno-signed-zeros / -fno-trapping-math / -fno-math-errno are part of
-  #     the same family.
-  #   -fdelete-null-pointer-checks: legal C++ pessimization that has caused
-  #     CVE-class bugs in mainstream projects when assumptions about UB
-  #     differ between compiler versions.
-  #   -fmerge-all-constants: violates the C/C++ standard's "distinct
-  #     addresses for distinct objects" guarantee; rarely matters in
-  #     practice but breaks identity comparisons of string literals.
-  set(RELEASE_PERF_COMPILE_OPTS
-    -O3 -march=native -flto=auto
-    -fomit-frame-pointer -funroll-loops
-    -fno-semantic-interposition -ftree-vectorize
-    -DQT_NO_DEBUG
-  )
-  set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
-endif()
+  # GCC/Clang. Stack protector is portable; -D_FORTIFY_SOURCE / -fPIE /
+  # -Wl,-z,* / -pie are ELF-only — MinGW's ld rejects -z, and PIE has no
+  # PE counterpart. Gate them behind NOT WIN32 so MinGW cross-builds link
+  # cleanly. On MinGW the equivalent runtime mitigations (ASLR, DEP,
+  # high-entropy VA) are binutils defaults — no extra flags required.
+  set(HARDENING_COMPILE_OPTS -fstack-protector-strong)
+  set(HARDENING_LINK_OPTS)
+  if (NOT WIN32)
+    list(APPEND HARDENING_COMPILE_OPTS -D_FORTIFY_SOURCE=2 -fPIE)
+    list(APPEND HARDENING_LINK_OPTS -Wl,-z,now -Wl,-z,relro -pie)
+  endif()
 
-# lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
-# the GNU linker or gold.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  list(PREPEND RELEASE_PERF_LINK_OPTS -fuse-ld=lld)
+  if (KARTEND_PORTABLE_RELEASE)
+    set(RELEASE_PERF_COMPILE_OPTS -flto=auto -DQT_NO_DEBUG)
+    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,--gc-sections -Wl,--as-needed)
+  else()
+    # Removed flags (the perf gain on a Qt frontend is in the noise, the risk
+    # is real):
+    #   -ffast-math: defines __FAST_MATH__ which can poison transitive headers
+    #     (some libraries #error on it) and changes IEEE-754 rounding;
+    #     -fno-signed-zeros / -fno-trapping-math / -fno-math-errno are part of
+    #     the same family.
+    #   -fdelete-null-pointer-checks: legal C++ pessimization that has caused
+    #     CVE-class bugs in mainstream projects when assumptions about UB
+    #     differ between compiler versions.
+    #   -fmerge-all-constants: violates the C/C++ standard's "distinct
+    #     addresses for distinct objects" guarantee; rarely matters in
+    #     practice but breaks identity comparisons of string literals.
+    set(RELEASE_PERF_COMPILE_OPTS
+      -O3 -march=native -flto=auto
+      -fomit-frame-pointer -funroll-loops
+      -fno-semantic-interposition -ftree-vectorize
+      -DQT_NO_DEBUG
+    )
+    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
+  endif()
+
+  # lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
+  # the GNU linker or gold.
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    list(PREPEND RELEASE_PERF_LINK_OPTS -fuse-ld=lld)
+  endif()
 endif()
 
 # RPATH: portable bundles (Flatpak, AppImage) ship Qt and other transitive
@@ -332,7 +372,11 @@ endif()
 # library paths and want NO embedded RPATH — leaving the install RPATH unset
 # is the right default there. AUTO_USE_LINK_PATH is disabled so the build
 # tree's link paths don't leak into the installed binary.
-if (KARTEND_PORTABLE_RELEASE)
+# Windows/PE has no RPATH concept — DLL search uses the exe's directory,
+# %PATH%, and the SafeDllSearchMode rules. Portable bundles on Windows
+# co-locate DLLs next to the exe via windeployqt, so no per-target hint
+# is needed.
+if (KARTEND_PORTABLE_RELEASE AND NOT WIN32)
   set_target_properties(kartend PROPERTIES
     INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../lib64"
     INSTALL_RPATH_USE_LINK_PATH FALSE
@@ -366,11 +410,20 @@ target_link_options(kartend PRIVATE
 # consumer linking ANY area lib transitively inherits these flags through
 # the chain. Tested under clang-18 Release where small test binaries link
 # direct area-lib .o subsets (Kartend-eyzv).
-set(KARTEND_LTO_LINK_OPTIONS
-  $<$<CONFIG:Release>:-flto=auto>
-)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
+if (MSVC)
+  # /GL is on the compile side via RELEASE_PERF_COMPILE_OPTS above; /LTCG
+  # is the matching link-side flag and must propagate to every test exe
+  # that consumes the LTO'd OBJECT libs.
+  set(KARTEND_LTO_LINK_OPTIONS
+    $<$<CONFIG:Release>:/LTCG>
+  )
+else()
+  set(KARTEND_LTO_LINK_OPTIONS
+    $<$<CONFIG:Release>:-flto=auto>
+  )
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
+  endif()
 endif()
 target_link_options(kartend_utils INTERFACE ${KARTEND_LTO_LINK_OPTIONS})
 
@@ -378,6 +431,14 @@ target_link_options(kartend_utils INTERFACE ${KARTEND_LTO_LINK_OPTIONS})
 # above used genex substitution — applying via separate target_*_options calls
 # accumulates rather than relying on dead list(APPEND) text substitution).
 if (KARTEND_USE_PGO)
+  if (MSVC)
+    # MSVC PGO uses /GENPROFILE / /USEPROFILE (compile and link side) plus
+    # a pgosweep run between generate and use. Not yet wired here — track
+    # as a follow-up once the GCC/Clang path is exercised on Windows.
+    message(FATAL_ERROR
+      "KARTEND_USE_PGO is not yet supported on MSVC. Use GCC/Clang for PGO, "
+      "or file a follow-up to add the /GENPROFILE / /USEPROFILE pair.")
+  endif()
   if (KARTEND_PGO_GENERATE)
     message(STATUS "PGO: Generating profile data in ${KARTEND_PGO_PROFILE_DIR}")
     foreach(_area ${KARTEND_AREA_LIBS})
@@ -418,9 +479,15 @@ endforeach()
 if (KARTEND_LINKER_MAP)
   set(_MAP_DIR "${CMAKE_BINARY_DIR}/maps")
   file(MAKE_DIRECTORY "${_MAP_DIR}")
-  target_link_options(kartend PRIVATE
-    $<$<CONFIG:Debug>:-Wl,-Map,${_MAP_DIR}/kartend.map>
-  )
+  if (MSVC)
+    target_link_options(kartend PRIVATE
+      $<$<CONFIG:Debug>:/MAP:${_MAP_DIR}/kartend.map>
+    )
+  else()
+    target_link_options(kartend PRIVATE
+      $<$<CONFIG:Debug>:-Wl,-Map,${_MAP_DIR}/kartend.map>
+    )
+  endif()
 endif()
 
 # Install (Linux)
@@ -448,10 +515,14 @@ if (NOT TARGET uninstall)
     VERBATIM)
 endif()
 
-# KARTEND_MAINTENANCE adds -Werror to every area lib's compile step.
+# KARTEND_MAINTENANCE adds -Werror (or /WX on MSVC) to every area lib.
 if (KARTEND_MAINTENANCE)
   foreach(_area ${KARTEND_AREA_LIBS})
-    target_compile_options(${_area} PRIVATE -Werror)
+    if (MSVC)
+      target_compile_options(${_area} PRIVATE /WX)
+    else()
+      target_compile_options(${_area} PRIVATE -Werror)
+    endif()
   endforeach()
 endif()
 
