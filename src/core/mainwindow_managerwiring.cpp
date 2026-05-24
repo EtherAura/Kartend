@@ -24,6 +24,8 @@
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "kartmanager.h"
+#include "kartpreflight.h"
+#include "kartpreflightdialog.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "navigationmanager.h"
@@ -237,6 +239,14 @@ void MainWindow::wireKartManager() {
       box.setDefaultButton(cancel);
       box.exec();
       return box.clickedButton() == importAnyway;
+    };
+    // Kartend-fr4z: pre-extraction preflight dialog. Surfaces a unified
+    // summary (bundle contents + every validation concern) before the
+    // user picks a destination directory; rejecting here costs nothing
+    // on disk.
+    kartSetup.preflightConfirmer = [this](const KartPreflight::PreflightReport &report) -> bool {
+      KartPreflightDialog dialog(report, this);
+      return dialog.exec() == QDialog::Accepted;
     };
     km->setupReferences(kartSetup);
 

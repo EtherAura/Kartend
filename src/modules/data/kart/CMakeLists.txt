@@ -10,6 +10,9 @@ target_sources(kartend_data PRIVATE
   kartmanifest.h
   kartmerge.cpp
   kartmerge.h
+  kartpreflight.cpp
+  kartpreflight.h
+  kartsuspiciouspaths.cpp
   kartreader.cpp
   kartreader.h
   kartwriter.cpp

@@ -39,42 +39,9 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
 
 } // namespace
 
-QList<SuspiciousKartPath> collectSuspiciousKartPaths(const CollectionConfig &cfg,
-                                                     const QSet<QString> &trustedLauncherPaths) {
-  QList<SuspiciousKartPath> out;
-  const QString home = QDir::homePath();
-  const QStringList allowedRoots = {home, QStringLiteral("/usr/bin"),
-                                    QStringLiteral("/usr/local/bin"), QStringLiteral("/opt")};
-  auto isPathAllowed = [&](const QString &path) {
-    const QString abs = QFileInfo(path).absoluteFilePath();
-    for (const QString &root : allowedRoots) {
-      if (abs.startsWith(root + QLatin1Char('/')) || abs == root) {
-        return true;
-      }
-    }
-    return false;
-  };
-  auto check = [&](const QString &field, const QString &path, bool launcherField) {
-    if (path.isEmpty()) return;
-    if (isPathAllowed(path)) return;
-    // Kartend-s6mj: a path already trusted via an existing collection's
-    // launcher entry doesn't need to re-prompt the user. Only applies to
-    // launcher fields — the icon/placeholder fields aren't reused across
-    // collections in the same way.
-    if (launcherField && trustedLauncherPaths.contains(path)) {
-      return;
-    }
-    out.append({field, path});
-  };
-  check(QStringLiteral("launcher.launcherPath"), cfg.launcher.launcherPath, /*launcherField=*/true);
-  for (int i = 0; i < cfg.launcher.additionalLaunchers.size(); ++i) {
-    check(QStringLiteral("additionalLaunchers[%1].launcherPath").arg(i),
-          cfg.launcher.additionalLaunchers[i].launcherPath, /*launcherField=*/true);
-  }
-  check(QStringLiteral("collectionIcon"), cfg.collectionIcon, /*launcherField=*/false);
-  check(QStringLiteral("placeholderArtwork"), cfg.placeholderArtwork, /*launcherField=*/false);
-  return out;
-}
+// collectSuspiciousKartPaths now lives in kartsuspiciouspaths.cpp so the
+// preflight unit tests can link it without pulling in the whole manager
+// translation unit. The declaration stays in kartmanager.h.
 
 KartManager::KartManager(QObject *parent) : QObject(parent) {}
 KartManager::~KartManager() = default;
@@ -304,6 +271,28 @@ void KartManager::importInteractive() {
       QMessageBox::warning(parent, tr("Import Kart"), peeked.error().message);
     }
     return;
+  }
+
+  // Preflight pass — surface launcher/path issues before the user picks a
+  // destination, so cancelling here costs nothing on disk. The hook is
+  // wired by the UI layer (MainWindow); in headless contexts we proceed
+  // unconditionally and rely on the existing post-extract suspicious-path
+  // gate for safety.
+  if (m_setup.preflightConfirmer) {
+    QSet<QString> existingNames;
+    if (m_setup.getCollections) {
+      if (auto *collections = m_setup.getCollections()) {
+        for (const CollectionConfig &c : *collections) {
+          existingNames.insert(c.name.trimmed().toLower());
+        }
+      }
+    }
+    const auto report =
+        KartPreflight::buildReport(peeked.value(), previouslyTrustedLauncherPaths(), existingNames);
+    if (!m_setup.preflightConfirmer(report)) {
+      // Treat as a clean user cancellation — no error toast.
+      return;
+    }
   }
 
   const QString suggested = QDir::homePath() + "/" +

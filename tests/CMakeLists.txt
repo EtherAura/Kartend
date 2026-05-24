@@ -1803,6 +1803,41 @@ target_link_libraries(test_historystore
 )
 add_test(NAME HistoryStore COMMAND test_historystore)
 
+# KartPreflight tests (Kartend-fr4z). Pure helpers + report assembly so the
+# UI dialog has something to render. Reuses kartsuspiciouspaths.cpp so the
+# allowlist branch can be exercised without dragging in KartManager itself.
+add_executable(test_kartpreflight
+  utils/test_kartpreflight.cpp
+  ${SRC_DIR}/modules/data/kart/kartpreflight.cpp
+  ${SRC_DIR}/modules/data/kart/kartsuspiciouspaths.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+)
+target_include_directories(test_kartpreflight PRIVATE
+  ${SRC_DIR}/modules/data/kart
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartpreflight
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME KartPreflight COMMAND test_kartpreflight)
+
 # KartManifest tests (JSON round-trip for the .kart packaging format)
 add_executable(test_kartmanifest
   modules/kart/test_kartmanifest.cpp

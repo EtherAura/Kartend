@@ -12,6 +12,7 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "kartmerge.h"
+#include "kartpreflight.h"
 #include "kartreader.h"
 
 QT_BEGIN_NAMESPACE
@@ -39,6 +40,12 @@ using SuspiciousKartPath = QPair<QString, QString>;
 /// warning with default=Cancel.
 using SuspiciousPathConfirmer = std::function<bool(const QList<SuspiciousKartPath> &)>;
 
+/// Owner-provided preflight gate fired after KartReader::peekManifest succeeds
+/// but before extraction begins. The UI layer typically wires a
+/// KartPreflightDialog and returns true when the user accepts. Null in
+/// headless contexts — the import skips the preflight and proceeds.
+using PreflightConfirmer = std::function<bool(const KartPreflight::PreflightReport &)>;
+
 struct KartManagerSetup {
   /// ctx is the canonical source for sibling managers — Kartend-phyc dropped
   /// the prior ISettingsManager *settingsManager field; reads now go through
@@ -62,6 +69,12 @@ struct KartManagerSetup {
   /// interactive .kart imports. Left null in headless contexts; the
   /// import then proceeds (with the warning logged from finalizeImport).
   SuspiciousPathConfirmer suspiciousPathConfirmer;
+
+  /// Kartend-fr4z: optional preflight confirmer fired right after
+  /// peekManifest and before extraction. The UI layer wraps a
+  /// KartPreflightDialog around this; returning false aborts the import
+  /// without writing anything to disk. Left null in headless contexts.
+  PreflightConfirmer preflightConfirmer;
 };
 
 /// Classify the imported manifest's externally-controlled path fields against
