@@ -62,6 +62,7 @@ struct MenuControllerContext {
   std::function<void()> onExportTheme;
   std::function<void()> onManageLayoutProfiles;
   std::function<void()> onShowCollectionHealth;
+  std::function<void()> onShowVariantGrouping;
   std::function<void()> onBulkEdit;
   std::function<void()> onReviewMissingMetadata;
   std::function<void()> onArtworkWizard;
@@ -133,6 +134,7 @@ private:
   QAction *m_exportThemeAction = nullptr;
   QAction *m_layoutProfilesAction = nullptr;
   QAction *m_collectionHealthAction = nullptr;
+  QAction *m_variantGroupingAction = nullptr;
   QAction *m_bulkEditAction = nullptr;
   QAction *m_reviewMissingMetadataAction = nullptr;
   QAction *m_artworkWizardAction = nullptr;
@@ -202,6 +204,7 @@ private:
   void setupActionExportTheme();
   void setupActionLayoutProfiles();
   void setupActionCollectionHealth();
+  void setupActionVariantGrouping();
   void setupActionBulkEdit();
   void setupActionReviewMissingMetadata();
   void setupActionArtworkWizard();

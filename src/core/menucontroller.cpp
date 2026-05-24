@@ -146,6 +146,7 @@ void MenuController::setupMenuBar() {
   setupActionExportTheme();
   setupActionLayoutProfiles();
   setupActionCollectionHealth();
+  setupActionVariantGrouping();
   setupActionBulkEdit();
   setupActionReviewMissingMetadata();
   setupActionArtworkWizard();
@@ -775,6 +776,18 @@ void MenuController::setupActionCollectionHealth() {
   }
   connect(m_collectionHealthAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onShowCollectionHealth) m_ctx.onShowCollectionHealth();
+  });
+}
+
+void MenuController::setupActionVariantGrouping() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_variantGroupingAction = new QAction(tr("Duplicates and variants..."), this);
+  m_ctx.mainWindow->addAction(m_variantGroupingAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_variantGroupingAction);
+  }
+  connect(m_variantGroupingAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowVariantGrouping) m_ctx.onShowVariantGrouping();
   });
 }
 

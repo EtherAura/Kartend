@@ -6,6 +6,7 @@ target_sources(kartend_ui PRIVATE
   launchpreviewdialog.cpp
   metadatareviewdialog.cpp
   starratingwidget.cpp
+  variantgroupingdialog.cpp
   artworkwizarddialog.h
   bulkeditdialog.h
   collectionhealthdialog.h
@@ -13,4 +14,5 @@ target_sources(kartend_ui PRIVATE
   launchpreviewdialog.h
   metadatareviewdialog.h
   starratingwidget.h
+  variantgroupingdialog.h
 )

@@ -414,6 +414,10 @@ private:
   /// Runs the CollectionHealth analyzer over the current item list +
   /// launcher config and pops a read-only summary dialog.
   void showCollectionHealthInteractive();
+  /// Run the same-basename variant detector across the active collection's
+  /// items table and pop the inspector dialog. No-op when no collection is
+  /// open; falls back to an informational toast when no groups are detected.
+  void showVariantGroupingInteractive();
   /// Switches to the collection that owns `filePath` and selects the
   /// item. No-op when the path can't be resolved to a live collection
   /// (e.g. its row survives from a deleted collection). Driven by the

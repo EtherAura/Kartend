@@ -1803,6 +1803,20 @@ target_link_libraries(test_historystore
 )
 add_test(NAME HistoryStore COMMAND test_historystore)
 
+# VariantGrouping tests (Kartend-skhk). Pure same-basename grouper.
+add_executable(test_variantgrouping
+  utils/test_variantgrouping.cpp
+  ${SRC_DIR}/utils/db/variantgrouping.cpp
+)
+target_include_directories(test_variantgrouping PRIVATE
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_variantgrouping
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME VariantGrouping COMMAND test_variantgrouping)
+
 # KartPreflight tests (Kartend-fr4z). Pure helpers + report assembly so the
 # UI dialog has something to render. Reuses kartsuspiciouspaths.cpp so the
 # allowlist branch can be exercised without dragging in KartManager itself.

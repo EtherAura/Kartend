@@ -62,6 +62,8 @@
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "toolbarcontroller.h"
+#include "variantgrouping.h"
+#include "variantgroupingdialog.h"
 #include "viewportmanager.h"
 
 #include "detailpageoverlay.h"
@@ -481,6 +483,7 @@ void MainWindow::createMenuBar() {
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
   ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
   ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
+  ctx.onShowVariantGrouping = [this]() { showVariantGroupingInteractive(); };
   ctx.onNavigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
   ctx.onBulkEdit = [this]() { bulkEditInteractive(); };
   ctx.onReviewMissingMetadata = [this]() { reviewMissingMetadataInteractive(); };
@@ -841,6 +844,57 @@ void MainWindow::showCollectionHealthInteractive() {
 
   CollectionHealthDialog dialog(this);
   dialog.setReport(cfg.name, report);
+  dialog.exec();
+}
+
+void MainWindow::showVariantGroupingInteractive() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    QMessageBox::information(this, tr("Duplicates and variants"),
+                             tr("Open a collection before scanning for variants."));
+    return;
+  }
+  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  if (uuid.isEmpty()) {
+    QMessageBox::warning(this, tr("Duplicates and variants"),
+                         tr("Could not resolve this collection's identity. "
+                            "Check the media directory in settings."));
+    return;
+  }
+  IDatabaseManager *db = m_appManager->getDatabaseManager();
+  if (!db) return;
+
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+  QStringList paths;
+  paths.reserve(rows.size());
+  for (const IDatabaseManager::ItemPathRow &row : rows) {
+    paths.append(row.path);
+  }
+  const auto groups = VariantGrouping::groupByBaseName(paths);
+  if (groups.isEmpty()) {
+    QMessageBox::information(this, tr("Duplicates and variants"),
+                             tr("No same-name variants were detected in '%1' — every item has a "
+                                "unique basename.")
+                                 .arg(cfg.name));
+    return;
+  }
+
+  VariantGroupingDialog dialog(groups, this);
+  dialog.setLaunchHandler([this](const QString &path) {
+    if (path.isEmpty() || !m_appManager) return;
+    // Defer to InteractionManager so launcher selection, kart-archive
+    // unpacking, and play-count bumps stay in one place. Resolve the
+    // owning collection via the DB instead of trusting the currently-viewed
+    // one — a user can navigate elsewhere while the dialog is up.
+    IDatabaseManager *db = m_appManager->getDatabaseManager();
+    InteractionManager *im = m_appManager->getInteractionManager();
+    if (!db || !im) return;
+    const int owningIndex = db->getCollectionIndexForFile(path);
+    if (!CollectionUtils::isValidIndex(owningIndex, &m_collections)) return;
+    im->launchItemWithCollection(path, owningIndex);
+  });
+  dialog.setSelectHandler([this](const QString &path) { navigateToItem(path); });
   dialog.exec();
 }
 

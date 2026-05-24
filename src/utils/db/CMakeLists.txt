@@ -10,6 +10,7 @@ target_sources(kartend_utils PRIVATE
   smartfilter.cpp
   smartplaylistevaluator.cpp
   usagestatsstore.cpp
+  variantgrouping.cpp
   batchsizes.h
   bulkedit.h
   collectionhealth.h
@@ -22,4 +23,5 @@ target_sources(kartend_utils PRIVATE
   smartfilter.h
   smartplaylistevaluator.h
   usagestatsstore.h
+  variantgrouping.h
 )
