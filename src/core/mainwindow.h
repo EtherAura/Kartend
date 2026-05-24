@@ -446,6 +446,12 @@ private:
   /// delete), and persists on close.
   void managePresentationProfilesInteractive();
 
+  /// Opens the read-only scraper provider registry dialog. Lists every
+  /// built-in metadata provider with its categories, capabilities, and
+  /// credential-configured status, plus a Test query line that
+  /// renders each provider's search URL on row activation.
+  void showScraperProvidersInteractive();
+
   /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
   /// the command palette. Called once during setupUI alongside the
   /// other application shortcuts.

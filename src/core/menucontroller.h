@@ -68,6 +68,7 @@ struct MenuControllerContext {
   std::function<void()> onShowBindings;
   std::function<void()> onNewLibraryWizard;
   std::function<void()> onPresentationProfiles;
+  std::function<void()> onShowScraperProviders;
   std::function<void()> onShowFirstRunWizard;
   std::function<void()> onShowScraperCredentials;
   std::function<void()> onRunBatchScrape;
@@ -122,6 +123,7 @@ private:
   QAction *m_statisticsAction = nullptr;
   QAction *m_firstRunWizardAction = nullptr;
   QAction *m_scraperCredentialsAction = nullptr;
+  QAction *m_scraperProvidersAction = nullptr;
   QAction *m_batchScrapeAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
@@ -189,6 +191,7 @@ private:
   void setupStatisticsAction();
   void setupFirstRunWizardAction();
   void setupScraperCredentialsAction();
+  void setupActionScraperProviders();
   void setupBatchScrapeAction();
   void setupGridWidthActions();
   void setupHamburgerMenu();

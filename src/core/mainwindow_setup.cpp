@@ -57,6 +57,7 @@
 #include "playlistmanager.h"
 #include "presentationprofilesdialog.h"
 #include "propertyutils.h"
+#include "scraperprovidersdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "toolbarcontroller.h"
@@ -481,6 +482,7 @@ void MainWindow::createMenuBar() {
   ctx.onShowBindings = [this]() { showBindingVisualizer(); };
   ctx.onNewLibraryWizard = [this]() { runNewLibraryWizard(); };
   ctx.onPresentationProfiles = [this]() { managePresentationProfilesInteractive(); };
+  ctx.onShowScraperProviders = [this]() { showScraperProvidersInteractive(); };
   ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
   ctx.onShowScraperCredentials = [this]() {
     m_dialogController->runScraperCredentialsDialog(&m_generalSettings,
@@ -1270,6 +1272,11 @@ void MainWindow::managePresentationProfilesInteractive() {
                            saved.error().message);
     }
   }
+}
+
+void MainWindow::showScraperProvidersInteractive() {
+  ScraperProvidersDialog dialog(&m_generalSettings, this);
+  dialog.exec();
 }
 
 void MainWindow::setupArtworkManager() {

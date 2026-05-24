@@ -152,6 +152,7 @@ void MenuController::setupMenuBar() {
   setupActionBindingVisualizer();
   setupActionNewLibraryWizard();
   setupActionPresentationProfiles();
+  setupActionScraperProviders();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -530,6 +531,20 @@ void MenuController::setupBatchScrapeAction() {
       m_ctx.ui->menuFile->addAction(m_batchScrapeAction);
     }
   }
+}
+
+void MenuController::setupActionScraperProviders() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_scraperProvidersAction = new QAction(tr("Scraper Providers..."), this);
+  m_ctx.mainWindow->addAction(m_scraperProvidersAction);
+  // Sits in the Help menu next to Scraper Credentials so configuration
+  // affordances stay grouped.
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_scraperProvidersAction);
+  }
+  connect(m_scraperProvidersAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowScraperProviders) m_ctx.onShowScraperProviders();
+  });
 }
 
 void MenuController::setupScraperCredentialsAction() {
