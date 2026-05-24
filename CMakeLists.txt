@@ -201,6 +201,30 @@ add_executable(kartend ${SRC_DIR}/core/main.cpp)
 
 target_link_libraries(kartend PRIVATE ${KARTEND_AREA_LIBS})
 
+# Windows resource: app icon + VERSIONINFO. Configured at generator
+# time so the embedded version stays in sync with the VERSION file
+# (single source of truth via the project() command above). Both MSVC
+# (cl.exe / rc.exe) and MinGW (windres) handle .rc through CMake's
+# RC language with no extra build-script glue.
+if (WIN32)
+  enable_language(RC)
+  set(KARTEND_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/icon.ico")
+  set(KARTEND_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+  set(KARTEND_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+  set(KARTEND_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+  set(KARTEND_APP_AUTHOR "EtherAura")
+  set(KARTEND_APP_NAME "kartend")
+  set(KARTEND_APP_DISPLAY_NAME "Kartend")
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/resources.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/src/assets/resources.rc"
+    @ONLY
+  )
+  target_sources(kartend PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/src/assets/resources.rc"
+  )
+endif()
+
 set(KARTEND_TRANSLATION_INSTALL_SUBDIR "${APP_NAME}/translations")
 set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
 

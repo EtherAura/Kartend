@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Windows build support (foundation).** CMakeLists gained an MSVC
+  compiler code path (hardening via `/sdl /guard:cf`, LTO via
+  `/GL /LTCG`, link cleanup via `/OPT:REF /OPT:ICF`, warnings via
+  `/W4 /permissive-`) and MinGW cross-builds now link cleanly — the
+  ELF-only hardening set (`-Wl,-z,*`, `-pie`, `-fPIE`,
+  `_FORTIFY_SOURCE`) is gated behind `NOT WIN32`. A `.rc` resource
+  embeds the Kartend app icon and a `VS_VERSION_INFO` block
+  (CompanyName, FileDescription, FileVersion, ProductName) into
+  `kartend.exe`, so Explorer and Properties → Details show the right
+  metadata. Two C++ portability fixes ride along: `std::_Exit`
+  replaces `std::quick_exit` (the C11 shim is absent from both
+  MinGW's libstdc++ and MSVC's STL), and `main` is declared
+  `extern "C"` so SDL2's main-hijacking macro yields an unmangled
+  symbol the `SDL2main` WinMain dispatcher can resolve. A temporary
+  `windows-preview-build` CI job uploads a downloadable Windows
+  preview .zip on every Build and Test run while the full Windows
+  release flow lands.
+
 ### Changed
 
 ### Fixed

@@ -1,0 +1,50 @@
+// Windows resource file. Configured at generator time by CMake's
+// configure_file so the version and metadata baked into kartend.exe
+// stay in sync with the VERSION file (single source of truth) and
+// the APP_* names defined in the top-level CMakeLists.
+//
+// To regenerate icon.ico from icon.png:
+//   python3 -c "from PIL import Image; \
+//     Image.open('icon.png').save('icon.ico', \
+//     sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+// Run from src/assets/.
+
+#include <winver.h>
+
+// Resource ID 1 is the convention for the app icon Explorer shows on
+// the .exe and Windows shows on the taskbar.
+IDI_ICON1 ICON "@KARTEND_ICON_PATH@"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    @KARTEND_VERSION_MAJOR@,@KARTEND_VERSION_MINOR@,@KARTEND_VERSION_PATCH@,0
+ PRODUCTVERSION @KARTEND_VERSION_MAJOR@,@KARTEND_VERSION_MINOR@,@KARTEND_VERSION_PATCH@,0
+ FILEFLAGSMASK  0x3fL
+#ifdef _DEBUG
+ FILEFLAGS      0x1L  // VS_FF_DEBUG
+#else
+ FILEFLAGS      0x0L
+#endif
+ FILEOS         0x40004L  // VOS_NT_WINDOWS32
+ FILETYPE       0x1L      // VFT_APP
+ FILESUBTYPE    0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // 040904b0 = US English (0x409) + Unicode (0x04b0 == 1200).
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "@KARTEND_APP_AUTHOR@"
+            VALUE "FileDescription",  "@KARTEND_APP_DISPLAY_NAME@"
+            VALUE "FileVersion",      "@KARTEND_VERSION@"
+            VALUE "InternalName",     "@KARTEND_APP_NAME@"
+            VALUE "LegalCopyright",   "Copyright (C) @KARTEND_APP_AUTHOR@"
+            VALUE "OriginalFilename", "@KARTEND_APP_NAME@.exe"
+            VALUE "ProductName",      "@KARTEND_APP_DISPLAY_NAME@"
+            VALUE "ProductVersion",   "@KARTEND_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
