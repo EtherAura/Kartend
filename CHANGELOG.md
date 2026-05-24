@@ -145,6 +145,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **GitHub Releases now ship binary + recipe packaging assets.**
+  Starting with v0.0.9, the tag-triggered `release.yml` workflow
+  builds a `.deb` via `cpack -G DEB` on `ubuntu-24.04` using the same
+  install-deps action `build.yml`'s gcc Release matrix uses, and
+  attaches it (with its sha256), plus `packaging/PKGBUILD` and
+  `packaging/kartend-<version>.ebuild`, alongside the existing
+  source tarball + sha256. Arch and Gentoo users can now fetch the
+  canonical recipe directly from the release page without cloning
+  (Kartend-hk2e).
 - **Usage Statistics dialog navigates instead of launching.**
   Double-clicking a row on the Most Played / Recently Played / Never
   Played / History tabs now closes the dialog, switches to the item's

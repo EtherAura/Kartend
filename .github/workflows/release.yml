@@ -78,10 +78,82 @@ jobs:
             -o ${{ steps.version.outputs.tarball }} \
             HEAD
 
-      - name: Compute checksums
+      - name: Compute source tarball checksum
         run: |
           sha256sum ${{ steps.version.outputs.tarball }} \
             | tee ${{ steps.version.outputs.tarball }}.sha256
+
+      # ─── Binary .deb via CPack ──────────────────────────────────────────
+      # Same package set as build.yml's gcc Release matrix cell; pulseaudio is
+      # dropped because the release job doesn't run tests. dpkg-dev is bundled
+      # in the runner image so CPACK_DEBIAN_PACKAGE_SHLIBDEPS resolves cleanly.
+
+      - name: Install build dependencies for .deb
+        uses: ./.github/actions/install-deps
+        with:
+          packages: g++ cmake ninja-build qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev
+
+      - name: Configure release build
+        run: |
+          cmake -S . -B build/release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DKARTEND_BUILD_TESTS=OFF \
+            -DKARTEND_ENABLE_CCACHE=OFF \
+            -DKARTEND_MAINTENANCE=OFF \
+            -DKARTEND_PORTABLE_RELEASE=ON
+
+      - name: Build kartend
+        run: cmake --build build/release --parallel
+
+      - name: Package .deb
+        id: deb
+        run: |
+          set -euo pipefail
+          cd build/release
+          cpack -G DEB
+          # CPACK_DEBIAN_FILE_NAME=DEB-DEFAULT produces a name like
+          # `kartend_0.0.9-1_amd64.deb`; glob it rather than hardcoding the
+          # release-number suffix CMake picks.
+          DEB_PATH="$(ls kartend_*.deb | head -n 1)"
+          if [ -z "${DEB_PATH:-}" ]; then
+            echo "::error::cpack -G DEB produced no .deb under build/release/"
+            exit 1
+          fi
+          # Move to the workspace root with the artifact name the release page
+          # advertises. action-gh-release uploads under the basename, so
+          # making the names predictable here keeps direct-download URLs
+          # consistent across releases.
+          DEB_OUT="../../kartend_${{ steps.version.outputs.version }}_amd64.deb"
+          mv "$DEB_PATH" "$DEB_OUT"
+          cd ../..
+          sha256sum "kartend_${{ steps.version.outputs.version }}_amd64.deb" \
+            | tee "kartend_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+          echo "deb=kartend_${{ steps.version.outputs.version }}_amd64.deb" >> "$GITHUB_OUTPUT"
+          echo "deb_sha=kartend_${{ steps.version.outputs.version }}_amd64.deb.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Stage packaging recipes
+        id: recipes
+        # Surface PKGBUILD + the ebuild as release assets so Arch and Gentoo
+        # users can wget the canonical recipes for v${{ steps.version.outputs.version }}
+        # without cloning. The PKGBUILD's sha256 is filled in by the
+        # post-publish step below, so a packaging-snapshot copy is uploaded
+        # alongside the live tag-time copy for callers that want the exact
+        # bytes that landed at tag time.
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          EBUILD="packaging/kartend-${VERSION}.ebuild"
+          if [ ! -f "$EBUILD" ]; then
+            echo "::error::Expected $EBUILD not found"
+            exit 1
+          fi
+          # Copy to the workspace root with predictable names that match what
+          # downstream packagers actually fetch.
+          cp packaging/PKGBUILD .
+          cp "$EBUILD" "kartend-${VERSION}.ebuild"
+          echo "pkgbuild=PKGBUILD" >> "$GITHUB_OUTPUT"
+          echo "ebuild=kartend-${VERSION}.ebuild" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
         uses: softprops/action-gh-release@v3
@@ -89,6 +161,10 @@ jobs:
           files: |
             ${{ steps.version.outputs.tarball }}
             ${{ steps.version.outputs.tarball }}.sha256
+            ${{ steps.deb.outputs.deb }}
+            ${{ steps.deb.outputs.deb_sha }}
+            ${{ steps.recipes.outputs.pkgbuild }}
+            ${{ steps.recipes.outputs.ebuild }}
           generate_release_notes: true
           fail_on_unmatched_files: true
 
