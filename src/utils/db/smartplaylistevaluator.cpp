@@ -213,6 +213,181 @@ QList<Match> evalHasArtwork(QSqlDatabase &db) {
   return out;
 }
 
+QList<Match> evalByCollection(QSqlDatabase &db, const QString &collectionUuid) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                               "SmartPlaylistEvaluator::evalByCollection"));
+    return out;
+  }
+  if (collectionUuid.isEmpty()) {
+    // Empty uuid is the unsaved-dialog sentinel — treat as "no matches"
+    // rather than returning every item across every collection.
+    return out;
+  }
+  QSqlQuery q(db);
+  if (!q.prepare("SELECT collection_uuid, path FROM items WHERE collection_uuid = ? "
+                 "ORDER BY name COLLATE NOCASE ASC")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare by-collection smart query",
+                                             "SmartPlaylistEvaluator::evalByCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run by-collection smart query",
+                                             "SmartPlaylistEvaluator::evalByCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
+QList<Match> evalByTitleSearch(QSqlDatabase &db, const QString &needle) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                               "SmartPlaylistEvaluator::evalByTitleSearch"));
+    return out;
+  }
+  const QString trimmed = needle.trimmed();
+  if (trimmed.isEmpty()) {
+    return out; // unsaved-dialog sentinel
+  }
+  QSqlQuery q(db);
+  // LIKE %?% on items.name. NOCASE collation isn't applied here because
+  // SQLite's default LIKE is case-insensitive for ASCII, which is the
+  // common case for English-language libraries. Unicode case folding via
+  // LOWER() on both sides could be a follow-up if multibyte titles need
+  // it.
+  if (!q.prepare("SELECT collection_uuid, path FROM items WHERE name LIKE ? "
+                 "ORDER BY name COLLATE NOCASE ASC")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare title-search smart query",
+                                             "SmartPlaylistEvaluator::evalByTitleSearch")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  q.addBindValue(QStringLiteral("%") + trimmed + QStringLiteral("%"));
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run title-search smart query",
+                                             "SmartPlaylistEvaluator::evalByTitleSearch")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
+QList<Match> evalMissingArtwork(QSqlDatabase &db) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                               "SmartPlaylistEvaluator::evalMissingArtwork"));
+    return out;
+  }
+  QSqlQuery q(db);
+  // Symmetric to evalHasArtwork — NULL OR empty captures both shapes the
+  // scanner can leave behind when an artwork file isn't found on disk.
+  if (!q.exec(QStringLiteral("SELECT collection_uuid, path FROM items "
+                             "WHERE artwork_path IS NULL OR artwork_path = '' "
+                             "ORDER BY name COLLATE NOCASE ASC"))) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run missing-artwork smart query",
+                                             "SmartPlaylistEvaluator::evalMissingArtwork")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
+QList<Match> evalFavorite(QSqlDatabase &db) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                               "SmartPlaylistEvaluator::evalFavorite"));
+    return out;
+  }
+  // Items present in the reserved Favorites playlist. INNER JOIN through
+  // playlist_items + playlists; the reserved_kind literal scope avoids
+  // user-named playlists colliding.
+  QSqlQuery q(db);
+  if (!q.exec(QStringLiteral(
+          "SELECT i.collection_uuid, i.path FROM items i "
+          "INNER JOIN playlist_items pi ON pi.source_collection_uuid = i.collection_uuid "
+          "AND pi.source_path = i.path "
+          "INNER JOIN playlists pl ON pl.id = pi.playlist_id "
+          "WHERE pl.reserved_kind = 'favorites' "
+          "ORDER BY i.name COLLATE NOCASE ASC"))) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run favorite smart query",
+                                             "SmartPlaylistEvaluator::evalFavorite")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
+QList<Match> evalStateFlag(QSqlDatabase &db, const char *column, const char *origin) {
+  QList<Match> out;
+  if (!db.isOpen()) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open", origin));
+    return out;
+  }
+  // Inner join keys (collection_uuid, path) which both item_metadata and
+  // items share; the (collection_uuid, path) pair is unique on item_metadata
+  // by the v5 constraint and on items by the v1 unique index, so the join
+  // doesn't multiply rows.
+  const QString sql = QStringLiteral("SELECT items.collection_uuid, items.path FROM items "
+                                     "INNER JOIN item_metadata ON "
+                                     "items.collection_uuid = item_metadata.collection_uuid "
+                                     "AND items.path = item_metadata.path "
+                                     "WHERE item_metadata.") +
+                      QString::fromLatin1(column) +
+                      QStringLiteral(" = 1 ORDER BY items.name COLLATE NOCASE ASC");
+  QSqlQuery q(db);
+  if (!q.exec(sql)) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to run state-flag smart query", origin)
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    Match m;
+    m.collectionUuid = q.value(0).toString();
+    m.path = q.value(1).toString();
+    out.append(m);
+  }
+  return out;
+}
+
 } // namespace
 
 QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
@@ -229,6 +404,20 @@ QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
     return evalHasArtwork(db);
   case SmartFilter::Kind::ByDateAdded:
     return evalByDateAdded(db, filter.days);
+  case SmartFilter::Kind::Pinned:
+    return evalStateFlag(db, "is_pinned", "SmartPlaylistEvaluator::evalPinned");
+  case SmartFilter::Kind::Hidden:
+    return evalStateFlag(db, "is_hidden", "SmartPlaylistEvaluator::evalHidden");
+  case SmartFilter::Kind::ContinueLater:
+    return evalStateFlag(db, "continue_later", "SmartPlaylistEvaluator::evalContinueLater");
+  case SmartFilter::Kind::ByCollection:
+    return evalByCollection(db, filter.collectionUuid);
+  case SmartFilter::Kind::ByTitleSearch:
+    return evalByTitleSearch(db, filter.titleSearch);
+  case SmartFilter::Kind::MissingArtwork:
+    return evalMissingArtwork(db);
+  case SmartFilter::Kind::Favorite:
+    return evalFavorite(db);
   }
   return {};
 }

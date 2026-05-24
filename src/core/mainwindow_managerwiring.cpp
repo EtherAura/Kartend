@@ -22,12 +22,16 @@
 #include "dialogcontroller.h"
 #include "eventmanager.h"
 #include "interactionmanager.h"
+#include "iplaylistmanager.h"
 #include "isettingsmanager.h"
 #include "kartmanager.h"
+#include "kartpreflight.h"
+#include "kartpreflightdialog.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
+#include "playlistmanager.h"
 #include "smartfilter.h"
 #include "ui_mainwindow.h"
 
@@ -42,18 +46,23 @@ void MainWindow::wireInteractionManager() {
   setup.ctx = &m_appContext; // Managers and UI elements from shared context
 
   // The input layer's right-click menu used to construct
-  // CreateSmartPlaylistDialog / CustomFieldsDialog directly, taking an
+  // CreateSmartPlaylistDialog / EditMetadataDialog directly, taking an
   // upward input -> ui edge. The dialogs now run via these closures
   // supplied here in the UI layer; InteractionManager just invokes them
   // and reads the result. The actual dialog construction lives in
   // DialogController so this TU doesn't need the dialog headers.
   setup.runSmartPlaylistDialog = [this](const QString &initialName,
-                                        const std::optional<SmartFilter::Filter> &initialFilter) {
-    return m_dialogController->runSmartPlaylistDialog(initialName, initialFilter);
+                                        const std::optional<SmartFilter::Filter> &initialFilter,
+                                        const SmartPlaylistCollectionEntries &collections) {
+    return m_dialogController->runSmartPlaylistDialog(initialName, initialFilter, collections);
   };
-  setup.runCustomFieldsDialog = [this](const QString &itemTitle,
-                                       const ItemMetadataStore::CustomFieldList &initial) {
-    return m_dialogController->runCustomFieldsDialog(itemTitle, initial);
+  setup.runEditMetadataDialog = [this](const QString &itemTitle,
+                                       const EditMetadataPayload &initial) {
+    return m_dialogController->runEditMetadataDialog(itemTitle, initial);
+  };
+  setup.runLaunchPreviewDialog = [this](const QString &itemTitle, const QString &launcherName,
+                                        const QString &filePath, const LaunchPreview &preview) {
+    m_dialogController->runLaunchPreviewDialog(itemTitle, launcherName, filePath, preview);
   };
 
   loadingLabel = ui->loadingLabel;
@@ -196,6 +205,12 @@ void MainWindow::wireKartManager() {
     kartSetup.getCollections = [this]() { return &m_collections; };
     kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
     kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
+    // Kartend-kmj1: round-trip the active collection's playlists through the
+    // bundle. Returns a base IPlaylistManager* so the data layer doesn't
+    // need to know the concrete PlaylistManager class.
+    kartSetup.getPlaylistManager = [this]() -> IPlaylistManager * {
+      return m_appManager ? m_appManager->getPlaylistManager() : nullptr;
+    };
     // Kartend-a3ir: the interactive merge dialog lives in the UI layer
     // and is constructed here. KartManager (data layer) just invokes the
     // closure with the conflicting metadata and uses the returned
@@ -232,6 +247,14 @@ void MainWindow::wireKartManager() {
       box.setDefaultButton(cancel);
       box.exec();
       return box.clickedButton() == importAnyway;
+    };
+    // Kartend-fr4z: pre-extraction preflight dialog. Surfaces a unified
+    // summary (bundle contents + every validation concern) before the
+    // user picks a destination directory; rejecting here costs nothing
+    // on disk.
+    kartSetup.preflightConfirmer = [this](const KartPreflight::PreflightReport &report) -> bool {
+      KartPreflightDialog dialog(report, this);
+      return dialog.exec() == QDialog::Accepted;
     };
     km->setupReferences(kartSetup);
 

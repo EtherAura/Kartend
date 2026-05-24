@@ -332,6 +332,53 @@ corePath=/home/me/builds/cores/some_libretro.so
 launchParameters=--fullscreen --verbose
 ```
 
+## Launch command preview (dry-run)
+
+When a launch fails silently or behaves unexpectedly, **Launch
+Preview** shows you exactly what Kartend *would* run without actually
+running it. Open via the per-item right-click menu → **Preview launch
+command…**.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Launch preview                                             │
+│                                                            │
+│ Program: /usr/bin/mpv                                      │
+│ Arguments:                                                 │
+│   --fs                                                     │
+│   --really-quiet                                           │
+│   "/home/me/Videos/Films/Some Movie (2021).mkv"            │
+│ Working directory: /home/me/Videos/Films                   │
+│                                                            │
+│ Warnings                                                   │
+│   ⚠  Argument 2 contains shell metacharacters — Kartend    │
+│      will pass it without quoting; the launcher must       │
+│      handle it.                                            │
+│                                                            │
+│                                              [ Close ]     │
+└────────────────────────────────────────────────────────────┘
+```
+
+What it shows:
+
+- **Program** — the resolved launcher executable.
+- **Arguments** — the full argv as Kartend would hand it to
+  `QProcess::start`, with one argument per line. No shell expansion
+  is performed; what you see is what gets passed.
+- **Working directory** — the cwd `QProcess` will use (typically the
+  item's media directory).
+- **Archive extraction** — when `extractArchives=true` and the item
+  is a `.zip` / `.7z` / `.rar`, the preview adds the resolved
+  extracted-file path that Kartend would launch instead.
+- **Warnings** — validation flags surfaced before the actual launch:
+  missing file, launcher not found, suspicious characters,
+  launcher-flag conflicts.
+
+Useful when iterating on launcher arguments (you don't want to keep
+firing a real launch just to verify the command line), and as a
+self-service first stop when "the item won't launch" — the warnings
+list usually explains why.
+
 ## Common pitfalls
 
 | Symptom | Likely cause | Fix |

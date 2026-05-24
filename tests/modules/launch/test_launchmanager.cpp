@@ -6,10 +6,10 @@
  */
 
 #include "launchmanager.h"
-#include <QTemporaryFile>
-#include <QTest>
 #include <QDir>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
+#include <QTest>
 
 class TestLaunchManager : public QObject {
   Q_OBJECT
@@ -73,6 +73,13 @@ private slots:
   void testFindFileWithExtension_respectsDepthLimit();
   void testFindFileWithExtension_emptyDirectory();
 
+  // previewLaunchCommand tests
+  void testPreview_buildErrorSurfacedAsWarning();
+  void testPreview_missingFileSurfacesWarning();
+  void testPreview_warnsWhenLauncherNotOnPath();
+  void testPreview_resolvesAbsoluteLauncher();
+  void testPreview_detectsUnresolvedPlaceholder();
+
 private:
   QString m_tempExecutable;
   QString m_tempNonExecutable;
@@ -87,8 +94,7 @@ void TestLaunchManager::initTestCase() {
     tempExec.write("#!/bin/sh\nexit 0\n");
     tempExec.close();
     m_tempExecutable = tempExec.fileName();
-    QFile::setPermissions(m_tempExecutable,
-                          QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    QFile::setPermissions(m_tempExecutable, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
   }
 
   // Create a temporary non-executable file for testing
@@ -99,8 +105,7 @@ void TestLaunchManager::initTestCase() {
     tempNonExec.write("not executable");
     tempNonExec.close();
     m_tempNonExecutable = tempNonExec.fileName();
-    QFile::setPermissions(m_tempNonExecutable,
-                          QFile::ReadOwner | QFile::WriteOwner);
+    QFile::setPermissions(m_tempNonExecutable, QFile::ReadOwner | QFile::WriteOwner);
   }
 }
 
@@ -135,8 +140,7 @@ void TestLaunchManager::testValidatePathSecurity_shellMetacharacters_data() {
 
   QTest::newRow("semicolon") << "/path/to;command" << "semicolon injection" << true;
   QTest::newRow("pipe") << "/path/to|command" << "pipe injection" << true;
-  QTest::newRow("ampersand") << "/path/to/Sonic & Knuckles.zip" << "ampersand in filename"
-                             << false;
+  QTest::newRow("ampersand") << "/path/to/Sonic & Knuckles.zip" << "ampersand in filename" << false;
   QTest::newRow("backtick") << "/path/to`command`" << "command substitution" << true;
   QTest::newRow("dollar") << "/path/to$HOME" << "variable expansion" << true;
   QTest::newRow("parens") << "/path/to$(command)" << "subshell" << true;
@@ -156,12 +160,10 @@ void TestLaunchManager::testValidatePathSecurity_shellMetacharacters() {
 
   auto result = LaunchManager::validatePathSecurity(path);
   if (shouldFail) {
-    QVERIFY2(result.isError(),
-             qPrintable(QString("Path with %1 should fail").arg(description)));
+    QVERIFY2(result.isError(), qPrintable(QString("Path with %1 should fail").arg(description)));
     QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
   } else {
-    QVERIFY2(result.isOk(),
-             qPrintable(QString("Path with %1 should be allowed").arg(description)));
+    QVERIFY2(result.isOk(), qPrintable(QString("Path with %1 should be allowed").arg(description)));
   }
 }
 
@@ -189,12 +191,12 @@ void TestLaunchManager::testValidatePathSecurity_unicodeNormalization() {
   // Test that paths with decomposed Unicode characters are rejected
   // The character 'é' can be represented as U+00E9 (composed) or U+0065 U+0301 (decomposed)
   // NFC normalization converts decomposed to composed form
-  QString composedPath = "/path/to/caf\u00E9";  // é as single codepoint
-  QString decomposedPath = "/path/to/cafe\u0301";  // e + combining acute
-  
+  QString composedPath = "/path/to/caf\u00E9";    // é as single codepoint
+  QString decomposedPath = "/path/to/cafe\u0301"; // e + combining acute
+
   auto composedResult = LaunchManager::validatePathSecurity(composedPath);
   QVERIFY2(composedResult.isOk(), "Composed Unicode path should pass");
-  
+
   auto decomposedResult = LaunchManager::validatePathSecurity(decomposedPath);
   QVERIFY2(decomposedResult.isError(), "Decomposed Unicode path should fail (non-canonical)");
 }
@@ -207,9 +209,8 @@ void TestLaunchManager::testValidateLauncherPath_validExecutable() {
   QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
 
   auto result = LaunchManager::validateLauncherPath(m_tempExecutable);
-  QVERIFY2(result.isOk(),
-           qPrintable(QString("Valid executable should pass: %1")
-                          .arg(result.isError() ? result.error().message : "")));
+  QVERIFY2(result.isOk(), qPrintable(QString("Valid executable should pass: %1")
+                                         .arg(result.isError() ? result.error().message : "")));
 
   const QString expectedCanonical = QFileInfo(m_tempExecutable).canonicalFilePath();
   QVERIFY2(!expectedCanonical.isEmpty(), "Test setup failed: canonical path is empty");
@@ -228,18 +229,17 @@ void TestLaunchManager::testValidateLauncherPath_resolvesViaPath() {
   f.write("#!/bin/sh\nexit 0\n");
   f.close();
 
-  QVERIFY2(QFile::setPermissions(launcherPath,
-                                 QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
-           "Failed to make test launcher executable");
+  QVERIFY2(
+      QFile::setPermissions(launcherPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
+      "Failed to make test launcher executable");
 
   const QByteArray oldPath = qgetenv("PATH");
   const QByteArray newPath = (dir.path().toUtf8() + ":" + oldPath);
   qputenv("PATH", newPath);
 
   auto result = LaunchManager::validateLauncherPath(launcherName);
-  QVERIFY2(result.isOk(),
-           qPrintable(QString("PATH-resolved launcher should validate: %1")
-                          .arg(result.isError() ? result.error().message : "")));
+  QVERIFY2(result.isOk(), qPrintable(QString("PATH-resolved launcher should validate: %1")
+                                         .arg(result.isError() ? result.error().message : "")));
 
   const QString expectedResolved = QFileInfo(launcherPath).canonicalFilePath();
   QVERIFY2(!expectedResolved.isEmpty(), "Test setup failed: expected canonical path is empty");
@@ -282,7 +282,7 @@ void TestLaunchManager::testValidateLauncherPath_sensitiveDirectories_data() {
 void TestLaunchManager::testValidateLauncherPath_sensitiveDirectories() {
   QFETCH(QString, path);
   QFETCH(QString, description);
-  
+
   // These paths either don't exist as executables or should be rejected
   // The test verifies that paths resolving to sensitive directories fail
   auto result = LaunchManager::validateLauncherPath(path);
@@ -381,8 +381,7 @@ void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("echo"));
-  QCOMPARE(result.value().arguments,
-           (QStringList{"--fullscreen", "--scale", "2", filePath}));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", "--scale", "2", filePath}));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
@@ -416,11 +415,9 @@ void TestLaunchManager::testBuildLaunchCommand_rejectsCollectionPathTraversal() 
   launcher.corePath = "";
   launcher.launchParameters = "";
 
-  auto result =
-      LaunchManager::buildLaunchCommand(launcher, collectionName, "/tmp/media/file.bin");
-  QVERIFY2(result.isError(),
-           "Expected buildLaunchCommand to refuse a collection name that injects "
-           "path traversal or separators into the %collection% substitution");
+  auto result = LaunchManager::buildLaunchCommand(launcher, collectionName, "/tmp/media/file.bin");
+  QVERIFY2(result.isError(), "Expected buildLaunchCommand to refuse a collection name that injects "
+                             "path traversal or separators into the %collection% substitution");
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
 }
 
@@ -430,9 +427,8 @@ void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
   config.launcher.launcherPath = "retroarch";
   config.launcher.corePath = "/tmp/genesis_plus_gx_libretro.so";
 
-  const QString filePath =
-      "/mnt/Games/Arcade/Collections/Sega - Mega Drive - Genesis/ROMs/"
-      "Sonic & Knuckles (World) (Beta) (1994-06-10).zip";
+  const QString filePath = "/mnt/Games/Arcade/Collections/Sega - Mega Drive - Genesis/ROMs/"
+                           "Sonic & Knuckles (World) (Beta) (1994-06-10).zip";
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
@@ -560,8 +556,8 @@ void TestLaunchManager::testResolvePreset_overridesFieldsFromMatchingPreset() {
   ref.launchParameters = "--stale";
 
   QList<LauncherPreset> presets;
-  presets.append({"preset-1", "RetroArch + mGBA", "/usr/bin/retroarch", "/cores/mgba.so",
-                  "--fullscreen"});
+  presets.append(
+      {"preset-1", "RetroArch + mGBA", "/usr/bin/retroarch", "/cores/mgba.so", "--fullscreen"});
 
   const LauncherConfig out = LauncherUtils::resolvePreset(ref, presets);
   QCOMPARE(out.name, QString("RetroArch + mGBA"));
@@ -603,8 +599,7 @@ void TestLaunchManager::testFindFileWithExtension_findsFlatFile() {
   f.write("x");
   f.close();
 
-  const QString found =
-      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  const QString found = LaunchManager::findFileWithExtension(root.path(), ".iso");
   // Returned path is canonicalized.
   QCOMPARE(found, QFileInfo(target).canonicalFilePath());
 }
@@ -628,11 +623,9 @@ void TestLaunchManager::testFindFileWithExtension_skipsSymlink() {
     QSKIP("Filesystem does not support symlinks");
   }
 
-  const QString found =
-      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  const QString found = LaunchManager::findFileWithExtension(root.path(), ".iso");
   // The symlink must be skipped; nothing else with .iso exists in root.
-  QVERIFY2(found.isEmpty(),
-           qPrintable(QString("Symlink should be rejected, got: %1").arg(found)));
+  QVERIFY2(found.isEmpty(), qPrintable(QString("Symlink should be rejected, got: %1").arg(found)));
 }
 
 void TestLaunchManager::testFindFileWithExtension_rejectsSymlinkEscapingRoot() {
@@ -653,11 +646,9 @@ void TestLaunchManager::testFindFileWithExtension_rejectsSymlinkEscapingRoot() {
     QSKIP("Filesystem does not support symlinks");
   }
 
-  const QString found =
-      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  const QString found = LaunchManager::findFileWithExtension(root.path(), ".iso");
   QVERIFY2(found.isEmpty(),
-           qPrintable(QString("Escape via symlinked dir should be rejected, got: %1")
-                          .arg(found)));
+           qPrintable(QString("Escape via symlinked dir should be rejected, got: %1").arg(found)));
 }
 
 void TestLaunchManager::testFindFileWithExtension_respectsDepthLimit() {
@@ -676,18 +667,106 @@ void TestLaunchManager::testFindFileWithExtension_respectsDepthLimit() {
   f.write("x");
   f.close();
 
-  const QString found =
-      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  const QString found = LaunchManager::findFileWithExtension(root.path(), ".iso");
   // Beyond MAX_EXTRACTION_DEPTH (16) - should not be returned.
   QVERIFY2(found.isEmpty(),
-           qPrintable(QString("Should ignore files past depth limit, got: %1")
-                          .arg(found)));
+           qPrintable(QString("Should ignore files past depth limit, got: %1").arg(found)));
 }
 
 void TestLaunchManager::testFindFileWithExtension_emptyDirectory() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
   QCOMPARE(LaunchManager::findFileWithExtension(root.path(), ".iso"), QString());
+}
+
+void TestLaunchManager::testPreview_buildErrorSurfacedAsWarning() {
+  // Empty launcher path triggers buildLaunchCommand's "No launcher
+  // configured" error. previewLaunchCommand surfaces this as buildOk=false
+  // plus a warning so the dialog can render the failure mode visibly.
+  CollectionConfig collection;
+  collection.name = "Concert Recordings";
+  LauncherConfig launcher; // launcherPath is empty by default
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, "/some/file.mp4");
+  QVERIFY(!preview.buildOk);
+  QVERIFY(!preview.buildError.isEmpty());
+  QCOMPARE(preview.warnings.size(), 1);
+  QVERIFY(preview.warnings.first().contains("No launcher"));
+}
+
+void TestLaunchManager::testPreview_missingFileSurfacesWarning() {
+  CollectionConfig collection;
+  collection.name = "Concert Recordings";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  const QString missingFile = QDir::tempPath() + "/does-not-exist-here-12345.mp4";
+  // Ensure the file really doesn't exist so the test isn't racing a
+  // stale leftover.
+  QFile::remove(missingFile);
+
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, missingFile);
+  QVERIFY(preview.buildOk);
+  QVERIFY(!preview.fileExists);
+  bool sawFileMissingWarning = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("File does not exist")) {
+      sawFileMissingWarning = true;
+      break;
+    }
+  }
+  QVERIFY(sawFileMissingWarning);
+}
+
+void TestLaunchManager::testPreview_warnsWhenLauncherNotOnPath() {
+  CollectionConfig collection;
+  collection.name = "Audio";
+  LauncherConfig launcher;
+  // A bare command name that surely isn't on PATH.
+  launcher.launcherPath = "kartend-no-such-binary-xyz";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  QVERIFY(preview.resolvedProgram.isEmpty());
+  bool sawNotFound = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("not found")) {
+      sawNotFound = true;
+      break;
+    }
+  }
+  QVERIFY(sawNotFound);
+}
+
+void TestLaunchManager::testPreview_resolvesAbsoluteLauncher() {
+  CollectionConfig collection;
+  collection.name = "Audio";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable; // absolute path created in initTestCase
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  // The resolved path must match the absolute launcher path the user
+  // provided — no PATH lookup, no rewriting.
+  QCOMPARE(preview.resolvedProgram, m_tempExecutable);
+  QVERIFY(preview.fileExists);
+}
+
+void TestLaunchManager::testPreview_detectsUnresolvedPlaceholder() {
+  // A stray `%scummvm_id%` (or any other %name%) in the launch parameter
+  // string is almost certainly a typo — the preview surfaces it so the
+  // user can fix it before launching.
+  CollectionConfig collection;
+  collection.name = "Audio";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = "--id=%scummvm_id% --quiet";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  bool sawPlaceholderWarning = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("placeholder")) {
+      sawPlaceholderWarning = true;
+      break;
+    }
+  }
+  QVERIFY(sawPlaceholderWarning);
 }
 
 QTEST_MAIN(TestLaunchManager)

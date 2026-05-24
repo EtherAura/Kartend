@@ -71,6 +71,11 @@ public:
   [[nodiscard]] static QString formatFileSize(qint64 bytes);
   [[nodiscard]] static QString formatRuntime(int seconds);
   [[nodiscard]] static QString formatTags(const QString &raw);
+  /// Renders a personal rating (0-10 internal, half-star precision) as a
+  /// glyph string with a parenthetical fraction, e.g. "★★★★☆ (3.5 / 5)".
+  /// Returns an empty string for the "unrated" sentinel (-1) so the
+  /// Details section can skip the row entirely.
+  [[nodiscard]] static QString formatPersonalRating(int rating);
   [[nodiscard]] static QString formatLastScanned(const QDateTime &lastScanned);
 
   /// Install a predicate the video-preview start timer consults before
@@ -209,6 +214,11 @@ signals:
   /// The sidebar widget itself has no item context, so the
   /// owning manager handles persistence and refresh.
   void editArtworkRequested();
+
+  /// Fired when the user clicks the inline edit-metadata button in the
+  /// title row. Mirrors editArtworkRequested — the manager looks up the
+  /// current selection and pops the EditMetadataDialog.
+  void editMetadataRequested();
 
   /// bug #7: forwards the gallery overlay's visibility so
   /// DetailsPaneManager can lower the sidebar while the overlay is on top. Only

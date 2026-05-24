@@ -105,9 +105,11 @@ What you can't do:
 
 ### Exporting
 
-Right-click a playlist tile → **Export Playlist…** (or use the future
-Backup section in Settings, which integrates with the
-[`.kart` package](Backup-and-Sharing.md) format too).
+Right-click a playlist tile → **Export Playlist…**. Use this for the
+items-only formats (JSON / M3U) below; for a full-fidelity backup
+that includes every playlist alongside the collection it lives in,
+export the parent collection as a [`.kart` package](Backup-and-Migration.md)
+instead — playlists now round-trip inside karts.
 
 Two formats:
 
@@ -184,27 +186,32 @@ Pair with a custom field (`status=in progress`) to mark items
 individually so you can recover the list state from custom fields if
 you ever delete the playlist.
 
-### Sharing a playlist with someone else's setup
+### Moving a playlist between your own machines
 
-Export to JSON. Send the file. The recipient imports it on their
-Kartend installation. **Limitation**: the playlist references items by
-collection UUID + source path. If the recipient's collection structure
-or paths differ, items won't match and the imported playlist will be
-empty (or partial).
+Two options:
 
-For sharing across machines, M3U with absolute paths is more portable
-*if* both machines have items at the same paths. Otherwise, share the
-[`.kart` package](Backup-and-Sharing.md) format which can include the
-underlying collections too.
+- **JSON export** preserves the source-collection UUID plus each
+  item's path. On import, items match by `(uuid, path)` against the
+  live items table on the target machine. Works cleanly when both
+  machines share the same collection layout (the typical sync case).
+- **`.kart` export** of the parent collection bundles every playlist
+  (static and smart) belonging to it, plus the items themselves. The
+  preflight + merge dialogs at import handle path remapping and any
+  conflicts. See [Backup & Migration](Backup-and-Migration.md).
+
+M3U export is intentionally lossy — it's intended for handing the
+list to a media player, not for round-tripping inside Kartend.
 
 ### Backup all playlists at once
 
-Export each playlist individually today. Bulk-export across all
-playlists is on the wishlist.
+Two options:
 
-For a quick all-in-one backup, copy the SQLite file
-`~/.local/share/kartend/kartend.db` — it contains every playlist and
-membership row.
+- Copy the SQLite file `~/.local/share/kartend/kartend.db` — it
+  contains every playlist and membership row.
+- Export each owning collection as a `.kart` — playlists ride along
+  inside the bundle. See [Backup & Migration](Backup-and-Migration.md).
+
+A bulk-JSON-export across all playlists is on the wishlist.
 
 ## How playlists store data
 
@@ -232,8 +239,9 @@ reserved_kind ('' or            source_path
   re-evaluate on open
 - [Item Metadata](Item-Metadata.md) — custom fields, manual files,
   artwork links per item
-- [Backup & Sharing](Backup-and-Sharing.md) — `.kart` package format
-  for full-collection (and playlist) transfer
+- [Backup & Migration](Backup-and-Migration.md) — `.kart` package
+  format for full-collection (and playlist) backup or transfer
+  between your own machines
 - [Search, Sort & Filter](Search-Sort-Filter.md) — searching inside a
   playlist works the same as inside a collection
 

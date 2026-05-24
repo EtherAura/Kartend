@@ -1,10 +1,12 @@
 target_sources(kartend_utils PRIVATE
+  artworkcandidates.cpp
   artworkutils.cpp
   imagedecodeutils.cpp
   kdecolorscheme.cpp
   placeholderwarmer.cpp
   textzoom.cpp
   videoutils.cpp
+  artworkcandidates.h
   artworkutils.h
   gridutils.h
   imagedecodeutils.h

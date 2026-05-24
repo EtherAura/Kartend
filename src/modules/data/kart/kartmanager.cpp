@@ -19,10 +19,12 @@
 // one-way progress dialog uses the kartProgress* signal family for the
 // same reason (see the header).
 #include "applicationcontext.h"
+#include "iplaylistmanager.h"
 #include "isettingsmanager.h"
 #include "kartreader.h"
 #include "kartwriter.h"
 #include "pathutils.h"
+#include "smartfilter.h"
 
 namespace kart {
 
@@ -39,42 +41,9 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
 
 } // namespace
 
-QList<SuspiciousKartPath> collectSuspiciousKartPaths(const CollectionConfig &cfg,
-                                                     const QSet<QString> &trustedLauncherPaths) {
-  QList<SuspiciousKartPath> out;
-  const QString home = QDir::homePath();
-  const QStringList allowedRoots = {home, QStringLiteral("/usr/bin"),
-                                    QStringLiteral("/usr/local/bin"), QStringLiteral("/opt")};
-  auto isPathAllowed = [&](const QString &path) {
-    const QString abs = QFileInfo(path).absoluteFilePath();
-    for (const QString &root : allowedRoots) {
-      if (abs.startsWith(root + QLatin1Char('/')) || abs == root) {
-        return true;
-      }
-    }
-    return false;
-  };
-  auto check = [&](const QString &field, const QString &path, bool launcherField) {
-    if (path.isEmpty()) return;
-    if (isPathAllowed(path)) return;
-    // Kartend-s6mj: a path already trusted via an existing collection's
-    // launcher entry doesn't need to re-prompt the user. Only applies to
-    // launcher fields — the icon/placeholder fields aren't reused across
-    // collections in the same way.
-    if (launcherField && trustedLauncherPaths.contains(path)) {
-      return;
-    }
-    out.append({field, path});
-  };
-  check(QStringLiteral("launcher.launcherPath"), cfg.launcher.launcherPath, /*launcherField=*/true);
-  for (int i = 0; i < cfg.launcher.additionalLaunchers.size(); ++i) {
-    check(QStringLiteral("additionalLaunchers[%1].launcherPath").arg(i),
-          cfg.launcher.additionalLaunchers[i].launcherPath, /*launcherField=*/true);
-  }
-  check(QStringLiteral("collectionIcon"), cfg.collectionIcon, /*launcherField=*/false);
-  check(QStringLiteral("placeholderArtwork"), cfg.placeholderArtwork, /*launcherField=*/false);
-  return out;
-}
+// collectSuspiciousKartPaths now lives in kartsuspiciouspaths.cpp so the
+// preflight unit tests can link it without pulling in the whole manager
+// translation unit. The declaration stays in kartmanager.h.
 
 KartManager::KartManager(QObject *parent) : QObject(parent) {}
 KartManager::~KartManager() = default;
@@ -215,6 +184,56 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   if (persistRes.isError()) {
     return persistRes.error();
   }
+
+  // Kartend-kmj1: restore bundled playlists onto the freshly-registered
+  // collection. Smart playlists copy their SmartFilter JSON straight
+  // through; static playlists translate bundled media_path entries back
+  // to the finalized absolute paths via destDir. Missing payloads (e.g.
+  // partial extract) are skipped so a malformed playlist never aborts
+  // the import.
+  if (registerCollection && m_setup.getPlaylistManager) {
+    if (IPlaylistManager *pm = m_setup.getPlaylistManager()) {
+      const QDir mediaRoot(QDir(result.destDir).filePath("media"));
+      for (const KartManifest::PlaylistEntry &entry : result.manifest.playlists) {
+        QString newPlaylistId;
+        if (entry.isSmart) {
+          auto filterRes = SmartFilter::fromJsonString(entry.smartFilterJson);
+          if (filterRes.isError()) {
+            ErrorUtils::logError(filterRes.error());
+            continue;
+          }
+          auto created = pm->createSmartPlaylist(entry.name, filterRes.value(), collectionUuid);
+          if (created.isError()) {
+            ErrorUtils::logError(created.error());
+            continue;
+          }
+          newPlaylistId = created.value();
+        } else {
+          auto created = pm->createPlaylist(entry.name, collectionUuid, entry.reservedKind);
+          if (created.isError()) {
+            ErrorUtils::logError(created.error());
+            continue;
+          }
+          newPlaylistId = created.value();
+        }
+        if (newPlaylistId.isEmpty()) continue;
+        if (entry.isSmart) continue;
+
+        // PlaylistItemEntry::mediaPath is relative to the media/ subtree
+        // of the bundle, matching what KartWriter populates. We strip a
+        // leading "media/" if present, then resolve against mediaRoot to
+        // produce the finalized absolute path the new items table sees.
+        for (const KartManifest::PlaylistItemEntry &ie : entry.items) {
+          QString rel = ie.mediaPath;
+          if (rel.startsWith(QStringLiteral("media/"))) rel.remove(0, 6);
+          if (rel.isEmpty()) continue;
+          const QString abs = mediaRoot.filePath(rel);
+          pm->addItem(newPlaylistId, collectionUuid, abs);
+        }
+      }
+    }
+  }
+
   return result.destDir;
 }
 
@@ -284,6 +303,45 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex,
   params.uuid = collectionUuid;
   params.name = cfg.name;
 
+  // Kartend-kmj1: bundle every playlist whose parentCollectionUuid points
+  // at the exported collection. Static-playlist items are translated to
+  // the in-bundle media_path (KartWriter populates that field on
+  // prepareFromCollection); references that don't resolve are dropped
+  // because the import side can't reconstruct them either.
+  if (m_setup.getPlaylistManager) {
+    if (IPlaylistManager *pm = m_setup.getPlaylistManager()) {
+      QHash<QString, QString> absToRel;
+      for (const KartWriter::ItemSource &it : params.items) {
+        if (!it.mediaAbs.isEmpty()) {
+          absToRel.insert(it.mediaAbs, it.manifestItem.mediaPath);
+        }
+      }
+      const QList<PlaylistRow> rows = pm->loadAll();
+      for (const PlaylistRow &row : rows) {
+        if (row.parentCollectionUuid != collectionUuid) continue;
+        KartManifest::PlaylistEntry entry;
+        entry.name = row.name;
+        entry.icon = row.icon;
+        entry.reservedKind = row.reservedKind;
+        entry.isSmart = row.isSmart;
+        entry.smartFilterJson = row.smartFilterJson;
+        if (!row.isSmart) {
+          const QList<PlaylistItemRef> refs = pm->loadItems(row.id);
+          for (const PlaylistItemRef &ref : refs) {
+            if (ref.sourceCollectionUuid != collectionUuid) continue;
+            const auto it = absToRel.constFind(ref.sourcePath);
+            if (it == absToRel.cend()) continue;
+            KartManifest::PlaylistItemEntry ie;
+            ie.mediaPath = it.value();
+            ie.position = ref.position;
+            entry.items.append(ie);
+          }
+        }
+        params.playlists.append(entry);
+      }
+    }
+  }
+
   KartWriter::Writer writer;
   auto wr = writer.writeKart(outPath, params);
   if (wr.isError()) return wr.error();
@@ -304,6 +362,28 @@ void KartManager::importInteractive() {
       QMessageBox::warning(parent, tr("Import Kart"), peeked.error().message);
     }
     return;
+  }
+
+  // Preflight pass — surface launcher/path issues before the user picks a
+  // destination, so cancelling here costs nothing on disk. The hook is
+  // wired by the UI layer (MainWindow); in headless contexts we proceed
+  // unconditionally and rely on the existing post-extract suspicious-path
+  // gate for safety.
+  if (m_setup.preflightConfirmer) {
+    QSet<QString> existingNames;
+    if (m_setup.getCollections) {
+      if (auto *collections = m_setup.getCollections()) {
+        for (const CollectionConfig &c : *collections) {
+          existingNames.insert(c.name.trimmed().toLower());
+        }
+      }
+    }
+    const auto report =
+        KartPreflight::buildReport(peeked.value(), previouslyTrustedLauncherPaths(), existingNames);
+    if (!m_setup.preflightConfirmer(report)) {
+      // Treat as a clean user cancellation — no error toast.
+      return;
+    }
   }
 
   const QString suggested = QDir::homePath() + "/" +

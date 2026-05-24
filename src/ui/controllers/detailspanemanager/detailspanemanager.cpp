@@ -65,6 +65,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   m_itemScrollArea = setup.getScrollArea();
   m_collections = setup.getCollections();
   m_runArtworkLinksDialog = setup.runArtworkLinksDialog;
+  m_runEditMetadataForItem = setup.runEditMetadataForItem;
 
   if (!m_metadataDebouncer) {
     m_metadataDebouncer =
@@ -109,6 +110,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   if (m_DetailsPane) {
     connect(m_DetailsPane, &DetailsPane::editArtworkRequested, this,
             &DetailsPaneManager::openArtworkLinksDialog);
+    connect(m_DetailsPane, &DetailsPane::editMetadataRequested, this,
+            &DetailsPaneManager::openEditMetadataDialog);
     // bug #7: lower the sidebar while its own gallery overlay is
     // showing so the overlay (parented to the top-level window) stays on top.
     connect(m_DetailsPane, &DetailsPane::galleryOverlayVisibilityChanged, this,

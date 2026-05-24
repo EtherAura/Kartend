@@ -28,6 +28,7 @@ class ToolbarController;
 class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
+class CollectionFilesystemWatcher;
 class InteractionManager;
 class IDatabaseManager;
 class NavigationManager;
@@ -293,6 +294,10 @@ private:
   ToolbarController *m_toolbarController = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
+  /// Per-collection filesystem watcher driving incremental rescans. Owned by
+  /// the MainWindow because its rescan callback closes over NavigationManager
+  /// (reached via m_appManager). Null until setupFilesystemWatcher() runs.
+  std::unique_ptr<CollectionFilesystemWatcher> m_collectionWatcher;
   DetailsPane *m_MetadataSidebar = nullptr;
 
   // Kartend-hzef step 3: ScraperService ownership + the dialog cache moved
@@ -336,6 +341,11 @@ private:
   /// edits that may have added or removed type tags. Delegates to the
   /// ToolbarController.
   void refreshFilterToolbar();
+  /// Pull the per-item state flags for the current collection from
+  /// IDatabaseManager and publish them into ItemWidget's static registry
+  /// so the grid badges paint without a per-tile DB hop. Connected to
+  /// DatabaseManager::itemsLoaded (Kartend-elte).
+  void refreshItemStateFlagsRegistry();
 
   // Wiring slot handlers — each method below is the named target of one
   // signal/slot connection in mainwindow_wiring.cpp. Extracted from inline
@@ -367,6 +377,11 @@ private:
   void setViewType(ViewType viewType);
   void setupSidebar();
   void setupArtworkManager();
+  /// Build / refresh the CollectionFilesystemWatcher's watch set from the
+  /// current m_collections. Safe to call repeatedly — used on startup and
+  /// after the Settings dialog saves collection changes so the watch set
+  /// tracks newly-enabled (or freshly-pointed-at) collections.
+  void refreshCollectionFilesystemWatcher();
   void setupLastSelectedIndices();
   void setupEventFilters();
   void setupInitialTimers();
@@ -389,6 +404,77 @@ private:
   /// never fires twice. Safe to call from both the deferred startup timer
   /// and the Help-menu action.
   void showFirstRunWizard();
+
+  /// Pops a file dialog for the user to pick a *.kartend-theme.json,
+  /// previews the would-be changes against the active collection, then
+  /// applies + saves on confirmation. No-op when no collection is active.
+  void importThemeInteractive();
+  /// Pops a file dialog and writes the active collection's appearance
+  /// fields out as a theme preset.
+  void exportThemeInteractive();
+  /// Opens the layout-profile registry dialog. Loads the on-disk profile
+  /// list, mutates it via the dialog buttons, and persists on close.
+  void manageLayoutProfilesInteractive();
+  /// Opens the collection-health dashboard for the active collection.
+  /// Runs the CollectionHealth analyzer over the current item list +
+  /// launcher config and pops a read-only summary dialog.
+  void showCollectionHealthInteractive();
+  /// Run the same-basename variant detector across the active collection's
+  /// items table and pop the inspector dialog. No-op when no collection is
+  /// open; falls back to an informational toast when no groups are detected.
+  void showVariantGroupingInteractive();
+  /// Switches to the collection that owns `filePath` and selects the
+  /// item. No-op when the path can't be resolved to a live collection
+  /// (e.g. its row survives from a deleted collection). Driven by the
+  /// analytics dialog's double-click handler.
+  void navigateToItem(const QString &filePath);
+  /// Opens the bulk-edit dialog scoped to all items in the active
+  /// collection. On confirm, fetches per-item metadata via the batch
+  /// loader, applies the chosen action through BulkEdit::applyAction,
+  /// persists every row that actually changed, and refreshes the view.
+  void bulkEditInteractive();
+  /// Opens the global command palette. Builds a fresh command list each
+  /// open so live collections / view-mode / settings entries reflect
+  /// the current state.
+  void openCommandPalette();
+
+  /// Opens the missing-metadata review queue for the active collection.
+  /// Items lacking title / description / genre / artwork are presented
+  /// one at a time with Edit / Skip / Close controls.
+  void reviewMissingMetadataInteractive();
+
+  /// Opens the artwork-assignment wizard for items in the active
+  /// collection that have no artwork match on disk. Each item shows a
+  /// ranked list of candidate images from the collection's artwork
+  /// directory; the user picks one, browses for a file manually, or
+  /// skips, and the choice is persisted as a per-item override.
+  void artworkWizardInteractive();
+
+  /// Opens the read-only binding visualizer (Help → Binding
+  /// Visualizer…). Shows the current keyboard + gamepad mappings and
+  /// highlights the matching row when the user presses an input.
+  void showBindingVisualizer();
+
+  /// Runs the New Library Wizard. On Finish, appends the wizard's
+  /// CollectionConfig to m_collections, persists, rebuilds the
+  /// hierarchy cache, and navigates to the new collection.
+  void runNewLibraryWizard();
+
+  /// Opens the presentation-profile registry dialog. Loads the on-disk
+  /// profile list, mutates it via the dialog buttons (save / apply /
+  /// delete), and persists on close.
+  void managePresentationProfilesInteractive();
+
+  /// Opens the read-only scraper provider registry dialog. Lists every
+  /// built-in metadata provider with its categories, capabilities, and
+  /// credential-configured status, plus a Test query line that
+  /// renders each provider's search URL on row activation.
+  void showScraperProvidersInteractive();
+
+  /// Installs the application-context shortcut (Ctrl+Shift+P) that opens
+  /// the command palette. Called once during setupUI alongside the
+  /// other application shortcuts.
+  void setupCommandPaletteShortcut();
 };
 
 #endif

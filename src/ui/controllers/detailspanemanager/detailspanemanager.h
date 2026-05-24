@@ -46,6 +46,16 @@ struct ItemArtworkLinksInput {
 using ItemArtworkLinksDialogRunner =
     std::function<std::optional<QHash<QString, QString>>(const ItemArtworkLinksInput &)>;
 
+/// Owner-supplied bridge to the same edit-metadata flow the right-click
+/// context menu drives. Kartend-oewu: the DetailsPane's inline pencil
+/// button fires editMetadataRequested → the manager looks up the current
+/// selection state it already tracks (m_currentItemFilePath /
+/// m_currentItemName) and invokes this runner. The closure body lives on
+/// MainWindow because the editItemMetadata flow needs InteractionManager
+/// + a refreshSidebarMetadataImmediate hop on success.
+using EditMetadataForItemRunner =
+    std::function<void(const QString &filePath, const QString &itemName)>;
+
 struct DetailsPaneManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
@@ -66,6 +76,10 @@ struct DetailsPaneManagerSetup {
   /// Owner-supplied runner for the per-item artwork-links dialog
   /// (Kartend-n8kh). Null in headless contexts; the call site guards.
   ItemArtworkLinksDialogRunner runArtworkLinksDialog;
+
+  /// Owner-supplied bridge to the right-click "Edit metadata…" flow
+  /// (Kartend-oewu). Null in headless contexts.
+  EditMetadataForItemRunner runEditMetadataForItem;
 
   SETUP_GETTER_DECL(IDetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
@@ -149,6 +163,11 @@ private slots:
   /// and refreshes the gallery so newly-set overrides appear immediately.
   void openArtworkLinksDialog();
 
+  /// Opens the EditMetadataDialog for the current selection (Kartend-oewu).
+  /// Delegates the actual save to the runner injected through setup; the
+  /// manager only contributes the (filePath, itemName) it already tracks.
+  void openEditMetadataDialog();
+
 private:
   /// The actual heavy work: 4 DB queries + filesystem probes that
   /// updateSidebarMetadata used to do inline. Routed through the
@@ -173,6 +192,8 @@ private:
   /// Kartend-n8kh: artwork-links dialog runner copied from setup. Null
   /// in headless contexts; metadata callers guard before invoking.
   ItemArtworkLinksDialogRunner m_runArtworkLinksDialog;
+  /// Kartend-oewu: edit-metadata bridge — see EditMetadataForItemRunner.
+  EditMetadataForItemRunner m_runEditMetadataForItem;
   bool m_sidebarVisible = false;
   /// separate from m_sidebarVisible because this flag is
   /// driven by the active view type (cover flow auto-hides) rather than

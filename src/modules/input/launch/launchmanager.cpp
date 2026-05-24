@@ -176,6 +176,78 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
   return cmd;
 }
 
+auto LaunchManager::previewLaunchCommand(const CollectionConfig &collection,
+                                         const LauncherConfig &launcher, const QString &filePath)
+    -> LaunchPreview {
+  LaunchPreview out;
+  out.program = launcher.launcherPath;
+
+  auto cmd = buildLaunchCommand(launcher, collection.name, filePath);
+  if (cmd.isError()) {
+    out.buildOk = false;
+    out.buildError = cmd.error().message;
+    out.warnings << cmd.error().message;
+    // Still report the file-existence + archive bits the user can fix from
+    // the preview surface even when the command can't be assembled.
+    out.fileExists = QFileInfo::exists(filePath);
+    if (collection.archive.extractArchives && isArchiveFile(filePath)) {
+      out.wouldExtractArchive = true;
+      out.archiveTargetExtension = collection.archive.extractedExtension;
+    }
+    return out;
+  }
+
+  out.buildOk = true;
+  out.program = cmd.value().program;
+  out.arguments = cmd.value().arguments;
+
+  // Resolve the launcher to an absolute executable so the preview shows
+  // both the configured value and what the OS would actually invoke. An
+  // empty resolved path => not on PATH and not at the given absolute
+  // location; surface as a warning.
+  auto resolved = validateLauncherPath(out.program);
+  if (resolved.isOk()) {
+    out.resolvedProgram = resolved.value();
+  } else {
+    out.warnings << QObject::tr("Launcher executable not found: %1").arg(out.program);
+  }
+
+  out.fileExists = QFileInfo::exists(filePath);
+  if (!out.fileExists) {
+    out.warnings << QObject::tr("File does not exist on disk: %1").arg(filePath);
+  }
+
+  // Archive-extraction warnings. When the toggle is on for the collection
+  // and the file is recognised as an archive, the launcher would receive
+  // the extracted file path at runtime instead of the original archive —
+  // call that out explicitly so the preview doesn't lie about what gets
+  // executed. The extension being empty is its own actionable warning.
+  if (collection.archive.extractArchives && isArchiveFile(filePath)) {
+    out.wouldExtractArchive = true;
+    out.archiveTargetExtension = collection.archive.extractedExtension;
+    if (out.archiveTargetExtension.trimmed().isEmpty()) {
+      out.warnings << QObject::tr(
+          "Archive extraction is enabled but the target extension is empty — "
+          "the launcher would receive the archive path verbatim.");
+    }
+  }
+
+  // Heuristic unresolved-placeholder check. We've already substituted
+  // %collection%; any remaining %name% style token after expansion likely
+  // indicates a typo in the launcher's parameter string. Flag it without
+  // claiming to know what the user meant.
+  static const QRegularExpression kPlaceholderRe(QStringLiteral("%[A-Za-z0-9_]+%"));
+  for (const QString &arg : out.arguments) {
+    auto m = kPlaceholderRe.match(arg);
+    if (m.hasMatch()) {
+      out.warnings << QObject::tr("Unresolved placeholder in argument: %1").arg(m.captured(0));
+      break; // one warning is enough; the dialog can show the full args
+    }
+  }
+
+  return out;
+}
+
 auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
   // Delegate to shared utility in PathUtils
   return PathUtils::validatePathSecurity(path);

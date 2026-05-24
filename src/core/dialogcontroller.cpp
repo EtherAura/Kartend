@@ -1,12 +1,13 @@
 #include "dialogcontroller.h"
 #include "createsmartplaylistdialog.h"
-#include "customfieldsdialog.h"
+#include "editmetadatadialog.h"
 #include "firstrunwizard.h"
 #include "itemartworklinksdialog.h"
 #include "kartmanager.h"
 #include "kartmergedialog.h"
 #include "kartprogressdialog.h"
 #include "launcherchooserdialog.h"
+#include "launchpreviewdialog.h"
 #include "scrapercredentialsdialog.h"
 #include "scraperesultdialog.h"
 #include "settingsdialog.h"
@@ -20,8 +21,12 @@ DialogController::~DialogController() = default;
 
 std::optional<SmartPlaylistEdit>
 DialogController::runSmartPlaylistDialog(const QString &initialName,
-                                         const std::optional<SmartFilter::Filter> &initialFilter) {
+                                         const std::optional<SmartFilter::Filter> &initialFilter,
+                                         const SmartPlaylistCollectionEntries &collectionEntries) {
   CreateSmartPlaylistDialog dialog(m_parent);
+  // Populate the ByCollection picker before setInitialFilter so the
+  // initial-selection lookup can find the saved uuid in the combo.
+  dialog.setCollectionList(collectionEntries);
   if (!initialName.isEmpty()) {
     dialog.setInitialName(initialName);
   }
@@ -37,16 +42,24 @@ DialogController::runSmartPlaylistDialog(const QString &initialName,
   return out;
 }
 
-std::optional<ItemMetadataStore::CustomFieldList>
-DialogController::runCustomFieldsDialog(const QString &itemTitle,
-                                        const ItemMetadataStore::CustomFieldList &initial) {
-  CustomFieldsDialog dialog(m_parent);
+void DialogController::runLaunchPreviewDialog(const QString &itemTitle, const QString &launcherName,
+                                              const QString &filePath,
+                                              const LaunchPreview &preview) {
+  LaunchPreviewDialog dialog(m_parent);
+  dialog.setPreview(itemTitle, launcherName, filePath, preview);
+  dialog.exec();
+}
+
+std::optional<EditMetadataPayload>
+DialogController::runEditMetadataDialog(const QString &itemTitle,
+                                        const EditMetadataPayload &initial) {
+  EditMetadataDialog dialog(m_parent);
   dialog.setItemTitle(itemTitle);
-  dialog.setFields(initial);
+  dialog.setPayload(initial);
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
-  return dialog.fields();
+  return dialog.payload();
 }
 
 kart::ConflictResolution

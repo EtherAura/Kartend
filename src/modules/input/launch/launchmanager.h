@@ -63,6 +63,40 @@ struct LaunchCommand {
   QStringList arguments;
 };
 
+/// Read-only summary of what `launchItem()` would do for a given
+/// (collection, launcher, file) triple, without spawning a child process.
+/// Drives the launch-preview / dry-run validation UI: each warning surfaces
+/// a specific user-fixable issue (missing executable, file gone, archive
+/// extraction without a target extension, etc.). `buildOk` is false when
+/// buildLaunchCommand itself rejected the input (e.g. missing libretro
+/// core); `buildError` carries the message.
+struct LaunchPreview {
+  /// True iff buildLaunchCommand returned a valid program + arguments.
+  /// When false, `program` and `arguments` are empty and `warnings` is the
+  /// single-entry list `[buildError]`.
+  bool buildOk = false;
+  /// Diagnostic message from buildLaunchCommand when buildOk == false.
+  QString buildError;
+  /// Raw launcher path as configured (may be a bare command name).
+  QString program;
+  /// Argument list, with %collection% / preset substitutions applied.
+  QStringList arguments;
+  /// Path returned by validateLauncherPath — empty when the launcher is
+  /// not on PATH / doesn't exist on disk.
+  QString resolvedProgram;
+  /// True when the file at `filePath` exists on disk at preview time.
+  bool fileExists = false;
+  /// True when the collection's archive-extraction toggle would apply to
+  /// this file. UI shows the extracted-extension target alongside.
+  bool wouldExtractArchive = false;
+  /// The target extension the archive would be unpacked to (set when
+  /// wouldExtractArchive is true). Empty string when extraction is on but
+  /// no extension was configured — surfaced as a warning.
+  QString archiveTargetExtension;
+  /// Human-readable warnings — empty list means the command is ready.
+  QStringList warnings;
+};
+
 /// Handles launching media items with their configured launchers.
 /// Manages libretro cores, parameter parsing, and launch debouncing.
 class LaunchManager : public QObject {
@@ -114,6 +148,15 @@ public:
   buildLaunchCommand(const CollectionConfig &collection, const QString &filePath) {
     return buildLaunchCommand(collection.launcher.launcherAt(0), collection.name, filePath);
   }
+
+  /// Read-only dry-run: returns a `LaunchPreview` for the given launcher /
+  /// collection / file triple without spawning a child process. The launcher
+  /// arg is taken pre-resolved (preset resolution is the caller's
+  /// responsibility — InteractionManager already does this for the real
+  /// launch path) so the preview shows exactly what would be executed.
+  [[nodiscard]] static LaunchPreview previewLaunchCommand(const CollectionConfig &collection,
+                                                          const LauncherConfig &launcher,
+                                                          const QString &filePath);
 
   /// Parses command-line parameters handling quoted strings
   /// Returns error if quotes are unclosed (potential injection vector)

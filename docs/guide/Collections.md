@@ -51,6 +51,10 @@ The Settings Dialog's left-hand tree is the control surface.
   blank and filled in later from the **Configuration**/**Launcher**
   tabs. New collections are created at root by default; drag them into a
   parent or set the **Parent Collection** field afterward.
+
+  For a step-by-step alternative, **File → New Library Wizard…** walks
+  the same fields across multiple pages with installed-launcher
+  detection. See [Getting Started → New Library Wizard](Getting-Started.md#new-library-wizard).
 - **Rename** — double-click the name field on the **Basic** tab, or use
   the tree's right-click → **Rename**. Renaming updates `name`, the INI
   section header, and any linked-parent references in the
@@ -233,6 +237,68 @@ grid:
 Distinct from the **Collection Icon** (`collectionIcon`) which is shown
 on the *tile* of this collection when it's a subcollection of another.
 
+## Filesystem watcher
+
+Per-collection toggle that triggers an automatic rescan when the
+media directory changes on disk. Useful for collections you sync from
+elsewhere (rsync, Syncthing, a Steam library, a network mount) where
+files appear and disappear outside Kartend.
+
+| Setting | INI key | Default | Effect |
+|---------|---------|---------|--------|
+| Watch Filesystem | `watchFilesystem` | `false` | Register the media directory (and every subdirectory) with `QFileSystemWatcher` and rescan after a debounce window when a change fires. |
+
+The watcher walks the media directory at startup and re-walks on
+change so newly-created subdirectories are picked up automatically.
+Rescans are debounced (default 2 s) to batch rapid filesystem
+operations — bulk copies and `rsync` runs fire one rescan when the
+dust settles, not one per file. Symlink loops are short-circuited.
+
+> **Where to find this** — Settings Dialog → per-collection
+> **Configuration** tab → **Watch filesystem for changes**.
+
+If you don't need automatic rescans, leave it off — for collections
+that change only when you explicitly edit them, the manual
+**File → Rescan Collection** (`Ctrl+F5`) is cheaper. The watcher's
+RAM cost scales with the number of subdirectories per collection.
+
+## Variant inspector
+
+**File → Duplicates and Variants…** opens a per-collection grouped
+view of items that share a base filename — e.g. `Concert.mkv` and
+`Concert.flac` both group under `Concert`. Each group expands to show
+the absolute paths of every variant; a row carries **Launch** and
+**Select** buttons so you can switch to a specific variant without
+leaving the dialog.
+
+Useful for sanity-checking duplicates after a library reorganisation,
+or when one logical recording exists in multiple formats and you
+want a quick map of which is which.
+
+The view is read-only — there's no merge or remove affordance here.
+Surfaced via the menu (and the [command palette](Toolbar-and-Menus.md#command-palette)).
+
+## Collection Health Dashboard
+
+**File → Collection Health…** opens a diagnostic dashboard listing:
+
+- **Missing files** — items in the database whose `source_path` no
+  longer resolves on disk (e.g. after a media-directory move that
+  wasn't followed by a rescan).
+- **Missing artwork** — items with no artwork file found.
+- **Launcher issues** — collections whose primary launcher path
+  doesn't resolve to an executable.
+
+Each category shows a count plus up to 20 example paths so you can
+spot the affected items without leaving the dialog. The view is
+read-only — fixes happen elsewhere (Rescan, the Artwork Wizard, the
+launcher field).
+
+Useful as the first stop when something doesn't render correctly:
+the dashboard usually reveals whether the cause is data drift
+(`Rescan`), missing assets (use the Artwork Wizard), or
+configuration drift (Settings → Launcher tab).
+
 ## The expand-mode "two-stage" launch
 
 Per-collection **Expand Mode** (`expandMode=true`) gives you a preview
@@ -287,6 +353,7 @@ the section structure at load time and are not INI keys.
 | `showAllSubcollectionItems` | bool | `false` | Mix descendants' items into this collection. |
 | `extractArchives` | bool | `false` | Auto-extract `.zip` / `.7z` etc. before launch. |
 | `extractedExtension` | string | empty | Which extension inside the archive to launch. |
+| `watchFilesystem` | bool | `false` | Auto-rescan on filesystem changes (debounced). See [Filesystem watcher](#filesystem-watcher). |
 
 ### Display options
 

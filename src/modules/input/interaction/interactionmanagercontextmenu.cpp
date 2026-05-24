@@ -16,11 +16,11 @@
 
 #include "artworkutils.h"
 #include "collectionutils.h"
-// Kartend-n8kh: createsmartplaylistdialog.h / customfieldsdialog.h are no
-// longer #included here. The two dialogs are launched via owner-supplied
-// closures (InteractionManagerSetup::runSmartPlaylistDialog /
-// runCustomFieldsDialog) so the data layer doesn't need the ui/ dialog
-// headers for the symbols. The runners themselves live in MainWindow.
+// The two dialogs (createsmartplaylistdialog.h / editmetadatadialog.h) are
+// launched via owner-supplied closures (InteractionManagerSetup::run*) so
+// the input layer doesn't need the ui/ dialog headers for the symbols. The
+// runners themselves live in MainWindow. EditMetadataPayload's full
+// definition lives in itemmetadata.h, included below.
 #include "idatabasemanager.h"
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
@@ -99,14 +99,63 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
   });
 
-  // --- Edit custom fields (, media items only) ---
+  // --- Edit per-item metadata (media items only) ---
   if (isMediaItem && !filePath.isEmpty() && databaseMgr() && m_collections &&
       m_currentCollectionIndex) {
     menu.addSeparator();
-    QAction *customFieldsAction = menu.addAction(tr("Edit custom fields..."));
+    QAction *editMetadataAction = menu.addAction(tr("Edit metadata..."));
     const QString itemName = widget->getItemName();
-    QObject::connect(customFieldsAction, &QAction::triggered, this,
-                     [this, filePath, itemName]() { editCustomFields(filePath, itemName); });
+    QObject::connect(editMetadataAction, &QAction::triggered, this,
+                     [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
+    // Preview the launch command without spawning the launcher. Surfaces
+    // resolved paths, archive-extraction behaviour, and any validation
+    // warnings the dry-run picked up.
+    if (m_runLaunchPreviewDialog) {
+      QAction *previewAction = menu.addAction(tr("Preview launch command..."));
+      QObject::connect(previewAction, &QAction::triggered, this,
+                       [this, filePath, itemName]() { previewLaunchCommand(filePath, itemName); });
+    }
+
+    // --- Per-item state flag toggles (Pin / Hide / Continue later) ---
+    // Read the current flags once so each menu label reflects the
+    // current state ("Pin" vs "Unpin"). The owning collection's uuid is
+    // resolved via the same fallback the editItemMetadata path uses, so
+    // the toggle hits the same (collection_uuid, path) key the read
+    // pipeline returns. uuid.isEmpty() means we can't resolve a stable
+    // key — skip the flag group entirely rather than offering actions
+    // that would silently no-op.
+    int flagOwningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
+    if (flagOwningIndex < 0) {
+      flagOwningIndex = *m_currentCollectionIndex;
+    }
+    QString flagUuid;
+    bool isPinned = false;
+    bool isHidden = false;
+    bool continueLater = false;
+    if (CollectionUtils::isValidIndex(flagOwningIndex, m_collections)) {
+      const CollectionConfig &flagOwning = (*m_collections)[flagOwningIndex];
+      const QString flagMediaDir =
+          PathUtils::validateAndExpandPath(flagOwning.mediaDirectory, flagOwning.name);
+      flagUuid = CollectionUtils::computeCollectionUuid(flagOwning.name, flagMediaDir);
+      if (!flagUuid.isEmpty()) {
+        const auto flagMeta = databaseMgr()->loadItemMetadata(flagUuid, filePath);
+        isPinned = flagMeta.isPinned;
+        isHidden = flagMeta.isHidden;
+        continueLater = flagMeta.continueLater;
+      }
+    }
+    if (!flagUuid.isEmpty()) {
+      QAction *pinAction = menu.addAction(isPinned ? tr("Unpin") : tr("Pin to top"));
+      QObject::connect(pinAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemPinned(filePath); });
+      QAction *continueAction = menu.addAction(continueLater ? tr("Clear continue-later marker")
+                                                             : tr("Mark as continue later"));
+      QObject::connect(continueAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemContinueLater(filePath); });
+      QAction *hideAction = menu.addAction(isHidden ? tr("Unhide") : tr("Hide"));
+      QObject::connect(hideAction, &QAction::triggered, this,
+                       [this, filePath]() { toggleItemHidden(filePath); });
+    }
 
     // --- Look up online (Stage 1: URL providers only) ---
     // Submenu of metadata providers applicable to the current
@@ -503,7 +552,8 @@ void InteractionManager::createSmartPlaylistDialog() {
   if (!playlistMgr() || !m_runSmartPlaylistDialog) {
     return;
   }
-  auto edit = m_runSmartPlaylistDialog(QString(), std::nullopt);
+  auto edit =
+      m_runSmartPlaylistDialog(QString(), std::nullopt, collectSmartPlaylistCollectionEntries());
   if (!edit.has_value() || edit->name.isEmpty()) {
     return;
   }
@@ -527,7 +577,8 @@ void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
                          loaded.error().message);
     return;
   }
-  auto edit = m_runSmartPlaylistDialog(currentName, loaded.value());
+  auto edit = m_runSmartPlaylistDialog(currentName, loaded.value(),
+                                       collectSmartPlaylistCollectionEntries());
   if (!edit.has_value()) {
     return;
   }
@@ -588,7 +639,7 @@ void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
   }
 }
 
-void InteractionManager::editCustomFields(const QString &filePath, const QString &itemName) {
+void InteractionManager::editItemMetadata(const QString &filePath, const QString &itemName) {
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
@@ -615,16 +666,27 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
 
-  if (!m_runCustomFieldsDialog) {
+  if (!m_runEditMetadataDialog) {
     return;
   }
-  auto edited = m_runCustomFieldsDialog(
-      itemName, ItemMetadataStore::parseCustomFields(metadata.customFields));
+
+  EditMetadataPayload initial;
+  initial.notes = metadata.notes;
+  initial.tags = ItemMetadataStore::parseTags(metadata.tags);
+  initial.rating = metadata.rating;
+  initial.sourceUrl = metadata.sourceUrl;
+  initial.customFields = ItemMetadataStore::parseCustomFields(metadata.customFields);
+
+  auto edited = m_runEditMetadataDialog(itemName, initial);
   if (!edited.has_value()) {
     return;
   }
 
-  metadata.customFields = ItemMetadataStore::serializeCustomFields(*edited);
+  metadata.notes = edited->notes;
+  metadata.tags = ItemMetadataStore::serializeTags(edited->tags);
+  metadata.rating = edited->rating;
+  metadata.sourceUrl = edited->sourceUrl;
+  metadata.customFields = ItemMetadataStore::serializeCustomFields(edited->customFields);
   // Mark the row as user-edited so future scraper integrations can decide
   // whether to overwrite. Existing rows from a scraper keep their source
   // until the user touches them via this dialog.
@@ -645,7 +707,7 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
-  // Resolve the owning collection the same way editCustomFields does so the
+  // Resolve the owning collection the same way editItemMetadata does so the
   // (uuid, path) key matches across showAllSubcollectionItems navigation.
   int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
   if (owningIndex < 0) {
@@ -667,7 +729,7 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   metadata.path = filePath;
   metadata.manualPath = manualPath;
   // User-driven edit: stamp the source so future scrapers know this row was
-  // touched by the user (matches editCustomFields behavior).
+  // touched by the user (matches editItemMetadata behavior).
   metadata.source = QStringLiteral("user");
   if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;
@@ -711,6 +773,158 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
     return;
   }
   if (detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+namespace {
+
+/// Resolves the (collection_uuid, path) key for a media item, picking the
+/// item's owning collection (which may differ from the displayed one in
+/// showAllSubcollectionItems mode). Returns an empty string when the
+/// resolution fails so callers can early-out instead of writing a row
+/// keyed by a stale collection.
+QString resolveOwningUuid(IDatabaseManager *db, QList<CollectionConfig> *collections,
+                          int *currentCollectionIndex, const QString &filePath) {
+  if (!db || !collections || !currentCollectionIndex) {
+    return {};
+  }
+  int owningIndex = db->getCollectionIndexForFile(filePath);
+  if (owningIndex < 0) {
+    owningIndex = *currentCollectionIndex;
+  }
+  if (!CollectionUtils::isValidIndex(owningIndex, collections)) {
+    return {};
+  }
+  const CollectionConfig &owning = (*collections)[owningIndex];
+  const QString expandedMediaDir =
+      PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+  return CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+}
+
+} // namespace
+
+SmartPlaylistCollectionEntries InteractionManager::collectSmartPlaylistCollectionEntries() const {
+  SmartPlaylistCollectionEntries out;
+  if (!m_collections) {
+    return out;
+  }
+  out.reserve(m_collections->size());
+  for (const CollectionConfig &cfg : *m_collections) {
+    // Playlists are virtual collections — anchoring a smart filter on
+    // their uuid would recurse through the smart-playlist evaluator and
+    // produce surprising results. Skip them.
+    if (cfg.isPlaylist) {
+      continue;
+    }
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    if (uuid.isEmpty()) {
+      continue;
+    }
+    out.append({cfg.name, uuid});
+  }
+  return out;
+}
+
+void InteractionManager::previewLaunchCommand(const QString &filePath, const QString &itemName) {
+  if (!m_runLaunchPreviewDialog || !m_collections || !m_currentCollectionIndex) {
+    return;
+  }
+  if (!databaseMgr()) {
+    return;
+  }
+  // Resolve the owning collection the same way every other per-item action
+  // does — the displayed collection may not own the file (e.g.
+  // showAllSubcollectionItems mode).
+  int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
+  if (owningIndex < 0) {
+    owningIndex = *m_currentCollectionIndex;
+  }
+  if (!CollectionUtils::isValidIndex(owningIndex, m_collections)) {
+    return;
+  }
+  const CollectionConfig &owning = (*m_collections)[owningIndex];
+
+  // Pick the launcher index the same way launchItem would: per-item
+  // override wins, then default-launcher, then 0. We don't pop the chooser
+  // dialog here — the preview is meant to be a fast read-only surface, so
+  // the user gets to see what would happen with the most likely launcher.
+  // If they want a different one, they can pick via "Always launch with…".
+  int launcherIndex = -1;
+  if (owning.launcher.launcherCount() > 0) {
+    const QString expandedMediaDir =
+        PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+    if (!uuid.isEmpty()) {
+      const auto md = databaseMgr()->loadItemMetadata(uuid, filePath);
+      if (md.launcherIndex >= 0 && md.launcherIndex < owning.launcher.launcherCount()) {
+        launcherIndex = md.launcherIndex;
+      }
+    }
+    if (launcherIndex < 0) {
+      launcherIndex =
+          std::clamp(owning.launcher.defaultLauncherIndex, 0, owning.launcher.launcherCount() - 1);
+    }
+  } else {
+    launcherIndex = 0;
+  }
+
+  const LauncherConfig launcher = LauncherUtils::resolvePreset(
+      owning.launcher.launcherAt(launcherIndex),
+      m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+  const QString launcherName = launcher.name.trimmed().isEmpty()
+                                   ? owning.launcher.launcherDisplayName(launcherIndex)
+                                   : launcher.name.trimmed();
+
+  const auto preview = LaunchManager::previewLaunchCommand(owning, launcher, filePath);
+  m_runLaunchPreviewDialog(itemName, launcherName, filePath, preview);
+}
+
+void InteractionManager::toggleItemPinned(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.isPinned = !md.isPinned;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+void InteractionManager::toggleItemHidden(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.isHidden = !md.isHidden;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+}
+
+void InteractionManager::toggleItemContinueLater(const QString &filePath) {
+  const QString uuid =
+      resolveOwningUuid(databaseMgr(), m_collections, m_currentCollectionIndex, filePath);
+  if (uuid.isEmpty()) {
+    return;
+  }
+  ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
+  md.collectionUuid = uuid;
+  md.path = filePath;
+  md.continueLater = !md.continueLater;
+  md.source = QStringLiteral("user");
+  if (databaseMgr()->saveItemMetadata(md) && detailsPaneMgr()) {
     detailsPaneMgr()->refreshSidebarMetadataImmediate();
   }
 }

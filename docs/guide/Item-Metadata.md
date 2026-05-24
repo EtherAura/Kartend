@@ -23,77 +23,98 @@ right-click menu reference is in
 | Play count | Database (`items.play_count`) | Incremented on every launch. |
 | Last played | Database (`items.last_played`) | Timestamp. |
 | Time played | Database (`launch_history.duration_seconds`) | Sum across history rows. Only populated if [runtime detection](Splash-and-Now-Playing.md#runtime-detection) is on. |
-| Custom fields | Database (`item_metadata`) | User-defined key-value pairs. |
+| Notes | Database (`item_metadata.notes`) | Free-form multi-line text. |
+| Tags | Database (`item_metadata.tags`) | JSON array; surfaced in search via `tag:` token. |
+| Rating | Database (`item_metadata.rating`) | 0–10 in half-star steps; `-1` = unrated. |
+| Source URL | Database (`item_metadata.source_url`) | Where you got the item (e.g. purchase link). |
+| Custom fields | Database (`item_metadata.custom_fields`) | User-defined key-value pairs. |
+| Pinned / Hidden / Continue later | Database (`item_metadata.is_pinned` / `is_hidden` / `continue_later`) | Boolean state flags, surfaced as tile badges. |
 | Manual file path | Database (`item_metadata.manual_path`) | Per-item link to a PDF / EPUB / etc. |
 | Launcher override | Database (`item_metadata.launcher_index`) | Per-item launcher choice. |
 | Artwork links | Database (`item_artwork`) | Per-type, per-item manual artwork file. |
 
 Per-item state lives in `~/.local/share/kartend/kartend.db` (see
 [File Locations](File-Locations.md#database)). Survives collection
-rename and rescans, keyed by `(collection_uuid, source_path)`.
+rename and rescans, keyed by `(collection_uuid, source_path)`. The
+metadata, tags, rating, source URL, custom fields, manual links,
+artwork links, and state flags all ride along inside
+[`.kart` exports](Backup-and-Migration.md).
 
-## Custom fields
+## Personal metadata: notes, tags, rating, source URL, custom fields
 
-User-defined key-value metadata attached to a single item. Useful for
-information no auto-scraper would know:
+The **Edit Metadata** dialog is the one-stop editor for everything
+you'd want to attach to an item by hand — notes, a tag list, a
+half-star rating, a source URL, and any number of free-form
+key/value custom fields. It replaces the older custom-fields-only
+dialog.
 
-- Personal ratings
-- Completion status
-- Notes / memorable quotes
-- Cross-references
+Open via right-click → **Edit metadata…**, the **Edit Metadata**
+button in the [details pane title row](#details-pane), or the same
+button on the [detail page](#detail-page).
 
-Open via right-click → **Edit custom fields…** (Custom Fields Dialog).
-
-### Custom Fields Dialog
-
-Window title: **Edit custom fields**. A two-column table — **Key** and
-**Value** — with two buttons:
-
-| Button | Effect |
-|--------|--------|
-| **Add** | Appends a new blank row and immediately puts the Key cell into edit mode so you can start typing the field name. |
-| **Remove** | Drops the selected row. (Single-row selection.) |
-
-Both cells are directly editable in place — double-click, single-click
-on a selected row, or just start typing to enter edit mode. Pressing
-**Save** persists every row to the database; the sidebar refreshes
-immediately.
-
-Empty rows (no key) are dropped silently on save. Field names are
-case-sensitive; values are free-form text. There's no validation —
-store URLs, multi-line text (limited rendering), star ratings as
-Unicode characters, whatever. The sidebar's metadata section displays
-each pair as a row.
+### Edit Metadata Dialog
 
 ```
-┌──────────────────────────────────────────────────┐
-│ Edit custom fields                               │
-│ Custom fields for: <item name>                   │
-│ ┌────────────┬─────────────────────────────────┐ │
-│ │ Key        │ Value                           │ │
-│ ├────────────┼─────────────────────────────────┤ │
-│ │ rating     │ ★★★★☆                          │ │
-│ │ status     │ in progress                     │ │
-│ │ notes      │ great soundtrack                │ │
-│ └────────────┴─────────────────────────────────┘ │
-│  [Add]  [Remove]                                 │
-│                            [Cancel]   [Save]     │
-└──────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│ Edit metadata                                      │
+│ <item name>                                        │
+│                                                    │
+│ Notes ┌────────────────────────────────────────┐   │
+│       │ Loved the second act; reminded me of   │   │
+│       │ the older director cut.                │   │
+│       └────────────────────────────────────────┘   │
+│ Tags  [comfort, rewatch, holiday               ]   │
+│ Rating ★★★★☆   [Clear]   (4.0 / 5)                 │
+│ Source URL [https://www.example.com/…          ]   │
+│                                                    │
+│ Custom fields                                      │
+│ ┌────────────┬─────────────────────────────────┐   │
+│ │ Key        │ Value                           │   │
+│ ├────────────┼─────────────────────────────────┤   │
+│ │ runtime    │ 142m                            │   │
+│ │ language   │ en, fr, de                      │   │
+│ └────────────┴─────────────────────────────────┘   │
+│ [Add row] [Remove row]                             │
+│                              [Cancel]   [Save]     │
+└────────────────────────────────────────────────────┘
 ```
+
+| Field | Behavior |
+|-------|----------|
+| **Notes** | Free-form multi-line text. Empty = unset. Surfaced in the sidebar's Item tab and, when [search mode All](Search-Sort-Filter.md#search-modes) is active, in search. |
+| **Tags** | Comma-separated. Whitespace is trimmed and case-insensitive duplicates are dropped on save, so `comfort, comfort,COMFORT` becomes `comfort`. Searchable via the `tag:NAME` [structured token](Search-Sort-Filter.md#structured-search-tokens). |
+| **Rating** | Half-star widget (5 stars, 0–10 internal scale). Click to set; right-click on a star to clear back to "unrated". The numeric label next to the widget shows the value out of 5. |
+| **Source URL** | Optional. Plain text; surfaced as a clickable link in the sidebar / detail page. |
+| **Custom fields** | Same key/value table as before — directly-editable cells, **Add row** / **Remove row** buttons. Empty rows are dropped silently on save. |
+
+The dialog operates on an in-memory payload; **Save** persists every
+field to the database in a single transaction and the sidebar
+refreshes immediately. Partial input survives a round-trip without
+clobbering other rows — leaving Notes empty doesn't clear an
+existing rating, for example.
 
 ### Persistence
 
-Stored as `(collection_uuid, source_path, field_name, field_value)`
-rows in the `item_metadata` table. Unique constraint on `(collection,
-path, field_name)` — saving a duplicate field name overwrites the
-previous value.
+Stored on the `item_metadata` table, keyed by
+`(collection_uuid, source_path)`. The hand-edited fields are:
 
-To query custom fields from outside Kartend:
+| Column | Type | Notes |
+|--------|------|-------|
+| `notes` | TEXT | Empty = NULL. |
+| `tags` | TEXT | Compact JSON array of strings. |
+| `rating` | INTEGER | 0–10 in half-star steps; NULL = unrated. |
+| `source_url` | TEXT | Empty = NULL. |
+| `custom_fields` | TEXT | Compact JSON object of `{ "key": "value" }` pairs. |
+
+Survives collection rename and rescans. Round-trips inside
+[`.kart` exports](Backup-and-Migration.md).
+
+To query from outside Kartend:
 
 ```sql
-SELECT field_name, field_value FROM item_metadata
-WHERE collection_uuid = '...' AND source_path = '/path/to/item.sfc'
-  AND field_name NOT IN ('manual_path', 'launcher_index');
+SELECT notes, tags, rating, source_url, custom_fields
+FROM item_metadata
+WHERE collection_uuid = '...' AND path = '/path/to/item.mkv';
 ```
 
 ## Manual files
@@ -235,6 +256,67 @@ The right-click menu shows **Always launch with…** only when the
 collection has more than one launcher (otherwise there's nothing to
 choose).
 
+## State flags
+
+Three per-item booleans that surface in the UI as small badges on the
+tile and as smart-playlist filters:
+
+| Flag | INI / DB | Badge | Effect |
+|------|----------|-------|--------|
+| **Pinned** | `item_metadata.is_pinned` | ★ (top-right of tile) | Highlights the item as a personal favorite for that collection. Pair with the **Pinned** smart-playlist kind for a curated tile. |
+| **Hidden** | `item_metadata.is_hidden` | ∅ | Filtered out of the regular grid by default. Surface them via the **Hidden** smart-playlist kind when you want to review or unhide. |
+| **Continue later** | `item_metadata.continue_later` | ⏵ | Marks the item as in-progress / on the resume list. Pair with the **Continue later** smart-playlist kind for a "pick up where I left off" view. |
+
+> **Where to find this** — right-click an item to toggle each flag.
+> Bulk-toggle via the [Bulk Edit Dialog](#bulk-edit-dialog).
+
+Badges paint on top of the tile artwork in the top-right corner; they
+repaint without database queries (the flag set is loaded once per
+collection and cached). Hidden items don't render in the grid by
+default, so you won't see the badge unless you're inside a smart
+playlist that surfaces them.
+
+### Bulk Edit Dialog
+
+For collection-wide changes there's a **Bulk Edit Dialog**: pick an
+action (Add Tag / Remove Tag / Set Pinned / Set Hidden / Set Continue
+Later / Clear Rating) and a parameter (the tag name, when applicable),
+then apply to every item in the active collection. Useful for marking
+an entire backlog as Continue Later in one shot, or stripping a tag you
+no longer want.
+
+Accessed via **File → Bulk Edit Items…** when a collection is active.
+Confirmation prompt shows the affected item count before any database
+writes happen.
+
+## Missing-metadata review
+
+For working through a partially-populated collection one item at a
+time, **File → Review Missing Metadata…** opens a queue dialog that
+walks every item in the active collection with empty
+title / description / genre / artwork.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Review missing metadata — 14 of 92 remaining               │
+│                                                            │
+│ Item: Some Album.flac                                      │
+│ Missing: Description, Genre                                │
+│                                                            │
+│ [ Edit metadata… ]   [ Skip ]   [ Stop ]                   │
+└────────────────────────────────────────────────────────────┘
+```
+
+| Action | Effect |
+|--------|--------|
+| **Edit metadata…** | Opens the [Edit Metadata Dialog](#edit-metadata-dialog) on this item; after save, re-evaluates whether the item still belongs in the queue and either dismisses it (now complete) or keeps it (still missing fields). |
+| **Skip** | Leave the item alone and advance to the next. |
+| **Stop** | Close the dialog. Items you've completed stay completed; the rest stay in the queue for next time. |
+
+The queue is rebuilt each time the dialog opens, so newly-added
+items (or items that lost metadata via a partial rescrape) show up
+automatically.
+
 ## Detail page
 
 Press `I` (or click the toolbar's `ℹ` button) on a selected item to
@@ -245,9 +327,11 @@ The detail page shows:
 
 - A larger artwork display (cycles through types using the same
   modifier+middle-click as the gallery).
-- All custom fields, formatted spaciously.
+- Notes, tags, rating, source URL, and all custom fields, formatted
+  spaciously.
 - Manual file link (if set).
-- Action buttons: **Launch**, **Edit custom fields…**, **Set manual…**,
+- Action buttons: **Launch**, **Edit metadata…** (opens the unified
+  [Edit Metadata Dialog](#edit-metadata-dialog)), **Set manual…**,
   **Edit artwork links…**.
 - File path / size / mtime / play count / last played.
 
@@ -262,16 +346,29 @@ without learning the sidebar's mechanics.
 > **Where to find this** — `I` key (rebindable as `keyItemDetails`),
 > or toolbar **Detail Page** button (`ℹ`).
 
+## Details pane
+
+The sidebar's Details Pane title row carries an inline **Edit
+Metadata** button (new on this branch) — same dialog as the
+right-click and detail-page entry points, but reachable in one click
+from the current selection without leaving the grid. Pair with the
+**Edit Links…** button (artwork) to make the sidebar a self-contained
+editor surface.
+
 ## Recipes
 
 ### Tag completed items
 
-Right-click each completed item → **Edit custom fields…** → add
-`status=completed`, `completed_date=2025-04-12`, `notes=loved the
-ending`.
+Right-click each completed item → **Edit metadata…** → add `completed`
+to the tag list. Then search with `tag:completed` to surface the
+completed pile, or build a smart playlist using the
+**By title search** kind on a custom field if you want a persistent
+view.
 
-Sidebar will display these every time you select the item. Search
-mode **All** will match against `completed` if you search that text.
+For a richer set of states (completed / in-progress / dropped),
+combine the tag list with the **Continue later** state flag —
+toggling it from the right-click menu is faster than editing a
+custom field per item.
 
 ### Add manual links to a books collection
 
@@ -324,17 +421,30 @@ auto-discovered cover.
   (`ItemMetadataStore`, `ItemArtworkStore`), and
   [src/modules/data/database/](../../src/modules/data/database/) for
   the `DatabaseManager` facade.
-- Custom fields use the same `item_metadata` table as `manual_path`
-  and `launcher_index` — they're stored as ordinary `(field_name,
-  field_value)` rows. The "system" fields (`manual_path`,
-  `launcher_index`) are well-known names; custom fields are anything
-  else.
+- Hand-edited per-item state on `item_metadata`: `notes` (TEXT),
+  `tags` (compact JSON array), `rating` (INTEGER 0–10, half-star),
+  `source_url` (TEXT), `custom_fields` (compact JSON object),
+  `is_pinned` / `is_hidden` / `continue_later` (INTEGER 0/1).
+  Migrations v14 and v15 add these columns to the existing table.
+- Edit Metadata Dialog:
+  [src/ui/dialogs/item/editmetadatadialog.{h,cpp}](../../src/ui/dialogs/item/);
+  the rating widget is `StarRatingWidget` in the same directory.
+  The dialog operates on an `EditMetadataPayload` struct
+  (`src/utils/db/itemmetadata.h`); the caller persists via
+  `DatabaseManager::saveItemMetadata`.
+- Bulk Edit Dialog: [src/ui/dialogs/item/bulkeditdialog.{h,cpp}](../../src/ui/dialogs/item/);
+  the bulk mutation primitives live in
+  [src/utils/db/bulkedit.{h,cpp}](../../src/utils/db/).
+- State-flag badges paint in
+  [src/chrome/items/itemwidgetpaint.cpp](../../src/chrome/items/itemwidgetpaint.cpp);
+  the flag set is loaded once per collection by
+  `ItemWidget::applyStateFlags` and cached.
 - Detail page: [src/modules/media/detailpage/](../../src/modules/media/detailpage/)
   (`DetailPageManager`).
-- Custom Fields Dialog: [src/ui/dialogs/customfieldsdialog.h](../../src/ui/dialogs/).
 - Item Artwork Links Dialog: [src/ui/dialogs/collection/itemartworklinksdialog.h](../../src/ui/dialogs/collection/).
 - Launcher chooser: [src/ui/dialogs/launcher/launcherchooserdialog.h](../../src/ui/dialogs/launcher/).
-- Adding a new well-known item field: extend the relevant store with a
-  typed accessor (e.g. `setLastPlayed`, `lastPlayedFor`) rather than
-  treating it as an arbitrary custom field — the typed accessor lets
-  the sidebar render it specially.
+- Adding a new well-known item field: extend `ItemMetadataStore::ItemMetadata`
+  with the typed column, bump the migration table in
+  [src/utils/db/dbmigrations.cpp](../../src/utils/db/dbmigrations.cpp),
+  surface it in `EditMetadataPayload` if user-editable, and render it
+  in the sidebar's metadata view.

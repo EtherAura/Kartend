@@ -159,6 +159,17 @@ public:
   bool resetAllUsageStats() override;
 
   void migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) override;
+
+  /// Whole-library path + artwork_path enumeration for the
+  /// collection-health dashboard. Single SQL pass against the main-thread
+  /// connection; no caching since the dashboard is a one-shot read.
+  [[nodiscard]] QList<IDatabaseManager::ItemPathRow>
+  loadAllItemPathsForCollection(const QString &collectionUuid) const override;
+  /// Single SQL pass over item_metadata for the collection's per-item state
+  /// flags. Only rows with at least one flag set are returned so the result
+  /// hash stays small for libraries where most items have no markers.
+  [[nodiscard]] QHash<QString, IDatabaseManager::ItemStateFlags>
+  loadItemStateFlagsForCollection(const QString &collectionUuid) const override;
   void purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) override;
 
   // ──────────────────────────────────────────────────────────────────────────

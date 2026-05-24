@@ -153,6 +153,52 @@ collection renames, and reorderings.
 To copy artwork links to a different filename, you'll need to re-link
 through the dialog — there's no "rename source" workflow today.
 
+## Artwork assignment wizard
+
+For collections with a lot of items missing artwork, the per-item
+"Browse… → Save" loop gets tedious. The **Artwork Wizard** (File →
+**Assign Missing Artwork…**) walks the missing pile one item at a
+time and ranks candidate images from the collection's artwork
+directory by fuzzy name match.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Assign Artwork — 12 of 47 remaining                        │
+│                                                            │
+│ Item: Some Movie (2021).mkv                                │
+│                                                            │
+│ Candidates                                                 │
+│   1. ▣ Some Movie (2021).jpg            (score 100)        │
+│   2. ▣ some-movie-2021.png              (score 84)         │
+│   3. ▣ Some_Movie.jpg                   (score 62)         │
+│   …                                                        │
+│                                                            │
+│ [ Browse… ]  [ Skip ]  [ Stop ]               [ Assign ]   │
+└────────────────────────────────────────────────────────────┘
+```
+
+| Action | Effect |
+|--------|--------|
+| **Assign** | Save the highlighted candidate as the item's manual artwork link and advance to the next item. |
+| **Browse…** | Open a file picker rooted at `artworkDirectory` for cases where no candidate fits. |
+| **Skip** | Leave the item alone and advance. |
+| **Stop** | Close the wizard. Already-assigned items keep their new links. |
+
+Candidates are ranked by a subsequence-based fuzzy score:
+case-insensitive, consecutive characters score higher, word-boundary
+matches score higher, and items already-matched by the standard
+auto-discovery process are skipped (the wizard only surfaces the
+*missing* pile). The top 12 candidates render with thumbnails.
+
+The assigned image lands in the `item_artwork` table as a manual
+override on the **primary** artwork type — identical to using **Edit
+artwork links…** by hand — so the choice survives rescans and
+collection renames.
+
+> **Tip** — pair with the **Missing artwork**
+> [smart-playlist kind](Smart-Playlists.md#filter-kinds) for a
+> persistent worklist tile that empties as you assign.
+
 ## Sidebar gallery
 
 The sidebar's **Item** tab shows every artwork type — standard +

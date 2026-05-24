@@ -33,6 +33,9 @@ inline constexpr const char *MENU = "application-menu";
 inline constexpr const char *FILTER = "filter-symbolic";
 /// Layout / view-mode picker (Breeze: "view-choose")
 inline constexpr const char *VIEW_PICKER = "view-choose";
+/// Pencil glyph for inline edit actions (Breeze: "document-edit" with
+/// "edit-entry" / "accessories-text-editor" fallbacks).
+inline constexpr const char *EDIT = "document-edit";
 
 /// Get a themed icon with fallback support
 /// @param names List of icon names to try in order

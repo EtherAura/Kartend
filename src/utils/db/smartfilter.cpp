@@ -27,6 +27,16 @@ constexpr const char *TAG_NEVER = "never_played";
 constexpr const char *TAG_BY_EXT = "by_extension";
 constexpr const char *TAG_HAS_ARTWORK = "has_artwork";
 constexpr const char *TAG_BY_DATE_ADDED = "by_date_added";
+constexpr const char *TAG_PINNED = "pinned";
+constexpr const char *TAG_HIDDEN = "hidden";
+constexpr const char *TAG_CONTINUE_LATER = "continue_later";
+constexpr const char *TAG_BY_COLLECTION = "by_collection";
+constexpr const char *TAG_BY_TITLE_SEARCH = "by_title_search";
+constexpr const char *TAG_MISSING_ARTWORK = "missing_artwork";
+constexpr const char *TAG_FAVORITE = "favorite";
+
+constexpr const char *KEY_COLLECTION_UUID = "collection_uuid";
+constexpr const char *KEY_TITLE_SEARCH = "title_search";
 
 QString tr(const char *s) {
   return QCoreApplication::translate("SmartFilter", s);
@@ -48,6 +58,20 @@ QString kindToTag(Kind kind) {
     return QString::fromLatin1(TAG_HAS_ARTWORK);
   case Kind::ByDateAdded:
     return QString::fromLatin1(TAG_BY_DATE_ADDED);
+  case Kind::Pinned:
+    return QString::fromLatin1(TAG_PINNED);
+  case Kind::Hidden:
+    return QString::fromLatin1(TAG_HIDDEN);
+  case Kind::ContinueLater:
+    return QString::fromLatin1(TAG_CONTINUE_LATER);
+  case Kind::ByCollection:
+    return QString::fromLatin1(TAG_BY_COLLECTION);
+  case Kind::ByTitleSearch:
+    return QString::fromLatin1(TAG_BY_TITLE_SEARCH);
+  case Kind::MissingArtwork:
+    return QString::fromLatin1(TAG_MISSING_ARTWORK);
+  case Kind::Favorite:
+    return QString::fromLatin1(TAG_FAVORITE);
   }
   // Unreachable in well-formed code; return a sentinel rather than
   // unhandled-switch UB so round-trip tests catch a missing case at the
@@ -62,6 +86,13 @@ ErrorUtils::Result<Kind> tagToKind(const QString &tag) {
   if (tag == QLatin1String(TAG_BY_EXT)) return Kind::ByExtension;
   if (tag == QLatin1String(TAG_HAS_ARTWORK)) return Kind::HasArtwork;
   if (tag == QLatin1String(TAG_BY_DATE_ADDED)) return Kind::ByDateAdded;
+  if (tag == QLatin1String(TAG_PINNED)) return Kind::Pinned;
+  if (tag == QLatin1String(TAG_HIDDEN)) return Kind::Hidden;
+  if (tag == QLatin1String(TAG_CONTINUE_LATER)) return Kind::ContinueLater;
+  if (tag == QLatin1String(TAG_BY_COLLECTION)) return Kind::ByCollection;
+  if (tag == QLatin1String(TAG_BY_TITLE_SEARCH)) return Kind::ByTitleSearch;
+  if (tag == QLatin1String(TAG_MISSING_ARTWORK)) return Kind::MissingArtwork;
+  if (tag == QLatin1String(TAG_FAVORITE)) return Kind::Favorite;
   return ErrorContext::error(ErrorCode::InvalidArgument, "Unknown smart-filter kind tag",
                              "SmartFilter::tagToKind")
       .withDetails(QStringLiteral("Tag: '%1'").arg(tag));
@@ -77,6 +108,8 @@ QJsonObject toJson(const Filter &filter) {
     exts.append(e);
   }
   o[KEY_EXTENSIONS] = exts;
+  o[KEY_COLLECTION_UUID] = filter.collectionUuid;
+  o[KEY_TITLE_SEARCH] = filter.titleSearch;
   return o;
 }
 
@@ -108,6 +141,12 @@ ErrorUtils::Result<Filter> fromJson(const QJsonObject &obj) {
       }
     }
   }
+  // Older smart_filter rows pre-date these fields — toString() returns an
+  // empty QString for missing keys, which is also the "no value" sentinel
+  // the evaluator checks (empty -> returns 0 matches), so the absence is
+  // honest rather than producing a "matches everything" surprise.
+  f.collectionUuid = obj.value(KEY_COLLECTION_UUID).toString();
+  f.titleSearch = obj.value(KEY_TITLE_SEARCH).toString();
   return f;
 }
 
@@ -146,6 +185,23 @@ QString humanLabel(const Filter &filter) {
     return tr("Has artwork");
   case Kind::ByDateAdded:
     return tr("Added in last %1 days").arg(filter.days);
+  case Kind::Pinned:
+    return tr("Pinned");
+  case Kind::Hidden:
+    return tr("Hidden");
+  case Kind::ContinueLater:
+    return tr("Continue later");
+  case Kind::ByCollection:
+    return filter.collectionUuid.isEmpty()
+               ? tr("By collection (none)")
+               : tr("By collection (%1…)").arg(filter.collectionUuid.left(8));
+  case Kind::ByTitleSearch:
+    return filter.titleSearch.isEmpty() ? tr("Title contains (empty)")
+                                        : tr("Title contains: %1").arg(filter.titleSearch);
+  case Kind::MissingArtwork:
+    return tr("Missing artwork");
+  case Kind::Favorite:
+    return tr("Favorites");
   }
   return tr("Unknown filter");
 }

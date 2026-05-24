@@ -70,8 +70,9 @@ and want to dig into a feature, the index below is grouped by purpose.
 - **[Marquee](Marquee.md)** — secondary always-on-top window for
   arcade-cabinet toppers: item artwork, collection icon, or looping
   video, per screen
-- **[Backup & Sharing](Backup-and-Sharing.md)** — `.kart` package format,
-  export, import, conflict policies, headless command-line workflow
+- **[Backup & Migration](Backup-and-Migration.md)** — `.kart` package
+  format, export, import, preflight validation, conflict policies,
+  headless command-line workflow
 
 ### Reference
 

@@ -20,11 +20,13 @@ private slots:
   void testParseRejectsMissingUuid();
   void testParseRejectsMissingName();
   void testParseRejectsNewerFormatVersion();
+  void testPlaylistRoundTrip();
+  void testV1ManifestParsesWithEmptyPlaylists();
 };
 
 void TestKartManifest::testFormatMagicConstants() {
   QCOMPARE(KartFormat::MAGIC_SIZE, 8);
-  QCOMPARE(KartFormat::CURRENT_VERSION, 1u);
+  QCOMPARE(KartFormat::CURRENT_VERSION, 2u);
   QCOMPARE(KartFormat::SHA256_SIZE, 32);
   const char good[] = {'K', 'A', 'R', 'T', 0, 0, 0, 1};
   QVERIFY(KartFormat::hasMagic(good, 8));
@@ -276,6 +278,50 @@ void TestKartManifest::testParseRejectsNewerFormatVersion() {
   auto result = KartManifest::parse("{\"format_version\":99,\"uuid\":\"u\",\"name\":\"n\"}");
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartVersionUnsupported));
+}
+
+void TestKartManifest::testPlaylistRoundTrip() {
+  KartManifest::Manifest m;
+  m.uuid = "11111111-2222-3333-4444-555555555555";
+  m.name = "Demos";
+
+  KartManifest::PlaylistEntry staticPl;
+  staticPl.name = "Favorites";
+  staticPl.icon = "star";
+  staticPl.reservedKind = "favorites";
+  staticPl.isSmart = false;
+  KartManifest::PlaylistItemEntry it;
+  it.mediaPath = "media/x.mkv";
+  it.position = 0;
+  staticPl.items.append(it);
+  m.playlists.append(staticPl);
+
+  KartManifest::PlaylistEntry smartPl;
+  smartPl.name = "Recently played";
+  smartPl.isSmart = true;
+  smartPl.smartFilterJson = "{\"kind\":\"played\",\"limit\":50}";
+  m.playlists.append(smartPl);
+
+  const QByteArray json = KartManifest::serialize(m);
+  auto parsed = KartManifest::parse(json);
+  QVERIFY(parsed.isOk());
+  QCOMPARE(parsed.value().playlists.size(), 2);
+  QCOMPARE(parsed.value().playlists.at(0).name, QStringLiteral("Favorites"));
+  QCOMPARE(parsed.value().playlists.at(0).items.size(), 1);
+  QCOMPARE(parsed.value().playlists.at(0).items.first().mediaPath, QStringLiteral("media/x.mkv"));
+  QVERIFY(parsed.value().playlists.at(1).isSmart);
+  QCOMPARE(parsed.value().playlists.at(1).smartFilterJson,
+           QStringLiteral("{\"kind\":\"played\",\"limit\":50}"));
+}
+
+void TestKartManifest::testV1ManifestParsesWithEmptyPlaylists() {
+  // A v1 bundle that pre-dated playlist bundling omits the field
+  // entirely. Parse must accept the manifest (v1 is <= CURRENT_VERSION)
+  // and emit an empty playlists list rather than failing.
+  const QByteArray v1Json = R"({"format_version":1,"uuid":"u","name":"n"})";
+  auto result = KartManifest::parse(v1Json);
+  QVERIFY(result.isOk());
+  QVERIFY(result.value().playlists.isEmpty());
 }
 
 QTEST_MAIN(TestKartManifest)

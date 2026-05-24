@@ -187,6 +187,142 @@ target_link_libraries(test_extensionutils
 )
 add_test(NAME ExtensionUtils COMMAND test_extensionutils)
 
+# SearchQueryParser tests (Kartend-9qv2). Pure string -> struct, no DB.
+add_executable(test_searchqueryparser
+  utils/test_searchqueryparser.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
+)
+target_link_libraries(test_searchqueryparser
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
+
+# CollectionFilesystemWatcher tests (Kartend-kr1g). Pure-helper subdir
+# enumeration plus the configure() reconcile path. Uses QTemporaryDir for
+# scratch trees so no production paths are touched.
+add_executable(test_collectionfilesystemwatcher
+  utils/test_collectionfilesystemwatcher.cpp
+  ${SRC_DIR}/modules/data/watcher/collectionfilesystemwatcher.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_collectionfilesystemwatcher PRIVATE
+  ${SRC_DIR}/modules/data/watcher
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_collectionfilesystemwatcher
+  Qt6::Core
+  Qt6::Test
+  Qt6::Widgets
+)
+add_test(NAME CollectionFilesystemWatcher COMMAND test_collectionfilesystemwatcher)
+
+# ThemePreset tests (Kartend-y3rg). JSON round-trip + file I/O + apply.
+add_executable(test_themepreset
+  utils/test_themepreset.cpp
+  ${SRC_DIR}/utils/app/collection/themepreset.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_themepreset PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_themepreset
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ThemePreset COMMAND test_themepreset)
+
+# PresentationProfile tests (Kartend-6pp5). JSON round-trip + apply + registry.
+add_executable(test_presentationprofile
+  utils/test_presentationprofile.cpp
+  ${SRC_DIR}/utils/app/collection/presentationprofile.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_presentationprofile PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_presentationprofile
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME PresentationProfile COMMAND test_presentationprofile)
+
+# CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
+add_executable(test_collectionhealth
+  utils/test_collectionhealth.cpp
+  ${SRC_DIR}/utils/db/collectionhealth.cpp
+)
+target_include_directories(test_collectionhealth PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_collectionhealth
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME CollectionHealth COMMAND test_collectionhealth)
+
+# MetadataQueue tests (Kartend-gtly). Pure analyzer over a metadata loader closure.
+add_executable(test_metadataqueue
+  utils/test_metadataqueue.cpp
+  ${SRC_DIR}/utils/db/metadataqueue.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+)
+target_link_libraries(test_metadataqueue
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME MetadataQueue COMMAND test_metadataqueue)
+
+# ArtworkCandidates tests (Kartend-y02i). Pure ranker, no filesystem.
+add_executable(test_artworkcandidates
+  utils/test_artworkcandidates.cpp
+  ${SRC_DIR}/utils/view/artworkcandidates.cpp
+  ${SRC_DIR}/utils/text/fuzzymatch.cpp
+)
+target_link_libraries(test_artworkcandidates
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ArtworkCandidates COMMAND test_artworkcandidates)
+
+# FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
+add_executable(test_fuzzymatch
+  utils/test_fuzzymatch.cpp
+  ${SRC_DIR}/utils/text/fuzzymatch.cpp
+)
+target_link_libraries(test_fuzzymatch
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME FuzzyMatch COMMAND test_fuzzymatch)
+
+# BulkEdit tests (Kartend-hrff). Pure logic over ItemMetadata, no DB.
+add_executable(test_bulkedit
+  utils/test_bulkedit.cpp
+  ${SRC_DIR}/utils/db/bulkedit.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+)
+target_include_directories(test_bulkedit PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_bulkedit
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME BulkEdit COMMAND test_bulkedit)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.
@@ -396,6 +532,7 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -448,6 +585,7 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -502,6 +640,7 @@ add_executable(test_querymanager_abspath
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -555,6 +694,7 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -594,6 +734,61 @@ target_link_libraries(test_querymanager_cross_collection_count
 )
 add_test(NAME QueryManagerCrossCollectionCount COMMAND test_querymanager_cross_collection_count)
 
+# QueryManagerCrossCollectionTokens (Kartend-jb6d). Locks in that the
+# structured-token filters apply when queryIncludeAllCollections=true so a
+# future refactor of the cross-mode SQL path can't quietly drop the
+# WHERE clauses.
+add_executable(test_querymanager_cross_collection_tokens
+  modules/query/test_querymanager_cross_collection_tokens.cpp
+  modules/query/workersignalspy.h
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
+  ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
+  ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
+  ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_querymanager_cross_collection_tokens PRIVATE
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/session
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_querymanager_cross_collection_tokens
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME QueryManagerCrossCollectionTokens COMMAND test_querymanager_cross_collection_tokens)
+
 add_executable(test_querymanager_shell_collection_sort
   modules/query/test_querymanager_shell_collection_sort.cpp
   modules/query/workersignalspy.h
@@ -605,6 +800,7 @@ add_executable(test_querymanager_shell_collection_sort
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
@@ -665,6 +861,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
@@ -1164,6 +1361,7 @@ add_executable(test_batchscraperunner_integration
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
   ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
@@ -1660,6 +1858,55 @@ target_link_libraries(test_historystore
 )
 add_test(NAME HistoryStore COMMAND test_historystore)
 
+# VariantGrouping tests (Kartend-skhk). Pure same-basename grouper.
+add_executable(test_variantgrouping
+  utils/test_variantgrouping.cpp
+  ${SRC_DIR}/utils/db/variantgrouping.cpp
+)
+target_include_directories(test_variantgrouping PRIVATE
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_variantgrouping
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME VariantGrouping COMMAND test_variantgrouping)
+
+# KartPreflight tests (Kartend-fr4z). Pure helpers + report assembly so the
+# UI dialog has something to render. Reuses kartsuspiciouspaths.cpp so the
+# allowlist branch can be exercised without dragging in KartManager itself.
+add_executable(test_kartpreflight
+  utils/test_kartpreflight.cpp
+  ${SRC_DIR}/modules/data/kart/kartpreflight.cpp
+  ${SRC_DIR}/modules/data/kart/kartsuspiciouspaths.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+)
+target_include_directories(test_kartpreflight PRIVATE
+  ${SRC_DIR}/modules/data/kart
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartpreflight
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME KartPreflight COMMAND test_kartpreflight)
+
 # KartManifest tests (JSON round-trip for the .kart packaging format)
 add_executable(test_kartmanifest
   modules/kart/test_kartmanifest.cpp
@@ -2001,6 +2248,7 @@ add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 add_executable(test_queryhelpers
   modules/query/test_queryhelpers.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
 )
 target_include_directories(test_queryhelpers PRIVATE
   ${SRC_DIR}/modules/data/query

@@ -13,6 +13,8 @@ private slots:
   void kindTagRoundTrip_coversEveryKind();
   void byDateAdded_roundTripsDaysParam();
   void fromJson_defaultsDaysWhenAbsent();
+  void byCollection_roundTripsCollectionUuid();
+  void byTitleSearch_roundTripsNeedle();
   void toJsonFromJson_recentlyLaunched();
   void toJsonFromJson_byExtension_normalisesEntries();
   void fromJson_rejectsMissingKind();
@@ -28,8 +30,12 @@ void TestSmartFilter::kindTagRoundTrip_coversEveryKind() {
   // surfaces the mismatch immediately.
   const SmartFilter::Kind kinds[] = {
       SmartFilter::Kind::RecentlyLaunched, SmartFilter::Kind::TopPlayed,
-      SmartFilter::Kind::NeverPlayed, SmartFilter::Kind::ByExtension,
-      SmartFilter::Kind::HasArtwork, SmartFilter::Kind::ByDateAdded};
+      SmartFilter::Kind::NeverPlayed,      SmartFilter::Kind::ByExtension,
+      SmartFilter::Kind::HasArtwork,       SmartFilter::Kind::ByDateAdded,
+      SmartFilter::Kind::Pinned,           SmartFilter::Kind::Hidden,
+      SmartFilter::Kind::ContinueLater,    SmartFilter::Kind::ByCollection,
+      SmartFilter::Kind::ByTitleSearch,    SmartFilter::Kind::MissingArtwork,
+      SmartFilter::Kind::Favorite};
   for (auto k : kinds) {
     const QString tag = SmartFilter::kindToTag(k);
     QVERIFY2(!tag.isEmpty() && tag != "invalid", qPrintable(QString("tag: %1").arg(tag)));
@@ -112,8 +118,7 @@ void TestSmartFilter::byDateAdded_roundTripsDaysParam() {
 
   auto parsed = SmartFilter::fromJson(json);
   QVERIFY(parsed.isOk());
-  QCOMPARE(static_cast<int>(parsed.value().kind),
-           static_cast<int>(SmartFilter::Kind::ByDateAdded));
+  QCOMPARE(static_cast<int>(parsed.value().kind), static_cast<int>(SmartFilter::Kind::ByDateAdded));
   QCOMPARE(parsed.value().days, 14);
 }
 
@@ -126,6 +131,31 @@ void TestSmartFilter::fromJson_defaultsDaysWhenAbsent() {
   auto r = SmartFilter::fromJson(obj);
   QVERIFY(r.isOk());
   QCOMPARE(r.value().days, 30);
+}
+
+void TestSmartFilter::byCollection_roundTripsCollectionUuid() {
+  SmartFilter::Filter in;
+  in.kind = SmartFilter::Kind::ByCollection;
+  in.collectionUuid = "uuid-abc-123";
+  const auto json = SmartFilter::toJson(in);
+  QCOMPARE(json.value("kind").toString(), QStringLiteral("by_collection"));
+  QCOMPARE(json.value("collection_uuid").toString(), QStringLiteral("uuid-abc-123"));
+
+  auto parsed = SmartFilter::fromJson(json);
+  QVERIFY(parsed.isOk());
+  QCOMPARE(parsed.value().collectionUuid, QStringLiteral("uuid-abc-123"));
+}
+
+void TestSmartFilter::byTitleSearch_roundTripsNeedle() {
+  SmartFilter::Filter in;
+  in.kind = SmartFilter::Kind::ByTitleSearch;
+  in.titleSearch = "concert";
+  const auto json = SmartFilter::toJson(in);
+  QCOMPARE(json.value("title_search").toString(), QStringLiteral("concert"));
+
+  auto parsed = SmartFilter::fromJson(json);
+  QVERIFY(parsed.isOk());
+  QCOMPARE(parsed.value().titleSearch, QStringLiteral("concert"));
 }
 
 void TestSmartFilter::humanLabel_includesParams() {

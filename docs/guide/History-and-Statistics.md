@@ -4,8 +4,8 @@ Kartend tracks how often you launch each item, when you last launched
 it, and (optionally) for how long. The **Statistics Dialog** rolls
 this up into per-item, per-collection, and library-wide views.
 
-> **Where to find this** — Help → **Statistics**. Master toggles in
-> Settings → General: `historyEnabled`, `historyMaxEntries`,
+> **Where to find this** — Help → **Usage Statistics…**. Master
+> toggles in Settings → General: `historyEnabled`, `historyMaxEntries`,
 > `runtimeDetectionEnabled`.
 
 ## What gets tracked
@@ -50,8 +50,7 @@ to `5000` if you want a lot more history without filling the database.
 
 ## Statistics Dialog
 
-Open via **Help → Statistics**. The window title is **Usage
-Statistics**. Tabbed dialog:
+Open via **Help → Usage Statistics…**. Tabbed dialog:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -100,8 +99,11 @@ Tree view of items, sorted by `play_count` descending. Columns:
 | Time | Sum of `duration_seconds` (or `—` if runtime detection is off) |
 | Last played | `items.last_played` timestamp |
 
-Click a row to see the item highlighted in its collection. Double-click
-launches the item directly from the dialog.
+**Double-click a row to navigate to the item** — the dialog closes,
+Kartend switches to the item's owning collection, and the item gains
+focus in the grid. Single-click selects the row inside the dialog
+without leaving it. The same double-click behavior applies on the
+Recently Played, Never Played, and History tabs.
 
 ### Recently played tab
 
@@ -216,8 +218,9 @@ will show "History is disabled" instead of rows.
 ### Move history to a different machine
 
 The launch_history table travels with `kartend.db`. Copy the database
-file (or use the [`.kart` export](Backup-and-Sharing.md) which doesn't
-include it today, but a future option may).
+file directly when migrating between your own machines —
+[`.kart` exports](Backup-and-Migration.md) carry per-item metadata
+and playlists but deliberately omit launch history.
 
 To merge history from two installations, you'd need to dump and import
 manually; no built-in merge.

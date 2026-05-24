@@ -181,6 +181,74 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
       }
     }
   }
+
+  // State-flag badges (Kartend-elte) — paint on top of the artwork +
+  // title so glyphs stay visible regardless of tile contents. Skipped
+  // for subcollections / virtual folders (no per-item flags) and for
+  // unpopulated tiles (empty filePath after a reset-for-reuse pass).
+  if (!m_isSubcollection && !m_isVirtualFolder && !filePath.isEmpty()) {
+    paintStateBadges(painter);
+  }
+}
+
+// Renders the pinned / hidden / continue-later badges (Kartend-elte) in
+// the top-right corner of the artwork area. Badges are drawn as a stacked
+// row of small circles with a glyph inside so a tile with two or three
+// markers stays legible even at small grid widths. Empty registry → no
+// badges; the widget pool's reuse pass leaves filePath empty on tiles
+// that haven't been populated yet, which guards the lookup.
+QHash<QString, ItemWidget::StateFlags> &itemWidgetStateFlagsRegistry();
+
+void ItemWidget::paintStateBadges(QPainter &painter) {
+  const auto &registry = itemWidgetStateFlagsRegistry();
+  const auto it = registry.constFind(filePath);
+  if (it == registry.cend() || !it->any()) return;
+  const StateFlags &flags = it.value();
+
+  // Place the badge strip against the artwork's top-right corner. List
+  // mode renders artwork through the dedicated artworkColumnWidth, so
+  // anchor against the column's right edge instead of the whole row.
+  QRect artRect;
+  if (m_isListMode) {
+    const int x = m_collectionColumnWidth;
+    artRect = QRect(x, 0, m_artworkColumnWidth, height());
+  } else if (imageLabel) {
+    artRect = imageLabel->geometry();
+  } else {
+    return;
+  }
+
+  const int badgeSize = std::max(14, std::min(22, artRect.width() / 8));
+  const int margin = 4;
+  int x = artRect.right() - badgeSize - margin;
+  const int y = artRect.top() + margin;
+
+  painter.save();
+  painter.setRenderHint(QPainter::Antialiasing);
+  QFont glyphFont = painter.font();
+  glyphFont.setPixelSize(static_cast<int>(badgeSize * 0.7));
+  glyphFont.setBold(true);
+  painter.setFont(glyphFont);
+
+  auto drawBadge = [&](const QColor &fill, QChar glyph) {
+    QColor bg = fill;
+    bg.setAlphaF(0.85);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(bg);
+    painter.drawEllipse(x, y, badgeSize, badgeSize);
+    painter.setPen(Qt::white);
+    painter.drawText(QRectF(x, y, badgeSize, badgeSize), Qt::AlignCenter, QString(glyph));
+    x -= badgeSize + 2;
+  };
+
+  // Order: pinned (most prominent), continue-later (resume marker),
+  // hidden (de-emphasised) — same precedence the Smart playlists in
+  // Kartend-68ky use.
+  if (flags.pinned) drawBadge(QColor(80, 130, 230), QChar(0x2605));      // ★
+  if (flags.continueLater) drawBadge(QColor(220, 160, 60), QChar(u'⏵')); // resume
+  if (flags.hidden) drawBadge(QColor(120, 120, 120), QChar(u'∅'));       // hidden
+
+  painter.restore();
 }
 
 // Set item dimensions

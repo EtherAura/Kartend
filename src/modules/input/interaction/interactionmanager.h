@@ -6,6 +6,7 @@
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
 #include "itemmetadata.h"
+#include "launchmanager.h" // LaunchPreview struct
 #include "setuputils.h"
 #include "smartfilter.h"
 #include <functional>
@@ -67,13 +68,27 @@ struct SmartPlaylistEdit {
 /// InteractionManager pop the dialog without #including its header — the
 /// UI layer supplies a closure that builds the dialog with the right
 /// parent and reads back the result.
-using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
-    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter)>;
+/// (displayName, uuid) pairs the smart-playlist dialog uses to populate
+/// the ByCollection picker. Built fresh at each invocation so it tracks
+/// the live collection list.
+using SmartPlaylistCollectionEntries = QList<QPair<QString, QString>>;
 
-/// Runs the modal CustomFieldsDialog seeded with the item's title and
-/// current custom fields. Returns the edited fields, or nullopt on cancel.
-using CustomFieldsDialogRunner = std::function<std::optional<ItemMetadataStore::CustomFieldList>(
-    const QString &itemTitle, const ItemMetadataStore::CustomFieldList &initial)>;
+using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
+    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter,
+    const SmartPlaylistCollectionEntries &collections)>;
+
+/// Runs the modal EditMetadataDialog seeded with the item's title and the
+/// current curation payload (notes, tags, rating, source URL, custom
+/// fields). Returns the edited payload, or nullopt on cancel.
+using EditMetadataDialogRunner = std::function<std::optional<EditMetadataPayload>(
+    const QString &itemTitle, const EditMetadataPayload &initial)>;
+
+/// Pops the launch-preview / dry-run dialog. Read-only, side-effect-free —
+/// the caller resolves the LaunchPreview ahead of time and hands the
+/// fully-baked struct in, so this closure just renders.
+using LaunchPreviewDialogRunner =
+    std::function<void(const QString &itemTitle, const QString &launcherName,
+                       const QString &filePath, const LaunchPreview &preview)>;
 
 struct InteractionManagerSetup {
   // ctx is the single source of truth for sibling managers. Per Kartend-mxn4
@@ -105,7 +120,8 @@ struct InteractionManagerSetup {
   /// data->ui edge is gone — the UI layer provides the runner closure
   /// from MainWindow setup wiring.
   SmartPlaylistDialogRunner runSmartPlaylistDialog;
-  CustomFieldsDialogRunner runCustomFieldsDialog;
+  EditMetadataDialogRunner runEditMetadataDialog;
+  LaunchPreviewDialogRunner runLaunchPreviewDialog;
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -195,10 +211,16 @@ public:
   void stopScrollAnimations() override;
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
-  // Opens the custom-fields editor for the given media item.
-  // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
-  // the sidebar so new fields render immediately.
-  void editCustomFields(const QString &filePath, const QString &itemName);
+  // Opens the per-item metadata editor (notes, tags, rating, source URL,
+  // custom fields). Persists changes via DatabaseManager::saveItemMetadata()
+  // and refreshes the sidebar so new fields render immediately.
+  void editItemMetadata(const QString &filePath, const QString &itemName);
+
+  // Opens the read-only launch-preview / dry-run dialog. Resolves the
+  // launcher (incl. preset + per-item override), builds the command via
+  // LaunchManager::previewLaunchCommand, and hands the result to the
+  // owner-supplied dialog runner. No external process is spawned.
+  void previewLaunchCommand(const QString &filePath, const QString &itemName);
   // Sets or clears the per-item manual override for a media item
   // Stored in `item_metadata.manual_path`; passing an empty
   // path clears the override and re-enables auto-discovery in the
@@ -209,6 +231,21 @@ public:
   // 1..N = launcher.additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
   // the override and re-enable the multi-launcher chooser at launch.
   void setItemLauncherOverride(const QString &filePath, int launcherIndex);
+
+  // Per-item state flag toggles (item_metadata.is_pinned / is_hidden /
+  // continue_later). Each reads the current row, flips the relevant flag,
+  // stamps source='user', persists, and refreshes the sidebar so the new
+  // state surfaces immediately.
+  void toggleItemPinned(const QString &filePath);
+  void toggleItemHidden(const QString &filePath);
+  void toggleItemContinueLater(const QString &filePath);
+
+  // Builds the live (displayName, uuid) list fed to the smart-playlist
+  // dialog's ByCollection picker. Playlists are skipped because anchoring
+  // a smart filter on a playlist's synthetic uuid would yield a recursive
+  // dependency. Built fresh on each open so collection renames / additions
+  // are picked up.
+  [[nodiscard]] SmartPlaylistCollectionEntries collectSmartPlaylistCollectionEntries() const;
 
   // ─── Playlist context-menu handlers ────────────────────────
   // Prompts for a playlist name, creates the playlist, and adds the given
@@ -411,7 +448,8 @@ private:
   // (MainWindow setup wiring), so the data-layer manager never #includes
   // the dialog header for the symbols.
   SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
-  CustomFieldsDialogRunner m_runCustomFieldsDialog;
+  EditMetadataDialogRunner m_runEditMetadataDialog;
+  LaunchPreviewDialogRunner m_runLaunchPreviewDialog;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;

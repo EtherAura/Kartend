@@ -39,6 +39,15 @@ public:
                    bool runtimeDetectionEnabled, GeneralSettings *generalSettings,
                    ISettingsManager *settingsManager, QWidget *parent = nullptr);
 
+signals:
+  /// Emitted when the user double-clicks an item row in one of the
+  /// per-item analytics trees (Most played, Recently played, Never
+  /// played, History). The caller (typically MenuController) is
+  /// responsible for routing the navigation — close the dialog, switch
+  /// to the owning collection, and select the item. `filePath` is the
+  /// absolute item path as stored in items.path.
+  void navigateToItemRequested(const QString &filePath);
+
 private:
   void setupUI();
   void refresh();

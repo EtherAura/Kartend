@@ -3,7 +3,7 @@
 
 #include "collection/collectionconfig.h"                       // CollectionConfig
 #include "controllers/detailspanemanager/detailspanemanager.h" // ItemArtworkLinksInput typedef
-#include "interactionmanager.h" // SmartPlaylistEdit, CustomFieldList typedefs
+#include "interactionmanager.h" // SmartPlaylistEdit, EditMetadataDialogRunner typedefs
 #include "isettingsdialog.h"    // ISettingsDialog (factory return type)
 #include "kartmerge.h"          // kart::ConflictResolution, ItemMetadata
 #include <functional>
@@ -41,17 +41,25 @@ public:
   ~DialogController() override;
 
   /// Runs CreateSmartPlaylistDialog modally, seeded with the given
-  /// name + filter. Returns the edited values, or nullopt on cancel.
+  /// name + filter. `collectionEntries` populates the ByCollection
+  /// picker — pass the live (displayName, uuid) list from the caller's
+  /// CollectionConfig array. Returns the edited values, or nullopt on
+  /// cancel.
   [[nodiscard]] std::optional<SmartPlaylistEdit>
   runSmartPlaylistDialog(const QString &initialName,
-                         const std::optional<SmartFilter::Filter> &initialFilter);
+                         const std::optional<SmartFilter::Filter> &initialFilter,
+                         const SmartPlaylistCollectionEntries &collectionEntries);
 
-  /// Runs CustomFieldsDialog modally, seeded with the given item title
-  /// + existing custom fields. Returns the edited fields, or nullopt on
-  /// cancel.
-  [[nodiscard]] std::optional<ItemMetadataStore::CustomFieldList>
-  runCustomFieldsDialog(const QString &itemTitle,
-                        const ItemMetadataStore::CustomFieldList &initial);
+  /// Runs EditMetadataDialog modally, seeded with the given item title
+  /// + existing payload (notes, tags, rating, source URL, custom fields).
+  /// Returns the edited payload, or nullopt on cancel.
+  [[nodiscard]] std::optional<EditMetadataPayload>
+  runEditMetadataDialog(const QString &itemTitle, const EditMetadataPayload &initial);
+
+  /// Pops a modal LaunchPreviewDialog seeded with the supplied preview.
+  /// Read-only — no user input is round-tripped back to the caller.
+  void runLaunchPreviewDialog(const QString &itemTitle, const QString &launcherName,
+                              const QString &filePath, const LaunchPreview &preview);
 
   /// Runs KartMergeDialog modally and returns the resolution. On reject
   /// the resolution carries MergeChoice::Skip.

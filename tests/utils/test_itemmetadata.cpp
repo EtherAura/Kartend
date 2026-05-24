@@ -52,7 +52,13 @@ private slots:
   void removeDeletesRow();
   void runtimeSecondsNullableRoundTrip();
   void launcherIndexNullableRoundTrip();
+  void ratingNullableRoundTrip();
+  void stateFlagsRoundTrip();
   void saveRejectsEmptyPath();
+  void parseTagsHandlesEmptyAndMalformed();
+  void parseTagsPreservesOrderAndDedupes();
+  void serializeTagsPrunesEmptyAndDeduplicates();
+  void tagsRoundTripThroughDb();
   void parseCustomFieldsHandlesEmptyAndMalformed();
   void parseCustomFieldsPreservesOrderAndCoercesValues();
   void serializeCustomFieldsPrunesEmptyKeys();
@@ -98,6 +104,12 @@ void TestItemMetadata::isNotEmptyForAnyPopulatedField() {
            [](ItemMetadata &m) { m.customFields = "{}"; },
            [](ItemMetadata &m) { m.manualPath = "/x"; },
            [](ItemMetadata &m) { m.launcherIndex = 0; },
+           [](ItemMetadata &m) { m.notes = "N"; },
+           [](ItemMetadata &m) { m.sourceUrl = "https://example.org"; },
+           [](ItemMetadata &m) { m.rating = 0; },
+           [](ItemMetadata &m) { m.isPinned = true; },
+           [](ItemMetadata &m) { m.isHidden = true; },
+           [](ItemMetadata &m) { m.continueLater = true; },
        }) {
     ItemMetadata m;
     mutate(m);
@@ -126,19 +138,22 @@ void TestItemMetadata::saveAndLoadRoundTrip() {
 
   ItemMetadata m;
   m.collectionUuid = "uuid-1";
-  m.path = "/games/sonic.bin";
-  m.title = "Sonic the Hedgehog";
-  m.description = "Run fast, collect rings.";
-  m.genre = "Platformer";
-  m.developer = "Sonic Team";
-  m.publisher = "Sega";
+  m.path = "/videos/clip.mp4";
+  m.title = "Concert Recording";
+  m.description = "Live show from the city hall.";
+  m.genre = "Concert";
+  m.developer = "Studio";
+  m.publisher = "Label";
   m.releaseDate = "1991-06-23";
-  m.contentRating = "E";
+  m.contentRating = "G";
   m.players = "1";
   m.runtimeSeconds = 120;
-  m.tags = "[\"classic\",\"mascot\"]";
+  m.tags = "[\"live\",\"jazz\"]";
   m.customFields = "{\"shelf\":\"A1\"}";
-  m.manualPath = "/manuals/sonic.pdf";
+  m.notes = "Recorded with two cameras; left audio channel is missing.";
+  m.sourceUrl = "https://archive.example/clip";
+  m.rating = 8; // 4 stars
+  m.manualPath = "/docs/clip.pdf";
   m.launcherIndex = 2;
   m.source = "user";
 
@@ -146,7 +161,7 @@ void TestItemMetadata::saveAndLoadRoundTrip() {
   QVERIFY(saved.isOk());
   QVERIFY(saved.value());
 
-  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/games/sonic.bin");
+  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/videos/clip.mp4");
   QVERIFY(loaded.isOk());
   ItemMetadata r = loaded.value();
   QCOMPARE(r.title, m.title);
@@ -160,6 +175,9 @@ void TestItemMetadata::saveAndLoadRoundTrip() {
   QCOMPARE(r.runtimeSeconds, 120);
   QCOMPARE(r.tags, m.tags);
   QCOMPARE(r.customFields, m.customFields);
+  QCOMPARE(r.notes, m.notes);
+  QCOMPARE(r.sourceUrl, m.sourceUrl);
+  QCOMPARE(r.rating, 8);
   QCOMPARE(r.manualPath, m.manualPath);
   QCOMPARE(r.launcherIndex, 2);
   QCOMPARE(r.source, m.source);
@@ -292,6 +310,118 @@ void TestItemMetadata::launcherIndexNullableRoundTrip() {
   closeAndRemove(db, conn);
 }
 
+void TestItemMetadata::ratingNullableRoundTrip() {
+  // Mirrors the launcherIndex contract: -1 in the struct serializes to NULL
+  // ("unset"), a 0-10 value round-trips intact, returning to -1 must clear
+  // the column back to NULL (otherwise stale ratings would leak forward).
+  const QString conn = "im_rating_null";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/p";
+  m.title = "T";
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().rating, -1);
+
+  // Mid-scale half-star.
+  m.rating = 7;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().rating, 7);
+
+  // Edge value (max).
+  m.rating = 10;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().rating, 10);
+
+  // Clearing back to -1 must round-trip to NULL.
+  m.rating = -1;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().rating, -1);
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::stateFlagsRoundTrip() {
+  // Per-item state flags (pinned / hidden / continue-later) must round-trip
+  // through save/load without bleeding into one another, and the cleared
+  // state must persist back as 0 — otherwise a "Pin then unpin" sequence
+  // would leak the pinned state forward.
+  const QString conn = "im_state_flags";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/p";
+  m.isPinned = true;
+  m.isHidden = false;
+  m.continueLater = true;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+
+  ItemMetadata r = ItemMetadataStore::load(db, "uuid-1", "/p").value();
+  QVERIFY(r.isPinned);
+  QVERIFY(!r.isHidden);
+  QVERIFY(r.continueLater);
+
+  // Toggle each independently and confirm the others stay put.
+  m.isPinned = false;
+  m.isHidden = true;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  r = ItemMetadataStore::load(db, "uuid-1", "/p").value();
+  QVERIFY(!r.isPinned);
+  QVERIFY(r.isHidden);
+  QVERIFY(r.continueLater); // unchanged
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::parseTagsHandlesEmptyAndMalformed() {
+  using ItemMetadataStore::parseTags;
+  QVERIFY(parseTags(QString()).isEmpty());
+  QVERIFY(parseTags("   ").isEmpty());
+  QVERIFY(parseTags("not json").isEmpty());
+  // Objects and primitives are not arrays -> no tags.
+  QVERIFY(parseTags("{\"a\":1}").isEmpty());
+  QVERIFY(parseTags("\"hello\"").isEmpty());
+}
+
+void TestItemMetadata::parseTagsPreservesOrderAndDedupes() {
+  using ItemMetadataStore::parseTags;
+  // First-seen casing wins on case-insensitive dedupe so the user's choice
+  // survives a save/reload round-trip rather than being lowercased.
+  const QStringList out = parseTags("[\"Jazz\",\"live\",\"jazz\",\"  \",\"LIVE\"]");
+  QCOMPARE(out, (QStringList{"Jazz", "live"}));
+}
+
+void TestItemMetadata::serializeTagsPrunesEmptyAndDeduplicates() {
+  using ItemMetadataStore::serializeTags;
+  // Empty input -> empty string (round-trips to NULL in the DB).
+  QVERIFY(serializeTags({}).isEmpty());
+  // Trimming + dedup happens on serialize too so the editor can be sloppy.
+  const QString json = serializeTags({" Jazz ", "live", "JAZZ", "", "  "});
+  QCOMPARE(json, QStringLiteral("[\"Jazz\",\"live\"]"));
+}
+
+void TestItemMetadata::tagsRoundTripThroughDb() {
+  // End-to-end: a tag JSON string survives save/load unchanged so smart
+  // playlist evaluators and the upcoming search-token feature can rely on
+  // the stored shape matching what the editor wrote.
+  const QString conn = "im_tags_roundtrip";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/v";
+  m.tags = ItemMetadataStore::serializeTags({"live", "concert", "jazz"});
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+
+  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/v").value();
+  QCOMPARE(loaded.tags, m.tags);
+  QCOMPARE(ItemMetadataStore::parseTags(loaded.tags), (QStringList{"live", "concert", "jazz"}));
+
+  closeAndRemove(db, conn);
+}
+
 void TestItemMetadata::saveRejectsEmptyPath() {
   const QString conn = "im_empty_path";
   auto db = openMemoryDb(conn);
@@ -348,8 +478,8 @@ void TestItemMetadata::serializeCustomFieldsPrunesEmptyKeys() {
   QVERIFY(serializeCustomFields({}).isEmpty());
   QVERIFY(serializeCustomFields(CustomFieldList{{QString(), "v"}, {"   ", "v"}}).isEmpty());
 
-  const QString out = serializeCustomFields(CustomFieldList{
-      {"first", "1"}, {"second", QString()}, {"   ", "skip"}, {"third", "3"}});
+  const QString out = serializeCustomFields(
+      CustomFieldList{{"first", "1"}, {"second", QString()}, {"   ", "skip"}, {"third", "3"}});
   // Round-trip back through the parser. Output ordering is alphabetical:
   // "first", "second", "third".
   const auto reparsed = ItemMetadataStore::parseCustomFields(out);

@@ -13,6 +13,14 @@ class QScrollArea;
 class SettingsUtils {
 public:
   [[nodiscard]] static auto getConfigPath() -> QString;
+  /// Path to the JSON file storing user-defined layout / theme profiles.
+  /// Sibling to kartend.cfg under the same per-user config dir. Caller
+  /// writes via QSaveFile + syncDirectory; we do not pre-create an empty
+  /// file so a fresh install stays clean.
+  [[nodiscard]] static auto getLayoutProfilesPath() -> QString;
+  /// Path to the JSON file storing presentation / attract-mode
+  /// profiles (Kartend-6pp5). Sibling to kartend.cfg.
+  [[nodiscard]] static auto getPresentationProfilesPath() -> QString;
   [[nodiscard]] static auto getFormat() -> QSettings::Format;
   /// Restrict kartend.cfg to user-only read+write (0600). The INI carries
   /// scraper credentials in cleartext under [Scrapers]; default umask on

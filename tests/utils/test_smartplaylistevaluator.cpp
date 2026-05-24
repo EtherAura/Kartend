@@ -48,6 +48,35 @@ void createItemsTable(QSqlDatabase &db) {
                  "date_added INTEGER NOT NULL DEFAULT 0)"));
 }
 
+void createItemMetadataTable(QSqlDatabase &db) {
+  // Subset of the v5+v15 item_metadata schema — only the columns the
+  // state-flag evaluator joins against. Independent of the migration suite
+  // so this test stays a focused unit check.
+  QSqlQuery q(db);
+  QVERIFY(q.exec("CREATE TABLE item_metadata ("
+                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                 "collection_uuid TEXT NOT NULL DEFAULT '', "
+                 "path TEXT NOT NULL, "
+                 "is_pinned INTEGER NOT NULL DEFAULT 0, "
+                 "is_hidden INTEGER NOT NULL DEFAULT 0, "
+                 "continue_later INTEGER NOT NULL DEFAULT 0, "
+                 "UNIQUE(collection_uuid, path))"));
+}
+
+void insertItemMetadata(QSqlDatabase &db, const QString &uuid, const QString &path, bool pinned,
+                        bool hidden, bool continueLater) {
+  QSqlQuery q(db);
+  q.prepare("INSERT INTO item_metadata "
+            "(collection_uuid, path, is_pinned, is_hidden, continue_later) "
+            "VALUES (?, ?, ?, ?, ?)");
+  q.addBindValue(uuid);
+  q.addBindValue(path);
+  q.addBindValue(pinned ? 1 : 0);
+  q.addBindValue(hidden ? 1 : 0);
+  q.addBindValue(continueLater ? 1 : 0);
+  QVERIFY(q.exec());
+}
+
 void insertItem(QSqlDatabase &db, const QString &uuid, const QString &name, const QString &path,
                 qint64 playCount = 0, const QString &lastPlayed = QString(),
                 const QString &artworkPath = QString()) {
@@ -58,8 +87,10 @@ void insertItem(QSqlDatabase &db, const QString &uuid, const QString &name, cons
   q.addBindValue(name);
   q.addBindValue(path);
   q.addBindValue(playCount);
-  q.addBindValue(lastPlayed.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(lastPlayed));
-  q.addBindValue(artworkPath.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(artworkPath));
+  q.addBindValue(lastPlayed.isEmpty() ? QVariant(QMetaType(QMetaType::QString))
+                                      : QVariant(lastPlayed));
+  q.addBindValue(artworkPath.isEmpty() ? QVariant(QMetaType(QMetaType::QString))
+                                       : QVariant(artworkPath));
   QVERIFY(q.exec());
 }
 
@@ -75,6 +106,14 @@ private slots:
   void byExtension_emptyListReturnsNothing();
   void hasArtwork_returnsItemsWithNonEmptyArtworkPath();
   void byDateAdded_filtersByRecencyWindowAndExcludesUnknownDates();
+  void stateFlag_pinnedReturnsOnlyPinned();
+  void stateFlag_hiddenIsIndependentOfPinned();
+  void stateFlag_continueLaterReturnsOnlyMarked();
+  void byCollection_returnsOnlyMatchingUuid();
+  void byCollection_emptyUuidReturnsNothing();
+  void byTitleSearch_substringCaseInsensitive();
+  void byTitleSearch_emptyNeedleReturnsNothing();
+  void missingArtwork_returnsNullOrEmptyArtwork();
   void evaluate_unopenedDb_returnsEmptyWithoutCrashing();
 };
 
@@ -207,11 +246,11 @@ void TestSmartPlaylistEvaluator::byDateAdded_filtersByRecencyWindowAndExcludesUn
   QSqlQuery ins(db);
   ins.prepare("INSERT INTO items (collection_uuid, name, path, date_added) "
               "VALUES (?, ?, ?, ?)");
-  for (const auto &row : QList<std::tuple<QString, QString, qint64>>{
-           {"Recent", "/a/recent.mp4", now - 3600},
-           {"Five", "/a/five.mp4", fiveDaysAgo},
-           {"Forty", "/a/forty.mp4", fortyDaysAgo},
-           {"Unknown", "/a/unknown.mp4", 0}}) {
+  for (const auto &row :
+       QList<std::tuple<QString, QString, qint64>>{{"Recent", "/a/recent.mp4", now - 3600},
+                                                   {"Five", "/a/five.mp4", fiveDaysAgo},
+                                                   {"Forty", "/a/forty.mp4", fortyDaysAgo},
+                                                   {"Unknown", "/a/unknown.mp4", 0}}) {
     ins.bindValue(0, "u1");
     ins.bindValue(1, std::get<0>(row));
     ins.bindValue(2, std::get<1>(row));
@@ -237,6 +276,178 @@ void TestSmartPlaylistEvaluator::byDateAdded_filtersByRecencyWindowAndExcludesUn
   for (const auto &m : wide) {
     QVERIFY(m.path != QStringLiteral("/a/unknown.mp4"));
   }
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::stateFlag_pinnedReturnsOnlyPinned() {
+  const QString conn = "spl_pinned";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  createItemMetadataTable(db);
+
+  insertItem(db, "u1", "Alpha", "/a/alpha.mp4");
+  insertItem(db, "u1", "Beta", "/a/beta.mp4");
+  insertItem(db, "u1", "Gamma", "/a/gamma.mp4");
+  // Only Alpha is pinned; Beta is hidden but not pinned; Gamma has no row.
+  insertItemMetadata(db, "u1", "/a/alpha.mp4", true, false, false);
+  insertItemMetadata(db, "u1", "/a/beta.mp4", false, true, false);
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::Pinned;
+  auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().path, QStringLiteral("/a/alpha.mp4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::stateFlag_hiddenIsIndependentOfPinned() {
+  // Confirms the evaluator picks the right column — pinning an item
+  // doesn't accidentally surface it in the Hidden playlist, and vice
+  // versa. Catches a copy/paste regression in evalStateFlag.
+  const QString conn = "spl_hidden_independence";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  createItemMetadataTable(db);
+
+  insertItem(db, "u1", "Alpha", "/a/alpha.mp4");
+  insertItem(db, "u1", "Beta", "/a/beta.mp4");
+  insertItemMetadata(db, "u1", "/a/alpha.mp4", true, false, false); // pinned only
+  insertItemMetadata(db, "u1", "/a/beta.mp4", false, true, false);  // hidden only
+
+  SmartFilter::Filter pinned;
+  pinned.kind = SmartFilter::Kind::Pinned;
+  SmartFilter::Filter hidden;
+  hidden.kind = SmartFilter::Kind::Hidden;
+
+  auto pinnedOut = SmartPlaylistEvaluator::evaluate(db, pinned);
+  auto hiddenOut = SmartPlaylistEvaluator::evaluate(db, hidden);
+  QCOMPARE(pinnedOut.size(), 1);
+  QCOMPARE(pinnedOut.first().path, QStringLiteral("/a/alpha.mp4"));
+  QCOMPARE(hiddenOut.size(), 1);
+  QCOMPARE(hiddenOut.first().path, QStringLiteral("/a/beta.mp4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::stateFlag_continueLaterReturnsOnlyMarked() {
+  const QString conn = "spl_continue_later";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  createItemMetadataTable(db);
+
+  insertItem(db, "u1", "Alpha", "/a/alpha.mp4");
+  insertItem(db, "u1", "Beta", "/a/beta.mp4");
+  insertItemMetadata(db, "u1", "/a/alpha.mp4", false, false, true);
+  insertItemMetadata(db, "u1", "/a/beta.mp4", false, false, false);
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ContinueLater;
+  auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().path, QStringLiteral("/a/alpha.mp4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byCollection_returnsOnlyMatchingUuid() {
+  const QString conn = "spl_by_collection";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+
+  insertItem(db, "uuid-A", "First", "/a/first.mp4");
+  insertItem(db, "uuid-A", "Second", "/a/second.mp4");
+  insertItem(db, "uuid-B", "Third", "/b/third.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByCollection;
+  f.collectionUuid = "uuid-A";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 2);
+  for (const auto &m : out) {
+    QCOMPARE(m.collectionUuid, QStringLiteral("uuid-A"));
+  }
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byCollection_emptyUuidReturnsNothing() {
+  // Unsaved dialog state (empty uuid) must NOT silently return the whole
+  // library — a default-constructed filter at startup would surface every
+  // item across every collection, which looks like a bug.
+  const QString conn = "spl_by_collection_empty";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "uuid-A", "First", "/a/first.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByCollection;
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QVERIFY(out.isEmpty());
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byTitleSearch_substringCaseInsensitive() {
+  const QString conn = "spl_title_search";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "Concert at the Park", "/a/concert.mp4");
+  insertItem(db, "u1", "Studio Session", "/a/studio.mp4");
+  // ASCII LIKE is case-insensitive by default in SQLite; "concert" should
+  // match "Concert at the Park" but not "Studio Session".
+  insertItem(db, "u1", "Stage Concert Special", "/a/special.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByTitleSearch;
+  f.titleSearch = "concert";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 2);
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byTitleSearch_emptyNeedleReturnsNothing() {
+  const QString conn = "spl_title_search_empty";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "First", "/a/first.mp4");
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByTitleSearch;
+  // Whitespace-only needle counts as empty (trimmed).
+  f.titleSearch = "   ";
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QVERIFY(out.isEmpty());
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::missingArtwork_returnsNullOrEmptyArtwork() {
+  const QString conn = "spl_missing_artwork";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  createItemsTable(db);
+  insertItem(db, "u1", "Has", "/a/has.mp4", 0, QString(), "/art/has.jpg");
+  insertItem(db, "u1", "Missing", "/a/missing.mp4", 0, QString(), QString());
+  // Empty string is also "no artwork" — the scanner can leave the column
+  // empty (not just NULL) when the lookup misses.
+  QSqlQuery upd(db);
+  QVERIFY(upd.exec("UPDATE items SET artwork_path = '' WHERE path = '/a/missing.mp4'"));
+
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::MissingArtwork;
+  const auto out = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().path, QStringLiteral("/a/missing.mp4"));
 
   closeAndRemove(db, conn);
 }

@@ -44,6 +44,7 @@
 #include "itemwidget.h"
 #include "pathutils.h"
 #include "uiconstants/detailspane.h"
+#include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
@@ -146,6 +147,18 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
           &DetailsPane::editArtworkRequested);
   connect(m_galleryView, &DetailsPaneGalleryView::overlayVisibilityChanged, this,
           &DetailsPane::galleryOverlayVisibilityChanged);
+
+  // Inline edit-metadata button (Kartend-oewu) — mirrors the gallery's
+  // editRequested wiring. Icon resolves from the active theme; the .ui
+  // form leaves it blank because Qt Designer can't express runtime
+  // theme lookups.
+  if (ui->editMetadataButton) {
+    ui->editMetadataButton->setIcon(UIConstants::Icons::fromTheme(
+        {UIConstants::Icons::EDIT, "edit-entry", "accessories-text-editor"}));
+    ui->editMetadataButton->setText(QString());
+    connect(ui->editMetadataButton, &QToolButton::clicked, this,
+            &DetailsPane::editMetadataRequested);
+  }
 
   // Artwork + video-preview helper (Kartend-5nxz). State lives on the
   // host (m_videoPlayback etc.); the helper owns the methods so the .cpp
@@ -657,6 +670,7 @@ void DetailsPane::applyTabVisibility() {
     // "What is this?" — artwork preview, video preview, gallery,
     // extended metadata + usage stats. No filesystem rows.
     ui->titleLabel->setText(tr("Item Information"));
+    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(m_hasItemDisplayed);
     setArtworkSectionVisible(true);
     setFileInfoRowsVisible(false);
     // Hide the gallery + details containers up front; they may still
@@ -682,12 +696,14 @@ void DetailsPane::applyTabVisibility() {
     // Collection summary — independent of selection. renderCollectionSummary
     // toggles its own section visibility (hides artwork, file info, gallery)
     // and populates the Details container with summary rows.
+    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(false);
     renderCollectionSummary();
     break;
   case DetailsPaneTab::File:
     // Pure filesystem view — name + path/size/modified/extension.
     // No artwork, no video, no gallery, no extended metadata.
     ui->titleLabel->setText(tr("File Information"));
+    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(false);
     ui->itemNameValue->setText(m_currentItemName.isEmpty() ? tr("No item selected")
                                                            : m_currentItemName);
     setArtworkSectionVisible(false);
@@ -918,6 +934,33 @@ QString DetailsPane::formatRuntime(int seconds) {
 // (their declarations also dropped from detailspane.h).
 void DetailsPane::setManualFile(const QString &manualPath) {
   if (m_metadataView) m_metadataView->setManualFile(manualPath);
+}
+
+QString DetailsPane::formatPersonalRating(int rating) {
+  if (rating < 0) {
+    return {};
+  }
+  const int clamped = std::clamp(rating, 0, 10);
+  const int fullStars = clamped / 2;
+  const bool halfStar = (clamped % 2) != 0;
+  const int emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+
+  QString glyphs;
+  glyphs.reserve(5);
+  for (int i = 0; i < fullStars; ++i) {
+    glyphs.append(QChar(0x2605)); // ★
+  }
+  if (halfStar) {
+    glyphs.append(QChar(0x00BD)); // ½ — placed where the half star would be.
+  }
+  for (int i = 0; i < emptyStars; ++i) {
+    glyphs.append(QChar(0x2606)); // ☆
+  }
+
+  const double stars = clamped / 2.0;
+  const QString fraction =
+      QString::number(stars, 'f', stars == int(stars) ? 0 : 1) + QStringLiteral(" / 5");
+  return QStringLiteral("%1 (%2)").arg(glyphs, fraction);
 }
 
 QString DetailsPane::formatTags(const QString &raw) {

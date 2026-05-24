@@ -1,19 +1,27 @@
 target_sources(kartend_utils PRIVATE
+  bulkedit.cpp
+  collectionhealth.cpp
   dbmigrations.cpp
   historystore.cpp
   itemartwork.cpp
   itemmetadata.cpp
   itemmetadatacache.cpp
+  metadataqueue.cpp
   smartfilter.cpp
   smartplaylistevaluator.cpp
   usagestatsstore.cpp
+  variantgrouping.cpp
   batchsizes.h
+  bulkedit.h
+  collectionhealth.h
   dbmigrations.h
   historystore.h
   itemartwork.h
   itemmetadata.h
   itemmetadatacache.h
+  metadataqueue.h
   smartfilter.h
   smartplaylistevaluator.h
   usagestatsstore.h
+  variantgrouping.h
 )

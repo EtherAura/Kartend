@@ -142,6 +142,18 @@ void MenuController::setupMenuBar() {
   setupActionOpenRandomItem();
   setupActionImportKart();
   setupActionExportKart();
+  setupActionImportTheme();
+  setupActionExportTheme();
+  setupActionLayoutProfiles();
+  setupActionCollectionHealth();
+  setupActionVariantGrouping();
+  setupActionBulkEdit();
+  setupActionReviewMissingMetadata();
+  setupActionArtworkWizard();
+  setupActionBindingVisualizer();
+  setupActionNewLibraryWizard();
+  setupActionPresentationProfiles();
+  setupActionScraperProviders();
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
@@ -457,6 +469,17 @@ void MenuController::setupStatisticsAction() {
         const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
         StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr,
                                 m_ctx.mainWindow);
+        // Wire the navigate-on-double-click signal: dismiss the dialog and
+        // hand off to MainWindow's navigation handler. accept() unblocks
+        // exec() so the closure below runs without lingering in the
+        // modal stack.
+        QObject::connect(&dialog, &StatisticsDialog::navigateToItemRequested, &dialog,
+                         [this, &dialog](const QString &filePath) {
+                           dialog.accept();
+                           if (m_ctx.onNavigateToItem) {
+                             m_ctx.onNavigateToItem(filePath);
+                           }
+                         });
         dialog.exec();
       })) {
     return;
@@ -509,6 +532,20 @@ void MenuController::setupBatchScrapeAction() {
       m_ctx.ui->menuFile->addAction(m_batchScrapeAction);
     }
   }
+}
+
+void MenuController::setupActionScraperProviders() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_scraperProvidersAction = new QAction(tr("Scraper Providers..."), this);
+  m_ctx.mainWindow->addAction(m_scraperProvidersAction);
+  // Sits in the Help menu next to Scraper Credentials so configuration
+  // affordances stay grouped.
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_scraperProvidersAction);
+  }
+  connect(m_scraperProvidersAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowScraperProviders) m_ctx.onShowScraperProviders();
+  });
 }
 
 void MenuController::setupScraperCredentialsAction() {
@@ -686,6 +723,145 @@ void MenuController::setupActionExportKart() {
   }
   connect(m_exportKartAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onExportKart) m_ctx.onExportKart();
+  });
+}
+
+// File menu entry for importing a shareable theme preset (.kartend-theme.json).
+// Distinct from Kart import — themes carry only the visual settings, not the
+// collection's media paths / launcher / scraper config, so they can be shared
+// across collections with completely different content.
+void MenuController::setupActionImportTheme() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_importThemeAction = new QAction(tr("Import Theme..."), this);
+  m_ctx.mainWindow->addAction(m_importThemeAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addSeparator();
+    m_ctx.ui->menuFile->addAction(m_importThemeAction);
+  }
+  connect(m_importThemeAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onImportTheme) m_ctx.onImportTheme();
+  });
+}
+
+void MenuController::setupActionExportTheme() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_exportThemeAction = new QAction(tr("Export Current Theme..."), this);
+  m_ctx.mainWindow->addAction(m_exportThemeAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_exportThemeAction);
+  }
+  connect(m_exportThemeAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onExportTheme) m_ctx.onExportTheme();
+  });
+}
+
+void MenuController::setupActionLayoutProfiles() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_layoutProfilesAction = new QAction(tr("Layout Profiles..."), this);
+  m_ctx.mainWindow->addAction(m_layoutProfilesAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_layoutProfilesAction);
+  }
+  connect(m_layoutProfilesAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onManageLayoutProfiles) m_ctx.onManageLayoutProfiles();
+  });
+}
+
+void MenuController::setupActionCollectionHealth() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_collectionHealthAction = new QAction(tr("Collection Health..."), this);
+  m_ctx.mainWindow->addAction(m_collectionHealthAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_collectionHealthAction);
+  }
+  connect(m_collectionHealthAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowCollectionHealth) m_ctx.onShowCollectionHealth();
+  });
+}
+
+void MenuController::setupActionVariantGrouping() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_variantGroupingAction = new QAction(tr("Duplicates and variants..."), this);
+  m_ctx.mainWindow->addAction(m_variantGroupingAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_variantGroupingAction);
+  }
+  connect(m_variantGroupingAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowVariantGrouping) m_ctx.onShowVariantGrouping();
+  });
+}
+
+void MenuController::setupActionBulkEdit() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_bulkEditAction = new QAction(tr("Bulk Edit Items..."), this);
+  m_ctx.mainWindow->addAction(m_bulkEditAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_bulkEditAction);
+  }
+  connect(m_bulkEditAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onBulkEdit) m_ctx.onBulkEdit();
+  });
+}
+
+void MenuController::setupActionReviewMissingMetadata() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_reviewMissingMetadataAction = new QAction(tr("Review Missing Metadata..."), this);
+  m_ctx.mainWindow->addAction(m_reviewMissingMetadataAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_reviewMissingMetadataAction);
+  }
+  connect(m_reviewMissingMetadataAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onReviewMissingMetadata) m_ctx.onReviewMissingMetadata();
+  });
+}
+
+void MenuController::setupActionArtworkWizard() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_artworkWizardAction = new QAction(tr("Assign Missing Artwork..."), this);
+  m_ctx.mainWindow->addAction(m_artworkWizardAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_artworkWizardAction);
+  }
+  connect(m_artworkWizardAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onArtworkWizard) m_ctx.onArtworkWizard();
+  });
+}
+
+void MenuController::setupActionBindingVisualizer() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  // Sits in the Help menu next to Usage Statistics / Shortcuts since
+  // it's a read-only diagnostic surface for the user's input config.
+  m_bindingVisualizerAction = new QAction(tr("Binding Visualizer..."), this);
+  m_ctx.mainWindow->addAction(m_bindingVisualizerAction);
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_bindingVisualizerAction);
+  }
+  connect(m_bindingVisualizerAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onShowBindings) m_ctx.onShowBindings();
+  });
+}
+
+void MenuController::setupActionNewLibraryWizard() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_newLibraryWizardAction = new QAction(tr("New Library Wizard..."), this);
+  m_ctx.mainWindow->addAction(m_newLibraryWizardAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_newLibraryWizardAction);
+  }
+  connect(m_newLibraryWizardAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onNewLibraryWizard) m_ctx.onNewLibraryWizard();
+  });
+}
+
+void MenuController::setupActionPresentationProfiles() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_presentationProfilesAction = new QAction(tr("Presentation Profiles..."), this);
+  m_ctx.mainWindow->addAction(m_presentationProfilesAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_presentationProfilesAction);
+  }
+  connect(m_presentationProfilesAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onPresentationProfiles) m_ctx.onPresentationProfiles();
   });
 }
 

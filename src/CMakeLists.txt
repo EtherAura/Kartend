@@ -126,6 +126,7 @@ target_include_directories(kartend_data PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/scraper/providers
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/session
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/settings
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/watcher
 )
 target_link_libraries(kartend_data PUBLIC kartend_api kartend_utils)
 # Conditional secure-credentials backend. When Qt6Keychain isn't available
@@ -185,6 +186,7 @@ target_include_directories(kartend_ui PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/detailspanemanager
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/collection
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/item
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/kart
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/launcher
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/scraper

@@ -234,6 +234,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.archive.extractArchives = settings.value(keys::kExtractArchives, false).toBool();
     config.archive.extractedExtension = settings.value(keys::kExtractedExtension).toString();
     config.expandMode = settings.value(keys::kExpandMode, false).toBool();
+    config.watchFilesystem = settings.value(keys::kWatchFilesystem, false).toBool();
     config.collectionIcon = settings.value(keys::kCollectionIcon).toString();
 
     QString extStr = settings.value(keys::kExtensions).toString();
@@ -619,6 +620,7 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     settings.setValue(keys::kExtractArchives, c.archive.extractArchives);
     settings.setValue(keys::kExtractedExtension, c.archive.extractedExtension);
     settings.setValue(keys::kExpandMode, c.expandMode);
+    settings.setValue(keys::kWatchFilesystem, c.watchFilesystem);
     settings.setValue(keys::kCollectionIcon, c.collectionIcon);
     settings.setValue(keys::kExtensions, c.extensions.join(", "));
     settings.setValue(keys::kCustomArtworkTypes, c.customArtworkTypes.join(", "));

@@ -307,9 +307,12 @@ Custom fields live in the `item_metadata` table in the database. If
 the database was deleted (or Kartend can't write to it):
 
 - Custom fields don't survive database deletion.
-- They aren't included in `.kart` exports (configuration only — see
-  [Backup & Sharing](Backup-and-Sharing.md)).
-- If you have a backup of the database file, restore it.
+- They *are* included in `.kart` exports alongside other per-item
+  metadata (notes, tags, ratings, manual links, artwork links, state
+  flags) — see [Backup & Migration](Backup-and-Migration.md). If you
+  have a recent `.kart` backup of the collection, importing with
+  `--on-conflict overwrite` restores them.
+- If you have a backup of the database file directly, restore it.
 
 ## Settings issues
 

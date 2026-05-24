@@ -23,6 +23,7 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "attractmanager.h"
+#include "collectionfilesystemwatcher.h"
 #include "collectionutils.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"

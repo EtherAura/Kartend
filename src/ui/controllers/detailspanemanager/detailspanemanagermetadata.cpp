@@ -492,6 +492,15 @@ void DetailsPaneManager::performSidebarMetadataUpdate(const QString &filePath,
   }
 }
 
+void DetailsPaneManager::openEditMetadataDialog() {
+  if (!m_runEditMetadataForItem) return;
+  if (m_currentItemFilePath.isEmpty()) return;
+  const QString displayName = m_currentItemName.isEmpty()
+                                  ? QFileInfo(m_currentItemFilePath).completeBaseName()
+                                  : m_currentItemName;
+  m_runEditMetadataForItem(m_currentItemFilePath, displayName);
+}
+
 void DetailsPaneManager::openArtworkLinksDialog() {
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_DetailsPane || !db || !m_collections) {

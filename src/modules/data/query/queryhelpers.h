@@ -2,8 +2,11 @@
 #define QUERYHELPERS_H
 
 #include "collectiontypes.h"
+#include "searchqueryparser.h"
 
 #include <QString>
+#include <QVariant>
+#include <QVector>
 
 // Pure helpers extracted from QueryManager so SQL/FTS pre-processing and
 // alphabetical sort-priority rules can be unit-tested without instantiating
@@ -65,6 +68,26 @@ namespace QueryHelpers {
 // QueryManager::buildUuidFilterClause which decides between the two forms
 // based on uuid count vs SQLite's variable bind limit.
 [[nodiscard]] auto placeholderList(int n) -> QString;
+
+/// Result of compiling a SearchQuery into SQL fragments.
+///
+/// `sql` is a concatenated string of " AND ..." clauses (always leading with
+/// a space + AND so it can be appended directly to an existing WHERE chain).
+/// `binds` is the parallel list of values to addBindValue() in order. The
+/// shape matches both fetch paths (range + count) so the same compiled
+/// fragments can be plugged in either place.
+struct SearchTokenClauses {
+  QString sql;
+  QVector<QVariant> binds;
+};
+
+/// Compiles the per-token portion of a SearchQueryParser::SearchQuery into
+/// SQL clauses + bind values. `itemsTableAlias` is the qualifier used on
+/// columns from the items table in the surrounding SELECT (use empty string
+/// when items columns appear unqualified). The tag / favorite tokens build
+/// correlated subqueries that join against item_metadata / playlist_items.
+[[nodiscard]] auto buildSearchTokenClauses(const SearchQueryParser::SearchQuery &query,
+                                           const QString &itemsTableAlias) -> SearchTokenClauses;
 
 } // namespace QueryHelpers
 

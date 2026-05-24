@@ -111,7 +111,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 13;
+  constexpr int CURRENT_SCHEMA_VERSION = 15;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -503,6 +503,39 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     // than the database. A meta flag (items_paths_absolutized) gates it.
     ensureColumn(db, "items", "rel_path", "TEXT", origin);
     setUserVersion(db, 13);
+    mutableVersion = 13;
+  }
+
+  if (mutableVersion < 14) {
+    // v14: Per-item curation fields on item_metadata: user notes, personal
+    // rating (0-10 internal, rendered as half-stars in the UI; NULL = unset),
+    // and source URL (e.g. where the user found / acquired the item). Lives on
+    // item_metadata so the keys stay (collection_uuid, path) — survives rescans
+    // identically to tags / custom_fields / manual_path. Existing rows take
+    // NULL for all three, which the load() helper maps to "unset" so the
+    // sidebar can keep skipping empty fields without special-casing.
+    ensureColumn(db, "item_metadata", "notes", "TEXT", origin);
+    ensureColumn(db, "item_metadata", "rating", "INTEGER", origin);
+    ensureColumn(db, "item_metadata", "source_url", "TEXT", origin);
+
+    setUserVersion(db, 14);
+    mutableVersion = 14;
+  }
+
+  if (mutableVersion < 15) {
+    // v15: Boolean per-item state flags — is_pinned (sort-first preference),
+    // is_hidden (de-emphasised in browse), continue_later (resume marker).
+    // Stored as INTEGER 0/1 with DEFAULT 0 so existing rows take "off" and
+    // the load() helper can read q.value().toInt() unconditionally. Lives
+    // on item_metadata (same (collection_uuid, path) key as the v14 curation
+    // fields) so the flags survive rescans. Favorites continue to use the
+    // existing playlist mechanism (ensureFavoritesPlaylist) rather than a
+    // duplicate boolean here.
+    ensureColumn(db, "item_metadata", "is_pinned", "INTEGER NOT NULL DEFAULT 0", origin);
+    ensureColumn(db, "item_metadata", "is_hidden", "INTEGER NOT NULL DEFAULT 0", origin);
+    ensureColumn(db, "item_metadata", "continue_later", "INTEGER NOT NULL DEFAULT 0", origin);
+
+    setUserVersion(db, 15);
   }
 }
 

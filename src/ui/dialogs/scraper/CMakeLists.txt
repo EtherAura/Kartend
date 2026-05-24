@@ -8,6 +8,7 @@ target_sources(kartend_ui PRIVATE
   scrapejobgrouping.cpp
   scrapercredentialsdialog.cpp
   scrapercredentialspanel.cpp
+  scraperprovidersdialog.cpp
   scrapersettingspanel.cpp
   flowlayout.h
   mediatypecheckboxbuilder.h
@@ -18,5 +19,6 @@ target_sources(kartend_ui PRIVATE
   scrapejobgrouping.h
   scrapercredentialsdialog.h
   scrapercredentialspanel.h
+  scraperprovidersdialog.h
   scrapersettingspanel.h
 )

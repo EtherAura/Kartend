@@ -84,7 +84,7 @@ kartend --import-kart ~/backups/films.kart \
 | `overwrite` | Replace the existing collection. |
 | `merge` | Combine — existing fields stay, imported fills in blanks. |
 
-See [Backup & Sharing → Conflict policies](Backup-and-Sharing.md#conflict-policies)
+See [Backup & Migration → Conflict policies](Backup-and-Migration.md#conflict-policies)
 for the full semantics.
 
 ### Standard Qt options

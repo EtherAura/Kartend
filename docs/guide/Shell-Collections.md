@@ -184,5 +184,5 @@ parent only severs the link, not the original.
 | Do shells appear in search results? | The shell *itself* doesn't (it has no items), but its children's items do via [recursive subcollection search](Search-Sort-Filter.md). |
 | Do shells appear in launch history? | No — there's nothing to launch. |
 | Do shells appear in the Statistics dialog? | The aggregate row sums their descendants. The shell row itself shows zero plays. |
-| Do shells survive `.kart` export? | Yes — exporting a shell exports its descendants too. See [Backup & Sharing](Backup-and-Sharing.md). |
+| Do shells survive `.kart` export? | Yes — exporting a shell exports its descendants too. See [Backup & Migration](Backup-and-Migration.md). |
 | Can I make a shell the **startup collection**? | Yes — `startupCollection=Video` is valid; Kartend opens that shell on launch and you navigate down with `Enter`. |

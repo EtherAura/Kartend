@@ -543,8 +543,9 @@ hideMissingArtwork=true
 - [Apply Settings](Settings-Dialog.md#apply-settings) — propagate keys
   across multiple collections
 - [File Locations](File-Locations.md) — where this config file lives
-- [Backup & Sharing](Backup-and-Sharing.md) — `.kart` packages bundle a
-  collection's config + metadata for transfer
+- [Backup & Migration](Backup-and-Migration.md) — `.kart` packages
+  bundle a collection's config, per-item metadata, and playlists for
+  backup or transfer between your own machines
 
 ## For developers
 

@@ -48,6 +48,27 @@ model.
 > back to a search-engine URL for the matched query, useful when no
 > API provider matches the collection's type.
 
+## Provider registry
+
+**Help → Scraper Providers…** opens a read-only registry of every
+built-in metadata scraper. The dialog is a diagnostic surface — it
+doesn't let you edit credentials or add new providers (that lives in
+Settings → Scrapers → Credentials), but it answers "what providers
+are wired in, what categories do they cover, and are mine
+authenticated?" at a glance.
+
+| Column | Contents |
+|--------|----------|
+| **Provider** | Display name (TMDB, MusicBrainz, OpenLibrary, ScreenScraper, Web Search). |
+| **Categories** | Media types the provider can scrape (Video, Audio, Reference, Games). |
+| **Capabilities** | Hash matching, metadata, artwork, manuals, videos — whichever the provider supports. |
+| **Credentials** | "Configured" if the provider's keychain entry exists for this user; "Not configured" otherwise. |
+| **Test query** | Per-row button that opens the provider's search URL in your browser with a sample query so you can confirm the upstream service is reachable. |
+
+Useful when troubleshooting an "all scrapes fail" state — the dialog
+tells you whether the registry sees the credentials at all (vs the
+keychain not being unlocked, or the entry never having been saved).
+
 ## Pinning a provider
 
 A collection's `type` field (`video`, `audio`, `games`, …) decides
