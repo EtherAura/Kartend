@@ -601,6 +601,14 @@ void MainWindow::setupSidebar() {
     setup.runArtworkLinksDialog = [this](const ItemArtworkLinksInput &in) {
       return m_dialogController->runArtworkLinksDialog(in);
     };
+    // Kartend-oewu: route the DetailsPane's inline edit-metadata button
+    // through InteractionManager so the dialog, persistence, and sidebar
+    // refresh all match the right-click "Edit metadata…" entry exactly.
+    setup.runEditMetadataForItem = [this](const QString &filePath, const QString &itemName) {
+      if (auto *im = m_appManager ? m_appManager->getInteractionManager() : nullptr) {
+        im->editItemMetadata(filePath, itemName);
+      }
+    };
 
     m_appManager->getDetailsPaneManager()->setupReferences(setup);
 

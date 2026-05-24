@@ -124,6 +124,22 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QToolButton" name="editMetadataButton">
+            <property name="toolTip">
+             <string>Edit personal metadata (notes, tags, rating, source URL)</string>
+            </property>
+            <property name="accessibleName">
+             <string>Edit metadata</string>
+            </property>
+            <property name="autoRaise">
+             <bool>true</bool>
+            </property>
+            <property name="visible">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

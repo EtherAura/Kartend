@@ -215,6 +215,11 @@ signals:
   /// owning manager handles persistence and refresh.
   void editArtworkRequested();
 
+  /// Fired when the user clicks the inline edit-metadata button in the
+  /// title row. Mirrors editArtworkRequested — the manager looks up the
+  /// current selection and pops the EditMetadataDialog.
+  void editMetadataRequested();
+
   /// bug #7: forwards the gallery overlay's visibility so
   /// DetailsPaneManager can lower the sidebar while the overlay is on top. Only
   /// fires for the sidebar's own gallery overlay; the expand-mode overlay
