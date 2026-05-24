@@ -943,7 +943,7 @@ void MainWindow::navigateToItem(const QString &filePath) {
   if (auto *im = m_appManager->getInteractionManager()) {
     auto *conn = new QMetaObject::Connection;
     *conn = connect(db, &IDatabaseManager::visualIndexForPathLoaded, this,
-                    [this, conn, filePath, im](int visualIndex, const QString &resultPath) {
+                    [conn, filePath, im](int visualIndex, const QString &resultPath) {
                       if (resultPath != filePath) {
                         return; // some other path's result — ignore
                       }
@@ -1247,7 +1247,7 @@ void MainWindow::artworkWizardInteractive() {
   auto candidatesFor = [directoryFiles](const ArtworkWizardDialog::Entry &entry) {
     return ArtworkCandidates::rank(entry.itemName, directoryFiles);
   };
-  auto onPick = [this, db](const ArtworkWizardDialog::Entry &entry, const QString &chosenFilePath) {
+  auto onPick = [db](const ArtworkWizardDialog::Entry &entry, const QString &chosenFilePath) {
     ItemArtworkStore::ItemArtwork row;
     row.collectionUuid = entry.collectionUuid;
     row.path = entry.filePath;
