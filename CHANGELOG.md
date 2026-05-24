@@ -9,6 +9,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Personal metadata editor.** Right-click → **Edit metadata…** opens
+  a unified per-item editor for notes (multi-line free text), tags
+  (comma-separated, trimmed and case-insensitively deduplicated on
+  save), a half-star rating (0–10 in half-star steps; right-click a
+  star to clear back to "unrated"), a source URL, and the existing
+  free-form custom fields. Replaces the old custom-fields-only dialog.
+  Notes, tags, ratings, and source URLs are first-class columns on
+  `item_metadata` (migration v14 adds them) so they survive rescans
+  and round-trip inside kart bundles (Kartend-z7id).
+- **Per-item state flags — pinned, hidden, continue-later.** Three
+  booleans you can toggle from the item right-click menu. Each
+  renders as a small badge in the top-right corner of the tile (★
+  pinned, ⏵ continue-later, ∅ hidden). Hidden items are filtered out
+  of the regular grid; the new smart-playlist kinds surface them when
+  needed. Migration v15 adds the `is_pinned` / `is_hidden` /
+  `continue_later` columns on `item_metadata` (Kartend-t4n0,
+  Kartend-elte).
+- **Inline Edit Metadata button in the details pane title row.** Same
+  dialog as the right-click and detail-page entry points, but
+  reachable in one click from the current selection without leaving
+  the grid (Kartend-oewu).
+- **Smart playlist kinds.** Added *By collection*, *By title search*,
+  *Missing artwork*, *Favorite*, *Pinned*, *Hidden*, and
+  *Continue later* alongside the existing kinds. *By collection*
+  references a collection by UUID so renames don't break the filter;
+  *By title search* matches `LIKE %?%` against `items.name` (Kartend-68ky).
+- **Structured search tokens.** The search bar now recognises
+  `played:true|false`, `favorite:true|false`, `missing:artwork`,
+  `has:artwork`, and `tag:NAME` alongside the plain-text query.
+  Tokens combine (`tag:rewatch tag:holiday played:false stage`).
+  Unrecognised `key:value` tokens are stripped from the free-text
+  portion and surfaced as a non-disruptive warning so the filter
+  doesn't silently miss them (Kartend-9qv2, Kartend-jb6d).
+- **Command palette (`Ctrl+Shift+P`).** Keyboard-first overlay that
+  fuzzy-matches every menu action and every collection in the live
+  tree, with subsequence + word-boundary scoring. Up/Down navigates
+  the list from inside the search field; Enter invokes. Each row
+  carries a short category label (File / View / Help / Collection /
+  …) so commands from different surfaces stay distinguishable when
+  ranked together (Kartend-581t).
+- **Kart preflight validation dialog.** Sits between picking a `.kart`
+  for import and committing it. Shows the bundle's metadata, item
+  count, referenced launchers, and any concerns (missing launchers
+  on this machine, paths that escape the collection's content roots,
+  collection-name conflicts, schema mismatches) so you can Reject
+  without touching disk. Suspicious-path detection refuses path
+  payloads regardless of the dialog choice (Kartend-fr4z).
+- **Static + smart playlists in `.kart` bundles.** Playlists are now
+  serialized into the kart manifest and restored on import: static
+  playlists are re-keyed against the rebuilt collection UUIDs, smart
+  playlists round-trip their `smart_filter` JSON spec verbatim, and
+  Favorites rides along as a reserved playlist. Items that can't be
+  matched on import are silently dropped rather than becoming ghost
+  rows (Kartend-kmj1).
+- **Bulk Edit Items dialog.** Collection-wide tag / pin / hide /
+  continue-later / clear-rating mutations. Pick an action and (where
+  applicable) a parameter; confirmation prompt shows the affected
+  item count before any database writes happen (Kartend-hrff).
+- **Missing Metadata review queue.** **File → Review Missing
+  Metadata…** walks every item in the active collection with empty
+  title / description / genre / artwork one at a time. Edit / Skip /
+  Stop per item; after each edit, re-evaluates whether the item still
+  belongs in the queue (Kartend-gtly).
+- **Artwork assignment wizard.** **File → Assign Missing Artwork…**
+  walks the missing-artwork pile and ranks candidate images from the
+  collection's artwork directory by a subsequence-based fuzzy score
+  (consecutive characters and word-boundary matches score higher).
+  Per item: Assign / Browse… / Skip / Stop. Saves picks as manual
+  links on the primary artwork type (Kartend-y02i).
+- **Duplicates and Variants inspector.** **File → Duplicates and
+  Variants…** opens a per-collection grouped view of same-basename
+  items (e.g. `Concert.mkv` + `Concert.flac` under `Concert`). Each
+  group expands to absolute paths; per-row Launch / Select buttons
+  let you switch to a specific variant without leaving the dialog
+  (Kartend-skhk).
+- **Collection Health dashboard.** **File → Collection Health…**
+  surfaces missing files, missing artwork, and launcher-path
+  problems across collections, with up to 20 example paths per
+  category. Read-only (fixes happen in Rescan / Artwork Wizard /
+  the launcher field) (Kartend-lprv).
+- **Launch command preview (dry-run).** Per-item right-click →
+  **Preview launch command…** shows the resolved program, the full
+  argv as `QProcess::start` would receive it, the working directory,
+  the archive-extraction step (if any), and validation warnings —
+  without actually launching the item (Kartend-65gx).
+- **Theme preset import/export.** Per-collection appearance — grid
+  layout, sidebar appearance, view background, list-view options,
+  horizontal alignment, custom font family — serializes to a
+  `*.kartend-theme.json` file via **File → Export Current Theme…** /
+  **Import Theme…**. The import dialog previews the per-field diff
+  ("Grid width: 8 → 12") before applying; numeric ranges are
+  re-clamped against `CollectionConfig::clampValues()`; forward-compat
+  presets are refused with a "needs a newer Kartend" message
+  (Kartend-y3rg).
+- **Layout profile registry.** **File → Layout Profiles…** wraps
+  theme presets in a save / apply / delete registry persisted to
+  `layout_profiles.json`. Multiple named looks per user
+  (`Cinema`, `Bookshelf`, `Synthwave`, …); switch between them per
+  collection from one dialog (Kartend-tfux).
+- **Presentation profile registry.** **File → Presentation Profiles…**
+  same shape as layout profiles but for attract / marquee / splash
+  settings. Stored separately so layout looks and presentation
+  behavior can be mixed and matched (Kartend-6pp5).
+- **New Library Wizard.** Multi-page guided creation of a new
+  collection — Welcome → Name + Media directory → Type + Artwork
+  directory → Launcher detection → Summary. Replaces the old
+  three-page first-run flow; **File → New Library Wizard…** opens
+  the same flow for additional libraries beyond the first
+  (Kartend-uft6).
+- **Filesystem watcher (debounced).** New per-collection
+  `watchFilesystem` boolean. When true, the collection's media
+  directory (recursive) is registered with `QFileSystemWatcher` and
+  triggers a debounced rescan on change (default 2 s window).
+  Symlink loops are short-circuited; newly-created subdirectories
+  are picked up on the next change event without restart
+  (Kartend-kr1g).
+- **Binding Visualizer dialog.** **Help → Binding Visualizer…** shows
+  every keyboard and gamepad mapping currently in effect, grouped by
+  surface. Press-to-identify highlights the matching row in real
+  time so an unfamiliar pad / rebound layout can be mapped to
+  actions interactively (Kartend-l703).
+- **Scraper Providers registry dialog.** **Help → Scraper
+  Providers…** opens a read-only diagnostic registry of built-in
+  scrapers — categories, capabilities, credential status, and a
+  per-row Test query button that opens the provider's search URL in
+  the browser (Kartend-q70r).
 - `.scripts/check-layering.py` now lints `src/chrome/` in addition to
   `src/utils/`, failing the maintenance build if the neutral chrome
   layer reaches upward into `src/modules/`, `src/ui/`, or `src/core/`
@@ -19,6 +145,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Usage Statistics dialog navigates instead of launching.**
+  Double-clicking a row on the Most Played / Recently Played / Never
+  Played / History tabs now closes the dialog, switches to the item's
+  owning collection, and focuses the item in the grid — instead of
+  launching it directly. Single-click selects the row inside the
+  dialog without leaving. The Help menu entry was also renamed
+  **Statistics** → **Usage Statistics…** to match the window title
+  (Kartend-oly2).
+- **`Backup & Sharing` user-guide page renamed to
+  `Backup & Migration`.** Removed the "share a curated collection
+  with a friend" recipe and the "share with another Kartend user"
+  framing — `.kart` packages bundle absolute paths, scraper
+  credentials, and personal metadata (notes, ratings, source URLs),
+  and importing one is equivalent to running unknown launcher
+  commands, so the format is positioned strictly as a personal
+  backup / cross-machine migration surface. The same reframe applies
+  to theme presets (`*.kartend-theme.json`) and layout / presentation
+  profiles. Cross-references in `Playlists-and-Favorites`,
+  `Smart-Playlists`, `Toolbar-and-Menus`, `Troubleshooting`,
+  `File-Locations`, `History-and-Statistics`,
+  `Configuration-Reference`, `Shell-Collections`, `CLI-Reference`,
+  `Home`, and `docs/kart-format.md` were updated to point at the new
+  page name and corrected text where it claimed kart bundles were
+  "configuration only" (they now carry per-item metadata + playlists
+  too)
 - Coverage floor in `.github/workflows/coverage.yml` raised from 26%/35%
   (lines/functions) to 33%/42% — milestone 1 of Kartend-l44o.1 following
   the addition of per-manager integration test suites for SearchManager,

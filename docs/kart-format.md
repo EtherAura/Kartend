@@ -4,10 +4,11 @@ The `.kart` file is Kartend's portable, self-contained collection
 bundle — config + metadata + every media / artwork / video / manual
 file the collection references, packed into one append-only stream.
 
-Used by **Backup & Sharing** (export from one machine, import on
-another) and by the headless `--kart-export` / `--kart-import` CLI.
+Used by **Backup & Migration** (export from one of your machines,
+import on another) and by the headless `--kart-export` /
+`--kart-import` CLI.
 
-User-facing overview: [Backup & Sharing](guide/Backup-and-Sharing.md).
+User-facing overview: [Backup & Migration](guide/Backup-and-Migration.md).
 This page is the on-disk format spec.
 
 ## Byte layout
@@ -143,9 +144,10 @@ Zlib. Practically, builds without zstd:
 - Write everything as Zlib.
 
 So a kart written on a Zstd-capable machine is portable to a
-Zlib-only build only if the writer used `compression=Zlib`. Today
-the writer always picks the strongest available codec; cross-build
-sharing isn't a first-class workflow.
+Zlib-only build only if the writer used `compression=Zlib`. The
+writer always picks the strongest codec the build supports; if you
+move karts between your own machines, build all of them with zstd
+to avoid surprises.
 
 Zstd uses compression level 3 — the same default `zstd(1)` picks,
 chosen for the speed/ratio trade-off on media bundles where the
@@ -225,4 +227,4 @@ clean break for hard backwards-incompatible layout changes.
 | Zstd / Zlib selection | [kartcompression.cpp](../src/modules/data/kart/kartcompression.cpp) |
 | Merger (dedupe by SHA-256) | [kartmerge.cpp](../src/modules/data/kart/kartmerge.cpp) |
 | Manager (high-level export / import) | [kartmanager.{h,cpp}](../src/modules/data/kart/) |
-| User docs | [docs/guide/Backup-and-Sharing.md](guide/Backup-and-Sharing.md) |
+| User docs | [docs/guide/Backup-and-Migration.md](guide/Backup-and-Migration.md) |

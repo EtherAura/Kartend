@@ -128,7 +128,11 @@ per-item manual links. See [Artwork](Artwork.md) for the type model.
 | Last modified | File mtime |
 | **Manual file** | Per-item manual link (PDF, EPUB, manual page). Clickable. See [Item Metadata](Item-Metadata.md#manual-files). |
 | **Launcher override** | Per-item launcher choice if set. Shows the launcher name. |
-| **Custom fields** | User-defined key/value pairs from the [Custom Fields Dialog](Item-Metadata.md#custom-fields). |
+| **Notes** | Free-form notes from the [Edit Metadata Dialog](Item-Metadata.md#edit-metadata-dialog). Multi-line; hidden when unset. |
+| **Tags** | Tag list set via the same dialog; chip-style. Searchable via the `tag:` [structured token](Search-Sort-Filter.md#structured-search-tokens). |
+| **Rating** | Half-star rating from the same dialog. Hidden when unrated. |
+| **Source URL** | Clickable source URL from the same dialog. |
+| **Custom fields** | User-defined key/value pairs from the [Edit Metadata Dialog](Item-Metadata.md#edit-metadata-dialog). |
 | **Play count** | From `play_count` in the database (Statistics dialog drives this too). |
 | **Last played** | From `last_played`. Format: `5 minutes ago`, `Yesterday`, etc. |
 | **Time played** | Sum from `launch_history` (only populated if [runtime detection](Splash-and-Now-Playing.md#runtime-detection) is enabled). |

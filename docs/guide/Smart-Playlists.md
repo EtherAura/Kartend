@@ -33,6 +33,12 @@ Some examples of what you can build:
   database in the last 30 days)
 - **Show me only the items I've illustrated** — *Has artwork* (every
   item with a non-empty artwork override)
+- **Items I've started but haven't finished** — *Continue later* (the
+  in-progress queue, driven by the per-item flag)
+- **A worklist for the artwork wizard** — *Missing artwork*
+- **The favorites tile, but as a smart playlist** — *Favorite* (lets
+  you treat the reserved Favorites list like any other smart-playlist
+  view, e.g. for setting as the startup collection)
 
 ## Creating a smart playlist
 
@@ -58,12 +64,19 @@ immediately and opens populated with its current matches.
 | **Never launched** | Show first (1–1000, default 50) | The first N items with zero recorded launches. Ordered the same way the rest of the grid is by default. |
 | **By extension** | Extensions (csv, lowercase, leading dot optional) | Every item whose file extension is in the list. Empty list = no matches. Example: `pdf,epub,cbz`. |
 | **Has artwork** | *(none)* | Every item with a non-empty artwork file recorded against it (auto-discovered or manually [linked](Artwork.md)). |
+| **Missing artwork** | *(none)* | The complement of *Has artwork* — items with no artwork file on disk. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
 | **Recently added** | Window (1–3650 days, default 30) | Items whose `date_added` falls within the last N days, newest first. |
+| **By collection** | Collection (picker) | Every item belonging to the chosen collection. The collection is referenced by UUID so renames don't break the filter. Empty selection yields zero matches. |
+| **By title search** | Substring | Every item whose name contains the given substring (case-insensitive, `LIKE %?%`). Empty substring yields zero matches. |
+| **Favorite** | *(none)* | Every item present in the reserved Favorites playlist. |
+| **Pinned** | *(none)* | Items toggled pinned via [item state flags](Item-Metadata.md#state-flags). |
+| **Hidden** | *(none)* | Items toggled hidden. Useful as a "review the hidden pile" view since the regular grid filters these out by default. |
+| **Continue later** | *(none)* | Items toggled continue-later — the in-progress queue. |
 
 > **Counted vs uncounted** — *Recently launched*, *Most played*,
-> *Never launched* are limited by a hard count. *By extension*,
-> *Has artwork*, *Recently added* are open-ended — the result set is
-> whatever matches the rule, with no cap.
+> *Never launched* are limited by a hard count. The rest are
+> open-ended — the result set is whatever matches the rule, with no
+> cap.
 
 ### Recently launched
 
@@ -188,12 +201,14 @@ re-evaluation in the meantime.
 
 - **One rule per playlist** — there's no AND / OR composition today. If
   you want "Never played PDFs", combine extension filtering with a
-  separate workflow (e.g., a custom field).
+  separate workflow (e.g., a custom field, or the structured search
+  tokens described in [Search](Search-Sort-Filter.md#structured-search-tokens)).
 - **Snapshot export is lossy** — exporting a smart playlist to JSON or
   M3U writes the matches at export time, not the rule. Importing
-  produces a regular (non-smart) playlist.
-- **Cross-machine sharing** — there's no `.kart` round-trip for the
-  smart filter spec yet.
+  produces a regular (non-smart) playlist. Use the
+  [`.kart` package](Backup-and-Migration.md) format if you need the
+  filter spec itself to round-trip (e.g. when migrating between your
+  own machines).
 
 ## How smart playlists store data
 
@@ -221,9 +236,14 @@ The JSON spec stored in `smart_filter` looks like:
   "kind": "recently_launched",
   "limit": 50,
   "extensions": [],
-  "days": 30
+  "days": 30,
+  "collection_uuid": "",
+  "title_search": ""
 }
 ```
+
+Per-kind fields irrelevant to the chosen `kind` are still emitted
+with default values so the schema stays predictable for tooling.
 
 Kind tags are stable across versions, so a smart playlist created in a
 newer build can be re-opened in an older build if the kind tag is

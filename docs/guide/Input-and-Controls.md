@@ -77,6 +77,7 @@ A small HUD shows the current percentage briefly after each adjustment.
 | `F5` | Soft refresh — reload the current collection without rescanning |
 | `Ctrl+F5` | Full rescan — drop and rebuild the database for the current collection |
 | `Ctrl+Shift+R` | Open a random item |
+| `Ctrl+Shift+P` | Open the [Command Palette](Toolbar-and-Menus.md#command-palette) |
 | `Ctrl+,` | Open Settings |
 | `Ctrl+Q` | Quit |
 
@@ -186,7 +187,9 @@ you clicked:
 - **Properties** — toggle the sidebar
 - **Refresh** — soft-reload the collection
 - *(separator)*
-- **Edit custom fields…** — open the [Custom Fields Dialog](Item-Metadata.md#custom-fields)
+- **Edit metadata…** — open the [Edit Metadata Dialog](Item-Metadata.md#edit-metadata-dialog) (notes, tags, rating, source URL, custom fields)
+- **Pin item** / **Hide item** / **Mark continue later** — toggle the per-item [state flags](Item-Metadata.md#state-flags); the labels flip to **Unpin** / **Unhide** / **Clear continue later** when the flag is already set
+- **Preview launch command…** — open the [Launch Preview](Launchers.md#launch-command-preview-dry-run) for this item
 - **Set manual file…** — pick a manual / PDF / etc. for this item
 - **Clear manual override** — appears only if a manual is set
 - **Always launch with…** — appears only if the collection has more
@@ -261,6 +264,42 @@ next button event. Press `Escape` (or click outside) to cancel.
 
 Kartend listens to the first connected device. Hot-plugging is
 supported — connect or disconnect mid-session and the backend reattaches.
+
+## Binding visualizer
+
+**Help → Binding Visualizer…** opens an interactive reference that
+shows every keyboard and gamepad mapping currently in effect, grouped
+by surface (Navigation, Selection, Search, etc.). The killer feature
+is **press-to-identify**: tap a key or gamepad button while the
+dialog is open and the matching row highlights so you can answer
+"what does this do?" without scanning the table.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Binding Visualizer                                       │
+│ Press a key or button to identify the mapped action.     │
+│                                                          │
+│ ▾ Navigation                                             │
+│     Move selection up         ↑     /  Pad Up            │
+│     Move selection down       ↓     /  Pad Down          │
+│     Move selection left       ←     /  Pad Left          │
+│     Move selection right      →     /  Pad Right         │
+│ ▾ Selection                                              │
+│     Launch / confirm          Enter /  A                 │
+│     Back / cancel             Esc   /  B          ← lit  │
+│ ▾ Search                                                 │
+│     Focus search bar          /     /  —                 │
+│ …                                                        │
+└──────────────────────────────────────────────────────────┘
+```
+
+Useful when you've rebound a few keys and forgotten which is which,
+or when handing the input to someone unfamiliar with the layout.
+Gamepad input is captured live while the dialog is open, so an
+unfamiliar pad can be mapped to actions interactively.
+
+The view is read-only — rebinding still happens through Settings →
+**General** → **Keyboard Bindings** / **Gamepad Config**.
 
 ## Hover, focus, and keyboard reach
 

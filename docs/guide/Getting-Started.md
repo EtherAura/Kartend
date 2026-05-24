@@ -31,23 +31,26 @@ linked from [Home](Home.md).
 After installing (see [building.md](../building.md)) launch Kartend from
 your application menu, or run `kartend` from a terminal.
 
-### The First-Run Wizard
+### New Library Wizard
 
-The first launch opens a three-page setup wizard. Cancel it and
-you'll land on the empty main window described below; complete it and
-you'll start with one collection already configured.
+The first launch opens the multi-page **New Library Wizard**. Cancel
+it and you'll land on the empty main window described below; complete
+it and you'll start with one collection already configured.
 
 | Page | What it asks for |
 |------|------------------|
-| **Welcome** | Nothing — just an intro to what Kartend is. **Next**. |
-| **Pick a media folder** | A **Collection name** (e.g. *Videos*, *Audiobooks*, *Reference*) and a **Media folder** path. Use the **Browse…** button to pick a directory; the folder is scanned recursively (subfolders become subcollections). |
-| **All set** | A confirmation page. **Finish** creates the collection, kicks off the initial scan, and writes `~/.config/kartend/kartend.cfg`. |
+| **Welcome** | Short intro. **Next**. |
+| **Name + media folder** | A **Collection name** and a **Media folder** path. Use the **Browse…** button; the field validates that the path exists before **Next** activates. |
+| **Type + artwork folder** | A **Media type** picker (Video / Audio / Image / Reference / Other — drives the suggested scraper) and an optional **Artwork folder** override. |
+| **Launcher** | Multi-select list of installed launchers detected on the system (mpv, vlc, RetroArch, …). The first checked entry becomes the primary launcher. |
+| **All set** | Summary of every field for confirmation. **Finish** creates the collection, kicks off the initial scan, and writes `~/.config/kartend/kartend.cfg`. |
 
 The wizard sets `firstRunComplete=true` in `[General]` after it
 finishes *or* is cancelled, so it won't auto-launch again. To re-run
-it later, choose **Help → Setup Wizard…** from the menu; the
-`firstRunComplete` flag stays set (the auto-launch is intentionally
-one-shot).
+the same flow later, choose **Help → Setup Wizard…**. For *additional*
+libraries beyond the first, **File → New Library Wizard…** opens the
+same wizard non-destructively — the new collection is appended to the
+tree alongside whatever exists.
 
 ### Without the wizard
 
@@ -68,6 +71,16 @@ Per-user state lives at:
 See [File Locations](File-Locations.md) for the full layout.
 
 ## 2. Add your first collection
+
+Two paths land at the same place:
+
+- **File → New Library Wizard…** opens the same multi-step wizard
+  described above. Recommended when you want guided detection of
+  launchers and a sensible default scraper.
+- **Settings Dialog → Add Collection** opens a single-screen form for
+  when you already know the fields you want.
+
+### Via the Settings Dialog
 
 1. Open the **Settings Dialog** with `Ctrl + ,` (or **File → Settings**).
 2. Click **Add Collection** in the tree on the left. The **Add

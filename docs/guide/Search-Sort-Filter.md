@@ -47,6 +47,42 @@ keyboard shortcut to cycle modes today.
 The available modes depend on the collection: a collection with no
 custom fields and no manuals has only Name mode active.
 
+### Structured search tokens
+
+The search bar also recognises `key:value` filter tokens alongside the
+plain-text query. Tokens combine — `played:true tag:soundtrack stage`
+matches items that have been launched at least once, carry the
+`soundtrack` tag, and contain `stage` in their name (or extended
+metadata, in All mode). Keys are case-insensitive; values are taken
+literally except for `tag:` which case-folds.
+
+| Token | Matches |
+|-------|---------|
+| `played:true` / `played:false` | Items that have / haven't been launched at least once (uses `launch_history`). |
+| `favorite:true` / `favorite:false` | Items present (or absent) in the reserved Favorites playlist. |
+| `missing:artwork` | Items with no artwork file on disk. |
+| `has:artwork` | Inverse of `missing:artwork` — items with artwork resolved. |
+| `tag:NAME` | Items whose tag list contains `NAME` (case-insensitive). Repeat to AND multiple tags: `tag:rewatch tag:holiday`. |
+
+Tokens you type but Kartend doesn't recognise (typos, unsupported
+keys) are stripped from the free-text portion so they don't bleed
+into FTS, and surfaced as a non-disruptive warning so you know the
+filter didn't apply.
+
+> **Where structured tokens come from** — the per-item tag list and
+> Favorites flag live in `item_metadata` / the Favorites playlist;
+> see [Item Metadata](Item-Metadata.md). Set tags via right-click →
+> **Edit metadata…**.
+
+### Cross-collection token search
+
+Structured tokens also work across the whole library, not just the
+current collection. Build a smart playlist with the
+**By title search** kind for the plain-text component and chain
+tokens in the search bar — e.g. `tag:must-watch played:false` inside
+an *All Films* shell shows the unplayed must-watches across every
+nested collection.
+
 ### Performance
 
 Search is backed by SQLite FTS5 for collections with thousands of

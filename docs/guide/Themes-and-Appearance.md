@@ -1,17 +1,28 @@
 # Themes & Appearance
 
-Kartend has no concept of "themes" as installable bundles — instead,
-every visual element is a per-collection or global setting. This page
-covers the visual surface: backgrounds (solid / image / video),
-vignette, parallax, blur, fonts, text zoom, title tints, and the
-header logo overlay.
+Kartend's visual surface is a set of per-collection and global
+settings — backgrounds (solid / image / video), vignette, parallax,
+blur, fonts, text zoom, title tints, header logos. There's also a
+**theme preset** format and a **layout profile registry** for capturing
+those settings as named snapshots you can re-apply later or move
+between your own machines.
 
 For sidebar-specific styling see [Sidebar & Details Pane](Sidebar-and-Details-Pane.md).
 For per-tile / per-item-grid layout see [View Modes](View-Modes.md).
+For attract / marquee / splash presets see
+[Presentation profiles](#presentation-profiles) below.
 
 > **Where to find this** — Settings Dialog → **Colors** and **Text &
 > Fonts** tabs (per-collection), **General** tab (global). All keys
 > documented in [Configuration Reference](Configuration-Reference.md).
+
+> **Theme presets and presentation profiles are a personal-backup
+> format.** Both serialize visual settings to JSON files on disk —
+> use them to snapshot a look before experimenting, to keep a small
+> library of looks per collection, or to move appearance settings
+> between your own machines. Importing a preset file someone else
+> sent you is equivalent to letting them rewrite your appearance
+> settings; review what they include before applying.
 
 ## Color palette
 
@@ -277,6 +288,101 @@ customFontFamily=JetBrains Mono
 The toolbar / menus stay Inter; the books grid uses Crimson Pro and
 the tools grid uses JetBrains Mono.
 
+## Theme presets
+
+A **theme preset** captures the visual fields of a collection — grid
+layout, sidebar appearance, view background, list-view options,
+horizontal alignment, custom font family — and serializes them to a
+self-contained JSON file (`*.kartend-theme.json`) you can re-apply
+later or copy to one of your other machines.
+
+Presets do **not** include paths, launcher config, scraper settings,
+or filter rules. They describe the collection's *look*, not its
+*contents*.
+
+> **Where to find this** — Settings Dialog → **Appearance** tab →
+> **Theme presets** section: **Export…**, **Import…**, **Save current
+> as preset…** buttons. The save/apply registry UI for multi-preset
+> management lives in the [Layout Profiles dialog](#layout-profiles).
+
+### Exporting
+
+**Save current as preset…** captures the active collection's
+appearance into a `ThemePreset` and writes it to disk via
+`QSaveFile` (crash-safe atomic rename). The file is pretty-printed
+JSON; convention is `*.kartend-theme.json`. The preset carries a
+`schemaVersion` field so older builds reading a newer preset know to
+surface a "some fields were ignored" warning instead of silently
+applying a partial result.
+
+### Importing
+
+**Import…** opens the file picker. Before any changes land, an
+**import-preview dialog** lists every field the preset would change
+against the current collection — entries are one-liners like
+`Grid width: 8 → 12` or `Sidebar background opacity: 80 → 120`. An
+empty change list means the preset matches the current state
+exactly (so the dialog tells you it's a no-op rather than silently
+"applying" nothing).
+
+Numeric ranges are re-clamped against `CollectionConfig::clampValues()`
+on apply, so a preset hand-edited with out-of-band values gets
+snapped back into the UI-safe envelope. Forward-compat presets
+(`schemaVersion` greater than this build understands) are refused
+with a "needs a newer Kartend" message rather than partially
+applied.
+
+### Apply scope
+
+Applying a preset rewrites the active collection's appearance fields
+in place; non-theme fields (paths, launcher, scraper, filter rules)
+are left untouched. Use the
+[Apply Settings](Settings-Dialog.md#apply-settings) workflow if you
+want to propagate the new look across multiple collections at once.
+
+## Layout profiles
+
+For keeping a stable of named looks — e.g. `Cinema`, `Bookshelf`,
+`Synthwave` — there's a **Layout Profiles** dialog that wraps the
+same preset format with a save / apply / delete registry stored
+under `layout_profiles.json`.
+
+| Button | Effect |
+|--------|--------|
+| **Save current as profile…** | Captures the active collection's appearance and stores it under a user-supplied name. Save-as-existing-name overwrites with confirmation. |
+| **Apply selected** | Rewrites the active collection from the selected profile (same flow as importing a preset file, with the change preview). |
+| **Delete selected** | Drops the profile from the registry. The file's only stored representation is the JSON file, so deletion is non-recoverable. |
+
+The registry is a JSON array; profiles are otherwise identical to
+single `ThemePreset` files. The dialog mutates an in-memory list
+that's persisted after close — switching profiles between
+collections happens without leaving the dialog.
+
+> **Where to find this** — Settings Dialog → **Appearance** tab →
+> **Manage layout profiles…**.
+
+## Presentation profiles
+
+The same registry pattern applies to **presentation profiles** —
+named bundles of attract / marquee / splash settings. Save your
+current attract-mode configuration as `Carnival`, your marquee setup
+as `Bartop Topper`, your splash setup as `Movie Night`, and switch
+between them per-collection or globally.
+
+| Field | Stored in profile |
+|-------|--------------------|
+| Attract mode | `attractMode*` keys ([Attract Mode](Attract-Mode.md)) |
+| Marquee | `marquee*` keys ([Marquee](Marquee.md)) |
+| Splash | `bootSplash*`, `resumeFocusSplash*`, `startupVideo*` keys ([Splash & Now Playing](Splash-and-Now-Playing.md)) |
+
+> **Where to find this** — Settings Dialog → **General** tab →
+> **Presentation profiles…** (alternatively: a per-collection
+> shortcut from each profile category's settings page).
+
+Same Save / Apply / Delete UI shape as the layout-profile registry.
+Stored separately from layout profiles so you can mix and match —
+a `Cinema` layout with a `Movie Night` splash, etc.
+
 ## Where to next
 
 - [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) — sidebar-specific
@@ -284,6 +390,11 @@ the tools grid uses JetBrains Mono.
 - [View Modes](View-Modes.md) — tile sizing and grid layout
 - [Splash & Now Playing](Splash-and-Now-Playing.md) — startup video
   and splash overlays
+- [Attract Mode](Attract-Mode.md) — idle / kiosk behavior
+- [Marquee](Marquee.md) — second-monitor topper
+- [Backup & Migration](Backup-and-Migration.md) — `.kart` packages
+  carry the *full* per-collection appearance plus content; theme
+  presets are appearance-only
 - [Configuration Reference](Configuration-Reference.md#background--visual-effects)
   — every appearance INI key
 
@@ -301,6 +412,25 @@ the tools grid uses JetBrains Mono.
 - Text zoom: `Qt::AA_DisableHighDpiScaling` interacts oddly with text
   zoom; the implementation walks all widgets and adjusts font point
   sizes by the zoom percentage. See `MainWindow::applyTextZoom`.
+- Theme preset struct + serializer:
+  [src/utils/app/collection/themepreset.{h,cpp}](../../src/utils/app/collection/).
+  `ThemePresetIO::toJson` / `fromJson` are the canonical entry points;
+  `applyTo` writes onto a `CollectionConfig` (and re-clamps via
+  `CollectionConfig::clampValues()`). `describeChanges` powers the
+  import-preview dialog's diff list.
+- Layout profile registry: persisted under `layout_profiles.json`
+  (path resolved by `SettingsUtils::getLayoutProfilesPath`). The
+  registry helpers live alongside `ThemePreset`. Dialog:
+  [src/ui/dialogs/settings/appearance/layoutprofilesdialog.{h,cpp}](../../src/ui/dialogs/settings/appearance/).
+- Presentation profile struct: [src/utils/app/collection/presentationprofile.{h,cpp}](../../src/utils/app/collection/);
+  dialog: [src/ui/dialogs/settings/appearance/presentationprofilesdialog.{h,cpp}](../../src/ui/dialogs/settings/appearance/).
+  Same registry shape as layout profiles, persisted to a separate
+  JSON file so the two registries stay independent.
 - Adding a new visual effect: add a `[General]` or per-collection key,
   read it in the relevant manager, hook into `paintEvent` (for static
-  effects) or the per-frame composition path (for animated ones).
+  effects) or the per-frame composition path (for animated ones). If
+  the new effect should ride along inside theme presets, add it to
+  the appropriate leaf cluster (`GridLayoutPreferences`,
+  `SidebarAppearance`, `CollectionBackground`, `ListViewOptions`) so
+  `ThemePreset` picks it up automatically — only standalone scalars
+  need to be wired into `ThemePresetIO` by hand.

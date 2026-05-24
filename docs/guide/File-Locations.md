@@ -91,9 +91,12 @@ Quit Kartend first, or use SQLite's online backup mechanism:
 sqlite3 ~/.local/share/kartend/kartend.db ".backup ~/backups/kartend-$(date +%F).db"
 ```
 
-`.kart` packages do **not** include the database (configuration only)
-— see [Backup & Sharing](Backup-and-Sharing.md). For a complete backup,
-copy both `kartend.cfg` and `kartend.db`.
+`.kart` packages bundle per-item metadata (custom fields, notes,
+tags, ratings, manual links, artwork links, state flags) and
+playlists in addition to collection configuration, but exclude
+`launch_history` (and play counts / last-played timestamps). See
+[Backup & Migration](Backup-and-Migration.md). For a complete
+backup including history, copy both `kartend.cfg` and `kartend.db`.
 
 ### Querying directly
 
@@ -272,8 +275,8 @@ manifest if your library lives elsewhere.
 
 - [Configuration Reference](Configuration-Reference.md) — keys and
   defaults inside `kartend.cfg`
-- [Backup & Sharing](Backup-and-Sharing.md) — `.kart` package format
-  for portable transfers
+- [Backup & Migration](Backup-and-Migration.md) — `.kart` package
+  format for moving libraries between your own machines
 - [History & Statistics](History-and-Statistics.md) — what's in the
   database
 - [Troubleshooting](Troubleshooting.md) — recovery paths for common
