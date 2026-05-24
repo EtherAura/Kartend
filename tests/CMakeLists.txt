@@ -734,6 +734,61 @@ target_link_libraries(test_querymanager_cross_collection_count
 )
 add_test(NAME QueryManagerCrossCollectionCount COMMAND test_querymanager_cross_collection_count)
 
+# QueryManagerCrossCollectionTokens (Kartend-jb6d). Locks in that the
+# structured-token filters apply when queryIncludeAllCollections=true so a
+# future refactor of the cross-mode SQL path can't quietly drop the
+# WHERE clauses.
+add_executable(test_querymanager_cross_collection_tokens
+  modules/query/test_querymanager_cross_collection_tokens.cpp
+  modules/query/workersignalspy.h
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
+  ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
+  ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
+  ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/utils/text/searchqueryparser.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/database/connectionpragmas.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
+  ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_querymanager_cross_collection_tokens PRIVATE
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/session
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_querymanager_cross_collection_tokens
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME QueryManagerCrossCollectionTokens COMMAND test_querymanager_cross_collection_tokens)
+
 add_executable(test_querymanager_shell_collection_sort
   modules/query/test_querymanager_shell_collection_sort.cpp
   modules/query/workersignalspy.h
