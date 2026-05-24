@@ -118,7 +118,7 @@ jobs:
         # issue. Subsequent failures append a comment with the failing run
         # URL so the issue collects history without flooding the tracker.
         if: ${{ failure() && github.event_name == 'schedule' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Nightly TSan failing';
