@@ -158,6 +158,7 @@ ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterP
   for (const ItemSource &item : params.items) {
     manifest.items.append(item.manifestItem);
   }
+  manifest.playlists = params.playlists;
   const QByteArray manifestJson = KartManifest::serialize(manifest);
   if (static_cast<quint64>(manifestJson.size()) > KartFormat::MAX_MANIFEST_SIZE) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartManifestInvalid,

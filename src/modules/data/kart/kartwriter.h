@@ -33,6 +33,12 @@ struct WriterParams {
   CollectionConfig collectionConfig;
   QList<LauncherPreset> launchers;
   QList<ItemSource> items;
+  /// Bundled playlists (Kartend-kmj1). Empty unless the caller fetched
+  /// playlists from PlaylistManager for the exported collection's UUID.
+  /// The writer copies these straight onto the manifest; resolution of
+  /// PlaylistItemRefs to in-bundle relative paths happens at the call
+  /// site so KartWriter stays free of PlaylistManager linkage.
+  QList<KartManifest::PlaylistEntry> playlists;
   KartFormat::Compression preferredCompression = KartFormat::Compression_Zstd;
 };
 

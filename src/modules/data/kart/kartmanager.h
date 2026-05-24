@@ -20,6 +20,7 @@ class QWidget;
 QT_END_NAMESPACE
 
 class ISettingsManager;
+class IPlaylistManager;
 struct ApplicationContext;
 
 namespace KartWriter {
@@ -54,6 +55,12 @@ struct KartManagerSetup {
   std::function<QList<CollectionConfig> *()> getCollections;
   std::function<QList<LauncherPreset>()> getLauncherPresets;
   std::function<QWidget *()> getParentWindow;
+  /// Optional accessor for PlaylistManager (Kartend-kmj1). When provided,
+  /// runExport bundles every playlist whose parentCollectionUuid matches
+  /// the exported collection, and finalizeImport restores playlists onto
+  /// the freshly-registered collection. Left null in headless contexts so
+  /// existing call sites compile without the playlist round-trip.
+  std::function<IPlaylistManager *()> getPlaylistManager;
 
   /// Owner-provided resolver for the interactive merge-conflict decision.
   /// Kartend-a3ir: KartManager previously #included kartmergedialog.h and

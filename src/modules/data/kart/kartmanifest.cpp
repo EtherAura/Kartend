@@ -387,6 +387,49 @@ Item jsonToItem(const QJsonObject &o) {
   return i;
 }
 
+QJsonObject playlistItemToJson(const PlaylistItemEntry &it) {
+  QJsonObject o;
+  o["media_path"] = it.mediaPath;
+  o["position"] = it.position;
+  return o;
+}
+
+PlaylistItemEntry jsonToPlaylistItem(const QJsonObject &o) {
+  PlaylistItemEntry it;
+  it.mediaPath = o["media_path"].toString();
+  it.position = o["position"].toInt(-1);
+  return it;
+}
+
+QJsonObject playlistToJson(const PlaylistEntry &p) {
+  QJsonObject o;
+  o["name"] = p.name;
+  o["icon"] = p.icon;
+  o["reserved_kind"] = p.reservedKind;
+  o["is_smart"] = p.isSmart;
+  o["smart_filter"] = p.smartFilterJson;
+  QJsonArray itemsArr;
+  for (const PlaylistItemEntry &it : p.items) {
+    itemsArr.append(playlistItemToJson(it));
+  }
+  o["items"] = itemsArr;
+  return o;
+}
+
+PlaylistEntry jsonToPlaylist(const QJsonObject &o) {
+  PlaylistEntry p;
+  p.name = o["name"].toString();
+  p.icon = o["icon"].toString();
+  p.reservedKind = o["reserved_kind"].toString();
+  p.isSmart = o["is_smart"].toBool(false);
+  p.smartFilterJson = o["smart_filter"].toString();
+  const QJsonArray itemsArr = o["items"].toArray();
+  for (const auto &v : itemsArr) {
+    p.items.append(jsonToPlaylistItem(v.toObject()));
+  }
+  return p;
+}
+
 } // namespace
 
 QByteArray serialize(const Manifest &manifest) {
@@ -412,6 +455,12 @@ QByteArray serialize(const Manifest &manifest) {
     items.append(itemToJson(it));
   }
   root["items"] = items;
+
+  QJsonArray playlistsArr;
+  for (const PlaylistEntry &p : manifest.playlists) {
+    playlistsArr.append(playlistToJson(p));
+  }
+  root["playlists"] = playlistsArr;
 
   return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
@@ -471,6 +520,13 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
   const QJsonArray itemsArr = root["items"].toArray();
   for (const auto &v : itemsArr) {
     m.items.append(jsonToItem(v.toObject()));
+  }
+  // Playlists optional — v1 bundles omit the field entirely. toArray()
+  // returns an empty array for a missing or wrong-type value, which is
+  // exactly the fall-back the version comment in kartformat.h promises.
+  const QJsonArray playlistsArr = root["playlists"].toArray();
+  for (const auto &v : playlistsArr) {
+    m.playlists.append(jsonToPlaylist(v.toObject()));
   }
   return m;
 }

@@ -23,7 +23,11 @@ namespace KartFormat {
 inline constexpr std::array<char, 8> MAGIC = {'K', 'A', 'R', 'T', '\0', '\0', '\0', '\1'};
 inline constexpr int MAGIC_SIZE = 8;
 
-inline constexpr quint32 CURRENT_VERSION = 1;
+// v1 → v2 (Kartend-kmj1): added the optional `playlists` array carrying the
+// collection's static + smart playlists plus their items. A v2 reader
+// silently treats a missing `playlists` field as empty so v1 bundles
+// continue to round-trip without playlists.
+inline constexpr quint32 CURRENT_VERSION = 2;
 
 inline constexpr int SHA256_SIZE = 32;
 

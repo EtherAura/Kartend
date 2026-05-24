@@ -22,6 +22,7 @@
 #include "dialogcontroller.h"
 #include "eventmanager.h"
 #include "interactionmanager.h"
+#include "iplaylistmanager.h"
 #include "isettingsmanager.h"
 #include "kartmanager.h"
 #include "kartpreflight.h"
@@ -30,6 +31,7 @@
 #include "launchmanager.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
+#include "playlistmanager.h"
 #include "smartfilter.h"
 #include "ui_mainwindow.h"
 
@@ -203,6 +205,12 @@ void MainWindow::wireKartManager() {
     kartSetup.getCollections = [this]() { return &m_collections; };
     kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
     kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
+    // Kartend-kmj1: round-trip the active collection's playlists through the
+    // bundle. Returns a base IPlaylistManager* so the data layer doesn't
+    // need to know the concrete PlaylistManager class.
+    kartSetup.getPlaylistManager = [this]() -> IPlaylistManager * {
+      return m_appManager ? m_appManager->getPlaylistManager() : nullptr;
+    };
     // Kartend-a3ir: the interactive merge dialog lives in the UI layer
     // and is constructed here. KartManager (data layer) just invokes the
     // closure with the conflicting metadata and uses the returned

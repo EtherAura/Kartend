@@ -19,10 +19,12 @@
 // one-way progress dialog uses the kartProgress* signal family for the
 // same reason (see the header).
 #include "applicationcontext.h"
+#include "iplaylistmanager.h"
 #include "isettingsmanager.h"
 #include "kartreader.h"
 #include "kartwriter.h"
 #include "pathutils.h"
+#include "smartfilter.h"
 
 namespace kart {
 
@@ -182,6 +184,56 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   if (persistRes.isError()) {
     return persistRes.error();
   }
+
+  // Kartend-kmj1: restore bundled playlists onto the freshly-registered
+  // collection. Smart playlists copy their SmartFilter JSON straight
+  // through; static playlists translate bundled media_path entries back
+  // to the finalized absolute paths via destDir. Missing payloads (e.g.
+  // partial extract) are skipped so a malformed playlist never aborts
+  // the import.
+  if (registerCollection && m_setup.getPlaylistManager) {
+    if (IPlaylistManager *pm = m_setup.getPlaylistManager()) {
+      const QDir mediaRoot(QDir(result.destDir).filePath("media"));
+      for (const KartManifest::PlaylistEntry &entry : result.manifest.playlists) {
+        QString newPlaylistId;
+        if (entry.isSmart) {
+          auto filterRes = SmartFilter::fromJsonString(entry.smartFilterJson);
+          if (filterRes.isError()) {
+            ErrorUtils::logError(filterRes.error());
+            continue;
+          }
+          auto created = pm->createSmartPlaylist(entry.name, filterRes.value(), collectionUuid);
+          if (created.isError()) {
+            ErrorUtils::logError(created.error());
+            continue;
+          }
+          newPlaylistId = created.value();
+        } else {
+          auto created = pm->createPlaylist(entry.name, collectionUuid, entry.reservedKind);
+          if (created.isError()) {
+            ErrorUtils::logError(created.error());
+            continue;
+          }
+          newPlaylistId = created.value();
+        }
+        if (newPlaylistId.isEmpty()) continue;
+        if (entry.isSmart) continue;
+
+        // PlaylistItemEntry::mediaPath is relative to the media/ subtree
+        // of the bundle, matching what KartWriter populates. We strip a
+        // leading "media/" if present, then resolve against mediaRoot to
+        // produce the finalized absolute path the new items table sees.
+        for (const KartManifest::PlaylistItemEntry &ie : entry.items) {
+          QString rel = ie.mediaPath;
+          if (rel.startsWith(QStringLiteral("media/"))) rel.remove(0, 6);
+          if (rel.isEmpty()) continue;
+          const QString abs = mediaRoot.filePath(rel);
+          pm->addItem(newPlaylistId, collectionUuid, abs);
+        }
+      }
+    }
+  }
+
   return result.destDir;
 }
 
@@ -250,6 +302,45 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex,
   KartWriter::WriterParams params = prepRes.value();
   params.uuid = collectionUuid;
   params.name = cfg.name;
+
+  // Kartend-kmj1: bundle every playlist whose parentCollectionUuid points
+  // at the exported collection. Static-playlist items are translated to
+  // the in-bundle media_path (KartWriter populates that field on
+  // prepareFromCollection); references that don't resolve are dropped
+  // because the import side can't reconstruct them either.
+  if (m_setup.getPlaylistManager) {
+    if (IPlaylistManager *pm = m_setup.getPlaylistManager()) {
+      QHash<QString, QString> absToRel;
+      for (const KartWriter::ItemSource &it : params.items) {
+        if (!it.mediaAbs.isEmpty()) {
+          absToRel.insert(it.mediaAbs, it.manifestItem.mediaPath);
+        }
+      }
+      const QList<PlaylistRow> rows = pm->loadAll();
+      for (const PlaylistRow &row : rows) {
+        if (row.parentCollectionUuid != collectionUuid) continue;
+        KartManifest::PlaylistEntry entry;
+        entry.name = row.name;
+        entry.icon = row.icon;
+        entry.reservedKind = row.reservedKind;
+        entry.isSmart = row.isSmart;
+        entry.smartFilterJson = row.smartFilterJson;
+        if (!row.isSmart) {
+          const QList<PlaylistItemRef> refs = pm->loadItems(row.id);
+          for (const PlaylistItemRef &ref : refs) {
+            if (ref.sourceCollectionUuid != collectionUuid) continue;
+            const auto it = absToRel.constFind(ref.sourcePath);
+            if (it == absToRel.cend()) continue;
+            KartManifest::PlaylistItemEntry ie;
+            ie.mediaPath = it.value();
+            ie.position = ref.position;
+            entry.items.append(ie);
+          }
+        }
+        params.playlists.append(entry);
+      }
+    }
+  }
 
   KartWriter::Writer writer;
   auto wr = writer.writeKart(outPath, params);
