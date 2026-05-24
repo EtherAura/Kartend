@@ -152,10 +152,10 @@ DatabaseManager::~DatabaseManager() {
   // Quit + bounded wait. If the worker thread doesn't return within the
   // budget, intentionally leak it (set pointer to nullptr) rather than let
   // ~QThread qFatal on a still-running thread. The OS will reclaim threads
-  // and SQLite handles at process exit (we use std::quick_exit in main).
+  // and SQLite handles at process exit (we use std::_Exit in main).
   constexpr int SHUTDOWN_WAIT_MS = 2000;
   // The leak paths below (timed-out wait → forget the thread pointer) are
-  // safe in production because main.cpp std::quick_exits and the OS reaps
+  // safe in production because main.cpp std::_Exits and the OS reaps
   // the thread + its SQLite handle on process exit. They're NOT safe in
   // tests, which run thousands of MainWindow ctor/dtor cycles inside one
   // QApplication and would accumulate leaked threads. Surface a debug-only
