@@ -218,6 +218,7 @@ inline constexpr auto kViewType = "viewType";
 inline constexpr auto kVignetteEnabled = "vignetteEnabled";
 inline constexpr auto kVignetteIntensity = "vignetteIntensity";
 inline constexpr auto kWallpaperParallax = "wallpaperParallax";
+inline constexpr auto kWatchFilesystem = "watchFilesystem";
 inline constexpr auto kWrapNavigation = "wrapNavigation";
 
 } // namespace kartend::settings::keys

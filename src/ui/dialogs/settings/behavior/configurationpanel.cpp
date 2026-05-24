@@ -50,6 +50,7 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
   connect(ui->expandModeCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
+  connect(ui->watchFilesystemCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->screenscraperSystemComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { emit changed(); });
   // A hand-pick freezes the type/extension → system autodetect so a
@@ -205,6 +206,7 @@ void ConfigurationPanel::load() {
   SettingsFormBinding::loadInto(ui->expandModeCheckBox, config.expandMode);
   SettingsFormBinding::loadInto(ui->showAllSubcollectionItemsCheckBox,
                                 config.showAllSubcollectionItems);
+  SettingsFormBinding::loadInto(ui->watchFilesystemCheckBox, config.watchFilesystem);
   m_screenscraperSystems =
       populateSystemsCombo(ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
                            config.scraperOverrides.screenscraperSystemId);
@@ -252,6 +254,7 @@ void ConfigurationPanel::clear() {
   ui->fileExtensionsLineEdit->clear();
   ui->expandModeCheckBox->setChecked(false);
   ui->showAllSubcollectionItemsCheckBox->setChecked(false);
+  ui->watchFilesystemCheckBox->setChecked(false);
   {
     QSignalBlocker blocker(ui->screenscraperSystemComboBox);
     ui->screenscraperSystemComboBox->clear();
@@ -279,6 +282,7 @@ void ConfigurationPanel::save() const {
   config.extensions = ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
   config.expandMode = ui->expandModeCheckBox->isChecked();
   config.showAllSubcollectionItems = ui->showAllSubcollectionItemsCheckBox->isChecked();
+  config.watchFilesystem = ui->watchFilesystemCheckBox->isChecked();
   // Combo carries the systemeid as item data (Auto-detect → -1).
   // currentData().toInt() returns 0 for an empty combo, so guard with
   // the index check — clear() leaves the combo empty until load() runs.
@@ -306,6 +310,7 @@ bool ConfigurationPanel::hasChanges() const {
   if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;
   if (ui->showAllSubcollectionItemsCheckBox->isChecked() != o.showAllSubcollectionItems)
     return true;
+  if (ui->watchFilesystemCheckBox->isChecked() != o.watchFilesystem) return true;
   // Compare against the parsed form so cosmetic comma-spacing tweaks don't
   // register as dirty.
   const QStringList parsed =

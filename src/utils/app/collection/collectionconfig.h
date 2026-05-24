@@ -142,6 +142,13 @@ struct CollectionConfig {
   // launches it. Selection change resets the expanded state.
   bool expandMode = false;
 
+  /// When true, Kartend installs a QFileSystemWatcher on this collection's
+  /// mediaDirectory tree at startup and re-runs forceRescanCollection
+  /// (debounced) whenever a watched file/directory change fires. Disabled by
+  /// default so the existing pull-based refresh behavior is preserved unless
+  /// the user opts in per collection.
+  bool watchFilesystem = false;
+
   /// Virtual-folder browsing cluster — the persisted "treat subfolders as
   /// virtual navigable folders" toggles plus the runtime currentSubfolder
   /// cursor. Access as `cfg.folderBrowsing.includeContentSubfolders` /
@@ -220,9 +227,10 @@ struct CollectionConfig {
            horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
            viewType == other.viewType && background == other.background &&
            archive == other.archive && expandMode == other.expandMode &&
-           folderBrowsing == other.folderBrowsing && listView == other.listView &&
-           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
-           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
+           watchFilesystem == other.watchFilesystem && folderBrowsing == other.folderBrowsing &&
+           listView == other.listView && customFontFamily == other.customFontFamily &&
+           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
+           isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

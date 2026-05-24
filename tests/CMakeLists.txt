@@ -198,6 +198,28 @@ target_link_libraries(test_searchqueryparser
 )
 add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
 
+# CollectionFilesystemWatcher tests (Kartend-kr1g). Pure-helper subdir
+# enumeration plus the configure() reconcile path. Uses QTemporaryDir for
+# scratch trees so no production paths are touched.
+add_executable(test_collectionfilesystemwatcher
+  utils/test_collectionfilesystemwatcher.cpp
+  ${SRC_DIR}/modules/data/watcher/collectionfilesystemwatcher.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_collectionfilesystemwatcher PRIVATE
+  ${SRC_DIR}/modules/data/watcher
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/app/collection
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_collectionfilesystemwatcher
+  Qt6::Core
+  Qt6::Test
+  Qt6::Widgets
+)
+add_test(NAME CollectionFilesystemWatcher COMMAND test_collectionfilesystemwatcher)
+
 # ThemePreset tests (Kartend-y3rg). JSON round-trip + file I/O + apply.
 add_executable(test_themepreset
   utils/test_themepreset.cpp

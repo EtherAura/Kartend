@@ -27,6 +27,7 @@
 #include "cachemanager.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
+#include "collectionfilesystemwatcher.h"
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
 #include "collectionutils.h"
@@ -193,6 +194,7 @@ void MainWindow::setupUI() {
   setupSidebar();
   setupManagerConnections();
   setupArtworkManager();
+  refreshCollectionFilesystemWatcher();
   setupLastSelectedIndices();
   setupEventFilters();
   // apply persisted toolbar visibility/text overrides to the
@@ -460,6 +462,10 @@ void MainWindow::createMenuBar() {
       context.databaseManager = m_appManager->getDatabaseManager();
       context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
       m_appManager->getSettingsManager()->openSettingsDialog(context);
+      // Settings may have flipped watchFilesystem on/off or changed a
+      // mediaDirectory; reconcile the watch set so the next file event
+      // lands on the right collection.
+      refreshCollectionFilesystemWatcher();
     }
   };
   ctx.onShowAbout = [this]() { showAbout(); };
@@ -1277,6 +1283,23 @@ void MainWindow::managePresentationProfilesInteractive() {
 void MainWindow::showScraperProvidersInteractive() {
   ScraperProvidersDialog dialog(&m_generalSettings, this);
   dialog.exec();
+}
+
+void MainWindow::refreshCollectionFilesystemWatcher() {
+  if (!m_collectionWatcher) {
+    m_collectionWatcher = std::make_unique<CollectionFilesystemWatcher>(this);
+    m_collectionWatcher->setRescanCallback([this](int collectionIndex) {
+      // Defer onto the next event-loop spin so a burst of filesystem
+      // events that the debounce has already coalesced doesn't reenter
+      // forceRescanCollection during the watcher's own slot dispatch.
+      QTimer::singleShot(0, this, [this, collectionIndex]() {
+        if (auto *nav = m_appManager ? m_appManager->getNavigationManager() : nullptr) {
+          nav->forceRescanCollection(collectionIndex);
+        }
+      });
+    });
+  }
+  m_collectionWatcher->configure(m_collections);
 }
 
 void MainWindow::setupArtworkManager() {

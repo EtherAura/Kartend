@@ -28,6 +28,7 @@ class ToolbarController;
 class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
+class CollectionFilesystemWatcher;
 class InteractionManager;
 class IDatabaseManager;
 class NavigationManager;
@@ -293,6 +294,10 @@ private:
   ToolbarController *m_toolbarController = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
+  /// Per-collection filesystem watcher driving incremental rescans. Owned by
+  /// the MainWindow because its rescan callback closes over NavigationManager
+  /// (reached via m_appManager). Null until setupFilesystemWatcher() runs.
+  std::unique_ptr<CollectionFilesystemWatcher> m_collectionWatcher;
   DetailsPane *m_MetadataSidebar = nullptr;
 
   // Kartend-hzef step 3: ScraperService ownership + the dialog cache moved
@@ -367,6 +372,11 @@ private:
   void setViewType(ViewType viewType);
   void setupSidebar();
   void setupArtworkManager();
+  /// Build / refresh the CollectionFilesystemWatcher's watch set from the
+  /// current m_collections. Safe to call repeatedly — used on startup and
+  /// after the Settings dialog saves collection changes so the watch set
+  /// tracks newly-enabled (or freshly-pointed-at) collections.
+  void refreshCollectionFilesystemWatcher();
   void setupLastSelectedIndices();
   void setupEventFilters();
   void setupInitialTimers();
