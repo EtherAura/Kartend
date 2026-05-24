@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+### Removed
+
+### Deprecated
+
+## [0.0.9] - 2026-05-24
+
+### Added
+
 - **Personal metadata editor.** Right-click → **Edit metadata…** opens
   a unified per-item editor for notes (multi-line free text), tags
   (comma-separated, trimmed and case-insensitively deduplicated on
@@ -222,6 +236,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value types live on the new `src/api/idetailpageoverlay.h` neutral
   interface. The `manualRequested` → `QDesktopServices::openUrl` wiring
   moved to MainWindow alongside the overlay's other UI-layer connects
+- `actions/github-script` pinned at v9 in `nightly-tsan.yml` (was v8).
+  Our script uses only the injected `github`/`context` clients, so the
+  v9 ESM-only and `getOctokit`-redeclaration breaking changes don't
+  apply (PR #5).
+- `actions/upload-artifact` pinned at v7 in `nightly-tsan.yml` (was
+  v4). Default zip behaviour unchanged; v7 only adds an opt-in
+  `archive: false` for unzipped single-file uploads, which we don't
+  use (PR #6).
+- `test_collectionfilesystemwatcher.cpp` moved from `tests/utils/` to
+  `tests/modules/watcher/` so the `src/modules/data/watcher/` feature
+  has the per-feature test folder `check-test-mapping.py` requires
+  (Kartend-l6aq).
 
 ### Fixed
 
@@ -255,6 +281,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replaced by a monotonic generation counter — `cancelAll` is now an
   atomic increment with no race window, and new dispatches read the
   current generation at dispatch time
+- Two unused `this` captures dropped from lambdas in
+  `mainwindow_setup.cpp` (the `visualIndexForPathLoaded` slot and the
+  artwork-wizard `onPick`). The maintenance build under clang with
+  `-Werror -Wunused-lambda-capture` was failing on both — no behaviour
+  change, the lambda bodies don't reference `this` (Kartend-y84d).
 
 ### Removed
 
