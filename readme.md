@@ -53,7 +53,28 @@ https://github.com/user-attachments/assets/e31ba6f6-f523-4fe5-a647-2af05299e389
 
 The full feature tour lives in the [user guide](https://github.com/EtherAura/Kartend/wiki).
 
-## Quick start
+## Install
+
+Every [release](https://github.com/EtherAura/Kartend/releases/latest)
+ships a binary `.deb` plus the canonical Arch and Gentoo recipes:
+
+| Distro | Asset | Install |
+|--------|-------|---------|
+| Debian / Ubuntu | `kartend_<version>_amd64.deb` | `sudo apt install ./kartend_<version>_amd64.deb` |
+| Arch Linux | `PKGBUILD` | Drop in a clean dir, `makepkg -si` |
+| Gentoo | `kartend-<version>.ebuild` | Place under your local overlay's category dir; `emerge kartend` |
+
+The `.deb` is built on Ubuntu 24.04 with the same flags this project's
+[`packaging/PKGBUILD`](packaging/PKGBUILD) uses; runtime deps are
+resolved against the stock Qt6 stack in Debian Trixie and
+Ubuntu 24.04+. Older distros — or anyone who wants PGO, sanitizers,
+or a `9999` Gentoo live build — should build from source via the
+[quick start](#quick-start-from-source) below.
+
+The release page also carries the source tarball
+(`Kartend-<version>.tar.gz`) and a `.sha256` for each asset.
+
+## Quick start (from source)
 
 ```bash
 # Debian / Ubuntu
@@ -66,9 +87,10 @@ cd Kartend
 .scripts/build.sh --install      # build + install (auto-elevates)
 ```
 
-The build script auto-detects Ninja, lld, and ccache, and keeps each
-flavor in its own tree (`build/ninja-release`, `build/ninja-debug`, …).
-Run `.scripts/build.sh --help` for the full flag list, or see
+The [`.scripts/build.sh`](.scripts/build.sh) wrapper auto-detects
+Ninja, lld, and ccache, and keeps each flavor in its own tree
+(`build/ninja-release`, `build/ninja-debug`, …). Run
+`.scripts/build.sh --help` for the full flag list, or see
 [docs/building.md](docs/building.md) for PGO, sanitizers, custom
 toolchains, manual CMake, packaging, and uninstall.
 
