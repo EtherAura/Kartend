@@ -46,6 +46,17 @@ QString ItemWidget::s_listRowColor;
 QString ItemWidget::s_listAltRowColor;
 bool ItemWidget::s_showTitleInPlaceholder = false;
 
+// Per-item state-flag registry (Kartend-elte). Keyed by absolute filePath
+// because that's what every ItemWidget carries; MainWindow populates the
+// hash from IDatabaseManager::loadItemStateFlagsForCollection on every
+// collection switch. Function-local static lets the sibling TU
+// (itemwidgetpaint.cpp) reach the same storage via stateFlagsRegistry()
+// without the linker drama of an anonymous-namespace global.
+QHash<QString, ItemWidget::StateFlags> &itemWidgetStateFlagsRegistry() {
+  static QHash<QString, ItemWidget::StateFlags> table;
+  return table;
+}
+
 void ItemWidget::setTitleTintSaturation(int saturation) {
   s_titleTintSaturation = qBound(0, saturation, 255);
 }
@@ -84,6 +95,26 @@ void ItemWidget::setListAltRowColor(const QString &hexColor) {
 
 void ItemWidget::setShowTitleInPlaceholder(bool enabled) {
   s_showTitleInPlaceholder = enabled;
+}
+
+void ItemWidget::setStateFlagsRegistry(const QHash<QString, StateFlags> &flags) {
+  itemWidgetStateFlagsRegistry() = flags;
+  // Repaint every visible ItemWidget so a collection-switch / settings-save
+  // refresh surfaces the new flags immediately. findChildren would scope
+  // to a single parent; we walk the global widget list because the items
+  // page rebuilds widgets out of a pool and they can land under different
+  // parents over time.
+  const auto topLevels = QApplication::topLevelWidgets();
+  for (QWidget *top : topLevels) {
+    const auto items = top->findChildren<ItemWidget *>();
+    for (ItemWidget *w : items) {
+      if (w->isVisible()) w->update();
+    }
+  }
+}
+
+void ItemWidget::clearStateFlagsRegistry() {
+  setStateFlagsRegistry({});
 }
 
 ItemWidget::ItemWidget(QWidget *parent)

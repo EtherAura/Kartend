@@ -144,6 +144,24 @@ public:
     return {};
   }
 
+  /// Returns the per-item boolean state flags (Kartend-elte / Kartend-t4n0)
+  /// for every row in the collection that has at least one flag set. Empty
+  /// (collectionUuid → []) by default so headless mocks don't need to
+  /// override; production DatabaseManager fulfills via direct SQL. Used by
+  /// the items grid to render pinned/hidden/continue-later badges without
+  /// a per-tile DB roundtrip — MainWindow calls this once on collection
+  /// switch and pushes the resulting hash through ItemWidget's static
+  /// registry.
+  struct ItemStateFlags {
+    bool isPinned = false;
+    bool isHidden = false;
+    bool continueLater = false;
+  };
+  [[nodiscard]] virtual QHash<QString, ItemStateFlags>
+  loadItemStateFlagsForCollection(const QString & /*collectionUuid*/) const {
+    return {};
+  }
+
   /// Delete `items` / `collections` rows that belong to no collection
   /// in `liveCollections` — purges orphans left by past renames /
   /// removals so whole-library counts match the live collections.

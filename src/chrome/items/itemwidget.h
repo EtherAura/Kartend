@@ -117,6 +117,26 @@ public:
   // placeholder pixmap. Toggle is read at render time, so a setting flip
   // followed by a viewport refresh updates every visible tile.
   static void setShowTitleInPlaceholder(bool enabled);
+
+  // ─── Per-item state-flag registry (Kartend-elte) ──────────────────────
+  // The grid renders pinned/hidden/continue-later glyph badges over each
+  // tile's top-right corner. MainWindow populates the registry once per
+  // collection switch with the result of
+  // IDatabaseManager::loadItemStateFlagsForCollection; the paint path
+  // consults it via the item's filePath. Keeping the lookup table static
+  // avoids threading a context pointer through every widget pool slot.
+  struct StateFlags {
+    bool pinned = false;
+    bool hidden = false;
+    bool continueLater = false;
+    [[nodiscard]] bool any() const { return pinned || hidden || continueLater; }
+  };
+  /// Replace the registry contents. Repaints every visible ItemWidget so
+  /// the new flags appear without waiting for the next scroll event.
+  static void setStateFlagsRegistry(const QHash<QString, StateFlags> &flags);
+  /// Convenience for unit-tests / hot-update flows: clears the registry
+  /// so the next paint shows no badges.
+  static void clearStateFlagsRegistry();
   static int s_titleTintSaturation;
   static int s_titleTintLightness;
   static QString s_titleBaseColor;
@@ -131,6 +151,12 @@ public:
   void mousePressEvent(QMouseEvent *event) override;
 
   void onArtworkChanged();
+
+  /// Paint the pinned/hidden/continue-later badges in @p painter's
+  /// coordinate space. Called from paintEvent after the artwork + title
+  /// are drawn so the glyphs sit on top. Public for unit-test access; the
+  /// grid path uses paintEvent.
+  void paintStateBadges(QPainter &painter);
 
 signals:
   // Only subcollectionDoubleClicked is used - EventManager intercepts all other

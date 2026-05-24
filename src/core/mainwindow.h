@@ -341,6 +341,11 @@ private:
   /// edits that may have added or removed type tags. Delegates to the
   /// ToolbarController.
   void refreshFilterToolbar();
+  /// Pull the per-item state flags for the current collection from
+  /// IDatabaseManager and publish them into ItemWidget's static registry
+  /// so the grid badges paint without a per-tile DB hop. Connected to
+  /// DatabaseManager::itemsLoaded (Kartend-elte).
+  void refreshItemStateFlagsRegistry();
 
   // Wiring slot handlers — each method below is the named target of one
   // signal/slot connection in mainwindow_wiring.cpp. Extracted from inline

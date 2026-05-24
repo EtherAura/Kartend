@@ -159,6 +159,7 @@
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "navigationmanager.h"
+#include "pathutils.h"
 #include "scrapercontroller.h"
 #include "scrolleventscontroller.h"
 #include "scrollmanager.h"
@@ -264,6 +265,12 @@ void MainWindow::connectDatabaseManager() {
   // DatabaseManager → NavigationManager
   QObject::connect(db, &DatabaseManager::itemsLoaded, nav, &NavigationManager::onItemsLoaded,
                    Qt::UniqueConnection);
+  // Kartend-elte: refresh the per-item state-flag registry whenever a
+  // collection's items reload so the badges paint without a per-tile DB
+  // hop. Slot body lives in refreshItemStateFlagsRegistry() so this TU
+  // stays lambda-free per the file-header convention.
+  QObject::connect(db, &DatabaseManager::itemsLoaded, this,
+                   &MainWindow::refreshItemStateFlagsRegistry, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::itemCountLoadedWithToken, nav,
                    &NavigationManager::onItemCountLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, nav,
@@ -478,6 +485,32 @@ void MainWindow::refreshFilterToolbar() {
   if (m_toolbarController) {
     m_toolbarController->refreshFilterToolbar();
   }
+}
+
+void MainWindow::refreshItemStateFlagsRegistry() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    ItemWidget::clearStateFlagsRegistry();
+    return;
+  }
+  const CollectionConfig &cfg = m_collections.at(currentCollectionIndex);
+  const QString expanded = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expanded);
+  IDatabaseManager *db = m_appManager ? m_appManager->getDatabaseManager() : nullptr;
+  if (uuid.isEmpty() || !db) {
+    ItemWidget::clearStateFlagsRegistry();
+    return;
+  }
+  const auto raw = db->loadItemStateFlagsForCollection(uuid);
+  QHash<QString, ItemWidget::StateFlags> registry;
+  registry.reserve(raw.size());
+  for (auto it = raw.constBegin(); it != raw.constEnd(); ++it) {
+    ItemWidget::StateFlags f;
+    f.pinned = it->isPinned;
+    f.hidden = it->isHidden;
+    f.continueLater = it->continueLater;
+    registry.insert(it.key(), f);
+  }
+  ItemWidget::setStateFlagsRegistry(registry);
 }
 
 void MainWindow::connectFilterToolbar() {
