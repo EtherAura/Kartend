@@ -202,7 +202,7 @@ add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
 # enumeration plus the configure() reconcile path. Uses QTemporaryDir for
 # scratch trees so no production paths are touched.
 add_executable(test_collectionfilesystemwatcher
-  utils/test_collectionfilesystemwatcher.cpp
+  modules/watcher/test_collectionfilesystemwatcher.cpp
   ${SRC_DIR}/modules/data/watcher/collectionfilesystemwatcher.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
