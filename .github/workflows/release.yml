@@ -297,14 +297,26 @@ jobs:
           "zip=$zipName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
           "sha=$shaName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
 
+      - name: Install NSIS
+        # NSIS is NOT preinstalled on windows-latest (despite what some
+        # docs suggest) — the v0.0.10 release tried to use it and failed
+        # with "C:\Program Files (x86)\NSIS\makensis.exe is not
+        # recognized". Chocolatey is preinstalled on the runner, so the
+        # nsis package is the cheapest path; ~1 min to install. The
+        # `refreshenv`-equivalent isn't needed because the next step
+        # invokes makensis via its absolute path.
+        run: choco install nsis -y --no-progress --no-color
+
       - name: Build NSIS installer (.exe) + sha256
         # Per-machine installer ($PROGRAMFILES64\Kartend, HKLM, UAC) with
-        # a Start Menu shortcut. NSIS is preinstalled on windows-latest at
-        # C:\Program Files (x86)\NSIS\. The .nsi.in template lives in
-        # packaging/; this step substitutes @VERSION@/@STAGE_DIR@/@ICON_PATH@
-        # and runs makensis. Paths stay Windows-native (backslashes); no
-        # special characters in the substituted values trigger PowerShell's
-        # -replace regex behaviour (`$` backreferences, etc.).
+        # a Start Menu shortcut. makensis comes from the chocolatey
+        # nsis package installed in the step above; it lands at the
+        # standard C:\Program Files (x86)\NSIS\makensis.exe path. The
+        # .nsi.in template lives in packaging/; this step substitutes
+        # @VERSION@/@STAGE_DIR@/@ICON_PATH@ and runs makensis. Paths
+        # stay Windows-native (backslashes); no special characters in
+        # the substituted values trigger PowerShell's -replace regex
+        # behaviour (`$` backreferences, etc.).
         id: installer
         run: |
           $version   = "${{ needs.release.outputs.version }}"
