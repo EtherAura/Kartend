@@ -553,6 +553,24 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -E "^(VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork)$"
 
+      - name: Dump per-test logs on failure
+        # ctest --output-on-failure swallows QTest's stderr-side detail
+        # on Windows when the test process aborts before flushing — the
+        # Testing/Temporary/LastTest.log file has the real per-test
+        # output. Print it only when ctest failed so green runs stay
+        # quiet.
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $logPath = "build\Testing\Temporary\LastTest.log"
+          if (Test-Path $logPath) {
+            Write-Host "::group::LastTest.log (full per-test output)"
+            Get-Content $logPath
+            Write-Host "::endgroup::"
+          } else {
+            Write-Host "::warning::$logPath not found"
+          }
+
       - name: Stage with windeployqt + bundled runtime DLLs
         # windeployqt walks the exe's import table and copies Qt DLLs
         # and the platforms/sqldrivers/imageformats/multimedia/... plugin
