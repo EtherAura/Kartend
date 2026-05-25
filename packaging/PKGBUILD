@@ -34,7 +34,7 @@ source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/Karten
 # page asset (releases/download/vX.Y.Z/Kartend-X.Y.Z.tar.gz) published by
 # .github/workflows/release.yml, at which point sha256sums can be filled in
 # from the deterministic `git archive` output (see workflow's post-publish step).
-sha256sums=('6a062c5217da67cb649eb0de0e393f378a90c4419a8e59ae006697939d237485')
+sha256sums=('5ab2d331360995e93db1e185d8489ef9ef2b1b02ca49581aab5ccdabb477e534')
 
 build() {
   cmake -S "Kartend-${pkgver}" -B build -G Ninja \
