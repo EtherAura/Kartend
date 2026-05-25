@@ -1,9 +1,14 @@
 name: Winget Submission
 
-# Submits a winget-pkgs PR to microsoft/winget-pkgs whenever a stable
-# release is published. Fires after release.yml has finished
-# attaching the .exe installer + .zip portable assets and tagged the
-# GitHub Release as `released` (not pre-release).
+# Submits a winget-pkgs PR to microsoft/winget-pkgs whenever the
+# Release workflow finishes successfully for a tag push. Originally
+# wired on `on: release: types: [released]`, but v0.0.10 confirmed
+# that GitHub's anti-recursion guard prevents the release.yml's
+# softprops/action-gh-release call (which uses the default
+# GITHUB_TOKEN) from firing downstream release-event-driven
+# workflows. Switched to `on: workflow_run` so this workflow chains
+# off the Release workflow's completion event instead, which is not
+# blocked.
 #
 # The first time this fires for the EtherAura.Kartend package id, the
 # action runs `wingetcreate new` against the upstream
@@ -26,8 +31,9 @@ name: Winget Submission
 # the secret is configured without breaking the release pipeline.
 
 on:
-  release:
-    types: [released]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
 
 permissions:
   contents: read
@@ -35,6 +41,14 @@ permissions:
 jobs:
   publish-winget:
     runs-on: windows-latest
+    # Two gates: Release must have actually succeeded, and the
+    # triggering run must have been on a tag (head_branch is the
+    # tag name for tag-pushed runs, e.g. "v0.0.10"). main-branch
+    # pushes also re-run Release in some configurations; the tag
+    # filter avoids submitting a manifest off a non-release run.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Check WINGET_PAT secret presence
@@ -69,8 +83,15 @@ jobs:
         # .zip stays available on the release page for users who want
         # it; a separate EtherAura.Kartend.Portable manifest could
         # cover that case if/when downstream asks.
+        #
+        # release-tag is required because we're triggered by
+        # workflow_run rather than the release event — the action
+        # can't auto-detect the tag from the event context. Source
+        # it from workflow_run.head_branch, which carries the tag
+        # name for tag-pushed runs.
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: EtherAura.Kartend
           installers-regex: '-windows-x64-setup\.exe$'
+          release-tag: ${{ github.event.workflow_run.head_branch }}
           token: ${{ secrets.WINGET_PAT }}
