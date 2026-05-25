@@ -17,6 +17,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    # Expose the parsed tag version as a job output so the windows-release
+    # job (below) can name its artifacts consistently without re-deriving
+    # GITHUB_REF.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -201,3 +206,107 @@ jobs:
           git add packaging/PKGBUILD
           git commit -m "chore(packaging): update PKGBUILD sha256 for v${{ steps.version.outputs.version }}"
           git push origin "$DEFAULT_BRANCH"
+
+  # ─── Windows portable .zip ──────────────────────────────────────────
+  # Mirrors build.yml's windows-build-test job: Qt 6.7 LTS via
+  # install-qt-action, MSVC via msvc-dev-cmd, SDL2 + zstd via vcpkg
+  # manifest mode, Ninja generator, KARTEND_PORTABLE_RELEASE=ON. Stages
+  # via windeployqt + co-located vcpkg DLLs, zips, and attaches to the
+  # release softprops/action-gh-release already created in the linux
+  # job — the action upserts files on an existing release at this tag
+  # rather than re-creating it.
+  #
+  # Qt6Keychain is intentionally absent (vcpkg port collides with the
+  # install-qt-action Qt6); scraper creds fall back to plaintext-INI —
+  # same caveat documented in build.yml. Tracked under Kartend-ixuy.10.
+  windows-release:
+    needs: release
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Qt 6.7 LTS
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          modules: 'qtmultimedia qtimageformats'
+          cache: true
+
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache vcpkg downloads and binary artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            C:\vcpkg\downloads
+            ${{ github.workspace }}\vcpkg-cache
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      - name: Configure CMake (MSVC + Ninja + vcpkg)
+        # KARTEND_BUILD_TESTS=OFF — the release job doesn't gate on tests
+        # (build.yml's windows-build-test already gated this commit). Drops
+        # roughly 7 min off this job vs. the test-running build.yml cell.
+        env:
+          VCPKG_BINARY_SOURCES: 'clear;files,${{ github.workspace }}\vcpkg-cache,readwrite'
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DKARTEND_BUILD_TESTS=OFF `
+            -DKARTEND_ENABLE_CCACHE=OFF `
+            -DKARTEND_MAINTENANCE=OFF `
+            -DKARTEND_PORTABLE_RELEASE=ON `
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Stage with windeployqt + bundled runtime DLLs
+        run: |
+          mkdir dist\kartend
+          Copy-Item build\kartend.exe dist\kartend\
+          Copy-Item LICENSE dist\kartend\
+          Copy-Item readme.md dist\kartend\
+          windeployqt --release --no-translations dist\kartend\kartend.exe
+          $vcpkgBin = "${{ github.workspace }}\build\vcpkg_installed\x64-windows\bin"
+          if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
+          if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
+
+      - name: Package release .zip + sha256
+        # Naming convention matches the source tarball capitalization
+        # (Kartend-X.Y.Z-*.zip), not the .deb's lowercase. Get-FileHash's
+        # default output format is one line "Algorithm Hash Path"; reformat
+        # to "<hash>  <path>" for parity with the existing sha256 sidecars
+        # the linux job produces via `sha256sum`.
+        id: package
+        run: |
+          $version  = "${{ needs.release.outputs.version }}"
+          $zipName  = "Kartend-$version-windows-x64.zip"
+          $shaName  = "$zipName.sha256"
+          Compress-Archive -Path dist\kartend\* -DestinationPath $zipName
+          $hash = (Get-FileHash -Algorithm SHA256 $zipName).Hash.ToLower()
+          "$hash  $zipName" | Out-File -Encoding ASCII -NoNewline $shaName
+          "zip=$zipName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
+          "sha=$shaName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
+
+      - name: Attach Windows assets to the release
+        # softprops/action-gh-release@v3 upserts files on an existing
+        # release at the tag this workflow fired for — the linux job
+        # above has already created the release with tarball + .deb +
+        # PKGBUILD + ebuild; this call adds the .zip + .sha256 alongside.
+        # fail_on_unmatched_files keeps a packaging bug from silently
+        # publishing a release without the Windows asset.
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.sha }}
+          fail_on_unmatched_files: true
