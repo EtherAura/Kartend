@@ -102,6 +102,44 @@ endif()
 # runtime degrades gracefully rather than refusing to start.
 find_package(Qt6Keychain QUIET)
 
+# MSVC fallback: install-qt-action doesn't ship Qt6Keychain and the
+# vcpkg port's transitive Qt6 dep collides with install-qt-action's Qt
+# (a single CMake project can't reconcile two Qt6 trees). FetchContent
+# builds upstream qtkeychain 0.15.x against the already-discovered Qt6
+# instead — small build cost (~30s on Windows CI), no extra runtime
+# deps (the Windows backend uses Win32 Credential Manager APIs from
+# advapi32 directly), and the resulting target aliases cleanly to the
+# Qt6Keychain::Qt6Keychain name the src/CMakeLists conditional expects.
+# Gated to MSVC (not generic WIN32) because qtkeychain's CMakeLists
+# adds MSVC-syntax `/utf-8` unconditionally — MinGW chokes on it.
+# MinGW Windows builds can still pick qtkeychain up via find_package
+# if the host installs a mingw qtkeychain package.
+if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
+  include(FetchContent)
+  FetchContent_Declare(qtkeychain
+    GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
+    # Upstream switched off the v-prefix between v0.14.0 and 0.15.0.
+    # 0.15.0 (ad7344c) is recent enough to have current Qt6 fixes and
+    # old enough to be well-shaken-down by downstreams.
+    GIT_TAG 0.15.0
+    GIT_SHALLOW TRUE
+  )
+  # Upstream toggles. BUILD_WITH_QT6 picks the Qt6 build path; the rest
+  # trim payload (we don't ship qtkeychain's tests, translations, or
+  # public installs — it's purely a static-ish dep linked into kartend).
+  set(BUILD_WITH_QT6     ON  CACHE BOOL "" FORCE)
+  set(BUILD_TESTING      OFF CACHE BOOL "" FORCE)
+  set(BUILD_TRANSLATIONS OFF CACHE BOOL "" FORCE)
+  set(QTKEYCHAIN_STATIC  ON  CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(qtkeychain)
+  # Upstream exports the build target as `qt6keychain` (lowercase).
+  # Bridge to the namespaced alias the rest of the codebase queries
+  # for via TARGET Qt6Keychain::Qt6Keychain.
+  if (TARGET qt6keychain AND NOT TARGET Qt6Keychain::Qt6Keychain)
+    add_library(Qt6Keychain::Qt6Keychain ALIAS qt6keychain)
+  endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

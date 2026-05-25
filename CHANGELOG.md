@@ -33,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Start Menu shortcut. The installer is built by `release.yml`'s
   `windows-release` job and attached to the same GitHub release as
   `Kartend-<version>-windows-x64-setup.exe` + `.sha256` sidecar.
+- **Windows Credential Manager backing for scraper credentials.**
+  CMakeLists bootstraps QtKeychain 0.15.x via `FetchContent` on MSVC
+  builds (the vcpkg port collides with install-qt-action's Qt6, and
+  install-qt-action doesn't ship QtKeychain itself). Scraper API keys
+  and passwords now live in the Windows Credential Manager instead of
+  the plaintext `Scrapers` group in `%APPDATA%\kartend\kartend.cfg`,
+  matching the behaviour Linux gets when `qtkeychain-qt6-dev` is
+  installed. The legacy plaintext-INI fallback still runs on hosts
+  where the secret service can't be reached.
 
 ### Changed
 
