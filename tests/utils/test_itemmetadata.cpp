@@ -550,7 +550,16 @@ void TestItemMetadata::findManualMatchesExtensionsCaseInsensitively() {
   QVERIFY(f.open(QIODevice::WriteOnly));
   f.close();
 
-  QCOMPARE(ItemMetadataStore::findManualForBaseName("Game", dir.path()), upperPath);
+  // On Windows's case-insensitive filesystem the matcher's lowercase
+  // probe finds "Game.PDF" but returns the lowercase candidate string;
+  // Qt's canonicalFilePath doesn't normalise case on Windows (only
+  // resolves symlinks/dots), so compare via case-insensitive match plus
+  // a file-exists guard.
+  const QString found = ItemMetadataStore::findManualForBaseName("Game", dir.path());
+  QVERIFY2(QFile::exists(found), qPrintable(QString("result does not exist: %1").arg(found)));
+  QVERIFY2(
+      QString::compare(found, upperPath, Qt::CaseInsensitive) == 0,
+      qPrintable(QString("found %1 != upperPath %2 (case-insensitive)").arg(found, upperPath)));
   // Different basename -> no match (we don't substring-match).
   QVERIFY(ItemMetadataStore::findManualForBaseName("Other", dir.path()).isEmpty());
 }

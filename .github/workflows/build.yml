@@ -540,16 +540,14 @@ jobs:
       - name: Run tests
         # QT_QPA_PLATFORM=offscreen mirrors every Linux ctest invocation —
         # the runner has no display server. Output-on-failure so red tests
-        # are debuggable from the workflow log without rerunning.
-        #
-        # Remaining tests excluded pending per-test Windows investigation
-        # — LaunchManager and KartReader were the first two cleared up
-        # (extension-based exec detection in the fixture, and flush()
-        # instead of close() on the temp-file helper). The exclude list
-        # shrinks as each remaining one comes back green.
+        # are debuggable from the workflow log without rerunning. The
+        # ctest -E exclude regex went from 7 entries down to 0 in three
+        # passes; the remaining symlink-shaped tests carry QSKIP-on-
+        # Q_OS_WIN gates in-source rather than ctest-level exclusion so
+        # the gate stays close to the reason.
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure -E "^(VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork)$"
+        run: ctest --test-dir build --output-on-failure
 
       - name: Re-run failed test binaries directly on failure
         # ctest's per-test stdout/stderr capture is empty for every test

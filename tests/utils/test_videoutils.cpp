@@ -66,7 +66,17 @@ void TestVideoUtils::findVideoForFile_findsUppercaseExtension() {
   f.close();
 
   const QString result = VideoUtils::findVideoForFile("game.smc", tmp.path());
-  QCOMPARE(result, QFileInfo(tmp.filePath("game.MP4")).absoluteFilePath());
+  // On Linux's case-sensitive filesystem the matcher's uppercase probe
+  // finds "game.MP4"; on Windows's case-insensitive filesystem the
+  // lowercase probe finds the same file and the returned string carries
+  // lowercase casing. Qt's canonicalFilePath doesn't normalise case on
+  // Windows (only resolves symlinks/dots), so compare via case-
+  // insensitive string match plus a file-exists guard.
+  const QString expected = QFileInfo(tmp.filePath("game.MP4")).absoluteFilePath();
+  QVERIFY2(QFile::exists(result), qPrintable(QString("result does not exist: %1").arg(result)));
+  QVERIFY2(
+      QString::compare(result, expected, Qt::CaseInsensitive) == 0,
+      qPrintable(QString("result %1 != expected %2 (case-insensitive)").arg(result, expected)));
 }
 
 void TestVideoUtils::findVideoForFile_prefersFirstExtensionInList() {
