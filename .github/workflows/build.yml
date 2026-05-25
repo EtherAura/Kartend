@@ -553,22 +553,39 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -E "^(VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork)$"
 
-      - name: Dump per-test logs on failure
-        # ctest --output-on-failure swallows QTest's stderr-side detail
-        # on Windows when the test process aborts before flushing — the
-        # Testing/Temporary/LastTest.log file has the real per-test
-        # output. Print it only when ctest failed so green runs stay
-        # quiet.
+      - name: Re-run failed test binaries directly on failure
+        # ctest's per-test stdout/stderr capture is empty for every test
+        # on Windows (`Output: <end of output>` in LastTest.log, even
+        # for passing ones) — the pipe between ctest and the QTest
+        # binary isn't getting the data at all. Running the test exes
+        # directly under PowerShell with 2>&1 routing lets QTest's TAP
+        # output flow through to the workflow log so we can root-cause
+        # rather than guess at the failure mode.
         if: ${{ failure() }}
         shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
-          $logPath = "build\Testing\Temporary\LastTest.log"
-          if (Test-Path $logPath) {
-            Write-Host "::group::LastTest.log (full per-test output)"
-            Get-Content $logPath
+          $failed = "build\Testing\Temporary\LastTestsFailed.log"
+          if (-not (Test-Path $failed)) {
+            Write-Host "::warning::$failed not found, can't determine failed tests"
+            exit 0
+          }
+          # LastTestsFailed.log format: one entry per line, `<index>:<TestName>`
+          Get-Content $failed | ForEach-Object {
+            $name = ($_ -split ":")[1]
+            # Glob: most tests live at build/tests/test_<name>.exe but
+            # naming isn't 100% predictable (e.g. test_kartreader.exe
+            # for KartReader). Match case-insensitively on the suffix.
+            $candidate = Get-ChildItem build\tests -Filter "test_*.exe" |
+                         Where-Object { $_.BaseName -replace '^test_', '' -ieq $name }
+            $exe = if ($candidate) { $candidate[0].FullName } else { $null }
+            Write-Host "::group::$name $(if ($exe) { "→ $exe" } else { "(no matching exe)" })"
+            if ($exe) {
+              & $exe -v2 2>&1 | Out-Host
+              Write-Host "exit: $LASTEXITCODE"
+            }
             Write-Host "::endgroup::"
-          } else {
-            Write-Host "::warning::$logPath not found"
           }
 
       - name: Stage with windeployqt + bundled runtime DLLs
