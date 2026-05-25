@@ -1,0 +1,76 @@
+name: Winget Submission
+
+# Submits a winget-pkgs PR to microsoft/winget-pkgs whenever a stable
+# release is published. Fires after release.yml has finished
+# attaching the .exe installer + .zip portable assets and tagged the
+# GitHub Release as `released` (not pre-release).
+#
+# The first time this fires for the EtherAura.Kartend package id, the
+# action runs `wingetcreate new` against the upstream
+# microsoft/winget-pkgs repo via the user's fork; subsequent releases
+# use `wingetcreate update`. Either way the resulting PR appears under
+# the winget-pkgs main repo and Microsoft's bot reviews it.
+#
+# Setup (one-time, on the user side):
+#
+#   1. Fork microsoft/winget-pkgs to your GitHub account.
+#   2. Create a fine-grained PAT scoped to that fork with:
+#        - Contents: Read and write
+#        - Pull requests: Read and write
+#        - Workflows: Read and write
+#      (legacy classic PAT with `public_repo` also works).
+#   3. Add the PAT as a repository secret named `WINGET_PAT`.
+#
+# Until WINGET_PAT is set, this workflow is a no-op — the gating step
+# emits a warning and exits 0. So the workflow can land in main before
+# the secret is configured without breaking the release pipeline.
+
+on:
+  release:
+    types: [released]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-winget:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check WINGET_PAT secret presence
+        # GitHub Actions can't reference `secrets.X` inside `if:` for
+        # security reasons; check via env var instead and emit a
+        # status output downstream steps can gate on. Lets the
+        # workflow file land in main before the user wires up the
+        # PAT without making the release flow fail.
+        id: check
+        shell: bash
+        env:
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+        run: |
+          if [ -z "$WINGET_PAT" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WINGET_PAT secret not configured; skipping winget submission. See .github/workflows/winget.yml header for setup steps."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Submit to winget-pkgs
+        if: steps.check.outputs.configured == 'true'
+        # vedantmgoyal9/winget-releaser handles tag-to-version
+        # detection, regex-based installer URL extraction from the
+        # release assets, fork sync against microsoft/winget-pkgs,
+        # and PR submission. Less brittle than hand-rolling
+        # wingetcreate + git ops here. The action's `installers-regex`
+        # picks our setup.exe (NSIS installer) but not the .zip — winget
+        # prefers a single InstallerType per manifest, and `nullsoft`
+        # (NSIS) gets the Start Menu shortcut + Apps & Features
+        # registration users expect from `winget install`. The portable
+        # .zip stays available on the release page for users who want
+        # it; a separate EtherAura.Kartend.Portable manifest could
+        # cover that case if/when downstream asks.
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: EtherAura.Kartend
+          installers-regex: '-windows-x64-setup\.exe$'
+          token: ${{ secrets.WINGET_PAT }}
