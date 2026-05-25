@@ -542,13 +542,70 @@ jobs:
         # the runner has no display server. Output-on-failure so red tests
         # are debuggable from the workflow log without rerunning.
         #
-        # 7 tests are excluded pending Windows-specific investigation —
-        # see Kartend-ixuy.11. The other 92 must stay green so this CI
-        # cell still gates the bulk of the test surface; the excluded
-        # list is intentionally small and tracked.
+        # Remaining tests excluded pending per-test Windows investigation
+        # — LaunchManager and KartReader were the first two cleared up
+        # (extension-based exec detection in the fixture, and flush()
+        # instead of close() on the temp-file helper). The exclude list
+        # shrinks as each remaining one comes back green.
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure -E "^(LaunchManager|VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork|KartReader)$"
+        run: ctest --test-dir build --output-on-failure -E "^(VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork)$"
+
+      - name: Re-run failed test binaries directly on failure
+        # ctest's per-test stdout/stderr capture is empty for every test
+        # on Windows (`Output: <end of output>` in LastTest.log, even
+        # for passing ones) — the pipe between ctest and the QTest
+        # binary isn't getting the data at all. Running the test exes
+        # directly under PowerShell with 2>&1 routing lets QTest's TAP
+        # output flow through to the workflow log so we can root-cause
+        # rather than guess at the failure mode.
+        if: ${{ failure() }}
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $failed = "build\Testing\Temporary\LastTestsFailed.log"
+          if (-not (Test-Path $failed)) {
+            Write-Host "::warning::$failed not found, can't determine failed tests"
+            exit 0
+          }
+          # LastTestsFailed.log format: one entry per line, `<index>:<TestName>`
+          Get-Content $failed | ForEach-Object {
+            $name = ($_ -split ":")[1]
+            # Glob: most tests live at build/tests/test_<name>.exe but
+            # naming isn't 100% predictable (e.g. test_kartreader.exe
+            # for KartReader). Match case-insensitively on the suffix.
+            $candidate = Get-ChildItem build\tests -Filter "test_*.exe" |
+                         Where-Object { $_.BaseName -replace '^test_', '' -ieq $name }
+            $exe = if ($candidate) { $candidate[0].FullName } else { $null }
+            Write-Host "::group::$name $(if ($exe) { "→ $exe" } else { "(no matching exe)" })"
+            if ($exe) {
+              # QTest's stdout/stderr never reaches us on this runner
+              # — `& $exe 2>&1 | Out-Host` AND
+              # `Start-Process -RedirectStandardOutput` both produce
+              # empty output even though the process exits with the
+              # QTest per-method-failure-count code (1, 2, ...). The
+              # bytes are clearly being written somewhere but neither
+              # PowerShell's pipeline nor the OS-level
+              # CreateProcess(...lpReserved2=stdin/out/err handles)
+              # redirect picks them up. QTest's `-o file,format`
+              # writes its full per-test verdicts and assertion text
+              # to a file directly via fopen/fprintf, bypassing the
+              # stdout pipe entirely.
+              $outTxt = "$env:RUNNER_TEMP\$($name)-qtest.txt"
+              $p = Start-Process -FilePath $exe `
+                                 -ArgumentList @("-v2","-o","$outTxt,txt") `
+                                 -NoNewWindow -Wait -PassThru
+              Write-Host "--- QTest -o txt ---"
+              if (Test-Path $outTxt) {
+                Get-Content $outTxt
+              } else {
+                Write-Host "(no $outTxt produced — process exited before QTest could write)"
+              }
+              Write-Host "exit: $($p.ExitCode)"
+            }
+            Write-Host "::endgroup::"
+          }
 
       - name: Stage with windeployqt + bundled runtime DLLs
         # windeployqt walks the exe's import table and copies Qt DLLs
