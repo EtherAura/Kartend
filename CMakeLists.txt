@@ -136,6 +136,26 @@ if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
   # Bridge to the namespaced alias the rest of the codebase queries
   # for via TARGET Qt6Keychain::Qt6Keychain.
   if (TARGET qt6keychain AND NOT TARGET Qt6Keychain::Qt6Keychain)
+    # Header layout shim: the installed Linux qtkeychain-qt6-dev package
+    # puts keychain.h under <prefix>/include/qt6keychain/, so the
+    # codebase #include is <qt6keychain/keychain.h>. Upstream's source
+    # tree has the file at qtkeychain/keychain.h — FetchContent doesn't
+    # run the install step, so the qt6keychain/ namespace dir doesn't
+    # exist anywhere in the include search path. Stage the header into
+    # a generated qt6keychain/ subdir of the build tree and push that
+    # location onto qt6keychain's INTERFACE_INCLUDE_DIRECTORIES so
+    # every consumer that links against the alias picks the right
+    # search path up automatically.
+    set(_qkc_shim_dir "${CMAKE_CURRENT_BINARY_DIR}/qtkeychain-include-shim")
+    file(MAKE_DIRECTORY "${_qkc_shim_dir}/qt6keychain")
+    configure_file(
+      "${qtkeychain_SOURCE_DIR}/qtkeychain/keychain.h"
+      "${_qkc_shim_dir}/qt6keychain/keychain.h"
+      COPYONLY
+    )
+    target_include_directories(qt6keychain INTERFACE "${_qkc_shim_dir}")
+    unset(_qkc_shim_dir)
+
     add_library(Qt6Keychain::Qt6Keychain ALIAS qt6keychain)
   endif()
 endif()
