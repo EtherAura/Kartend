@@ -297,16 +297,51 @@ jobs:
           "zip=$zipName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
           "sha=$shaName"   | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
 
+      - name: Build NSIS installer (.exe) + sha256
+        # Per-machine installer ($PROGRAMFILES64\Kartend, HKLM, UAC) with
+        # a Start Menu shortcut. NSIS is preinstalled on windows-latest at
+        # C:\Program Files (x86)\NSIS\. The .nsi.in template lives in
+        # packaging/; this step substitutes @VERSION@/@STAGE_DIR@/@ICON_PATH@
+        # and runs makensis. Paths stay Windows-native (backslashes); no
+        # special characters in the substituted values trigger PowerShell's
+        # -replace regex behaviour (`$` backreferences, etc.).
+        id: installer
+        run: |
+          $version   = "${{ needs.release.outputs.version }}"
+          $stageDir  = "${{ github.workspace }}\dist\kartend"
+          $iconPath  = "${{ github.workspace }}\src\assets\icon.ico"
+          $nsiIn     = "packaging\kartend-installer.nsi.in"
+          $nsiOut    = "kartend-installer.nsi"
+          (Get-Content $nsiIn -Raw) `
+            -replace '@KARTEND_VERSION@',   $version `
+            -replace '@KARTEND_STAGE_DIR@', $stageDir `
+            -replace '@KARTEND_ICON_PATH@', $iconPath `
+            | Set-Content -Encoding UTF8 $nsiOut
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          & $makensis /V2 $nsiOut
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit $LASTEXITCODE" }
+
+          $exeName = "Kartend-$version-windows-x64-setup.exe"
+          if (-not (Test-Path $exeName)) { throw "Expected $exeName but it wasn't produced" }
+          $exeSha  = "$exeName.sha256"
+          $hash    = (Get-FileHash -Algorithm SHA256 $exeName).Hash.ToLower()
+          "$hash  $exeName" | Out-File -Encoding ASCII -NoNewline $exeSha
+          "exe=$exeName" | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
+          "sha=$exeSha"  | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
+
       - name: Attach Windows assets to the release
         # softprops/action-gh-release@v3 upserts files on an existing
         # release at the tag this workflow fired for — the linux job
         # above has already created the release with tarball + .deb +
-        # PKGBUILD + ebuild; this call adds the .zip + .sha256 alongside.
-        # fail_on_unmatched_files keeps a packaging bug from silently
-        # publishing a release without the Windows asset.
+        # PKGBUILD + ebuild; this call adds the .zip / .exe installer /
+        # sha256 sidecars alongside. fail_on_unmatched_files keeps a
+        # packaging bug from silently publishing a release without the
+        # Windows assets.
         uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ steps.package.outputs.zip }}
             ${{ steps.package.outputs.sha }}
+            ${{ steps.installer.outputs.exe }}
+            ${{ steps.installer.outputs.sha }}
           fail_on_unmatched_files: true

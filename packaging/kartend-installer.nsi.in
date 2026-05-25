@@ -1,0 +1,126 @@
+; Kartend Windows installer — NSIS script template.
+;
+; Substituted at release time by .github/workflows/release.yml (sed):
+;   @KARTEND_VERSION@        — semver, e.g. 0.0.10
+;   @KARTEND_STAGE_DIR@      — absolute path to the windeployqt-bundled
+;                              dist tree (kartend.exe + Qt DLLs + plugins
+;                              + bundled vcpkg DLLs). Windows-native
+;                              backslash path; NSIS handles either style
+;                              but matching what PowerShell hands us
+;                              keeps the workflow substitution simple.
+;   @KARTEND_ICON_PATH@      — path to src/assets/icon.ico used by the
+;                              installer/uninstaller wizard. Kept as a
+;                              separate var so the icon doesn't get
+;                              installed into $INSTDIR (it's already
+;                              embedded in kartend.exe via the .rc).
+;
+; Scope: per-machine ($PROGRAMFILES64\Kartend). Requires UAC elevation.
+; HKLM registry, visible to all users in Apps & Features.
+;
+; Files installed:
+;   $INSTDIR\kartend.exe + everything else from @KARTEND_STAGE_DIR@
+;     (the same tree the portable .zip ships)
+;   $SMPROGRAMS\Kartend\Kartend.lnk
+;   $SMPROGRAMS\Kartend\Uninstall.lnk
+;
+; Uninstaller removes every file and the Start Menu folder. The
+; per-user $APPDATA\kartend\ config dir is intentionally left
+; untouched so a reinstall keeps the user's preferences.
+
+Unicode true
+SetCompressor /SOLID lzma
+
+!include "MUI2.nsh"
+!include "x64.nsh"
+
+; ---- Product metadata -----------------------------------------------
+!define PRODUCT_NAME       "Kartend"
+!define PRODUCT_VERSION    "@KARTEND_VERSION@"
+!define PRODUCT_PUBLISHER  "EtherAura"
+!define PRODUCT_WEB_SITE   "https://github.com/EtherAura/Kartend"
+!define PRODUCT_DIR_REGKEY "Software\${PRODUCT_PUBLISHER}\${PRODUCT_NAME}"
+!define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
+
+Name             "${PRODUCT_NAME} ${PRODUCT_VERSION}"
+OutFile          "Kartend-${PRODUCT_VERSION}-windows-x64-setup.exe"
+InstallDir       "$PROGRAMFILES64\${PRODUCT_NAME}"
+InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" "InstallDir"
+RequestExecutionLevel admin   ; HKLM writes require elevation
+ShowInstDetails   show
+ShowUnInstDetails show
+BrandingText "${PRODUCT_NAME} ${PRODUCT_VERSION}"
+
+; VERSIONINFO baked into the installer .exe itself so Properties → Details
+; on the setup.exe shows the right version.
+VIProductVersion "${PRODUCT_VERSION}.0"
+VIAddVersionKey "ProductName"      "${PRODUCT_NAME}"
+VIAddVersionKey "ProductVersion"   "${PRODUCT_VERSION}"
+VIAddVersionKey "FileVersion"      "${PRODUCT_VERSION}.0"
+VIAddVersionKey "FileDescription"  "${PRODUCT_NAME} installer"
+VIAddVersionKey "CompanyName"      "${PRODUCT_PUBLISHER}"
+VIAddVersionKey "LegalCopyright"   "Copyright (C) ${PRODUCT_PUBLISHER}"
+VIAddVersionKey "OriginalFilename" "Kartend-${PRODUCT_VERSION}-windows-x64-setup.exe"
+
+; ---- Modern UI 2 pages ----------------------------------------------
+!define MUI_ABORTWARNING
+!define MUI_ICON   "@KARTEND_ICON_PATH@"
+!define MUI_UNICON "@KARTEND_ICON_PATH@"
+
+!insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "@KARTEND_STAGE_DIR@/LICENSE"
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
+
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_UNPAGE_FINISH
+
+!insertmacro MUI_LANGUAGE "English"
+
+; ---- Install section ------------------------------------------------
+Section "MainSection" SEC01
+  SetOutPath "$INSTDIR"
+  SetOverwrite ifnewer
+
+  ; /r recurses into Qt plugin subfolders (platforms\, sqldrivers\,
+  ; imageformats\, ...) that windeployqt creates next to kartend.exe.
+  File /r "@KARTEND_STAGE_DIR@\*.*"
+
+  ; Start Menu folder + shortcut to the exe + uninstaller link.
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortcut  "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" \
+                  "$INSTDIR\kartend.exe" "" "$INSTDIR\kartend.exe" 0
+  CreateShortcut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" \
+                  "$INSTDIR\uninstall.exe"
+
+  ; Apps & Features registration.
+  WriteUninstaller "$INSTDIR\uninstall.exe"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "InstallDir"      "$INSTDIR"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "Version"         "${PRODUCT_VERSION}"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayName"     "${PRODUCT_NAME}"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayVersion"  "${PRODUCT_VERSION}"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayIcon"     "$INSTDIR\kartend.exe"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "Publisher"       "${PRODUCT_PUBLISHER}"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "URLInfoAbout"    "${PRODUCT_WEB_SITE}"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninstall.exe"
+  WriteRegDWORD HKLM "${PRODUCT_UNINST_KEY}" "NoModify" 1
+  WriteRegDWORD HKLM "${PRODUCT_UNINST_KEY}" "NoRepair" 1
+SectionEnd
+
+; ---- Uninstall section ----------------------------------------------
+Section "Uninstall"
+  ; /r matches the install-side /r recursive copy. Uninstalls everything
+  ; the installer wrote under $INSTDIR; deliberately does NOT touch the
+  ; per-user config at $APPDATA\kartend\ so a reinstall keeps the user's
+  ; settings.
+  RMDir /r "$INSTDIR"
+
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
+  RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
+
+  DeleteRegKey HKLM "${PRODUCT_DIR_REGKEY}"
+  DeleteRegKey HKLM "${PRODUCT_UNINST_KEY}"
+SectionEnd
