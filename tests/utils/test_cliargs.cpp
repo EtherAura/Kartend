@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QStringList>
 #include <QTest>
 
@@ -58,16 +59,16 @@ void TestCliArgs::unknownOption_doesNotAbort() {
   // parse() (vs process()) is non-fatal on unknown options. Verify the helper
   // tolerates them without crashing — main.cpp uses process() to surface the
   // standard error to users on the real CLI.
-  const auto opts = CliArgs::parseStartupArguments(
-      {QStringLiteral("kartend"), QStringLiteral("--bogus"), QStringLiteral("--collection"),
-       QStringLiteral("DOS")});
+  const auto opts =
+      CliArgs::parseStartupArguments({QStringLiteral("kartend"), QStringLiteral("--bogus"),
+                                      QStringLiteral("--collection"), QStringLiteral("DOS")});
   QCOMPARE(opts.collectionOverride, QStringLiteral("DOS"));
 }
 
 void TestCliArgs::emptyValue_returnsEmptyOverride() {
   // --collection= with empty value should not override the persisted setting.
-  const auto opts = CliArgs::parseStartupArguments(
-      {QStringLiteral("kartend"), QStringLiteral("--collection=")});
+  const auto opts =
+      CliArgs::parseStartupArguments({QStringLiteral("kartend"), QStringLiteral("--collection=")});
   QVERIFY(opts.collectionOverride.isEmpty());
 }
 
@@ -90,17 +91,21 @@ void TestCliArgs::importKart_expandsTilde() {
   QVERIFY(!opts.pathValidationError.isError());
   QVERIFY(!opts.importKartPath.startsWith('~'));
   QVERIFY(!opts.importDestDir.startsWith('~'));
-  QVERIFY(opts.importKartPath.startsWith('/'));
-  QVERIFY(opts.importDestDir.startsWith('/'));
+  // QFileInfo::isAbsolute is platform-aware: '/' on POSIX, drive-letter
+  // ('C:/...') on Windows. The earlier '/' prefix check only worked on
+  // POSIX because tilde expanded to /home/user/...; on Windows it
+  // expands to C:\Users\user\... .
+  QVERIFY(QFileInfo(opts.importKartPath).isAbsolute());
+  QVERIFY(QFileInfo(opts.importDestDir).isAbsolute());
 }
 
 void TestCliArgs::importKart_rejectsShellMetachars() {
   // ; | ` $ < > are rejected by validatePathSecurity — these are the
   // primary command-injection vectors. The raw value is preserved in the
   // struct so the caller can include it in the error message.
-  const auto opts = CliArgs::parseStartupArguments({QStringLiteral("kartend"),
-                                                    QStringLiteral("--import-kart"),
-                                                    QStringLiteral("/tmp/x.kart; rm -rf /")});
+  const auto opts =
+      CliArgs::parseStartupArguments({QStringLiteral("kartend"), QStringLiteral("--import-kart"),
+                                      QStringLiteral("/tmp/x.kart; rm -rf /")});
   QVERIFY(opts.pathValidationError.isError());
   QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
 }
@@ -144,8 +149,7 @@ void TestCliArgs::onConflict_overwriteRecognized() {
 void TestCliArgs::onConflict_mergeRecognized() {
   const auto opts = CliArgs::parseStartupArguments(
       {QStringLiteral("kartend"), QStringLiteral("--on-conflict=merge")});
-  QCOMPARE(static_cast<int>(opts.onConflict),
-           static_cast<int>(CliArgs::KartConflictPolicy::Merge));
+  QCOMPARE(static_cast<int>(opts.onConflict), static_cast<int>(CliArgs::KartConflictPolicy::Merge));
 }
 
 void TestCliArgs::onConflict_unknownDefaultsToSkip() {

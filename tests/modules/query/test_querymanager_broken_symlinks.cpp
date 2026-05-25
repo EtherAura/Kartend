@@ -65,6 +65,18 @@ static auto openInspectorDb(const QString &dbFilePath) -> QSqlDatabase {
 }
 
 void TestQueryManagerBrokenSymlinks::brokenSymlinkSurvivesScan() {
+#ifdef Q_OS_WIN
+  // QFile::link() on Windows creates a real NTFS reparse-point symbolic
+  // link, but QFileInfo::isSymLink() doesn't consistently classify every
+  // reparse-point class across Qt versions on Windows. The runtime
+  // scanner (QueryManager) sees broken paths through QDir / QDirIterator
+  // and handles them the same way regardless of POSIX-vs-NTFS link
+  // mechanics, so this btrfs-mount-not-ready regression is genuinely
+  // POSIX-shaped. QSKIP rather than try to recreate the broken-link
+  // shape via NTFS reparse points.
+  QSKIP(
+      "QFileInfo::isSymLink semantics on NTFS reparse points are inconsistent across Qt versions");
+#else
   QTemporaryDir mediaDir;
   QVERIFY2(mediaDir.isValid(), "Failed to create temporary media directory");
 
@@ -173,6 +185,7 @@ void TestQueryManagerBrokenSymlinks::brokenSymlinkSurvivesScan() {
   for (const QString &absPath : persistedAbsPaths) {
     QVERIFY2(QDir::isAbsolutePath(absPath), qPrintable("items.path must be absolute: " + absPath));
   }
+#endif
 }
 
 QTEST_MAIN(TestQueryManagerBrokenSymlinks)

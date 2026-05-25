@@ -99,8 +99,7 @@ void TestItemArtwork::isStandardTypeRecognisesCanonicalIds() {
 
 void TestItemArtwork::displayNameMatchesStandardTypes() {
   QCOMPARE(ItemArtworkStore::standardTypeDisplayName("box"), QStringLiteral("Box"));
-  QCOMPARE(ItemArtworkStore::standardTypeDisplayName("screenshot"),
-           QStringLiteral("Screenshot"));
+  QCOMPARE(ItemArtworkStore::standardTypeDisplayName("screenshot"), QStringLiteral("Screenshot"));
   QCOMPARE(ItemArtworkStore::standardTypeDisplayName("title"), QStringLiteral("Title Screen"));
   QCOMPARE(ItemArtworkStore::standardTypeDisplayName("marquee"), QStringLiteral("Marquee"));
   QCOMPARE(ItemArtworkStore::standardTypeDisplayName("fanart"), QStringLiteral("Fan Art"));
@@ -209,8 +208,8 @@ void TestItemArtwork::loadAllForItemReturnsAllRowsInInsertionOrder() {
   // Insert in non-canonical order; loadAllForItem orders by id (insertion),
   // not by the standardTypes() priority. Callers that want display order
   // should re-sort themselves so the storage stays index-friendly.
-  for (const QString &type : {QStringLiteral("logo"), QStringLiteral("box"),
-                              QStringLiteral("screenshot")}) {
+  for (const QString &type :
+       {QStringLiteral("logo"), QStringLiteral("box"), QStringLiteral("screenshot")}) {
     ItemArtwork a;
     a.collectionUuid = "uuid-1";
     a.path = "/p";
@@ -263,8 +262,8 @@ void TestItemArtwork::removeAllForItemDeletesEverythingForItem() {
   const QString conn = "ia_remove_all";
   auto db = openMemoryDb(conn);
 
-  for (const QString &type : {QStringLiteral("box"), QStringLiteral("screenshot"),
-                              QStringLiteral("logo")}) {
+  for (const QString &type :
+       {QStringLiteral("box"), QStringLiteral("screenshot"), QStringLiteral("logo")}) {
     ItemArtwork a;
     a.collectionUuid = "uuid-1";
     a.path = "/p";
@@ -348,7 +347,15 @@ void TestItemArtwork::findStandardArtworkMatchesCaseInsensitiveExtensions() {
   // probe in findStandardArtwork.
   const QString upper = dir.filePath("screenshot/Sonic.PNG");
   QVERIFY(touchFile(upper));
-  QCOMPARE(ItemArtworkStore::findStandardArtwork("Sonic", dir.path(), "screenshot"), upper);
+  // On Windows's case-insensitive filesystem the matcher's lowercase
+  // probe finds "Sonic.PNG" but returns the lowercase candidate string;
+  // Qt's canonicalFilePath doesn't normalise case on Windows (only
+  // resolves symlinks/dots), so compare via case-insensitive match plus
+  // a file-exists guard.
+  const QString found = ItemArtworkStore::findStandardArtwork("Sonic", dir.path(), "screenshot");
+  QVERIFY2(QFile::exists(found), qPrintable(QString("result does not exist: %1").arg(found)));
+  QVERIFY2(QString::compare(found, upper, Qt::CaseInsensitive) == 0,
+           qPrintable(QString("found %1 != upper %2 (case-insensitive)").arg(found, upper)));
 }
 
 void TestItemArtwork::resolveArtworkPathPrefersValidOverride() {
@@ -374,8 +381,7 @@ void TestItemArtwork::resolveArtworkPathFallsBackForStandardTypes() {
   QVERIFY(touchFile(autoPath));
 
   // No override -> auto-discovery in {artDir}/{type}/ kicks in for standards.
-  QCOMPARE(ItemArtworkStore::resolveArtworkPath(QString(), "Sonic", dir.path(), "box"),
-           autoPath);
+  QCOMPARE(ItemArtworkStore::resolveArtworkPath(QString(), "Sonic", dir.path(), "box"), autoPath);
   // Whitespace-only override is treated as unset (matches the manual-link
   // resolver's behaviour).
   QCOMPARE(ItemArtworkStore::resolveArtworkPath("   ", "Sonic", dir.path(), "box"), autoPath);
@@ -410,9 +416,8 @@ void TestItemArtwork::resolveArtworkPathCustomTypeOnlyHonoursOverride() {
   // With a valid override the file resolves normally.
   const QString overridePath = dir.filePath("concept_art/Custom.png");
   QVERIFY(touchFile(overridePath));
-  QCOMPARE(
-      ItemArtworkStore::resolveArtworkPath(overridePath, "Sonic", dir.path(), "concept_art"),
-      overridePath);
+  QCOMPARE(ItemArtworkStore::resolveArtworkPath(overridePath, "Sonic", dir.path(), "concept_art"),
+           overridePath);
 }
 
 QTEST_MAIN(TestItemArtwork)
