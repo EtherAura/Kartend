@@ -467,15 +467,13 @@ jobs:
   # Full Windows MSVC build + test job. Pulls Qt 6.7 LTS via
   # install-qt-action (its official binaries are faster than vcpkg can
   # build Qt from source) and SDL2 + zstd via vcpkg manifest mode
-  # (vcpkg.json at repo root). Builds kartend.exe + tests, runs ctest
-  # offscreen, stages with windeployqt + co-locates the vcpkg-built
-  # runtime DLLs, then uploads a downloadable preview .zip artifact.
-  #
-  # Qt6Keychain is intentionally not in vcpkg.json — its port collides
-  # with install-qt-action's Qt6, and the scraper credential layer
-  # gracefully falls back to plaintext-INI storage when QtKeychain
-  # isn't found (same behaviour as a Linux build without
-  # qtkeychain-qt6-dev). Tracked as a follow-up.
+  # (vcpkg.json at repo root). Qt6Keychain comes in via FetchContent
+  # in CMakeLists rather than vcpkg — its vcpkg port collides with
+  # install-qt-action's Qt6, so the project builds it itself against
+  # the already-discovered Qt6 instead. Builds kartend.exe + tests,
+  # runs ctest offscreen, stages with windeployqt + co-locates the
+  # vcpkg-built runtime DLLs, then uploads a downloadable preview
+  # .zip artifact.
   windows-build-test:
     runs-on: windows-latest
 

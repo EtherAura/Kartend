@@ -25,11 +25,17 @@ both are reproducible locally:
 - **Visual Studio 2022 Build Tools** with the `Desktop development with C++` workload (provides MSVC, the Windows SDK, and Ninja).
 - **vcpkg** in manifest mode — point at the [`vcpkg.json`](../vcpkg.json) at the repo root via `CMAKE_TOOLCHAIN_FILE`; SDL2 and zstd auto-install on the first cmake configure.
 
-Qt6Keychain is not currently wired up on Windows (vcpkg's port collides
-with `install-qt-action`'s Qt6 — see the open follow-up). The scraper
-credential layer falls back to plaintext-INI in `%APPDATA%/kartend` when
-it can't find QtKeychain, same as a Linux build without
-`qtkeychain-qt6-dev` installed.
+Qt6Keychain is wired up on MSVC builds via `FetchContent` against
+upstream `frankosterfeld/qtkeychain` 0.15.x — install-qt-action
+doesn't ship it and vcpkg's port pulls in a second Qt6 that collides
+with the install-qt-action one, so the project builds it itself
+against the already-discovered Qt6 instead. Scraper credentials end
+up in the Windows Credential Manager via QtKeychain's
+`WriteCredentialW` backend (matching the Linux behaviour with
+`qtkeychain-qt6-dev` installed). MinGW Windows builds still take the
+plaintext-INI fallback because qtkeychain's CMakeLists adds the
+MSVC-only `/utf-8` flag unconditionally; the fallback path is the
+same one Linux uses without `qtkeychain-qt6-dev` installed.
 
 `.scripts/build.sh` is bash-only; Windows contributors invoke
 `cmake` directly per [Manual Build](#manual-build) below. The
