@@ -12,6 +12,32 @@ emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld \
   dev-qt/qtbase:6 dev-qt/qtmultimedia:6 dev-qt/qttools:6 dev-util/ccache
 ```
 
+### Windows (MSVC)
+
+Native Windows builds use **MSVC 2019 or 2022 + Qt 6.7 LTS + Ninja**.
+The CI job pulls Qt through `install-qt-action` and the optional
+native deps (SDL2 gamepad backend, zstd compression) through vcpkg —
+both are reproducible locally:
+
+- **Qt 6.7 LTS** — install via the official Qt online installer
+  (component `Qt 6.7.x` → `MSVC 2019 64-bit`), or via [`aqtinstall`](https://github.com/miurahr/aqtinstall):
+  `pip install aqtinstall && aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 --modules qtmultimedia qtimageformats`.
+- **Visual Studio 2022 Build Tools** with the `Desktop development with C++` workload (provides MSVC, the Windows SDK, and Ninja).
+- **vcpkg** in manifest mode — point at the [`vcpkg.json`](../vcpkg.json) at the repo root via `CMAKE_TOOLCHAIN_FILE`; SDL2 and zstd auto-install on the first cmake configure.
+
+Qt6Keychain is not currently wired up on Windows (vcpkg's port collides
+with `install-qt-action`'s Qt6 — see the open follow-up). The scraper
+credential layer falls back to plaintext-INI in `%APPDATA%/kartend` when
+it can't find QtKeychain, same as a Linux build without
+`qtkeychain-qt6-dev` installed.
+
+`.scripts/build.sh` is bash-only; Windows contributors invoke
+`cmake` directly per [Manual Build](#manual-build) below. The
+`.scripts/build-windows-cross.sh` helper cross-compiles to Windows from
+Linux via Docker (Fedora `mingw64-qt6`) for fast iteration without a
+Windows host — useful for spotting portability bugs early, but the
+release artifact ships from CI's MSVC build.
+
 ## Build modes
 
 The build script (`.scripts/build.sh`) is the canonical entry point for
@@ -133,6 +159,42 @@ cmake --build build/ninja-release --parallel $(nproc)
 # Run
 ./build/ninja-release/kartend
 ```
+
+### Windows (MSVC + Ninja + vcpkg)
+
+From a **Developer Command Prompt for VS 2022** (so `cl.exe` and
+`ninja.exe` are on `PATH`) with `Qt6_DIR` pointing at the
+`...\6.7.x\msvc2019_64\lib\cmake\Qt6` directory (or `QT_ROOT_DIR`
+exported by `aqtinstall`):
+
+```powershell
+# Configure — Ninja over the Visual Studio generator because msbuild
+# can race AUTOUIC vs. header compilation. The vcpkg toolchain pulls
+# SDL2 and zstd from vcpkg.json on first configure.
+cmake -S . -B build -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DKARTEND_PORTABLE_RELEASE=ON `
+  -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+# Build
+cmake --build build --parallel
+
+# Bundle Qt + plugin DLLs next to the exe so it runs anywhere
+mkdir dist; Copy-Item build\kartend.exe dist\
+windeployqt --release --no-translations dist\kartend.exe
+
+# Copy the vcpkg-built optional DLLs (windeployqt only walks Qt's)
+Copy-Item build\vcpkg_installed\x64-windows\bin\SDL2.dll dist\
+Copy-Item build\vcpkg_installed\x64-windows\bin\zstd.dll dist\
+
+# Run
+.\dist\kartend.exe
+```
+
+Add `-DKARTEND_BUILD_TESTS=ON` and `ctest --test-dir build` to run the
+test suite. A few tests need Windows-specific portability work and are
+currently excluded in CI (see the build.yml's `windows-build-test`
+job for the up-to-date exclude list).
 
 ## CMake Options
 
