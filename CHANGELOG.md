@@ -9,40 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Windows build support (foundation).** CMakeLists gained an MSVC
-  compiler code path (hardening via `/sdl /guard:cf`, LTO via
-  `/GL /LTCG`, link cleanup via `/OPT:REF /OPT:ICF`, warnings via
-  `/W4 /permissive-`) and MinGW cross-builds now link cleanly — the
-  ELF-only hardening set (`-Wl,-z,*`, `-pie`, `-fPIE`,
-  `_FORTIFY_SOURCE`) is gated behind `NOT WIN32`. A `.rc` resource
-  embeds the Kartend app icon and a `VS_VERSION_INFO` block
-  (CompanyName, FileDescription, FileVersion, ProductName) into
-  `kartend.exe`, so Explorer and Properties → Details show the right
-  metadata. Two C++ portability fixes ride along: `std::_Exit`
-  replaces `std::quick_exit` (the C11 shim is absent from both
-  MinGW's libstdc++ and MSVC's STL), and `main` is declared
-  `extern "C"` so SDL2's main-hijacking macro yields an unmangled
-  symbol the `SDL2main` WinMain dispatcher can resolve. A temporary
-  `windows-preview-build` CI job uploads a downloadable Windows
-  preview .zip on every Build and Test run while the full Windows
-  release flow lands.
-- **Windows installer (.exe) on the release page.** Tag pushes now
-  produce a Nullsoft (NSIS) installer alongside the portable .zip:
-  per-machine install under `%ProgramFiles%\Kartend`, registered with
-  Apps & Features (so users can uninstall the normal way), with a
-  Start Menu shortcut. The installer is built by `release.yml`'s
-  `windows-release` job and attached to the same GitHub release as
-  `Kartend-<version>-windows-x64-setup.exe` + `.sha256` sidecar.
-- **Windows Credential Manager backing for scraper credentials.**
-  CMakeLists bootstraps QtKeychain 0.15.x via `FetchContent` on MSVC
-  builds (the vcpkg port collides with install-qt-action's Qt6, and
-  install-qt-action doesn't ship QtKeychain itself). Scraper API keys
-  and passwords now live in the Windows Credential Manager instead of
-  the plaintext `Scrapers` group in `%APPDATA%\kartend\kartend.cfg`,
-  matching the behaviour Linux gets when `qtkeychain-qt6-dev` is
-  installed. The legacy plaintext-INI fallback still runs on hosts
-  where the secret service can't be reached.
-
 ### Changed
 
 ### Fixed
@@ -52,6 +18,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Deprecated
+
+## [0.0.10] - 2026-05-25
+
+### Added
+
+- **Windows support — portable `.zip` and NSIS installer (.exe) on the
+  release page.** Tag pushes now produce
+  `Kartend-<version>-windows-x64.zip` (windeployqt-bundled portable
+  tree) **and** `Kartend-<version>-windows-x64-setup.exe` (NSIS
+  installer; per-machine `%ProgramFiles%\Kartend`, Start Menu
+  shortcut, Apps & Features-managed uninstall) alongside the existing
+  Linux `.deb` / source tarball / PKGBUILD / ebuild. Built on
+  `windows-latest` with MSVC 2022 + Qt 6.7 LTS + Ninja; SDL2 + zstd
+  bundled via vcpkg, QtKeychain via FetchContent. Unsigned for now —
+  Windows SmartScreen will warn on first launch.
+- **Windows Credential Manager backing for scraper credentials.** On
+  MSVC builds CMakeLists FetchContents QtKeychain 0.15.x and builds
+  it against the discovered Qt6. Scraper API keys and passwords land
+  in Windows Credential Manager via `WriteCredentialW` instead of the
+  plaintext `Scrapers` group in `%APPDATA%\kartend\kartend.cfg`,
+  matching Linux behaviour with `qtkeychain-qt6-dev` installed. The
+  legacy plaintext-INI fallback still runs where the secret service
+  can't be reached.
+- **Automated winget submission on stable release.** A new
+  `winget.yml` workflow runs after `release.yml` and submits the
+  `EtherAura.Kartend` manifest to `microsoft/winget-pkgs` via
+  `vedantmgoyal9/winget-releaser@v2`. Gated on the `WINGET_PAT`
+  repository secret being present (no-op warning otherwise) so it
+  ships safely before the user wires up their fork + PAT.
+- **Local Windows cross-compile tooling.**
+  `.scripts/build-windows-cross.sh` produces a runnable `kartend.exe`
+  + DLL bundle + preview .zip from a Linux host via Docker (Fedora 41
+  `mingw64-qt6` toolchain), no MSVC needed. Useful for iterating on
+  Windows-portability fixes without the CI round-trip; the release
+  artifact still ships from CI's MSVC build.
+- **CMake MSVC code path.** Hardening (`/sdl /guard:cf`), LTO
+  (`/GL /LTCG`), link cleanup (`/OPT:REF /OPT:ICF`), warnings
+  (`/W4 /permissive-`). ELF-only flags (`-Wl,-z,*`, `-pie`, `-fPIE`,
+  `_FORTIFY_SOURCE`) gated behind `NOT WIN32` so MinGW cross-builds
+  link cleanly. `kartend.exe` carries an embedded icon and
+  `VS_VERSION_INFO` block (CompanyName, FileDescription,
+  FileVersion, ProductName) via a configure-time `.rc`. C++
+  portability fixes: `std::_Exit` replaces `std::quick_exit` (the
+  C11 shim is absent from both MinGW's libstdc++ and MSVC's STL);
+  `main` is declared `extern "C"` so SDL2's main-hijacking macro
+  produces an unmangled symbol for `SDL2main`'s WinMain dispatcher.
 
 ## [0.0.9] - 2026-05-24
 
