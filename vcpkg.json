@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "$comment": "Vcpkg manifest for the Windows MSVC CI build. Linux uses pkg-config + apt; only consumed when CMAKE_TOOLCHAIN_FILE points at vcpkg.cmake (i.e. in the windows-build-test job).",
+  "name": "kartend",
+  "version-string": "0.0.9",
+  "homepage": "https://github.com/EtherAura/Kartend",
+  "description": "Optional native deps for the Windows MSVC build (SDL2 gamepad backend, zstd for kart compression). Qt6 and Qt6Keychain are NOT here: Qt6 comes from jurplel/install-qt-action which serves the official binaries faster than vcpkg can build from source, and Qt6Keychain has no vcpkg port that plays nicely with install-qt-action's Qt; the scraper credential layer falls back to plaintext-INI when QtKeychain isn't found (same as Linux without qtkeychain-qt6-dev).",
+  "dependencies": [
+    "sdl2",
+    "zstd"
+  ]
+}
