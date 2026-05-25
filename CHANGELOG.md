@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `windows-preview-build` CI job uploads a downloadable Windows
   preview .zip on every Build and Test run while the full Windows
   release flow lands.
+- **Windows installer (.exe) on the release page.** Tag pushes now
+  produce a Nullsoft (NSIS) installer alongside the portable .zip:
+  per-machine install under `%ProgramFiles%\Kartend`, registered with
+  Apps & Features (so users can uninstall the normal way), with a
+  Start Menu shortcut. The installer is built by `release.yml`'s
+  `windows-release` job and attached to the same GitHub release as
+  `Kartend-<version>-windows-x64-setup.exe` + `.sha256` sidecar.
 
 ### Changed
 
