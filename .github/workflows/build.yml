@@ -489,13 +489,12 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2019_64
-          # qttools provides moc/uic/rcc and linguist; qttranslations
-          # ships Qt's own .qm files (windeployqt needs them on disk
-          # even though we pass --no-translations). qtsvg renders the
-          # in-app vector icons; qtimageformats covers the non-default
-          # raster decoders kartend's artwork pipeline can encounter.
-          # No qttest here — Qt6Test lives in the qtbase tarball.
-          modules: 'qtmultimedia qtimageformats qtsvg qttools qttranslations'
+          # Only aqt-recognized addons go here. qttools / qtsvg /
+          # qttranslations ship inside the qtbase tarball by default
+          # — listing them as modules makes install-qt-action fail
+          # with "packages ... not found while parsing XML". qttest
+          # (Qt6::Test) also lives in qtbase.
+          modules: 'qtmultimedia qtimageformats'
           cache: true
 
       - name: Setup MSVC developer environment
