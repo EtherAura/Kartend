@@ -582,8 +582,25 @@ jobs:
             $exe = if ($candidate) { $candidate[0].FullName } else { $null }
             Write-Host "::group::$name $(if ($exe) { "→ $exe" } else { "(no matching exe)" })"
             if ($exe) {
-              & $exe -v2 2>&1 | Out-Host
-              Write-Host "exit: $LASTEXITCODE"
+              # `& $exe -v2 2>&1 | Out-Host` came up empty even though
+              # QTest exits with the per-test failure count (1, 2, ...)
+              # — PowerShell's pipeline was eating the bytes somehow.
+              # Start-Process with explicit RedirectStandardOutput /
+              # RedirectStandardError to temp files is the OS-level
+              # redirect that can't lose data. -v2 makes QTest print
+              # each test method's verdict so the per-method failure
+              # is visible.
+              $outFile = "$env:RUNNER_TEMP\$($name)-stdout.log"
+              $errFile = "$env:RUNNER_TEMP\$($name)-stderr.log"
+              $p = Start-Process -FilePath $exe -ArgumentList "-v2" `
+                                 -NoNewWindow -Wait -PassThru `
+                                 -RedirectStandardOutput $outFile `
+                                 -RedirectStandardError  $errFile
+              Write-Host "--- stdout ---"
+              if (Test-Path $outFile) { Get-Content $outFile }
+              Write-Host "--- stderr ---"
+              if (Test-Path $errFile) { Get-Content $errFile }
+              Write-Host "exit: $($p.ExitCode)"
             }
             Write-Host "::endgroup::"
           }
