@@ -86,14 +86,29 @@ private:
 };
 
 void TestLaunchManager::initTestCase() {
-  // Create a temporary executable file for testing
+  // Create a temporary executable file for testing. Windows decides
+  // executability by extension (QFileInfo::isExecutable() checks the
+  // .exe/.bat/.cmd/.com tail), not by a unix-style ExeOwner permission
+  // bit, so the test fixture has to differ per platform — a #!/bin/sh
+  // script in a no-extension file isn't recognized as runnable on
+  // NTFS, and a .bat with a shebang isn't valid batch.
+#ifdef Q_OS_WIN
+  static constexpr const char *kExecTemplate = "/test_launcher_XXXXXX.bat";
+  static constexpr const char *kExecContent = "@echo off\r\nexit /b 0\r\n";
+#else
+  static constexpr const char *kExecTemplate = "/test_launcher_XXXXXX";
+  static constexpr const char *kExecContent = "#!/bin/sh\nexit 0\n";
+#endif
   QTemporaryFile tempExec;
   tempExec.setAutoRemove(false);
-  tempExec.setFileTemplate(QDir::tempPath() + "/test_launcher_XXXXXX");
+  tempExec.setFileTemplate(QDir::tempPath() + kExecTemplate);
   if (tempExec.open()) {
-    tempExec.write("#!/bin/sh\nexit 0\n");
+    tempExec.write(kExecContent);
     tempExec.close();
     m_tempExecutable = tempExec.fileName();
+    // On Windows ExeOwner is a no-op (PE files don't have unix perm
+    // bits) — the .bat extension is what makes the file "executable"
+    // — but the call is harmless and keeps the test code uniform.
     QFile::setPermissions(m_tempExecutable, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
   }
 

@@ -68,7 +68,16 @@ QString writeTempKart(const QByteArray &bytes, QTemporaryFile &file) {
   if (file.write(bytes) != bytes.size()) {
     qFatal("writeTempKart: short write");
   }
-  file.close();
+  // flush(), not close(): the matching KartWriter test uses QTemporaryDir
+  // for an explicit reason — on Windows, closing a QTemporaryFile and
+  // then immediately re-opening it by name through a separate code path
+  // (KartReader::peekManifest opens with QFile::ReadOnly) lands the
+  // re-open against a still-pending delete or share lock that the close
+  // didn't fully release. Keeping the QFile handle alive via flush()
+  // pushes the bytes to disk while the underlying file shares cleanly
+  // with KartReader's QFile::open(ReadOnly). The QTemporaryFile object
+  // outlives the test method scope, so the file isn't reaped early.
+  file.flush();
   return file.fileName();
 }
 
@@ -131,12 +140,12 @@ void TestKartReader::testExtractToWritesFiles() {
   QByteArray a("hello world");
   QByteArray b("second file content");
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("media/a.bin", a, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None),
-                           entryBytes("artwork/b.png", b, KartFormat::Flag_Artwork,
-                                      KartFormat::Compression_None)}),
-                f);
+  writeTempKart(
+      buildKart(
+          sampleManifest(),
+          {entryBytes("media/a.bin", a, KartFormat::Flag_Media, KartFormat::Compression_None),
+           entryBytes("artwork/b.png", b, KartFormat::Flag_Artwork, KartFormat::Compression_None)}),
+      f);
   QTemporaryDir dest;
   KartReader::Extractor ex;
   auto result = ex.extractTo(f.fileName(), dest.path());
@@ -187,9 +196,8 @@ void TestKartReader::testExtractToHandlesZstdEntries() {
   }
   QByteArray data(2048, 'A');
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("media/x.bin", data, KartFormat::Flag_Media,
-                                      KartFormat::Compression_Zstd)}),
+  writeTempKart(buildKart(sampleManifest(), {entryBytes("media/x.bin", data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_Zstd)}),
                 f);
   QTemporaryDir dest;
   KartReader::Extractor ex;
@@ -203,9 +211,8 @@ void TestKartReader::testExtractToHandlesZstdEntries() {
 void TestKartReader::testExtractToHandlesZlibEntries() {
   QByteArray data(2048, 'B');
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("media/x.bin", data, KartFormat::Flag_Media,
-                                      KartFormat::Compression_Zlib)}),
+  writeTempKart(buildKart(sampleManifest(), {entryBytes("media/x.bin", data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_Zlib)}),
                 f);
   QTemporaryDir dest;
   KartReader::Extractor ex;
@@ -219,10 +226,10 @@ void TestKartReader::testExtractToHandlesZlibEntries() {
 void TestKartReader::testExtractToRefusesPathTraversal() {
   QByteArray data("x");
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("../escape.txt", data, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None)}),
-                f);
+  writeTempKart(
+      buildKart(sampleManifest(), {entryBytes("../escape.txt", data, KartFormat::Flag_Media,
+                                              KartFormat::Compression_None)}),
+      f);
   QTemporaryDir dest;
   KartReader::Extractor ex;
   auto result = ex.extractTo(f.fileName(), dest.path());
@@ -233,9 +240,8 @@ void TestKartReader::testExtractToRefusesPathTraversal() {
 void TestKartReader::testExtractToRefusesAbsolutePaths() {
   QByteArray data("x");
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("/etc/passwd", data, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None)}),
+  writeTempKart(buildKart(sampleManifest(), {entryBytes("/etc/passwd", data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None)}),
                 f);
   QTemporaryDir dest;
   KartReader::Extractor ex;
@@ -252,10 +258,10 @@ void TestKartReader::testExtractToRefusesSymlinkEscape() {
   // symlink chain via canonicalFilePath catches the escape.
   QByteArray data("x");
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("inner/escapee.bin", data, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None)}),
-                f);
+  writeTempKart(
+      buildKart(sampleManifest(), {entryBytes("inner/escapee.bin", data, KartFormat::Flag_Media,
+                                              KartFormat::Compression_None)}),
+      f);
 
   QTemporaryDir dest;
   QTemporaryDir outside;
@@ -284,11 +290,10 @@ void TestKartReader::testExtractToEmitsProgress() {
   QByteArray a(1024, 'a');
   QByteArray b(1024, 'b');
   QTemporaryFile f;
-  writeTempKart(buildKart(sampleManifest(),
-                          {entryBytes("media/a.bin", a, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None),
-                           entryBytes("media/b.bin", b, KartFormat::Flag_Media,
-                                      KartFormat::Compression_None)}),
+  writeTempKart(buildKart(sampleManifest(), {entryBytes("media/a.bin", a, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None),
+                                             entryBytes("media/b.bin", b, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None)}),
                 f);
   QTemporaryDir dest;
   KartReader::Extractor ex;

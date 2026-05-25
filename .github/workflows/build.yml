@@ -544,13 +544,14 @@ jobs:
         # the runner has no display server. Output-on-failure so red tests
         # are debuggable from the workflow log without rerunning.
         #
-        # 7 tests are excluded pending Windows-specific investigation —
-        # see Kartend-ixuy.11. The other 92 must stay green so this CI
-        # cell still gates the bulk of the test surface; the excluded
-        # list is intentionally small and tracked.
+        # Remaining tests excluded pending per-test Windows investigation
+        # — LaunchManager and KartReader were the first two cleared up
+        # (extension-based exec detection in the fixture, and flush()
+        # instead of close() on the temp-file helper). The exclude list
+        # shrinks as each remaining one comes back green.
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure -E "^(LaunchManager|VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork|KartReader)$"
+        run: ctest --test-dir build --output-on-failure -E "^(VideoUtils|QueryManagerBrokenSymlinks|CliArgs|ItemMetadata|ItemArtwork)$"
 
       - name: Stage with windeployqt + bundled runtime DLLs
         # windeployqt walks the exe's import table and copies Qt DLLs
