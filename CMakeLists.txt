@@ -153,7 +153,12 @@ if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
       "${_qkc_shim_dir}/qt6keychain/keychain.h"
       COPYONLY
     )
-    target_include_directories(qt6keychain INTERFACE "${_qkc_shim_dir}")
+    # $<BUILD_INTERFACE:...> keeps the path out of any export/install
+    # surface — qt6keychain's CMakeLists doesn't install in this
+    # FetchContent path, but the generator-expression wrap is what
+    # CMake requires for any build-tree-only include directory.
+    target_include_directories(qt6keychain INTERFACE
+      "$<BUILD_INTERFACE:${_qkc_shim_dir}>")
     unset(_qkc_shim_dir)
 
     add_library(Qt6Keychain::Qt6Keychain ALIAS qt6keychain)
