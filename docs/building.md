@@ -375,3 +375,80 @@ you when they fail in `act`:
   CPU. Mitigated permanently by `KARTEND_PORTABLE_RELEASE=ON` in CI's
   Release builds.
 
+## Windows MSVC pitfalls
+
+The Linux CI matrix and `.scripts/build-windows-cross.sh` (Fedora
+`mingw64-qt6` cross-compile) catch most portability bugs, but the
+**MSVC** build is its own animal — `act` can't reproduce
+`windows-latest` (Windows containers don't run on Linux hosts), the
+MSVC compiler isn't redistributable, and the MinGW cross-compile
+deliberately skips MSVC-only code paths. The list below collects
+every Windows-CI failure mode we've hit, with the symptom on the left
+and the fix pattern on the right.
+
+| Symptom in CI | Cause | Fix pattern |
+|---|---|---|
+| `error C1083: Cannot open include file: 'ui_*.h'` during the build step on `windows-latest` | Visual Studio generator's msbuild parallelizes header compilation before AUTOUIC has produced `ui_*.h`. | Use `-G Ninja` on Windows (matches every Linux job); ilammy/msvc-dev-cmd@v1 exports the MSVC env so `cl.exe` finds Ninja. |
+| `'/utf-8': linker input file not found` on a third-party CMake build | Upstream's CMakeLists adds the MSVC-syntax `/utf-8` flag unconditionally; MinGW's `g++` rejects it. | Gate the dep to `if (MSVC)` rather than `if (WIN32)`, OR strip `/utf-8` from the target's compile options after `FetchContent_MakeAvailable`. |
+| `Target X INTERFACE_INCLUDE_DIRECTORIES property contains path "<build>/..." which is prefixed in the build directory` at configure time | CMake refuses raw build-tree paths on exportable target interfaces. | Wrap the path: `target_include_directories(X INTERFACE "$<BUILD_INTERFACE:${path}>")`. |
+| `'std::quick_exit' is not a member of 'std'` | C11 `quick_exit` is absent from MinGW's libstdc++ AND MSVC's STL — the Windows CRT has no `quick_exit`. | `std::_Exit(0)` (also C++11) — same effect for skipping atexit / destructors. |
+| Linker can't resolve `SDL_main` on the Windows build | SDL2's `sdl2.pc` injects `-Dmain=SDL_main`, renaming `int main` at the preprocessor; the renamed function then gets C++ name mangling and `SDL2main`'s C-language `WinMain` can't find it. | Declare `extern "C" int main(...)` (no-op on POSIX since `main` already has C linkage). |
+| MinGW's `ld` rejects `-Wl,-z,now` / `-Wl,-z,relro` / `-pie` / `-fPIE` / `_FORTIFY_SOURCE` | ELF-only hardening flags don't apply to PE/COFF. | Gate the ELF set behind `NOT WIN32` inside the non-MSVC branch (in `CMakeLists.txt`). Equivalent runtime mitigations (ASLR, DEP, high-entropy VA) are MSVC linker defaults or set via `/sdl /guard:cf`. |
+| `QFileInfo::isExecutable()` returns false on a unix-perm-set fixture file | Windows decides executability by extension (`.exe`/`.bat`/`.cmd`/`.com`), not by a unix-style `ExeOwner` perm bit. | Create the test fixture with a `.bat` extension on Windows, with `@echo off\r\nexit /b 0\r\n` content; keep the POSIX shim on Linux via `#ifdef Q_OS_WIN`. |
+| Test passes on Linux, mysteriously fails on Windows in the read path after a writer-test passes | `QTemporaryFile.close()` then re-open by name through another `QFile::open(ReadOnly)` lands against a pending delete or share lock the close didn't fully release. | Use `flush()` instead of `close()` and let the temp file's destructor clean up. Or use `QTemporaryDir` + a fixed `QFile` inside it (the pattern the matching writer test uses). |
+| `NSIS error: invalid VIProductVersion format, should be X.X.X.X` | NSIS requires exactly 4 dotted integer components in `VIProductVersion`. `X.Y.Z` (3 ints) or pre-release suffixes (`X.Y.Z-rc1`) get rejected. | Always pad to 4: `VIProductVersion "${VERSION}.0"` for `0.0.10` semver; reject hyphenated pre-release tags entirely or strip the suffix before substitution. |
+| `error C1083: Cannot open include file: 'qt6keychain/keychain.h'` after a `FetchContent_MakeAvailable` of a third-party Qt addon | The installed package layout (`<prefix>/include/qt6keychain/`) differs from the upstream source tree (`<repo>/qtkeychain/`). FetchContent doesn't run the install step, so the namespaced directory never materializes. | `configure_file` the header into a generated shim directory under the build tree, then push that dir onto the target's `INTERFACE_INCLUDE_DIRECTORIES` (wrapped in `$<BUILD_INTERFACE:>`). See the qtkeychain shim in `CMakeLists.txt`. |
+| `qttools` / `qtsvg` / `qttranslations` "packages not found while parsing XML of package information" in `jurplel/install-qt-action` | These are part of the qtbase tarball, not optional addon modules. | Only list **actual** aqt addons in the `modules:` field (e.g., `qtmultimedia qtimageformats`). qtbase brings the rest. |
+
+### What our local tooling does and doesn't catch
+
+`.scripts/build-windows-cross.sh` (MinGW-w64 + Qt 6 via Fedora 41
+mingw64 packages, in Docker) catches most of the **POSIX-incompatible
+code** issues — `std::quick_exit`, ELF flag gating, the SDL2 main
+hijack, missing-DLL build failures. It runs in under 15 minutes after
+the first image build.
+
+It deliberately doesn't catch anything inside `if (MSVC)` / MSVC-only
+code paths, and the test suite isn't run under Wine because Wine
+reproduction was unreliable (KartReader's actual failure mode at
+real-MSVC ctest didn't reproduce under Wine — the test hung
+instead).
+
+The PR-side `windows-build-test` CI job on `windows-latest` is the
+canonical signal. PR-side green is necessary but **not sufficient**
+— conditional CMake (`if (MSVC AND NOT TARGET ...)`) and conditional
+sources (`#ifdef KARTEND_HAVE_X`) can take a different path on
+the post-merge main run than the PR head, so wait for the post-merge
+main run to also go green before declaring a Windows change shipped.
+
+### Higher-fidelity options (not currently in tree)
+
+- **`clang-cl` cross-compile** — Clang with the MSVC-compatible
+  driver can target the MSVC ABI without booting Windows. Catches
+  most MSVC-flag-syntax issues (`/utf-8`, `BUILD_INTERFACE` checks)
+  because `MSVC` evaluates true. **Gotcha**: needs the MSVC headers
+  and libs to link against, which Microsoft doesn't redistribute.
+  Projects that do this typically bundle their own MSVC installation
+  via [`msvc-wine`](https://github.com/mstorsjo/msvc-wine), which
+  requires a user-side install step and is fragile across Wine
+  versions. Not worth the maintenance burden for a single-developer
+  project unless MSVC iteration becomes a daily bottleneck.
+
+- **Windows VM** (QEMU/libvirt with a Windows 11 evaluation image +
+  MSVC Build Tools): highest fidelity, slowest dev loop. Setup is
+  ~1 hour once; per-iteration is "boot VM, mount source, cmake
+  configure, build, test." Genuinely the right tool for the
+  remaining ctest failures (VideoUtils, ItemMetadata, ItemArtwork,
+  CliArgs, QueryManagerBrokenSymlinks) — those fail at runtime on
+  real Windows, which neither MinGW cross-compile nor `clang-cl`
+  can simulate.
+
+- **Two-stage Windows CI**: split the existing `windows-build-test`
+  into a fast `configure` stage (~3 min, with strict CMake warnings
+  promoted to errors) and a full build+test stage. Catches CMake-side
+  issues (`BUILD_INTERFACE`, missing headers at configure time)
+  before paying for the full Qt install + compile. Probably worth
+  doing if we see another configure-time-only failure; the data so
+  far is ~50/50 configure vs compile failures, so the saving is
+  real but not huge.
+
