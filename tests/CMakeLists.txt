@@ -1523,6 +1523,7 @@ add_test(NAME OpenLibraryParser COMMAND test_openlibraryparser)
 add_executable(test_metadataproviderregistry
   modules/scraper/test_metadataproviderregistry.cpp
   ${SRC_DIR}/modules/data/scraper/core/httpclient.cpp
+  ${SRC_DIR}/modules/data/scraper/core/scrapelogging.cpp
   ${SRC_DIR}/modules/data/scraper/providers/metadataproviderregistry.cpp
   ${SRC_DIR}/modules/data/scraper/parsers/musicbrainzparser.cpp
   ${SRC_DIR}/modules/data/scraper/providers/musicbrainzprovider.cpp
@@ -1572,6 +1573,7 @@ add_test(NAME MetadataProviderRegistry COMMAND test_metadataproviderregistry)
 add_executable(test_httpclient
   modules/scraper/test_httpclient.cpp
   ${SRC_DIR}/modules/data/scraper/core/httpclient.cpp
+  ${SRC_DIR}/modules/data/scraper/core/scrapelogging.cpp
 )
 target_include_directories(test_httpclient PRIVATE
   ${SRC_DIR}/modules/data/scraper/core

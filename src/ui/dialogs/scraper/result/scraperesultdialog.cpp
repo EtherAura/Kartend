@@ -51,11 +51,6 @@
 #include <QTreeWidgetItem>
 #include <QUrlQuery>
 
-// Shares the name "kartend.scrape.timings" with httpclient.cpp's
-// category so QT_LOGGING_RULES toggles both at once. Each TU keeps
-// its own static instance (Qt's logging registry dedupes by name).
-// QtInfoMsg default so qCInfo lines emit by default.
-Q_LOGGING_CATEGORY(lcDialogTimings, "kartend.scrape.timings", QtWarningMsg)
 #include <QStackedWidget>
 #include <QTextBrowser>
 #include <QTimer>
@@ -67,6 +62,7 @@ Q_LOGGING_CATEGORY(lcDialogTimings, "kartend.scrape.timings", QtWarningMsg)
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
 #include "scrapejobgrouping.h"
+#include "scrapelogging.h"
 
 namespace {
 
@@ -402,7 +398,7 @@ void ScrapeResultDialog::buildUi() {
       return;
     }
     if (m_downloadsTotal > 0) {
-      qCInfo(lcDialogTimings) << "DIALOG cancel mid-download — committing"
+      qCInfo(lcScrapeTimings) << "DIALOG cancel mid-download — committing"
                               << m_result.downloads.size() << "of" << m_downloadsTotal;
       accept();
     } else {
@@ -435,15 +431,15 @@ void ScrapeResultDialog::onItemCheckChanged(QListWidgetItem *item) {
 }
 
 void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
-  qCInfo(lcDialogTimings) << "DIALOG setScraperService called service=" << service
+  qCInfo(lcScrapeTimings) << "DIALOG setScraperService called service=" << service
                           << "current=" << m_service << "this=" << this;
   if (m_service == service) {
-    qCInfo(lcDialogTimings) << "DIALOG setScraperService: same service, skipping connect";
+    qCInfo(lcScrapeTimings) << "DIALOG setScraperService: same service, skipping connect";
     return;
   }
   m_service = service;
   if (!m_service) return;
-  qCInfo(lcDialogTimings) << "DIALOG setScraperService: establishing connections";
+  qCInfo(lcScrapeTimings) << "DIALOG setScraperService: establishing connections";
   // Connect to every signal the dialog needs to keep its Live view in
   // sync. Each handler was an inline lambda before Kartend-3fkz step 2
   // pulled the bodies out into named private slots — setScraperService
@@ -554,7 +550,7 @@ void ScrapeResultDialog::onApply() {
   // about whether the resize policy actually took effect.)
   const QString sample =
       selected.isEmpty() ? QStringLiteral("(none)") : selected.first().url.toString().left(200);
-  qCInfo(lcDialogTimings) << "DIALOG dispatch begin total=" << m_downloadsTotal
+  qCInfo(lcScrapeTimings) << "DIALOG dispatch begin total=" << m_downloadsTotal
                           << "first_url=" << sample;
 
   dispatchSelectedDownloads(selected, applyTimer);
@@ -593,7 +589,7 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
     // is self-contained on first scrape without re-paying bandwidth.
     const QString existing = findExistingSharedAsset(asset, m_sharedSearchPaths);
     if (!existing.isEmpty()) {
-      qCInfo(lcDialogTimings) << "DIALOG dedup hit" << asset.type << asset.label << "<-"
+      qCInfo(lcScrapeTimings) << "DIALOG dedup hit" << asset.type << asset.label << "<-"
                               << existing;
       QFile f(existing);
       QByteArray bytes;
@@ -630,13 +626,13 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
       if (!existingPerGame.isEmpty()) {
         const LocalHashes hashes = hashLocalFile(existingPerGame);
         fetchUrl = withHashHints(asset.url, hashes);
-        qCInfo(lcDialogTimings) << "DIALOG hash-hint" << asset.type << "from" << existingPerGame;
+        qCInfo(lcScrapeTimings) << "DIALOG hash-hint" << asset.type << "from" << existingPerGame;
       }
     }
     m_singleItemView->provider()->fetchMediaBytes(
         fetchUrl, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
           if (guard.isNull()) return; // dialog gone — drop the reply
-          qCInfo(lcDialogTimings) << "DIALOG complete" << asset.type << asset.label
+          qCInfo(lcScrapeTimings) << "DIALOG complete" << asset.type << asset.label
                                   << "ok=" << response.isOk()
                                   << "elapsed_total=" << applyTimer->elapsed() << "ms";
           if (response.isOk()) {
@@ -645,7 +641,7 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
             // matches, so don't add to the download list. Persistence
             // never sees the asset and the existing file stays put.
             if (isHashShortCircuit(bytes)) {
-              qCInfo(lcDialogTimings)
+              qCInfo(lcScrapeTimings)
                   << "DIALOG hash-hit (skip)" << asset.type << "body=" << bytes.trimmed();
             } else {
               MediaDownload dl;
@@ -661,12 +657,12 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
           const int completed = guard->m_downloadsTotal - guard->m_downloadsPending;
           guard->updateSingleItemProgress(completed);
           if (guard->m_downloadsPending <= 0) {
-            qCInfo(lcDialogTimings) << "DIALOG all done in" << applyTimer->elapsed() << "ms";
+            qCInfo(lcScrapeTimings) << "DIALOG all done in" << applyTimer->elapsed() << "ms";
             guard->m_unified->finishCurrentApply();
           }
         });
   }
-  qCInfo(lcDialogTimings) << "DIALOG dispatch loop returned in" << applyTimer->elapsed() << "ms"
+  qCInfo(lcScrapeTimings) << "DIALOG dispatch loop returned in" << applyTimer->elapsed() << "ms"
                           << "(should be near zero — all calls are async)";
 }
 

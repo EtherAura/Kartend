@@ -12,17 +12,13 @@
 #include <QTimer>
 #include <QUrlQuery>
 
-// Diagnostic log for scrape-speed work. Stays silent at runtime by
-// default — every ENQ / START / FINISH below would otherwise stream
-// to stderr synchronously on the main thread, and with high
-// batchItemConcurrency that's thousands of writes/sec that starve
-// the Qt event loop and freeze the UI. Enable via
-// `QT_LOGGING_RULES=kartend.scrape.timings.debug=true` when diagnosing.
-Q_LOGGING_CATEGORY(lcScrapeTimings, "kartend.scrape.timings", QtWarningMsg)
+#include "scrapelogging.h"
 
 // Always-on logging for HTTP layer health: SSL config on first request,
 // non-trivial socket-level errors. Kept distinct from lcScrapeTimings so it
 // survives the timings-category's default Warning-only filter.
+// (lcScrapeTimings itself is defined in scrapelogging.cpp — shared with the
+// scrape result dialog so a single QT_LOGGING_RULES rule covers both surfaces.)
 Q_LOGGING_CATEGORY(lcScraperHttp, "kartend.scraper.http")
 
 using ErrorUtils::ErrorCode;

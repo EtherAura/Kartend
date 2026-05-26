@@ -68,11 +68,7 @@
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
 #include "scrapejobgrouping.h"
-
-// Shares the "kartend.scrape.timings" category with the host TU; each TU
-// keeps its own static instance (Qt's logging registry dedupes by name).
-Q_LOGGING_CATEGORY(lcDialogTimingsUnified, "kartend.scrape.timings", QtWarningMsg)
-#define lcDialogTimings lcDialogTimingsUnified
+#include "scrapelogging.h"
 
 ScrapeResultDialogUnified::ScrapeResultDialogUnified(ScrapeResultDialog *dlg)
     : QObject(dlg), m_dlg(dlg) {}
@@ -1126,7 +1122,7 @@ void ScrapeResultDialogUnified::setUnifiedSetupEnabled(bool enabled) {
 }
 
 void ScrapeResultDialogUnified::onServiceScrapeStarted(int total) {
-  qCInfo(lcDialogTimings) << "DIALOG service.scrapeStarted total=" << total;
+  qCInfo(lcScrapeTimings) << "DIALOG service.scrapeStarted total=" << total;
   setUnifiedSetupEnabled(false);
   m_dlg->m_unifiedProgressBar->setRange(0, std::max(1, total));
   m_dlg->m_unifiedProgressBar->setValue(m_dlg->m_service->itemsCompleted());
@@ -1164,7 +1160,7 @@ void ScrapeResultDialogUnified::onServiceItemBegan(int done, int total,
   // batchItemConcurrency this fires several times per second; not
   // worth updating widgets nobody can see.
   if (!m_dlg->isVisible()) return;
-  qCDebug(lcDialogTimings) << "DIALOG service.itemBegan name=" << name;
+  qCDebug(lcScrapeTimings) << "DIALOG service.itemBegan name=" << name;
   // Refresh the collection label HERE, not only in the itemCompleted
   // handler below: itemCompleted fires only on a successful scrape, so
   // a collection whose items all error (or all skip) would otherwise
@@ -1275,7 +1271,7 @@ void ScrapeResultDialogUnified::onServicePickerNeeded(
 }
 
 void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperService::Summary &s) {
-  qCInfo(lcDialogTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
+  qCInfo(lcScrapeTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
                           << "skipped=" << s.skipped << "errors=" << s.errors;
   m_dlg->m_liveTickTimer.stop();
   m_dlg->m_marqueeTimer.stop();
@@ -1575,7 +1571,7 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
     // and let it drive. The dialog's signal handlers (wired in
     // setScraperService) flip the UI into Live view + advance progress
     // from there. Close button now relevant.
-    qCInfo(lcDialogTimings) << "DIALOG onScrapeClicked: service path, queue size="
+    qCInfo(lcScrapeTimings) << "DIALOG onScrapeClicked: service path, queue size="
                             << serviceQueue.size() << "mode="
                             << (mode == Scraper::ScraperService::Mode::Auto ? "auto"
                                                                             : "interactive")
