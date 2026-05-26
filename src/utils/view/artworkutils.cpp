@@ -242,6 +242,14 @@ bool DirectoryCache::hasQueuedDirectories() const {
   return !m_queuedDirectories.isEmpty();
 }
 
+bool DirectoryCache::isDirectoryQueued(const QString &directory) const {
+  if (directory.isEmpty()) {
+    return false;
+  }
+  QMutexLocker locker(&m_mutex);
+  return m_queuedDirectories.contains(directory);
+}
+
 void DirectoryCache::clear() {
   QMutexLocker locker(&m_mutex);
   m_cache.clear();

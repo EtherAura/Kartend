@@ -84,11 +84,21 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
       QString fileName = QFileInfo(fullPath).fileName();
       QString artworkPath = ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
       // Cold-cache fallback: findArtworkForFileCached returns empty on the
-      // first lookup for an uncached directory (it queues a background scan).
-      // For list mode we can't rely on the post-prewarm reconfigure alone --
-      // do a direct synchronous lookup so the artwork preview button
-      // ('view-preview' icon) appears on first paint.
-      if (artworkPath.isEmpty()) {
+      // first lookup for an uncached directory (it queues a background
+      // scan). The synchronous fallback paints the artwork preview button
+      // on the very first frame, but during a fast scroll across hundreds
+      // of items in an uncached directory it serialises a filesystem stat
+      // per widget on the GUI thread.
+      //
+      // Gate the sync fallback on whether a prewarm is already in flight:
+      // if a background thread is about to populate the cache, skip the
+      // per-widget stat and let ScrollManager's post-prewarm
+      // reconfigureArtworkForActiveWidgets() set hasArtwork once the cache
+      // is warm (typically tens of ms later). Outside the scroll-burst
+      // case the prewarm queue is empty, so the sync fallback still fires
+      // and the button still appears on first paint as before.
+      if (artworkPath.isEmpty() &&
+          !ArtworkUtils::DirectoryCache::instance().isDirectoryQueued(artworkDir)) {
         artworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
       }
       widget->setHasArtwork(!artworkPath.isEmpty());
