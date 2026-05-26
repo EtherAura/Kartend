@@ -1,7 +1,7 @@
 #ifndef COLLECTIONBACKGROUNDCONTROLLER_H
 #define COLLECTIONBACKGROUNDCONTROLLER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include <QList>
 #include <QObject>
 #include <QTimer>

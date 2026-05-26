@@ -1,7 +1,7 @@
 #ifndef DETAILSPANERESIZEGRIP_H
 #define DETAILSPANERESIZEGRIP_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 
 #include <QObject>
 

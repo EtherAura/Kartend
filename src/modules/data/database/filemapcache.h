@@ -5,7 +5,7 @@
 #include <QMutex>
 #include <QString>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 
 class FileMapCache {
 public:

@@ -30,7 +30,7 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

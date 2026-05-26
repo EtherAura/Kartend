@@ -18,7 +18,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
+#include "collectiontypes.h"
 #include "detailspane.h"
 #include "detailspanegalleryview.h"
 #include "extensionutils.h"

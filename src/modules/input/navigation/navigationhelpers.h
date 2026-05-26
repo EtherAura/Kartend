@@ -1,7 +1,7 @@
 #ifndef NAVIGATIONHELPERS_H
 #define NAVIGATIONHELPERS_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include <functional>
 #include <QList>
 #include <QString>

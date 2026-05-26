@@ -10,7 +10,8 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/helpers.h"
+#include "collectiontypes.h"
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
 #include "scrollmanager.h"

@@ -3,6 +3,7 @@
 #include "titlecountshelpers.h"
 
 #include "applicationcontext.h"
+#include "collectionutils.h"
 #include "iartworkmanager.h" // unused but pulled along by ApplicationContext header chain
 #include "idatabasemanager.h"
 #include "iscrollmanager.h"

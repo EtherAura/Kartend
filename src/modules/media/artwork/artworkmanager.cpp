@@ -6,7 +6,7 @@
 #include "artworkutils.h"
 #include "artworkwidgetregistry.h"
 #include "cachemanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "extensionutils.h"
 #include "icachemanager.h"
 #include "interactionstateholder.h"

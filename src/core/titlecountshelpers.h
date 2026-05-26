@@ -1,7 +1,7 @@
 #ifndef KARTEND_CORE_TITLECOUNTSHELPERS_H
 #define KARTEND_CORE_TITLECOUNTSHELPERS_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include <QList>
 #include <QString>
 
