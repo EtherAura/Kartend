@@ -67,7 +67,14 @@ fi
 #    isn't available cross-host anyway, and Ninja gives cleaner AUTOUIC
 #    dependency ordering than Unix Makefiles.
 echo "[*] Cross-compiling (mingw64-cmake + Ninja, Release, portable flags)"
+# --user maps the container's primary user to the host invoker so the
+# build artifacts under build-windows-mingw/ end up owned by the
+# invoking user instead of root, which would otherwise need sudo to
+# clean up. Falls back to running as the container's default user when
+# id is unavailable (unlikely on a Linux dev host).
+DOCKER_USER_ARG="$(id -u):$(id -g)"
 docker run --rm \
+  --user "$DOCKER_USER_ARG" \
   -v "${REPO_ROOT}:/src" \
   "$IMAGE_TAG" \
   bash -c "
@@ -90,6 +97,7 @@ docker run --rm \
 #    thing on a Windows host.
 echo "[*] Staging DLLs + plugins → ${DIST_DIR_REL}/"
 docker run --rm \
+  --user "$DOCKER_USER_ARG" \
   -v "${REPO_ROOT}:/src" \
   "$IMAGE_TAG" \
   bash -c '
