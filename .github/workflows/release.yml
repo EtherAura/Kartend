@@ -280,6 +280,69 @@ jobs:
           if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
           if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
 
+      # ─── SignPath code-signing (kartend.exe) ─────────────────────────
+      # SignPath Foundation signs OSS projects' release artifacts with
+      # an EV-equivalent cert that clears Windows SmartScreen. The
+      # action uploads a GitHub-Actions-artifact to SignPath, waits for
+      # SignPath to sign it (auto-approved release policies finish in
+      # ~30s; manually-approved policies block until a maintainer
+      # clicks Approve in the SignPath UI), then writes the signed file
+      # back into output-artifact-directory. Two signing passes total:
+      # kartend.exe here (so the signed binary lands inside both the
+      # .zip and the NSIS installer downstream), and setup.exe after
+      # NSIS builds (so the installer itself is signed).
+      #
+      # Setup (one-time, on the user side):
+      #   1. Apply at https://signpath.org/services/foundation (free
+      #      for OSS).
+      #   2. Once approved, copy the four values from the SignPath UI:
+      #        - API token            → repo SECRET     SIGNPATH_API_TOKEN
+      #        - Organization ID      → repo VARIABLE   SIGNPATH_ORGANIZATION_ID
+      #        - Project slug         → repo VARIABLE   SIGNPATH_PROJECT_SLUG
+      #        - Signing-policy slug  → repo VARIABLE   SIGNPATH_SIGNING_POLICY_SLUG
+      #          (typically `release-signing` for stable releases)
+      #
+      # Until SIGNPATH_API_TOKEN is set, both signing passes no-op and
+      # the release publishes unsigned artifacts (SmartScreen-warn-on-
+      # first-launch behaviour, same as v0.0.10). The check step emits
+      # a warning so the omission is visible in the release run log.
+      - name: Check SignPath configuration
+        id: signpath_check
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if [ -z "$SIGNPATH_API_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SIGNPATH_API_TOKEN not configured; releasing unsigned Windows artifacts. Users will see Windows SmartScreen warning on first launch. See .github/workflows/release.yml header for SignPath setup steps."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload kartend.exe for SignPath signing
+        if: steps.signpath_check.outputs.configured == 'true'
+        id: upload_kartend_exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-kartend-exe
+          path: dist\kartend\kartend.exe
+          if-no-files-found: error
+
+      - name: Sign kartend.exe via SignPath
+        if: steps.signpath_check.outputs.configured == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload_kartend_exe.outputs.artifact-id }}
+          wait-for-completion: true
+          # Drops the signed file back over the staged unsigned one so
+          # the downstream Compress-Archive + makensis steps pick it
+          # up without further plumbing.
+          output-artifact-directory: dist\kartend
+
       - name: Package release .zip + sha256
         # Naming convention matches the source tarball capitalization
         # (Kartend-X.Y.Z-*.zip), not the .deb's lowercase. Get-FileHash's
@@ -307,7 +370,7 @@ jobs:
         # invokes makensis via its absolute path.
         run: choco install nsis -y --no-progress --no-color
 
-      - name: Build NSIS installer (.exe) + sha256
+      - name: Build NSIS installer (.exe)
         # Per-machine installer ($PROGRAMFILES64\Kartend, HKLM, UAC) with
         # a Start Menu shortcut. makensis comes from the chocolatey
         # nsis package installed in the step above; it lands at the
@@ -317,6 +380,10 @@ jobs:
         # stay Windows-native (backslashes); no special characters in
         # the substituted values trigger PowerShell's -replace regex
         # behaviour (`$` backreferences, etc.).
+        #
+        # sha256 computation moved to a separate step after the
+        # SignPath setup.exe signing pass below — signing changes the
+        # bytes, so the hash has to be taken on the final artifact.
         id: installer
         run: |
           $version   = "${{ needs.release.outputs.version }}"
@@ -335,11 +402,44 @@ jobs:
 
           $exeName = "Kartend-$version-windows-x64-setup.exe"
           if (-not (Test-Path $exeName)) { throw "Expected $exeName but it wasn't produced" }
-          $exeSha  = "$exeName.sha256"
-          $hash    = (Get-FileHash -Algorithm SHA256 $exeName).Hash.ToLower()
-          "$hash  $exeName" | Out-File -Encoding ASCII -NoNewline $exeSha
           "exe=$exeName" | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
-          "sha=$exeSha"  | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
+
+      - name: Upload setup.exe for SignPath signing
+        if: steps.signpath_check.outputs.configured == 'true'
+        id: upload_setup_exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-setup-exe
+          path: ${{ steps.installer.outputs.exe }}
+          if-no-files-found: error
+
+      - name: Sign setup.exe via SignPath
+        if: steps.signpath_check.outputs.configured == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload_setup_exe.outputs.artifact-id }}
+          wait-for-completion: true
+          # Drops the signed installer back over the unsigned one at
+          # the workspace root where Attach Windows assets below picks
+          # it up via steps.installer.outputs.exe.
+          output-artifact-directory: .
+
+      - name: Compute sha256 for setup.exe
+        # Has to happen AFTER the SignPath pass above (signing changes
+        # the bytes). Always runs — the unsigned path needs a sha256
+        # too. id: installer_sha so the Attach step can pluck the
+        # filename without recomputing.
+        id: installer_sha
+        run: |
+          $exeName = "${{ steps.installer.outputs.exe }}"
+          $shaName = "$exeName.sha256"
+          $hash    = (Get-FileHash -Algorithm SHA256 $exeName).Hash.ToLower()
+          "$hash  $exeName" | Out-File -Encoding ASCII -NoNewline $shaName
+          "sha=$shaName" | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
 
       - name: Attach Windows assets to the release
         # softprops/action-gh-release@v3 upserts files on an existing
@@ -355,5 +455,5 @@ jobs:
             ${{ steps.package.outputs.zip }}
             ${{ steps.package.outputs.sha }}
             ${{ steps.installer.outputs.exe }}
-            ${{ steps.installer.outputs.sha }}
+            ${{ steps.installer_sha.outputs.sha }}
           fail_on_unmatched_files: true
