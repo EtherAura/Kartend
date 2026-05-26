@@ -17,7 +17,7 @@
 #include <QTemporaryFile>
 
 #include "artworkutils.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "pathutils.h"
 
 namespace PlaceholderWarmer {

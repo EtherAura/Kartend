@@ -13,7 +13,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "placeholderwarmer.h"
 
 namespace {
@@ -136,8 +136,8 @@ void TestPlaceholderWarmer::export_writesPngsForEachUnmatchedItem() {
   touchFile(media.path(), "gamma.mp4");
 
   auto cfg = collectionWith(media.path(), art.path(), {".mp4"});
-  const auto result = PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0,
-                                                                   &fakeTile);
+  const auto result =
+      PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0, &fakeTile);
   QCOMPARE(result.itemsScanned, qint64(3));
   QCOMPARE(result.itemsExported, qint64(3));
   QCOMPARE(result.itemsAlreadyHadArtwork, qint64(0));
@@ -158,8 +158,8 @@ void TestPlaceholderWarmer::export_skipsItemsWithExistingArtwork() {
   touchFile(art.path(), "alpha.png");
 
   auto cfg = collectionWith(media.path(), art.path(), {".mp4"});
-  const auto result = PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0,
-                                                                   &fakeTile);
+  const auto result =
+      PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0, &fakeTile);
   QCOMPARE(result.itemsScanned, qint64(2));
   QCOMPARE(result.itemsAlreadyHadArtwork, qint64(1));
   QCOMPARE(result.itemsExported, qint64(1));
@@ -173,16 +173,16 @@ void TestPlaceholderWarmer::export_filtersByExtensionAndIsCaseInsensitive() {
   QTemporaryDir media;
   QTemporaryDir art;
   QVERIFY(media.isValid() && art.isValid());
-  touchFile(media.path(), "video.MP4");      // uppercase, should match
-  touchFile(media.path(), "audio.flac");     // not in extensions list
-  touchFile(media.path(), "doc.pdf");        // not in extensions list
-  touchFile(media.path(), "another.mp4");    // matches
+  touchFile(media.path(), "video.MP4");   // uppercase, should match
+  touchFile(media.path(), "audio.flac");  // not in extensions list
+  touchFile(media.path(), "doc.pdf");     // not in extensions list
+  touchFile(media.path(), "another.mp4"); // matches
 
   // Extensions stored both with and without leading dot — both shapes occur
   // in real CollectionConfigs depending on how the user typed them.
   auto cfg = collectionWith(media.path(), art.path(), {QStringLiteral("mp4")});
-  const auto result = PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0,
-                                                                   &fakeTile);
+  const auto result =
+      PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0, &fakeTile);
   QCOMPARE(result.itemsScanned, qint64(2));
   QCOMPARE(result.itemsExported, qint64(2));
   QVERIFY(QFileInfo(art.path() + "/video.png").exists());
@@ -201,8 +201,8 @@ void TestPlaceholderWarmer::export_recursesIntoSubdirectories() {
   touchFile(media.path() + "/season2/disc1", "episode2.mp4");
 
   auto cfg = collectionWith(media.path(), art.path(), {".mp4"});
-  const auto result = PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0,
-                                                                   &fakeTile);
+  const auto result =
+      PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0, &fakeTile);
   QCOMPARE(result.itemsScanned, qint64(2));
   QCOMPARE(result.itemsExported, qint64(2));
   // The warmer flattens output into the artwork dir keyed on basename

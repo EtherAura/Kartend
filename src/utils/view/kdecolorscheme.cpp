@@ -22,7 +22,8 @@
 #include <QStringList>
 #include <QTextStream>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
