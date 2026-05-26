@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
+## [0.0.11] - 2026-05-26
+
+### Added
+
+- **Code-signing pipeline (SignPath Foundation).** `release.yml` now
+  has a two-pass SignPath signing flow — `kartend.exe` is signed
+  before the `.zip` / installer build so the signed binary lands
+  inside both artifacts, and the NSIS `setup.exe` is signed
+  afterwards so the installer itself is signed. Gated on
+  `SIGNPATH_API_TOKEN` (plus `SIGNPATH_ORGANIZATION_ID`,
+  `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG` repo
+  variables); until those are configured, the pipeline publishes
+  unsigned artifacts and emits a `::warning::` in the release log,
+  identical behaviour to v0.0.10.
+
+### Fixed
+
+- **Automated winget submission now actually fires after release.**
+  `winget.yml` previously triggered on `release: [released]`, but
+  GitHub's anti-recursion guard prevents downstream workflows from
+  firing when the upstream workflow uses the default `GITHUB_TOKEN`
+  (which `release.yml`'s `softprops/action-gh-release` does).
+  v0.0.10 silently confirmed this: the release tag published
+  successfully but no winget PR was opened. Switched the trigger to
+  `workflow_run` on `Release: [completed]` so the chaining works.
+
 ## [0.0.10] - 2026-05-25
 
 ### Added
