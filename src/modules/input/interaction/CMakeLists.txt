@@ -2,6 +2,7 @@ target_sources(kartend_input PRIVATE
   arrownavigationhandler.cpp
   interactionhelpers.cpp
   interactionmanager.cpp
+  interactionmanagercontextactions.cpp
   interactionmanagercontextmenu.cpp
   interactionmanagerenter.cpp
   interactionmanagerholdscroll.cpp
