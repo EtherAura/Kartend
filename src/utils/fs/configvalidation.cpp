@@ -84,33 +84,13 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
     }
   }
 
-  // Video directory validation (optional but validate if present)
-  if (!config.videoDirectory.isEmpty()) {
-    QString expandedPath = config.videoDirectory;
-    if (expandedPath.startsWith("~")) {
-      expandedPath = QDir::homePath() + expandedPath.mid(1);
-    }
-    QFileInfo videoInfo(expandedPath);
-    if (!videoInfo.exists()) {
-      result.addWarning(prefix + "video directory does not exist: " + config.videoDirectory);
-    } else if (!videoInfo.isDir()) {
-      result.addWarning(prefix + "video path is not a directory: " + config.videoDirectory);
-    }
-  }
-
-  // Manual directory validation (optional but validate if present)
-  if (!config.manualDirectory.isEmpty()) {
-    QString expandedPath = config.manualDirectory;
-    if (expandedPath.startsWith("~")) {
-      expandedPath = QDir::homePath() + expandedPath.mid(1);
-    }
-    QFileInfo manualInfo(expandedPath);
-    if (!manualInfo.exists()) {
-      result.addWarning(prefix + "manual directory does not exist: " + config.manualDirectory);
-    } else if (!manualInfo.isDir()) {
-      result.addWarning(prefix + "manual path is not a directory: " + config.manualDirectory);
-    }
-  }
+  // No validation for videoDirectory / manualDirectory here: the load path
+  // in SettingsManager forces both fields empty (the canonical home is now
+  // `{artworkDirectory}/video/` and `{artworkDirectory}/manual/`), so by
+  // the time validateAllCollections runs they're guaranteed empty and any
+  // check would be dead code. Runtime consumers (Kart imports, coverflow,
+  // marquee, details pane) still set and read the fields directly, so the
+  // struct fields themselves stay in place.
 
   // Launcher validation (optional but validate if present)
   if (!config.launcher.launcherPath.isEmpty()) {
