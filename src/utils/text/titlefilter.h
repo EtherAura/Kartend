@@ -42,6 +42,19 @@ void rebuildFromCollections(const QList<CollectionConfig> &collections);
 // rebuildFromCollections() instead.
 void clearForTests();
 
+// Compiles @p patterns into ready-to-apply QRegularExpression instances.
+// Trimmed-empty entries are skipped silently. Invalid regexes are
+// dropped and logged via ErrorUtils so a single typo can't wedge the
+// caller's full pattern list. @p diagnosticContext is included in the
+// log message verbatim (typically the owning collection's name); it is
+// optional so unit tests can call the function without inventing a name.
+//
+// The registry-mutation code path (rebuildFromCollections) calls this
+// internally; it is exposed in the public API so the compilation +
+// error-handling semantics can be exercised in isolation.
+[[nodiscard]] QList<QRegularExpression>
+compilePatterns(const QStringList &patterns, const QString &diagnosticContext = QString());
+
 } // namespace TitleFilter
 
 #endif // TITLEFILTER_H
