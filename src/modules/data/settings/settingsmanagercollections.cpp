@@ -465,6 +465,13 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 
   finalizeCollections(tempCollections, collections, needsRewrite);
 
+  // Seed the per-domain *Changed diff baseline. Without this, the first
+  // saveCollections after launch would compare against an empty baseline
+  // and fire every signal for every collection at once — noisy, and the
+  // listeners would refresh state that hadn't actually changed since the
+  // user opened the app.
+  m_lastSavedCollections = collections;
+
   // Validate loaded collections and log any issues
   auto validation = ConfigValidation::validateAllCollections(collections);
   ConfigValidation::logValidationResult(validation, "loadCollections");
@@ -824,5 +831,63 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   if (err.isError()) {
     return err;
   }
+
+  // Per-collection hot-reload signals: compare each new collection against
+  // the previously-saved snapshot by UUID identity, emit per-leaf-struct
+  // diffs, then refresh the baseline so the next save sees the new state.
+  // Identity is the (name, mediaDirectory) UUID so a reorder of unchanged
+  // collections doesn't fire spurious diffs; an added collection has no
+  // matching old entry and skips the diff (collectionsModified above
+  // already covers add/remove lifecycle).
+  {
+    QHash<QString, const CollectionConfig *> oldByUuid;
+    oldByUuid.reserve(m_lastSavedCollections.size());
+    for (const CollectionConfig &oldCfg : m_lastSavedCollections) {
+      const QString uuid =
+          CollectionUtils::computeCollectionUuid(oldCfg.name, oldCfg.mediaDirectory);
+      oldByUuid.insert(uuid, &oldCfg);
+    }
+
+    for (int i = 0; i < collections.size(); ++i) {
+      const CollectionConfig &newCfg = collections[i];
+      const QString uuid =
+          CollectionUtils::computeCollectionUuid(newCfg.name, newCfg.mediaDirectory);
+      const auto it = oldByUuid.constFind(uuid);
+      if (it == oldByUuid.constEnd()) {
+        continue; // newly added — handled by collectionsModified()
+      }
+      const CollectionConfig &oldCfg = *(it.value());
+
+      if (oldCfg.gridLayout != newCfg.gridLayout) {
+        emit gridLayoutChanged(i, newCfg.gridLayout);
+      }
+      if (oldCfg.sidebar != newCfg.sidebar) {
+        emit sidebarAppearanceChanged(i, newCfg.sidebar);
+      }
+      if (oldCfg.background != newCfg.background) {
+        emit collectionBackgroundChanged(i, newCfg.background);
+      }
+      if (oldCfg.listView != newCfg.listView) {
+        emit listViewOptionsChanged(i, newCfg.listView);
+      }
+      if (oldCfg.archive != newCfg.archive) {
+        emit archiveOptionsChanged(i, newCfg.archive);
+      }
+      if (oldCfg.folderBrowsing != newCfg.folderBrowsing) {
+        emit folderBrowsingOptionsChanged(i, newCfg.folderBrowsing);
+      }
+      if (oldCfg.filter != newCfg.filter) {
+        emit collectionFilterPreferencesChanged(i, newCfg.filter);
+      }
+      if (oldCfg.scraperOverrides != newCfg.scraperOverrides) {
+        emit scraperOverridesChanged(i, newCfg.scraperOverrides);
+      }
+      if (oldCfg.launcher != newCfg.launcher) {
+        emit launcherProfileChanged(i, newCfg.launcher);
+      }
+    }
+  }
+  m_lastSavedCollections = collections;
+
   return ErrorUtils::Result<void>::success();
 }
