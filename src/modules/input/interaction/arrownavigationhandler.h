@@ -20,7 +20,7 @@ class ISelectionManager;
 class InteractionStateHolder;
 struct CollectionConfig;
 struct GeneralSettings;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 template <typename T> class QList;
 
 /**

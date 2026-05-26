@@ -11,6 +11,7 @@ target_sources(kartend_utils PRIVATE
   scrapelogger.cpp
   settingsutils.cpp
   applicationcontext.h
+  applicationcontext_fwd.h
   cliargs.h
   collection/archiveoptions.h
   collection/collectionbackground.h

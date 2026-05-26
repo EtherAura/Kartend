@@ -12,7 +12,7 @@ class QWidget;
 class IArtworkManager;
 class IDatabaseManager;
 class WidgetPoolManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Factory for creating and configuring ItemWidget instances.

@@ -15,7 +15,7 @@
 #include "errorutils.h"
 #include "setuputils.h"
 
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 struct LaunchManagerSetup {
   const ApplicationContext *ctx = nullptr;

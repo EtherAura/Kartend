@@ -37,7 +37,7 @@ QT_END_NAMESPACE
 
 class BatchScrapeProgressView;
 class IDatabaseManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 class MetadataLookupProvider;
 class ScrapeResultDialogUnified;
 class SingleItemScrapeView;

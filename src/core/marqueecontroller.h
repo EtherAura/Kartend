@@ -7,7 +7,7 @@
 #include <QObject>
 
 class MarqueeWindow;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 namespace TimerUtils {
 class DebouncedTimer;

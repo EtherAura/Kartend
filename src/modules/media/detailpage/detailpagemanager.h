@@ -8,7 +8,7 @@
 
 class DatabaseManager;
 class DetailsPaneManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Coordinates the item detail page.

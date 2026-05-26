@@ -16,7 +16,7 @@
 
 class IDatabaseManager;
 class QThread;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 namespace Scraper {
 

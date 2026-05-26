@@ -32,7 +32,7 @@ class IDetailsPaneManager;
 class InteractionStateHolder;
 class HoverScrollHandler;
 class WheelEventHandler;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Setup struct for EventManager dependencies.

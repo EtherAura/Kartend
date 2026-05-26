@@ -9,7 +9,7 @@ class ScrollDataStore;
 class PreSearchStateCache;
 class SearchLoadingOverlay;
 class QWidget;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Owns the data-source sub-managers extracted from ScrollManager

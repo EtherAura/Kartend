@@ -11,7 +11,7 @@ QT_BEGIN_NAMESPACE
 class QScrollBar;
 QT_END_NAMESPACE
 
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 struct GeneralSettings;
 
 /**

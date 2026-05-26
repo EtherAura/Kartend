@@ -7,7 +7,7 @@
 
 class QWidget;
 class LoadingOverlay;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /// Kartend-dk2c.5: extracted from MainWindow to slim core/mainwindow.cpp.
 ///

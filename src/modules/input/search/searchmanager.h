@@ -22,7 +22,7 @@ class InteractionStateHolder;
 class INavigationManager;
 class IScrollManager;
 class ISettingsManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 struct SearchManagerSetup {
   const ApplicationContext *ctx = nullptr;
