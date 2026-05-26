@@ -1,6 +1,14 @@
 #ifndef APPLICATIONCONTEXT_H
 #define APPLICATIONCONTEXT_H
 
+// Headers that only need to name `ApplicationContext` as a pointer type
+// (typically `const ApplicationContext *ctx = nullptr` inside a setup
+// struct) should include applicationcontext_fwd.h instead — that header
+// is a single struct fwd-decl and doesn't drag collectionutils.h + the
+// 30+ collection/ leaf headers along the include graph. Translation units
+// that actually dereference ctx (read fields, call accessors) still need
+// this full header.
+#include "applicationcontext_fwd.h"
 #include "collectionutils.h"
 #include <functional>
 #include <QList>

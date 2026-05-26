@@ -17,7 +17,7 @@ class IScrollManager;
 class ISelectionManager;
 class IArtworkManager;
 class InteractionStateHolder;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 struct ViewportManagerSetup {
   const ApplicationContext *ctx = nullptr;

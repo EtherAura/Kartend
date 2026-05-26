@@ -21,7 +21,7 @@ class ItemWidget;
 class SettingsManager;
 class ArtworkManager;
 class DatabaseManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 namespace TimerUtils {
 class DebouncedTimer;
 }

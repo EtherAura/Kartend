@@ -66,7 +66,7 @@ struct ArtworkPrecacheResult {
   bool loadedFromDiskCache = false;
 };
 
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Setup struct for ArtworkManager dependencies.

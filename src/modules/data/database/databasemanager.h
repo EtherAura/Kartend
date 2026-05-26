@@ -11,7 +11,7 @@ class CachedCountsService;
 class QueryManager;
 class QThread;
 class SessionManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Coordinates database operations via a dedicated worker thread.

@@ -21,7 +21,7 @@ QT_END_NAMESPACE
 
 class ISettingsManager;
 class IPlaylistManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 namespace KartWriter {
 class Writer;

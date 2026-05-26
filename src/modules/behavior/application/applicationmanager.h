@@ -24,7 +24,7 @@ class KartManager;
 }
 
 struct CollectionConfig;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 template <typename T> class QList;
 
 class ApplicationManager : public QObject {

@@ -14,7 +14,7 @@
 class ScrollManager;
 class ArtworkManager;
 class InteractionStateHolder;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /// Setup struct for AnimationManager dependencies
 struct AnimationManagerSetup {

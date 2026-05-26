@@ -17,7 +17,7 @@
 #include "scrapertypes.h"
 
 class IDatabaseManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 class QLockFile;
 class QTimer;
 struct GeneralSettings;

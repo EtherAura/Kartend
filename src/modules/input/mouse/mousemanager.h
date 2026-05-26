@@ -20,7 +20,7 @@ class ItemWidget;
 class InteractionStateHolder;
 struct CollectionConfig;
 struct GeneralSettings;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /// Setup struct for MouseManager dependencies
 struct MouseManagerSetup {

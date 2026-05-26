@@ -10,7 +10,7 @@
 class ScrollManager;
 class ISelectionManager;
 class FilterManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Handles alphabetic navigation via PageUp/PageDown keys.

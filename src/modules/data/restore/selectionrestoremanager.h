@@ -16,7 +16,7 @@ class InteractionStateHolder;
 class IScrollManager;
 class ISessionManager;
 class ISettingsManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 struct CollectionConfig;
 struct GeneralSettings;
 

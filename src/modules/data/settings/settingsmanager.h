@@ -8,7 +8,7 @@
 
 class QFile;
 class SessionManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 class SettingsManager : public ISettingsManager {
   Q_OBJECT

@@ -11,7 +11,7 @@ class QTimer;
 QT_END_NAMESPACE
 
 class IKeyboardManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 struct GeneralSettings;
 
 struct GamepadManagerSetup {

@@ -49,7 +49,7 @@ class DebouncedTimer;
 // Alias for backward compatibility - use GridMetrics from GridLayoutCalculator
 using VirtualMetrics = GridMetrics;
 
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Setup struct for ScrollManager dependencies.

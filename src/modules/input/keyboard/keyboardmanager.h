@@ -15,7 +15,7 @@ class QLineEdit;
 class QStackedWidget;
 class ScrollManager;
 class InteractionStateHolder;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 struct KeyboardManagerSetup {
   const ApplicationContext *ctx = nullptr;

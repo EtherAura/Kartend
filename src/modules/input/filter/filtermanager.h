@@ -11,7 +11,7 @@
 #include <QStringList>
 
 class IDatabaseManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 /**
  * @brief Manages search filtering and subcollection filtering for the scroll

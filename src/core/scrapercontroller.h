@@ -34,7 +34,7 @@ class InteractionManager;
 class NavigationManager;
 class ScrapeResultDialog;
 class ScrollManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 struct CollectionConfig;
 struct GeneralSettings;
 

@@ -9,7 +9,7 @@ class QWidget;
 class CoverFlowWidget;
 class ScrollDataStore;
 class IFilterManager;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 namespace TimerUtils {
 class DebouncedTimer;

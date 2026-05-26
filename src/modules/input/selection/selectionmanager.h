@@ -26,7 +26,7 @@ class QWidget;
 class QScrollArea;
 class QLineEdit;
 class QMouseEvent;
-struct ApplicationContext;
+#include "applicationcontext_fwd.h"
 
 struct SelectionManagerSetup {
   const ApplicationContext *ctx = nullptr;
