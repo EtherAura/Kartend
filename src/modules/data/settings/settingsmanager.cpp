@@ -15,6 +15,7 @@
 #include "pathutils.h"
 #include "scrapelogger.h"
 #include "settingshelpers.h"
+#include "settingsmigrations.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants/attract.h"
@@ -217,6 +218,14 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
         << "Settings INI was written with schemaVersion" << loadedSchemaVersion
         << "but this build only understands up to" << kSettingsSchemaVersion
         << "— unknown keys will be ignored on load and overwritten on save.";
+  } else if (loadedSchemaVersion < kSettingsSchemaVersion) {
+    // Drive in-place migration before any value() reads consume the
+    // (potentially renamed/restructured) keys. The dispatcher is a no-op
+    // when no steps are registered for the current span, so this is cheap
+    // on every load until a real migration lands.
+    kartend::settings::migrations::applyMigrations(
+        s, loadedSchemaVersion, kSettingsSchemaVersion,
+        QStringLiteral("SettingsManager::loadGeneralSettings"));
   }
   settings.rememberSelection = s.value(keys::kRememberSelection, true).toBool();
   settings.wrapNavigation = s.value(keys::kWrapNavigation, false).toBool();
