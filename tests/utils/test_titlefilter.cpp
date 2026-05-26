@@ -8,7 +8,7 @@
 #include <QStringList>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "titlefilter.h"
 
 class TestTitleFilter : public QObject {

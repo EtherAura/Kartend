@@ -11,7 +11,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "kdecolorscheme.h"
 
 class TestKdeColorScheme : public QObject {
@@ -99,12 +100,11 @@ void TestKdeColorScheme::load_skipsMalformedRgbTriples() {
   // that somehow lives under [Colors:View]).
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
-  const QString body =
-      QStringLiteral("[General]\nName=Mixed\n[Colors:View]\n"
-                     "BackgroundNormal=10,20,30\n"
-                     "BadEntry=not,a,real,color,value\n"
-                     "AlsoBad=true\n"
-                     "ForegroundNormal=200,200,200\n");
+  const QString body = QStringLiteral("[General]\nName=Mixed\n[Colors:View]\n"
+                                      "BackgroundNormal=10,20,30\n"
+                                      "BadEntry=not,a,real,color,value\n"
+                                      "AlsoBad=true\n"
+                                      "ForegroundNormal=200,200,200\n");
   const QString path = writeScheme(tmp, "Mixed.colors", body);
   QVERIFY(!path.isEmpty());
 
@@ -142,9 +142,8 @@ void TestKdeColorScheme::applyToCollection_leavesUnsetSlotsUntouched() {
   // (additive merge, not destructive overwrite).
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
-  const QString partial =
-      QStringLiteral("[General]\nName=Partial\n[Colors:Window]\n"
-                     "BackgroundNormal=11,22,33\n");
+  const QString partial = QStringLiteral("[General]\nName=Partial\n[Colors:Window]\n"
+                                         "BackgroundNormal=11,22,33\n");
   const QString path = writeScheme(tmp, "Partial.colors", partial);
   auto result = KdeColorScheme::load(path);
   QVERIFY(result.isOk());
