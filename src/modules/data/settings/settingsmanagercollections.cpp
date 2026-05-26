@@ -161,6 +161,26 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 
     settings.beginGroup(group);
     CollectionConfig config;
+
+    // Strict round-trip preservation: capture every flat child key in this
+    // collection section into config.preservedKeys, minus a small blocklist
+    // of legacy keys that the codebase intentionally strips on save. On
+    // re-save, preservedKeys is written first and the known-field
+    // setValue() calls below overwrite the duplicates, so the net effect is
+    // that future-version keys this build doesn't recognise survive a
+    // load-modify-save cycle instead of being silently dropped.
+    {
+      static const QStringList kPreservationBlocklist = {
+          keys::kVideoDirectory,
+          keys::kManualDirectory,
+      };
+      for (const QString &k : settings.childKeys()) {
+        if (k.contains(QLatin1Char('/'))) continue;
+        if (kPreservationBlocklist.contains(k)) continue;
+        config.preservedKeys.insert(k, settings.value(k));
+      }
+    }
+
     config.name = settings.value(keys::kName).toString();
     // free-form category label. Empty means "untagged" — the
     // sidebar/toolbar filter resolves an empty type by walking up the parent
@@ -560,6 +580,15 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     iniGroupName.replace("/", " > ");
 
     settings.beginGroup(iniGroupName);
+    // Strict round-trip preservation: replay every flat key captured at
+    // load time before any known-field setValue() calls below. The
+    // ordering matters: known keys must overwrite duplicates so the
+    // user's current struct values win over the stashed copy. Future-
+    // version keys (or hand-edited keys this build doesn't otherwise
+    // touch) survive an older-build save.
+    for (auto it = c.preservedKeys.constBegin(); it != c.preservedKeys.constEnd(); ++it) {
+      settings.setValue(it.key(), it.value());
+    }
     settings.setValue(keys::kName, c.name);
     // persist the free-form category label. Stored verbatim
     // (whitespace already trimmed at load) so a hand-edit round-trips.

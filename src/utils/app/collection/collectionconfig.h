@@ -16,8 +16,10 @@
 // still live in the umbrella collectionutils.h for now.
 
 #include <algorithm>
+#include <QHash>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 #include "../collectiontypes.h"
 #include "archiveoptions.h"
@@ -211,6 +213,16 @@ struct CollectionConfig {
   /// and to highlight the favorites toggle on items that already belong to
   /// the favorites playlist. Runtime-only, never persisted to INI.
   QString playlistReservedKind;
+
+  /// Pass-through bag for keys the load path read out of the collection's
+  /// INI section that this build doesn't otherwise consume. Strict
+  /// round-trip preservation: a newer build's key (e.g. a future feature
+  /// flag) read by this older build is stashed here and re-emitted on
+  /// save, so a save-by-older-build doesn't silently delete it. Only flat
+  /// child keys are preserved — nested arrays (additionalLaunchers/N/*)
+  /// are handled by their own load/save paths. Excluded from operator==
+  /// because the bag has no semantic meaning to runtime code.
+  QHash<QString, QVariant> preservedKeys;
 
   bool operator==(const CollectionConfig &other) const {
     return name == other.name && type == other.type && launcher == other.launcher &&
