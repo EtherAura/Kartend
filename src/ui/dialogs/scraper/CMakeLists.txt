@@ -4,6 +4,7 @@ target_sources(kartend_ui PRIVATE
   result/batchprogressview.cpp
   result/scraperesultdialog.cpp
   result/scraperesultdialogunified.cpp
+  result/scraperesultdialogunified_runtime.cpp
   result/singleitemview.cpp
   scrapejobgrouping.cpp
   scrapercredentialsdialog.cpp
