@@ -6,13 +6,13 @@
  */
 
 #include "cachemanager.h"
-#include <QTemporaryDir>
-#include <QTest>
+#include <QApplication>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QPixmap>
-#include <QApplication>
+#include <QTemporaryDir>
+#include <QTest>
 
 class TestCacheManager : public QObject {
   Q_OBJECT
@@ -31,7 +31,7 @@ private slots:
   void testGetArtwork_cacheHit();
   void testGetArtwork_cacheMiss();
   void testGetArtwork_emptyPath();
-  
+
   // Cache metrics
   void testMetrics_initialState();
   void testMetrics_memoryHit();
@@ -39,9 +39,10 @@ private slots:
   void testMetrics_insert();
   void testMetrics_hitRate();
   void testMetrics_reset();
-  
+
   // Cache management
   void testClearCollectionCache();
+  void testClearCollectionCacheIsScoped();
   void testReleaseGuiResources();
 
   // Async cancellation / shutdown paths
@@ -63,7 +64,7 @@ void TestCacheManager::initTestCase() {
   // Create a temporary directory for test artwork files
   m_tempDir = new QTemporaryDir();
   QVERIFY(m_tempDir->isValid());
-  
+
   // Create a test artwork file
   m_testArtworkPath = m_tempDir->path() + "/test_artwork.png";
   QPixmap testPixmap(300, 300);
@@ -93,10 +94,10 @@ void TestCacheManager::cleanup() {
 void TestCacheManager::testCacheArtwork_validPixmap() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   // Should not throw and should be retrievable
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
-  
+
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   QVERIFY2(!retrieved.isNull(), "Cached pixmap should be retrievable");
   QCOMPARE(retrieved.width(), 300);
@@ -106,10 +107,10 @@ void TestCacheManager::testCacheArtwork_validPixmap() {
 void TestCacheManager::testCacheArtwork_emptyPath() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   // Should not crash with empty path
   m_cacheManager->cacheArtwork("", pixmap);
-  
+
   // Empty path should return null pixmap
   QPixmap retrieved = m_cacheManager->getArtwork("");
   QVERIFY(retrieved.isNull());
@@ -117,10 +118,10 @@ void TestCacheManager::testCacheArtwork_emptyPath() {
 
 void TestCacheManager::testCacheArtwork_nullPixmap() {
   QPixmap nullPixmap;
-  
+
   // Should not crash with null pixmap
   m_cacheManager->cacheArtwork(m_testArtworkPath, nullPixmap);
-  
+
   // Null pixmap should not be cached
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.inserts, 0);
@@ -130,10 +131,10 @@ void TestCacheManager::testCacheArtwork_tooSmallPixmap() {
   // Pixmaps smaller than MIN_PIXMAP_SIZE (200) should not be cached
   QPixmap smallPixmap(100, 100);
   smallPixmap.fill(Qt::green);
-  
+
   QString smallPath = m_tempDir->path() + "/small.png";
   m_cacheManager->cacheArtwork(smallPath, smallPixmap);
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.inserts, 0);
 }
@@ -141,14 +142,14 @@ void TestCacheManager::testCacheArtwork_tooSmallPixmap() {
 void TestCacheManager::testGetArtwork_cacheHit() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   m_cacheManager->resetMetrics();
-  
+
   // First retrieval - should be memory hit
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   QVERIFY(!retrieved.isNull());
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 1);
   QCOMPARE(metrics.misses, 0);
@@ -156,10 +157,10 @@ void TestCacheManager::testGetArtwork_cacheHit() {
 
 void TestCacheManager::testGetArtwork_cacheMiss() {
   QString nonExistentPath = "/nonexistent/artwork/path.png";
-  
+
   QPixmap retrieved = m_cacheManager->getArtwork(nonExistentPath);
   QVERIFY(retrieved.isNull());
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.misses, 1);
   QCOMPARE(metrics.memoryHits, 0);
@@ -176,7 +177,7 @@ void TestCacheManager::testGetArtwork_emptyPath() {
 
 void TestCacheManager::testMetrics_initialState() {
   CacheMetrics metrics = m_cacheManager->metrics();
-  
+
   QCOMPARE(metrics.memoryHits, 0);
   QCOMPARE(metrics.diskHits, 0);
   QCOMPARE(metrics.misses, 0);
@@ -188,13 +189,13 @@ void TestCacheManager::testMetrics_initialState() {
 void TestCacheManager::testMetrics_memoryHit() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   m_cacheManager->resetMetrics();
-  
+
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   Q_UNUSED(retrieved);
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 1);
 }
@@ -202,7 +203,7 @@ void TestCacheManager::testMetrics_memoryHit() {
 void TestCacheManager::testMetrics_cacheMiss() {
   QPixmap retrieved = m_cacheManager->getArtwork("/nonexistent/path.png");
   Q_UNUSED(retrieved);
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.misses, 1);
 }
@@ -210,9 +211,9 @@ void TestCacheManager::testMetrics_cacheMiss() {
 void TestCacheManager::testMetrics_insert() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.inserts, 1);
 }
@@ -220,25 +221,25 @@ void TestCacheManager::testMetrics_insert() {
 void TestCacheManager::testMetrics_hitRate() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   // Insert one item
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   m_cacheManager->resetMetrics();
-  
+
   // 2 hits
   QPixmap hit1 = m_cacheManager->getArtwork(m_testArtworkPath);
   QPixmap hit2 = m_cacheManager->getArtwork(m_testArtworkPath);
   Q_UNUSED(hit1);
   Q_UNUSED(hit2);
-  
+
   // 1 miss
   QPixmap miss = m_cacheManager->getArtwork("/nonexistent.png");
   Q_UNUSED(miss);
-  
+
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 2);
   QCOMPARE(metrics.misses, 1);
-  
+
   // Hit rate should be 2/3 = 0.666...
   double expectedRate = 2.0 / 3.0;
   QVERIFY(qAbs(metrics.memoryHitRate() - expectedRate) < 0.01);
@@ -247,16 +248,16 @@ void TestCacheManager::testMetrics_hitRate() {
 void TestCacheManager::testMetrics_reset() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   Q_UNUSED(retrieved);
-  
+
   CacheMetrics before = m_cacheManager->metrics();
   QVERIFY(before.inserts > 0 || before.memoryHits > 0);
-  
+
   m_cacheManager->resetMetrics();
-  
+
   CacheMetrics after = m_cacheManager->metrics();
   QCOMPARE(after.memoryHits, 0);
   QCOMPARE(after.diskHits, 0);
@@ -271,17 +272,20 @@ void TestCacheManager::testMetrics_reset() {
 void TestCacheManager::testClearCollectionCache() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
-  
+
   // Verify it's cached
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   QVERIFY(!retrieved.isNull());
-  
-  // Clear cache
-  m_cacheManager->clearCollectionCache(0);
+
+  // Clear cache for the artwork directory holding m_testArtworkPath. The
+  // signature is now prefix-scoped (Kartend cache-scoping change), so the
+  // caller passes the collection's artworkDirectory; m_tempDir->path()
+  // matches the prefix the path was stored under above.
+  m_cacheManager->clearCollectionCache(m_tempDir->path());
   m_cacheManager->resetMetrics();
-  
+
   // Should now be a miss (not in memory cache)
   QPixmap afterClear = m_cacheManager->getArtwork(m_testArtworkPath);
   // Note: might still be found on disk, but memory cache should be cleared
@@ -289,16 +293,47 @@ void TestCacheManager::testClearCollectionCache() {
   QCOMPARE(metrics.memoryHits, 0);
 }
 
+void TestCacheManager::testClearCollectionCacheIsScoped() {
+  // Two artwork paths under DIFFERENT prefixes. clearCollectionCache for
+  // one prefix must NOT evict entries belonging to the other — the whole
+  // point of the prefix-scoped signature.
+  const QString otherDir = m_tempDir->path() + "/sibling_collection";
+  QVERIFY(QDir().mkpath(otherDir));
+  const QString otherPath = otherDir + "/sibling_artwork.png";
+  // Pixmaps below UIConstants::Cache::MIN_PIXMAP_SIZE (200) are silently
+  // rejected by cacheArtwork. Use 300x300 to match the rest of the suite.
+  QPixmap otherPixmap(300, 300);
+  otherPixmap.fill(Qt::blue);
+  QVERIFY(otherPixmap.save(otherPath, "PNG"));
+
+  QPixmap firstPixmap(300, 300);
+  firstPixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(m_testArtworkPath, firstPixmap);
+  m_cacheManager->cacheArtwork(otherPath, otherPixmap);
+
+  // Evict only the m_testArtworkPath collection by scoping to a non-
+  // matching prefix… first prove the sibling survives an unrelated clear.
+  m_cacheManager->clearCollectionCache(m_tempDir->path() + "/nonexistent");
+  QVERIFY(!m_cacheManager->getArtworkFromMemoryOnly(m_testArtworkPath).isNull());
+  QVERIFY(!m_cacheManager->getArtworkFromMemoryOnly(otherPath).isNull());
+
+  // Now clear under the sibling's prefix and verify the m_testArtworkPath
+  // entry survives intact.
+  m_cacheManager->clearCollectionCache(otherDir);
+  QVERIFY(!m_cacheManager->getArtworkFromMemoryOnly(m_testArtworkPath).isNull());
+  QVERIFY(m_cacheManager->getArtworkFromMemoryOnly(otherPath).isNull());
+}
+
 void TestCacheManager::testReleaseGuiResources() {
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
-  
+
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
-  
+
   // Release resources
   m_cacheManager->releaseGuiResources();
   m_cacheManager->resetMetrics();
-  
+
   // Should be empty now
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   CacheMetrics metrics = m_cacheManager->metrics();
@@ -399,10 +434,9 @@ void TestCacheManager::testDestruct_withScheduledSavesUnderLoad_doesNotCrash() {
   delete manager;
   const qint64 elapsedMs = timer.elapsed();
 
-  QVERIFY2(elapsedMs < 5000,
-           qPrintable(QStringLiteral("CacheManager destructor took %1 ms — "
-                                     "pool drain or timer teardown stalled")
-                          .arg(elapsedMs)));
+  QVERIFY2(elapsedMs < 5000, qPrintable(QStringLiteral("CacheManager destructor took %1 ms — "
+                                                       "pool drain or timer teardown stalled")
+                                            .arg(elapsedMs)));
 
   QCoreApplication::processEvents();
 }

@@ -63,7 +63,13 @@ public:
   virtual void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) = 0;
   virtual void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) = 0;
 
-  virtual void clearCollectionCache(int collectionIndex) = 0;
+  /// Evict cached artwork (in-memory + dirty-tracking) whose source path
+  /// begins with @p artworkDirectoryPrefix. Surgical replacement for the
+  /// prior blanket-clear: callers pass the collection's resolved
+  /// artworkDirectory so only that collection's cache entries drop, leaving
+  /// unrelated collections' caches intact. Passing an empty prefix clears
+  /// nothing (caller bug — would previously have blanket-cleared).
+  virtual void clearCollectionCache(const QString &artworkDirectoryPrefix) = 0;
   virtual void releaseGuiResources() = 0;
 
   /// Resize the in-memory artwork QCache budget. Driven by the user

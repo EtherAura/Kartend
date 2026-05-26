@@ -532,7 +532,15 @@ auto SettingsManager::handleReloadRequired(
 
     if (mediaDirectoryChanged || extensionsChanged) {
       if (cacheManager) {
-        cacheManager->clearCollectionCache(viewingCollectionIndex);
+        // Cache eviction is scoped to the collection's artworkDirectory so
+        // unrelated collections' cached pixmaps survive a media-directory
+        // change here. Skip when the directory is empty — there's nothing
+        // to scope by and the previous blanket-clear is no longer the
+        // implementation.
+        const QString &artworkDir = newCollections[viewingCollectionIndex].artworkDirectory;
+        if (!artworkDir.isEmpty()) {
+          cacheManager->clearCollectionCache(artworkDir);
+        }
       }
       if (artworkManager) {
         artworkManager->clearLoadedArtworkState();
