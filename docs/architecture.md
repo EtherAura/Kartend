@@ -261,6 +261,27 @@ if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
 `setupReferences()` runs; setup calls are wired in
 `MainWindow::setupManagers()` and related methods.
 
+### Two ctx patterns: `ApplicationContext` vs controller-ctx structs
+
+There are two distinct context shapes in the codebase. They are
+intentionally different — the naming distinguishes them at a glance.
+
+| Shape | Holder | Accessor style | Used by |
+|-------|--------|----------------|---------|
+| `ApplicationContext` | Raw `IXxxManager *` fields | `ctx->scrollManager()` (**no** `get` prefix) | Every manager outside `src/core/` reaches its siblings this way |
+| `<Controller>Context` (e.g. `MenuControllerContext`, `ScrollEventsControllerContext`) | `std::function<XxxManager *()>` callbacks | `m_ctx.getScrollManager()` (**with** `get` prefix) | `src/core/` controllers that need lazy, MainWindow-mediated access during the bring-up window when manager pointers are still null |
+
+The `get` prefix on controller-ctx fields is the conventional C++ getter
+hint for a callable / `std::function`, signalling that the call site is
+invoking a thunk rather than dereferencing a pointer. The plain accessor
+on `ApplicationContext` reflects that those *are* direct pointer reads
+of a value already resolved. Don't normalise the two — the prefix is the
+signal.
+
+The audit-grep against legacy `mainWindow->getXxxManager` callers
+(documented in `.scripts/check-layering.py`) is unaffected: it matches
+on the `mainWindow->` qualifier, which neither pattern uses.
+
 ## Key Design Patterns
 
 ### Single Source of Truth
