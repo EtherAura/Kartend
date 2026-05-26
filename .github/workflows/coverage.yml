@@ -105,18 +105,19 @@ jobs:
       - name: Surface coverage in step summary + enforce floor
         env:
           # Floors track the observed CI baseline minus a small tolerance.
-          # Baseline as of the integration-test-harness landing: 27.2% lines,
-          # 39.6% functions. Milestone 1 of Kartend-l44o.1 lifts the floor
-          # after the per-manager integration test suites (l44o.2-9) landed;
-          # local gcov 15 measurement on 2026-05-22 showed 35.79% lines /
-          # 46.87% functions, so 33/42 leaves ~2.8pp lines / ~4.9pp functions
-          # headroom for the CI gcov-11 vs local gcov-15 measurement drift.
-          # Tolerances chosen to absorb small refactors without firing on
-          # noise, while still catching gross regressions (deleted suite,
-          # accidentally disabled job, etc.). Set either var to 0 to disable
-          # that metric's enforcement (report-only).
-          KARTEND_COVERAGE_MIN_LINES: '33'
-          KARTEND_COVERAGE_MIN_FUNCTIONS: '42'
+          # Earlier baseline (post integration-test-harness landing) was 27.2%
+          # lines / 39.6% functions; once the per-manager integration suites
+          # landed, the local gcov 15 measurement on 2026-05-22 showed 35.79%
+          # lines / 46.87% functions. The floor is set to that baseline minus
+          # ~0.5pp on each metric — tight enough to catch gross regressions
+          # (deleted suite, accidentally disabled job, half a manager going
+          # untested), loose enough to absorb the CI gcov-11 vs local gcov-15
+          # measurement drift and small benign refactors. Raise manually when
+          # coverage improves enough to justify it (no ongoing ratchet).
+          # Set either var to 0 to disable that metric's enforcement
+          # (report-only).
+          KARTEND_COVERAGE_MIN_LINES: '35'
+          KARTEND_COVERAGE_MIN_FUNCTIONS: '46'
         run: |
           # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
           # Capture the percentage and write a GitHub step summary.
