@@ -1199,7 +1199,7 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
     } catch (const std::exception &e) {
       m_db.rollback();
 
-      QString errorText = QString::fromStdString(e.what());
+      QString errorText = ErrorUtils::exceptionMessage(e);
       bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {

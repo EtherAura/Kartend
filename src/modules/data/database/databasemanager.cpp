@@ -427,7 +427,7 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
     auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
                                       "Failed to clear collection from database",
                                       "DatabaseManager::clearCollectionFromDatabaseByUuid")
-                   .withDetails(QString::fromStdString(e.what()));
+                   .withDetails(ErrorUtils::exceptionMessage(e));
     ErrorUtils::logError(err);
   }
 }
@@ -471,7 +471,7 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
     ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
                                                 "Failed to migrate collection uuid",
                                                 "DatabaseManager::migrateCollectionUuid")
-                             .withDetails(QString::fromStdString(e.what())));
+                             .withDetails(ErrorUtils::exceptionMessage(e)));
   }
 }
 
@@ -605,7 +605,7 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
     ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
                                                 "Failed to purge orphan collection data",
                                                 "DatabaseManager::purgeOrphanCollectionData")
-                             .withDetails(QString::fromStdString(e.what())));
+                             .withDetails(ErrorUtils::exceptionMessage(e)));
   }
 }
 
