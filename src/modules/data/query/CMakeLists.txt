@@ -12,6 +12,7 @@ target_sources(kartend_data PRIVATE
   querymanagerstatichelpers.cpp
   scanneditemstable.cpp
   scanservice.cpp
+  scanservice_persist.cpp
   scanworkcontroller.cpp
   preparedstatementcache.h
   querymanager.h
