@@ -70,6 +70,23 @@ in CI and will catch the drift there.
 
 See [docs/architecture.md](docs/architecture.md) for module hierarchy, signal flow, and ownership model.
 
+## Issue tracking conventions (beads / `bd`)
+
+Kartend uses [beads](https://github.com/steveyegge/beads) for internal task
+tracking. Most contributors don't need to interact with it directly — GitHub
+issues remain the public-facing entry point for bug reports and feature
+requests (see below). For PRs that touch the codebase, the convention is:
+
+**Beads IDs (`Kartend-XXXX`) may appear in:** code comments, commit messages
+and PR descriptions, `CHANGELOG.md`, and contributor-facing dev docs
+under `docs/` (architecture, layering, testing, building, …). The IDs serve
+as cross-references to historical extraction or refactor work.
+
+**Beads IDs must NOT appear in:** user-facing string literals (tooltips,
+labels, dialogs, error messages), `readme.md`, AppStream metadata under
+`packaging/`, or the wiki content under `docs/guide/*.md`. End users see
+those surfaces and a `Kartend-XXXX` reference there is noise to them.
+
 ## Reporting Issues
 
 Use the GitHub issue templates for bugs and feature requests.
