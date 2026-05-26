@@ -77,14 +77,13 @@ can enforce that it never reaches back up.
 - **External `MainWindow::getXxxManager()` callers** are being moved to
   `mainWindow->getApplicationManager()->getXxxManager()` or, preferably,
   to controllers that accept an `ApplicationManager*` in their setup.
-  See Kartend-5wuk.1 for the migration tracking issue. Internal callers
-  inside `mainwindow*.cpp` retain the convenience `getXxxMgr()` helpers
-  until the removal lands.
+  Internal callers inside `mainwindow*.cpp` retain the convenience
+  `getXxxMgr()` helpers until the removal lands.
 
-- **`mainwindow.cpp` slimming** (Kartend-dk2c.5): `refreshTitleCounts`
-  and the few remaining handler bodies at the bottom of the file are
-  the next extraction candidates. The target is a 600-line core
-  TU; current is 865.
+- **`mainwindow.cpp` slimming**: `refreshTitleCounts` and the few
+  remaining handler bodies at the bottom of the file are the next
+  extraction candidates. The target is a 600-line core TU; current is
+  865.
 
 ## See also
 

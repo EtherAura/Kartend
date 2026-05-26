@@ -94,7 +94,8 @@ It owns a ui-layer widget (`DetailsPane`), so per the layering rules
 it has to live at `ui/`. The historical name carried "Manager"
 because that was the established pattern when it was extracted, but
 structurally it's a controller for a ui widget. It was moved out of
-`modules/media/` in [Kartend-uk5z](../src/ui/controllers/detailspanemanager/).
+`modules/media/` and now lives at
+[`src/ui/controllers/detailspanemanager/`](../src/ui/controllers/detailspanemanager/).
 
 `DetailPageManager`'s widget (`DetailPageOverlay`) is owned by
 MainWindow, parented to the central widget so it can span the full

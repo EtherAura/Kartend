@@ -38,8 +38,9 @@ Most additions don't need all of these — pick what applies.
 
 ### Which leaf cluster (per-collection)?
 
-After the Kartend-0yz3 god-header split, per-collection settings
-live in narrow leaf headers — pick the one your field belongs to:
+After the `collectionutils.h` god-header was peeled into leaf
+clusters, per-collection settings live in narrow leaf headers — pick
+the one your field belongs to:
 
 | Leaf header | Holds |
 |-------------|-------|
