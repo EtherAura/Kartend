@@ -65,6 +65,21 @@ public:
   [[nodiscard]] bool hasQueuedDirectories() const;
 
   /**
+   * @brief Check whether @p directory is currently pending or being
+   * processed by a background prewarm.
+   *
+   * Callers use this to decide whether a synchronous filesystem fallback
+   * is worthwhile. If a prewarm is in flight, the cache will be warm
+   * within tens of ms and the post-prewarm reconfigure path will fire —
+   * paying for a synchronous stat in the meantime just doubles the work
+   * and blocks the GUI thread per call. Returns true while the directory
+   * is in `m_queuedDirectories`, which holds entries from the moment
+   * they're queued until `prewarmDirectories` / `processQueuedDirectories`
+   * removes them after the scan finishes.
+   */
+  [[nodiscard]] bool isDirectoryQueued(const QString &directory) const;
+
+  /**
    * @brief Clear all cached directory contents and queued directories.
    * Call when collection changes or artwork directories are modified.
    */
