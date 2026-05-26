@@ -107,10 +107,16 @@ toolchains, manual CMake, packaging, and uninstall.
 
 ### Dependencies
 
-CMake 3.20+, a C++23 compiler (Clang or GCC), and Qt6 (Core, Gui,
-Widgets, Sql, Concurrent, Multimedia, MultimediaWidgets). Optional:
-**Qt6 Gamepad** *or* **SDL2** (gamepad backend, auto-detected) and
-**zstd** (auto-detected; falls back to zlib via `qCompress`).
+CMake 3.20+, a C++23 compiler (Clang or GCC), and **Qt 6.4 LTS or
+later** (Core, Gui, Widgets, Sql, Concurrent, Multimedia,
+MultimediaWidgets, Network, LinguistTools). Optional: **Qt6 Gamepad**
+*or* **SDL2** (gamepad backend, auto-detected) and **zstd**
+(auto-detected; falls back to zlib via `qCompress`).
+
+A cold release build takes roughly **5–10 minutes** on modern hardware
+the first time through; subsequent ccache-hit incremental builds finish
+in ~30 seconds. See [`docs/building.md`](docs/building.md) for distro
+package lists, debug/sanitizer/PGO modes, and CI reproduction.
 
 ## Documentation
 
