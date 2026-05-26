@@ -380,13 +380,41 @@ void CacheManager::cacheArtworkInMemoryOnly(const QString &artworkPath, const QP
   ++m_metrics.inserts;
 }
 
-// Clears all cached data for a particular collection (currently clears all) and
-// resets memory accounting
-void CacheManager::clearCollectionCache(int collectionIndex) {
-  Q_UNUSED(collectionIndex)
+// Evicts only the artwork-cache + dirty-tracking entries whose source path
+// begins with @p artworkDirectoryPrefix, leaving other collections' caches
+// intact. Empty prefix is a no-op — callers that intend a full purge
+// should be explicit rather than going through this collection-scoped
+// path. Pattern mirrors ItemMetadataCache::invalidateCollection.
+void CacheManager::clearCollectionCache(const QString &artworkDirectoryPrefix) {
+  if (artworkDirectoryPrefix.isEmpty()) return;
+
   QMutexLocker locker(&m_mutex);
-  artworkCache.clear();
-  dirtyArtwork.clear();
+
+  // Normalise the prefix to a directory-terminated form so an
+  // artworkDirectory of "/home/u/art" doesn't accidentally match
+  // "/home/u/art-old/cover.png". QCache::keys() returns the full key list
+  // — safe to copy here because the underlying storage isn't mutated
+  // while we hold m_mutex.
+  QString prefix = artworkDirectoryPrefix;
+  if (!prefix.endsWith(QLatin1Char('/'))) {
+    prefix.append(QLatin1Char('/'));
+  }
+
+  const QList<QString> allKeys = artworkCache.keys();
+  for (const QString &key : allKeys) {
+    if (key.startsWith(prefix)) {
+      artworkCache.remove(key);
+    }
+  }
+  // Walk dirtyArtwork with the same prefix; std::erase_if would be cleaner
+  // but QSet has no project-wide erase-if helper today.
+  for (auto it = dirtyArtwork.begin(); it != dirtyArtwork.end();) {
+    if (it->startsWith(prefix)) {
+      it = dirtyArtwork.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 // Returns the cached on-disk size and (when stale) dispatches a background

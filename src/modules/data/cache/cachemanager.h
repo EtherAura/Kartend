@@ -61,7 +61,7 @@ public:
   // persistence.
   void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) override;
 
-  void clearCollectionCache(int collectionIndex) override;
+  void clearCollectionCache(const QString &artworkDirectoryPrefix) override;
   /// Approximate total bytes on disk under the artwork cache directory.
   /// Cached internally and refreshed via a background QDirIterator walk —
   /// the call returns the most recent cached value immediately, and
