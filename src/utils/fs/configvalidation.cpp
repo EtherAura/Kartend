@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -150,6 +151,104 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
   }
   if (config.gridLayout.itemWidth < 50 || config.gridLayout.itemHeight < 50) {
     result.addWarning(prefix + "very small item dimensions may cause display issues");
+  }
+
+  // Per-leaf-struct field validation. Each block is independent so adding a
+  // new field to any leaf struct touches only the matching block here.
+  // Convention: warning-level only — clampValues() is the runtime
+  // backstop; these warnings give the user a diagnostic trail when a
+  // hand-edited or migrated INI carries an out-of-range value.
+
+  // GridLayoutPreferences — alternates + spacing + corner radius.
+  const auto &gl = config.gridLayout;
+  if (gl.horizontalGridHeight < 0) {
+    result.addWarning(prefix + "horizontalGridHeight negative, will be clamped to 0 (inherit)");
+  }
+  if (gl.gridWidthSidebarHidden < 0) {
+    result.addWarning(prefix + "gridWidthSidebarHidden negative, will be clamped to 0 (inherit)");
+  }
+  if (gl.horizontalGridHeightSidebarHidden < 0) {
+    result.addWarning(prefix +
+                      "horizontalGridHeightSidebarHidden negative, will be clamped to 0 (inherit)");
+  }
+  if (gl.gridHeightSidebarHidden < 0) {
+    result.addWarning(prefix +
+                      "gridHeightSidebarHidden negative, will be clamped to 0 (no override)");
+  }
+  if (gl.horizontalSpacing < 0) {
+    result.addWarning(prefix + "horizontalSpacing negative, will be clamped to 0");
+  }
+  if (gl.verticalSpacing < 0) {
+    result.addWarning(prefix + "verticalSpacing negative, will be clamped to 0");
+  }
+  if (gl.fontSize <= 0) {
+    result.addWarning(prefix + "gridLayout.fontSize must be > 0, will be clamped to default");
+  }
+  if (gl.cornerRadius < 0) {
+    result.addWarning(prefix + "cornerRadius negative, will be clamped to 0");
+  }
+
+  // ListViewOptions — font + row height.
+  const auto &lv = config.listView;
+  if (lv.listFontSize <= 0) {
+    result.addWarning(prefix + "listFontSize must be > 0, will be clamped to default");
+  }
+  if (lv.listRowHeight <= 0) {
+    result.addWarning(prefix + "listRowHeight must be > 0, will be clamped to default");
+  }
+
+  // CollectionBackground — vignette + parallax + blur ranges.
+  const auto &bg = config.background;
+  if (bg.vignetteIntensity < 0 || bg.vignetteIntensity > 100) {
+    result.addWarning(prefix + "vignetteIntensity " + QString::number(bg.vignetteIntensity) +
+                      " outside 0-100, will be clamped");
+  }
+  if (bg.parallaxStrength < 0 || bg.parallaxStrength > 100) {
+    result.addWarning(prefix + "parallaxStrength " + QString::number(bg.parallaxStrength) +
+                      " outside 0-100, will be clamped");
+  }
+  if (bg.backdropBlurRadius < 0) {
+    result.addWarning(prefix + "backdropBlurRadius negative, will be clamped to 0");
+  }
+
+  // SidebarAppearance — opacities + intensity + dimensions.
+  const auto &sb = config.sidebar;
+  if (sb.sidebarPatternIntensity < 0 || sb.sidebarPatternIntensity > 100) {
+    result.addWarning(prefix + "sidebarPatternIntensity " +
+                      QString::number(sb.sidebarPatternIntensity) +
+                      " outside 0-100, will be clamped");
+  }
+  if (sb.sidebarHeaderBgOpacity < 0 || sb.sidebarHeaderBgOpacity > 255) {
+    result.addWarning(prefix + "sidebarHeaderBgOpacity " +
+                      QString::number(sb.sidebarHeaderBgOpacity) +
+                      " outside 0-255, will be clamped");
+  }
+  if (sb.sidebarSectionBgOpacity < 0 || sb.sidebarSectionBgOpacity > 255) {
+    result.addWarning(prefix + "sidebarSectionBgOpacity " +
+                      QString::number(sb.sidebarSectionBgOpacity) +
+                      " outside 0-255, will be clamped");
+  }
+  if (sb.sidebarWidth < 0) {
+    result.addWarning(prefix + "sidebarWidth negative, will be clamped to MIN_WIDTH");
+  }
+  if (sb.sidebarHeight < 0) {
+    result.addWarning(prefix + "sidebarHeight negative, will be clamped to MIN_HEIGHT");
+  }
+  if (sb.sidebarFontPointSize < 0) {
+    result.addWarning(prefix + "sidebarFontPointSize negative, will be treated as 0 (inherit)");
+  }
+
+  // CollectionFilterPreferences — surface invalid regex patterns. The
+  // runtime TitleFilter::compilePatterns silently drops bad patterns; this
+  // warning gives the user a chance to fix the typo before they wonder why
+  // their cleanup rule "isn't working".
+  for (const QString &pat : config.filter.titleExclusionPatterns) {
+    if (pat.isEmpty()) continue;
+    QRegularExpression re(pat);
+    if (!re.isValid()) {
+      result.addWarning(prefix + "titleExclusionPatterns entry is not a valid regex: \"" + pat +
+                        "\" — " + re.errorString());
+    }
   }
 
   // Parent index validation
