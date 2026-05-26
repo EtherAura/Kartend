@@ -282,4 +282,4 @@ metadata yourself.
   [scrapercredentialspanel.cpp](../../src/ui/dialogs/scraper/scrapercredentialspanel.cpp)
   if it needs auth, and (when adding `MetadataLookup` / `MediaFetch`)
   a parser. A dedicated dev doc for the provider plugin pattern is
-  planned (see Kartend-6qs0).
+  planned.

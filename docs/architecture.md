@@ -57,12 +57,12 @@ src/
 ├── ui/                  # UI components and constants
 │   ├── controllers/     # Controllers that orchestrate UI widgets but stay
 │   │   │                # at the ui/ layer (e.g. DetailsPaneManager, moved
-│   │   │                # out of modules/media/ in Kartend-uk5z)
+│   │   │                # out of modules/media/ when relayered as ui/)
 │   │   └── detailspanemanager/
 │   ├── dialogs/         # Dialogs grouped by domain: settings/ (further
 │   │                    # split into core/ + appearance/ + behavior/ +
-│   │                    # artwork/ + launchers/ + collections/ per
-│   │                    # Kartend-cqx3), collection/, launcher/, scraper/,
+│   │                    # artwork/ + launchers/ + collections/),
+│   │                    # collection/, launcher/, scraper/,
 │   │                    # kart/ (loose dialogs at root)
 │   └── widgets/         # UI-coupled widgets: details pane, marquee window,
 │                        # splash / now-playing / startup-video / text-zoom
@@ -77,7 +77,7 @@ src/
 | `main.cpp` | Application entry point that initializes Qt and displays the main window. |
 | `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. The implementation is split across six sibling TUs (`mainwindow.cpp`, `mainwindow_setup.cpp`, `mainwindow_wiring.cpp`, `mainwindow_timers.cpp`, `mainwindow_scraper.cpp`, `mainwindow_toolbar.cpp`); see [mainwindow-partials.md](mainwindow-partials.md) for the responsibility map and the rule for where new code goes. |
 | `marqueecontroller` | Drives the secondary-monitor marquee / topper window — owns the MarqueeWindow and the artwork-refresh debounce timer (extracted from MainWindow). |
-| `scrolleventscontroller` | Owns MainWindow's reactions to ScrollManager view-mode / column-resize / CoverFlow activation signals (sort-mode change, list-column-width persist, CoverFlow item-launch, sidebar-yield for CoverFlow / artwork-preview overlay). Replaces the prior `mainwindow_scrollevents.cpp` partial (Kartend-hzef). |
+| `scrolleventscontroller` | Owns MainWindow's reactions to ScrollManager view-mode / column-resize / CoverFlow activation signals (sort-mode change, list-column-width persist, CoverFlow item-launch, sidebar-yield for CoverFlow / artwork-preview overlay). Replaces the prior `mainwindow_scrollevents.cpp` partial. |
 
 ## Modules (`src/modules/`)
 
@@ -102,7 +102,7 @@ src/
 | `cachemanager` | Manages in-memory pixmap cache with LRU eviction and optional disk persistence. |
 | `sessionmanager` | Persists and restores selection state and item counts across application sessions. |
 | `settingsmanager` | Handles config file I/O, collection settings, and the settings dialog interface. |
-| `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). Lives at `src/ui/controllers/detailspanemanager/` since Kartend-uk5z — a controller for a ui-layer widget (DetailsPane), at the ui/ layer. |
+| `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). Lives at `src/ui/controllers/detailspanemanager/` — a controller for a ui-layer widget (DetailsPane), at the ui/ layer. |
 | `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
 | `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
 | `datasourcemanager` | Owns FilterManager, ScrollDataManager, PreSearchStateManager, and SearchLoadingOverlay (helper extracted from ScrollManager). |
@@ -122,7 +122,7 @@ Additional helper managers owned by their parent feature module (not top-level):
 
 | Component | Description |
 |-----------|-------------|
-| `uiconstants/` | Per-area headers (`grid.h`, `dialog.h`, `icons.h`, …) carrying UI timing, spacing, and dimension constants. The old `uiconstants.h` umbrella was deprecated in Kartend-m175 — 117 callers migrated to the topical subheaders. |
+| `uiconstants/` | Per-area headers (`grid.h`, `dialog.h`, `icons.h`, …) carrying UI timing, spacing, and dimension constants. The old `uiconstants.h` umbrella was deprecated when the 117 callers were migrated to the topical subheaders. |
 | `settingsdialog` | Collection configuration dialog with tree-based hierarchy editing and live preview. |
 | `detailspane` | Displays file metadata, artwork gallery, and item details in the side pane. |
 | `itemwidget` | Media item widget displaying artwork, title, and selection state with pulse animation. |
@@ -137,22 +137,22 @@ Utilities are grouped by concern in six subfolders.
 |---------|-------------|
 | `applicationcontext.h` | `ApplicationContext` struct (collection / ui / managers sub-structs) shared across managers. |
 | `cliargs` | Command-line argument parsing for startup-collection overrides and headless Kart import/export. |
-| `collection/archiveoptions.h` | `ArchiveOptions` leaf struct (per-collection archive-extraction toggles: `extractArchives`, `extractedExtension`). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/collectionbackground.h` | `CollectionBackground` leaf struct (per-collection view-background / wallpaper cluster: items-page background, palette, header logo, vignette, parallax, toolbar backdrop blur). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/collectionconfig.h` | `CollectionConfig` per-collection god-struct (embeds every leaf cluster + `LauncherProfile` + per-collection scalar fields + the `isValid` / `clampValues` helpers). Includes every leaf header it embeds, so a TU that needs `CollectionConfig` no longer drags in `CollectionContext` + `GeneralSettings` + the hierarchy cache from `collectionutils.h`. Peeled from `collectionutils.h` (Kartend-0yz3). |
-| `collection/collectioncontext.h` | `CollectionContext` runtime context bundle (current index + config snapshot, active artwork dir, loaded file paths/names, sort mode, query-scope toggles, precomputed descendants/UUIDs/dir maps from the hierarchy cache, UI overrides, type filters, root-view flag). Peeled from `collectionutils.h` (Kartend-0yz3). |
-| `collection/collectionfilterpreferences.h` | `CollectionFilterPreferences` leaf struct (per-collection title-cleanup regex patterns + master toggle). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/collectionhierarchycache.h` | `CollectionHierarchyCache` precomputed parent → children + descendant + UUID + media/artwork-dir maps; rebuilt once per navigation entry for O(1) lookup on the QueryManager / search hot path. Peeled from `collectionutils.h` (Kartend-0yz3); `rebuild()` impl stays in `collectionutils.cpp`. |
-| `collection/folderbrowsingoptions.h` | `FolderBrowsingOptions` leaf struct (virtual-folder browsing toggles + runtime subfolder cursor). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/generalsettings.h` | `GeneralSettings` app-wide settings god-struct (input timing, keybindings, gamepad, scraper preset + credentials + options, attract / marquee / splash / runtime-detection toggles, first-run flag, launch history, view-mode + toolbar customisation, the `LauncherPreset` registry, …). Includes nested `ScraperOptions` + `ScraperPreset` / `ScraperRescrapeMode` enums. Peeled from `collectionutils.h` (Kartend-0yz3). |
-| `collection/gridlayoutpreferences.h` | `GridLayoutPreferences` leaf struct (per-collection grid / item-layout cluster: items-per-row, spacing, item-box dimensions + font + corner radius, scrollbar toggles). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/launcherconfig.h` | `LauncherConfig` (one launcher entry) + `LauncherProfile` (per-collection launcher container with primary + additional launchers + chooser-default index + lookup helpers) + `LauncherUtils::usesLibretroCore` / `LauncherUtils::resolvePreset` decl. First non-leaf peel — depends on `LauncherPreset`. Peeled from `collectionutils.h` (Kartend-0yz3); `resolvePreset` impl stays in `collectionutils.cpp`. |
-| `collection/launcherpreset.h` | `LauncherPreset` leaf struct (globally-registered, reusable launcher configuration). First struct peeled out of the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/listviewoptions.h` | `ListViewOptions` leaf struct (per-collection list-view appearance overrides: `listFontSize`, `listRowHeight`, `listRowColor`, `listAltRowColor`). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/scraperoverrides.h` | `ScraperOverrides` leaf struct (per-collection scraper / DAT overrides: `screenscraperSystemId`, `screenscraperHashArchive`, `datFilePaths`, `scraperProviderId`). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
-| `collection/sidebarappearance.h` | `SidebarAppearance` leaf struct (per-collection metadata-sidebar appearance: visibility, dock mode/position, background + pattern, colors, opacity, dimensions, font). Peeled from the `collectionutils.h` god-header (Kartend-0yz3). |
+| `collection/archiveoptions.h` | `ArchiveOptions` leaf struct (per-collection archive-extraction toggles: `extractArchives`, `extractedExtension`). Peeled from the `collectionutils.h` god-header. |
+| `collection/collectionbackground.h` | `CollectionBackground` leaf struct (per-collection view-background / wallpaper cluster: items-page background, palette, header logo, vignette, parallax, toolbar backdrop blur). Peeled from the `collectionutils.h` god-header. |
+| `collection/collectionconfig.h` | `CollectionConfig` per-collection god-struct (embeds every leaf cluster + `LauncherProfile` + per-collection scalar fields + the `isValid` / `clampValues` helpers). Includes every leaf header it embeds, so a TU that needs `CollectionConfig` no longer drags in `CollectionContext` + `GeneralSettings` + the hierarchy cache from `collectionutils.h`. Peeled from `collectionutils.h`. |
+| `collection/collectioncontext.h` | `CollectionContext` runtime context bundle (current index + config snapshot, active artwork dir, loaded file paths/names, sort mode, query-scope toggles, precomputed descendants/UUIDs/dir maps from the hierarchy cache, UI overrides, type filters, root-view flag). Peeled from `collectionutils.h`. |
+| `collection/collectionfilterpreferences.h` | `CollectionFilterPreferences` leaf struct (per-collection title-cleanup regex patterns + master toggle). Peeled from the `collectionutils.h` god-header. |
+| `collection/collectionhierarchycache.h` | `CollectionHierarchyCache` precomputed parent → children + descendant + UUID + media/artwork-dir maps; rebuilt once per navigation entry for O(1) lookup on the QueryManager / search hot path. Peeled from `collectionutils.h`; `rebuild()` impl stays in `collectionutils.cpp`. |
+| `collection/folderbrowsingoptions.h` | `FolderBrowsingOptions` leaf struct (virtual-folder browsing toggles + runtime subfolder cursor). Peeled from the `collectionutils.h` god-header. |
+| `collection/generalsettings.h` | `GeneralSettings` app-wide settings god-struct (input timing, keybindings, gamepad, scraper preset + credentials + options, attract / marquee / splash / runtime-detection toggles, first-run flag, launch history, view-mode + toolbar customisation, the `LauncherPreset` registry, …). Includes nested `ScraperOptions` + `ScraperPreset` / `ScraperRescrapeMode` enums. Peeled from `collectionutils.h`. |
+| `collection/gridlayoutpreferences.h` | `GridLayoutPreferences` leaf struct (per-collection grid / item-layout cluster: items-per-row, spacing, item-box dimensions + font + corner radius, scrollbar toggles). Peeled from the `collectionutils.h` god-header. |
+| `collection/launcherconfig.h` | `LauncherConfig` (one launcher entry) + `LauncherProfile` (per-collection launcher container with primary + additional launchers + chooser-default index + lookup helpers) + `LauncherUtils::usesLibretroCore` / `LauncherUtils::resolvePreset` decl. First non-leaf peel — depends on `LauncherPreset`. Peeled from `collectionutils.h`; `resolvePreset` impl stays in `collectionutils.cpp`. |
+| `collection/launcherpreset.h` | `LauncherPreset` leaf struct (globally-registered, reusable launcher configuration). First struct peeled out of the `collectionutils.h` god-header. |
+| `collection/listviewoptions.h` | `ListViewOptions` leaf struct (per-collection list-view appearance overrides: `listFontSize`, `listRowHeight`, `listRowColor`, `listAltRowColor`). Peeled from the `collectionutils.h` god-header. |
+| `collection/scraperoverrides.h` | `ScraperOverrides` leaf struct (per-collection scraper / DAT overrides: `screenscraperSystemId`, `screenscraperHashArchive`, `datFilePaths`, `scraperProviderId`). Peeled from the `collectionutils.h` god-header. |
+| `collection/sidebarappearance.h` | `SidebarAppearance` leaf struct (per-collection metadata-sidebar appearance: visibility, dock mode/position, background + pattern, colors, opacity, dimensions, font). Peeled from the `collectionutils.h` god-header. |
 | `collectiontypes.h` | Standalone enums extracted from `collectionutils.h` (`HorizontalAlignment`, `DetailsPaneMode`, etc.). |
-| `collectionutils` | `CollectionConfig`, `CollectionContext`, `CollectionHierarchyCache` plus hierarchy and validation helpers. Umbrella header that re-includes the leaf structs under `collection/` during the Kartend-0yz3 split. |
+| `collectionutils` | `CollectionConfig`, `CollectionContext`, `CollectionHierarchyCache` plus hierarchy and validation helpers. Umbrella header that re-includes the leaf structs under `collection/` (kept during the god-header peel for a backwards-compatible include path). |
 | `errorutils.h` | Structured error handling: `ErrorCode` enum, `ErrorContext` struct, `Result<T>` template, `lcErrors` category. |
 | `loggingcategories` | Cross-cutting `Q_LOGGING_CATEGORY` declarations (`lcPerfTrace`, `lcSearchDiag`, `lcScanFlow`). |
 | `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants. |

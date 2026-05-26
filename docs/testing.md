@@ -106,7 +106,7 @@ leaving a test folder behind after deleting a module, fails the lint.
 | `src/modules/input/widgetpool/` | `tests/modules/widgetpool/` |
 | `src/modules/media/artwork/` | `tests/modules/artwork/` |
 | `src/modules/media/detailpage/` | `tests/modules/detailpage/` |
-| `src/ui/controllers/detailspanemanager/` | *(integration-only — `tests/integration/test_eventmanager_detailspane.cpp`, `test_detailspane_coverflow.cpp`; moved from `src/modules/media/detailspane/` in Kartend-uk5z)* |
+| `src/ui/controllers/detailspanemanager/` | *(integration-only — `tests/integration/test_eventmanager_detailspane.cpp`, `test_detailspane_coverflow.cpp`; moved here from `src/modules/media/detailspane/` when DetailsPaneManager was relayered as a ui-layer controller)* |
 
 Integration-only features (no `tests/modules/<feature>/`) are listed in
 `INTEGRATION_ONLY` inside `check-test-mapping.py`; new additions there
@@ -168,7 +168,7 @@ link closure once instead of per test.
   and links upward to its dependencies via `target_link_libraries(<area>
   PUBLIC <dep>)`, forming a CMake-enforced layering DAG (utils → api →
   chrome → data → input/media → ui → behavior → core). Replaced the prior
-  `kartend_lib` INTERFACE aggregator in Kartend-w1wv.
+  `kartend_lib` INTERFACE aggregator in the per-area-library refactor.
 - `kartend` (executable) — `src/core/main.cpp` plus
   `target_link_libraries(kartend PRIVATE ${KARTEND_AREA_LIBS})`. OBJECT libs
   don't propagate `.o` files through `INTERFACE_LINK_LIBRARIES`, so every

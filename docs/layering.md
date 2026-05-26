@@ -122,10 +122,11 @@ lint is the only guardrail. Fix the include, don't bypass the lint.
 
 The eventual goal is to split each layer into its own CMake target
 with explicit `target_link_libraries`, so the compiler enforces what
-the lint does today. That work is tracked in the original layering
-issue cluster — `Kartend-uk5z` (DetailsPaneManager move), `Kartend-w1wv`
-(kartend_lib deletion), and so on. Until that ships, the lint is
-load-bearing.
+the lint does today. Initial steps have landed (the DetailsPaneManager
+move to `ui/`, the deletion of the `kartend_lib` INTERFACE aggregator
+in favour of per-area OBJECT libraries); the remaining work is
+incremental. Until each layer is its own CMake target with no
+back-doors, the lint is load-bearing.
 
 ## Other discoverability gotchas
 

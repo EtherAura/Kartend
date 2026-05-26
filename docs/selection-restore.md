@@ -85,10 +85,10 @@ the executor:
 
 This is the historical reason the API used to take
 `maxAttempts + attemptDelayMs` — multiple attempts as the worker
-batched items in. Those parameters were dropped in Kartend-plqg
-because they were always `Q_UNUSED` on receipt (the actual loop
-lived elsewhere); the single `finalEnsureDelayMs` covers the same
-ground.
+batched items in. Those parameters were dropped during a later
+cleanup because they were always `Q_UNUSED` on receipt (the actual
+loop lived elsewhere); the single `finalEnsureDelayMs` covers the
+same ground.
 
 ## `shouldRestoreSelection`
 
