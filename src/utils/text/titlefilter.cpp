@@ -20,8 +20,12 @@ QHash<int, CollectionEntry> &registry() {
   return map;
 }
 
+} // namespace
+
+namespace TitleFilter {
+
 QList<QRegularExpression> compilePatterns(const QStringList &patterns,
-                                          const QString &collectionName) {
+                                          const QString &diagnosticContext) {
   QList<QRegularExpression> compiled;
   compiled.reserve(patterns.size());
   for (const QString &raw : patterns) {
@@ -38,18 +42,16 @@ QList<QRegularExpression> compilePatterns(const QStringList &patterns,
           ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::InvalidArgument,
                                             QStringLiteral("Invalid title-exclusion regex skipped"),
                                             QStringLiteral("TitleFilter::compilePatterns"))
-              .withDetails(QStringLiteral("collection=%1 pattern=%2 error=%3")
-                               .arg(collectionName, trimmed, re.errorString())));
+              .withDetails(QStringLiteral("context=%1 pattern=%2 error=%3")
+                               .arg(diagnosticContext.isEmpty() ? QStringLiteral("<unset>")
+                                                                : diagnosticContext,
+                                    trimmed, re.errorString())));
       continue;
     }
     compiled.append(std::move(re));
   }
   return compiled;
 }
-
-} // namespace
-
-namespace TitleFilter {
 
 void rebuildFromCollections(const QList<CollectionConfig> &collections) {
   QHash<int, CollectionEntry> next;
