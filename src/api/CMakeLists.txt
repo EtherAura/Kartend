@@ -16,6 +16,7 @@ target_sources(kartend_api PRIVATE
   idetailpageoverlay.h
   idetailspane.h
   idetailspanemanager.h
+  ifiltermanager.h
   iinteractionmanager.h
   ikeyboardmanager.h
   imainwindow.h

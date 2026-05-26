@@ -8,7 +8,7 @@ class QScrollArea;
 class QWidget;
 class CoverFlowWidget;
 class ScrollDataStore;
-class FilterManager;
+class IFilterManager;
 struct ApplicationContext;
 
 namespace TimerUtils {
@@ -94,8 +94,10 @@ private:
   void resolveAndPushGallery(int visualIndex);
 
   /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old
-  /// m_filterManager pointer-as-setup-struct-field pattern.
-  [[nodiscard]] FilterManager *filterMgr() const;
+  /// m_filterManager pointer-as-setup-struct-field pattern. Returns the
+  /// IFilterManager interface — the cover-flow controller only needs the
+  /// read-side surface (isFiltered/getActualIndex/filteredCount).
+  [[nodiscard]] IFilterManager *filterMgr() const;
 
   // Borrowed dependencies — never owned, never deleted through these.
   const ApplicationContext *m_ctx = nullptr;

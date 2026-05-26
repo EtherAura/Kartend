@@ -38,7 +38,7 @@ class IInteractionManager;
 class IMouseManager;
 class IKeyboardManager;
 class EventManager;
-class FilterManager;
+class IFilterManager;
 class SearchManager;
 class LaunchManager;
 class ICacheManager;
@@ -142,8 +142,11 @@ struct ApplicationContext {
     IPlaylistManager *playlistManager = nullptr;
     /// CoverFlowController + other scroll-side helpers reach the filter via
     /// ctx (Kartend-yeik). Owned by ScrollManager's DataSourceCoordinator;
-    /// this pointer is a raw alias seeded after ScrollManager construction.
-    FilterManager *filterManager = nullptr;
+    /// this pointer is a raw alias to the IFilterManager interface that
+    /// FilterManager implements, seeded after ScrollManager construction.
+    /// Exposed via interface so external callers don't need to #include
+    /// the concrete filtermanager.h.
+    IFilterManager *filterManager = nullptr;
 
     // Centralized interaction state (owned by InteractionManager)
     InteractionStateHolder *interactionState = nullptr;
@@ -199,7 +202,7 @@ struct ApplicationContext {
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }
   [[nodiscard]] ICacheManager *cacheManager() const { return managers.cacheManager; }
   [[nodiscard]] IPlaylistManager *playlistManager() const { return managers.playlistManager; }
-  [[nodiscard]] FilterManager *filterManager() const { return managers.filterManager; }
+  [[nodiscard]] IFilterManager *filterManager() const { return managers.filterManager; }
   [[nodiscard]] InteractionStateHolder *interactionState() const {
     return managers.interactionState;
   }

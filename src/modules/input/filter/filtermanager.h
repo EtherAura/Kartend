@@ -2,6 +2,7 @@
 #define FILTERMANAGER_H
 
 #include "collectionutils.h"
+#include "ifiltermanager.h"
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -37,7 +38,7 @@ struct ApplicationContext;
  *   // Map visual index to actual index
  *   int actualIndex = filterManager->getActualIndex(visualIndex);
  */
-class FilterManager : public QObject {
+class FilterManager : public QObject, public IFilterManager {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(FilterManager)
 public:
@@ -111,7 +112,7 @@ public:
   // Query filter state
   // ─────────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] bool isFiltered() const { return m_isFiltered; }
+  [[nodiscard]] bool isFiltered() const override { return m_isFiltered; }
   [[nodiscard]] const QString &currentFilter() const { return m_currentFilter; }
   [[nodiscard]] const QList<int> &filteredIndices() const { return m_filteredIndices; }
 
@@ -120,12 +121,12 @@ public:
    * @param visualIndex Index in the filtered view.
    * @return Actual item index, or -1 if out of range.
    */
-  [[nodiscard]] int getActualIndex(int visualIndex) const;
+  [[nodiscard]] int getActualIndex(int visualIndex) const override;
 
   /**
    * @brief Get count of items after filtering.
    */
-  [[nodiscard]] int filteredCount() const { return m_filteredIndices.size(); }
+  [[nodiscard]] int filteredCount() const override { return m_filteredIndices.size(); }
 
 signals:
   /**

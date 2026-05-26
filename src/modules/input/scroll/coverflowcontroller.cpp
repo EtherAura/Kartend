@@ -16,8 +16,8 @@
 #include "artworkutils.h"
 #include "collectionutils.h"
 #include "coverflowwidget.h"
-#include "filtermanager.h"
 #include "idatabasemanager.h"
+#include "ifiltermanager.h"
 #include "itemartwork.h"
 #include "pathutils.h"
 #include "scrolldatamanager.h"
@@ -70,7 +70,7 @@ void CoverFlowController::setupReferences(const CoverFlowControllerSetup &setup)
 // cached setup-struct pointer. ctx is seeded once in initializeAppContext;
 // every accessor below is null-safe so the controller still no-ops cleanly
 // when the filter isn't wired (headless smoke tests, early shutdown).
-FilterManager *CoverFlowController::filterMgr() const {
+IFilterManager *CoverFlowController::filterMgr() const {
   return m_ctx ? m_ctx->filterManager() : nullptr;
 }
 
