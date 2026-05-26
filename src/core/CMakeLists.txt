@@ -3,6 +3,7 @@ target_sources(kartend_core PRIVATE
   dialogcontroller.cpp
   gridwidthdebouncer.cpp
   mainwindow.cpp
+  mainwindow_dialogs.cpp
   mainwindow_scraper.cpp
   mainwindow_managerwiring.cpp
   mainwindow_setup.cpp
