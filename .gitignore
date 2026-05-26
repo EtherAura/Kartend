@@ -4,10 +4,12 @@ build-*/
 *.tar.gz
 
 # Outputs of .scripts/build-windows-cross.sh (Windows cross-compile helper).
-# build-windows-mingw/ is already covered by build-*/ above; these two
-# entries cover the staged DLL tree and the preview zip the script emits.
+# build-windows-mingw/ is already covered by build-*/ above; these entries
+# cover the staged DLL tree, the preview zip the script emits, and the
+# unpacked preview directory (the zip's extraction target).
 /dist-windows-mingw/
 /kartend-windows-x64-mingw-preview.zip
+/kartend-windows-x64-mingw-preview/
 *.o
 *.a
 *.so
