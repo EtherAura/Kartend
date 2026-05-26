@@ -125,9 +125,34 @@ def main() -> int:
         )
         return 1
 
+    # Third guardrail: no legacy MainWindow::getXxxManager() callers outside
+    # src/core/mainwindow*. The documented routing is:
+    #   - mainWindow->applicationManager()->getXxx()  (preferred fallback)
+    #   - mainWindow->{settingsManager,scrollManager,interactionManager}()
+    #     (three IMainWindow forwarders for ui-layer settings dialogs)
+    # `mainWindow->getXxxManager()` accessors are gone outside mainwindow*.cpp
+    # since the Kartend-5wuk.1 audit; this lint stops them from creeping back.
+    mw_accessor_violations = check_mainwindow_accessor_callers()
+    if mw_accessor_violations:
+        print(
+            "check-layering: legacy MainWindow::getXxxManager() callers outside "
+            "src/core/mainwindow*:"
+        )
+        for rel, line, snippet in mw_accessor_violations:
+            print(f"  {rel}:{line}  ->  {snippet}")
+        print(
+            "\nFix: route through ApplicationManager — "
+            "`mainWindow->applicationManager()->getXxxManager()` — or, for "
+            "new classes, take an `ApplicationManager *` in the constructor. "
+            "Settings dialogs may use the three IMainWindow forwarders "
+            "(`settingsManager()`, `scrollManager()`, `interactionManager()`)."
+        )
+        return 1
+
     print(
         "check-layering: OK — src/utils/ and src/chrome/ stay within "
-        "their layers; setup structs carry only ctx + non-manager refs"
+        "their layers; setup structs carry only ctx + non-manager refs; "
+        "no legacy MainWindow::getXxxManager() callers outside mainwindow*"
     )
     return 0
 
@@ -204,6 +229,45 @@ def check_setup_struct_members() -> list[tuple[str, str, int, str]]:
 # stays effective for NEW structs while these are queued for cleanup.
 # Drop entries from this set as the corresponding refactor lands.
 SETUP_STRUCT_GRANDFATHERED: set[str] = set()
+
+
+# Match calls like `mainWindow->getDatabaseManager()` or
+# `m_mainWindow->getScrollManager()`. The qualifier list intentionally
+# stays narrow — `mw`, `mainWindow`, `m_mainWindow`, `mainwindow`,
+# `m_mainwindow` — to keep false positives low. `getApplicationManager()`
+# is the canonical fallback hop and is filtered out below.
+MAINWINDOW_GETTER_RE = re.compile(
+    r"\b(?:(?:m_)?[Mm]ain[Ww]indow|mw)\s*->\s*(get[A-Z][A-Za-z0-9]*Manager)\s*\("
+)
+
+
+def check_mainwindow_accessor_callers() -> list[tuple[str, int, str]]:
+    """Find `mainWindow->getXxxManager()` callers outside mainwindow*.
+
+    Returns (relative_path, line_number, snippet) for each non-allowed
+    accessor call. `getApplicationManager` is exempt — going through
+    ApplicationManager is the documented fallback.
+    """
+    findings: list[tuple[str, int, str]] = []
+    for path in sorted(SRC.rglob("*")):
+        if path.suffix not in (".cpp", ".h"):
+            continue
+        # Exempt the MainWindow's own TUs — they define and call these
+        # legacy accessors internally as the rename progresses.
+        if path.parent == SRC / "core" and path.stem.startswith("mainwindow"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for match in MAINWINDOW_GETTER_RE.finditer(text):
+            accessor = match.group(1)
+            if accessor == "getApplicationManager":
+                continue
+            line_number = text[: match.start()].count("\n") + 1
+            # Reconstruct the snippet by taking the matched substring plus
+            # any context up to the end of the call's open paren.
+            snippet = match.group(0).rstrip()
+            rel = str(path.relative_to(REPO))
+            findings.append((rel, line_number, snippet))
+    return findings
 
 
 if __name__ == "__main__":

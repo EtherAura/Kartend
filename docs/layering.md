@@ -67,14 +67,29 @@ the header is harmless to include from below.
 
 ## How the lint works
 
-For every `*.cpp` and `*.h` under `src/utils/` and `src/chrome/`,
-the script:
+The script enforces three guardrails:
+
+**1. Include layering.** For every `*.cpp` and `*.h` under `src/utils/`
+and `src/chrome/`:
 
 1. Scans for `#include "x.h"` directives (quoted, not bracketed).
 2. Maps each included header back to its top-level area
    (`src/utils/`, `src/modules/`, etc.) via a basename-to-area
    table built from a full repo walk.
 3. Fails if the included header's area is "above" the includer's.
+
+**2. Setup-struct DI.** Every `<Foo>Setup` struct must carry only
+`const ApplicationContext *ctx` plus non-manager refs (widgets, value
+containers, callbacks). Sibling-manager pointers belong on ctx so a
+manager can't accidentally pin its siblings through a setup field.
+
+**3. MainWindow accessor routing.** No file outside
+`src/core/mainwindow*` may call `mainWindow->getXxxManager()` directly.
+The documented paths are `mainWindow->applicationManager()->getXxxManager()`
+(fallback) or one of the three `IMainWindow` forwarders
+(`settingsManager()`, `scrollManager()`, `interactionManager()`) used by
+ui-layer settings dialogs. `getApplicationManager()` itself is the
+canonical hop and is always allowed.
 
 The lint runs:
 
