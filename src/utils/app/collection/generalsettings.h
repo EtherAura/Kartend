@@ -325,6 +325,23 @@ struct GeneralSettings {
     // and art; this value only backstops items whose region has no
     // entry. Default "us" preserves the historical behaviour.
     QString preferredScraperRegion = QStringLiteral("us");
+
+    // Value-equality for the per-domain hot-reload signal: the change
+    // emit in SettingsManager::saveGeneralSettings only fires when this
+    // returns false, so a Save that didn't actually touch ScraperOptions
+    // doesn't wake the background scraper consumers.
+    bool operator==(const ScraperOptions &other) const {
+      return preset == other.preset && mediaMaxDimension == other.mediaMaxDimension &&
+             mediaConcurrency == other.mediaConcurrency &&
+             mediaThrottleMs == other.mediaThrottleMs &&
+             batchItemConcurrency == other.batchItemConcurrency &&
+             rescrapeMode == other.rescrapeMode &&
+             skipRecentScrapeDays == other.skipRecentScrapeDays &&
+             preferJpgOutput == other.preferJpgOutput &&
+             scrapeAutoResume == other.scrapeAutoResume && scrapeLogging == other.scrapeLogging &&
+             preferredScraperRegion == other.preferredScraperRegion;
+    }
+    bool operator!=(const ScraperOptions &other) const { return !(*this == other); }
   };
   ScraperOptions scraperOptions;
 

@@ -89,6 +89,21 @@ public:
 
 signals:
   void collectionsModified();
+
+  /// Emitted from saveGeneralSettings() when ScraperOptions actually
+  /// changed between the previously-loaded value and the new one. Background
+  /// consumers (ScraperService, BatchScraperRunner) that cache fields like
+  /// mediaConcurrency / mediaThrottleMs at startup connect to this and
+  /// refresh on the next quiescent point — without it, in-flight scrape
+  /// batches keep using the pre-Apply config and the user's change doesn't
+  /// take effect until restart or the next batch boundary.
+  ///
+  /// Pilot signal for the per-domain hot-reload contract: the remaining
+  /// per-collection and app-wide structs (gridLayout, sidebar, background,
+  /// listView, archive, folderBrowsing, filter, launcherProfile,
+  /// scraperOverrides) are tracked separately and will land alongside their
+  /// natural consumer wirings. See the follow-up bd issue for the rollout.
+  void scraperOptionsChanged(const GeneralSettings::ScraperOptions &options);
 };
 
 #endif // ISETTINGSMANAGER_H
