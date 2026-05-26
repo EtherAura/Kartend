@@ -528,6 +528,7 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -581,6 +582,7 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -636,6 +638,7 @@ add_executable(test_querymanager_abspath
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -690,6 +693,7 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -745,6 +749,7 @@ add_executable(test_querymanager_cross_collection_tokens
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -796,6 +801,7 @@ add_executable(test_querymanager_shell_collection_sort
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -857,6 +863,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -1357,6 +1364,7 @@ add_executable(test_batchscraperunner_integration
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
   ${SRC_DIR}/modules/data/query/scanneditemstable.cpp
   ${SRC_DIR}/modules/data/query/scanservice.cpp
+  ${SRC_DIR}/modules/data/query/scanservice_persist.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
