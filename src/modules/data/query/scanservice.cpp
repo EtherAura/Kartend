@@ -69,7 +69,6 @@ namespace {
 constexpr int BATCH_SIZE = KartendDb::BatchSizes::FilesystemScanBatch;
 constexpr int COMMIT_INTERVAL_BATCHES = KartendDb::BatchSizes::ScanCommitInterval;
 constexpr int PROGRESS_REPORT_INTERVAL = 50000;
-constexpr int APPLY_BATCH_SIZE = KartendDb::BatchSizes::StagedScanApplyBatch;
 
 // Kartend-a911.2: executes a prepared query and logs a DatabaseQueryFailed
 // warning on failure. Returns nullopt on success, the constructed

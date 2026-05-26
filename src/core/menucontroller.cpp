@@ -51,18 +51,6 @@ constexpr SortActionEntry kSortActions[] = {
     {&Ui_MainWindow::actionSortRandom, SortMode::Random},
 };
 
-struct LayoutActionEntry {
-  QAction *Ui_MainWindow::*action;
-  ViewType viewType;
-};
-
-constexpr LayoutActionEntry kLayoutActions[] = {
-    {&Ui_MainWindow::actionLayoutGrid, ViewType::Grid},
-    {&Ui_MainWindow::actionLayoutList, ViewType::List},
-    {&Ui_MainWindow::actionLayoutCoverFlow, ViewType::CoverFlow},
-    {&Ui_MainWindow::actionLayoutHorizontal, ViewType::Horizontal},
-};
-
 } // namespace
 
 MenuController::MenuController(QObject *parent) : QObject(parent) {}
