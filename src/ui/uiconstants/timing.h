@@ -36,6 +36,14 @@ inline constexpr int SETTINGS_RETRY_BASE_MS = 50;
 inline constexpr int USER_IDLE_THRESHOLD_MS = 2000;
 /// Delay after resize before re-centering selection
 inline constexpr int RESIZE_RECENTER_DELAY_MS = 150;
+/// Default per-item video thumbnail extraction timeout (ms).
+inline constexpr int DEFAULT_VIDEO_THUMBNAIL_TIMEOUT_MS = 4000;
+/// Minimum configurable video thumbnail extraction timeout (ms). Floors
+/// slow-system tuning while preventing the queue from stalling on a
+/// misconfigured value.
+inline constexpr int MIN_VIDEO_THUMBNAIL_TIMEOUT_MS = 1000;
+/// Maximum configurable video thumbnail extraction timeout (ms).
+inline constexpr int MAX_VIDEO_THUMBNAIL_TIMEOUT_MS = 30000;
 } // namespace Timing
 } // namespace UIConstants
 
