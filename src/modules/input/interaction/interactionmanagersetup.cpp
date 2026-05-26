@@ -31,7 +31,7 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

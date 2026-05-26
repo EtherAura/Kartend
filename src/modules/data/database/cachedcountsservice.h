@@ -8,7 +8,7 @@
 #include <QStringList>
 #include <QTimer>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 
 class ISessionManager;
 

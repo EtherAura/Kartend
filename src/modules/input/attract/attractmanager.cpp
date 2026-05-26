@@ -6,7 +6,7 @@
 
 #include "applicationcontext.h"
 #include "attracthelpers.h"
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "gridlayoutcalculator.h"
 #include "iscrollmanager.h"
 #include "iselectionmanager.h"

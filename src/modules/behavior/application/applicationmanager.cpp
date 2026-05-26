@@ -5,7 +5,7 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "databasemanager.h"
 #include "detailpagemanager.h"
 #include "detailspanemanager.h"

@@ -1,7 +1,7 @@
 #ifndef VIRTUALCONTAINERMANAGER_H
 #define VIRTUALCONTAINERMANAGER_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QObject>
 
 class QWidget;

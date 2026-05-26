@@ -18,7 +18,8 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
+#include "collectiontypes.h"
 #include "isettingsmanager.h"
 #include "uiconstants/mouse.h"
 

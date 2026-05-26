@@ -1,7 +1,8 @@
 #ifndef SCROLLHELPERS_H
 #define SCROLLHELPERS_H
 
-#include "collectionutils.h" // for HorizontalAlignment
+#include "collection/helpers.h"
+#include "collectiontypes.h"
 
 // Pure helpers extracted from scroll-module classes so movement-direction and
 // alignment-resolution rules can be unit-tested without instantiating

@@ -1,7 +1,7 @@
 #include "artworkpathcatalog.h"
 
 #include "artworkutils.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "extensionutils.h"
 #include "loggingcategories.h"
 

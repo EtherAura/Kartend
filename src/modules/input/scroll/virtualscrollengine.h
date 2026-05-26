@@ -1,7 +1,7 @@
 #ifndef VIRTUALSCROLLENGINE_H
 #define VIRTUALSCROLLENGINE_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 
 #include <limits>
 

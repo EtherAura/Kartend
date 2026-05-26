@@ -2,7 +2,7 @@
 
 #include <QString>
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
 #include "interactionmanager.h"

@@ -1,7 +1,7 @@
 #ifndef SEARCHHELPERS_H
 #define SEARCHHELPERS_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "searchutils.h"
 #include <functional>
 #include <QList>
