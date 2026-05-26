@@ -669,10 +669,6 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
   s.beginGroup(keys::kGroupGeneral);
-  // Stamp the schema sentinel first so any later partial-write failure
-  // still leaves the version marker visible to the next load (the
-  // QSaveFile work tracked separately will plug the partial-write hole).
-  s.setValue(keys::kSchemaVersion, kSettingsSchemaVersion);
   s.setValue(keys::kRememberSelection, m_generalSettings.rememberSelection);
   s.setValue(keys::kWrapNavigation, m_generalSettings.wrapNavigation);
   s.setValue(keys::kSelectItemOnHover, m_generalSettings.selectItemOnHover);
@@ -880,6 +876,14 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   s.setValue(keys::kScrapeAutoResume, m_generalSettings.scraperOptions.scrapeAutoResume);
   s.setValue(keys::kScrapeLogging, m_generalSettings.scraperOptions.scrapeLogging);
   s.setValue(keys::kPreferredRegion, m_generalSettings.scraperOptions.preferredScraperRegion);
+  // Stamp the schema sentinel LAST so a torn write doesn't leave a
+  // false-positive version marker on a partial-content file. The atomic
+  // temp-file + rename mechanism above is the primary protection; this
+  // ordering is defence-in-depth for the rare paths that bypass it
+  // (hand-edits, external tooling, etc.) — load can refuse to treat a
+  // file without the sentinel as v1, and the future migration dispatcher
+  // gets a single point to branch on.
+  s.setValue(keys::kSchemaVersion, kSettingsSchemaVersion);
   s.endGroup();
 
   s.sync();
