@@ -2,8 +2,8 @@
 #
 # Pre-push hook for Kartend.
 #
-# Runs the three fast Python lint scripts that gate the CI build job.
-# All three are pure-Python, no Docker, no Qt — they finish in well under
+# Runs the four fast Python lint scripts that gate the CI build job.
+# All four are pure-Python, no Docker, no Qt — they finish in well under
 # a second combined, so the cost-per-push is negligible compared to the
 # round-trip of letting CI catch them.
 #
@@ -13,6 +13,9 @@
 #                                     a preceding 'why' comment
 #   3. check-test-mapping.py        — src/modules/<feature>/ must have a
 #                                     matching tests/modules/<feature>/
+#   4. check-bd-id-leakage.py       — no Kartend-XXXX issue IDs in
+#                                     user-facing surfaces (readme,
+#                                     docs/guide/, AppStream metadata)
 #
 # Install with: .scripts/git-hooks/install.sh
 #
@@ -36,7 +39,7 @@ fi
 
 fail=0
 
-for check in check-layering.py check-singleshot-comments.py check-test-mapping.py; do
+for check in check-layering.py check-singleshot-comments.py check-test-mapping.py check-bd-id-leakage.py; do
   script=".scripts/${check}"
   if [ ! -f "$script" ]; then
     yellow "Skipping ${check}: not found."
