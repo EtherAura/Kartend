@@ -23,7 +23,7 @@
 // reparse all 29 even though only these four are used. Subheaders are
 // self-contained (no includes themselves), so this is a pure preprocessor
 // cost cut with no behavioural change.
-#include <uiconstants/detailspane.h>
+#include <uiconstants/detailspaneconstants.h>
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 #include <uiconstants/listview.h>

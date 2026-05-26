@@ -11,7 +11,7 @@
 #include "viewportmanager.h"
 
 #include "gridutils.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/grid.h"
 
 #include <QApplication>

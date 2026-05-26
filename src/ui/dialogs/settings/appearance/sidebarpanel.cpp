@@ -3,7 +3,7 @@
 #include "collectionutils.h"
 #include "settingsmodel.h"
 #include "ui_sidebarpanel.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 
 #include <QApplication>
 #include <QCheckBox>

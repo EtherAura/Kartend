@@ -26,7 +26,7 @@
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/grid.h"
 
 #include <QLoggingCategory>

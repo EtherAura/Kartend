@@ -24,7 +24,7 @@
 #include "settingskeys.h"
 #include "settingsutils.h"
 #include "titlefilter.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
 #include "uiconstants/listview.h"

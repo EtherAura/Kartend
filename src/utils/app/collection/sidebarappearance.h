@@ -11,7 +11,7 @@
 #include <QString>
 
 #include "../collectiontypes.h"
-#include <uiconstants/detailspane.h>
+#include <uiconstants/detailspaneconstants.h>
 
 /// Per-collection sidebar (details-pane) look. Extracted from the
 /// CollectionConfig god-struct (Kartend-r4x5 follow-up: sidebar appearance).
