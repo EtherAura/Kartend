@@ -23,7 +23,7 @@ target_sources(kartend_utils PRIVATE
   scroll.h
   search.h
   selection.h
-  detailspane.h
+  detailspaneconstants.h
   timing.h
   viewport.h
   widget.h

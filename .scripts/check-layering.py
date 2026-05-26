@@ -48,11 +48,46 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 
 
 def header_area_map() -> dict[str, str]:
-    """Map each src header's basename to its top-level area."""
+    """Map each src header's basename to its top-level area.
+
+    Fails with sys.exit(2) on a basename collision — two headers under
+    src/ sharing the same `*.h` basename would silently overwrite each
+    other in this map, and the layering lint (which keys by basename
+    from `#include "x.h"`) would resolve to whichever happened to be
+    visited last. That's a quietly broken state that can mask real
+    layer violations, so collisions must be eliminated rather than
+    arbitrated.
+
+    Fix collisions by renaming one of the two files so its basename
+    becomes unique — e.g. add a `-constants` suffix to the constant-
+    namespace half of a name shared with a widget class.
+    """
     area: dict[str, str] = {}
-    for hdr in SRC.rglob("*.h"):
+    seen: dict[str, pathlib.Path] = {}
+    collisions: list[tuple[str, pathlib.Path, pathlib.Path]] = []
+    for hdr in sorted(SRC.rglob("*.h")):
         rel = hdr.relative_to(SRC)
-        area[hdr.name] = rel.parts[0]
+        if hdr.name in seen and seen[hdr.name] != hdr:
+            collisions.append((hdr.name, seen[hdr.name], hdr))
+        else:
+            seen[hdr.name] = hdr
+            area[hdr.name] = rel.parts[0]
+    if collisions:
+        print("check-layering: header basename collisions detected:")
+        for name, first, second in collisions:
+            print(
+                f"  {name}\n"
+                f"    {first.relative_to(REPO)}\n"
+                f"    {second.relative_to(REPO)}"
+            )
+        print(
+            "\nFix: rename one of the colliding files so its basename "
+            "is unique. The layering lint maps included headers to "
+            "areas by basename — a collision silently masks layer "
+            "violations because the second file's area overwrites the "
+            "first's."
+        )
+        sys.exit(2)
     # uiconstants sub-headers live under src/ui/uiconstants/; treat the
     # whole namespace as allowlisted constants.
     for hdr in (SRC / "ui" / "uiconstants").glob("*.h"):

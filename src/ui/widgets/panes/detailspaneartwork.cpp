@@ -11,7 +11,7 @@
 #include "extensionutils.h"
 #include "itemartwork.h"
 #include "ui_detailspane.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 

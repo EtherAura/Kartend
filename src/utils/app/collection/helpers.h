@@ -14,7 +14,7 @@
 #include <QList>
 #include <QString>
 
-#include <uiconstants/detailspane.h>
+#include <uiconstants/detailspaneconstants.h>
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 #include <uiconstants/listview.h>

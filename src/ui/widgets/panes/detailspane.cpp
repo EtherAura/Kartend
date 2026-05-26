@@ -43,7 +43,7 @@
 #include "extensionutils.h"
 #include "itemwidget.h"
 #include "pathutils.h"
-#include "uiconstants/detailspane.h"
+#include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
