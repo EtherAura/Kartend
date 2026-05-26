@@ -19,9 +19,15 @@
 #     resulting kartend.exe.
 #   * The exe is unsigned — Windows SmartScreen will warn on first run.
 #
+# Output layout (all under build/ so the regular build/ gitignore covers
+# everything; docker runs as the invoking user so files are host-owned):
+#   build/windows-mingw/                cross-compile build tree
+#   build/windows-mingw-dist/           staged exe + DLLs + Qt plugins
+#   build/kartend-windows-x64-mingw-preview.zip   final artifact
+#
 # Usage:
 #   .scripts/build-windows-cross.sh           # configure → build → stage → zip
-#   .scripts/build-windows-cross.sh --clean   # also wipe build-windows-mingw/
+#   .scripts/build-windows-cross.sh --clean   # also wipe build/windows-mingw/
 #   .scripts/build-windows-cross.sh --rebuild-image  # force a fresh docker image build
 #   .scripts/build-windows-cross.sh -h        # show this header
 
@@ -30,9 +36,23 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE_TAG="kartend-windows-cross:latest"
 DOCKERFILE="${REPO_ROOT}/.scripts/Dockerfile.windows-cross"
-BUILD_DIR_REL="build-windows-mingw"
-DIST_DIR_REL="dist-windows-mingw"
-ZIP_NAME="kartend-windows-x64-mingw-preview.zip"
+
+# All artifacts go under build/ so they fall under the existing build/
+# gitignore rule (no separate /dist-windows-mingw/, /kartend-…zip rules
+# needed). The previous layout dropped these at the repo root, and the
+# docker container's root user left them root-owned — `rm -rf` then
+# needed sudo. Keeping artifacts under build/ also matches the regular
+# build.sh convention (build/ninja-release/, build/ninja-debug/, …).
+BUILD_DIR_REL="build/windows-mingw"
+DIST_DIR_REL="build/windows-mingw-dist"
+ZIP_NAME="build/kartend-windows-x64-mingw-preview.zip"
+
+# Run docker as the invoking user so emitted files are host-owned (no
+# sudo needed to delete them later). The container has no /etc/passwd
+# entry for an arbitrary uid, but `docker run --user uid:gid` does not
+# require one — Qt/mingw64 tools don't read $HOME or $USER during the
+# cross-compile and ninja's parallel scheduler doesn't either.
+DOCKER_USER_ARGS=(--user "$(id -u):$(id -g)")
 
 CLEAN=0
 REBUILD_IMAGE=0
@@ -68,6 +88,7 @@ fi
 #    dependency ordering than Unix Makefiles.
 echo "[*] Cross-compiling (mingw64-cmake + Ninja, Release, portable flags)"
 docker run --rm \
+  "${DOCKER_USER_ARGS[@]}" \
   -v "${REPO_ROOT}:/src" \
   "$IMAGE_TAG" \
   bash -c "
@@ -90,6 +111,7 @@ docker run --rm \
 #    thing on a Windows host.
 echo "[*] Staging DLLs + plugins → ${DIST_DIR_REL}/"
 docker run --rm \
+  "${DOCKER_USER_ARGS[@]}" \
   -v "${REPO_ROOT}:/src" \
   "$IMAGE_TAG" \
   bash -c '
