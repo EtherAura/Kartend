@@ -523,6 +523,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 
 // Saves general settings (no legacy last_selected.dat persistence)
 ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
+  // Snapshot the sub-structs we plan to diff before any field assignment,
+  // so the per-domain change signals at the bottom of the function can
+  // fire only when a value actually changed. Cheap value copies — these
+  // are POD-ish leaf structs.
+  const GeneralSettings::ScraperOptions oldScraperOptions = m_generalSettings.scraperOptions;
+
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.selectItemOnHover = settings.selectItemOnHover;
@@ -918,6 +924,16 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   if (err.isError()) {
     return err;
   }
+
+  // Per-domain hot-reload signals: fire AFTER a clean save so consumers
+  // don't refresh against a half-written file. Compare against the
+  // pre-save snapshot captured at the top of the function — emitting
+  // unconditionally would wake every listener on every Apply, even when
+  // nothing in that domain changed.
+  if (m_generalSettings.scraperOptions != oldScraperOptions) {
+    emit scraperOptionsChanged(m_generalSettings.scraperOptions);
+  }
+
   return ErrorUtils::Result<void>::success();
 }
 
