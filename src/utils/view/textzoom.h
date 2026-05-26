@@ -9,7 +9,16 @@
 
 namespace TextZoom {
 
-// Returns the configured zoom percentage. Always between 50 and 300.
+// Bounds for the configurable text-zoom percentage. setPercent() and
+// primeFromSettings() clamp inputs into [MIN_PERCENT, MAX_PERCENT]; callers
+// that present the value in UI (settings dialog, HUD readout) should reuse
+// these constants instead of hard-coding 50 / 300.
+inline constexpr int DEFAULT_PERCENT = 100;
+inline constexpr int MIN_PERCENT = 50;
+inline constexpr int MAX_PERCENT = 300;
+
+// Returns the configured zoom percentage. Always between MIN_PERCENT and
+// MAX_PERCENT.
 [[nodiscard]] int percent();
 
 // Initialise the percent from settings before any widget is built. Clamps

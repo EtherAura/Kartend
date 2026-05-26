@@ -16,8 +16,13 @@
 #include "scrapelogger.h"
 #include "settingshelpers.h"
 #include "settingsutils.h"
+#include "textzoom.h"
 #include "timerutils.h"
 #include "uiconstants/attract.h"
+#include "uiconstants/cache.h"
+#include "uiconstants/launch.h"
+#include "uiconstants/scroll.h"
+#include "uiconstants/timing.h"
 #include <algorithm>
 #include <QDateTime>
 #include <QDir>
@@ -221,15 +226,19 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.rememberSelection = s.value(keys::kRememberSelection, true).toBool();
   settings.wrapNavigation = s.value(keys::kWrapNavigation, false).toBool();
   settings.selectItemOnHover = s.value(keys::kSelectItemOnHover, false).toBool();
-  settings.pixmapCacheSizeMB = s.value(keys::kPixmapCacheSizeMB, 50).toInt();
-  // Clamp to reasonable range: 10MB - 500MB
-  settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  settings.pixmapCacheSizeMB =
+      s.value(keys::kPixmapCacheSizeMB, UIConstants::Cache::DEFAULT_PIXMAP_CACHE_MB).toInt();
+  settings.pixmapCacheSizeMB =
+      qBound(UIConstants::Cache::MIN_PIXMAP_CACHE_MB, settings.pixmapCacheSizeMB,
+             UIConstants::Cache::MAX_PIXMAP_CACHE_MB);
   settings.videoThumbnailExtractionTimeoutMs =
-      s.value(keys::kVideoThumbnailExtractionTimeoutMs, 4000).toInt();
-  // Clamp to keep slow-system tuning useful while preventing the queue from
-  // stalling indefinitely on a misconfigured value.
+      s.value(keys::kVideoThumbnailExtractionTimeoutMs,
+              UIConstants::Timing::DEFAULT_VIDEO_THUMBNAIL_TIMEOUT_MS)
+          .toInt();
   settings.videoThumbnailExtractionTimeoutMs =
-      qBound(1000, settings.videoThumbnailExtractionTimeoutMs, 30000);
+      qBound(UIConstants::Timing::MIN_VIDEO_THUMBNAIL_TIMEOUT_MS,
+             settings.videoThumbnailExtractionTimeoutMs,
+             UIConstants::Timing::MAX_VIDEO_THUMBNAIL_TIMEOUT_MS);
   // Load timing settings (direct ms/count values)
   settings.keyboardRepeatIntervalMs = s.value(keys::kKeyboardRepeatIntervalMs, 260).toInt();
   settings.keyboardRepeatDelayMs = s.value(keys::kKeyboardRepeatDelayMs, 260).toInt();
@@ -240,10 +249,14 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
       s.value(keys::kListClickHoldRepeatIntervalMs, 80).toInt();
   settings.mouseWheelRows = s.value(keys::kMouseWheelRows, 1).toInt();
   settings.scrollAnimationDurationMs = s.value(keys::kScrollAnimationDurationMs, 1500).toInt();
-  settings.scrollVelocityMultiplier = s.value(keys::kScrollVelocityMultiplier, 1.0).toDouble();
-  // Clamp to a safe range: 0.25× - 5.0× so the multiplier can't stall or
-  // saturate the animation pipeline.
-  settings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
+  settings.scrollVelocityMultiplier =
+      s.value(keys::kScrollVelocityMultiplier, UIConstants::Scroll::DEFAULT_VELOCITY_MULTIPLIER)
+          .toDouble();
+  // Bounds keep the multiplier from stalling or saturating the animation
+  // pipeline.
+  settings.scrollVelocityMultiplier =
+      qBound(UIConstants::Scroll::MIN_VELOCITY_MULTIPLIER, settings.scrollVelocityMultiplier,
+             UIConstants::Scroll::MAX_VELOCITY_MULTIPLIER);
   // Load text appearance settings
   settings.titleTintSaturation = s.value(keys::kTitleTintSaturation, 180).toInt();
   settings.titleTintLightness = s.value(keys::kTitleTintLightness, 60).toInt();
@@ -258,10 +271,11 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.globalUiFontPointSize = s.value(keys::kGlobalUiFontPointSize, 0).toInt();
 
   // runtime text zoom. Persisted as percent so a hand-edited
-  // value reads obviously; clamped to [50, 300] to keep typography legible
-  // and avoid absurdly tiny / huge widget sizes that the layout pipeline
-  // wasn't designed for.
-  settings.uiTextZoomPercent = qBound(50, s.value(keys::kUiTextZoomPercent, 100).toInt(), 300);
+  // value reads obviously; bounds keep typography legible and avoid
+  // absurdly tiny / huge widget sizes the layout pipeline wasn't built for.
+  settings.uiTextZoomPercent = qBound(
+      TextZoom::MIN_PERCENT, s.value(keys::kUiTextZoomPercent, TextZoom::DEFAULT_PERCENT).toInt(),
+      TextZoom::MAX_PERCENT);
 
   // preview video volume (0-100). Clamped on read so a
   // hand-edited out-of-range value can't mute audio permanently or push
@@ -377,7 +391,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // qBound clamps them to a sane window so trim never deletes the whole
   // table by accident.
   settings.historyEnabled = s.value(keys::kHistoryEnabled, true).toBool();
-  settings.historyMaxEntries = qBound(10, s.value(keys::kHistoryMaxEntries, 500).toInt(), 50000);
+  settings.historyMaxEntries = qBound(
+      UIConstants::Launch::MIN_HISTORY_MAX_ENTRIES,
+      s.value(keys::kHistoryMaxEntries, UIConstants::Launch::DEFAULT_HISTORY_MAX_ENTRIES).toInt(),
+      UIConstants::Launch::MAX_HISTORY_MAX_ENTRIES);
 
   // View-mode toggles. Defaults match the.ui defaults so an
   // upgrading install sees no change until the user toggles F8/F10/F11.
@@ -526,9 +543,13 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.selectItemOnHover = settings.selectItemOnHover;
-  m_generalSettings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  m_generalSettings.pixmapCacheSizeMB =
+      qBound(UIConstants::Cache::MIN_PIXMAP_CACHE_MB, settings.pixmapCacheSizeMB,
+             UIConstants::Cache::MAX_PIXMAP_CACHE_MB);
   m_generalSettings.videoThumbnailExtractionTimeoutMs =
-      qBound(1000, settings.videoThumbnailExtractionTimeoutMs, 30000);
+      qBound(UIConstants::Timing::MIN_VIDEO_THUMBNAIL_TIMEOUT_MS,
+             settings.videoThumbnailExtractionTimeoutMs,
+             UIConstants::Timing::MAX_VIDEO_THUMBNAIL_TIMEOUT_MS);
   m_generalSettings.keyboardRepeatIntervalMs = settings.keyboardRepeatIntervalMs;
   m_generalSettings.keyboardRepeatDelayMs = settings.keyboardRepeatDelayMs;
   m_generalSettings.clickHoldDelayMs = settings.clickHoldDelayMs;
@@ -537,7 +558,9 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   m_generalSettings.listClickHoldRepeatIntervalMs = settings.listClickHoldRepeatIntervalMs;
   m_generalSettings.mouseWheelRows = settings.mouseWheelRows;
   m_generalSettings.scrollAnimationDurationMs = settings.scrollAnimationDurationMs;
-  m_generalSettings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
+  m_generalSettings.scrollVelocityMultiplier =
+      qBound(UIConstants::Scroll::MIN_VELOCITY_MULTIPLIER, settings.scrollVelocityMultiplier,
+             UIConstants::Scroll::MAX_VELOCITY_MULTIPLIER);
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
@@ -547,7 +570,8 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   m_generalSettings.globalUiFontFamily = settings.globalUiFontFamily.trimmed();
   m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
   // runtime text zoom
-  m_generalSettings.uiTextZoomPercent = qBound(50, settings.uiTextZoomPercent, 300);
+  m_generalSettings.uiTextZoomPercent =
+      qBound(TextZoom::MIN_PERCENT, settings.uiTextZoomPercent, TextZoom::MAX_PERCENT);
   // preview video volume
   m_generalSettings.previewVideoVolume = qBound(0, settings.previewVideoVolume, 100);
   // startup video
@@ -633,7 +657,9 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   ScrapeLogger::setEnabled(m_generalSettings.scraperOptions.scrapeLogging);
   // Launch history
   m_generalSettings.historyEnabled = settings.historyEnabled;
-  m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
+  m_generalSettings.historyMaxEntries =
+      qBound(UIConstants::Launch::MIN_HISTORY_MAX_ENTRIES, settings.historyMaxEntries,
+             UIConstants::Launch::MAX_HISTORY_MAX_ENTRIES);
   // View-mode toggles
   m_generalSettings.showMenuBar = settings.showMenuBar;
   m_generalSettings.showToolbar = settings.showToolbar;

@@ -23,6 +23,14 @@ inline constexpr int MIN_EFFECTIVE_VIEWPORT_WIDTH = 200;
 /// resolution at the trailing edge instead of running DB + filesystem
 /// probes for every intermediate selection.
 inline constexpr int COVER_FLOW_RESOLVE_DEBOUNCE_MS = 60;
+/// Default user-configurable scroll velocity multiplier. 1.0 = unmodified.
+inline constexpr double DEFAULT_VELOCITY_MULTIPLIER = 1.0;
+/// Minimum configurable scroll velocity multiplier. Bounded so the
+/// multiplier can't stall scrolling outright.
+inline constexpr double MIN_VELOCITY_MULTIPLIER = 0.25;
+/// Maximum configurable scroll velocity multiplier. Bounded so the
+/// multiplier can't run away on a misconfigured value.
+inline constexpr double MAX_VELOCITY_MULTIPLIER = 5.0;
 } // namespace Scroll
 } // namespace UIConstants
 

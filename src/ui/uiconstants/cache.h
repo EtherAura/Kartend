@@ -10,6 +10,12 @@ namespace UIConstants {
 namespace Cache {
 /// Maximum pixmap cache size in KB (50 MB)
 inline constexpr int PIXMAP_CACHE_KB = 1024 * 50;
+/// Default user-configurable pixmap cache budget (MB).
+inline constexpr int DEFAULT_PIXMAP_CACHE_MB = 50;
+/// Minimum user-configurable pixmap cache budget (MB).
+inline constexpr int MIN_PIXMAP_CACHE_MB = 10;
+/// Maximum user-configurable pixmap cache budget (MB).
+inline constexpr int MAX_PIXMAP_CACHE_MB = 500;
 /// Interval for lazy loading additional cache entries
 inline constexpr int LAZY_LOAD_INTERVAL_MS = 500;
 /// Batch size for lazy load operations

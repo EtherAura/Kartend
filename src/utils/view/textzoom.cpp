@@ -3,7 +3,7 @@
 #include <algorithm>
 
 namespace {
-int g_textZoomPercent = 100;
+int g_textZoomPercent = TextZoom::DEFAULT_PERCENT;
 } // namespace
 
 namespace TextZoom {
@@ -13,11 +13,11 @@ int percent() {
 }
 
 void primeFromSettings(int p) {
-  g_textZoomPercent = std::clamp(p, 50, 300);
+  g_textZoomPercent = std::clamp(p, MIN_PERCENT, MAX_PERCENT);
 }
 
 int setPercent(int p) {
-  g_textZoomPercent = std::clamp(p, 50, 300);
+  g_textZoomPercent = std::clamp(p, MIN_PERCENT, MAX_PERCENT);
   return g_textZoomPercent;
 }
 
