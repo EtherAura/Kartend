@@ -35,6 +35,7 @@
 #include "detailpagemanager.h"
 #include "detailspane.h"
 #include "dialogcontroller.h"
+#include "filtermanager.h"
 #include "gamepadmanager.h"
 #include "gridwidthdebouncer.h"
 #include "idatabasemanager.h"
@@ -391,6 +392,9 @@ void MainWindow::initializeAppContext() {
   if (auto *sm = m_appManager->getScrollManager()) {
     // ScrollManager's ctor already wired m_filterManager off DataSourceCoordinator,
     // so this alias is non-null the moment ScrollManager exists (Kartend-yeik).
+    // sm->filterManager() returns the concrete FilterManager*; the implicit
+    // upcast to IFilterManager* relies on FilterManager's complete declaration,
+    // which is reached through the filtermanager.h include below.
     m_appContext.managers.filterManager = sm->filterManager();
   }
   m_appContext.managers.artworkManager = m_appManager->getArtworkManager();
