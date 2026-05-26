@@ -431,6 +431,13 @@ jobs:
         # allowlisted in the script. Build-independent, <1s.
         run: python3 .scripts/check-test-mapping.py
 
+      - name: Check bd issue ID leakage to user-facing surfaces
+        # Blocks `Kartend-XXXX` issue IDs from landing in user-visible
+        # surfaces (readme.md, docs/guide/*.md wiki content, AppStream
+        # metadata). Allowed in code comments / CHANGELOG / dev docs.
+        # See CONTRIBUTING.md → "Issue tracking conventions".
+        run: python3 .scripts/check-bd-id-leakage.py
+
       - name: Shellcheck
         # Lint all .scripts/*.sh at warning level. Ubuntu 24.04 ships
         # shellcheck 0.9.0 which is the same baseline developers can run
