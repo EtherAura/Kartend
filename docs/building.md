@@ -3,7 +3,55 @@
 > See [Build modes](#build-modes) below for the full flag matrix
 > (`--debug`, `--maintenance`, `--sanitize`, …).
 
+## Requirements
+
+- **CMake 3.20+**
+- **C++23 compiler** — Clang 16+ or GCC 12+
+- **Qt 6.4 LTS or later** — CI pins Qt 6.4.2; newer versions build
+  fine, but APIs introduced after 6.4 (`QDateTime::setTimeSpec`,
+  `QTimeZone::UTC`, `QHash::insert(key, std::move(value))` with real
+  move semantics) are off-limits so the code stays portable to the
+  pinned CI Qt.
+
+Required Qt components: `Core Gui Widgets Sql Concurrent Multimedia
+MultimediaWidgets Network LinguistTools`. Optional: `Gamepad` (auto-
+detected; SDL2 is the fallback gamepad backend), `Qt6Keychain` (auto-
+detected; falls back to plaintext-INI credential storage when absent).
+
+Cold release builds take roughly **5–10 minutes** on modern hardware
+the first time through; ccache-hit incrementals finish in ~30 seconds.
+
 ## Dependencies
+
+### Arch / Manjaro
+
+```bash
+sudo pacman -S cmake ninja clang lld ccache \
+  qt6-base qt6-multimedia qt6-tools qt6-svg qtkeychain-qt6
+```
+
+Optional gamepad backends: `qt6-gamepad` (if available in your repos)
+or `sdl2`.
+
+### Fedora
+
+```bash
+sudo dnf install cmake ninja-build clang lld ccache \
+  qt6-qtbase-devel qt6-qtmultimedia-devel qt6-qttools-devel \
+  qt6-qtsvg-devel qt5-qt5compat-devel qtkeychain-qt6-devel
+```
+
+Optional gamepad backend: `SDL2-devel`.
+
+### Debian / Ubuntu
+
+```bash
+sudo apt install clang cmake lld ninja-build ccache \
+  qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite \
+  qt6-tools-dev qt6-l10n-tools qt6keychain-dev
+```
+
+Optional gamepad backend: `libsdl2-dev`.
 
 ### Gentoo
 
