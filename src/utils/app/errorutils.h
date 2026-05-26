@@ -1,6 +1,7 @@
 #ifndef ERRORUTILS_H
 #define ERRORUTILS_H
 
+#include <exception>
 #include <optional>
 #include <QDebug>
 #include <QLoggingCategory>
@@ -16,6 +17,13 @@ namespace ErrorUtils {
 inline const QLoggingCategory &lcErrors() {
   static const QLoggingCategory cat("kartend.errors", QtInfoMsg);
   return cat;
+}
+
+// Convert a std::exception's message to QString. Centralised so future
+// formatting changes (typeid prefix, structured ErrorContext attachment,
+// etc.) land in one place instead of every catch block.
+[[nodiscard]] inline QString exceptionMessage(const std::exception &e) {
+  return QString::fromStdString(e.what());
 }
 
 } // namespace ErrorUtils

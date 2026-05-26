@@ -228,7 +228,7 @@ void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
     } catch (const std::exception &e) {
       db.rollback();
 
-      QString errorText = QString::fromStdString(e.what());
+      QString errorText = ErrorUtils::exceptionMessage(e);
       bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {
