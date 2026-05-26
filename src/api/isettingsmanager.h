@@ -98,12 +98,33 @@ signals:
   /// batches keep using the pre-Apply config and the user's change doesn't
   /// take effect until restart or the next batch boundary.
   ///
-  /// Pilot signal for the per-domain hot-reload contract: the remaining
-  /// per-collection and app-wide structs (gridLayout, sidebar, background,
-  /// listView, archive, folderBrowsing, filter, launcherProfile,
-  /// scraperOverrides) are tracked separately and will land alongside their
-  /// natural consumer wirings. See the follow-up bd issue for the rollout.
+  /// Pilot signal for the per-domain hot-reload contract; the per-collection
+  /// signals below complete the rollout.
   void scraperOptionsChanged(const GeneralSettings::ScraperOptions &options);
+
+  // Per-collection hot-reload signals: emitted from saveCollections() after
+  // a clean on-disk write, but only when the named sub-struct on the
+  // collection at @p collectionIndex actually changed against the
+  // previously-saved snapshot. Identity is the (name, mediaDirectory) UUID
+  // so a reorder of unchanged collections doesn't fire spurious diffs.
+  //
+  // Consumers opt in by connecting to the signals they care about — most
+  // managers only need one or two (ScrollManager: gridLayoutChanged;
+  // DetailsPaneManager: sidebarAppearanceChanged; ArtworkManager:
+  // scraperOverridesChanged). The "added" / "removed" lifecycle is still
+  // covered by the coarse collectionsModified() signal above; these new
+  // signals are strictly for in-place mutations of an existing collection.
+  void gridLayoutChanged(int collectionIndex, const GridLayoutPreferences &gridLayout);
+  void sidebarAppearanceChanged(int collectionIndex, const SidebarAppearance &sidebar);
+  void collectionBackgroundChanged(int collectionIndex, const CollectionBackground &background);
+  void listViewOptionsChanged(int collectionIndex, const ListViewOptions &listView);
+  void archiveOptionsChanged(int collectionIndex, const ArchiveOptions &archive);
+  void folderBrowsingOptionsChanged(int collectionIndex,
+                                    const FolderBrowsingOptions &folderBrowsing);
+  void collectionFilterPreferencesChanged(int collectionIndex,
+                                          const CollectionFilterPreferences &filter);
+  void scraperOverridesChanged(int collectionIndex, const ScraperOverrides &scraperOverrides);
+  void launcherProfileChanged(int collectionIndex, const LauncherProfile &launcher);
 };
 
 #endif // ISETTINGSMANAGER_H

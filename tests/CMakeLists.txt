@@ -2184,6 +2184,27 @@ target_include_directories(test_settingsroundtrip PRIVATE
 )
 add_test(NAME SettingsRoundtrip COMMAND test_settingsroundtrip)
 
+# Per-domain *Changed signals from saveCollections — emit-on-diff
+# coverage. Pairs with the contract in src/api/isettingsmanager.h.
+add_executable(test_perdomainsignals
+  modules/settings/test_perdomainsignals.cpp
+)
+target_link_libraries(test_perdomainsignals
+  PRIVATE
+    ${KARTEND_AREA_LIBS}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
+    Qt6::Test
+)
+target_include_directories(test_perdomainsignals PRIVATE
+  ${CMAKE_BINARY_DIR}/kartend_chrome_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
+)
+add_test(NAME PerDomainSignals COMMAND test_perdomainsignals)
+
 # KeyboardHelpers tests (pure helpers extracted from KeyboardManager)
 add_executable(test_keyboardhelpers
   modules/keyboard/test_keyboardhelpers.cpp

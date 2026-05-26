@@ -68,6 +68,13 @@ private:
   // outlive it if the dialog is destroyed before the async scan finishes.
   QPointer<QWidget> m_pendingAddSummaryParent;
 
+  // Last successfully-saved collection list, used as the diff baseline for
+  // the per-domain *Changed signals emitted from saveCollections(). Updated
+  // atomically at the end of a successful save (and seeded from
+  // loadCollections so the first save after launch has a sensible baseline
+  // instead of an empty one that fires every signal at once).
+  QList<CollectionConfig> m_lastSavedCollections;
+
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                            QList<CollectionConfig> &collections, const bool &needsRewrite);
 };
