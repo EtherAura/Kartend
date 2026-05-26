@@ -2152,6 +2152,28 @@ target_include_directories(test_settingsmigration PRIVATE
 )
 add_test(NAME SettingsMigration COMMAND test_settingsmigration)
 
+# Strict round-trip preservation of unknown per-collection INI keys.
+# Guards against the version-skew data-loss class where a newer build's
+# key is silently dropped when an older build loads + saves the same file.
+add_executable(test_settingsroundtrip
+  modules/settings/test_settingsroundtrip.cpp
+)
+target_link_libraries(test_settingsroundtrip
+  PRIVATE
+    ${KARTEND_AREA_LIBS}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
+    Qt6::Test
+)
+target_include_directories(test_settingsroundtrip PRIVATE
+  ${CMAKE_BINARY_DIR}/kartend_chrome_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
+)
+add_test(NAME SettingsRoundtrip COMMAND test_settingsroundtrip)
+
 # KeyboardHelpers tests (pure helpers extracted from KeyboardManager)
 add_executable(test_keyboardhelpers
   modules/keyboard/test_keyboardhelpers.cpp
