@@ -2,7 +2,7 @@
 
 `MainWindow` is the top-level Qt window that owns `ApplicationManager`
 and orchestrates everything the user sees. Its implementation is split
-across six sibling translation units under `src/core/` so the file
+across seven sibling translation units under `src/core/` so the file
 sizes stay tractable and grep stays fast. This page is the canonical
 rule for what goes where and where to put new code.
 
@@ -21,6 +21,7 @@ rule for what goes where and where to put new code.
 | `mainwindow_timers.cpp` | **Debounce/throttle timer wiring only.** `setupInitialTimers` defers post-construction work (centering scroll, first-run wizard, splash dismiss) and `setupDebouncedSaveTimers` wires the gridWidth debouncer's callbacks. Anything else that uses `QTimer::singleShot` lives at its real callsite. | `setupInitialTimers`, the debouncer-wiring helpers, the post-show defer-to-next-tick handlers. |
 | `mainwindow_scraper.cpp` | Thin glue between MainWindow and the scraper subsystem — runs at <50 LOC. Only here because the scraper's call site touches enough MainWindow state to make a controller premature. | `runManualScrape` and direct callers from menu actions. |
 | `mainwindow_toolbar.cpp` | Items-page toolbar event handlers (zoom reset, pause-preview shortcut, volume slider) that don't go through ToolbarController. Most toolbar setup lives in `ToolbarController::initialize` — the partial only carries handlers that need MainWindow state. | Volume slider, video pause toggle, zoom-reset handlers, the items-page mini-toolbar wiring. |
+| `mainwindow_dialogs.cpp` | Dialog and wizard launchers — every `void MainWindow::*Interactive()` and the `show*` / `manage*` entry points that the menu controller calls to open a modal. Each function is a thin wrapper that constructs a dialog/wizard, populates its inputs from MainWindow state, calls `exec()`, and writes results back. No setup/init code, no signal wiring. | `showAbout`, `showFirstRunWizard`, `importThemeInteractive`, `exportThemeInteractive`, `manageLayoutProfilesInteractive`, `showCollectionHealthInteractive`, `showVariantGroupingInteractive`, `navigateToItem`, `bulkEditInteractive`, `openCommandPalette`, `reviewMissingMetadataInteractive`, `artworkWizardInteractive`, `showBindingVisualizer`, `runNewLibraryWizard`, `managePresentationProfilesInteractive`, `showScraperProvidersInteractive`. |
 
 ## Rules for new code
 
@@ -49,12 +50,13 @@ rule for what goes where and where to put new code.
    for *named* debouncers (GridWidthDebouncer wiring) and a handful of
    startup-deferred calls that don't have a natural home elsewhere.
 
-5. **No new partials.** If a chunk of work is big enough that it
-   doesn't fit any of the six above, that's a sign it should become its
-   own controller in `src/core/` (no Manager suffix — Manager is reserved
-   for the ApplicationManager-owned graph) or a new UI controller in
-   `src/ui/controllers/`. The MainWindow split is intentionally finite;
-   the next decomposition should slim a partial, not grow a seventh.
+5. **Prefer slimming over splitting.** If a chunk of work is big
+   enough that it doesn't fit any of the seven above, that's a sign it
+   should become its own controller in `src/core/` (no Manager suffix —
+   Manager is reserved for the ApplicationManager-owned graph) or a new
+   UI controller in `src/ui/controllers/`. The MainWindow split is
+   intentionally finite; the next decomposition should slim a partial,
+   not grow an eighth.
 
 ## Controller location convention
 
