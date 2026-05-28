@@ -19,9 +19,16 @@
 #     resulting kartend.exe.
 #   * The exe is unsigned — Windows SmartScreen will warn on first run.
 #
+# Output layout (all under build/ so the regular build/ gitignore covers
+# everything; docker already runs as the invoking user so files are
+# host-owned):
+#   build/windows-mingw/                          cross-compile build tree
+#   build/windows-mingw-dist/                     staged exe + DLLs + Qt plugins
+#   build/kartend-windows-x64-mingw-preview.zip   final artifact
+#
 # Usage:
 #   .scripts/build-windows-cross.sh           # configure → build → stage → zip
-#   .scripts/build-windows-cross.sh --clean   # also wipe build-windows-mingw/
+#   .scripts/build-windows-cross.sh --clean   # also wipe build/windows-mingw/
 #   .scripts/build-windows-cross.sh --rebuild-image  # force a fresh docker image build
 #   .scripts/build-windows-cross.sh -h        # show this header
 
@@ -30,9 +37,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE_TAG="kartend-windows-cross:latest"
 DOCKERFILE="${REPO_ROOT}/.scripts/Dockerfile.windows-cross"
-BUILD_DIR_REL="build-windows-mingw"
-DIST_DIR_REL="dist-windows-mingw"
-ZIP_NAME="kartend-windows-x64-mingw-preview.zip"
+# All artifacts go under build/ so they fall under the existing build/
+# gitignore rule (no separate /dist-windows-mingw/, /kartend-…zip rules
+# needed). The previous layout dropped these at the repo root, leaving
+# stale root-owned dirs that needed sudo to delete. Matches the regular
+# build.sh convention (build/ninja-release/, build/ninja-debug/, …).
+BUILD_DIR_REL="build/windows-mingw"
+DIST_DIR_REL="build/windows-mingw-dist"
+ZIP_NAME="build/kartend-windows-x64-mingw-preview.zip"
 
 CLEAN=0
 REBUILD_IMAGE=0
