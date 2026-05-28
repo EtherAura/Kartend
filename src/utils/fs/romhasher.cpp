@@ -266,15 +266,15 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   while (it.hasNext()) {
     const QString candidate = it.next();
     if (++inspected > MAX_INNER_FILES_INSPECTED) break;
-    const QFileInfo info(candidate);
-    if (info.isSymLink()) continue;
+    const QFileInfo entryInfo(candidate);
+    if (entryInfo.isSymLink()) continue;
     // Defence-in-depth against malicious archives that smuggle
     // symlinks past NoSymLinks.
-    const QString canon = info.canonicalFilePath();
+    const QString canon = entryInfo.canonicalFilePath();
     if (canon.isEmpty() || (canon != rootCanonical && !canon.startsWith(rootPrefix))) {
       continue;
     }
-    const qint64 sz = info.size();
+    const qint64 sz = entryInfo.size();
     if (sz > largestSize) {
       largestSize = sz;
       largestPath = canon;

@@ -12,6 +12,7 @@
 #include "applicationmanager.h"
 #include "collectionutils.h"
 #include "iplaylistmanager.h"
+#include "kartcompression.h"
 #include "kartmanager.h"
 #include "kartmanifest.h"
 #include "kartmerge.h"
@@ -98,6 +99,11 @@ void TestKartManager::testImportRoundtripRegistersCollection() {
                                       QByteArray("audio-bytes"));
   auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("test-uuid-1"), {});
   QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  // prepareFromCollection defaults to Compression_Zstd; pick Zlib when CI
+  // builds without zstd so the writer doesn't error out on the codec gate.
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
 
   QTemporaryDir kartHome;
   QVERIFY(kartHome.isValid());
@@ -244,6 +250,9 @@ void TestKartManager::testImportWithUnknownLauncherPathStillSucceeds() {
   // 2. Build the .kart bundle with that config.
   auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("cross-host-uuid"), {});
   QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   const QString kartPath = QDir(tmp.path()).filePath(QStringLiteral("crosshost.kart"));
@@ -285,6 +294,9 @@ void TestKartManager::testImportFiresMissingLauncherPathsReporter() {
   src->cfg.launcher.launcherPath = QStringLiteral("/nonexistent/launchers/never-installed-runner");
   auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("reporter-uuid"), {});
   QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   const QString kartPath = QDir(tmp.path()).filePath(QStringLiteral("reporter.kart"));
@@ -343,6 +355,9 @@ void TestKartManager::testImportSkipsReporterWhenAllLauncherPathsResolve() {
   auto prep =
       KartWriter::prepareFromCollection(src->cfg, QStringLiteral("empty-launcher-uuid"), {});
   QVERIFY(prep.isOk());
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   const QString kartPath = QDir(tmp.path()).filePath(QStringLiteral("empty.kart"));

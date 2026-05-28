@@ -328,8 +328,10 @@ void MainWindow::connectDatabaseManager() {
   // signal carries the collectionIndex + the diffed leaf-struct value; the
   // receiver slot is active-collection-guarded. Covers the alternate save
   // paths (kart import, right-click edits, toolbar inline edits) that
-  // bypass the settings dialog's handleLayoutChanges flow.
-  if (auto *scroll = m_appManager->getScrollManager()) {
+  // bypass the settings dialog's handleLayoutChanges flow. Reuses `scroll`
+  // and `nav` from the outer scope rather than shadowing — both were
+  // resolved above for the existing connect()s.
+  if (scroll) {
     QObject::connect(settings, &SettingsManager::gridLayoutChanged, scroll,
                      &ScrollManager::onGridLayoutChanged);
     QObject::connect(settings, &SettingsManager::listViewOptionsChanged, scroll,
@@ -339,7 +341,7 @@ void MainWindow::connectDatabaseManager() {
     QObject::connect(settings, &SettingsManager::sidebarAppearanceChanged, details,
                      &DetailsPaneManager::onSidebarAppearanceChanged);
   }
-  if (auto *nav = m_appManager->getNavigationManager()) {
+  if (nav) {
     QObject::connect(settings, &SettingsManager::collectionBackgroundChanged, nav,
                      &NavigationManager::onCollectionBackgroundChanged);
     QObject::connect(settings, &SettingsManager::collectionFilterPreferencesChanged, nav,
