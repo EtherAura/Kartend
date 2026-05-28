@@ -263,6 +263,12 @@ void VirtualScrollEngine::enforceScrollContentConstraints() {
 }
 
 void VirtualScrollEngine::recreateLayout() {
+  // m_owner is a QPointer (Kartend-kovt); clang-tidy promotes the
+  // implicit deref to a NullDereference error. Bail early if the
+  // back-pointer has been cleared by a teardown race.
+  if (!m_owner) {
+    return;
+  }
   if (m_owner->m_dataManager->filePaths().isEmpty() &&
       m_owner->m_dataManager->subcollections().isEmpty()) {
     return;
