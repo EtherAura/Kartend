@@ -131,6 +131,13 @@ private:
   [[nodiscard]] int cardSize() const;
   [[nodiscard]] qreal currentPositionF() const { return m_selectedIndex + m_selectionPositionF; }
   void requestArtworkLoad(int idx);
+  // Schedule a worker-thread Smooth-scale of @p sourcePm to @p targetSize
+  // and insert the result into m_scaledPixmapCache under @p key. No-op if
+  // a scale for @p key is already in flight. Triggers update() on
+  // completion. See Kartend-g6ft for rationale.
+  void requestScaledPixmap(const QString &key, const QPixmap &sourcePm, const QSize &targetSize);
+  void cancelPendingScales();
+  void pruneScaledPixmapCache();
   void prunePixmapCache();
   void updateVideoPreviewGeometry();
   void applyVideoPreviewState();
@@ -147,6 +154,17 @@ private:
 
   QHash<QString, QPixmap> m_pixmapCache;
   QHash<QString, QFutureWatcher<QPixmap> *> m_pendingLoads;
+
+  // Cache of source pixmaps already scaled to card-target size + smooth
+  // transform, keyed on "path|WxH" (Kartend-g6ft). paintEvent's
+  // pm.scaled(..., Smooth) call ran ~11 times per paint (kVisibleSideCards*2+1)
+  // and dominated the per-frame cost (profile: p50 paint = 20.9ms, well
+  // over the 16ms 60fps budget). Population happens on a worker thread via
+  // requestScaledPixmap so a cache miss never blocks paint. Invalidated on
+  // resize, setCards, and setTileColor — between those events every paint
+  // hits, and the steady-state paint cost drops to ~8-11ms.
+  QHash<QString, QPixmap> m_scaledPixmapCache;
+  QHash<QString, QFutureWatcher<QPixmap> *> m_pendingScales;
 
   // Per-instance placeholder cache (was function-local static — multiple
   // CoverFlowWidget instances with different tile colors would thrash a

@@ -198,6 +198,7 @@ target_include_directories(kartend_ui PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/collections
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/core
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/settings/launchers
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/widgets
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/widgets/overlays
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/widgets/panes
 )

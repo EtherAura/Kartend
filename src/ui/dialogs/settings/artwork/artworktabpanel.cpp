@@ -2,6 +2,8 @@
 
 #include "collectionutils.h"
 #include "itemwidget.h"
+#include "pathstatusglyph.h"
+#include "pathutils.h"
 #include "placeholderwarmer.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
@@ -87,6 +89,9 @@ void ArtworkTabPanel::load() {
   SettingsFormBinding::loadInto(ui->customArtworkTypesLineEdit,
                                 config.customArtworkTypes.join(", "));
   SettingsFormBinding::loadInto(ui->hideMissingArtworkCheckBox, config.hideMissingArtwork);
+  // Kartend-liye: warning glyph for paths that don't resolve on this host.
+  PathStatusGlyph::install(ui->artworkDirLineEdit, &PathUtils::checkDirectoryPath);
+  PathStatusGlyph::install(ui->placeholderArtworkLineEdit, &PathUtils::checkFilePath);
 }
 
 void ArtworkTabPanel::clear() {

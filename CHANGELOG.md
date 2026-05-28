@@ -9,9 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-collection hot-reload signals are now wired to real receivers.**
+  Six per-cluster `*Changed` signals (grid layout, sidebar appearance,
+  collection background, list-view options, collection-filter
+  preferences, folder-browsing options) now drive live updates on the
+  active collection from alternate save paths (kart import, right-click
+  edits, toolbar inline edits) that previously only the settings-dialog
+  apply flow covered. Four remaining signals (archive, launcher,
+  scraper-overrides, scraper-options) are documented as covered by
+  per-call reads in `docs/settings-hotreload.md`.
+- **Persistent launcher-path warnings on imported collections.** When a
+  `.kart` bundle from another machine has launcher paths that don't
+  resolve on the importing host, the import flow now (1) logs each
+  unresolvable path with the human-readable status, (2) shows a
+  one-shot informational dialog at finalize time listing every bad
+  path with selectable text, and (3) surfaces a persistent
+  "⚠ Launcher path" row per failing entry in the sidebar info panel
+  for the active collection. The rows recompute on every refresh so
+  they clear the moment the user fixes the underlying path.
+- **Settings-dialog warning glyph for path fields that don't resolve.**
+  The launcher / artwork-directory / placeholder-artwork / additional-
+  launcher / core path fields in the settings dialog now show a small
+  trailing warning icon + tooltip whenever the entered path fails the
+  PathStatus probe (missing file, not executable, wrong type, etc.).
+  Empty paths and OK paths are silent — the glyph is purely
+  informational and never blocks save.
+- **Cross-machine kart import scraper-region detection.** Imported
+  manifests with unknown enum values (alignment, view type, sidebar
+  background type, sidebar active tab, header logo position) now log a
+  named warning before falling back to the default, matching the INI
+  side's behaviour. Catches typos in hand-edited `.kart` manifests
+  before they silently change a collection's look.
+
 ### Changed
 
+- **Settings dialog modeling files now decompose along clear seams.**
+  `settingsmanagercollections.cpp` shrank from 958 → 406 LOC by moving
+  each `CollectionConfig` sub-cluster's INI load/save into its own
+  `*_persistence.{h,cpp}` pair alongside the struct definition.
+  `settingsdialogtree.cpp` shrank from 795 → 70 LOC across three
+  sibling TUs (`settingsdialogtreesync.cpp`,
+  `settingsdialogtreemutation.cpp`, `settingsdialogtreedragdrop.cpp`).
+  No user-facing behaviour change; the INI + kart-manifest round-trip
+  is identical.
+- **Unified failed-test diagnostics across Linux + Windows CI.**
+  Replaces the Windows-only PowerShell fallback that re-ran failing
+  test binaries with `.scripts/print-failed-tests.py`, a portable
+  helper invoked on all five ctest sites. Failure logs now have
+  identical shape on every OS / sanitizer config and bypass the
+  broken-on-Windows ctest stdout pipe via QTest's `-o file,txt`.
+
 ### Fixed
+
+- **Stale `mainwindow_dbevents.cpp` references in `mainwindow_wiring.cpp`
+  comments.** The file was renamed to `dbeventscontroller.cpp` in an
+  earlier refactor (Kartend-hzef); the residual five doc-block
+  mentions are now updated. Pure-comment change — no behavioural
+  effect.
 
 ### Security
 

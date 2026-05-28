@@ -263,30 +263,38 @@ void VirtualScrollEngine::enforceScrollContentConstraints() {
 }
 
 void VirtualScrollEngine::recreateLayout() {
-  if (m_owner->m_dataManager->filePaths().isEmpty() &&
-      m_owner->m_dataManager->subcollections().isEmpty()) {
+  // m_owner is a QPointer (Kartend-kovt); cache to a raw alias so the
+  // clang-analyzer flow analysis doesn't re-assume null after each
+  // intermediate member-function call (which it can't prove leaves the
+  // back-pointer intact even though Qt's parent ownership guarantees it).
+  ScrollManager *owner = m_owner.data();
+  if (!owner) {
+    return;
+  }
+  if (owner->m_dataManager->filePaths().isEmpty() &&
+      owner->m_dataManager->subcollections().isEmpty()) {
     return;
   }
   calculateVirtualMetrics();
   positionVirtualContainer();
-  bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
-  int fontSize = isListMode ? m_owner->m_context.config.listView.listFontSize
-                            : m_owner->m_context.config.gridLayout.fontSize;
+  bool isListMode = (owner->m_context.config.viewType == ViewType::List);
+  int fontSize = isListMode ? owner->m_context.config.listView.listFontSize
+                            : owner->m_context.config.gridLayout.fontSize;
   // scale before push so item titles match the active zoom.
   fontSize = TextZoom::zoomedFontSize(fontSize);
-  for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
+  for (auto it = owner->m_activeWidgets.begin(); it != owner->m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
     if (!widget) {
       continue;
     }
-    widget->setHideTitles(m_owner->m_context.config.hideTitles);
-    widget->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
+    widget->setHideTitles(owner->m_context.config.hideTitles);
+    widget->setHideSubcollectionTitles(owner->m_context.config.hideSubcollectionTitles);
     widget->setFontSize(fontSize);
-    widget->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
-    widget->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
-    QPoint position = m_owner->getItemPosition(it.key());
-    widget->setGeometry(position.x(), position.y(), m_owner->m_metrics.itemWidth,
-                        m_owner->m_metrics.itemHeight);
+    widget->setCornerRadius(owner->m_context.config.gridLayout.cornerRadius);
+    widget->setItemDimensions(owner->m_metrics.itemWidth, owner->m_metrics.itemHeight);
+    QPoint position = owner->getItemPosition(it.key());
+    widget->setGeometry(position.x(), position.y(), owner->m_metrics.itemWidth,
+                        owner->m_metrics.itemHeight);
   }
   updateVirtualView();
 }

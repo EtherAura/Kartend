@@ -71,6 +71,15 @@ private:
   /// matched-ROM region first; this only backstops items whose region
   /// has no entry. Stores the SS region shortname as item data.
   QComboBox *m_regionCombo = nullptr;
+  /// Hash-mode policy (Kartend-ou0a). See
+  /// GeneralSettings::ScraperOptions::ScraperHashMode for semantics.
+  /// SizeGated reveals m_maxHashableSizeSpin; the other two hide it.
+  QComboBox *m_hashModeCombo = nullptr;
+  QSpinBox *m_maxHashableSizeSpin = nullptr;
+  QLabel *m_maxHashableSizeLabel = nullptr;
+  /// Region-source policy (Kartend-ou0a). See
+  /// GeneralSettings::ScraperOptions::ScraperRegionSource for semantics.
+  QComboBox *m_regionSourceCombo = nullptr;
   bool m_loading = false; // suppress changed() during programmatic loads
 };
 

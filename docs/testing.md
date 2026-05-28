@@ -212,6 +212,15 @@ Key properties:
 - Does **not** call `show()`. Tests that need rendering can do
   `fixture.window()->show()` themselves; the `offscreen` QPA platform plugin
   is selected by `test_main.cpp` so this works on headless CI.
+- **Sandbox escape guard (Kartend-jcj7):** the constructor verifies
+  `QStandardPaths::isTestModeEnabled()` actually stuck, and snapshots the
+  developer's real per-app config / data dirs (`~/.config/kartend`,
+  `<appConfig>/`, `<appData>/`). The destructor recaptures and `qFatal`s
+  the test run if any file in those directories was created or modified —
+  the only way that can happen is a code path that constructs `QSettings`
+  with an absolute path, bypassing `QStandardPaths`. Keep new persistence
+  code routed through `SettingsUtils::getConfigPath()` / `QStandardPaths`
+  so this guard stays silent.
 
 ### Adding a New Integration Test
 

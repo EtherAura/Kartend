@@ -234,6 +234,44 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
     }
   }
 
+  // Kartend-jset: post-import launcher-path probe. Karts built on a
+  // different machine often carry absolute launcher paths that don't exist
+  // on the importing host (e.g. /opt/imported-from-another-machine/runner).
+  // Log every issue + invoke the optional UI reporter so the user finds
+  // out at import time rather than at first-Launch click.
+  QList<MissingLauncherPathIssue> launcherIssues;
+  auto recordLauncherIssue = [&](const QString &field, const QString &path) {
+    if (path.isEmpty()) return;
+    const PathUtils::PathStatus status = PathUtils::checkLauncherPath(path);
+    if (status == PathUtils::PathStatus::OK || status == PathUtils::PathStatus::Empty) {
+      return;
+    }
+    launcherIssues.append(
+        {field, QStringLiteral("'%1' %2").arg(path, PathUtils::pathStatusDescription(status))});
+  };
+  recordLauncherIssue(QStringLiteral("launcherPath"), cfg.launcher.launcherPath);
+  for (int i = 0; i < cfg.launcher.additionalLaunchers.size(); ++i) {
+    recordLauncherIssue(QStringLiteral("additionalLaunchers[%1].launcherPath").arg(i),
+                        cfg.launcher.additionalLaunchers[i].launcherPath);
+  }
+  if (!launcherIssues.isEmpty()) {
+    QStringList lines;
+    lines.reserve(launcherIssues.size());
+    for (const auto &[field, desc] : launcherIssues) {
+      lines.append(QStringLiteral("%1: %2").arg(field, desc));
+    }
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::InvalidFilePath,
+            "Imported .kart launcher paths don't resolve on this host",
+            "KartManager::finalizeImport")
+            .withDetails(QStringLiteral("Collection: %1, Issues:\n  - %2")
+                             .arg(cfg.name, lines.join(QStringLiteral("\n  - ")))));
+    if (m_setup.missingLauncherPathsReporter) {
+      m_setup.missingLauncherPathsReporter(cfg.name, launcherIssues);
+    }
+  }
+
   return result.destDir;
 }
 

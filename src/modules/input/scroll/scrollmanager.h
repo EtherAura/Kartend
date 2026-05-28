@@ -208,8 +208,10 @@ public:
   /// Kartend-yeik: expose the FilterManager owned by m_dataSource so the
   /// ApplicationContext seed (initializeAppContext) and sibling scroll-side
   /// helpers like CoverFlowController can read filter state through ctx
-  /// instead of holding their own setup-struct pointer.
-  [[nodiscard]] FilterManager *filterManager() const { return m_filterManager; }
+  /// instead of holding their own setup-struct pointer. Defined out-of-line
+  /// because m_filterManager is now QPointer<FilterManager> (Kartend-kovt)
+  /// and converting it to a raw pointer needs the complete type.
+  [[nodiscard]] FilterManager *filterManager() const;
 
 signals:
   void subcollectionEntered(int subcollectionIndex);
@@ -250,6 +252,23 @@ public slots:
   /// Receives the visual index for a file path from database query
   void onVisualIndexForPathLoaded(int visualIndex, const QString &filePath);
 
+  /// Kartend-2hzy pilot: per-collection gridLayoutChanged receiver. Fires when
+  /// any save path (settings dialog OR kart import / toolbar inline edits /
+  /// right-click) actually mutates GridLayoutPreferences on a collection.
+  /// No-op unless the diff is for the active collection — non-active
+  /// collections pick up the new layout on next switch via the normal
+  /// switchCollection path. The settings-dialog flow already drives grid
+  /// updates through handleLayoutChanges, so this slot's load is the
+  /// alternate-save paths.
+  void onGridLayoutChanged(int collectionIndex, const GridLayoutPreferences &gridLayout);
+
+  /// Kartend-2hzy: per-collection listViewOptionsChanged receiver. The list
+  /// view widgets (ItemWidget in list mode + the row-color static) consult
+  /// ListViewOptions on the next paint — this slot forces a redraw when
+  /// the diff hits the active collection. No-op when not in list mode or
+  /// non-active.
+  void onListViewOptionsChanged(int collectionIndex, const ListViewOptions &listView);
+
 private slots:
   void onScrollChanged();
   void onThrottledUpdate();
@@ -285,22 +304,30 @@ private:
   // ScrollManager,).
   std::unique_ptr<DataSourceCoordinator> m_dataSource;
 
-  // Raw aliases into m_dataSource for the in-place filter/data update
-  // logic that still lives in ScrollManager (scrollmanagerfilter.cpp).
-  // Lifetime is tied to m_dataSource; never delete through these pointers.
-  FilterManager *m_filterManager = nullptr;
-  ScrollDataStore *m_dataManager = nullptr;
-  PreSearchStateCache *m_preSearchStateManager = nullptr;
-  SearchLoadingOverlay *m_searchLoadingOverlay = nullptr;
+  // Aliases into m_dataSource for the in-place filter/data update logic
+  // that still lives in ScrollManager (scrollmanagerfilter.cpp). Lifetime
+  // is tied to m_dataSource; never delete through these pointers. QPointer
+  // (Kartend-kovt) guards against dangling reads if a future refactor
+  // changes destruction order or extracts a helper that captures these
+  // aliases — today the unique_ptr in m_dataSource destructs first under
+  // reverse-declaration teardown, which would null these out implicitly.
+  QPointer<FilterManager> m_filterManager;
+  QPointer<ScrollDataStore> m_dataManager;
+  QPointer<PreSearchStateCache> m_preSearchStateManager;
+  QPointer<SearchLoadingOverlay> m_searchLoadingOverlay;
 
   // Selection display manager owns overlay + state tracker + list header +
   // artwork preview overlay (extracted from ScrollManager,).
   std::unique_ptr<SelectionDisplayManager> m_selectionDisplay;
 
-  // Raw aliases into m_selectionDisplay for the in-place selection update
+  // Aliases into m_selectionDisplay for the in-place selection update
   // logic that still lives in ScrollManager. Lifetime is tied to
-  // m_selectionDisplay; never delete through these pointers.
-  SelectionOverlayManager *m_overlayManager = nullptr;
+  // m_selectionDisplay; never delete through these pointers. m_overlayManager
+  // is wrapped in QPointer for the same Kartend-kovt rationale as the
+  // m_dataSource aliases above. SelectionStateTracker is not a QObject
+  // (it's a pure-data tracker, not a Qt-aware manager) so QPointer doesn't
+  // apply; it stays raw and its lifetime is guaranteed by m_selectionDisplay.
+  QPointer<SelectionOverlayManager> m_overlayManager;
   SelectionStateTracker *m_selectionState = nullptr;
 
   // Search loading overlay, virtual container, selection coordinator, etc.

@@ -52,6 +52,7 @@ private slots:
   void testBuildLaunchCommand_allowsAmpersandMediaPath();
   void testBuildLaunchCommand_rejectsCollectionPathTraversal_data();
   void testBuildLaunchCommand_rejectsCollectionPathTraversal();
+  void testBuildLaunchCommand_unclosedQuoteParameterFails();
 
   // Multi-launcher tests
   void testLauncherCount_singlePrimary();
@@ -79,6 +80,7 @@ private slots:
   void testPreview_warnsWhenLauncherNotOnPath();
   void testPreview_resolvesAbsoluteLauncher();
   void testPreview_detectsUnresolvedPlaceholder();
+  void testPreview_unclosedQuoteParameterSurfacedAsWarning();
 
 private:
   QString m_tempExecutable;
@@ -430,6 +432,21 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
 }
 
+void TestLaunchManager::testBuildLaunchCommand_unclosedQuoteParameterFails() {
+  // An unclosed quote in launchParameters must abort buildLaunchCommand —
+  // without this, the parse error was logged but the launch proceeded with
+  // a truncated arg list, surfacing as a cryptic launcher failure (Kartend-x1oi).
+  CollectionConfig config;
+  config.name = "Concert Recordings";
+  config.launcher.launcherPath = "mpv";
+  config.launcher.launchParameters = "--title \"Unfinished";
+
+  auto result = LaunchManager::buildLaunchCommand(config, "/tmp/recording.mp4");
+  QVERIFY2(result.isError(), "Unclosed quote in launchParameters must abort buildLaunchCommand");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+  QVERIFY(result.error().message.contains("Unclosed quote"));
+}
+
 void TestLaunchManager::testBuildLaunchCommand_rejectsCollectionPathTraversal_data() {
   QTest::addColumn<QString>("collectionName");
   QTest::newRow("dotdot-slash") << QStringLiteral("../etc");
@@ -736,6 +753,23 @@ void TestLaunchManager::testPreview_buildErrorSurfacedAsWarning() {
   QVERIFY(!preview.buildError.isEmpty());
   QCOMPARE(preview.warnings.size(), 1);
   QVERIFY(preview.warnings.first().contains("No launcher"));
+}
+
+void TestLaunchManager::testPreview_unclosedQuoteParameterSurfacedAsWarning() {
+  // End-to-end: an unclosed quote in launchParameters reaches the dialog as
+  // buildOk=false plus a warning naming the unclosed-quote condition, so the
+  // user can fix the parameter string without hitting a cryptic exec failure.
+  CollectionConfig collection;
+  collection.name = "Concert Recordings";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = "--title \"Unfinished";
+
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(!preview.buildOk);
+  QVERIFY(preview.buildError.contains("Unclosed quote"));
+  QCOMPARE(preview.warnings.size(), 1);
+  QVERIFY(preview.warnings.first().contains("Unclosed quote"));
 }
 
 void TestLaunchManager::testPreview_missingFileSurfacesWarning() {

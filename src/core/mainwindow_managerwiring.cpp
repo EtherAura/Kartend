@@ -256,6 +256,33 @@ void MainWindow::wireKartManager() {
       KartPreflightDialog dialog(report, this);
       return dialog.exec() == QDialog::Accepted;
     };
+    // Kartend-jset: post-import notice when imported launcher paths don't
+    // resolve on this host (common when the .kart was built on a different
+    // machine). Informational only — the collection has already imported;
+    // this just tells the user which paths to fix in Settings → Launchers.
+    // The detail line is copyable from the QMessageBox text so the user
+    // can paste it into a follow-up note.
+    kartSetup.missingLauncherPathsReporter =
+        [this](const QString &collectionName, const QList<kart::MissingLauncherPathIssue> &issues) {
+          QStringList lines;
+          lines.reserve(issues.size());
+          for (const auto &[field, desc] : issues) {
+            lines.append(QStringLiteral("• %1: %2").arg(field, desc));
+          }
+          QMessageBox box(this);
+          box.setIcon(QMessageBox::Information);
+          box.setWindowTitle(tr("Imported Kart — launcher paths to review"));
+          box.setText(tr("The imported collection '%1' references launcher paths that do "
+                         "not resolve on this host. The collection was imported successfully; "
+                         "fix the paths in Settings → Launchers before launching items.")
+                          .arg(collectionName));
+          // setTextInteractionFlags + setInformativeText lets the user
+          // select and copy the path list.
+          box.setInformativeText(lines.join(QLatin1Char('\n')));
+          box.setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+          box.addButton(QMessageBox::Ok);
+          box.exec();
+        };
     km->setupReferences(kartSetup);
 
     connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {

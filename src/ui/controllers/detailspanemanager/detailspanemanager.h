@@ -157,6 +157,15 @@ signals:
   void sidebarVisibilityChanged(bool visible);
   void sidebarLayoutChanged();
 
+public slots:
+  /// Kartend-2hzy: per-collection sidebarAppearanceChanged receiver. Fires
+  /// when any save path (kart import, right-click edit, inline toolbar
+  /// commit) actually mutates SidebarAppearance on a collection. Re-applies
+  /// the persisted sidebar state + relayouts the pane when the diff hits
+  /// the currently-viewed collection; no-op otherwise (next
+  /// switchCollection picks it up via the normal apply path).
+  void onSidebarAppearanceChanged(int collectionIndex, const SidebarAppearance &sidebar);
+
 private slots:
   /// Opens the per-item artwork-link editor dialog for the current
   /// selection. Persists the user's diff via DatabaseManager

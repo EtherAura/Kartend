@@ -1,5 +1,5 @@
-#ifndef API_ERRORPRESENTATION_H
-#define API_ERRORPRESENTATION_H
+#ifndef KARTEND_UTILS_APP_ERRORPRESENTATION_H
+#define KARTEND_UTILS_APP_ERRORPRESENTATION_H
 
 #include "errorutils.h"
 
@@ -38,4 +38,4 @@ void setShowCriticalErrorOverride(ShowCriticalErrorFn fn);
 
 } // namespace ErrorPresentation
 
-#endif // API_ERRORPRESENTATION_H
+#endif // KARTEND_UTILS_APP_ERRORPRESENTATION_H

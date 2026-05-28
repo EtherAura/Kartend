@@ -4,10 +4,17 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace KartManifest {
 
 namespace {
+
+// Kartend-1vie: surface unknown enum strings in imported .kart manifests so a
+// cross-machine import doesn't silently fall back to defaults. Reuse the
+// settingsmanager category so users only have to enable one logging filter
+// to debug both INI-side and manifest-side enum typos.
+Q_LOGGING_CATEGORY(lcKartManifest, "kartend.settingsmanager")
 
 QString sidebarModeToString(DetailsPaneMode mode) {
   return mode == DetailsPaneMode::Expand ? "expand" : "overlay";
@@ -249,12 +256,24 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.filter.titleExclusionPatterns = jsonToStringList(o["title_exclusion_patterns"]);
   c.filter.titleExclusionEnabled = o["title_exclusion_enabled"].toBool(true);
 
-  c.horizontalAlignment = CollectionUtils::stringToAlignment(o["horizontal_alignment"].toString());
+  auto warnUnknown = [&](const QString &key, const QString &raw, const QString &dflt) {
+    qCWarning(lcKartManifest).nospace()
+        << "Imported .kart collection '" << c.name << "': unknown " << key << " value '" << raw
+        << "' — falling back to '" << dflt << "'. Fix the manifest to silence.";
+  };
+
+  const QString rawAlignment = o["horizontal_alignment"].toString();
+  bool alignmentFallback = false;
+  c.horizontalAlignment = CollectionUtils::stringToAlignment(rawAlignment, &alignmentFallback);
+  if (alignmentFallback) warnUnknown("horizontal_alignment", rawAlignment, "center");
   c.sidebar.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
   c.sidebar.sidebarPosition =
       CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
+  const QString rawSidebarBgType = o["sidebar_background_type"].toString();
+  bool sidebarBgTypeFallback = false;
   c.sidebar.sidebarBackgroundType =
-      CollectionUtils::stringToDetailsPaneBackgroundType(o["sidebar_background_type"].toString());
+      CollectionUtils::stringToDetailsPaneBackgroundType(rawSidebarBgType, &sidebarBgTypeFallback);
+  if (sidebarBgTypeFallback) warnUnknown("sidebar_background_type", rawSidebarBgType, "color");
   c.sidebar.sidebarBackgroundColor = o["sidebar_background_color"].toString();
   c.sidebar.sidebarBackgroundImage = o["sidebar_background_image"].toString();
   c.sidebar.sidebarPattern =
@@ -270,12 +289,18 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.sidebar.sidebarWidth = o["sidebar_width"].toInt(UIConstants::DetailsPane::FIXED_WIDTH);
   c.sidebar.sidebarHeight = o["sidebar_height"].toInt(UIConstants::DetailsPane::FIXED_HEIGHT);
   c.sidebar.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
+  const QString rawSidebarActiveTab = o["sidebar_active_tab"].toString();
+  bool sidebarActiveTabFallback = false;
   c.sidebar.sidebarActiveTab =
-      CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
+      CollectionUtils::stringToDetailsPaneTab(rawSidebarActiveTab, &sidebarActiveTabFallback);
+  if (sidebarActiveTabFallback) warnUnknown("sidebar_active_tab", rawSidebarActiveTab, "item");
   c.sidebar.sidebarFontFamily = o["sidebar_font_family"].toString();
   c.sidebar.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
 
-  c.viewType = CollectionUtils::stringToViewType(o["view_type"].toString());
+  const QString rawViewType = o["view_type"].toString();
+  bool viewTypeFallback = false;
+  c.viewType = CollectionUtils::stringToViewType(rawViewType, &viewTypeFallback);
+  if (viewTypeFallback) warnUnknown("view_type", rawViewType, "grid");
   c.hideMissingArtwork = o["hide_missing_artwork"].toBool(false);
   c.gridLayout.horizontalSpacing = o["horizontal_spacing"].toInt(UIConstants::Grid::SPACING);
   c.gridLayout.verticalSpacing = o["vertical_spacing"].toInt(20);
@@ -295,8 +320,12 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.background.selectionColor = o["selection_color"].toString();
 
   c.background.headerLogoImage = o["header_logo_image"].toString();
-  c.background.headerLogoPosition =
-      CollectionUtils::stringToHeaderLogoPosition(o["header_logo_position"].toString());
+  const QString rawHeaderLogoPosition = o["header_logo_position"].toString();
+  bool headerLogoPositionFallback = false;
+  c.background.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
+      rawHeaderLogoPosition, &headerLogoPositionFallback);
+  if (headerLogoPositionFallback)
+    warnUnknown("header_logo_position", rawHeaderLogoPosition, "topcenter");
 
   c.background.vignetteEnabled = o["vignette_enabled"].toBool(false);
   c.background.vignetteIntensity = o["vignette_intensity"].toInt(60);

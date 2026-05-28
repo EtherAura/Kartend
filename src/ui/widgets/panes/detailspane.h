@@ -170,6 +170,15 @@ public:
     QString manualDirectory;
     QStringList extensions;
     QString parentName;
+    /// Kartend-ecky: persistent warning lines surfacing launcher paths
+    /// that don't resolve on this host (typical for kart bundles imported
+    /// from a different machine). Each entry is a human-readable
+    /// "<field>: <path> <reason>" line ready to display verbatim; empty
+    /// list = no issues, omit the section. Recomputed on every summary
+    /// refresh via PathUtils::checkLauncherPath so the section clears the
+    /// moment the user reinstalls the missing binary and the sidebar
+    /// re-renders.
+    QStringList launcherPathIssues;
     [[nodiscard]] bool isValid() const { return !name.trimmed().isEmpty(); }
   };
   /// Caches the collection summary used when no item is selected. The

@@ -27,11 +27,15 @@ namespace {
 // from the kernel's readahead cache after the first).
 constexpr qint64 CHUNK_SIZE = 1 << 20;
 
-// Extraction timeout. Matches LaunchManager::extractArchiveToTemp's
-// 30s — a typical ROM archive extracts in well under a second; an
-// archive that takes 30s of CPU is either huge (skip it for hashing)
-// or malformed.
-constexpr int ARCHIVE_EXTRACT_TIMEOUT_MS = 30000;
+// Extraction timeout. The old 30s was tuned for cartridge-sized ROMs
+// (NES/SNES/GBA/etc., a few hundred KB at most). PS1/PS2 disc images
+// inside .zip routinely exceed 1 GB; even with `unzip -o` to a local
+// SSD a 4 GB ISO needs minutes. With the 30s ceiling the hash silently
+// failed on every disc-image collection, dropping SS into filename-only
+// matching and producing the wrong-region match Kartend-ou0a tracks.
+// 10 minutes covers ~4 GB extracted at 7 MB/s — a slow USB drive in
+// the worst case — without making the scrape feel hung.
+constexpr int ARCHIVE_EXTRACT_TIMEOUT_MS = 600000;
 
 // Hard cap on the number of files we'll consider as the "largest
 // inner file" candidate. Mirrors LaunchManager's malicious-archive
@@ -82,13 +86,32 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty file path",
                                "RomHasher::hashFile");
   }
+  // Symlink-safe: SS hash-ID matches on the underlying file bytes, so we
+  // must hash the symlink's target — not the symlink entry itself. Qt's
+  // QFile + QFileInfo *usually* dereference symlinks transparently, but
+  // the canonical-path round-trip also fixes paths that mix relative
+  // segments or escape a mount with `..`, and it surfaces broken
+  // symlinks as an empty canonical (rather than letting QFile::open
+  // produce a less-actionable "Failed to open" later). Kartend-ou0a:
+  // without this, a symlinked ROM silently produced no md5/sha1 in the
+  // SS jeuInfos.php URL and SS fell back to filename-only matching —
+  // landing on a wrong-region game record.
   QFileInfo info(filePath);
+  if (info.isSymLink()) {
+    const QString canonical = info.canonicalFilePath();
+    if (canonical.isEmpty()) {
+      return ErrorContext::error(ErrorCode::FileNotFound, "ROM symlink target does not resolve",
+                                 "RomHasher::hashFile")
+          .withDetails(filePath);
+    }
+    info = QFileInfo(canonical);
+  }
   if (!info.exists() || !info.isFile()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "ROM file does not exist",
                                "RomHasher::hashFile")
         .withDetails(filePath);
   }
-  QFile f(filePath);
+  QFile f(info.absoluteFilePath());
   if (!f.open(QIODevice::ReadOnly)) {
     return ErrorContext::error(ErrorCode::FileNotFound, "Failed to open ROM file for hashing",
                                "RomHasher::hashFile")
@@ -143,12 +166,28 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path",
                                "RomHasher::hashArchiveInnerRom");
   }
-  if (!QFileInfo(archivePath).isFile()) {
+  // Symlink-safe (Kartend-ou0a): canonicalize before invoking the
+  // extractor so a symlinked .zip / .7z resolves to its target — matches
+  // the hashFile() pattern above. Empty canonical signals a broken
+  // symlink; surface as FileNotFound instead of trusting QProcess's
+  // less-actionable extractor error.
+  QFileInfo info(archivePath);
+  if (info.isSymLink()) {
+    const QString canonical = info.canonicalFilePath();
+    if (canonical.isEmpty()) {
+      return ErrorContext::error(ErrorCode::FileNotFound, "Archive symlink target does not resolve",
+                                 "RomHasher::hashArchiveInnerRom")
+          .withDetails(archivePath);
+    }
+    info = QFileInfo(canonical);
+  }
+  if (!info.isFile()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Archive does not exist or is not a regular file",
                                "RomHasher::hashArchiveInnerRom")
         .withDetails(archivePath);
   }
+  const QString resolvedArchivePath = info.absoluteFilePath();
 
   // Pick whichever extractor the user has on PATH. Same priority order
   // as LaunchManager's extractor — 7z first because it handles the
@@ -182,11 +221,11 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   }
 
   if (extractor == QStringLiteral("7z")) {
-    args << QStringLiteral("x") << QStringLiteral("-y") << archivePath;
+    args << QStringLiteral("x") << QStringLiteral("-y") << resolvedArchivePath;
   } else if (extractor == QStringLiteral("unzip")) {
-    args << QStringLiteral("-o") << archivePath;
+    args << QStringLiteral("-o") << resolvedArchivePath;
   } else { // bsdtar
-    args << QStringLiteral("-xf") << archivePath;
+    args << QStringLiteral("-xf") << resolvedArchivePath;
   }
 
   QProcess proc;
@@ -227,15 +266,15 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   while (it.hasNext()) {
     const QString candidate = it.next();
     if (++inspected > MAX_INNER_FILES_INSPECTED) break;
-    const QFileInfo info(candidate);
-    if (info.isSymLink()) continue;
+    const QFileInfo entryInfo(candidate);
+    if (entryInfo.isSymLink()) continue;
     // Defence-in-depth against malicious archives that smuggle
     // symlinks past NoSymLinks.
-    const QString canon = info.canonicalFilePath();
+    const QString canon = entryInfo.canonicalFilePath();
     if (canon.isEmpty() || (canon != rootCanonical && !canon.startsWith(rootPrefix))) {
       continue;
     }
-    const qint64 sz = info.size();
+    const qint64 sz = entryInfo.size();
     if (sz > largestSize) {
       largestSize = sz;
       largestPath = canon;

@@ -1,11 +1,22 @@
 target_sources(kartend_utils PRIVATE
   cliargs.cpp
+  collection/archiveoptions_persistence.cpp
+  collection/collectionbackground_persistence.cpp
+  collection/collectionfilterpreferences_persistence.cpp
   collection/collectionhierarchycache.cpp
+  collection/collectionscalars_persistence.cpp
+  collection/folderbrowsingoptions_persistence.cpp
+  collection/gridlayoutpreferences_persistence.cpp
   collection/helpers.cpp
   collection/launcherconfig.cpp
+  collection/launcherprofile_persistence.cpp
+  collection/listviewoptions_persistence.cpp
   collection/presentationprofile.cpp
+  collection/scraperoverrides_persistence.cpp
+  collection/sidebarappearance_persistence.cpp
   collection/themepreset.cpp
   collectionutils.cpp
+  errorpresentation_default.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
   scrapelogger.cpp
@@ -15,23 +26,34 @@ target_sources(kartend_utils PRIVATE
   cliargs.h
   collection/archiveoptions.h
   collection/collectionbackground.h
+  collection/collectionbackground_persistence.h
   collection/collectionconfig.h
   collection/collectioncontext.h
   collection/collectionfilterpreferences.h
+  collection/collectionfilterpreferences_persistence.h
   collection/collectionhierarchycache.h
+  collection/collectionscalars_persistence.h
   collection/folderbrowsingoptions.h
   collection/generalsettings.h
   collection/gridlayoutpreferences.h
+  collection/gridlayoutpreferences_persistence.h
   collection/helpers.h
+  collection/archiveoptions_persistence.h
+  collection/folderbrowsingoptions_persistence.h
   collection/launcherconfig.h
   collection/launcherpreset.h
+  collection/launcherprofile_persistence.h
   collection/listviewoptions.h
+  collection/listviewoptions_persistence.h
   collection/presentationprofile.h
   collection/scraperoverrides.h
+  collection/scraperoverrides_persistence.h
   collection/sidebarappearance.h
+  collection/sidebarappearance_persistence.h
   collection/themepreset.h
   collectiontypes.h
   collectionutils.h
+  errorpresentation.h
   errorutils.h
   interactionstateholder.h
   loggingcategories.h

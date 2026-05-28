@@ -28,6 +28,15 @@ private slots:
   void multipleDomainChanges_eachEmitsOnce();
   void addedCollection_doesNotFirePerDomainSignals();
   void reorderOnly_doesNotFirePerDomainSignals();
+
+  // Kartend-xsyt: emission tests for the remaining per-cluster signals so
+  // the matrix in docs/settings-hotreload.md is fully covered.
+  void listViewChange_emitsOnlyListViewSignal();
+  void folderBrowsingChange_emitsOnlyFolderBrowsingSignal();
+  void collectionFilterChange_emitsOnlyFilterSignal();
+  void scraperOverridesChange_emitsOnlyScraperOverridesSignal();
+  void launcherProfileChange_emitsOnlyLauncherProfileSignal();
+  void collectionsModified_firesOnEverySave();
 };
 
 void TestPerDomainSignals::initTestCase() {
@@ -163,6 +172,103 @@ void TestPerDomainSignals::reorderOnly_doesNotFirePerDomainSignals() {
 
   QCOMPARE(gridSpy.count(), 0);
   QCOMPARE(sidebarSpy.count(), 0);
+}
+
+// Kartend-xsyt emission slots for the previously-untested per-cluster signals.
+
+void TestPerDomainSignals::listViewChange_emitsOnlyListViewSignal() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections);
+
+  QSignalSpy listViewSpy(&mgr, &ISettingsManager::listViewOptionsChanged);
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  collections[0].listView.listFontSize = 28;
+  mgr.saveCollections(collections);
+
+  QCOMPARE(listViewSpy.count(), 1);
+  QCOMPARE(listViewSpy.first().at(0).toInt(), 0);
+  QCOMPARE(gridSpy.count(), 0);
+}
+
+void TestPerDomainSignals::folderBrowsingChange_emitsOnlyFolderBrowsingSignal() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections);
+
+  QSignalSpy fbSpy(&mgr, &ISettingsManager::folderBrowsingOptionsChanged);
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  collections[0].folderBrowsing.includeContentSubfolders =
+      !collections[0].folderBrowsing.includeContentSubfolders;
+  mgr.saveCollections(collections);
+
+  QCOMPARE(fbSpy.count(), 1);
+  QCOMPARE(fbSpy.first().at(0).toInt(), 0);
+  QCOMPARE(gridSpy.count(), 0);
+}
+
+void TestPerDomainSignals::collectionFilterChange_emitsOnlyFilterSignal() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections);
+
+  QSignalSpy filterSpy(&mgr, &ISettingsManager::collectionFilterPreferencesChanged);
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  collections[0].filter.titleExclusionPatterns.append(QStringLiteral("\\s*\\(USA\\)"));
+  mgr.saveCollections(collections);
+
+  QCOMPARE(filterSpy.count(), 1);
+  QCOMPARE(filterSpy.first().at(0).toInt(), 0);
+  QCOMPARE(gridSpy.count(), 0);
+}
+
+void TestPerDomainSignals::scraperOverridesChange_emitsOnlyScraperOverridesSignal() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections);
+
+  QSignalSpy soSpy(&mgr, &ISettingsManager::scraperOverridesChanged);
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  collections[0].scraperOverrides.screenscraperSystemId = 7;
+  mgr.saveCollections(collections);
+
+  QCOMPARE(soSpy.count(), 1);
+  QCOMPARE(soSpy.first().at(0).toInt(), 0);
+  QCOMPARE(gridSpy.count(), 0);
+}
+
+void TestPerDomainSignals::launcherProfileChange_emitsOnlyLauncherProfileSignal() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections);
+
+  QSignalSpy launcherSpy(&mgr, &ISettingsManager::launcherProfileChanged);
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  collections[0].launcher.launcherPath = QStringLiteral("/tmp/some-launcher");
+  mgr.saveCollections(collections);
+
+  QCOMPARE(launcherSpy.count(), 1);
+  QCOMPARE(launcherSpy.first().at(0).toInt(), 0);
+  QCOMPARE(gridSpy.count(), 0);
+}
+
+void TestPerDomainSignals::collectionsModified_firesOnEverySave() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  QSignalSpy spy(&mgr, &ISettingsManager::collectionsModified);
+
+  // Two consecutive saves — collectionsModified fires unconditionally on each
+  // (it's the coarse lifecycle signal; per-cluster signals carry the "what
+  // actually changed" detail). Two saves must produce two emissions.
+  mgr.saveCollections(collections);
+  mgr.saveCollections(collections);
+
+  QCOMPARE(spy.count(), 2);
 }
 
 QTEST_GUILESS_MAIN(TestPerDomainSignals)

@@ -11,12 +11,27 @@
 #ifndef KARTEND_TESTS_MAINWINDOWFIXTURE_H
 #define KARTEND_TESTS_MAINWINDOWFIXTURE_H
 
-#include <QString>
 #include <memory>
+#include <QHash>
+#include <QString>
 
 class MainWindow;
 
 namespace KartendTest {
+
+/// Snapshot of the real-user kartend config / data directories taken
+/// outside test mode. The fixture captures one at construction and
+/// re-captures + diffs at destruction so any write that escaped the
+/// QStandardPaths sandbox (e.g. an explicit absolute path bypassing
+/// setTestModeEnabled) aborts the run instead of silently corrupting
+/// the developer's real config (Kartend-jcj7).
+struct RealUserPathSnapshot {
+  QString configDir;
+  QString appConfigDir;
+  QString appDataDir;
+  /// path -> (size, mtime_msecs); empty when the directory didn't exist.
+  QHash<QString, QPair<qint64, qint64>> entries;
+};
 
 /**
  * RAII fixture that constructs a fully-wired MainWindow against an isolated
@@ -46,6 +61,7 @@ public:
 
 private:
   std::unique_ptr<MainWindow> m_window;
+  RealUserPathSnapshot m_realPathsBefore;
 };
 
 } // namespace KartendTest

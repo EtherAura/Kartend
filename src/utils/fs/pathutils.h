@@ -64,6 +64,44 @@ validateCollectionNameForSubstitution(const QString &collectionName);
 // Returns true if the sync succeeded or the platform has nothing to do.
 bool syncDirectory(const QString &dirPath);
 
+// Existence + kind + permission status for a stored path (Kartend-qc1c). The
+// loader uses these helpers to surface "the binary you configured isn't on
+// this host anymore" / "the artwork dir got unmounted" at startup instead of
+// at first launch or first paint. The status enum is also intended for a
+// future settings-dialog UI hint (warning glyph next to the field) — see
+// Kartend-qc1c follow-ups.
+enum class PathStatus {
+  OK,            ///< Exists with the required kind + permissions.
+  Empty,         ///< Input was empty — not really a failure, just "no path stored".
+  Missing,       ///< Path doesn't resolve to an entry on disk.
+  NotExecutable, ///< Exists but lacks +x (only checked for launcher binaries).
+  NotReadable,   ///< Exists but lacks +r (file or dir not readable).
+  WrongType,     ///< Exists but isn't the expected kind (e.g. file where dir expected).
+};
+
+/// Status check for a launcher binary path. Bare commands (no '/') are
+/// resolved via QStandardPaths::findExecutable so a PATH-only launcher
+/// reports OK iff it's actually on the host. Same set of checks as
+/// LaunchManager::validateLauncherPath but without the
+/// sensitive-directory / canonical-symlink / shell-metacharacter side
+/// validations — those are launch-time security concerns, not load-time
+/// "does this still exist" status.
+[[nodiscard]] PathStatus checkLauncherPath(const QString &path);
+
+/// Status check for an artwork directory. Returns OK when the path exists,
+/// is a directory, and is readable.
+[[nodiscard]] PathStatus checkDirectoryPath(const QString &path);
+
+/// Status check for a regular file (placeholder artwork, header logo
+/// image, etc.). Returns OK when the path exists, is a file, and is
+/// readable.
+[[nodiscard]] PathStatus checkFilePath(const QString &path);
+
+/// Single-line English string suitable for inclusion in a log warning.
+/// Returns an empty string for `Empty` / `OK` so the caller doesn't need
+/// to special-case those.
+[[nodiscard]] QString pathStatusDescription(PathStatus status);
+
 } // namespace PathUtils
 
 #endif

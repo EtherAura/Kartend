@@ -29,6 +29,7 @@ private slots:
   void parseDetailResponse_titleAndDateFollowRomRegion();
   void parseDetailResponse_artworkFollowsRomRegion();
   void parseDetailResponse_fallbackRegionBackstopsUnknownRomRegion();
+  void parseDetailResponse_filenameOverridePreemptsRomRegion();
   void parseDetailResponse_freeTextFollowsPreferredLanguage();
   void parseDetailResponse_collapsesSsToScreenshot();
 };
@@ -369,6 +370,34 @@ void TestScreenScraperParser::parseDetailResponse_fallbackRegionBackstopsUnknown
   auto defaultResult = ScreenScraperParser::parseDetailResponse(unknownRegion);
   QVERIFY(defaultResult.isOk());
   QCOMPARE(defaultResult.value().title, QStringLiteral("Game (US)"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_filenameOverridePreemptsRomRegion() {
+  // Kartend-ou0a regression: when the caller supplies a filenameRegionOverride
+  // (typically because a hash-failure forced filename-only matching at SS),
+  // that override must win against the matched ROM's region — otherwise a
+  // JP-named-file matched to SS's US jeu record collapses to US art.
+  QByteArray usRomFixture = REGION_FIXTURE;
+  usRomFixture.replace("\"romregions\": \"jp\"", "\"romregions\": \"us\"");
+
+  // Baseline (no override): SS reports the matched ROM as US, so US art wins.
+  auto baseline = ScreenScraperParser::parseDetailResponse(usRomFixture);
+  QVERIFY(baseline.isOk());
+  QCOMPARE(baseline.value().title, QStringLiteral("Game (US)"));
+
+  // With filenameRegionOverride='jp' (e.g. parsed from "(Japan)" in the user's
+  // ROM filename), JP must come back even though SS still says us.
+  ScreenScraperParser::ParseOptions opts;
+  opts.filenameRegionOverride = QStringLiteral("jp");
+  auto overridden = ScreenScraperParser::parseDetailResponse(usRomFixture, opts);
+  QVERIFY(overridden.isOk());
+  QCOMPARE(overridden.value().title, QStringLiteral("Game (JP)"));
+  QCOMPARE(overridden.value().releaseDate, QStringLiteral("1991-08-13"));
+  QString frontUrl;
+  for (const auto &m : overridden.value().media) {
+    if (m.type == QStringLiteral("front")) frontUrl = m.url.toString();
+  }
+  QCOMPARE(frontUrl, QStringLiteral("https://example.com/box-jp.png"));
 }
 
 void TestScreenScraperParser::parseDetailResponse_freeTextFollowsPreferredLanguage() {

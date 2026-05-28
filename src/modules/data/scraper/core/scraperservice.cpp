@@ -365,6 +365,12 @@ void ScraperService::startAutoCollection() {
   // Pass the runner's per-account quota updates straight through to
   // the dialog. Main-thread → main-thread, so no qRegisterMetaType.
   connect(m_autoRunner, &BatchScrapeRunner::quotaUpdated, this, &ScraperService::quotaUpdated);
+  // Kartend-ou0a: forward the runner's hashing/extracting stage to our
+  // own itemStageChanged so the unified-mode dialog can show the same
+  // progress label regardless of whether the work came from
+  // startInteractiveItem (interactive picker flow) or this auto runner.
+  connect(m_autoRunner, &BatchScrapeRunner::itemStageChanged, this,
+          &ScraperService::itemStageChanged);
   m_autoRunner->start();
 }
 
@@ -510,6 +516,17 @@ void ScraperService::startInteractiveItem() {
   if (m_currentCollectionName != job.collectionName || !m_interactiveProvider) {
     if (m_ctx.providerBuilder) {
       m_interactiveProvider = m_ctx.providerBuilder(job.collectionIndex);
+      // Kartend-ou0a: wire stage reporter through the service so the
+      // batch / interactive UIs can show "Hashing ROM…" / "Extracting
+      // archive…" instead of a frozen spinner. QPointer-guarded so a
+      // service destroyed mid-lookup doesn't UAF when the worker
+      // thread's continuation invokes the reporter.
+      if (m_interactiveProvider) {
+        QPointer<ScraperService> guard(this);
+        m_interactiveProvider->setStageReporter([guard](const QString &stage) {
+          if (guard) emit guard->itemStageChanged(stage);
+        });
+      }
     }
     m_currentCollectionName = job.collectionName;
   }

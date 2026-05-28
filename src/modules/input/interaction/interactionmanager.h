@@ -15,13 +15,16 @@
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
+// Full Qt widget headers (rather than fwd-decls) because the matching members
+// below use QPointer<T> which needs the complete type for the static_cast
+// inside the assignment / conversion operators (Kartend-ccl0).
+#include <QLineEdit>
+#include <QStackedWidget>
 
 QT_BEGIN_NAMESPACE
 class QAction;
 class QKeyEvent;
-class QLineEdit;
 class QPushButton;
-class QStackedWidget;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -433,13 +436,17 @@ private:
   [[nodiscard]] IArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
-  QPointer<QScrollArea> m_itemScrollArea = nullptr;
-  QWidget *m_gridContainer = nullptr;
-  QStackedWidget *m_stackedWidget = nullptr;
-  QWidget *m_itemsPage = nullptr;
+  // Borrowed UI widgets from MainWindow. QPointer guards against dangling
+  // reads if MainWindow ever reconstructs a layout-level widget (live theme
+  // reload, full-screen swap) and the underlying QWidget is destroyed before
+  // InteractionManager (Kartend-ccl0).
+  QPointer<QScrollArea> m_itemScrollArea;
+  QPointer<QWidget> m_gridContainer;
+  QPointer<QStackedWidget> m_stackedWidget;
+  QPointer<QWidget> m_itemsPage;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
-  QLineEdit *m_searchBar = nullptr;
+  QPointer<QLineEdit> m_searchBar;
   GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 

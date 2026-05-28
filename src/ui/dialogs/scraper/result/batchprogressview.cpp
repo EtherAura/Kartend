@@ -52,6 +52,18 @@ BatchScrapeProgressView::BatchScrapeProgressView(QWidget *parent) : QWidget(pare
   m_currentLabel->setWordWrap(true);
   layout->addWidget(m_currentLabel);
 
+  // Sub-status under the current item, e.g. "Hashing ROM…",
+  // "Extracting archive…". Hidden when empty (the common case for
+  // small ROMs that hash in milliseconds) so the layout doesn't
+  // reserve vertical space for it (Kartend-ou0a).
+  m_stageLabel = new QLabel(this);
+  m_stageLabel->setWordWrap(true);
+  QFont stageFont = m_stageLabel->font();
+  stageFont.setItalic(true);
+  m_stageLabel->setFont(stageFont);
+  m_stageLabel->hide();
+  layout->addWidget(m_stageLabel);
+
   m_progressBar = new QProgressBar(this);
   m_progressBar->setRange(0, 100);
   m_progressBar->setValue(0);
@@ -84,6 +96,8 @@ void BatchScrapeProgressView::setRunner(Scraper::BatchScrapeRunner *runner,
   if (!runner) return;
   connect(runner, &Scraper::BatchScrapeRunner::progress, this,
           &BatchScrapeProgressView::onProgress);
+  connect(runner, &Scraper::BatchScrapeRunner::itemStageChanged, this,
+          &BatchScrapeProgressView::onStageChanged);
   connect(runner, &Scraper::BatchScrapeRunner::finished, this,
           [this](const Scraper::BatchScrapeRunner::Summary &s) {
             m_summary = s;
@@ -109,8 +123,13 @@ void BatchScrapeProgressView::onProgress(int done, int total, const QString &cur
     m_totalItems = total;
   }
   m_progressBar->setValue(done);
+  m_currentItemName = currentName;
   m_currentLabel->setText(currentName.isEmpty() ? tr("Scraping…")
                                                 : tr("Now scraping: %1").arg(currentName));
+  // Each new item starts with a fresh (empty) stage; clear the label
+  // so a previous item's "Extracting archive…" doesn't linger.
+  m_stageLabel->clear();
+  m_stageLabel->hide();
 
   const qint64 elapsedMs = std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
   QString etaStr = QStringLiteral("—");
@@ -120,4 +139,14 @@ void BatchScrapeProgressView::onProgress(int done, int total, const QString &cur
     etaStr = formatDuration(etaMs);
   }
   m_timingLabel->setText(tr("Elapsed %1 · ETA %2").arg(formatDuration(elapsedMs), etaStr));
+}
+
+void BatchScrapeProgressView::onStageChanged(const QString &stage) {
+  if (stage.isEmpty()) {
+    m_stageLabel->clear();
+    m_stageLabel->hide();
+    return;
+  }
+  m_stageLabel->setText(stage);
+  m_stageLabel->show();
 }

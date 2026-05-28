@@ -11,17 +11,19 @@
 #include "errorpresentation.h"
 #include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
-#include "test_detailspane_coverflow.h"
-#include "test_eventmanager_detailspane.h"
-#include "test_mainwindow_smoke.h"
-#include "test_navigationmanager.h"
-#include "test_scrollmanager.h"
-#include "test_filtermanager.h"
-#include "test_searchmanager.h"
-#include "test_selectiondisplaymanager.h"
-#include "test_detailspanemanager.h"
 #include "test_attractmanager.h"
 #include "test_detailpagemanager.h"
+#include "test_detailspane_coverflow.h"
+#include "test_detailspanemanager.h"
+#include "test_eventmanager_detailspane.h"
+#include "test_filtermanager.h"
+#include "test_kartmanager.h"
+#include "test_mainwindow_smoke.h"
+#include "test_navigationmanager.h"
+#include "test_scanservice.h"
+#include "test_scrollmanager.h"
+#include "test_searchmanager.h"
+#include "test_selectiondisplaymanager.h"
 #include "test_selectionoverlaymanager.h"
 #include "test_settingsdialog_changes.h"
 #include "test_settingsdialog_scope.h"
@@ -167,6 +169,20 @@ int main(int argc, char *argv[]) {
   {
     TestDetailPageManager detailPage;
     status |= QTest::qExec(&detailPage, argc, argv);
+  }
+  drainGlobalThreadPool();
+  // Kartend-r9u0: KartManager + ScanService integration coverage.
+  // Kept last in the chain so the (heavier, full-ApplicationManager)
+  // kart tests don't slow the early-failure feedback for the lighter
+  // tests above.
+  {
+    TestKartManager kart;
+    status |= QTest::qExec(&kart, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestScanService scanService;
+    status |= QTest::qExec(&scanService, argc, argv);
   }
   drainGlobalThreadPool();
   return status;

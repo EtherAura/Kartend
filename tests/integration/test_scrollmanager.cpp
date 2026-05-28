@@ -14,7 +14,8 @@ void TestScrollManager::getTotalItems_isZeroOnFreshFixture() {
   // Sanity check: confirm the factory hooks actually substituted the mock.
   // Without this, a regression that broke the factory plumbing would leave
   // tests silently exercising the real SQLite-backed DatabaseManager.
-  QVERIFY(qobject_cast<KartendTest::MockDatabaseManager *>(fixture.window()->getApplicationManager()->getDatabaseManager()));
+  QVERIFY(qobject_cast<KartendTest::MockDatabaseManager *>(
+      fixture.window()->getApplicationManager()->getDatabaseManager()));
   ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
   QVERIFY(sm);
   // No collections have been loaded into the fixture's MainWindow, so
@@ -30,8 +31,7 @@ void TestScrollManager::getCurrentGridWidth_returnsPositive() {
   // Even without a collection loaded, getCurrentGridWidth falls back to
   // the default constant. Asserting >0 catches a regression where the
   // fallback path returns 0 (which would break layout math downstream).
-  QVERIFY2(sm->getCurrentGridWidth() > 0,
-           "getCurrentGridWidth must return a positive default");
+  QVERIFY2(sm->getCurrentGridWidth() > 0, "getCurrentGridWidth must return a positive default");
 }
 
 void TestScrollManager::sidebarShrinkingActive_roundTripsThroughSetter() {
@@ -105,4 +105,39 @@ void TestScrollManager::willNeedVerticalScrollbar_returnsBoolWithoutCrash() {
   // routing) hit on every layout event.
   const bool needed = sm->willNeedVerticalScrollbar();
   QVERIFY(!needed);
+}
+
+void TestScrollManager::gridLayoutChanged_appliesToActiveCollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  const int baseline = sm->getCurrentGridWidth();
+  QVERIFY(baseline > 0);
+  // Emit the per-cluster signal for the active collection (currentIndex
+  // defaults to -1 in the empty fixture; the slot's guard reads
+  // m_context.currentIndex). Use -1 so the slot treats the diff as
+  // matching the (uninitialized) active context.
+  GridLayoutPreferences newGrid;
+  newGrid.gridWidth = baseline + 3;
+  sm->onGridLayoutChanged(-1, newGrid);
+  // updateGridWidth ran → calculateMetrics picks up the new value via
+  // m_context.config.gridLayout.gridWidth, which getCurrentGridWidth
+  // reads. So the gating worked: the alternate-save path applied.
+  QCOMPARE(sm->getCurrentGridWidth(), baseline + 3);
+}
+
+void TestScrollManager::gridLayoutChanged_ignoresNonActiveCollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  const int baseline = sm->getCurrentGridWidth();
+  GridLayoutPreferences otherGrid;
+  otherGrid.gridWidth = baseline + 5;
+  // Signal targets collectionIndex=42 — definitely not the active one
+  // (currentIndex == -1 in the empty fixture). The guard must drop the
+  // diff so the active layout stays put.
+  sm->onGridLayoutChanged(42, otherGrid);
+  QCOMPARE(sm->getCurrentGridWidth(), baseline);
 }

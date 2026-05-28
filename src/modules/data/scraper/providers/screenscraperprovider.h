@@ -83,6 +83,8 @@ public:
   ScreenScraperProvider(GeneralSettingsAccessor settingsAccessor,
                         CollectionAccessor collectionAccessor);
 
+  void setStageReporter(StageReporter reporter) override { m_stageReporter = std::move(reporter); }
+
   [[nodiscard]] QString id() const override { return QStringLiteral("screenscraper"); }
   [[nodiscard]] QString displayName() const override { return QStringLiteral("ScreenScraper.fr"); }
   [[nodiscard]] QStringList categories() const override { return {QStringLiteral("games")}; }
@@ -137,7 +139,8 @@ private:
   /// optional KARTEND_SCRAPER_DUMP_JSON diagnostic dump; quota
   /// refresh; and the search/detail parse-and-cache step that feeds
   /// fetchDetail() without a second roundtrip.
-  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, LookupCallback callback);
+  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, LookupCallback callback,
+                              const QString &filenameRegionOverride);
 
   /// Snapshot the user's current scraper preferences (image cap, JPG
   /// preference, preferred region, UI language) into a parser
@@ -178,6 +181,7 @@ private:
 
   GeneralSettingsAccessor m_settingsAccessor;
   CollectionAccessor m_collectionAccessor;
+  StageReporter m_stageReporter;
   /// SS's jeuInfos.php returns the candidate AND the full detail in
   /// one response — there's no separate detail endpoint. We cache
   /// the full ScrapedItem during lookup() keyed on the candidate's

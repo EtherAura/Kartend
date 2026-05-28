@@ -16,25 +16,25 @@
 // The slot handlers that those connections target live in companion TUs
 // extracted by responsibility:
 //
-//   * mainwindow_dbevents.cpp     — DatabaseManager scan/count handlers
+//   * dbeventscontroller.{h,cpp}  — DatabaseManager scan/count handlers
 //                                    (releaseStartupOverlaySuppressionIfIdle,
 //                                    refreshTitleCountsIfActive, onScan*,
 //                                    onCollectionScanCompleted*,
 //                                    refreshCollectionSummaryOnScanCompleted,
 //                                    refreshFilterToolbarOnItemsLoaded)
-//   * ScrollEventsController      — ScrollManager view-mode / column-resize /
+//   * scrolleventscontroller.{h,cpp} — ScrollManager view-mode / column-resize /
 //                                    CoverFlow event handlers
 //                                    (onSortModeChangeRequested,
 //                                    onSelectItemByIndex,
 //                                    onCoverFlow*, onArtworkPreviewVisibilityChanged,
 //                                    onList*ColumnWidthChanged).
-//                                    Extracted from MainWindow per Kartend-hzef;
-//                                    lives in scrolleventscontroller.{h,cpp}.
-//   * mainwindow_scraper.cpp      — scraper-service lifecycle entry points
+//                                    Extracted from MainWindow per Kartend-hzef.
+//   * mainwindow_scraper.cpp      — IMainWindow scraper-flow forwarders
 //                                    (openScraperDialog,
 //                                    promptResumePendingScrapeIfAny) and
 //                                    marquee shims (applyMarqueeSettings,
-//                                    updateMarqueeArtwork)
+//                                    updateMarqueeArtwork). Implementation lives
+//                                    in scrapercontroller.{h,cpp}.
 //
 // This TU keeps:
 //   - the connect*() tables (the flat manager graph)
@@ -55,7 +55,7 @@
 //     errorOccurred             → onMediaLibraryError
 //   DatabaseManager → ScrollManager
 //     visualIndexForPathLoaded  → onVisualIndexForPathLoaded
-//   DatabaseManager → MainWindow (UI/title/overlay state — handlers in mainwindow_dbevents.cpp)
+//   DatabaseManager → MainWindow (UI/title/overlay state — handlers in dbeventscontroller.cpp)
 //     itemCountLoaded           → releaseStartupOverlaySuppressionIfIdle
 //     cachedCountsUpdated       → refreshTitleCountsIfActive
 //     itemsLoaded               → refreshFilterToolbarOnItemsLoaded
@@ -122,9 +122,9 @@
 //    new edges can't smuggle behaviour into the wiring file.
 //
 // 3. **Slot bodies live elsewhere when they outgrow one screen.** The
-//    extracted TUs (mainwindow_dbevents.cpp, mainwindow_scraper.cpp) and
-//    the extracted Controllers (ScrollEventsController per Kartend-hzef)
-//    own the larger responsibility-segmented handlers; the small
+//    extracted Controllers (DbEventsController, ScrollEventsController per
+//    Kartend-hzef, ScraperController) own the larger
+//    responsibility-segmented handlers; the small
 //    wiring-adjacent slots that read naturally next to their connect()
 //    stay here. When a new slot would push this TU's inline-handler
 //    section over ~150 LOC, extract a sibling TU keyed by its emitter
@@ -172,8 +172,8 @@
 // =====================================================================
 // Small slot handlers that live alongside their connect()s — too small
 // to justify their own TU. Larger responsibility-segmented handlers live
-// in mainwindow_dbevents.cpp / mainwindow_scraper.cpp or in extracted
-// Controllers under src/core/ (see ScrollEventsController).
+// in extracted Controllers under src/core/ (DbEventsController,
+// ScrollEventsController, ScraperController).
 // =====================================================================
 
 void MainWindow::onArtworkViewportUpdateRequested() {
@@ -323,6 +323,40 @@ void MainWindow::connectDatabaseManager() {
   // SettingsManager → MainWindow / DetailsPaneManager
   QObject::connect(settings, &SettingsManager::collectionsModified, this,
                    &MainWindow::rebuildHierarchyCache);
+
+  // Kartend-2hzy: SettingsManager → per-cluster hot-reload receivers. Each
+  // signal carries the collectionIndex + the diffed leaf-struct value; the
+  // receiver slot is active-collection-guarded. Covers the alternate save
+  // paths (kart import, right-click edits, toolbar inline edits) that
+  // bypass the settings dialog's handleLayoutChanges flow. Reuses `scroll`
+  // and `nav` from the outer scope rather than shadowing — both were
+  // resolved above for the existing connect()s.
+  if (scroll) {
+    QObject::connect(settings, &SettingsManager::gridLayoutChanged, scroll,
+                     &ScrollManager::onGridLayoutChanged);
+    QObject::connect(settings, &SettingsManager::listViewOptionsChanged, scroll,
+                     &ScrollManager::onListViewOptionsChanged);
+  }
+  if (details) {
+    QObject::connect(settings, &SettingsManager::sidebarAppearanceChanged, details,
+                     &DetailsPaneManager::onSidebarAppearanceChanged);
+  }
+  if (nav) {
+    QObject::connect(settings, &SettingsManager::collectionBackgroundChanged, nav,
+                     &NavigationManager::onCollectionBackgroundChanged);
+    QObject::connect(settings, &SettingsManager::collectionFilterPreferencesChanged, nav,
+                     &NavigationManager::onCollectionFilterPreferencesChanged);
+    QObject::connect(settings, &SettingsManager::folderBrowsingOptionsChanged, nav,
+                     &NavigationManager::onFolderBrowsingOptionsChanged);
+  }
+  // launcherProfileChanged / archiveOptionsChanged: LaunchManager reads
+  //   from m_collections at launch time (no startup cache), so the
+  //   persisted diff is already visible to the next launch via per-call
+  //   read. No connect needed today; see docs/settings-hotreload.md.
+  // scraperOptionsChanged / scraperOverridesChanged: ScreenScraperProvider
+  //   re-reads ctx-routed scraper options on every fetch, and ScraperService
+  //   re-reads scraperOverrides per item via the active collection. No
+  //   connect needed today; see docs/settings-hotreload.md.
 
   // DatabaseManager / SettingsManager → DetailsPaneManager (sidebar summary)
   if (details) {

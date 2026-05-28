@@ -236,41 +236,12 @@ auto ErrorDialog::showCriticalError(QWidget *parent, const ErrorUtils::ErrorCont
   return dialog.exec() == QDialog::Accepted;
 }
 
-// Kartend-ncot: free-function entry points so lower-layer modules don't
-// upward-include errordialog.h. Implementation forwards to the static members
-// above, which remain available to other callers in src/ui/ that already have
-// the concrete header.
-namespace ErrorPresentation {
-
-namespace {
-// Test-only overrides; left empty in production. setShowErrorOverride below
-// installs the stub from MainWindowFixture so integration tests don't have
-// to race the modal-dismiss timer against ErrorDialog::exec() (Kartend-hlnl).
-ShowErrorFn g_showErrorOverride;
-ShowCriticalErrorFn g_showCriticalErrorOverride;
-} // namespace
-
-void showError(QWidget *parent, const ErrorUtils::ErrorContext &context) {
-  if (g_showErrorOverride) {
-    g_showErrorOverride(parent, context);
-    return;
-  }
-  ErrorDialog::showError(parent, context);
-}
-
-auto showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context, bool allowContinue)
-    -> bool {
-  if (g_showCriticalErrorOverride) {
-    return g_showCriticalErrorOverride(parent, context, allowContinue);
-  }
-  return ErrorDialog::showCriticalError(parent, context, allowContinue);
-}
-
-void setShowErrorOverride(ShowErrorFn fn) {
-  g_showErrorOverride = std::move(fn);
-}
-void setShowCriticalErrorOverride(ShowCriticalErrorFn fn) {
-  g_showCriticalErrorOverride = std::move(fn);
-}
-
-} // namespace ErrorPresentation
+// Kartend-hx6l: the ErrorPresentation namespace implementation moved
+// to src/utils/app/errorpresentation_default.cpp so kartend_data callers
+// (settingsdialogcontroller.cpp) don't drag a kartend_data → kartend_ui
+// link edge into every test executable. Production binaries register
+// the ErrorDialog-backed override at MainWindow startup (see
+// mainwindow_setup.cpp). The header in src/api/errorpresentation.h
+// still declares the public entry points; ErrorDialog::showError /
+// showCriticalError above remain as the concrete dialog impl callers
+// register via setShowErrorOverride.

@@ -3,12 +3,17 @@
 
 #include "isettingsmanager.h"
 #include <QHash>
+#include <QLoggingCategory>
 #include <QPointer>
 #include <QString>
 
 class QFile;
 class SessionManager;
 #include "applicationcontext_fwd.h"
+
+// Defined in settingsmanager.cpp. Declared here so settingsmanagercollections.cpp
+// (which implements saveCollections) can log to the same category.
+Q_DECLARE_LOGGING_CATEGORY(lcSettingsManager)
 
 class SettingsManager : public ISettingsManager {
   Q_OBJECT
@@ -77,6 +82,13 @@ private:
 
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                            QList<CollectionConfig> &collections, const bool &needsRewrite);
+
+  // Per-collection hot-reload diff. Compares `collections` against
+  // m_lastSavedCollections by (name, mediaDirectory) UUID and fires the
+  // per-leaf-struct *Changed signals. Called from saveCollections() after
+  // a successful disk write so observers (background painter, sidebar
+  // appearance, etc.) refresh only when their slice actually changed.
+  void emitPerCollectionDiffs(const QList<CollectionConfig> &collections);
 };
 
 #endif // SETTINGSMANAGER_H

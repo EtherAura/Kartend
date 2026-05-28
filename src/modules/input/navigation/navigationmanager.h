@@ -164,6 +164,29 @@ public slots:
   void applyBackgroundForCollection(int collectionIndex) override;
   void applyPrimaryColorForCollection(int collectionIndex) override;
 
+public slots:
+  /// Kartend-2hzy: per-collection collectionBackgroundChanged receiver.
+  /// Active-collection-guarded; non-active collections get the new
+  /// CollectionBackground on the next switchCollection path.
+  void onCollectionBackgroundChanged(int collectionIndex, const CollectionBackground &background);
+
+  /// Kartend-2hzy: collectionFilterPreferencesChanged receiver. Refreshes
+  /// the TitleFilter registry for all collections. Already covered inline
+  /// in SettingsManager::saveCollections for the main paths, but this
+  /// connect catches alternate paths (e.g. a future in-memory mutation
+  /// site that emits the diff without going through saveCollections).
+  void onCollectionFilterPreferencesChanged(int collectionIndex,
+                                            const CollectionFilterPreferences &filter);
+
+  /// Kartend-2hzy: folderBrowsingOptionsChanged receiver.
+  /// includeContentSubfolders changes affect ScanService's scan signature;
+  /// the user is expected to trigger a rescan to repopulate the DB.
+  /// Per-paint reads in QueryManager already pick up the new values, so
+  /// this slot is a diagnostic log breadcrumb until a force-rescan path
+  /// lands as a follow-up.
+  void onFolderBrowsingOptionsChanged(int collectionIndex,
+                                      const FolderBrowsingOptions &folderBrowsing);
+
 signals:
   /// Emitted when a media-library load fails. The owner (MainWindow) shows the
   /// error dialog — NavigationManager stays out of the UI-chrome layer.

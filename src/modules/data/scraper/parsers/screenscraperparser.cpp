@@ -53,8 +53,17 @@ void addPreferenceTag(QStringList &prefs, const QString &raw) {
 /// fixed English-leaning chain backstops everything. SS occasionally
 /// reports a multi-region ROM as a comma/space-separated list — each
 /// token is folded in, in order.
-QStringList buildRegionPreferences(const QString &itemRegion, const QString &fallbackRegion) {
+///
+/// When `filenameOverride` is non-empty (Kartend-ou0a), it preempts
+/// `itemRegion`. The caller sets this when the hash-based ID didn't
+/// run and the filename carries a No-Intro region marker — without
+/// the override SS's filename-only fallback often lands on the
+/// canonical (US) jeu record even when "(Japan)" was right there in
+/// the user's filename.
+QStringList buildRegionPreferences(const QString &itemRegion, const QString &fallbackRegion,
+                                   const QString &filenameOverride = QString()) {
   QStringList prefs;
+  addPreferenceTag(prefs, filenameOverride);
   const auto tokens =
       itemRegion.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts);
   for (const QString &token : tokens) {
@@ -368,7 +377,8 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   const QJsonObject rom = jeu.value("rom").toObject();
   const QString itemRegion =
       romTagShortname(rom, QStringLiteral("romregions"), QStringLiteral("regions"));
-  const QStringList regionPrefs = buildRegionPreferences(itemRegion, options.preferredRegion);
+  const QStringList regionPrefs =
+      buildRegionPreferences(itemRegion, options.preferredRegion, options.filenameRegionOverride);
   const QStringList languagePrefs = buildLanguagePreferences(options.preferredLanguage);
 
   Scraper::ScrapedItem item;
