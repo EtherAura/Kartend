@@ -30,6 +30,8 @@ private slots:
   void legacyIni_loadsAllKnownKeysWithoutWarning();
   void v1Ini_loadsCleanlyWithCurrentSchemaVersion();
   void futureIni_warnsButStillLoadsAllKnownKeys();
+  void legacyIni_invokesV0ToV1Migration();
+  void v1Ini_doesNotInvokeAnyMigration();
 
 private:
   void installFixture(const QString &fixtureName);
@@ -95,8 +97,7 @@ void TestSettingsMigration::futureIni_warnsButStillLoadsAllKnownKeys() {
   // Expect exactly one schemaVersion warning from the future-versioned INI.
   // The category-prefixed message routes through QtMsgType::QtWarningMsg
   // for ignoreMessage matching purposes.
-  QTest::ignoreMessage(QtWarningMsg,
-                       QRegularExpression(QStringLiteral("schemaVersion 99")));
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("schemaVersion 99")));
 
   SettingsManager mgr(nullptr, nullptr);
   GeneralSettings settings;
@@ -107,6 +108,59 @@ void TestSettingsMigration::futureIni_warnsButStillLoadsAllKnownKeys() {
   QCOMPARE(settings.rememberSelection, false);
   QCOMPARE(settings.pixmapCacheSizeMB, 200);
   QCOMPARE(settings.titleTintSaturation, 50);
+}
+
+void TestSettingsMigration::legacyIni_invokesV0ToV1Migration() {
+  // Kartend-h16z: with the v0->v1 no-op step registered, loading a pre-
+  // versioning INI must trigger the dispatcher and emit the "applying
+  // settings migration 0 -> 1" qCInfo message. The message is the
+  // observable side-effect that proves the registration table is wired —
+  // the step body is intentionally empty, so this is the only assertion
+  // available short of a side-channel observer.
+  installFixture(QStringLiteral("legacy.ini"));
+
+  QTest::ignoreMessage(QtInfoMsg,
+                       QRegularExpression(QStringLiteral("applying settings migration 0 -> 1")));
+
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings settings;
+  mgr.loadGeneralSettings(settings);
+
+  // Reading still produces the same values as legacyIni_loadsAllKnownKeysWithoutWarning;
+  // the migration is a no-op so the load behavior is unchanged.
+  QCOMPARE(settings.rememberSelection, false);
+  QCOMPARE(settings.pixmapCacheSizeMB, 128);
+}
+
+void TestSettingsMigration::v1Ini_doesNotInvokeAnyMigration() {
+  // The dispatcher's short-circuit must fire when loadedVersion ==
+  // currentVersion. Verify by failing the test if the v0->v1 step's
+  // qCInfo line appears. QTest treats unexpected qInfo via failOnWarning,
+  // which we drive by tee-ing the migration category through a temporary
+  // message handler that records its invocations.
+  installFixture(QStringLiteral("v1.ini"));
+
+  static QStringList capturedMigrationMessages;
+  capturedMigrationMessages.clear();
+  auto previousHandler =
+      qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+        Q_UNUSED(type);
+        if (ctx.category && QByteArray(ctx.category) == "kartend.settingsmigrations") {
+          capturedMigrationMessages.append(msg);
+        }
+      });
+
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings settings;
+  mgr.loadGeneralSettings(settings);
+
+  qInstallMessageHandler(previousHandler);
+
+  QVERIFY2(capturedMigrationMessages.isEmpty(),
+           qPrintable(QStringLiteral("Expected no migration log for v1 INI but got: %1")
+                          .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
+  QCOMPARE(settings.rememberSelection, true);
+  QCOMPARE(settings.pixmapCacheSizeMB, 64);
 }
 
 QTEST_GUILESS_MAIN(TestSettingsMigration)

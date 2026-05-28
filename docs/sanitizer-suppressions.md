@@ -116,12 +116,64 @@ internal suppressions.
 
 ## Common patterns currently in the files
 
-| Pattern | Why |
-|---------|-----|
-| `race:QtPrivate::QSlotObject` | Qt's `BlockingQueuedConnection` heap-allocates slot objects; sync is inside Qt's internal `QMetaObject` mutex which TSan can't observe |
-| `called_from_lib:libglib-2.0.so` | glib uses an eventfd wakeup pattern with internal mutexes TSan doesn't see |
-| `race:libpulsecommon` | PulseAudio's threaded-ml thread uses its own sync primitives |
-| `leak:QThreadPool::QThreadPool` | CacheManager's worker pool fallback path when long I/O ignores cancel — covered by a 2s timeout, fix tracked separately |
+| Pattern | Why | bd issue |
+|---------|-----|----------|
+| `race:QtPrivate::QSlotObject` | Qt's `BlockingQueuedConnection` heap-allocates slot objects; sync is inside Qt's internal `QMetaObject` mutex which TSan can't observe | (tracked in `.tsan_suppressions.txt`) |
+| `called_from_lib:libglib-2.0.so` | glib uses an eventfd wakeup pattern with internal mutexes TSan doesn't see | (tracked in `.tsan_suppressions.txt`) |
+| `race:libpulsecommon` | PulseAudio's threaded-ml thread uses its own sync primitives | (tracked in `.tsan_suppressions.txt`) |
+| `leak:QThreadPool::QThreadPool` | CacheDiskStorage's worker pool fallback path when long I/O ignores cancel — covered by a bounded timeout | Kartend-pa5a |
+| `leak:ScanWorkController`, `leak:ScanService::ScanService` | ScanWorkController abandons its pool at exit; `~QThreadPool()` would block DatabaseManager teardown | Kartend-dw0j |
+| `leak:gst_device_monitor_new` + 3 GStreamer entries | Qt6 GStreamer multimedia plugin caches; upstream-Qt issue. Re-evaluate when CI bumps Qt to >= 6.10 | Kartend-l52j |
+
+## TSan suppression audit (Kartend-3hjs.2, 2026-05-27)
+
+`.tsan_suppressions.txt` groups its 26 entries into three logical
+clusters, each tracked by a closed-as-suppressed bd:
+
+- **[Kartend-feqz](https://github.com/EtherAura/Kartend)** — Qt internal
+  event-queue mutex (10 entries: QSlotObject, deleteLater /
+  sendPostedEvents, QMetaCallEvent + the QArrayDataPointer derefs that
+  fall out, QMetaType::create, invokeMethod, and the QNAM →
+  main-thread QByteArray cluster). Qt synchronises queued post→consume
+  through its event-queue QMutex but the fast path is futex/atomic —
+  not TSan-interceptable. Re-evaluate on the Qt bump that exposes
+  QMutex atomics as TSan-visible.
+- **[Kartend-8fh5](https://github.com/EtherAura/Kartend)** — Qt thread
+  lifecycle (13 entries: QueryManager + shared_ptr control block
+  teardown, process-exit ApplicationManager QWaitCondition tear-down,
+  QtTest qRun watchdog, Qt COW (QArrayData::allocate /
+  reallocateUnaligned), CacheManager + ArtworkInfo destructor races,
+  QNAM first-use thread spin-up). QThread::wait /
+  QFuture::waitForFinished provably synchronise but libQt6Core's
+  stripped frames hide the happens-before edge. QtConcurrent worker
+  reuse amplifies the issue. Re-evaluate on a Qt bump with TSan-visible
+  QThread::wait or a build toggle for QtConcurrent pool no-reuse.
+- **[Kartend-d4x4](https://github.com/EtherAura/Kartend)** — Third-party
+  library sync primitives (3 entries: glib / pulseaudio / gstreamer).
+  These libraries use their own sync primitives TSan can't observe.
+  Re-evaluate on third-party version bumps or when Qt Multimedia
+  switches off the GStreamer + PulseAudio backends.
+
+Same code-review-only methodology as the LSan audit applied — the
+`--sanitize --tests` build needs Kartend-hx6l fixed before LSan/TSan
+can be re-run locally to verify each entry still fires.
+
+## LSan suppression audit (Kartend-3hjs.1, 2026-05-27)
+
+Each entry in `.lsan_suppressions.txt` now carries:
+- A clear comment explaining the leak path + why it's intentional.
+- A `Closed: Kartend-<id>` citation referencing the bd that documented
+  the rationale + closed-as-suppressed.
+- A `Re-evaluate when …` note where applicable (GStreamer entries; the
+  others have an explicit "remove if X becomes possible" trigger).
+
+The 2026-05-27 audit was **code-review only** — the `--sanitize --tests`
+build currently fails to link several test exes because of a pre-existing
+CMake layering issue where `settingsdialogcontroller.cpp` calls into
+`kartend_ui` symbols (`ErrorPresentation::showError`) that the test link
+command doesn't include. Resolving that is a separate sanitizer-CI
+follow-up. Once that builds again, re-run LSan and confirm each
+suppression entry still fires (else delete and remove the bd ID).
 
 ## Don't
 

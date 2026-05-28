@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QStandardPaths>
 
 #if defined(Q_OS_UNIX)
 #include <cerrno>
@@ -202,6 +203,80 @@ bool syncDirectory(const QString &dirPath) {
   Q_UNUSED(dirPath);
   return true;
 #endif
+}
+
+PathStatus checkLauncherPath(const QString &path) {
+  if (path.isEmpty()) {
+    return PathStatus::Empty;
+  }
+  QFileInfo info(path);
+  // Bare command (e.g. "mpv"): resolve through PATH so the user's stored
+  // value is interpreted the same way the launcher would resolve it.
+  if (!info.isAbsolute()) {
+    const QString resolved = QStandardPaths::findExecutable(path);
+    if (resolved.isEmpty()) {
+      return PathStatus::Missing;
+    }
+    info.setFile(resolved);
+  }
+  if (!info.exists()) {
+    return PathStatus::Missing;
+  }
+  if (!info.isExecutable()) {
+    return PathStatus::NotExecutable;
+  }
+  return PathStatus::OK;
+}
+
+PathStatus checkDirectoryPath(const QString &path) {
+  if (path.isEmpty()) {
+    return PathStatus::Empty;
+  }
+  const QFileInfo info(path);
+  if (!info.exists()) {
+    return PathStatus::Missing;
+  }
+  if (!info.isDir()) {
+    return PathStatus::WrongType;
+  }
+  if (!info.isReadable()) {
+    return PathStatus::NotReadable;
+  }
+  return PathStatus::OK;
+}
+
+PathStatus checkFilePath(const QString &path) {
+  if (path.isEmpty()) {
+    return PathStatus::Empty;
+  }
+  const QFileInfo info(path);
+  if (!info.exists()) {
+    return PathStatus::Missing;
+  }
+  if (!info.isFile()) {
+    return PathStatus::WrongType;
+  }
+  if (!info.isReadable()) {
+    return PathStatus::NotReadable;
+  }
+  return PathStatus::OK;
+}
+
+QString pathStatusDescription(PathStatus status) {
+  switch (status) {
+  case PathStatus::OK:
+  case PathStatus::Empty:
+    return QString();
+  case PathStatus::Missing:
+    return QStringLiteral("does not exist on this host");
+  case PathStatus::NotExecutable:
+    return QStringLiteral("exists but is not executable");
+  case PathStatus::NotReadable:
+    return QStringLiteral("exists but is not readable");
+  case PathStatus::WrongType:
+    return QStringLiteral("exists but is the wrong kind (file vs directory)");
+  }
+  return QString();
 }
 
 } // namespace PathUtils

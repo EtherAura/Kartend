@@ -27,18 +27,26 @@ struct MigrationStep {
 // previous entry's `to` so the chain is dense — applyMigrations() walks
 // sequentially and any gap would silently leave a user stranded.
 //
-// When the file is empty (only v0 -> v1 will ever be added once a real
-// schema bump lands), applyMigrations() short-circuits to the no-op fast
-// path on every load.
+// The v0 -> v1 step is registered as a no-op baseline (Kartend-h16z). Its
+// purpose is twofold: it documents that pre-versioning legacy INIs are
+// considered "version 0" and intentionally need no key-shape changes to
+// reach the current schemaVersion, AND it keeps the dispatcher walk
+// exercised in tests before any real bump lands. The body is empty so
+// running it on legacy INIs is observably free.
 const std::vector<MigrationStep> &registeredSteps() {
-  // First real migration step will be appended here when the schema
-  // version is bumped to 2. Documented as a placeholder so the dispatcher
-  // wiring stays exercised in tests even before a real step exists.
   static const std::vector<MigrationStep> steps{
-      // Example shape for the first real migration (left commented out
-      // until needed so the test suite doesn't double-fire). The block
-      // below is the canonical template — copy-paste, rename, replace
-      // the body when bumping the schema:
+      MigrationStep{
+          /*from=*/0,
+          /*to=*/1,
+          [](QSettings & /*settings*/) {
+            // Intentional no-op: every v1 key was loaded with its declared
+            // default by the v0 reader. The dispatcher still walks this
+            // step so tests can verify the registration table is non-empty
+            // and the per-step invocation path is wired.
+          },
+          "v0->v1: legacy unversioned INIs (no key-shape change required)",
+      },
+      // Template for the first real schema bump:
       //
       // MigrationStep{
       //     /*from=*/1,

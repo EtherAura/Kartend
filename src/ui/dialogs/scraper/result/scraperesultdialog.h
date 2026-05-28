@@ -410,6 +410,12 @@ private:
   /// the dialog's exec() because the caller wires deletion to the
   /// runner's `finished` signal after the dialog handles it.
   Scraper::BatchScrapeRunner *m_batchRunner = nullptr;
+  /// In-dialog stage label (Kartend-ou0a). Shows "Hashing ROM…",
+  /// "Extracting archive for hash ID…", "Looking up…" while the
+  /// provider is working. Hidden when empty so fast scrapes don't
+  /// reserve vertical space for it. Driven by ScraperService's
+  /// itemStageChanged + BatchScrapeRunner's itemStageChanged.
+  QLabel *m_stageLabel = nullptr;
 
   // ── Unified-flow state ──────────────────────────────────────────
   ScraperContext m_scraperCtx;

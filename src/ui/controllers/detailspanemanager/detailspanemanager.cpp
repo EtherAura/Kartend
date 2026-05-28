@@ -225,6 +225,19 @@ void DetailsPaneManager::setExternallyHidden(bool hidden) {
   emit sidebarVisibilityChanged(m_sidebarVisible && !m_externallyHidden);
 }
 
+void DetailsPaneManager::onSidebarAppearanceChanged(int collectionIndex,
+                                                    const SidebarAppearance &sidebar) {
+  Q_UNUSED(sidebar);
+  // Active-collection guard — non-active collections pick up the new
+  // SidebarAppearance on next switchCollection through the normal apply
+  // path.
+  if (collectionIndex != m_currentCollectionIndex) {
+    return;
+  }
+  applySidebarStateForCollection(collectionIndex);
+  updateSidebarLayout(collectionIndex);
+}
+
 void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
   if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
@@ -307,6 +320,31 @@ void DetailsPaneManager::refreshCollectionSummary() {
         PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, uuidMediaDir);
     summary.lastScanned = db->loadCollectionLastScanned(uuid);
+  }
+
+  // Kartend-ecky: persistent launcher-path-issue surface in the sidebar
+  // summary. Recomputed on every refresh so the lines clear the moment
+  // the user reinstalls the missing binary and triggers any state that
+  // calls refreshCollectionSummary. Primary launcher + each
+  // additionalLaunchers[i] check independently so the user can see
+  // which row to fix in Settings → Launchers.
+  auto recordIssue = [&](const QString &fieldLabel, const QString &path) {
+    if (path.isEmpty()) return;
+    const PathUtils::PathStatus status = PathUtils::checkLauncherPath(path);
+    if (status == PathUtils::PathStatus::OK || status == PathUtils::PathStatus::Empty) {
+      return;
+    }
+    summary.launcherPathIssues.append(
+        QStringLiteral("%1 (%2): %3")
+            .arg(fieldLabel, path, PathUtils::pathStatusDescription(status)));
+  };
+  recordIssue(tr("Launcher"), collection.launcher.launcherPath);
+  for (int i = 0; i < collection.launcher.additionalLaunchers.size(); ++i) {
+    const auto &al = collection.launcher.additionalLaunchers[i];
+    const QString label = al.name.trimmed().isEmpty()
+                              ? tr("Additional launcher %1").arg(i + 1)
+                              : tr("Additional launcher %1 (%2)").arg(i + 1).arg(al.name);
+    recordIssue(label, al.launcherPath);
   }
 
   m_DetailsPane->setCollectionSummary(summary);
@@ -464,15 +502,11 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
 
   bool wasInLayout = inAnyLayout();
 
-  // Note (Kartend-x1u1): the previous version re-set
-  //   m_DetailsPane->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff)
-  // here on every call. The wrapper inside DetailsPane chained a
-  // QApplication::processEvents() after the policy assignment, which under
-  // the offscreen QPA on Qt 6.10.3 re-entered the layout system through the
-  // missing propagateSizeHints() path and never returned. The policy is
-  // already AlwaysOff from detailspane.ui + the DetailsPane constructor, no
-  // code path flips it, so the per-update reset was redundant — and the
-  // DetailsPane public wrapper has been removed along with the call.
+  // Do NOT add a processEvents() chain inside this layout-update path: under
+  // the offscreen QPA on Qt 6.10.3 it re-enters the layout system through a
+  // missing propagateSizeHints() path and never returns. The horizontal
+  // scrollbar policy is already AlwaysOff from detailspane.ui + the
+  // DetailsPane constructor, so don't re-set it here either.
 
   // cover flow takes the full viewport — render as if
   // m_sidebarVisible were false but skip the persistence step below so the

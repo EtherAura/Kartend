@@ -508,6 +508,12 @@ void DetailsPane::renderCollectionSummary() {
     appendDetailRow(tr("Extensions"), m_collectionSummary.extensions.join(QStringLiteral(", ")),
                     /*wrap=*/true);
   }
+  // Kartend-ecky: persistent warning surface for launcher paths that
+  // don't resolve on this host. One row per offending launcher so a
+  // multi-launcher collection makes it clear which entry needs fixing.
+  for (const QString &issue : m_collectionSummary.launcherPathIssues) {
+    appendDetailRow(tr("⚠ Launcher path"), issue, /*wrap=*/true);
+  }
 
   // pull the just-built summary rows under the active sidebar-
   // font override so the no-selection view doesn't render in a different font

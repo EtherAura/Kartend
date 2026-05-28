@@ -328,3 +328,43 @@ bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
 
 Adopters: `SessionManager`, `PlaylistManager`, `KartWriter` / `KartReader`,
 `CacheDiskStorage`.
+
+### QObject lifecycle: `parent()` as a runtime guard
+
+In this codebase `QObject::parent()` is treated as a **runtime lifetime
+guard**, not merely ownership metadata. Several manager paths read
+`parent()` to decide whether the object is still attached to its expected
+QObject tree before touching siblings — when a manager is detached (e.g.
+during teardown, or because a parent re-parenting freed sibling
+infrastructure), the parent-pointer goes null and the guard short-circuits.
+
+Example sites:
+
+- `SelectionRestoreCoordinator::validateSelectionRestoreContext()`
+  ([selectionrestoremanager.cpp:106](../src/modules/data/restore/selectionrestoremanager.cpp))
+  bails on `!parent() || QApplication::closingDown()` before reaching
+  through `m_ctx` to `ScrollManager` / `InteractionManager`.
+- `BackdropBlurOverlay`, `BackgroundVideoWidget`, `LoadingOverlay`
+  filter parent-resize events by comparing `watched == parent()` before
+  re-laying themselves out — when the overlay has been re-parented away
+  from the original chrome, the event is no longer theirs to handle.
+- `SettingsManager::openSettingsDialog()`
+  ([settingsmanager.cpp:993](../src/modules/data/settings/settingsmanager.cpp))
+  uses `dynamic_cast<IMainWindow *>(parent())` to confirm the dialog
+  is being mounted under a real `MainWindow`; headless contexts (tests,
+  CLI flows) get `nullptr` and the dialog code skips MainWindow-specific
+  wiring.
+
+**Rule for changing constructor parents.** Before flipping a
+constructor's parent from `this` to `nullptr` (or removing a parent
+argument), `grep -rn "parent()" src/<module>` and confirm no
+runtime-guard call relies on it. Don't assume "parent is just an
+ownership hint" — the codebase's manager-tree teardown specifically
+uses these guards to keep destruction-phase reads from racing the
+sibling tree's collapse.
+
+The full hard-rule wording — including the
+"setup-struct sibling-manager pointer" complement — lives in
+[`.github/copilot-instructions.md` §7](../.github/copilot-instructions.md).
+That file is the source of truth; this section is a developer-facing
+explainer of why it exists.

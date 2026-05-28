@@ -99,6 +99,18 @@ public:
   /// return the quota parsed from the `ssuser` block every lookup /
   /// detail response carries.
   [[nodiscard]] virtual Scraper::QuotaStatus quotaStatus() const { return {}; }
+
+  /// Optional progress reporter for long-running lookup stages
+  /// (hashing a multi-GB ROM, extracting an archive, awaiting a slow
+  /// API response). The reporter is invoked on the GUI thread with a
+  /// short user-facing string ("Hashing ROM…", "Extracting archive…",
+  /// "") — empty signals "stage cleared". Default implementation is a
+  /// noop; providers that benefit from progress surfacing override.
+  /// Kartend-ou0a: ScreenScraperProvider uses this so the batch
+  /// progress view doesn't look frozen during the multi-minute PS2
+  /// .zip extraction.
+  using StageReporter = std::function<void(const QString &stage)>;
+  virtual void setStageReporter(StageReporter /*reporter*/) {}
 };
 
 #endif // METADATALOOKUPPROVIDER_H

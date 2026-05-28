@@ -18,6 +18,8 @@
 #include <cstdlib>
 
 #include "collectionutils.h"
+#include "errordialog.h"
+#include "errorpresentation.h"
 #include "errorutils.h"
 #include "kartdb.h"
 #include "kartmanager.h"
@@ -303,6 +305,22 @@ extern "C" auto main(int argc, char *argv[]) -> int {
     // sanitizer CI job exercises full destructor sequencing (no _Exit).
     QTimer::singleShot(smokeMs, &app, &QCoreApplication::quit);
   }
+
+  // Kartend-hx6l: install the ErrorDialog-backed showError / showCriticalError
+  // override on the ErrorPresentation seam. The default impl in
+  // src/utils/app/errorpresentation_default.cpp is a qWarning-only fallback
+  // so kartend_data link sites don't drag kartend_ui into every test exe.
+  // Production main upgrades the default to the real modal here, where
+  // integration-test setups (which install their own no-op override before
+  // constructing MainWindowFixture) can't accidentally be overwritten.
+  ErrorPresentation::setShowErrorOverride(
+      [](QWidget *parent, const ErrorUtils::ErrorContext &context) {
+        ErrorDialog::showError(parent, context);
+      });
+  ErrorPresentation::setShowCriticalErrorOverride(
+      [](QWidget *parent, const ErrorUtils::ErrorContext &context, bool allowContinue) {
+        return ErrorDialog::showCriticalError(parent, context, allowContinue);
+      });
 
   {
     MainWindow window;

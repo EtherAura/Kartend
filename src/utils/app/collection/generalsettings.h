@@ -326,6 +326,41 @@ struct GeneralSettings {
     // entry. Default "us" preserves the historical behaviour.
     QString preferredScraperRegion = QStringLiteral("us");
 
+    // Hash-mode policy for ROM identification (Kartend-ou0a).
+    //   Always:    always try to hash, even multi-GB disc images. SS hash-ID
+    //              is the most accurate match path but the slowest for big
+    //              archives (PS2 .zip can spend 5-10 min extracting).
+    //   SizeGated: hash only when the source is ≤ maxHashableSizeMB. Files
+    //              over the limit skip straight to filename-based matching.
+    //              The default 4096 MB covers most PS1/PS2 ISOs in zip and
+    //              excludes Blu-ray-sized images that would never extract
+    //              in a sane timeout.
+    //   Never:     never hash. Filename-only matching. Useful when the user
+    //              trusts their filenames and doesn't want the extract cost.
+    enum class ScraperHashMode { Always = 0, SizeGated = 1, Never = 2 };
+    ScraperHashMode hashMode = ScraperHashMode::Always;
+    int maxHashableSizeMB = 4096;
+
+    // Region-source policy for ScreenScraper match disambiguation
+    // (Kartend-ou0a).
+    //   TrustScraperFirst:      SS's matched-ROM region wins; a No-Intro
+    //                           tag in the filename ("(Japan)") is the
+    //                           fallback ONLY when hash-ID didn't narrow
+    //                           the candidate. Current default behaviour.
+    //   FilenameWhenAvailable:  the filename's region tag always preempts
+    //                           SS's matched-ROM region. Use when SS's
+    //                           per-file region tagging is unreliable
+    //                           (multi-region ROM records, hash collisions).
+    //   ScraperOnly:            never look at the filename. Pre-Kartend-ou0a
+    //                           behaviour. Use when filenames are noisy and
+    //                           SS hashes are trusted.
+    enum class ScraperRegionSource {
+      TrustScraperFirst = 0,
+      FilenameWhenAvailable = 1,
+      ScraperOnly = 2,
+    };
+    ScraperRegionSource regionSource = ScraperRegionSource::TrustScraperFirst;
+
     // Value-equality for the per-domain hot-reload signal: the change
     // emit in SettingsManager::saveGeneralSettings only fires when this
     // returns false, so a Save that didn't actually touch ScraperOptions
@@ -339,7 +374,8 @@ struct GeneralSettings {
              skipRecentScrapeDays == other.skipRecentScrapeDays &&
              preferJpgOutput == other.preferJpgOutput &&
              scrapeAutoResume == other.scrapeAutoResume && scrapeLogging == other.scrapeLogging &&
-             preferredScraperRegion == other.preferredScraperRegion;
+             preferredScraperRegion == other.preferredScraperRegion && hashMode == other.hashMode &&
+             maxHashableSizeMB == other.maxHashableSizeMB && regionSource == other.regionSource;
     }
     bool operator!=(const ScraperOptions &other) const { return !(*this == other); }
   };

@@ -38,10 +38,17 @@ namespace CollectionUtils {
   }
 }
 
-[[nodiscard]] inline HorizontalAlignment stringToAlignment(const QString &str) {
+/// @p unknownFallback (optional) is set to true when @p str is non-empty but
+/// doesn't match any recognized value — lets the caller warn about the silent
+/// default. Mirrors stringToDetailsPanePosition (Kartend-hp2y / Kartend-1vie).
+[[nodiscard]] inline HorizontalAlignment stringToAlignment(const QString &str,
+                                                           bool *unknownFallback = nullptr) {
   QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "left") return HorizontalAlignment::Left;
   if (lower == "right") return HorizontalAlignment::Right;
+  if (lower == "center") return HorizontalAlignment::Center;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return HorizontalAlignment::Center;
 }
 
@@ -59,11 +66,15 @@ namespace CollectionUtils {
   }
 }
 
-[[nodiscard]] inline ViewType stringToViewType(const QString &str) {
+[[nodiscard]] inline ViewType stringToViewType(const QString &str,
+                                               bool *unknownFallback = nullptr) {
   QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "list") return ViewType::List;
   if (lower == "coverflow") return ViewType::CoverFlow;
   if (lower == "horizontal") return ViewType::Horizontal;
+  if (lower == "grid") return ViewType::Grid;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return ViewType::Grid;
 }
 
@@ -79,10 +90,14 @@ namespace CollectionUtils {
   }
 }
 
-[[nodiscard]] inline HeaderLogoPosition stringToHeaderLogoPosition(const QString &str) {
+[[nodiscard]] inline HeaderLogoPosition
+stringToHeaderLogoPosition(const QString &str, bool *unknownFallback = nullptr) {
   const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "topleft") return HeaderLogoPosition::TopLeft;
   if (lower == "topright") return HeaderLogoPosition::TopRight;
+  if (lower == "topcenter") return HeaderLogoPosition::TopCenter;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return HeaderLogoPosition::TopCenter;
 }
 
@@ -100,11 +115,19 @@ namespace CollectionUtils {
   }
 }
 
-[[nodiscard]] inline DetailsPanePosition stringToDetailsPanePosition(const QString &str) {
+/// @p unknownFallback (optional) is set to true when @p str is non-empty but
+/// doesn't match any recognized position, so the caller can warn about the
+/// silent default — INI typos used to swap the user's sidebar with no
+/// feedback (Kartend-hp2y). Pass nullptr to opt out.
+[[nodiscard]] inline DetailsPanePosition
+stringToDetailsPanePosition(const QString &str, bool *unknownFallback = nullptr) {
   const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "left") return DetailsPanePosition::Left;
   if (lower == "top") return DetailsPanePosition::Top;
   if (lower == "bottom") return DetailsPanePosition::Bottom;
+  if (lower == "right") return DetailsPanePosition::Right;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return DetailsPanePosition::Right;
 }
 
@@ -128,10 +151,13 @@ namespace CollectionUtils {
 }
 
 [[nodiscard]] inline DetailsPaneBackgroundType
-stringToDetailsPaneBackgroundType(const QString &str) {
+stringToDetailsPaneBackgroundType(const QString &str, bool *unknownFallback = nullptr) {
   const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "image") return DetailsPaneBackgroundType::Image;
   if (lower == "pattern") return DetailsPaneBackgroundType::Pattern;
+  if (lower == "color") return DetailsPaneBackgroundType::Color;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return DetailsPaneBackgroundType::Color;
 }
 
@@ -161,10 +187,14 @@ stringToDetailsPaneBackgroundType(const QString &str) {
   }
 }
 
-[[nodiscard]] inline DetailsPaneTab stringToDetailsPaneTab(const QString &str) {
+[[nodiscard]] inline DetailsPaneTab stringToDetailsPaneTab(const QString &str,
+                                                           bool *unknownFallback = nullptr) {
   const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
   if (lower == "collection") return DetailsPaneTab::Collection;
   if (lower == "file") return DetailsPaneTab::File;
+  if (lower == "item") return DetailsPaneTab::Item;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
   return DetailsPaneTab::Item;
 }
 
@@ -242,6 +272,158 @@ stringToDetailsPaneBackgroundType(const QString &str) {
 /// PathUtils, which would balloon the include cost if dragged into this
 /// header.
 [[nodiscard]] int countVirtualFolders(const CollectionConfig &config);
+
+// ─── Hierarchy + identity helpers ─────────────────────────────────────────────
+//
+// Kartend-9agw: these namespace functions used to be declared in
+// collectionutils.h. Moved here so direct callers can depend on this leaf
+// header instead of the umbrella (which forced ~113 TUs to re-parse every
+// collection/* subheader on every settings touch). Implementations still live
+// in collectionutils.cpp.
+
+[[nodiscard]] QList<int> collectDescendantIndices(int parentIndex,
+                                                  const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Rebuilds a collection list after a deletion, dropping removed rows
+ * and remapping every survivor's parent link to its new position.
+ *
+ * @p oldToNew maps each original index to its post-removal index, with a
+ * negative entry marking a removed (or unmapped) row. A survivor keeps its
+ * row when @c oldToNew[i] >= 0; its @c parentCollectionIndex is translated
+ * through the same map. A survivor whose parent maps to a negative value —
+ * the parent was itself removed, or the stored index is stale/out of range —
+ * is orphaned to the root (parent -1, @c isSubcollection false).
+ *
+ * Skipping this remap is what leaves subcollections pointing at the wrong
+ * row, or off the end of the list, after a delete: the source of stray
+ * "ghost" collections in the root view and of crashes when the stale index
+ * is later dereferenced.
+ */
+[[nodiscard]] QList<CollectionConfig>
+applyCollectionRemoval(const QList<CollectionConfig> &collections, const QList<int> &oldToNew);
+
+[[nodiscard]] QString hierarchicalNameFor(const CollectionConfig &collection,
+                                          const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Returns the ancestor index chain for a collection, root-first.
+ *
+ * Walks up `parentCollectionIndex` from `collection`'s direct parent until the
+ * first non-subcollection ancestor (inclusive). The returned list is ordered
+ * from the outermost (root-most) ancestor to the direct parent and does NOT
+ * include `collection` itself. Returns an empty list for non-subcollections or
+ * collections whose `parentCollectionIndex` is out of range.
+ *
+ * Use this to render multi-level breadcrumbs.
+ */
+[[nodiscard]] QList<int> ancestorIndexChain(const CollectionConfig &collection,
+                                            const QList<CollectionConfig> &collections);
+
+[[nodiscard]] QString selectionSessionKeyFor(const CollectionConfig &collection,
+                                             const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Detects whether reparenting `childIndex` under `potentialParentIndex`
+ * would create a cycle in the collection hierarchy.
+ *
+ * Walks up `potentialParentIndex`'s ancestor chain looking for `childIndex`.
+ * If found, the proposed reparent is illegal. Also defends against pre-existing
+ * cycles in the input data by tracking visited indices.
+ *
+ * Returns true (i.e. "circular, reject the operation") in these cases:
+ *   - either index is out of range
+ *   - childIndex == potentialParentIndex (self-parenting)
+ *   - childIndex is already an ancestor of potentialParentIndex
+ *   - the existing chain has a pre-existing cycle (data corruption)
+ *
+ * Pure function — extracted from SettingsDialog so the validation can be
+ * unit-tested without instantiating the full settings dialog.
+ */
+[[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex,
+                                                const QList<CollectionConfig> &collections);
+
+[[nodiscard]] QList<int> directChildrenOf(int parentIndex,
+                                          const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Walks up the parent chain looking for a non-empty value of @p field
+ * on @p collectionIndex or its nearest ancestor. Returns the empty string if
+ * no ancestor has the field set.
+ *
+ * The four directory resolvers below were textually identical except for the
+ * member they read; this helper consolidates the parent-chain walk so future
+ * fixes (cycle handling, subcollection semantics) need only one edit.
+ */
+[[nodiscard]] QString resolveInheritedField(int collectionIndex,
+                                            const QList<CollectionConfig> &collections,
+                                            QString CollectionConfig::*field);
+
+[[nodiscard]] QString resolveArtworkDirectory(int collectionIndex,
+                                              const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Resolves video directory for a collection, falling back to parent if
+ * empty. Used by the sidebar so subcollections inherit a parent's
+ * videoDirectory in showAllSubcollectionItems mode.
+ */
+[[nodiscard]] QString resolveVideoDirectory(int collectionIndex,
+                                            const QList<CollectionConfig> &collections);
+
+[[nodiscard]] QString resolveManualDirectory(int collectionIndex,
+                                             const QList<CollectionConfig> &collections);
+
+[[nodiscard]] QString resolvePlaceholderArtwork(int collectionIndex,
+                                                const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Returns the effective category/type for a collection, walking up
+ * the parent chain when the collection's own `type` field is empty.
+ *
+ * the per-collection type is optional. Subcollections can either
+ * declare their own type or inherit from the nearest non-empty ancestor —
+ * this matches the user's mental model of "this whole branch is Games" while
+ * still letting an oddball subcollection be tagged differently. Returns an
+ * empty string when nothing in the chain is tagged.
+ *
+ * Cycle-safe: bounds the walk by `collections.size()` so a malformed
+ * parentCollectionIndex chain can't loop forever.
+ */
+[[nodiscard]] QString effectiveCollectionType(int collectionIndex,
+                                              const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Returns the set of distinct non-empty `type` labels across the full
+ * collection list (roots and subcollections), case-insensitive deduped and
+ * sorted alphabetically. Used to populate the toolbar filter dropdown and
+ * the per-collection editor's combobox completion.
+ */
+[[nodiscard]] QStringList collectAllCollectionTypes(const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Returns the curated built-in media-type labels offered as presets in
+ * the collection-type dropdowns (creation dialog + per-collection editor).
+ * The combobox stays editable, so these are suggestions rather than a closed
+ * set — a user can still type a custom type. Order is display order.
+ */
+[[nodiscard]] QStringList standardCollectionTypes();
+
+/**
+ * @brief Builds the type-combobox item list: a leading blank entry (untagged),
+ * then the standard presets, then any custom types already in use across
+ * @p collections. Case-insensitive deduped; presets keep their display order
+ * and custom extras are appended sorted.
+ */
+[[nodiscard]] QStringList collectionTypeChoices(const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Computes a deterministic UUID from collection name and media
+ * directory.
+ * @param name Collection name.
+ * @param mediaDir Media directory path.
+ * @return SHA1 hash as hex string.
+ */
+[[nodiscard]] QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
 } // namespace CollectionUtils
 

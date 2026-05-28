@@ -47,6 +47,22 @@ using SuspiciousPathConfirmer = std::function<bool(const QList<SuspiciousKartPat
 /// headless contexts — the import skips the preflight and proceeds.
 using PreflightConfirmer = std::function<bool(const KartPreflight::PreflightReport &)>;
 
+/// Field+description pair describing an imported launcher path that does
+/// not resolve on the importing host. Used by the post-import reporter
+/// (Kartend-jset) so the UI can list the offending paths with a
+/// human-readable PathStatus description.
+using MissingLauncherPathIssue = QPair<QString, QString>;
+
+/// Kartend-jset: post-import reporter invoked when a freshly-registered
+/// collection's launcher / additionalLauncher paths fail
+/// PathUtils::checkLauncherPath on the importing host (typical when a
+/// .kart was built on a different machine). The collection has already
+/// been registered + saved by the time this fires; the reporter is purely
+/// informational and offers the user a one-shot dialog. Null in headless
+/// contexts — the issues are still logged via lcKartManager.
+using MissingLauncherPathsReporter =
+    std::function<void(const QString &collectionName, const QList<MissingLauncherPathIssue> &)>;
+
 struct KartManagerSetup {
   /// ctx is the canonical source for sibling managers — Kartend-phyc dropped
   /// the prior ISettingsManager *settingsManager field; reads now go through
@@ -82,6 +98,13 @@ struct KartManagerSetup {
   /// KartPreflightDialog around this; returning false aborts the import
   /// without writing anything to disk. Left null in headless contexts.
   PreflightConfirmer preflightConfirmer;
+
+  /// Kartend-jset: optional post-import reporter for launcher paths that
+  /// don't exist on the importing host. Fires once after a successful
+  /// finalizeImport when any launcher path returned PathStatus != OK. The
+  /// import has already committed; this is informational only. Null in
+  /// headless contexts — the issues still get logged.
+  MissingLauncherPathsReporter missingLauncherPathsReporter;
 };
 
 /// Classify the imported manifest's externally-controlled path fields against

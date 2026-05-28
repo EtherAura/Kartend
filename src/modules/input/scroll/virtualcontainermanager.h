@@ -3,6 +3,7 @@
 
 #include "collectiontypes.h"
 #include <QObject>
+#include <QPointer>
 
 class QWidget;
 class QScrollArea;
@@ -43,8 +44,10 @@ public:
   // Setup
   void setGridContainer(QWidget *container) { m_gridContainer = container; }
   void setScrollArea(QScrollArea *scrollArea) { m_scrollArea = scrollArea; }
-  void setOverlayManager(SelectionOverlayManager *overlay) { m_overlayManager = overlay; }
-  void setFilterManager(FilterManager *filter) { m_filterManager = filter; }
+  // Defined out-of-line so QPointer<>::operator= can static_cast through
+  // the complete type rather than the fwd-declared one (Kartend-kovt).
+  void setOverlayManager(SelectionOverlayManager *overlay);
+  void setFilterManager(FilterManager *filter);
 
   // Container lifecycle
   void createContainer();
@@ -77,8 +80,13 @@ private:
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_scrollArea = nullptr;
   QWidget *m_virtualContainer = nullptr;
-  SelectionOverlayManager *m_overlayManager = nullptr;
-  FilterManager *m_filterManager = nullptr;
+  // Borrowed from ScrollManager's owned sub-objects. QPointer guards
+  // against dangling reads if a future refactor changes the destruction
+  // order of these siblings relative to VirtualContainerManager
+  // (Kartend-kovt). Implicit T*-conversion keeps existing call sites
+  // unchanged.
+  QPointer<SelectionOverlayManager> m_overlayManager;
+  QPointer<FilterManager> m_filterManager;
 };
 
 #endif // VIRTUALCONTAINERMANAGER_H

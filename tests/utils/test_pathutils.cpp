@@ -59,6 +59,23 @@ private slots:
   void testSyncDirectory_emptyPath();
   void testSyncDirectory_nonExistentDir();
 
+  // PathStatus tests (Kartend-qc1c)
+  void testCheckLauncherPath_empty();
+  void testCheckLauncherPath_missing();
+  void testCheckLauncherPath_existsButNotExecutable();
+  void testCheckLauncherPath_existsAndExecutable();
+  void testCheckLauncherPath_bareCommandResolvesViaPath();
+  void testCheckDirectoryPath_empty();
+  void testCheckDirectoryPath_missing();
+  void testCheckDirectoryPath_existingDir();
+  void testCheckDirectoryPath_wrongTypeIsFile();
+  void testCheckFilePath_empty();
+  void testCheckFilePath_missing();
+  void testCheckFilePath_existingFile();
+  void testCheckFilePath_wrongTypeIsDir();
+  void testPathStatusDescription_okAndEmptyAreBlank();
+  void testPathStatusDescription_nonOkProducesText();
+
 private:
   QTemporaryDir m_tempDir;
 };
@@ -114,7 +131,7 @@ void TestPathUtils::testValidateAndExpandPath_tildeExpansion() {
   // We use home directory itself since it's guaranteed to exist
   QString pathWithTilde = "~";
   QString result = PathUtils::validateAndExpandPath(pathWithTilde);
-  
+
   QVERIFY2(!result.isEmpty(), "~ should expand to home directory");
   QCOMPARE(result, QDir::homePath());
 }
@@ -122,7 +139,7 @@ void TestPathUtils::testValidateAndExpandPath_tildeExpansion() {
 void TestPathUtils::testValidateAndExpandPath_tildeOnly() {
   // Test that ~ alone expands correctly
   auto result = PathUtils::tryValidateAndExpandPath("~");
-  
+
   QVERIFY2(result.isOk(), "~ alone should expand to home directory");
   QCOMPARE(result.value(), QDir::homePath());
 }
@@ -180,7 +197,7 @@ void TestPathUtils::testTruncatePathForDisplay_exactLength() {
 void TestPathUtils::testTruncatePathForDisplay_longPath() {
   QString longPath = "/home/user/very/long/path/to/some/deeply/nested/directory/structure";
   QString result = PathUtils::truncatePathForDisplay(longPath, 30);
-  
+
   QCOMPARE(result.length(), 30);
   QVERIFY2(result.startsWith("..."), "Truncated path should start with ellipsis");
 }
@@ -188,7 +205,7 @@ void TestPathUtils::testTruncatePathForDisplay_longPath() {
 void TestPathUtils::testTruncatePathForDisplay_customLength() {
   QString path = "/home/user/documents/file.txt";
   QString result = PathUtils::truncatePathForDisplay(path, 20);
-  
+
   QCOMPARE(result.length(), 20);
   QVERIFY(result.startsWith("..."));
 }
@@ -236,11 +253,10 @@ void TestPathUtils::testValidatePathSecurity_shellMetacharacters_data() {
   QTest::addColumn<QString>("path");
   QTest::addColumn<QString>("description");
   QTest::addColumn<bool>("shouldFail");
-  
+
   QTest::newRow("semicolon") << "/path/with;command" << "semicolon" << true;
   QTest::newRow("pipe") << "/path/with|pipe" << "pipe" << true;
-  QTest::newRow("ampersand") << "/path/with/Sonic & Knuckles.zip" << "ampersand"
-                             << false;
+  QTest::newRow("ampersand") << "/path/with/Sonic & Knuckles.zip" << "ampersand" << false;
   QTest::newRow("backtick") << "/path/with`command`" << "backtick" << true;
   QTest::newRow("dollar") << "/path/with$VAR" << "dollar sign" << true;
   QTest::newRow("redirect-in") << "/path/with<input" << "input redirect" << true;
@@ -251,15 +267,13 @@ void TestPathUtils::testValidatePathSecurity_shellMetacharacters() {
   QFETCH(QString, path);
   QFETCH(QString, description);
   QFETCH(bool, shouldFail);
-  
+
   auto result = PathUtils::validatePathSecurity(path);
   if (shouldFail) {
-    QVERIFY2(result.isError(),
-             qPrintable(QString("Path with %1 should fail").arg(description)));
+    QVERIFY2(result.isError(), qPrintable(QString("Path with %1 should fail").arg(description)));
     QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
   } else {
-    QVERIFY2(result.isOk(),
-             qPrintable(QString("Path with %1 should be allowed").arg(description)));
+    QVERIFY2(result.isOk(), qPrintable(QString("Path with %1 should be allowed").arg(description)));
   }
 }
 
@@ -272,7 +286,7 @@ void TestPathUtils::testValidatePathSecurity_nullBytes() {
 void TestPathUtils::testValidatePathSecurity_newlines() {
   auto result1 = PathUtils::validatePathSecurity("/path/with\nnewline");
   QVERIFY2(result1.isError(), "Path with newline should fail");
-  
+
   auto result2 = PathUtils::validatePathSecurity("/path/with\rcarriage");
   QVERIFY2(result2.isError(), "Path with carriage return should fail");
 }
@@ -308,6 +322,116 @@ void TestPathUtils::testSyncDirectory_nonExistentDir() {
   QVERIFY2(PathUtils::syncDirectory("/nonexistent/path/abcxyz"),
            "Non-existent path is a no-op on non-POSIX");
 #endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PathStatus tests (Kartend-qc1c)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testCheckLauncherPath_empty() {
+  QCOMPARE(PathUtils::checkLauncherPath(QString()), PathUtils::PathStatus::Empty);
+}
+
+void TestPathUtils::testCheckLauncherPath_missing() {
+  QCOMPARE(PathUtils::checkLauncherPath(QStringLiteral("/nonexistent/launcher/abcxyz123")),
+           PathUtils::PathStatus::Missing);
+}
+
+void TestPathUtils::testCheckLauncherPath_existsButNotExecutable() {
+  // Plain text file under the temp dir — exists, readable, not executable.
+  const QString path = m_tempDir.path() + QStringLiteral("/notexec.txt");
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("hello");
+  f.close();
+  QCOMPARE(PathUtils::checkLauncherPath(path), PathUtils::PathStatus::NotExecutable);
+}
+
+void TestPathUtils::testCheckLauncherPath_existsAndExecutable() {
+#ifdef Q_OS_WIN
+  const QString path = m_tempDir.path() + QStringLiteral("/runner.bat");
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("@echo off\r\nexit /b 0\r\n");
+  f.close();
+#else
+  const QString path = m_tempDir.path() + QStringLiteral("/runner.sh");
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("#!/bin/sh\nexit 0\n");
+  f.close();
+  QVERIFY(
+      f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+#endif
+  QCOMPARE(PathUtils::checkLauncherPath(path), PathUtils::PathStatus::OK);
+}
+
+void TestPathUtils::testCheckLauncherPath_bareCommandResolvesViaPath() {
+  // `sh` (POSIX) / `cmd` (Windows) is essentially guaranteed to be on PATH
+  // for any test environment we care about. Verifies the PATH-resolution
+  // branch matches the reachable on-disk binary.
+#ifdef Q_OS_WIN
+  const QString bareCommand = QStringLiteral("cmd");
+#else
+  const QString bareCommand = QStringLiteral("sh");
+#endif
+  QCOMPARE(PathUtils::checkLauncherPath(bareCommand), PathUtils::PathStatus::OK);
+}
+
+void TestPathUtils::testCheckDirectoryPath_empty() {
+  QCOMPARE(PathUtils::checkDirectoryPath(QString()), PathUtils::PathStatus::Empty);
+}
+
+void TestPathUtils::testCheckDirectoryPath_missing() {
+  QCOMPARE(PathUtils::checkDirectoryPath(QStringLiteral("/nonexistent/dir/abcxyz123")),
+           PathUtils::PathStatus::Missing);
+}
+
+void TestPathUtils::testCheckDirectoryPath_existingDir() {
+  QCOMPARE(PathUtils::checkDirectoryPath(m_tempDir.path()), PathUtils::PathStatus::OK);
+}
+
+void TestPathUtils::testCheckDirectoryPath_wrongTypeIsFile() {
+  const QString path = m_tempDir.path() + QStringLiteral("/not-a-dir.txt");
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+  QCOMPARE(PathUtils::checkDirectoryPath(path), PathUtils::PathStatus::WrongType);
+}
+
+void TestPathUtils::testCheckFilePath_empty() {
+  QCOMPARE(PathUtils::checkFilePath(QString()), PathUtils::PathStatus::Empty);
+}
+
+void TestPathUtils::testCheckFilePath_missing() {
+  QCOMPARE(PathUtils::checkFilePath(QStringLiteral("/nonexistent/file/abcxyz123.png")),
+           PathUtils::PathStatus::Missing);
+}
+
+void TestPathUtils::testCheckFilePath_existingFile() {
+  const QString path = m_tempDir.path() + QStringLiteral("/artwork.png");
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("\x89PNG\r\n");
+  f.close();
+  QCOMPARE(PathUtils::checkFilePath(path), PathUtils::PathStatus::OK);
+}
+
+void TestPathUtils::testCheckFilePath_wrongTypeIsDir() {
+  QCOMPARE(PathUtils::checkFilePath(m_tempDir.path()), PathUtils::PathStatus::WrongType);
+}
+
+void TestPathUtils::testPathStatusDescription_okAndEmptyAreBlank() {
+  QCOMPARE(PathUtils::pathStatusDescription(PathUtils::PathStatus::OK), QString());
+  QCOMPARE(PathUtils::pathStatusDescription(PathUtils::PathStatus::Empty), QString());
+}
+
+void TestPathUtils::testPathStatusDescription_nonOkProducesText() {
+  QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::Missing).isEmpty());
+  QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::NotExecutable).isEmpty());
+  QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::NotReadable).isEmpty());
+  QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::WrongType).isEmpty());
 }
 
 QTEST_MAIN(TestPathUtils)

@@ -1,5 +1,7 @@
 #include "launchertabpanel.h"
 
+#include "pathstatusglyph.h"
+#include "pathutils.h"
 #include "retroarchutils.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
@@ -70,6 +72,12 @@ void LauncherTabPanel::load() {
   SettingsFormBinding::loadInto(ui->launcherNameLineEdit, config.launcher.launcherName);
   SettingsFormBinding::loadInto(ui->extractArchivesCheckBox, config.archive.extractArchives);
   SettingsFormBinding::loadInto(ui->extractedExtensionLineEdit, config.archive.extractedExtension);
+  // Kartend-liye: trailing-action warning glyph surfaces a stat-based path
+  // check (binary missing, NAS unmounted, kart imported from a different
+  // host). Re-installed on every load() so the glyph clears when the user
+  // fixes the underlying resource and reopens the dialog.
+  PathStatusGlyph::install(ui->launcherLineEdit, &PathUtils::checkLauncherPath);
+  PathStatusGlyph::install(ui->coreLineEdit, &PathUtils::checkFilePath);
   updateExtractedExtensionVisibility();
 }
 

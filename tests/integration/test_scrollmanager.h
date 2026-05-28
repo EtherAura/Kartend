@@ -20,6 +20,14 @@ private slots:
   void filterChange_clearOnEmptyStateIsSafe();
   void getFilePaths_isEmptyOnFreshFixture();
   void willNeedVerticalScrollbar_returnsBoolWithoutCrash();
+
+  // Kartend-2hzy pilot: gridLayoutChanged → ScrollManager::onGridLayoutChanged
+  // end-to-end re-read. Two cases: signal targeted at the active collection
+  // must apply the new layout cluster to m_context; signal targeted at a
+  // non-active collection index must be a no-op (the next switchCollection
+  // path applies it instead, so we shouldn't shadow that).
+  void gridLayoutChanged_appliesToActiveCollection();
+  void gridLayoutChanged_ignoresNonActiveCollection();
 };
 
 #endif // TEST_SCROLLMANAGER_H

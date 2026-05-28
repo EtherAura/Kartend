@@ -296,14 +296,37 @@ set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
 # Each per-area OBJECT lib owns its own sources, so SOURCE_TARGETS must
 # enumerate every area lib (not just the INTERFACE aggregator, which has no
 # sources of its own) for lupdate to scan all tr() calls.
-qt_add_translations(kartend
+#
+# Kartend-7oct: English is the source locale, so kartend_en.ts is maintained
+# by lupdate as a translator seed but never compiled to a .qm — Qt's tr()
+# already returns the source text when no .qm matches the active locale, so
+# an "all-English-source, no-translations" .qm just bloats the install. Other
+# languages are picked up by the glob and run through lrelease.
+file(GLOB KARTEND_NON_SOURCE_TS_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/translations/kartend_*.ts")
+list(REMOVE_ITEM KARTEND_NON_SOURCE_TS_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/translations/kartend_en.ts")
+
+qt_add_lupdate(kartend
   SOURCE_TARGETS
     ${KARTEND_AREA_LIBS}
     kartend
-  TS_FILES translations/kartend_en.ts
-  QM_FILES_OUTPUT_VARIABLE KARTEND_TRANSLATION_QM_FILES
-  QM_OUTPUT_DIRECTORY "${KARTEND_TRANSLATION_BUILD_DIR}"
+  TS_FILES
+    translations/kartend_en.ts
+    ${KARTEND_NON_SOURCE_TS_FILES}
 )
+
+if(KARTEND_NON_SOURCE_TS_FILES)
+  qt_add_lrelease(kartend
+    TS_FILES ${KARTEND_NON_SOURCE_TS_FILES}
+    QM_FILES_OUTPUT_VARIABLE KARTEND_TRANSLATION_QM_FILES
+    QM_OUTPUT_DIRECTORY "${KARTEND_TRANSLATION_BUILD_DIR}"
+  )
+else()
+  # No non-source .ts files yet; the install(FILES ...) rule below becomes a
+  # no-op until the first translation lands.
+  set(KARTEND_TRANSLATION_QM_FILES "")
+endif()
 target_compile_definitions(kartend PRIVATE
   APP_TRANSLATIONS_SUBDIR="${KARTEND_TRANSLATION_INSTALL_SUBDIR}"
   APP_BUILD_TRANSLATIONS_DIR="${KARTEND_TRANSLATION_BUILD_DIR}"

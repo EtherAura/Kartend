@@ -34,8 +34,13 @@ TESTS_MODULES = REPO / "tests" / "modules"
 # in isolation). New entries here need a justification — every other
 # module should have a per-feature tests/modules/<feature>/ folder.
 INTEGRATION_ONLY: set[str] = {
-    "application",  # src/modules/behavior/application — ApplicationManager
-                    # exercised by tests/integration/test_applicationmanager_lifecycle.cpp
+    # ApplicationManager (src/modules/behavior/application) is the top-level
+    # orchestrator that constructs and wires every other manager + the
+    # ApplicationContext seed. A pure-unit test isn't viable because its
+    # constructor pulls the full kartend_lib closure (database, settings,
+    # scroll, interaction, …) and exercising the wiring is the test's point.
+    # Covered by: tests/integration/test_applicationmanager_lifecycle.cpp.
+    "application",
     # DetailsPaneManager moved out of src/modules/media/detailspane/ to
     # src/ui/controllers/detailspanemanager/ in Kartend-uk5z. It still lacks
     # unit tests (integration-only via test_eventmanager_detailspane /

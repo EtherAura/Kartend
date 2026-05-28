@@ -26,6 +26,8 @@ private slots:
   void stringToAlignment_right();
   void stringToAlignment_caseInsensitive();
   void stringToAlignment_unknownDefaultsToCenter();
+  void stringToAlignment_unknownFallbackFlagSet();
+  void stringToAlignment_emptyDoesNotSetFallback();
   void alignmentRoundTrip();
 
   // viewTypeToString / stringToViewType
@@ -35,7 +37,17 @@ private slots:
   void stringToViewType_list();
   void stringToViewType_caseInsensitive();
   void stringToViewType_unknownDefaultsToGrid();
+  void stringToViewType_unknownFallbackFlagSet();
+  void stringToViewType_emptyDoesNotSetFallback();
   void viewTypeRoundTrip();
+
+  // Enum converters audited in Kartend-1vie — unknown-fallback flag tests
+  void stringToHeaderLogoPosition_known();
+  void stringToHeaderLogoPosition_unknownFallbackFlagSet();
+  void stringToDetailsPaneBackgroundType_known();
+  void stringToDetailsPaneBackgroundType_unknownFallbackFlagSet();
+  void stringToDetailsPaneTab_known();
+  void stringToDetailsPaneTab_unknownFallbackFlagSet();
 
   // isValidIndex overloads
   void isValidIndex_validIndexInRef();
@@ -139,6 +151,21 @@ void TestCollectionUtilsAlignment::stringToAlignment_unknownDefaultsToCenter() {
   QCOMPARE(CollectionUtils::stringToAlignment("nonsense"), HorizontalAlignment::Center);
 }
 
+void TestCollectionUtilsAlignment::stringToAlignment_unknownFallbackFlagSet() {
+  bool fallback = false;
+  CollectionUtils::stringToAlignment("nonsense", &fallback);
+  QVERIFY(fallback);
+  fallback = true;
+  CollectionUtils::stringToAlignment("left", &fallback);
+  QVERIFY(!fallback);
+}
+
+void TestCollectionUtilsAlignment::stringToAlignment_emptyDoesNotSetFallback() {
+  bool fallback = true;
+  CollectionUtils::stringToAlignment("", &fallback);
+  QVERIFY(!fallback);
+}
+
 void TestCollectionUtilsAlignment::alignmentRoundTrip() {
   for (auto a :
        {HorizontalAlignment::Left, HorizontalAlignment::Center, HorizontalAlignment::Right}) {
@@ -176,10 +203,86 @@ void TestCollectionUtilsAlignment::stringToViewType_unknownDefaultsToGrid() {
   QCOMPARE(CollectionUtils::stringToViewType("garbage"), ViewType::Grid);
 }
 
+void TestCollectionUtilsAlignment::stringToViewType_unknownFallbackFlagSet() {
+  bool fallback = false;
+  CollectionUtils::stringToViewType("garbage", &fallback);
+  QVERIFY(fallback);
+  fallback = true;
+  CollectionUtils::stringToViewType("list", &fallback);
+  QVERIFY(!fallback);
+}
+
+void TestCollectionUtilsAlignment::stringToViewType_emptyDoesNotSetFallback() {
+  bool fallback = true;
+  CollectionUtils::stringToViewType("", &fallback);
+  QVERIFY(!fallback);
+}
+
 void TestCollectionUtilsAlignment::viewTypeRoundTrip() {
   for (auto v : {ViewType::Grid, ViewType::List}) {
     QCOMPARE(CollectionUtils::stringToViewType(CollectionUtils::viewTypeToString(v)), v);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enum converters audited in Kartend-1vie — unknown-fallback flag tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCollectionUtilsAlignment::stringToHeaderLogoPosition_known() {
+  QCOMPARE(CollectionUtils::stringToHeaderLogoPosition("topleft"), HeaderLogoPosition::TopLeft);
+  QCOMPARE(CollectionUtils::stringToHeaderLogoPosition("topright"), HeaderLogoPosition::TopRight);
+  QCOMPARE(CollectionUtils::stringToHeaderLogoPosition("TopCenter"), HeaderLogoPosition::TopCenter);
+}
+
+void TestCollectionUtilsAlignment::stringToHeaderLogoPosition_unknownFallbackFlagSet() {
+  bool fallback = false;
+  CollectionUtils::stringToHeaderLogoPosition("nonsense", &fallback);
+  QVERIFY(fallback);
+  fallback = true;
+  CollectionUtils::stringToHeaderLogoPosition("topleft", &fallback);
+  QVERIFY(!fallback);
+  fallback = true;
+  CollectionUtils::stringToHeaderLogoPosition("", &fallback);
+  QVERIFY(!fallback);
+}
+
+void TestCollectionUtilsAlignment::stringToDetailsPaneBackgroundType_known() {
+  QCOMPARE(CollectionUtils::stringToDetailsPaneBackgroundType("image"),
+           DetailsPaneBackgroundType::Image);
+  QCOMPARE(CollectionUtils::stringToDetailsPaneBackgroundType("pattern"),
+           DetailsPaneBackgroundType::Pattern);
+  QCOMPARE(CollectionUtils::stringToDetailsPaneBackgroundType("COLOR"),
+           DetailsPaneBackgroundType::Color);
+}
+
+void TestCollectionUtilsAlignment::stringToDetailsPaneBackgroundType_unknownFallbackFlagSet() {
+  bool fallback = false;
+  CollectionUtils::stringToDetailsPaneBackgroundType("nonsense", &fallback);
+  QVERIFY(fallback);
+  fallback = true;
+  CollectionUtils::stringToDetailsPaneBackgroundType("image", &fallback);
+  QVERIFY(!fallback);
+  fallback = true;
+  CollectionUtils::stringToDetailsPaneBackgroundType("", &fallback);
+  QVERIFY(!fallback);
+}
+
+void TestCollectionUtilsAlignment::stringToDetailsPaneTab_known() {
+  QCOMPARE(CollectionUtils::stringToDetailsPaneTab("collection"), DetailsPaneTab::Collection);
+  QCOMPARE(CollectionUtils::stringToDetailsPaneTab("file"), DetailsPaneTab::File);
+  QCOMPARE(CollectionUtils::stringToDetailsPaneTab("Item"), DetailsPaneTab::Item);
+}
+
+void TestCollectionUtilsAlignment::stringToDetailsPaneTab_unknownFallbackFlagSet() {
+  bool fallback = false;
+  CollectionUtils::stringToDetailsPaneTab("nonsense", &fallback);
+  QVERIFY(fallback);
+  fallback = true;
+  CollectionUtils::stringToDetailsPaneTab("collection", &fallback);
+  QVERIFY(!fallback);
+  fallback = true;
+  CollectionUtils::stringToDetailsPaneTab("", &fallback);
+  QVERIFY(!fallback);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

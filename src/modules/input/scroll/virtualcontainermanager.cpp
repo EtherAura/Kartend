@@ -16,6 +16,14 @@ VirtualContainerManager::~VirtualContainerManager() {
   cleanupContainer();
 }
 
+void VirtualContainerManager::setOverlayManager(SelectionOverlayManager *overlay) {
+  m_overlayManager = overlay;
+}
+
+void VirtualContainerManager::setFilterManager(FilterManager *filter) {
+  m_filterManager = filter;
+}
+
 void VirtualContainerManager::createContainer() {
   cleanupContainer();
 

@@ -183,6 +183,13 @@ signals:
   /// at once, so consecutive `progress` emissions may carry the same
   /// `done` value with different `currentName` strings.
   void progress(int done, int total, const QString &currentName);
+  /// Emitted by the provider through its stageReporter callback when a
+  /// long-running lookup stage starts ("Hashing ROM…", "Extracting
+  /// archive…") and again with an empty string when the stage ends.
+  /// BatchScrapeProgressView routes this into its current-item label
+  /// so a multi-minute PS2 .zip extraction doesn't look like a hang
+  /// (Kartend-ou0a).
+  void itemStageChanged(const QString &stage);
   /// Emitted after each item's applyScrapedItem completes (success
   /// path only). Lets the Scraper UI surface the just-scraped
   /// metadata + the on-disk paths of the media files the persistence

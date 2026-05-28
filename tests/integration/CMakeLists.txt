@@ -33,6 +33,8 @@ set(INTEGRATION_TEST_SOURCES
   test_detailspanemanager.cpp
   test_attractmanager.cpp
   test_detailpagemanager.cpp
+  test_kartmanager.cpp
+  test_scanservice.cpp
 )
 
 set(INTEGRATION_TEST_HEADERS
@@ -54,6 +56,8 @@ set(INTEGRATION_TEST_HEADERS
   test_detailspanemanager.h
   test_attractmanager.h
   test_detailpagemanager.h
+  test_kartmanager.h
+  test_scanservice.h
   mocks/mockdatabasemanager.h
   mocks/mockedmainwindowfixture.h
   mocks/mocksettingsmanager.h

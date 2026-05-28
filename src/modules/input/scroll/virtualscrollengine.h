@@ -6,6 +6,7 @@
 #include <limits>
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 
 class ScrollManager;
@@ -74,7 +75,12 @@ private:
   void removeUnneededWidgets(const NeededRange &needed);
   void updateArtworkIfAllowed();
 
-  ScrollManager *m_owner = nullptr; // back-pointer; not owned
+  // Back-pointer to the owning ScrollManager. QPointer guards against
+  // dangling reads if a future refactor changes the destruction order
+  // — VirtualScrollEngine is Qt-parented under ScrollManager so under
+  // normal teardown m_owner is guaranteed live for the engine's whole
+  // lifetime (Kartend-kovt).
+  QPointer<ScrollManager> m_owner;
 
   // Tracks the committedSelectedIndex value at the last overlay raise() call
   // so updateVirtualView() can skip the raise on smooth-scroll animation

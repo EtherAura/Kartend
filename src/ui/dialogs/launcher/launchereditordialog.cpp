@@ -1,5 +1,7 @@
 #include "launchereditordialog.h"
 
+#include "pathstatusglyph.h"
+#include "pathutils.h"
 #include "retroarchutils.h"
 
 #include <QComboBox>
@@ -124,6 +126,12 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   // seed visibility from the initial launcher path so freshly
   // opened dialogs hide the core field when it doesn't apply.
   updateCoreRowVisibility();
+
+  // Kartend-liye: warning glyph for paths that don't resolve on this host
+  // — covers additionalLaunchers[i] edits and preset edits since both
+  // open this dialog.
+  PathStatusGlyph::install(m_launcherEdit, &PathUtils::checkLauncherPath);
+  PathStatusGlyph::install(m_coreEdit, &PathUtils::checkFilePath);
 }
 
 LauncherConfig LauncherEditorDialog::launcher() const {

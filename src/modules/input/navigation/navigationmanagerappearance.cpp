@@ -18,6 +18,7 @@
 #include "selectionrestoremanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
+#include "titlefilter.h"
 #include "uiconstants/selection.h"
 #include <algorithm>
 #include <QApplication>
@@ -83,6 +84,45 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   if (m_backgroundController) {
     m_backgroundController->applyPrimaryColorForCollection(collectionIndex);
   }
+}
+
+void NavigationManager::onCollectionBackgroundChanged(int collectionIndex,
+                                                      const CollectionBackground &background) {
+  Q_UNUSED(background);
+  if (!m_currentCollectionIndex || collectionIndex != *m_currentCollectionIndex) {
+    return;
+  }
+  applyBackgroundForCollection(collectionIndex);
+  applyPrimaryColorForCollection(collectionIndex);
+}
+
+void NavigationManager::onCollectionFilterPreferencesChanged(
+    int collectionIndex, const CollectionFilterPreferences &filter) {
+  Q_UNUSED(collectionIndex);
+  Q_UNUSED(filter);
+  // TitleFilter is a global registry keyed by collection index, so any
+  // diff needs a full rebuild from the current collection list to keep
+  // index → patterns mapping intact. SettingsManager::saveCollections
+  // already calls rebuildFromCollections inline, so this connect mostly
+  // covers alternate emission paths (none today, but the connect graph
+  // stays complete for future ones).
+  if (m_collections) {
+    TitleFilter::rebuildFromCollections(*m_collections);
+  }
+}
+
+void NavigationManager::onFolderBrowsingOptionsChanged(
+    int collectionIndex, const FolderBrowsingOptions &folderBrowsing) {
+  Q_UNUSED(folderBrowsing);
+  // includeContentSubfolders feeds the ScanService scan signature; a
+  // changed value requires a rescan to repopulate the DB with the new
+  // subfolder set. QueryManager's fetch paths re-read this field per
+  // query, so the items list already reflects the new value on the next
+  // navigation — only a rescan rebuilds the per-collection item count.
+  // Force-rescan integration is filed as a follow-up of Kartend-2hzy.
+  qCDebug(lcNavigationManager).nospace()
+      << "FolderBrowsingOptions changed for collection " << collectionIndex
+      << " — DB rescan recommended to pick up subfolder changes (no auto-rescan yet).";
 }
 
 void NavigationManager::restoreSelectionForCurrentCollection() {

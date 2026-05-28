@@ -208,6 +208,14 @@ signals:
   /// count completed across all collections (not per-collection).
   /// `currentName` is the item's basename for the UI caption.
   void itemBegan(int done, int total, const QString &collectionName, const QString &currentName);
+  /// Fired by the provider when the current item enters a long-running
+  /// stage (hashing an ISO, extracting an archive, awaiting the SS API
+  /// response). `stage` is a short user-facing string ("Hashing ROM…",
+  /// "Extracting archive…", "Querying ScreenScraper…") or empty when
+  /// the stage clears. UI consumers route this into the progress view's
+  /// per-item status line so the scrape doesn't appear hung during a
+  /// multi-minute disc-image extraction (Kartend-ou0a).
+  void itemStageChanged(const QString &stage);
   /// Fired after an item's applyScrapedItem returns. `scraped` is
   /// the provider's result for the Live view's metadata panel;
   /// `mediaPaths` are the on-disk files the persistence layer

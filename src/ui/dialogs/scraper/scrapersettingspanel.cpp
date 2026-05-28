@@ -279,6 +279,72 @@ void ScraperSettingsPanel::buildLayout() {
                                "always follow the application language."));
   behaviorForm->addRow(tr("Fallback region:"), m_regionCombo);
 
+  // Kartend-ou0a: hash-mode + region-source. Two new policy knobs so
+  // users can opt out of hash-ID for slow archive collections and choose
+  // when to trust their own filename's region tag over SS's match.
+  m_hashModeCombo = new QComboBox(behaviorGroup);
+  m_hashModeCombo->addItem(
+      tr("Always hash"),
+      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::Always));
+  m_hashModeCombo->addItem(
+      tr("Skip large files…"),
+      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated));
+  m_hashModeCombo->addItem(
+      tr("Never hash (filename only)"),
+      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::Never));
+  m_hashModeCombo->setMaximumWidth(kComboMaxWidth);
+  m_hashModeCombo->setToolTip(
+      tr("ScreenScraper's hash-based ID is the most reliable match path but "
+         "the slowest for big archives — extracting a multi-GB PS2 .zip can "
+         "take several minutes per item.\n\n"
+         "• Always hash: try every file regardless of size.\n"
+         "• Skip large files: only hash files at or under the size limit "
+         "(below); larger files fall back to filename-based matching.\n"
+         "• Never hash: filename-only matching for every item."));
+  behaviorForm->addRow(tr("ROM hashing:"), m_hashModeCombo);
+
+  m_maxHashableSizeSpin = new QSpinBox(behaviorGroup);
+  m_maxHashableSizeSpin->setRange(1, 65536);
+  m_maxHashableSizeSpin->setSingleStep(256);
+  m_maxHashableSizeSpin->setSuffix(tr(" MB"));
+  m_maxHashableSizeSpin->setMaximumWidth(kSpinMaxWidth);
+  m_maxHashableSizeSpin->setToolTip(
+      tr("Files larger than this skip the hash step and fall through to "
+         "filename-based matching. Only meaningful when ROM hashing is set "
+         "to Skip large files."));
+  m_maxHashableSizeLabel = new QLabel(tr("Skip hashing files over:"), behaviorGroup);
+  behaviorForm->addRow(m_maxHashableSizeLabel, m_maxHashableSizeSpin);
+  // Initial visibility set by load(); kept hidden until that point so the
+  // form layout doesn't flash an unconfigured spinner.
+  m_maxHashableSizeLabel->hide();
+  m_maxHashableSizeSpin->hide();
+
+  m_regionSourceCombo = new QComboBox(behaviorGroup);
+  m_regionSourceCombo->addItem(
+      tr("Trust scraper match (use filename only when hash fails)"),
+      static_cast<int>(GeneralSettings::ScraperOptions::ScraperRegionSource::TrustScraperFirst));
+  m_regionSourceCombo->addItem(
+      tr("Trust filename region when present"),
+      static_cast<int>(
+          GeneralSettings::ScraperOptions::ScraperRegionSource::FilenameWhenAvailable));
+  m_regionSourceCombo->addItem(
+      tr("Always use scraper match (ignore filename)"),
+      static_cast<int>(GeneralSettings::ScraperOptions::ScraperRegionSource::ScraperOnly));
+  m_regionSourceCombo->setMaximumWidth(kComboMaxWidth);
+  m_regionSourceCombo->setToolTip(
+      tr("Picks the region used for the title, release date, and box art:\n\n"
+         "• Trust scraper match: the scraper's matched-ROM region wins. "
+         "If hashing didn't run (file too big, archive extract failed), "
+         "the No-Intro region tag in the filename (e.g. '(Japan)') is "
+         "used instead.\n"
+         "• Trust filename region: a No-Intro tag in the filename always "
+         "wins over the scraper match. Use this when ScreenScraper's per-"
+         "file region tagging is unreliable (hash collisions between "
+         "regional variants).\n"
+         "• Always use scraper match: never look at the filename — useful "
+         "when filenames are noisy and you trust hash-based identification."));
+  behaviorForm->addRow(tr("Region detection:"), m_regionSourceCombo);
+
   // Refresh-window gate that pairs with both Skip and Fill missing.
   // Under Skip the filter drops items with any metadata; under
   // Fill missing it drops items whose checked fields are all already
@@ -438,6 +504,30 @@ void ScraperSettingsPanel::connectChangeSignals() {
     emit changed();
   });
 
+  // Kartend-ou0a: hash mode + size limit + region source. Hash-mode
+  // change drives the size-spinner visibility (only SizeGated shows it)
+  // and also writes back the model so the change is durable.
+  connect(m_hashModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+    if (m_loading) return;
+    const auto mode = static_cast<GeneralSettings::ScraperOptions::ScraperHashMode>(
+        m_hashModeCombo->currentData().toInt());
+    const bool sizeGated = mode == GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated;
+    if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
+    if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
+    writeModel();
+    emit changed();
+  });
+  connect(m_maxHashableSizeSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) {
+    if (m_loading) return;
+    writeModel();
+    emit changed();
+  });
+  connect(m_regionSourceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+    if (m_loading) return;
+    writeModel();
+    emit changed();
+  });
+
   // Detect-threads button: fire ssuserInfos.php with the current
   // member credentials and surface the result in the label next to
   // the button. QPointer guard so a panel destroyed before the
@@ -567,6 +657,22 @@ void ScraperSettingsPanel::refresh() {
     // to the first entry rather than leaving the combo blank.
     m_regionCombo->setCurrentIndex(regionIdx >= 0 ? regionIdx : 0);
   }
+  if (m_hashModeCombo) {
+    const int idx = m_hashModeCombo->findData(static_cast<int>(opts.hashMode));
+    m_hashModeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
+  if (m_maxHashableSizeSpin) {
+    QSignalBlocker b(m_maxHashableSizeSpin);
+    m_maxHashableSizeSpin->setValue(qBound(1, opts.maxHashableSizeMB, 65536));
+  }
+  const bool sizeGated =
+      opts.hashMode == GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated;
+  if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
+  if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
+  if (m_regionSourceCombo) {
+    const int idx = m_regionSourceCombo->findData(static_cast<int>(opts.regionSource));
+    m_regionSourceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
   m_loading = false;
 }
 
@@ -594,5 +700,16 @@ void ScraperSettingsPanel::writeModel() {
   }
   if (m_regionCombo) {
     opts.preferredScraperRegion = m_regionCombo->currentData().toString();
+  }
+  if (m_hashModeCombo) {
+    opts.hashMode = static_cast<GeneralSettings::ScraperOptions::ScraperHashMode>(
+        m_hashModeCombo->currentData().toInt());
+  }
+  if (m_maxHashableSizeSpin) {
+    opts.maxHashableSizeMB = m_maxHashableSizeSpin->value();
+  }
+  if (m_regionSourceCombo) {
+    opts.regionSource = static_cast<GeneralSettings::ScraperOptions::ScraperRegionSource>(
+        m_regionSourceCombo->currentData().toInt());
   }
 }

@@ -140,6 +140,7 @@ CoverFlowWidget::~CoverFlowWidget() {
     }
   }
   m_pendingLoads.clear();
+  cancelPendingScales();
 }
 
 void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
@@ -153,6 +154,11 @@ void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
     m_glide->stop();
   }
   prunePixmapCache();
+  // The new collection's artwork paths may not overlap the previous list,
+  // and the per-card layout slots will rebind to different sources — drop
+  // every scaled entry rather than carry stale (path,size) hits.
+  cancelPendingScales();
+  m_scaledPixmapCache.clear();
   // Selected card may have moved into a different slot when filters or
   // sorting reshuffled the list; re-evaluate the video preview source so a
   // stale path doesn't keep playing.
@@ -256,6 +262,8 @@ void CoverFlowWidget::setTileColor(const QString &color) {
   }
   m_tileColor = color;
   m_pixmapCache.clear(); // placeholders depend on tile color
+  cancelPendingScales();
+  m_scaledPixmapCache.clear(); // scaled entries snapshot placeholders too
   update();
 }
 
@@ -513,10 +521,46 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     t.translate(-c.rect.center().x(), -c.rect.center().y());
     painter.setTransform(t, true);
 
-    // Scale the source pixmap once and reuse it for both the reflection
-    // and the card itself. Was being computed twice with identical args
-    // — meaningful at kVisibleSideCards=5 cards * 60fps glide animation.
-    const QPixmap scaled = pm.scaled(c.rect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // Look up a pre-scaled pixmap; if missing, schedule a worker-thread
+    // scale and fall back to scaling the source pm at draw time for this
+    // frame. The cache is invalidated on resize / setCards / setTileColor
+    // and bounded by requestScaledPixmap. Steady-state paint is a hash
+    // lookup + drawPixmap; only the first paint after a size change scales
+    // the source on the main thread, and the worker delivers the cached
+    // entry before the next paint (Kartend-g6ft).
+    const QString &cardPath = m_cards[c.index].artworkPath;
+    const QSize cardSize = c.rect.size();
+    const QString scaledKey = cardPath + QLatin1Char('|') + QString::number(cardSize.width()) +
+                              QLatin1Char('x') + QString::number(cardSize.height());
+    QPixmap scaled;
+    QSize scaledDrawSize;
+    bool useFastTransform = false;
+    if (auto it = m_scaledPixmapCache.constFind(scaledKey); it != m_scaledPixmapCache.constEnd()) {
+      scaled = it.value();
+      scaledDrawSize = scaled.size();
+    } else {
+      scaled = pm;
+      // KeepAspectRatio: the on-disk source pm may be wider or taller than
+      // the card slot. Compute what its target size would be so target
+      // rects line up the same way pm.scaled() would have produced.
+      scaledDrawSize = pm.size().scaled(cardSize, Qt::KeepAspectRatio);
+      // On miss, the painter would scale the source pm at draw time using
+      // SmoothPixmapTransform — that's the slow path we're trying to defer.
+      // Render this frame with FastTransformation (cheap nearest-neighbour)
+      // and let the worker deliver a Smooth-scaled cache entry for the next
+      // paint (Kartend-g6ft). The cards briefly look slightly pixelated
+      // until the worker finishes; sub-frame perceptible in practice.
+      useFastTransform = true;
+      requestScaledPixmap(scaledKey, pm, cardSize);
+    }
+
+    // The outer painter.save() at the top of this card iteration captures
+    // the SmoothPixmapTransform hint state, so the restore() below brings
+    // it back to the default after the (cheap, slightly pixelated) miss
+    // draw.
+    if (useFastTransform) {
+      painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    }
 
     // Paint reflection underneath (a flipped, faded copy) for the iTunes
     // look — only for the center-ish band to keep paint cost low.
@@ -541,7 +585,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     }
 
     // The card itself: same scaled pixmap, with corner radius.
-    QRect target = scaled.rect();
+    QRect target(QPoint(0, 0), scaledDrawSize);
     target.moveCenter(c.rect.center());
     if (m_cornerRadius > 0) {
       QPainterPath clip;
@@ -598,6 +642,11 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
 void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   prunePixmapCache();
+  // Card target sizes are derived from widget size, so a resize invalidates
+  // every scaled entry. Cancel in-flight worker scales first so their
+  // late-arriving results don't repopulate stale-size entries.
+  cancelPendingScales();
+  m_scaledPixmapCache.clear();
   updateVideoPreviewGeometry();
   update();
 }
@@ -900,6 +949,78 @@ void CoverFlowWidget::startArtworkLoad(const QString &path) {
     }
   });
   watcher->setFuture(QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
+}
+
+void CoverFlowWidget::requestScaledPixmap(const QString &key, const QPixmap &sourcePm,
+                                          const QSize &targetSize) {
+  if (sourcePm.isNull() || targetSize.isEmpty() || m_pendingScales.contains(key)) {
+    return;
+  }
+  // QPixmap is implicitly shared so the worker captures a cheap copy; the
+  // scale itself produces a fresh QPixmap that we hand back to the GUI
+  // thread via the QFutureWatcher's finished signal (same pattern as
+  // startArtworkLoad below).
+  auto *watcher = new QFutureWatcher<QPixmap>(this);
+  m_pendingScales.insert(key, watcher);
+  connect(watcher, &QFutureWatcher<QPixmap>::finished, this, [this, watcher, key]() {
+    m_pendingScales.remove(key);
+    const QPixmap scaled = watcher->result();
+    watcher->deleteLater();
+    if (!scaled.isNull()) {
+      m_scaledPixmapCache.insert(key, scaled);
+      pruneScaledPixmapCache();
+      update();
+    }
+  });
+  watcher->setFuture(QtConcurrent::run([sourcePm, targetSize]() {
+    return sourcePm.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  }));
+}
+
+void CoverFlowWidget::pruneScaledPixmapCache() {
+  // Bound the scaled cache the same way prunePixmapCache bounds the source
+  // cache: drop entries whose path no longer corresponds to any card near
+  // the current selection. Without this the cache can grow to thousands of
+  // entries as the user scrolls through a large collection (the profile
+  // run that motivated Kartend-g6ft saw it climb to 2200 entries
+  // ≈ 500MB before any teardown).
+  const int budget = (kVisibleSideCards * 2 + 1) * 4;
+  if (static_cast<int>(m_scaledPixmapCache.size()) <= budget) {
+    return;
+  }
+  QSet<QString> keepPaths;
+  int from = std::max(0, m_selectedIndex - kVisibleSideCards * 2);
+  int to = std::min(static_cast<int>(m_cards.size()) - 1, m_selectedIndex + kVisibleSideCards * 2);
+  for (int i = from; i <= to; ++i) {
+    keepPaths.insert(m_cards[i].artworkPath);
+  }
+  for (auto it = m_scaledPixmapCache.begin(); it != m_scaledPixmapCache.end();) {
+    // Cache key shape is "<path>|<W>x<H>"; the leading section up to '|'
+    // is the artwork path. Strip it once per entry to compare against
+    // the keep-set.
+    const QString &k = it.key();
+    const int sep = k.indexOf(QLatin1Char('|'));
+    const QString entryPath = sep > 0 ? k.left(sep) : k;
+    if (!keepPaths.contains(entryPath)) {
+      it = m_scaledPixmapCache.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void CoverFlowWidget::cancelPendingScales() {
+  // Disconnect each watcher so its finished lambda doesn't fire a stale
+  // insert into m_scaledPixmapCache after we've cleared it (the worker
+  // may still be running; we can't cancel QtConcurrent::run, but we can
+  // drop the result on the floor).
+  for (auto it = m_pendingScales.begin(); it != m_pendingScales.end(); ++it) {
+    if (auto *w = it.value()) {
+      w->disconnect(this);
+      w->deleteLater();
+    }
+  }
+  m_pendingScales.clear();
 }
 
 void CoverFlowWidget::prunePixmapCache() {

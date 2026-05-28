@@ -57,7 +57,20 @@ BatchScrapeRunner::BatchScrapeRunner(const ApplicationContext *ctx,
       m_collectionUuid(std::move(collectionUuid)), m_paths(std::move(paths)),
       m_artworkDir(std::move(artworkDir)), m_fetchPrimaryCover(fetchPrimaryCover),
       m_rescrapeMode(rescrapeMode), m_itemConcurrency(std::max(1, itemConcurrency)),
-      m_skipRecentDays(qBound(0, skipRecentDays, 365)) {}
+      m_skipRecentDays(qBound(0, skipRecentDays, 365)) {
+  // Kartend-ou0a: relay provider stage changes (hashing, extracting,
+  // …) as our own itemStageChanged signal so BatchScrapeProgressView
+  // can show the current stage and the user doesn't think the scrape
+  // is hung during a multi-minute PS2 .zip extraction. QPointer guard
+  // because the callback fires from the GUI thread but after the
+  // runner may have been destroyed (e.g. cancel + destroy mid-hash).
+  if (m_provider) {
+    QPointer<BatchScrapeRunner> guard(this);
+    m_provider->setStageReporter([guard](const QString &stage) {
+      if (guard) emit guard->itemStageChanged(stage);
+    });
+  }
+}
 
 BatchScrapeRunner::~BatchScrapeRunner() {
   shutdownWriteWorker();

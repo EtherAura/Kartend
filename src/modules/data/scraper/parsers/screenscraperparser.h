@@ -51,6 +51,15 @@ struct ParseOptions {
   /// region always wins; this only backstops it. Empty falls straight
   /// through to the parser's fixed English-leaning chain.
   QString preferredRegion;
+  /// Override the matched-ROM region detection with this tag when set
+  /// (Kartend-ou0a). Caller populates it when SS's hash-based ID didn't
+  /// run (e.g. archive extraction timed out) and the filename carries a
+  /// No-Intro-style region marker. Empty = trust SS's `rom.region` for
+  /// the item's own region. Non-empty: this value goes to the front of
+  /// the region preference chain, ahead of even the matched ROM's region,
+  /// because we can't trust SS's match when no hash narrowed the
+  /// candidate.
+  QString filenameRegionOverride;
   /// Application UI language (ISO 639-1: "en", "fr", "de", ...) used
   /// to pick language-keyed free-text fields — description, genres,
   /// families, modes — so they read in the same language as the rest

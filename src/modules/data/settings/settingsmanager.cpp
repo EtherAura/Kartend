@@ -537,6 +537,27 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.scraperOptions.scrapeLogging = s.value(keys::kScrapeLogging, false).toBool();
   settings.scraperOptions.preferredScraperRegion =
       s.value(keys::kPreferredRegion, QStringLiteral("us")).toString().trimmed().toLower();
+  // Kartend-ou0a: hash mode + region source. The enum ints come back as
+  // QVariant, default to the same value the in-memory struct defaults to
+  // (Always, TrustScraperFirst) so a fresh install picks the historical
+  // behaviour. Clamping to the enum range guards a hand-edited INI from
+  // setting an out-of-range integer.
+  const int rawHashMode =
+      s.value(keys::kScraperHashMode,
+              static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::Always))
+          .toInt();
+  settings.scraperOptions.hashMode =
+      static_cast<GeneralSettings::ScraperOptions::ScraperHashMode>(qBound(0, rawHashMode, 2));
+  settings.scraperOptions.maxHashableSizeMB =
+      qBound(1, s.value(keys::kScraperMaxHashableSizeMB, 4096).toInt(), 65536);
+  const int rawRegionSource =
+      s.value(keys::kScraperRegionSource,
+              static_cast<int>(
+                  GeneralSettings::ScraperOptions::ScraperRegionSource::TrustScraperFirst))
+          .toInt();
+  settings.scraperOptions.regionSource =
+      static_cast<GeneralSettings::ScraperOptions::ScraperRegionSource>(
+          qBound(0, rawRegionSource, 2));
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -667,6 +688,10 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   m_generalSettings.scraperOptions.scrapeLogging = settings.scraperOptions.scrapeLogging;
   m_generalSettings.scraperOptions.preferredScraperRegion =
       settings.scraperOptions.preferredScraperRegion;
+  m_generalSettings.scraperOptions.hashMode = settings.scraperOptions.hashMode;
+  m_generalSettings.scraperOptions.maxHashableSizeMB =
+      qBound(1, settings.scraperOptions.maxHashableSizeMB, 65536);
+  m_generalSettings.scraperOptions.regionSource = settings.scraperOptions.regionSource;
   // Apply the (possibly changed) scrape-logging toggle immediately so a
   // settings-dialog change takes effect without a restart. Idempotent.
   ScrapeLogger::setEnabled(m_generalSettings.scraperOptions.scrapeLogging);
@@ -917,6 +942,10 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   s.setValue(keys::kScrapeAutoResume, m_generalSettings.scraperOptions.scrapeAutoResume);
   s.setValue(keys::kScrapeLogging, m_generalSettings.scraperOptions.scrapeLogging);
   s.setValue(keys::kPreferredRegion, m_generalSettings.scraperOptions.preferredScraperRegion);
+  s.setValue(keys::kScraperHashMode, static_cast<int>(m_generalSettings.scraperOptions.hashMode));
+  s.setValue(keys::kScraperMaxHashableSizeMB, m_generalSettings.scraperOptions.maxHashableSizeMB);
+  s.setValue(keys::kScraperRegionSource,
+             static_cast<int>(m_generalSettings.scraperOptions.regionSource));
   // Stamp the schema sentinel LAST so a torn write doesn't leave a
   // false-positive version marker on a partial-content file. The atomic
   // temp-file + rename mechanism above is the primary protection; this

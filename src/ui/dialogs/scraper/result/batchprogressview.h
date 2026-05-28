@@ -54,15 +54,23 @@ signals:
 
 private:
   void onProgress(int done, int total, const QString &currentName);
+  void onStageChanged(const QString &stage);
 
   QLabel *m_headerLabel = nullptr;
   QLabel *m_currentLabel = nullptr;
+  /// Sub-status under m_currentLabel showing the active provider stage
+  /// (hashing, extracting…). Hidden when empty so it doesn't reserve
+  /// vertical space during normal fast-path scrapes (Kartend-ou0a).
+  QLabel *m_stageLabel = nullptr;
   QProgressBar *m_progressBar = nullptr;
   QLabel *m_timingLabel = nullptr;
   QLabel *m_countsLabel = nullptr;
 
   Scraper::BatchScrapeRunner *m_runner = nullptr;
   Scraper::BatchScrapeRunner::Summary m_summary;
+  /// Last item name passed to onProgress, so onStageChanged can rebuild
+  /// the current-item line without round-tripping through the runner.
+  QString m_currentItemName;
   qint64 m_startMs = 0;
   int m_totalItems = 0;
 };

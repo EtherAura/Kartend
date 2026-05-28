@@ -217,6 +217,10 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
           &ScrollManager::coverFlowActiveChanged);
 }
 
+FilterManager *ScrollManager::filterManager() const {
+  return m_filterManager;
+}
+
 // Destructor disconnects scroll events, clears timers, deletes widgets and
 // container
 ScrollManager::~ScrollManager() {
@@ -333,6 +337,45 @@ void ScrollManager::updateViewType(ViewType viewType) {
   // cover-flow uses a parallel widget tree; keep its config, card list, and
   // visibility in sync with the grid's.
   m_coverFlow->refreshForViewTypeChange();
+}
+
+void ScrollManager::onListViewOptionsChanged(int collectionIndex, const ListViewOptions &listView) {
+  if (collectionIndex != m_context.currentIndex) {
+    return;
+  }
+  m_context.config.listView = listView;
+  // Push the row-color knobs into the static palette ItemWidget paints
+  // against; otherwise the next list-view paint still reads the previous
+  // hex string.
+  ItemWidget::setListRowColor(listView.listRowColor);
+  ItemWidget::setListAltRowColor(listView.listAltRowColor);
+  // List mode is the only one that consults ListViewOptions; force a
+  // repaint so the new font size + row height land immediately.
+  if (m_context.config.viewType == ViewType::List) {
+    updateVirtualView();
+  }
+}
+
+void ScrollManager::onGridLayoutChanged(int collectionIndex,
+                                        const GridLayoutPreferences &gridLayout) {
+  // Active-collection guard — the per-cluster signal fires for any
+  // collection's mutation, but ScrollManager only owns the live layout
+  // for the currently-viewed one. Non-active collections get the new
+  // GridLayoutPreferences applied on the next switchCollection through
+  // the normal apply-context path; we don't shadow that here.
+  if (collectionIndex != m_context.currentIndex) {
+    return;
+  }
+  // Reuse the existing per-field setters so the calculator hooks fire.
+  // gridWidth + horizontalGridHeight have their own update paths that
+  // recompute metrics + reposition active widgets. Spacing / itemDim /
+  // font / cornerRadius changes flow through the next recalculateMetrics
+  // (which the setter cascade triggers).
+  updateGridWidth(gridLayout.gridWidth);
+  updateHorizontalGridHeight(gridLayout.horizontalGridHeight);
+  // Cluster-wide write so subsequent reads (calculateMetrics, paint, etc.)
+  // see the full new state without per-field setters for every knob.
+  m_context.config.gridLayout = gridLayout;
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {

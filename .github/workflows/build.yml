@@ -122,6 +122,14 @@ jobs:
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           ctest --output-on-failure
 
+      - name: Dump failed-test diagnostics
+        # Kartend-oieo: unified Linux + Windows failure-detail path; see
+        # .scripts/print-failed-tests.py for the rationale.
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 .scripts/print-failed-tests.py --build-dir build/${{ matrix.build_type }}-${{ matrix.compiler }}
+
       - name: Capture SIGILL backtrace under gdb
         # Only for the (Release, gcc/clang) job that we've seen SIGILL on,
         # and only if `Run Tests` failed. Re-runs the integration test
@@ -208,6 +216,12 @@ jobs:
           cd build/no-zstd
           ctest --output-on-failure
 
+      - name: Dump failed-test diagnostics
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 .scripts/print-failed-tests.py --build-dir build/no-zstd
+
       - name: ccache stats
         run: ccache --show-stats
 
@@ -277,6 +291,15 @@ jobs:
         run: |
           cd build/Sanitize
           ctest --output-on-failure
+
+      - name: Dump failed-test diagnostics (ASan/UBSan)
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+        run: python3 .scripts/print-failed-tests.py --build-dir build/Sanitize
 
       - name: Smoke-test kartend binary (ASan/UBSan, full teardown)
         env:
@@ -380,6 +403,13 @@ jobs:
         run: |
           cd build/TSan
           ctest --output-on-failure
+
+      - name: Dump failed-test diagnostics (TSan)
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
+        run: python3 .scripts/print-failed-tests.py --build-dir build/TSan
 
   maintenance-check:
     runs-on: ubuntu-24.04
@@ -556,61 +586,16 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure
 
-      - name: Re-run failed test binaries directly on failure
-        # ctest's per-test stdout/stderr capture is empty for every test
-        # on Windows (`Output: <end of output>` in LastTest.log, even
-        # for passing ones) — the pipe between ctest and the QTest
-        # binary isn't getting the data at all. Running the test exes
-        # directly under PowerShell with 2>&1 routing lets QTest's TAP
-        # output flow through to the workflow log so we can root-cause
-        # rather than guess at the failure mode.
+      - name: Dump failed-test diagnostics
+        # Kartend-oieo: unified Linux + Windows failure-detail path. The
+        # Python helper walks LastTestsFailed.log and re-runs each failed
+        # test exe with `-o file,txt` so QTest's per-assertion output
+        # bypasses the broken-on-Windows ctest stdout pipe. Identical
+        # invocation on both OSes.
         if: ${{ failure() }}
-        shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          $failed = "build\Testing\Temporary\LastTestsFailed.log"
-          if (-not (Test-Path $failed)) {
-            Write-Host "::warning::$failed not found, can't determine failed tests"
-            exit 0
-          }
-          # LastTestsFailed.log format: one entry per line, `<index>:<TestName>`
-          Get-Content $failed | ForEach-Object {
-            $name = ($_ -split ":")[1]
-            # Glob: most tests live at build/tests/test_<name>.exe but
-            # naming isn't 100% predictable (e.g. test_kartreader.exe
-            # for KartReader). Match case-insensitively on the suffix.
-            $candidate = Get-ChildItem build\tests -Filter "test_*.exe" |
-                         Where-Object { $_.BaseName -replace '^test_', '' -ieq $name }
-            $exe = if ($candidate) { $candidate[0].FullName } else { $null }
-            Write-Host "::group::$name $(if ($exe) { "→ $exe" } else { "(no matching exe)" })"
-            if ($exe) {
-              # QTest's stdout/stderr never reaches us on this runner
-              # — `& $exe 2>&1 | Out-Host` AND
-              # `Start-Process -RedirectStandardOutput` both produce
-              # empty output even though the process exits with the
-              # QTest per-method-failure-count code (1, 2, ...). The
-              # bytes are clearly being written somewhere but neither
-              # PowerShell's pipeline nor the OS-level
-              # CreateProcess(...lpReserved2=stdin/out/err handles)
-              # redirect picks them up. QTest's `-o file,format`
-              # writes its full per-test verdicts and assertion text
-              # to a file directly via fopen/fprintf, bypassing the
-              # stdout pipe entirely.
-              $outTxt = "$env:RUNNER_TEMP\$($name)-qtest.txt"
-              $p = Start-Process -FilePath $exe `
-                                 -ArgumentList @("-v2","-o","$outTxt,txt") `
-                                 -NoNewWindow -Wait -PassThru
-              Write-Host "--- QTest -o txt ---"
-              if (Test-Path $outTxt) {
-                Get-Content $outTxt
-              } else {
-                Write-Host "(no $outTxt produced — process exited before QTest could write)"
-              }
-              Write-Host "exit: $($p.ExitCode)"
-            }
-            Write-Host "::endgroup::"
-          }
+        run: python .scripts/print-failed-tests.py --build-dir build
 
       - name: Stage with windeployqt + bundled runtime DLLs
         # windeployqt walks the exe's import table and copies Qt DLLs

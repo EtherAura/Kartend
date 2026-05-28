@@ -360,6 +360,20 @@ void ScrapeResultDialog::buildUi() {
 
   root->addWidget(m_modeStack, 1);
 
+  // Kartend-ou0a: stage label that lives outside the mode-stack so it's
+  // visible during every flow (single-item picker wait, batch progress,
+  // unified setup→running transition). Hidden when empty so it doesn't
+  // reserve vertical space on fast scrapes. ScraperService::itemStageChanged
+  // drives its text via the connect() below in setScraperService.
+  m_stageLabel = new QLabel(this);
+  m_stageLabel->setWordWrap(true);
+  QFont stageFont = m_stageLabel->font();
+  stageFont.setItalic(true);
+  m_stageLabel->setFont(stageFont);
+  m_stageLabel->setStyleSheet(QStringLiteral("padding: 4px 8px;"));
+  m_stageLabel->hide();
+  root->addWidget(m_stageLabel);
+
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
   m_applyButton = buttons->addButton(tr("Apply"), QDialogButtonBox::AcceptRole);
   m_applyButton->setEnabled(false);
@@ -458,6 +472,37 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
           &ScrapeResultDialog::onServiceScrapePaused);
   connect(m_service, &Scraper::ScraperService::quotaUpdated, this,
           &ScrapeResultDialog::onServiceQuotaUpdated);
+  // Kartend-ou0a: route the provider's "Hashing ROM…" / "Extracting
+  // archive…" stage into the in-dialog label so the user can see
+  // what's holding the scrape up, rather than staring at a blank
+  // setup page for the multi-minute extraction.
+  connect(m_service, &Scraper::ScraperService::itemStageChanged, this,
+          [this](const QString &stage) {
+            if (!m_stageLabel) return;
+            if (stage.isEmpty()) {
+              m_stageLabel->clear();
+              m_stageLabel->hide();
+            } else {
+              m_stageLabel->setText(stage);
+              m_stageLabel->show();
+            }
+          });
+  // Clear the stage label when candidates arrive or the scrape ends —
+  // the provider already emits an empty-string stage on completion, but
+  // these are the user-visible "we're done with that work" moments and
+  // make the cleanup explicit even if the provider missed a clear.
+  connect(m_service, &Scraper::ScraperService::pickerNeeded, this, [this]() {
+    if (m_stageLabel) {
+      m_stageLabel->clear();
+      m_stageLabel->hide();
+    }
+  });
+  connect(m_service, &Scraper::ScraperService::scrapeFinished, this, [this]() {
+    if (m_stageLabel) {
+      m_stageLabel->clear();
+      m_stageLabel->hide();
+    }
+  });
 }
 
 void ScrapeResultDialog::onServiceScrapeStarted(int total) {

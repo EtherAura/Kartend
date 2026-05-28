@@ -35,6 +35,8 @@ private slots:
   void recognisesArchiveExtensions();
   void hashesInnerRomLargestFile();
   void archiveMissingPathReturnsError();
+  void hashesSymlinkTargetSameAsDirect();
+  void brokenSymlinkReturnsError();
 
 private:
   QTemporaryDir m_dir;
@@ -144,8 +146,8 @@ void TestRomHasher::missingFileReturnsError() {
 
 void TestRomHasher::recognisesArchiveExtensions() {
   QVERIFY(RomHasher::isArchivePath(QStringLiteral("/foo/bar.zip")));
-  QVERIFY(RomHasher::isArchivePath(QStringLiteral("/foo/bar.7Z")));      // case-insensitive
-  QVERIFY(RomHasher::isArchivePath(QStringLiteral("/foo/bar.tar.gz")));  // ends in .gz
+  QVERIFY(RomHasher::isArchivePath(QStringLiteral("/foo/bar.7Z")));     // case-insensitive
+  QVERIFY(RomHasher::isArchivePath(QStringLiteral("/foo/bar.tar.gz"))); // ends in .gz
   QVERIFY(RomHasher::isArchivePath(QStringLiteral("rom.RAR")));
   QVERIFY(!RomHasher::isArchivePath(QStringLiteral("/foo/bar.smc")));
   QVERIFY(!RomHasher::isArchivePath(QString()));
@@ -194,15 +196,13 @@ void TestRomHasher::hashesInnerRomLargestFile() {
   const QString archivePath = m_dir.filePath("game.zip");
   QProcess zipProc;
   zipProc.setWorkingDirectory(workDir);
-  zipProc.start(QStringLiteral("zip"),
-                {QStringLiteral("-q"), archivePath, QStringLiteral("game.rom"),
-                 QStringLiteral("readme.txt")});
+  zipProc.start(QStringLiteral("zip"), {QStringLiteral("-q"), archivePath,
+                                        QStringLiteral("game.rom"), QStringLiteral("readme.txt")});
   QVERIFY(zipProc.waitForFinished(5000));
   QCOMPARE(zipProc.exitCode(), 0);
 
   auto result = RomHasher::hashArchiveInnerRom(archivePath);
-  QVERIFY2(result.isOk(),
-           qPrintable(result.isError() ? result.error().message : QString()));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   const auto h = result.value();
   QCOMPARE(h.size, static_cast<qint64>(romBytes.size()));
   QCOMPARE(h.md5, QString::fromLatin1(
@@ -216,6 +216,48 @@ void TestRomHasher::archiveMissingPathReturnsError() {
   auto result = RomHasher::hashArchiveInnerRom(m_dir.filePath("absent.zip"));
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+}
+
+void TestRomHasher::hashesSymlinkTargetSameAsDirect() {
+  // Kartend-ou0a regression test: a symlinked ROM must hash identically
+  // to a direct read of its target. The original bug was a silent fallback
+  // to filename-only matching when QFile failed to open via a symlink path,
+  // which produced wrong-region SS matches downstream.
+#ifdef Q_OS_WIN
+  QSKIP("Symlink semantics on Windows differ; tested separately if needed.");
+#else
+  const QString target = m_dir.filePath("rom-target.bin");
+  const QByteArray payload = QByteArray("XENO") + QByteArray(8192, '\xAA') + QByteArray("END");
+  writeFile(target, payload);
+
+  const QString link = m_dir.filePath("rom-link.bin");
+  QVERIFY2(QFile::link(target, link),
+           qPrintable(QStringLiteral("Failed to create symlink %1 -> %2").arg(link, target)));
+
+  auto direct = RomHasher::hashFile(target);
+  auto viaLink = RomHasher::hashFile(link);
+  QVERIFY2(direct.isOk(), qPrintable(direct.isError() ? direct.error().message : QString()));
+  QVERIFY2(viaLink.isOk(), qPrintable(viaLink.isError() ? viaLink.error().message : QString()));
+  QCOMPARE(viaLink.value().md5, direct.value().md5);
+  QCOMPARE(viaLink.value().sha1, direct.value().sha1);
+  QCOMPARE(viaLink.value().crc, direct.value().crc);
+  QCOMPARE(viaLink.value().size, direct.value().size);
+#endif
+}
+
+void TestRomHasher::brokenSymlinkReturnsError() {
+#ifdef Q_OS_WIN
+  QSKIP("Symlink semantics on Windows differ; tested separately if needed.");
+#else
+  const QString missing = m_dir.filePath("absent-target.bin");
+  const QString link = m_dir.filePath("broken-link.bin");
+  QVERIFY2(QFile::link(missing, link),
+           qPrintable(QStringLiteral("Failed to create symlink %1 -> %2").arg(link, missing)));
+
+  auto result = RomHasher::hashFile(link);
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+#endif
 }
 
 QTEST_MAIN(TestRomHasher)
