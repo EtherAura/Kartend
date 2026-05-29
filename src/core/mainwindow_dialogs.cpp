@@ -29,11 +29,12 @@
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
-#include "collectionutils.h"
 #include "commandpalettedialog.h"
 #include "detailpagemanager.h"
 #include "dialogcontroller.h"
@@ -69,6 +70,27 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
+
+void MainWindow::openSettingsDialog(SettingsPage initialPage) {
+  auto *settings = m_appManager ? m_appManager->getSettingsManager() : nullptr;
+  if (!settings) {
+    return;
+  }
+  SettingsDialogContext context;
+  context.parent = this;
+  context.collections = &m_collections;
+  context.currentCollectionIndex = &currentCollectionIndex;
+  context.detailsPaneManager = m_appManager->getDetailsPaneManager();
+  context.scrollManager = m_appManager->getScrollManager();
+  context.navigationManager = m_appManager->getNavigationManager();
+  context.databaseManager = m_appManager->getDatabaseManager();
+  context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+  context.initialPage = initialPage;
+  settings->openSettingsDialog(context);
+  // Settings may have flipped watchFilesystem on/off or changed a mediaDirectory;
+  // reconcile the watch set so the next file event lands on the right collection.
+  refreshCollectionFilesystemWatcher();
+}
 
 void MainWindow::showAbout() {
   QString appName = APP_DISPLAY_NAME;

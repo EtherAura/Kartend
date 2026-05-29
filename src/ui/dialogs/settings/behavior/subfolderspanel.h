@@ -1,7 +1,7 @@
 #ifndef SUBFOLDERSPANEL_H
 #define SUBFOLDERSPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE

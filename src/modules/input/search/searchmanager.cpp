@@ -2,6 +2,8 @@
 // filtering.
 #include "searchmanager.h"
 #include "applicationcontext.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "idatabasemanager.h"
 #include "inavigationmanager.h"
 #include "interactionstateholder.h"
@@ -22,6 +24,7 @@
 #include <QStackedWidget>
 #include <QtGlobal>
 
+#include <algorithm>
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
 #define debugLog(msg)                                                                              \

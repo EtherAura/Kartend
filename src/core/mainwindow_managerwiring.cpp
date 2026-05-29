@@ -33,6 +33,7 @@
 #include "nowplayingoverlay.h"
 #include "playlistmanager.h"
 #include "smartfilter.h"
+#include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
 
 #include <QDesktopServices>
@@ -140,6 +141,11 @@ void MainWindow::wireNavigationManager() {
   // Callbacks (not in context)
   navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
   navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+  navSetup.refreshCollectionWarningBadge = [this]() {
+    if (m_toolbarController) {
+      m_toolbarController->refreshCollectionWarningBadge();
+    }
+  };
 
   m_appManager->getNavigationManager()->setupReferences(navSetup);
 }

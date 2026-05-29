@@ -8,7 +8,7 @@
 #include <QString>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "navigationhelpers.h"
 
 namespace {
@@ -100,8 +100,7 @@ void TestNavigationHelpers::depthOfTopLevelIsOne() {
 
 void TestNavigationHelpers::depthOfNestedChain() {
   // A (top, 0) <- B (child of A, 1) <- C (child of B, 2) <- D (child of C, 3)
-  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B", 0),
-                                makeCollection("C", 1),
+  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B", 0), makeCollection("C", 1),
                                 makeCollection("D", 2)};
   QCOMPARE(NavigationHelpers::computeCollectionDepth(0, cs), 1);
   QCOMPARE(NavigationHelpers::computeCollectionDepth(1, cs), 2);
@@ -140,26 +139,21 @@ void TestNavigationHelpers::isValidAcceptsInRange() {
 void TestNavigationHelpers::lookupReturnsMinusOneWhenIndexInvalid() {
   QList<CollectionConfig> cs = {makeCollection("A")};
   auto lookup = [](const QString &) { return 5; };
-  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(-1, cs, 10, lookup),
-           -1);
-  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(99, cs, 10, lookup),
-           -1);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(-1, cs, 10, lookup), -1);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(99, cs, 10, lookup), -1);
 }
 
 void TestNavigationHelpers::lookupReturnsMinusOneWhenTotalItemsZero() {
   QList<CollectionConfig> cs = {makeCollection("A")};
   auto lookup = [](const QString &) { return 5; };
-  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 0, lookup),
-           -1);
-  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, -1, lookup),
-           -1);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 0, lookup), -1);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, -1, lookup), -1);
 }
 
 void TestNavigationHelpers::lookupReturnsMinusOneWhenLookupAbsent() {
   QList<CollectionConfig> cs = {makeCollection("Movies")};
   auto lookup = [](const QString &) { return -1; };
-  QCOMPARE(
-      NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, lookup), -1);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, lookup), -1);
 }
 
 void TestNavigationHelpers::lookupFallsBackToBareName() {
@@ -174,16 +168,14 @@ void TestNavigationHelpers::lookupFallsBackToBareName() {
     auto it = store.find(k);
     return it == store.end() ? -1 : it.value();
   };
-  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 100, lookup),
-           7);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 100, lookup), 7);
 }
 
 void TestNavigationHelpers::lookupClampsToTotalItems() {
   QList<CollectionConfig> cs = {makeCollection("Movies")};
   auto lookup = [](const QString &) { return 999; };
   // Stored index 999 with totalItems=10 -> clamp to 9.
-  QCOMPARE(
-      NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, lookup), 9);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, lookup), 9);
 }
 
 void TestNavigationHelpers::lookupClampsNegativeToZero() {
@@ -192,8 +184,7 @@ void TestNavigationHelpers::lookupClampsNegativeToZero() {
   // "not found"). Then test the std::max(0, ...) guard.
   QList<CollectionConfig> cs = {makeCollection("Movies")};
   auto zero = [](const QString &) { return 0; };
-  QCOMPARE(
-      NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, zero), 0);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 10, zero), 0);
 }
 
 void TestNavigationHelpers::lookupUsesSubfolderKeyWhenSubfolderActive() {
@@ -212,8 +203,7 @@ void TestNavigationHelpers::lookupUsesSubfolderKeyWhenSubfolderActive() {
     }
     return 3;
   };
-  QCOMPARE(
-      NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 100, lookup), 3);
+  QCOMPARE(NavigationHelpers::lookupRememberedSelectionIndex(0, cs, 100, lookup), 3);
   QVERIFY(sawAnyKey);
   QVERIFY(!sawBareName);
 }
@@ -232,25 +222,19 @@ void TestNavigationHelpers::calcReturnsMinusOneWhenSearchActive() {
 void TestNavigationHelpers::calcReturnsMinusOneWhenRememberDisabled() {
   QList<CollectionConfig> cs = {makeCollection("A")};
   auto lookup = [](const QString &) { return 5; };
-  QCOMPARE(NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, false,
-                                                      lookup),
-           -1);
+  QCOMPARE(NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, false, lookup), -1);
 }
 
 void TestNavigationHelpers::calcReturnsZeroWhenRememberOnButNoEntry() {
   QList<CollectionConfig> cs = {makeCollection("A")};
   auto lookup = [](const QString &) { return -1; };
-  QCOMPARE(
-      NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, true, lookup),
-      0);
+  QCOMPARE(NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, true, lookup), 0);
 }
 
 void TestNavigationHelpers::calcReturnsRememberedIndex() {
   QList<CollectionConfig> cs = {makeCollection("A")};
   auto lookup = [](const QString &) { return 4; };
-  QCOMPARE(
-      NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, true, lookup),
-      4);
+  QCOMPARE(NavigationHelpers::calculateSelectionIndex(0, cs, 10, false, true, lookup), 4);
 }
 
 // ------------------------------ findSubcollectionVisualIndex ---------------
@@ -271,8 +255,8 @@ void TestNavigationHelpers::findSubVisualReturnsMinusOneWhenPreviousNotChild() {
 
 void TestNavigationHelpers::findSubVisualReturnsZeroBasedPositionAmongChildren() {
   // A=0 has children B=1, C=2, D=3 in that source order.
-  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B", 0),
-                                makeCollection("C", 0), makeCollection("D", 0)};
+  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B", 0), makeCollection("C", 0),
+                                makeCollection("D", 0)};
   QCOMPARE(NavigationHelpers::findSubcollectionVisualIndex(0, 1, cs), 0);
   QCOMPARE(NavigationHelpers::findSubcollectionVisualIndex(0, 2, cs), 1);
   QCOMPARE(NavigationHelpers::findSubcollectionVisualIndex(0, 3, cs), 2);
@@ -281,9 +265,8 @@ void TestNavigationHelpers::findSubVisualReturnsZeroBasedPositionAmongChildren()
 void TestNavigationHelpers::findSubVisualSkipsNonChildrenWhenCounting() {
   // A=0, B=1 (top-level), C=2 (child of A), D=3 (child of B), E=4 (child of A).
   // A's children in source order: C(2), E(4). E's visual index = 1.
-  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B"),
-                                makeCollection("C", 0), makeCollection("D", 1),
-                                makeCollection("E", 0)};
+  QList<CollectionConfig> cs = {makeCollection("A"), makeCollection("B"), makeCollection("C", 0),
+                                makeCollection("D", 1), makeCollection("E", 0)};
   QCOMPARE(NavigationHelpers::findSubcollectionVisualIndex(0, 2, cs), 0);
   QCOMPARE(NavigationHelpers::findSubcollectionVisualIndex(0, 4, cs), 1);
   // D is not a child of A.
@@ -306,8 +289,7 @@ void TestNavigationHelpers::fallbackKeepsCurrentWhenInRange() {
 
 void TestNavigationHelpers::fallbackPrefersFirstTopLevelWhenCurrentInvalid() {
   // First entry is a (orphaned) child; second is the first top-level.
-  QList<CollectionConfig> cs = {makeCollection("ChildOrphan", 99),
-                                makeCollection("TopA"),
+  QList<CollectionConfig> cs = {makeCollection("ChildOrphan", 99), makeCollection("TopA"),
                                 makeCollection("TopB")};
   QCOMPARE(NavigationHelpers::chooseFallbackCollectionIndex(-1, cs), 1);
   QCOMPARE(NavigationHelpers::chooseFallbackCollectionIndex(99, cs), 1);
@@ -344,8 +326,7 @@ void TestNavigationHelpers::parseLinkRejectsCollectionWithNegativeIndex() {
 }
 
 void TestNavigationHelpers::parseLinkRecognizesSubfolderPath() {
-  const auto parsed =
-      NavigationHelpers::parseBreadcrumbLink("subfolder:Action/2024");
+  const auto parsed = NavigationHelpers::parseBreadcrumbLink("subfolder:Action/2024");
   QCOMPARE(parsed.kind, NavigationHelpers::BreadcrumbLink::Kind::Subfolder);
   QCOMPARE(parsed.subfolderPath, QString("Action/2024"));
 }
@@ -381,18 +362,15 @@ void TestNavigationHelpers::parentPathOfSingleSegmentIsEmpty() {
 }
 
 void TestNavigationHelpers::parentPathDropsLastSegment() {
-  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024"),
-           QString("Action"));
-  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024/Q1"),
-           QString("Action/2024"));
+  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024"), QString("Action"));
+  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024/Q1"), QString("Action/2024"));
 }
 
 void TestNavigationHelpers::parentPathTreatsTrailingSlashAsNoSegment() {
   // "Action/" trims to "Action", whose parent is "".
   QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/"), QString());
   // "Action/2024/" trims to "Action/2024", parent is "Action".
-  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024/"),
-           QString("Action"));
+  QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024/"), QString("Action"));
 }
 
 QTEST_APPLESS_MAIN(TestNavigationHelpers)

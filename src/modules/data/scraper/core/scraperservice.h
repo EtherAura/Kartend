@@ -12,7 +12,8 @@
 #include <QStringList>
 
 #include "batchscraperunner.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "metadatalookupprovider.h"
 #include "scrapertypes.h"
 

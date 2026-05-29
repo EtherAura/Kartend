@@ -1,7 +1,7 @@
 #ifndef APPEARANCEEFFECTSPANEL_H
 #define APPEARANCEEFFECTSPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE

@@ -9,7 +9,8 @@
  * grow independently and surfaces clearly in CTest's per-binary output.
  */
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include <QTest>
 
 class TestCollectionUtilsCycles : public QObject {

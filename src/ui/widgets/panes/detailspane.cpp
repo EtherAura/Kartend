@@ -16,6 +16,7 @@
 #include <QImage>
 #include <QLoggingCategory>
 
+#include "collection/helpers.h"
 #include "itemartwork.h"
 #include "loggingcategories.h"
 #include <QMouseEvent>

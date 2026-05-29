@@ -10,7 +10,7 @@
 #include <QNetworkRequest>
 #include <QUrlQuery>
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "httpclient.h"
 #include "tmdbparser.h"
 

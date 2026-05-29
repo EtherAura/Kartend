@@ -5,6 +5,8 @@
 #include "databasemanager.h"
 
 #include <atomic>
+#include <QMetaType>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -14,7 +16,8 @@
 
 #include "applicationcontext.h"
 #include "cachedcountsservice.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "databaseschema.h"
 #include "errorutils.h"
 #include "isessionmanager.h"

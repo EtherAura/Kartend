@@ -2,7 +2,9 @@
 #define NAVIGATIONMANAGER_H
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include "errorutils.h"
 #include "inavigationmanager.h"
 #include "setuputils.h"
@@ -68,6 +70,11 @@ struct NavigationManagerSetup {
   // Callbacks (not in context)
   std::function<bool()> isShuttingDown;
   std::function<void()> refreshTitleCounts;
+  /// Kartend-w2n0: fired from updateItemsPageTitle so the items-toolbar
+  /// warning badge re-resolves launcher paths on every collection switch.
+  /// Optional — when unset (e.g. tests), the badge simply doesn't refresh
+  /// from the navigation path.
+  std::function<void()> refreshCollectionWarningBadge;
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -265,6 +272,10 @@ private:
   std::unique_ptr<CollectionBackgroundController> m_backgroundController;
   std::function<bool()> m_isShuttingDown;
   std::function<void()> m_refreshTitleCounts;
+  /// Kartend-w2n0: invoked from updateItemsPageTitle so the items-toolbar
+  /// warning badge re-resolves launcher paths on every collection switch.
+  /// Optional — null in test setups.
+  std::function<void()> m_refreshCollectionWarningBadge;
 
   // Owned manager for selection restore logic
   std::unique_ptr<SelectionRestoreCoordinator> m_selectionRestoreManager;

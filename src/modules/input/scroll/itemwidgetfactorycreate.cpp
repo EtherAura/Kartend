@@ -1,5 +1,6 @@
 // Widget creation + media path resolution + artwork configuration cluster
 // split out from itemwidgetfactory.cpp.
+#include "collection/helpers.h"
 #include "itemwidgetfactory.h"
 
 #include "artworkutils.h"

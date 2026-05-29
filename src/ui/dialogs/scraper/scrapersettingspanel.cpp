@@ -1,6 +1,6 @@
 #include "scrapersettingspanel.h"
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "scrapelogger.h"
 #include "screenscraperparser.h"
 #include "screenscraperprovider.h"

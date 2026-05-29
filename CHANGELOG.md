@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "⚠ Launcher path" row per failing entry in the sidebar info panel
   for the active collection. The rows recompute on every refresh so
   they clear the moment the user fixes the underlying path.
+- **Toolbar launcher-warning badge + launch gate.** The items toolbar
+  now shows a warning glyph next to the active collection's title
+  whenever that collection has an unresolvable launcher path; its
+  tooltip lists each bad path. Attempting to launch an item from such
+  a collection surfaces an explanatory "Launcher unavailable" dialog
+  listing the issues instead of failing silently a moment later.
+  Clicking the badge opens the settings dialog directly on the
+  Launchers page. The badge recomputes on every collection switch and
+  after each settings save, so it clears as soon as the path is fixed.
 - **Settings-dialog warning glyph for path fields that don't resolve.**
   The launcher / artwork-directory / placeholder-artwork / additional-
   launcher / core path fields in the settings dialog now show a small

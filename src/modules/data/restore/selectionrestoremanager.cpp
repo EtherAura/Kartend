@@ -9,7 +9,9 @@
 #include <QTimer>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h"
 #include "iscrollmanager.h"

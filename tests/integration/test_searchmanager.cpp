@@ -1,7 +1,7 @@
 #include "test_searchmanager.h"
 
 #include "applicationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"

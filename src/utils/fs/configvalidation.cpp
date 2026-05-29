@@ -1,6 +1,10 @@
 // Implementation of ConfigValidation namespace functions.
 // Bodies moved out of configvalidation.h to reduce per-TU compile time.
 #include "configvalidation.h"
+
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>

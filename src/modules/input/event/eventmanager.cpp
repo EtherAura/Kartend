@@ -15,7 +15,9 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"

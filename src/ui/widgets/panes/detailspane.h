@@ -20,7 +20,7 @@
 #include <QTimer>
 #include <QWidget>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "idetailspane.h"
 #include "itemmetadata.h"
 #include "stateutils.h"

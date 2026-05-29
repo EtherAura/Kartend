@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QWidget>
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "idetailspanemanager.h"
 #include "interactionstateholder.h"
 #include "iselectionmanager.h"

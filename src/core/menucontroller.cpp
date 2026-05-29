@@ -1,6 +1,7 @@
 // Handles menu bar setup and action connections, extracted from MainWindow.
 #include "menucontroller.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "detailspanemanager.h"
 #include "historystore.h"
 #include "idatabasemanager.h"
@@ -13,6 +14,7 @@
 #include "ui_mainwindow.h"
 #include "uiconstants/icons.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QFileInfo>
 #include <QFontMetrics>

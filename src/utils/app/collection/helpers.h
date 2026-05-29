@@ -278,8 +278,8 @@ stringToDetailsPaneBackgroundType(const QString &str, bool *unknownFallback = nu
 // Kartend-9agw: these namespace functions used to be declared in
 // collectionutils.h. Moved here so direct callers can depend on this leaf
 // header instead of the umbrella (which forced ~113 TUs to re-parse every
-// collection/* subheader on every settings touch). Implementations still live
-// in collectionutils.cpp.
+// collection/* subheader on every settings touch). Implementations live in
+// collection/helpers.cpp.
 
 [[nodiscard]] QList<int> collectDescendantIndices(int parentIndex,
                                                   const QList<CollectionConfig> &collections);

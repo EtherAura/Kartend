@@ -12,7 +12,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "errordialog.h"
 #include "isettingsmanager.h"
 

@@ -25,6 +25,7 @@
 #include "batchsizes.h"
 #include "preparedstatementcache.h"
 
+#include <algorithm>
 #include <atomic>
 #include <limits>
 #include <memory>
@@ -49,7 +50,8 @@
 #include <QWaitCondition>
 #include <stdexcept>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"

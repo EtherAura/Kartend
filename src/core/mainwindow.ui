@@ -187,6 +187,22 @@
             </widget>
            </item>
            <item>
+            <widget class="QToolButton" name="collectionWarningBadge">
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
+             <property name="autoRaise">
+              <bool>true</bool>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <spacer name="itemsTitleSpacer">
              <property name="orientation">
               <enum>Qt::Horizontal</enum>

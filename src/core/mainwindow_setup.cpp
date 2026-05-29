@@ -25,12 +25,14 @@
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/helpers.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
 #include "collectionfilesystemwatcher.h"
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
-#include "collectionutils.h"
 #include "commandpalettedialog.h"
 #include "detailpagemanager.h"
 #include "detailspane.h"
@@ -277,12 +279,14 @@ void MainWindow::setupUIReferences() {
   tcSetup.viewModeButton = ui->viewModeButton;
   tcSetup.filterButton = ui->filterButton;
   tcSetup.homeButton = ui->homeButton;
+  tcSetup.collectionWarningBadge = ui->collectionWarningBadge;
   tcSetup.searchBar = ui->searchBar;
   m_toolbarController->initialize(tcSetup);
   m_toolbarController->setupViewModeButton();
   m_toolbarController->setupSearchModeAction();
   m_toolbarController->setupHomeButton();
   m_toolbarController->refreshHomeButton(m_generalSettings);
+  m_toolbarController->setupCollectionWarningBadge();
   if (ui->filterButton) {
     ui->filterButton->setIcon(
         UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));
@@ -456,24 +460,7 @@ void MainWindow::createMenuBar() {
       im->launchItemWithCollection(filePath, collectionIndex);
     }
   };
-  ctx.onOpenSettings = [this]() {
-    if (m_appManager->getSettingsManager()) {
-      SettingsDialogContext context;
-      context.parent = this;
-      context.collections = &m_collections;
-      context.currentCollectionIndex = &currentCollectionIndex;
-      context.detailsPaneManager = m_appManager->getDetailsPaneManager();
-      context.scrollManager = m_appManager->getScrollManager();
-      context.navigationManager = m_appManager->getNavigationManager();
-      context.databaseManager = m_appManager->getDatabaseManager();
-      context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
-      m_appManager->getSettingsManager()->openSettingsDialog(context);
-      // Settings may have flipped watchFilesystem on/off or changed a
-      // mediaDirectory; reconcile the watch set so the next file event
-      // lands on the right collection.
-      refreshCollectionFilesystemWatcher();
-    }
-  };
+  ctx.onOpenSettings = [this]() { openSettingsDialog(); };
   ctx.onShowAbout = [this]() { showAbout(); };
   ctx.onAdjustGridWidth = [this](int delta) { adjustGridWidth(delta); };
   ctx.onImportKart = [this]() {

@@ -7,7 +7,8 @@
 // updateWindowTitle, applyScrollbarSettings, refreshSidebar,
 // handleScrollBranch, detectChanges).
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "databasemanager.h"
 #include "errorpresentation.h"
 #include "iartworkmanager.h"
@@ -340,6 +341,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   if (!dlg) {
     return;
   }
+
+  // Apply the caller's optional page hint before exec() so the user lands
+  // on the relevant tab without an extra click. Default is a no-op.
+  dlg->setInitialPage(context.initialPage);
 
   if (dlg->exec() != QDialog::Accepted) {
     return;

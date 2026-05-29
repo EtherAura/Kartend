@@ -149,7 +149,8 @@
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "databasemanager.h"
 #include "dbeventscontroller.h"
 #include "detailspanemanager.h"
@@ -349,10 +350,24 @@ void MainWindow::connectDatabaseManager() {
     QObject::connect(settings, &SettingsManager::folderBrowsingOptionsChanged, nav,
                      &NavigationManager::onFolderBrowsingOptionsChanged);
   }
-  // launcherProfileChanged / archiveOptionsChanged: LaunchManager reads
-  //   from m_collections at launch time (no startup cache), so the
-  //   persisted diff is already visible to the next launch via per-call
-  //   read. No connect needed today; see docs/settings-hotreload.md.
+  // launcherProfileChanged: drive the items-toolbar warning badge so an
+  // edit to the launcher block in Settings → Launchers re-resolves paths
+  // and clears/raises the chip without waiting for the user to switch
+  // collections. archiveOptionsChanged has no UI surface yet (LaunchManager
+  // reads collections fresh per launch — see docs/settings-hotreload.md).
+  if (m_toolbarController) {
+    auto refreshBadge = [this](int, const LauncherProfile &) {
+      if (m_toolbarController) {
+        m_toolbarController->refreshCollectionWarningBadge();
+      }
+    };
+    QObject::connect(settings, &SettingsManager::launcherProfileChanged, this, refreshBadge);
+    QObject::connect(settings, &SettingsManager::collectionsModified, this, [this]() {
+      if (m_toolbarController) {
+        m_toolbarController->refreshCollectionWarningBadge();
+      }
+    });
+  }
   // scraperOptionsChanged / scraperOverridesChanged: ScreenScraperProvider
   //   re-reads ctx-routed scraper options on every fetch, and ScraperService
   //   re-reads scraperOverrides per item via the active collection. No

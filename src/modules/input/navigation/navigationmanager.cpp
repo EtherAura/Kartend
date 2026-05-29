@@ -2,6 +2,8 @@
 // traversal.
 #include "navigationmanager.h"
 #include "artworkutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "collectionbackgroundcontroller.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -28,6 +30,7 @@
 #include <QLabel>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSet>
 #include <QStackedWidget>
 #include <QtGlobal>
 #include <QTimer>
@@ -70,6 +73,7 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   // Callbacks
   m_isShuttingDown = setup.isShuttingDown;
   m_refreshTitleCounts = setup.refreshTitleCounts;
+  m_refreshCollectionWarningBadge = setup.refreshCollectionWarningBadge;
 
   // Setup SelectionRestoreCoordinator. Sibling managers come from ctx.
   if (m_selectionRestoreManager) {

@@ -2,8 +2,11 @@
 #define MAINWINDOW_H
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include "imainwindow.h"
+#include "isettingsdialog.h" // for SettingsPage on openSettingsDialog signature
 #include <functional>
 #include <memory>
 #include <QHash>
@@ -160,6 +163,15 @@ public:
   /// orchestration.
   void openScraperDialog(int preCollectionIndex = -1,
                          const QString &preItemPath = QString()) override;
+
+  /// Open the settings dialog with the standard MainWindow-rooted context
+  /// (collections list, current index, manager handles, dialog factory).
+  /// Used by the menu/palette entries AND by the toolbar warning-badge
+  /// click handler so all entry points go through the same wiring. The
+  /// @p initialPage hint pre-selects a navigation row (e.g. the badge
+  /// click passes SettingsPage::Launchers); SettingsPage::Default leaves
+  /// the dialog at its standard landing row.
+  void openSettingsDialog(SettingsPage initialPage = SettingsPage::Default);
 
   // Kartend-hzef step 3: getScraperService() was never used by an external
   // caller; service ownership moved into ScraperController and the accessor

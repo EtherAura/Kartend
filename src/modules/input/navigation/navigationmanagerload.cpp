@@ -1,6 +1,9 @@
 // Collection load + item-count + items-loaded slots for NavigationManager.
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; this is a translation-unit split.
+#include "collection/collectionconfig.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "navigationmanager.h"
 
 #include "applicationcontext.h"

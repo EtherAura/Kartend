@@ -2,8 +2,9 @@
 #define SETTINGSDIALOG_H
 
 #include "applysettingsdialog.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "collectionremover.h"
-#include "collectionutils.h"
 #include "errorutils.h"
 #include "isettingsdialog.h"
 #include "settingsmodel.h"
@@ -13,6 +14,7 @@
 #include <QList>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QSet>
 #include <QTreeWidgetItem>
 
 QT_BEGIN_NAMESPACE
@@ -65,6 +67,13 @@ public:
   /// (otherwise the interface's pure virtual would leave SettingsDialog
   /// abstract).
   int exec() override { return QDialog::exec(); }
+
+  /// Pre-select the navigation row matching @p page. Maps the public
+  /// SettingsPage enum to the categoryList row index private to this
+  /// dialog. SettingsPage::Default keeps the constructor's default row.
+  /// Called between construction and exec() so the row change is visible
+  /// to the user on the very first paint.
+  void setInitialPage(SettingsPage page) override;
 
   /// Returns the index of the collection currently selected in the tree.
   [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }

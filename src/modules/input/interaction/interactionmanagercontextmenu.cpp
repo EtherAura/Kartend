@@ -15,7 +15,9 @@
 #include <QUrl>
 
 #include "artworkutils.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 // The two dialogs (createsmartplaylistdialog.h / editmetadatadialog.h) are
 // launched via owner-supplied closures (InteractionManagerSetup::run*) so
 // the input layer doesn't need the ui/ dialog headers for the symbols. The
@@ -38,6 +40,7 @@
 #include "scrapepersistence.h"
 #include "scrollmanager.h"
 
+#include <algorithm>
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
 

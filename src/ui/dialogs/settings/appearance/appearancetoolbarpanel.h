@@ -1,7 +1,7 @@
 #ifndef APPEARANCETOOLBARPANEL_H
 #define APPEARANCETOOLBARPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE

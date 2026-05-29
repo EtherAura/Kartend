@@ -11,7 +11,8 @@
 
 #include <utility>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "workersignalspy.h"
@@ -23,8 +24,7 @@ private slots:
   void testCancelledScanDoesNotMutateDatabase();
 };
 
-template <typename Func>
-class ScopeExit {
+template <typename Func> class ScopeExit {
 public:
   explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
   ~ScopeExit() { m_func(); }
@@ -36,8 +36,7 @@ private:
   Func m_func;
 };
 
-template <typename Func>
-auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
+template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
   return ScopeExit<Func>(std::forward<Func>(func));
 }
 
@@ -127,7 +126,8 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
 
   // Seed DB with a row that would be deleted on a successful scan apply.
   // If cancellation is truly non-mutating, this row must remain.
-  const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   {
     QSqlQuery q(inspectDb);
@@ -145,9 +145,9 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
     q.addBindValue(QString());
     QVERIFY(q.exec());
 
-    q.prepare(QStringLiteral(
-        "INSERT INTO items (collection_id, collection_uuid, path, name, last_modified, play_count, rating) "
-        "VALUES (?, ?, ?, ?, ?, 0, 0)"));
+    q.prepare(QStringLiteral("INSERT INTO items (collection_id, collection_uuid, path, name, "
+                             "last_modified, play_count, rating) "
+                             "VALUES (?, ?, ?, ?, ?, 0, 0)"));
     q.addBindValue(1);
     q.addBindValue(uuid);
     q.addBindValue(QStringLiteral("ghost.bin"));
@@ -163,15 +163,14 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
   QVERIFY(itemCountSpy.isValid());
 
   // Cancel immediately when scan starts.
-  QObject::connect(qm, &QueryManager::scanStarting, qm,
-                   [qm](const QString &, int) { qm->requestCancelScan(); },
-                   Qt::DirectConnection);
+  QObject::connect(
+      qm, &QueryManager::scanStarting, qm, [qm](const QString &, int) { qm->requestCancelScan(); },
+      Qt::DirectConnection);
 
   // Trigger the scan via the normal public slot, but invoke it via a functor to
   // avoid queued-connection metatype requirements for CollectionContext.
   QMetaObject::invokeMethod(
-      qm,
-      [qm, ctx, allCollections]() { qm->fetchItemCount(ctx, allCollections, QString()); },
+      qm, [qm, ctx, allCollections]() { qm->fetchItemCount(ctx, allCollections, QString()); },
       Qt::QueuedConnection);
 
   // Wait for fetchItemCount() to complete.

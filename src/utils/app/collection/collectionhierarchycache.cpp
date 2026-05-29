@@ -4,8 +4,8 @@
 #include "collectionhierarchycache.h"
 
 #include "collectionconfig.h"
-#include "collectionutils.h" // computeCollectionUuid + resolveArtworkDirectory
-#include "settingsutils.h"   // expandConfigVariables
+#include "helpers.h"       // computeCollectionUuid + resolveArtworkDirectory
+#include "settingsutils.h" // expandConfigVariables
 
 #include <QHash>
 #include <QList>

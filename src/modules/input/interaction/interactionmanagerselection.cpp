@@ -3,6 +3,8 @@
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
 
+#include "collection/launcherconfig.h"
+
 #include <algorithm>
 #include <QApplication>
 #include <QDateTime>
@@ -11,6 +13,7 @@
 #include <QHash>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPoint>
 #include <QScrollArea>
@@ -31,7 +34,7 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -302,18 +305,39 @@ void InteractionManager::initializeSearchModeForCurrentCollection() {
 // variables without path validation so launch works even if artworkDirectory is
 // Delegates to LaunchManager for launching media items
 void InteractionManager::launchItemWithCollection(const QString &filePath, int collectionIndex) {
-  if (m_launchManager) {
-    // Treat the launch itself as user activity so attract mode stops
-    // immediately. Without this, attract keeps advancing the selection during
-    // the gap between Enter-press and runtimeStarted (which only fires once
-    // QProcess::started arrives — a noticeable lag for video players), and
-    // never stops at all for detached launches.
-    if (m_attractManager) {
-      m_attractManager->onActivityDetected();
-    }
-    m_launchManager->recordLaunch(filePath);
-    m_launchManager->launchItem(filePath, collectionIndex);
+  if (!m_launchManager) {
+    return;
   }
+  // Kartend-w2n0: gate Enter/launch when the collection's launcher profile
+  // has unresolvable paths. Replaces the silent "launch fails 200ms later
+  // with a QMessageBox from validateLauncherPath" surprise with an upfront
+  // explanation pointing the user to Settings → Launchers. Hard gate per
+  // bd choice; users who hit a false-negative from checkLauncherPath can
+  // still fix the path or temporarily clear it.
+  if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+    const QStringList issues =
+        LauncherUtils::launcherPathIssues((*m_collections)[collectionIndex].launcher);
+    if (!issues.isEmpty()) {
+      QString body = tr("This collection's launcher paths are unresolvable on this host:");
+      for (const QString &issue : issues) {
+        body += QLatin1String("\n• ") + issue;
+      }
+      body += QLatin1Char('\n');
+      body += tr("Fix the paths in Settings → Launchers, then try again.");
+      QMessageBox::warning(QApplication::activeWindow(), tr("Launcher unavailable"), body);
+      return;
+    }
+  }
+  // Treat the launch itself as user activity so attract mode stops
+  // immediately. Without this, attract keeps advancing the selection during
+  // the gap between Enter-press and runtimeStarted (which only fires once
+  // QProcess::started arrives — a noticeable lag for video players), and
+  // never stops at all for detached launches.
+  if (m_attractManager) {
+    m_attractManager->onActivityDetected();
+  }
+  m_launchManager->recordLaunch(filePath);
+  m_launchManager->launchItem(filePath, collectionIndex);
 }
 
 // Finalizes selection bookkeeping and persists selection; standardizes property

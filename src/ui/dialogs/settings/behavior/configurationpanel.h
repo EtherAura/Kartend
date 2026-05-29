@@ -1,7 +1,7 @@
 #ifndef CONFIGURATIONPANEL_H
 #define CONFIGURATIONPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "screenscrapersystems.h"
 
 #include <QList>

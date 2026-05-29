@@ -1,7 +1,7 @@
-#include "applicationmanager.h"
 #include "test_settingsdialog_changes.h"
+#include "applicationmanager.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "settingsdialog.h"
 
 #include <QCheckBox>

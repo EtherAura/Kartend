@@ -11,9 +11,8 @@
 // of re-running SHA1 + filesystem checks on every query. Lives in its
 // own translation-unit-input so TUs that only need the cache no
 // longer drag in GeneralSettings + CollectionContext from the umbrella.
-// rebuild()'s implementation stays in collectionutils.cpp during the
-// Kartend-0yz3 split — moving it requires either a new translation
-// unit or rolling it into a future collectionhierarchycache.cpp.
+// rebuild()'s implementation lives in collection/collectionhierarchycache.cpp
+// (Kartend-7uia).
 
 #include <QFileInfo>
 #include <QHash>
@@ -30,7 +29,8 @@ public:
   CollectionHierarchyCache() = default;
 
   // Rebuilds the hierarchy cache with pre-computed UUIDs and directory
-  // mappings. Implemented in collectionutils.cpp to avoid header dependencies.
+  // mappings. Implemented in collection/collectionhierarchycache.cpp to
+  // avoid header dependencies.
   void rebuild(const QList<CollectionConfig> &collections);
 
   /// Returns the union of primary children and linked children

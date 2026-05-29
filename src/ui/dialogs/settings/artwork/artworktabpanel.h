@@ -1,7 +1,7 @@
 #ifndef ARTWORKTABPANEL_H
 #define ARTWORKTABPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QStringList>
 #include <QWidget>
 

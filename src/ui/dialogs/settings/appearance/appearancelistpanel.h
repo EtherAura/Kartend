@@ -1,7 +1,7 @@
 #ifndef APPEARANCELISTPANEL_H
 #define APPEARANCELISTPANEL_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE

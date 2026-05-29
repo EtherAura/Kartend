@@ -1,7 +1,8 @@
 #ifndef EVENTMANAGER_H
 #define EVENTMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "setuputils.h"
 #include <functional>
 #include <memory>

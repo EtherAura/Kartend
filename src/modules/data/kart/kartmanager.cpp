@@ -5,9 +5,12 @@
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
+#include <QSet>
 #include <QtConcurrentRun>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+#include "collection/launcherpreset.h"
 #include "errorutils.h"
 #include "kartdb.h"
 // Kartend-a3ir: the previous #include of "kartmergedialog.h" was the last

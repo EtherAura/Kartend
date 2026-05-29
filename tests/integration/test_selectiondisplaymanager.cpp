@@ -1,7 +1,7 @@
 #include "test_selectiondisplaymanager.h"
 
 #include "applicationmanager.h"
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"
 #include "scrollmanager.h"

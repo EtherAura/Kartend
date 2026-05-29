@@ -10,7 +10,8 @@
 
 #include "applicationcontext.h"
 #include "applicationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/launcherpreset.h"
 #include "iplaylistmanager.h"
 #include "kartcompression.h"
 #include "kartmanager.h"

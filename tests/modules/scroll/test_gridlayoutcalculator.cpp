@@ -5,8 +5,8 @@
  * Tests the stateless grid layout calculation functions extracted from ScrollManager.
  */
 
+#include "collection/collectionconfig.h"
 #include "gridlayoutcalculator.h"
-#include "collectionutils.h"
 #include <QTest>
 
 class TestGridLayoutCalculator : public QObject {
@@ -230,8 +230,8 @@ void TestGridLayoutCalculator::testIndexAtPosition_outOfBounds() {
 void TestGridLayoutCalculator::testGetVisibleRowRange_topOfView() {
   m_metrics = GridLayoutCalculator::calculateMetrics(m_config, 100);
 
-  auto [first, last] = GridLayoutCalculator::getVisibleRowRange(
-      0, 600, m_metrics); // scrollY=0, viewportHeight=600
+  auto [first, last] =
+      GridLayoutCalculator::getVisibleRowRange(0, 600, m_metrics); // scrollY=0, viewportHeight=600
 
   QCOMPARE(first, 0);
   QVERIFY(last >= 0);
@@ -242,8 +242,8 @@ void TestGridLayoutCalculator::testGetVisibleRowRange_scrolledDown() {
   m_metrics = GridLayoutCalculator::calculateMetrics(m_config, 100);
 
   int rowHeight = m_metrics.itemHeight + m_metrics.verticalSpacing;
-  auto [first, last] = GridLayoutCalculator::getVisibleRowRange(
-      rowHeight * 5, 600, m_metrics); // Scrolled down 5 rows
+  auto [first, last] = GridLayoutCalculator::getVisibleRowRange(rowHeight * 5, 600,
+                                                                m_metrics); // Scrolled down 5 rows
 
   // With buffer rows, first visible row should be around row 3-5
   QVERIFY(first >= 0);
@@ -278,12 +278,14 @@ void TestGridLayoutCalculator::testHorizontal_calculateMetrics_dimensionsAreTran
 
   // The fixed (Y) dimension should equal margins*2 + 3 items + 2 spacings.
   const int rowHeight = metrics.itemHeight + metrics.verticalSpacing;
-  const int expectedHeight = metrics.margins * 2 + 3 * metrics.itemHeight + 2 * metrics.verticalSpacing;
+  const int expectedHeight =
+      metrics.margins * 2 + 3 * metrics.itemHeight + 2 * metrics.verticalSpacing;
   QCOMPARE(metrics.totalHeight, expectedHeight);
   Q_UNUSED(rowHeight);
 
   // The long (X) dimension should grow with column count.
-  const int expectedWidth = metrics.margins * 2 + 4 * metrics.itemWidth + 3 * metrics.horizontalSpacing;
+  const int expectedWidth =
+      metrics.margins * 2 + 4 * metrics.itemWidth + 3 * metrics.horizontalSpacing;
   QCOMPARE(metrics.totalWidth, expectedWidth);
 }
 
@@ -338,7 +340,7 @@ void TestGridLayoutCalculator::testHorizontal_calculateCenterScrollTarget_center
   const int colStride = m.itemWidth + m.horizontalSpacing;
   // Item 9 lives at column 3 (9 / 3). centerTarget should aim at colX + half - vw/2.
   int target = GridLayoutCalculator::calculateCenterScrollTarget(/*idx=*/9, /*viewportSize=*/600,
-                                                                  /*maxScroll=*/100000, m);
+                                                                 /*maxScroll=*/100000, m);
   int itemX = m.margins + 3 * colStride;
   int expected = itemX + (m.itemWidth / 2) - (600 / 2);
   QCOMPARE(target, qMax(0, expected));

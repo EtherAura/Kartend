@@ -1,4 +1,7 @@
 #include "launchereditordialog.h"
+#include "collection/helpers.h"
+#include "collection/launcherconfig.h"
+#include "collection/launcherpreset.h"
 
 #include "pathstatusglyph.h"
 #include "pathutils.h"

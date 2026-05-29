@@ -1,7 +1,8 @@
 #ifndef SETTINGSMODEL_H
 #define SETTINGSMODEL_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include <QList>
 
 /// Aggregates the per-dialog data state SettingsDialog edits during its

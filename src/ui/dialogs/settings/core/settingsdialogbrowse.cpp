@@ -28,6 +28,8 @@
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "collectiontreewidget.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"

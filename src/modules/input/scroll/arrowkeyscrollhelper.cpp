@@ -1,9 +1,11 @@
 #include "arrowkeyscrollhelper.h"
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
+#include "collectiontypes.h"
 #include "interactionstateholder.h"
 #include "scrolleventhandler.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
+#include <algorithm>
 #include <cmath>
 #include <QDateTime>
 #include <QPropertyAnimation>

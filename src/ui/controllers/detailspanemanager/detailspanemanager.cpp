@@ -1,7 +1,9 @@
 // Controls details pane visibility, positioning, and content updates.
 #include "detailspanemanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+#include "collection/launcherconfig.h"
 #include "detailspane.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -325,27 +327,9 @@ void DetailsPaneManager::refreshCollectionSummary() {
   // Kartend-ecky: persistent launcher-path-issue surface in the sidebar
   // summary. Recomputed on every refresh so the lines clear the moment
   // the user reinstalls the missing binary and triggers any state that
-  // calls refreshCollectionSummary. Primary launcher + each
-  // additionalLaunchers[i] check independently so the user can see
-  // which row to fix in Settings → Launchers.
-  auto recordIssue = [&](const QString &fieldLabel, const QString &path) {
-    if (path.isEmpty()) return;
-    const PathUtils::PathStatus status = PathUtils::checkLauncherPath(path);
-    if (status == PathUtils::PathStatus::OK || status == PathUtils::PathStatus::Empty) {
-      return;
-    }
-    summary.launcherPathIssues.append(
-        QStringLiteral("%1 (%2): %3")
-            .arg(fieldLabel, path, PathUtils::pathStatusDescription(status)));
-  };
-  recordIssue(tr("Launcher"), collection.launcher.launcherPath);
-  for (int i = 0; i < collection.launcher.additionalLaunchers.size(); ++i) {
-    const auto &al = collection.launcher.additionalLaunchers[i];
-    const QString label = al.name.trimmed().isEmpty()
-                              ? tr("Additional launcher %1").arg(i + 1)
-                              : tr("Additional launcher %1 (%2)").arg(i + 1).arg(al.name);
-    recordIssue(label, al.launcherPath);
-  }
+  // calls refreshCollectionSummary. Helper lives in LauncherUtils so the
+  // items-toolbar warning badge (Kartend-w2n0) reuses the same strings.
+  summary.launcherPathIssues = LauncherUtils::launcherPathIssues(collection.launcher);
 
   m_DetailsPane->setCollectionSummary(summary);
 }

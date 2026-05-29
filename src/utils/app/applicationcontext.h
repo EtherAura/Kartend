@@ -9,7 +9,9 @@
 // that actually dereference ctx (read fields, call accessors) still need
 // this full header.
 #include "applicationcontext_fwd.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include <functional>
 #include <QList>
 

@@ -16,7 +16,7 @@
 #include <QtGlobal>
 #include <stdexcept>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "queryhelpers.h"

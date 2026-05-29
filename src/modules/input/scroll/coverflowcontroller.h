@@ -1,7 +1,7 @@
 #ifndef COVERFLOWCONTROLLER_H
 #define COVERFLOWCONTROLLER_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include <QObject>
 
 class QScrollArea;

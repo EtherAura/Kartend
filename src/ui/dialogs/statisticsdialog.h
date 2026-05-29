@@ -6,7 +6,8 @@
 #include <QList>
 #include <QString>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "historystore.h"
 #include "usagestatsstore.h"
 

@@ -22,7 +22,9 @@
 #include <QProgressDialog>
 #include <QUrl>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+#include "collection/launcherpreset.h"
 // The two dialogs (createsmartplaylistdialog.h / editmetadatadialog.h) are
 // launched via owner-supplied closures so the input layer doesn't need the
 // ui/ dialog headers. EditMetadataPayload's full definition lives in
@@ -37,6 +39,7 @@
 #include "launchmanager.h"
 #include "pathutils.h"
 
+#include <algorithm>
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
 

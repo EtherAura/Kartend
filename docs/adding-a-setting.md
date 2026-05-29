@@ -16,7 +16,7 @@ A single new key typically touches all of these:
 |------|----------------|
 | [settingskeys.h](../src/utils/app/settingskeys.h) | The string constant for the on-disk INI key name |
 | One of the leaf headers in [src/utils/app/collection/](../src/utils/app/collection/) | The C++ struct field + default value |
-| [collectionutils.cpp](../src/utils/app/collectionutils.cpp) | Validation / clamp helpers (if the field has a valid range) |
+| The matching `*_persistence.cpp` next to the leaf header, or [collection/helpers.cpp](../src/utils/app/collection/helpers.cpp) | Validation / clamp helpers (if the field has a valid range) |
 | [configvalidation.cpp](../src/utils/fs/configvalidation.cpp) | Schema validation (if it's per-collection and shouldn't be rejected silently) |
 | [settingsmanager.cpp](../src/modules/data/settings/settingsmanager.cpp) or [settingsmanagercollections.cpp](../src/modules/data/settings/settingsmanagercollections.cpp) | `QSettings::value(key, default).toType()` on load, `setValue(key, val)` on save |
 | The relevant `*panel.ui` in [src/ui/dialogs/settings/](../src/ui/dialogs/settings/) | The widget |
@@ -98,9 +98,9 @@ install picks up no surprise change in behavior.
 
 ### 3. Add validation (optional)
 
-For numeric fields with a sensible range, add a clamp in
-[collectionutils.cpp](../src/utils/app/collectionutils.cpp)'s
-`clampValues()`:
+For numeric fields with a sensible range, add a clamp in the
+`clampValues()` member on the leaf struct (in the matching
+`collection/<leaf>.h` or its `*_persistence.cpp`):
 
 ```cpp
 config.gridLayoutPreferences.myNumeric =
@@ -236,7 +236,7 @@ and add a row:
 | Per-collection leaf clusters | [src/utils/app/collection/](../src/utils/app/collection/) |
 | `GeneralSettings` (global) | [src/utils/app/collection/generalsettings.h](../src/utils/app/collection/generalsettings.h) |
 | `CollectionConfig` (per-collection umbrella) | [src/utils/app/collection/collectionconfig.h](../src/utils/app/collection/collectionconfig.h) |
-| Validation + clamp | [src/utils/app/collectionutils.cpp](../src/utils/app/collectionutils.cpp), [src/utils/fs/configvalidation.cpp](../src/utils/fs/configvalidation.cpp) |
+| Validation + clamp | The leaf's `*_persistence.cpp` (e.g. [archiveoptions_persistence.cpp](../src/utils/app/collection/archiveoptions_persistence.cpp)) or [collection/helpers.cpp](../src/utils/app/collection/helpers.cpp), plus [configvalidation.cpp](../src/utils/fs/configvalidation.cpp) |
 | Load / save | [src/modules/data/settings/](../src/modules/data/settings/) |
 | Apply-settings gate | [src/ui/dialogs/settings/core/applysettingsdialog.cpp](../src/ui/dialogs/settings/core/applysettingsdialog.cpp) |
 | Form binding helpers | [src/ui/dialogs/settings/core/settingsformbinding.h](../src/ui/dialogs/settings/core/settingsformbinding.h) |

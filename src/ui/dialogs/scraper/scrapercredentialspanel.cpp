@@ -1,6 +1,6 @@
 #include "scrapercredentialspanel.h"
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "settingsmodel.h"
 
 #include <QFormLayout>

@@ -13,7 +13,8 @@
 #include <QString>
 #include <QStringList>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 
 QStringList QueryManager::loadOrScanCollection(int collectionIndex,
                                                const CollectionConfig &collection,

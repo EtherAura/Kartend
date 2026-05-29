@@ -1,6 +1,7 @@
 #include "sidebarpanel.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "settingsmodel.h"
 #include "ui_sidebarpanel.h"
 #include "uiconstants/detailspaneconstants.h"

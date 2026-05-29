@@ -17,7 +17,8 @@
 
 #include <utility>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "workersignalspy.h"

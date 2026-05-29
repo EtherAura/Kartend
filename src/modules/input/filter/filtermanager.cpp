@@ -2,10 +2,12 @@
 #include "filtermanager.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
+#include "collection/helpers.h"
 #include "filterhelpers.h"
 #include "idatabasemanager.h"
 #include <QDir>
 #include <QFileInfo>
+#include <QSet>
 
 FilterManager::FilterManager(QObject *parent) : QObject(parent) {}
 

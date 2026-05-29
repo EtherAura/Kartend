@@ -11,7 +11,7 @@
 #include <QStandardPaths>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 

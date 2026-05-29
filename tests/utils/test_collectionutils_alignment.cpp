@@ -10,7 +10,8 @@
  * wouldCreateCircularReference slots live in test_collectionutils_cycles.cpp.
  */
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include <QTest>
 
 class TestCollectionUtilsAlignment : public QObject {

@@ -341,7 +341,6 @@ add_test(NAME TitleFilter COMMAND test_titlefilter)
 # tree walk vs cycle detection) and so future additions live in their
 # cohesive home rather than accreting into a single mega-file.
 set(_kartend_collectionutils_test_sources
-  ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/collection/helpers.cpp
   ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
   ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
@@ -567,6 +566,14 @@ add_executable(test_launcherprobe
 )
 target_link_libraries(test_launcherprobe PRIVATE kartend_utils Qt6::Test)
 add_test(NAME LauncherProbe COMMAND test_launcherprobe)
+
+# LauncherUtils::launcherPathIssues — drives the items-toolbar warning
+# badge tooltip + the launch-gate dialog body (Kartend-w2n0).
+add_executable(test_launcherpathissues
+  utils/test_launcherpathissues.cpp
+)
+target_link_libraries(test_launcherpathissues PRIVATE kartend_utils Qt6::Test)
+add_test(NAME LauncherPathIssues COMMAND test_launcherpathissues)
 
 # DatLookup tests (Logiqx + MAME listxml DAT parsers + indexed store)
 add_executable(test_datlookup

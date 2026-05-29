@@ -14,7 +14,8 @@
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "coverflowwidget.h"
 #include "idatabasemanager.h"
 #include "ifiltermanager.h"
@@ -31,6 +32,7 @@
 #include <QFileInfo>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSet>
 
 CoverFlowController::CoverFlowController(QObject *parent) : QObject(parent) {
   // Resolve debouncer — coalesces per-tick DB + FS lookups during a wheel

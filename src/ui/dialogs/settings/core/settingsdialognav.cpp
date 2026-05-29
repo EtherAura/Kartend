@@ -26,6 +26,7 @@
 #include <QString>
 #include <QStringList>
 
+#include "collection/helpers.h"
 #include "settingsdialog.h"
 #include "settingskeys.h"
 #include "ui_settingsdialog.h"
@@ -203,6 +204,39 @@ void SettingsDialog::applyUniformPageWidgetSizing() {
           label->setMinimumWidth(kLabelMinWidth);
         }
       }
+    }
+  }
+}
+
+void SettingsDialog::setInitialPage(SettingsPage page) {
+  // SettingsPage::Default leaves the constructor's setCurrentRow(1) selection
+  // in place. Any other value is mapped to the kRolePage index of one of the
+  // addEntry() calls in setupNavigation(); we scan the categoryList for the
+  // matching row rather than hard-coding it so reorders of the addEntry()
+  // calls don't silently re-target the badge / future caller hints.
+  if (page == SettingsPage::Default) {
+    return;
+  }
+  int targetPage = -1;
+  switch (page) {
+  case SettingsPage::Default:
+    return;
+  case SettingsPage::Launchers:
+    // Application-tab Launchers — distinct from the per-collection Launcher
+    // row at page 3 (singular). The caller hint exists because the toolbar
+    // warning badge points users at the global launcher list, not the
+    // currently-selected collection's primary launcher override.
+    targetPage = 13;
+    break;
+  }
+  if (targetPage < 0) {
+    return;
+  }
+  for (int row = 0; row < ui->categoryList->count(); ++row) {
+    QListWidgetItem *item = ui->categoryList->item(row);
+    if (item->data(kRolePage).toInt() == targetPage) {
+      ui->categoryList->setCurrentRow(row);
+      return;
     }
   }
 }

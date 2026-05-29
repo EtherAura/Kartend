@@ -1,7 +1,8 @@
 #ifndef IMAINWINDOW_H
 #define IMAINWINDOW_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include <QList>
 #include <QString>
 

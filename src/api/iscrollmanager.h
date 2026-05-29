@@ -1,7 +1,7 @@
 #ifndef ISCROLLMANAGER_H
 #define ISCROLLMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include <QHash>
 #include <QObject>
 #include <QString>

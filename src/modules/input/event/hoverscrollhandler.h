@@ -2,7 +2,8 @@
 #define HOVERSCROLLHANDLER_H
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include <QObject>
 #include <QPoint>
 #include <QPointer>

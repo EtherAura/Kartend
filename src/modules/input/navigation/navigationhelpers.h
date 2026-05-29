@@ -2,6 +2,7 @@
 #define NAVIGATIONHELPERS_H
 
 #include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include <functional>
 #include <QList>
 #include <QString>

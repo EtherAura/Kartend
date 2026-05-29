@@ -4,6 +4,8 @@
 // tree gestures back into dialog UI stay on SettingsDialog because they
 // have non-tree side effects.
 #include "treemanager.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 
 #include "collectiontreewidget.h"
 

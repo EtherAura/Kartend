@@ -4,7 +4,8 @@
 //   - onItemCountLoaded (~215 LOC)
 // Both remain NavigationManager members and access existing class state.
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "emptystatewidget.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -116,6 +117,13 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   }
 
   titleLabel->setText(titleHtml);
+
+  // Kartend-w2n0: refresh the items-toolbar warning badge atomically with
+  // the title so an active-collection switch can't leave the badge state
+  // pointing at the prior collection. Callback may be null in tests.
+  if (m_refreshCollectionWarningBadge) {
+    m_refreshCollectionWarningBadge();
+  }
 
   // Show subfolder path if we're navigated into a virtual folder
   if (subfolderLabel) {

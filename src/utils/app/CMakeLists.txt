@@ -15,7 +15,6 @@ target_sources(kartend_utils PRIVATE
   collection/scraperoverrides_persistence.cpp
   collection/sidebarappearance_persistence.cpp
   collection/themepreset.cpp
-  collectionutils.cpp
   errorpresentation_default.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
@@ -52,7 +51,6 @@ target_sources(kartend_utils PRIVATE
   collection/sidebarappearance_persistence.h
   collection/themepreset.h
   collectiontypes.h
-  collectionutils.h
   errorpresentation.h
   errorutils.h
   interactionstateholder.h

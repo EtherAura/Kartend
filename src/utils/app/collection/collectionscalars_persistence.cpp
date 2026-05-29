@@ -1,4 +1,6 @@
 #include "collectionscalars_persistence.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 
 #include <QLoggingCategory>
 #include <QStringList>

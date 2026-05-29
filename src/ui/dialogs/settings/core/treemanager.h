@@ -1,7 +1,7 @@
 #ifndef TREEMANAGER_H
 #define TREEMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include <QHash>
 #include <QList>
 #include <QString>

@@ -1,6 +1,6 @@
 #include "splashpanel.h"
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_splashpanel.h"

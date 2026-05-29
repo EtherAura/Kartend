@@ -1,6 +1,6 @@
 #include "controlspanel.h"
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "gamepadcapturecontroller.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"

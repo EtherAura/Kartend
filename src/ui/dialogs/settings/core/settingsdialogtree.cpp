@@ -11,7 +11,7 @@
 #include <QComboBox>
 #include <QSignalBlocker>
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "settingsdialog.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"

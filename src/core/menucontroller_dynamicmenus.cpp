@@ -16,7 +16,7 @@
 
 #include "menucontroller.h"
 
-#include "collectionutils.h"
+#include "collection/collectionhierarchycache.h"
 #include "detailspanemanager.h"
 #include "historystore.h"
 #include "idatabasemanager.h"

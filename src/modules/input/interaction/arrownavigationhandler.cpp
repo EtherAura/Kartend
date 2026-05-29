@@ -1,7 +1,9 @@
 #include "arrownavigationhandler.h"
 #include "animationmanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "interactionstateholder.h"
 #include "iviewportmanager.h"
 #include "keyboardmanager.h"
@@ -9,10 +11,12 @@
 #include "selectionmanager.h"
 #include "uiconstants/mouse.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
+#include <QtCore/Qt>
 #include <QTimer>
 
 // ArrowNavigationHandlerSetup getter definitions (non-manager fields only).

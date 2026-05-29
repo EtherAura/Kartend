@@ -1,7 +1,7 @@
 #ifndef QUERYMANAGER_H
 #define QUERYMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"

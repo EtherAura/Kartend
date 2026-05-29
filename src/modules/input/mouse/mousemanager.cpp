@@ -2,7 +2,9 @@
 // finding.
 #include "mousemanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "gridlayoutcalculator.h"
 #include "ikeyboardmanager.h"
 #include "interactionstateholder.h"

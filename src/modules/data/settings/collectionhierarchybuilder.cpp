@@ -2,8 +2,8 @@
 
 #include <QStringList>
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 namespace {
 
 int findParentCollectionIndex(const QStringList &parts, const QString &immediateParentName,

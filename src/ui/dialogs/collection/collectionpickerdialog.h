@@ -4,9 +4,9 @@
 #include <QDialog>
 #include <QHash>
 #include <QList>
+#include <QSet>
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
 QT_BEGIN_NAMESPACE
 class QTreeWidget;
 class QTreeWidgetItem;

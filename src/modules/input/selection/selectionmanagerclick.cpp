@@ -12,7 +12,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "ianimationmanager.h"
 #include "iartworkmanager.h"
 #include "idetailspane.h"

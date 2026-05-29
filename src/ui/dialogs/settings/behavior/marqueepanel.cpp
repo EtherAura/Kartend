@@ -1,6 +1,6 @@
 #include "marqueepanel.h"
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_marqueepanel.h"

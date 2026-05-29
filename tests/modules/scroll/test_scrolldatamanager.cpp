@@ -5,7 +5,7 @@
  *        Kartend-83iu.
  */
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "scrolldatamanager.h"
 
 #include <QList>

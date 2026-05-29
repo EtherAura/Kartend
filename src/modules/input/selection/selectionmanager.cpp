@@ -13,7 +13,9 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/helpers.h"
 #include "ianimationmanager.h"
 #include "iartworkmanager.h"
 #include "idetailspane.h"

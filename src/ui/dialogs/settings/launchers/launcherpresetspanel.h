@@ -1,7 +1,7 @@
 #ifndef LAUNCHERPRESETSPANEL_H
 #define LAUNCHERPRESETSPANEL_H
 
-#include "collectionutils.h"
+#include "collection/launcherpreset.h"
 #include <QList>
 #include <QWidget>
 

@@ -8,10 +8,12 @@
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include <QtCore/Qt>
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
 #include "scrollmanager.h"

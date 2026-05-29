@@ -3,6 +3,8 @@
 #include "marqueecontroller.h"
 #include "applicationcontext.h"
 #include "artworkmanager.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "interactionmanager.h"
 #include "marqueewindow.h"
 #include "pathutils.h"

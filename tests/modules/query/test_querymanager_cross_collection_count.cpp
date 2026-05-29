@@ -17,7 +17,7 @@
 
 #include <utility>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "workersignalspy.h"
@@ -29,8 +29,7 @@ private slots:
   void duplicateNamedFilesCountSeparately();
 };
 
-template <typename Func>
-class ScopeExit {
+template <typename Func> class ScopeExit {
 public:
   explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
   ~ScopeExit() { m_func(); }
@@ -42,8 +41,7 @@ private:
   Func m_func;
 };
 
-template <typename Func>
-auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
+template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
   return ScopeExit<Func>(std::forward<Func>(func));
 }
 

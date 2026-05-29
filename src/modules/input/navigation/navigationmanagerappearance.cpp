@@ -1,5 +1,6 @@
 // Sibling TU: appearance/styling application for NavigationManager.
 #include "artworkutils.h"
+#include "collection/helpers.h"
 #include "collectionbackgroundcontroller.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

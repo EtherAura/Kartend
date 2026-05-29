@@ -7,7 +7,7 @@
 // stale results never overwrite a fresher SessionManager state.
 
 #include "cachedcountsservice.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "isessionmanager.h"
 
 #include <QObject>
@@ -34,8 +34,8 @@ public:
   [[nodiscard]] qint64 getGlobalItemCount() const override { return 0; }
   void setGlobalItemCount(qint64 /*count*/) override { ++m_setGlobalCount; }
   void setCollectionCounts(const CollectionConfig & /*collection*/,
-                           const QList<CollectionConfig> & /*allCollections*/,
-                           qint64 /*itemCount*/, qint64 /*recursiveCount*/) override {}
+                           const QList<CollectionConfig> & /*allCollections*/, qint64 /*itemCount*/,
+                           qint64 /*recursiveCount*/) override {}
   [[nodiscard]] bool getCollectionCounts(const CollectionConfig & /*collection*/,
                                          const QList<CollectionConfig> & /*allCollections*/,
                                          qint64 &itemCount, qint64 &recursiveCount) const override {
@@ -47,8 +47,7 @@ public:
                          const QStringList & /*filePaths*/,
                          const QHash<QString, QString> & /*fileNames*/,
                          const QHash<QString, QString> & /*artworkPaths*/) override {}
-  [[nodiscard]] CachedViewport
-  getCachedViewport(const QString & /*collectionKey*/) const override {
+  [[nodiscard]] CachedViewport getCachedViewport(const QString & /*collectionKey*/) const override {
     return {};
   }
   void clearStaleCollections(const QList<CollectionConfig> & /*currentCollections*/) override {}

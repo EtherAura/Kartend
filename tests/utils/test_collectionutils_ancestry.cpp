@@ -8,7 +8,9 @@
  * share the same tree-of-collections fixture pattern.
  */
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/helpers.h"
 #include <QTest>
 
 class TestCollectionUtilsAncestry : public QObject {

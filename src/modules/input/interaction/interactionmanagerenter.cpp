@@ -32,7 +32,9 @@
 #include "searchmanager.h"
 #include "selectionmanager.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

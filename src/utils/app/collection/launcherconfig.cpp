@@ -3,8 +3,11 @@
 // declaration in collection/launcherconfig.h.
 #include "launcherconfig.h"
 #include "launcherpreset.h"
+#include "pathutils.h"
 
+#include <QCoreApplication>
 #include <QList>
+#include <QStringList>
 
 namespace LauncherUtils {
 
@@ -24,6 +27,32 @@ LauncherConfig resolvePreset(const LauncherConfig &lc, const QList<LauncherPrese
     }
   }
   return lc;
+}
+
+QStringList launcherPathIssues(const LauncherProfile &profile) {
+  QStringList issues;
+  auto recordIssue = [&issues](const QString &fieldLabel, const QString &path) {
+    if (path.isEmpty()) return;
+    const PathUtils::PathStatus status = PathUtils::checkLauncherPath(path);
+    if (status == PathUtils::PathStatus::OK || status == PathUtils::PathStatus::Empty) {
+      return;
+    }
+    issues.append(QStringLiteral("%1 (%2): %3")
+                      .arg(fieldLabel, path, PathUtils::pathStatusDescription(status)));
+  };
+
+  recordIssue(QCoreApplication::translate("LauncherUtils", "Launcher"), profile.launcherPath);
+  for (int i = 0; i < profile.additionalLaunchers.size(); ++i) {
+    const auto &al = profile.additionalLaunchers[i];
+    const QString label =
+        al.name.trimmed().isEmpty()
+            ? QCoreApplication::translate("LauncherUtils", "Additional launcher %1").arg(i + 1)
+            : QCoreApplication::translate("LauncherUtils", "Additional launcher %1 (%2)")
+                  .arg(i + 1)
+                  .arg(al.name);
+    recordIssue(label, al.launcherPath);
+  }
+  return issues;
 }
 
 } // namespace LauncherUtils

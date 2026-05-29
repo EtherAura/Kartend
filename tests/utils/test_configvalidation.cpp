@@ -11,7 +11,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "configvalidation.h"
 
 class TestConfigValidation : public QObject {
@@ -337,8 +337,7 @@ void TestConfigValidation::isCommandInPath_findsCommonShellBuiltin() {
 }
 
 void TestConfigValidation::isCommandInPath_returnsFalseForGarbage() {
-  QVERIFY(!ConfigValidation::isCommandInPath(
-      QStringLiteral("kartend_no_such_executable_zzzzzzz")));
+  QVERIFY(!ConfigValidation::isCommandInPath(QStringLiteral("kartend_no_such_executable_zzzzzzz")));
 }
 
 QTEST_MAIN(TestConfigValidation)

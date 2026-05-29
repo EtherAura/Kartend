@@ -11,7 +11,8 @@
 #include <QString>
 #include <QStringList>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "errorutils.h"
 #include "setuputils.h"
 

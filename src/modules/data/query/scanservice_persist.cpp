@@ -20,6 +20,7 @@
 #include "batchsizes.h"
 #include "preparedstatementcache.h"
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <limits>
@@ -41,7 +42,8 @@
 #include <QVector>
 #include <stdexcept>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"

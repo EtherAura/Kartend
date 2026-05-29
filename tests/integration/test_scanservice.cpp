@@ -1,5 +1,6 @@
 #include "test_scanservice.h"
 
+#include <algorithm>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -11,7 +12,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
 

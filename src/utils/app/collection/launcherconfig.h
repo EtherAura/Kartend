@@ -11,13 +11,12 @@
 //   - LauncherUtils::usesLibretroCore / resolvePreset.
 // Kept in its own translation-unit-input so settings / launch / chooser
 // code paths can take the launcher cluster without dragging in
-// CollectionConfig + UIConstants. resolvePreset's implementation stays in
-// collectionutils.cpp during the Kartend-0yz3 split — moving it requires
-// either a new translation unit or rolling it into a future
-// launcherconfig.cpp.
+// CollectionConfig + UIConstants. resolvePreset's implementation lives in
+// collection/launcherconfig.cpp (Kartend-7uia).
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QtCore/Qt>
 
 #include "launcherpreset.h"
@@ -144,5 +143,17 @@ struct LauncherProfile {
   }
   bool operator!=(const LauncherProfile &other) const { return !(*this == other); }
 };
+
+namespace LauncherUtils {
+
+/// Walk the profile's primary + additionalLaunchers slots and return a
+/// user-facing string per slot whose launcherPath fails PathUtils::
+/// checkLauncherPath. Empty paths skip silently (they're "unconfigured", not
+/// "broken"). Each issue carries a localized field label + the raw path + a
+/// localized status description, matching the sidebar's `⚠ Launcher path`
+/// rows so the items-toolbar warning badge can reuse the strings verbatim.
+[[nodiscard]] QStringList launcherPathIssues(const LauncherProfile &profile);
+
+} // namespace LauncherUtils
 
 #endif

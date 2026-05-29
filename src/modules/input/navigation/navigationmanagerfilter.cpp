@@ -1,7 +1,8 @@
 // Filter and reload methods for NavigationManager.
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; this is a translation-unit split.
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "databasemanager.h"
 #include "iartworkmanager.h"
 #include "interactionmanager.h"

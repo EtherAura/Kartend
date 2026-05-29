@@ -1,7 +1,7 @@
 #ifndef SCANSERVICE_H
 #define SCANSERVICE_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "scanneditemstable.h"
 #include "scanworkcontroller.h"

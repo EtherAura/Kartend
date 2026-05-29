@@ -6,7 +6,7 @@
 // for the rationale of the friend pattern vs moving state.
 #include "detailspaneartwork.h"
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "detailspane.h"
 #include "extensionutils.h"
 #include "itemartwork.h"
@@ -15,6 +15,7 @@
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 
+#include <algorithm>
 #include <QDir>
 #include <QFile>
 #include <QFutureWatcher>

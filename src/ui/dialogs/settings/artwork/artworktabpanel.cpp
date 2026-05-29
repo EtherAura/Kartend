@@ -1,6 +1,6 @@
 #include "artworktabpanel.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "itemwidget.h"
 #include "pathstatusglyph.h"
 #include "pathutils.h"
@@ -9,6 +9,7 @@
 #include "settingsmodel.h"
 #include "ui_artworktabpanel.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCursor>

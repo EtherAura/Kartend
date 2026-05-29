@@ -17,7 +17,7 @@
 #include <QStringList>
 #include <QtGlobal>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "queryhelpers.h"

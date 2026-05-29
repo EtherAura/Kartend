@@ -1,7 +1,8 @@
 #ifndef MARQUEECONTROLLER_H
 #define MARQUEECONTROLLER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include <functional>
 #include <QList>
 #include <QObject>

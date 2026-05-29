@@ -1,7 +1,7 @@
 #ifndef CONFIGVALIDATION_H
 #define CONFIGVALIDATION_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include <QString>
 #include <QStringList>
 

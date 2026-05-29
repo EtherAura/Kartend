@@ -12,7 +12,8 @@
 #include <QTimer>
 
 #include "batchscraperunner.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "scrapepersistence.h"
 #include "scraperservice.h"
 #include "scrapertypes.h"

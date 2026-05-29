@@ -21,7 +21,8 @@
 #include <QTest>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/helpers.h"
 #include "databasemanager.h"
 #include "sessionmanager.h"
 
@@ -65,8 +66,7 @@ private:
 void TestDatabaseManager::initTestCase() {
   QStandardPaths::setTestModeEnabled(true);
   QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(
-      QStringLiteral("kartend-test-databasemanager"));
+  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-databasemanager"));
 }
 
 void TestDatabaseManager::cleanup() {
@@ -85,7 +85,8 @@ void TestDatabaseManager::testConstructDestruct_doesNotCrash() {
   // pool dirty.
   m_session = std::make_unique<SessionManager>();
   {
-    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
+    auto appCtx = makeCtxWithSession(m_session.get());
+    DatabaseManager db(&appCtx);
     Q_UNUSED(db);
   }
   // If we get here, the destructor returned within its bounded wait without
@@ -188,9 +189,8 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
   const qint64 elapsedMs = timer.elapsed();
 
   QVERIFY2(elapsedMs < 6000,
-           qPrintable(QStringLiteral(
-                          "DatabaseManager destructor took %1 ms during active "
-                          "scan — bounded-wait fallback may be regressing")
+           qPrintable(QStringLiteral("DatabaseManager destructor took %1 ms during active "
+                                     "scan — bounded-wait fallback may be regressing")
                           .arg(elapsedMs)));
 
   // The connection must be cleaned up regardless of whether the worker
@@ -206,7 +206,8 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
 
 void TestDatabaseManager::testResolveFilePath_absolutePathPassthrough() {
   m_session = std::make_unique<SessionManager>();
-  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
 
   CollectionContext ctx;
   ctx.currentIndex = 0;
@@ -218,28 +219,26 @@ void TestDatabaseManager::testResolveFilePath_absolutePathPassthrough() {
 
 void TestDatabaseManager::testResolveRelativeFilePath_emptyMapReturnsEmpty() {
   m_session = std::make_unique<SessionManager>();
-  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
 
   // No mapping available -> empty string (caller treats as "not resolvable").
   QHash<QString, QString> emptyMap;
-  QCOMPARE(db.resolveRelativeFilePath(QStringLiteral("foo.bin"), emptyMap),
-           QString());
+  QCOMPARE(db.resolveRelativeFilePath(QStringLiteral("foo.bin"), emptyMap), QString());
 }
 
 void TestDatabaseManager::testResolveRelativeFilePath_resolvesViaMap() {
   m_session = std::make_unique<SessionManager>();
-  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
 
   QHash<QString, QString> fileNames;
-  fileNames.insert(QStringLiteral("/abs/path/to/foo.bin"),
-                   QStringLiteral("foo.bin"));
-  fileNames.insert(QStringLiteral("/abs/path/to/bar.bin"),
-                   QStringLiteral("bar.bin"));
+  fileNames.insert(QStringLiteral("/abs/path/to/foo.bin"), QStringLiteral("foo.bin"));
+  fileNames.insert(QStringLiteral("/abs/path/to/bar.bin"), QStringLiteral("bar.bin"));
 
   // Looking up by display name should return the absolute path stored as the
   // key in the reverse-lookup map.
-  const QString resolved =
-      db.resolveRelativeFilePath(QStringLiteral("foo.bin"), fileNames);
+  const QString resolved = db.resolveRelativeFilePath(QStringLiteral("foo.bin"), fileNames);
   QCOMPARE(resolved, QStringLiteral("/abs/path/to/foo.bin"));
 }
 
@@ -332,9 +331,10 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() 
   db.purgeOrphanCollectionData({live});
 
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items"), 2);
-  QCOMPARE(scalar(insp, QStringLiteral("SELECT COUNT(*) FROM items WHERE collection_uuid='%1'")
-                            .arg(liveUuid)),
-           2);
+  QCOMPARE(
+      scalar(insp,
+             QStringLiteral("SELECT COUNT(*) FROM items WHERE collection_uuid='%1'").arg(liveUuid)),
+      2);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), 1);
 }
 

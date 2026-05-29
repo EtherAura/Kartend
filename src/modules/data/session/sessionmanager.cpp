@@ -1,7 +1,8 @@
 // Persists and restores selection state and item counts across application
 // sessions.
 #include "sessionmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 
@@ -15,6 +16,7 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 
 #include <QLoggingCategory>

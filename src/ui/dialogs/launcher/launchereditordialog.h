@@ -4,8 +4,8 @@
 #include <QDialog>
 #include <QList>
 
-#include "collectionutils.h"
-
+#include "collection/launcherconfig.h"
+#include "collection/launcherpreset.h"
 QT_BEGIN_NAMESPACE
 class QComboBox;
 class QFormLayout;

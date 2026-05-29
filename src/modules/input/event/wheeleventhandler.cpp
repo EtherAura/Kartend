@@ -15,7 +15,8 @@
 #include <QWidget>
 
 #include "animationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "idetailspane.h"

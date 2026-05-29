@@ -1,8 +1,12 @@
 // Stateless calculator for grid layout metrics and item positioning.
 #include "gridlayoutcalculator.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 
 #include <algorithm>
 #include <climits>
+#include <uiconstants/grid.h>
+#include <uiconstants/listview.h>
 
 auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int totalItems,
                                             bool sidebarShrinkingActive) -> GridMetrics {

@@ -8,7 +8,8 @@
 #include <QDir>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "detailspane.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

@@ -13,6 +13,7 @@
 
 #include <QHash>
 #include <QList>
+#include <QMetaType>
 #include <QString>
 #include <QStringList>
 
@@ -76,5 +77,10 @@ struct CollectionContext {
 
   [[nodiscard]] bool isValid() const { return currentIndex >= 0 || isRootView; }
 };
+
+// Kartend-1iq9: registered here (instead of in the collectionutils.h
+// umbrella) so callers that take CollectionContext through QVariant /
+// queued signals only pull in this leaf header.
+Q_DECLARE_METATYPE(CollectionContext)
 
 #endif

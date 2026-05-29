@@ -21,11 +21,14 @@
 #include "test_mainwindow_smoke.h"
 #include "test_navigationmanager.h"
 #include "test_scanservice.h"
+#include "test_scrapedialog_perf.h"
 #include "test_scrollmanager.h"
 #include "test_searchmanager.h"
 #include "test_selectiondisplaymanager.h"
 #include "test_selectionoverlaymanager.h"
 #include "test_settingsdialog_changes.h"
+#include "test_settingsdialog_navigation.h"
+#include "test_settingsdialog_perf.h"
 #include "test_settingsdialog_scope.h"
 #include "test_virtualcontainermanager.h"
 
@@ -124,6 +127,21 @@ int main(int argc, char *argv[]) {
   {
     TestSettingsDialogChanges sdCh;
     status |= QTest::qExec(&sdCh, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestSettingsDialogNavigation sdNav;
+    status |= QTest::qExec(&sdNav, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestSettingsDialogPerf sdPerf;
+    status |= QTest::qExec(&sdPerf, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestScrapeDialogPerf scrapePerf;
+    status |= QTest::qExec(&scrapePerf, argc, argv);
   }
   drainGlobalThreadPool();
   {

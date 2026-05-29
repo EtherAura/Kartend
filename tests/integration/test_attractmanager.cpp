@@ -2,7 +2,7 @@
 
 #include "applicationmanager.h"
 #include "attractmanager.h"
-#include "collectionutils.h" // brings GeneralSettings in transitively
+#include "collection/generalsettings.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"

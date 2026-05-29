@@ -7,7 +7,7 @@
 #include <QApplication>
 #include <QTimer>
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "detailspanemanager.h"
 #include "loadingoverlay.h"
 #include "navigationmanager.h"

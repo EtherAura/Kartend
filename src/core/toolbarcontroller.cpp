@@ -5,6 +5,10 @@
 // the previous mainwindow_toolbar.cpp + mainwindow_wiring.cpp partial-class
 // TUs that managed the same widgets through MainWindow::* members.
 #include "toolbarcontroller.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
+#include "collection/launcherconfig.h"
 
 #include "applicationmanager.h"
 #include "inavigationmanager.h"
@@ -25,6 +29,8 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSize>
+#include <QStringList>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -35,6 +41,7 @@ void ToolbarController::initialize(const Setup &setup) {
   m_viewModeButton = setup.viewModeButton;
   m_filterButton = setup.filterButton;
   m_homeButton = setup.homeButton;
+  m_collectionWarningBadge = setup.collectionWarningBadge;
   m_searchBar = setup.searchBar;
 }
 
@@ -183,6 +190,58 @@ void ToolbarController::refreshHomeButton(const GeneralSettings &gs) {
   m_homeButton->setIconSize(QSize(18, 18));
   const QString label = gs.homeViewLabel.trimmed();
   m_homeButton->setToolTip(label.isEmpty() ? tr("Home") : label);
+}
+
+void ToolbarController::setupCollectionWarningBadge() {
+  if (!m_collectionWarningBadge || !m_mainWindow) {
+    return;
+  }
+  // SP_MessageBoxWarning is the platform-themed triangle/exclamation glyph —
+  // matches every other "something is off" surface (sidebar, error dialogs)
+  // so users don't have to learn a new icon dialect for the toolbar badge.
+  const QIcon warningIcon =
+      m_collectionWarningBadge->style()->standardIcon(QStyle::SP_MessageBoxWarning);
+  m_collectionWarningBadge->setIcon(warningIcon);
+  m_collectionWarningBadge->setIconSize(QSize(18, 18));
+  MainWindow *mw = m_mainWindow;
+  // Click opens Settings so the user has a one-click path from "I see a
+  // warning" to "I can fix the path that triggered it". The Launchers
+  // page hint lands the dialog directly on the global launcher list —
+  // the only surface that owns the paths the badge actually flagged —
+  // so the user doesn't have to walk the navigation rail first.
+  QObject::connect(m_collectionWarningBadge, &QToolButton::clicked, this, [mw]() {
+    if (mw) {
+      mw->openSettingsDialog(SettingsPage::Launchers);
+    }
+  });
+}
+
+void ToolbarController::refreshCollectionWarningBadge() {
+  if (!m_collectionWarningBadge || !m_mainWindow) {
+    return;
+  }
+  QStringList issues;
+  const int idx = m_mainWindow->currentCollectionIndex;
+  if (idx >= 0 && idx < m_mainWindow->m_collections.size()) {
+    issues = LauncherUtils::launcherPathIssues(m_mainWindow->m_collections[idx].launcher);
+  }
+  const bool hasIssues = !issues.isEmpty();
+  m_collectionWarningBadge->setVisible(hasIssues);
+  if (hasIssues) {
+    // Header line names the kind of problem so the tooltip reads as a
+    // diagnostic instead of a bare path dump. Detail lines come straight
+    // from LauncherUtils::launcherPathIssues — identical wording to the
+    // sidebar's ⚠ Launcher path rows.
+    QString tooltip = tr("Launcher paths are unresolvable on this host:");
+    for (const QString &issue : issues) {
+      tooltip += QLatin1Char('\n') + issue;
+    }
+    tooltip += QLatin1Char('\n');
+    tooltip += tr("Click to open Settings → Launchers.");
+    m_collectionWarningBadge->setToolTip(tooltip);
+  } else {
+    m_collectionWarningBadge->setToolTip(QString());
+  }
 }
 
 void ToolbarController::connectFilterToolbar() {

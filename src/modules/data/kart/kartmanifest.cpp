@@ -1,10 +1,18 @@
 #include "kartmanifest.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+#include "collection/launcherconfig.h"
+#include "collection/launcherpreset.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <uiconstants/detailspaneconstants.h>
+#include <uiconstants/grid.h>
+#include <uiconstants/item.h>
+#include <uiconstants/listview.h>
 
 namespace KartManifest {
 

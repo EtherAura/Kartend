@@ -16,6 +16,8 @@
 // rebuildItemsList, setUnifiedSetupEnabled, startUnifiedScrape) stays in
 // scraperesultdialogunified.cpp.
 
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "scraperesultdialogunified.h"
 
 #include "scraperesultdialog.h"
@@ -25,6 +27,7 @@
 #include "mediatypecheckboxbuilder.h"
 #include "singleitemview.h"
 
+#include <algorithm>
 #include <limits>
 #include <QCheckBox>
 #include <QComboBox>

@@ -7,7 +7,7 @@
 #include <QSet>
 #include <QStringList>
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "historystore.h"
 #include "itemartwork.h"

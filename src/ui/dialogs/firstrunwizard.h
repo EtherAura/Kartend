@@ -4,8 +4,8 @@
 #include <QString>
 #include <QWizard>
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 QT_BEGIN_NAMESPACE
 class QLabel;
 class QLineEdit;

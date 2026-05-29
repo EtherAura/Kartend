@@ -5,7 +5,8 @@
 #include <QList>
 #include <QString>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/launcherpreset.h"
 #include "errorutils.h"
 #include "itemmetadata.h"
 #include "kartformat.h"

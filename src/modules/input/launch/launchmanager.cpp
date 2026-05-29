@@ -2,7 +2,9 @@
 // parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
+#include "collection/launcherpreset.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "pathutils.h"
@@ -21,6 +23,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
 #define debugLog(msg)                                                                              \

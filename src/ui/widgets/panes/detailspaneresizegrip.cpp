@@ -1,8 +1,9 @@
 #include "detailspaneresizegrip.h"
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "uiconstants/detailspaneconstants.h"
 
+#include <algorithm>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPoint>

@@ -1,7 +1,8 @@
 // Sibling TU: centering/scroll-to-visible logic for ViewportManager.
 #include "animationmanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
 #include "interactionstateholder.h"

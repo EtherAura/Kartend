@@ -1,7 +1,7 @@
 #ifndef GRIDLAYOUTCALCULATOR_H
 #define GRIDLAYOUTCALCULATOR_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "gridutils.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/listview.h"

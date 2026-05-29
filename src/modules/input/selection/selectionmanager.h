@@ -1,7 +1,8 @@
 #ifndef SELECTIONMANAGER_H
 #define SELECTIONMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
 #include "iselectionmanager.h"
 #include "setuputils.h"
 #include <QCoreApplication>

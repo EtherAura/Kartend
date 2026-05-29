@@ -350,7 +350,7 @@ Zoom ................ Ctrl+= / Ctrl+- / Ctrl+0
   `KARTEND_HAS_QT_GAMEPAD` / `KARTEND_HAS_SDL2_GAMEPAD` (see
   [CMakeLists.txt](../../CMakeLists.txt)).
 - Rebinding storage: `GeneralSettings::keyNav*` etc. in
-  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
+  [src/utils/app/collection/generalsettings.h](../../src/utils/app/collection/generalsettings.h).
 - Repeat-interval logic for List view's special-case faster cadence:
   see `keyboardmanager*.cpp` for the view-aware path.
 - Hold-scroll: `MouseManager::startHoldScroll()` / `holdScrollTimer`.

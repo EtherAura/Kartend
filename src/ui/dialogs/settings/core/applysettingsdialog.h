@@ -6,8 +6,7 @@
 #include <QHash>
 #include <QList>
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
 QT_BEGIN_NAMESPACE
 class QCheckBox;
 class QComboBox;

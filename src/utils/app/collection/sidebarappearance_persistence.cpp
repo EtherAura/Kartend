@@ -1,4 +1,6 @@
 #include "sidebarappearance_persistence.h"
+#include "collection/helpers.h"
+#include "collection/sidebarappearance.h"
 
 #include <QLoggingCategory>
 

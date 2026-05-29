@@ -4,7 +4,8 @@
 //   - sortFiles
 // These touch no QSqlDatabase or worker-thread state — they operate only
 // on caller-supplied containers / strings.
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "preparedstatementcache.h"
@@ -17,6 +18,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>

@@ -1,7 +1,7 @@
 #ifndef HEADERLOGOOVERLAY_H
 #define HEADERLOGOOVERLAY_H
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include <QPixmap>
 #include <QSize>
 #include <QString>

@@ -9,8 +9,8 @@
 #include <QDialog>
 #include <QPushButton>
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 void SettingsDialog::loadLinkedParentsToUI(const CollectionConfig &config) {
   m_workingAdditionalParentNames = config.additionalParentNames;
   updateLinkedParentsButtonLabel();

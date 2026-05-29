@@ -1,13 +1,15 @@
 #ifndef KEYBOARDMANAGER_H
 #define KEYBOARDMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "ikeyboardmanager.h"
 #include "setuputils.h"
 #include <QKeyEvent>
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
+#include <QtCore/Qt>
 #include <QTimer>
 
 class QWidget;

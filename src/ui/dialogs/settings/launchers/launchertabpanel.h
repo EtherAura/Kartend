@@ -1,7 +1,7 @@
 #ifndef LAUNCHERTABPANEL_H
 #define LAUNCHERTABPANEL_H
 
-#include "collectionutils.h"
+#include "collection/generalsettings.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE

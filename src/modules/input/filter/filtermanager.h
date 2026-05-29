@@ -1,7 +1,8 @@
 #ifndef FILTERMANAGER_H
 #define FILTERMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/collectionhierarchycache.h"
 #include "ifiltermanager.h"
 #include <QHash>
 #include <QList>

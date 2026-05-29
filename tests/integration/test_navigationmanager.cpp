@@ -1,7 +1,7 @@
 #include "test_navigationmanager.h"
 
 #include "applicationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "errorutils.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"

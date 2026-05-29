@@ -1,7 +1,7 @@
 #ifndef DETAILSPANEMANAGER_H
 #define DETAILSPANEMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "idetailspanemanager.h"
 #include "setuputils.h"
 #include <functional>

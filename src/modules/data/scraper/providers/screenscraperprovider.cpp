@@ -23,7 +23,8 @@
 #include <QUrlQuery>
 
 #include "bundledcredentials.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "datcache.h"
 #include "datlookup.h"
 #include "httpclient.h"

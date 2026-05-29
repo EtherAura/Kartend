@@ -4,15 +4,15 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 
 #include <QList>
 #include <QSet>
@@ -73,7 +73,8 @@ void TestApplicationManagerLifecycle::testGettersReturnNullBeforeInitialize() {
 void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
   ensureSandbox();
   ApplicationManager manager;
-  ApplicationContext appCtx; manager.initialize(&appCtx);
+  ApplicationContext appCtx;
+  manager.initialize(&appCtx);
 
   // Each getter must return a distinct, non-null pointer. Aliased managers
   // would indicate a wiring bug where ApplicationManager hands out the same
@@ -99,7 +100,8 @@ void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
 void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
   ensureSandbox();
   ApplicationManager manager;
-  ApplicationContext appCtx; manager.initialize(&appCtx);
+  ApplicationContext appCtx;
+  manager.initialize(&appCtx);
 
   // Kartend-d70s (re-attempted after Kartend-3v92 replaced
   // NavigationManager's parent()-based lifetime guards with the
@@ -129,7 +131,8 @@ void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
 void TestApplicationManagerLifecycle::testShutdownAfterInitializeIsSafe() {
   ensureSandbox();
   ApplicationManager manager;
-  ApplicationContext appCtx; manager.initialize(&appCtx);
+  ApplicationContext appCtx;
+  manager.initialize(&appCtx);
 
   // shutdown() with an empty collection list exercises every conditional
   // branch (`if (m_artworkManager)`, snapshotting, settings save, cache
@@ -153,6 +156,7 @@ void TestApplicationManagerLifecycle::testDestructAfterInitializeWithoutShutdown
   // destructor must wait for the deferred task before letting CacheManager
   // be destroyed (otherwise the worker would dereference a freed cache).
   ApplicationManager manager;
-  ApplicationContext appCtx; manager.initialize(&appCtx);
+  ApplicationContext appCtx;
+  manager.initialize(&appCtx);
   // Intentionally no shutdown() call — block scope ends and dtor runs.
 }

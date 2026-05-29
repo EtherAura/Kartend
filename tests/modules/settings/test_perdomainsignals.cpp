@@ -5,12 +5,13 @@
 // UUID. Verifies both the emit-on-diff path and the no-op-on-equal path
 // so a noisy regression (every Save firing every signal) gets caught.
 
+#include <algorithm>
 #include <QDir>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 

@@ -1,7 +1,7 @@
 // Executes SQLite queries on worker thread for paginated item loading and
 // filtering.
 #include "querymanager.h"
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
 #include "isessionmanager.h"
@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaType>
 #include <QMutex>
 #include <QRegularExpression>
 #include <QRunnable>

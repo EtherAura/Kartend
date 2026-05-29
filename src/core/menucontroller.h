@@ -6,7 +6,9 @@
 #include <QActionGroup>
 #include <QObject>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include "usagestatsstore.h"
 
 QT_BEGIN_NAMESPACE

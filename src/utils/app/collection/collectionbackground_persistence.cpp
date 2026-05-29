@@ -1,4 +1,6 @@
 #include "collectionbackground_persistence.h"
+#include "collection/collectionbackground.h"
+#include "collection/helpers.h"
 
 #include <QLoggingCategory>
 

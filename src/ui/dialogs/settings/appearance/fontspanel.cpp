@@ -1,6 +1,6 @@
 #include "fontspanel.h"
 
-#include "collectionutils.h"
+#include "collectiontypes.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_fontspanel.h"

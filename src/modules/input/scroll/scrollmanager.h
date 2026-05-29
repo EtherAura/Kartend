@@ -2,7 +2,9 @@
 #define SCROLLMANAGER_H
 
 #include "artworkpreviewoverlay.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include "gridlayoutcalculator.h"
 #include "iscrollmanager.h"
 #include "setuputils.h"

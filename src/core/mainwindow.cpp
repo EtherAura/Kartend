@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QDir>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -23,8 +24,10 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "attractmanager.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "collectionfilesystemwatcher.h"
-#include "collectionutils.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
 #include "dialogcontroller.h"
@@ -75,6 +78,7 @@
 #include <QMimeData>
 #include <QUrl>
 
+#include <algorithm>
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 

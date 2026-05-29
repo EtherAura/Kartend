@@ -17,7 +17,8 @@
 
 #include <cstdlib>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "errordialog.h"
 #include "errorpresentation.h"
 #include "errorutils.h"

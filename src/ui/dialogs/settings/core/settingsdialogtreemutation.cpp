@@ -14,8 +14,9 @@
 #include <QMessageBox>
 
 #include "applysettingsdialog.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "collectiontreewidget.h"
-#include "collectionutils.h"
 #include "createcollectiondialog.h"
 #include "pathutils.h"
 #include "settingsdialog.h"

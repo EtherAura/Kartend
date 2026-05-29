@@ -6,7 +6,7 @@
 #include <QTimer>
 
 #include "applicationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "dbeventscontroller.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"

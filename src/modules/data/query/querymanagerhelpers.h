@@ -28,7 +28,7 @@
 #include <QVector>
 #include <QWaitCondition>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "queryhelpers.h"
 #include "uiconstants/database.h"
 

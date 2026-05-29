@@ -6,6 +6,7 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include <QDir>
 #include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QSqlDatabase>

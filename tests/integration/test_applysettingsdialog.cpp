@@ -1,8 +1,8 @@
-#include "applicationmanager.h"
 #include "test_applysettingsdialog.h"
+#include "applicationmanager.h"
 
 #include "applysettingsdialog.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "settingsdialog.h"
 
 #include <QCheckBox>
@@ -70,7 +70,8 @@ QList<CollectionConfig> makeCollections() {
 void TestApplySettingsDialog::testDefaultMaskIsAll() {
   ApplySettingsDialog dialog(ApplySettingsDialog::Mode::Push, makeCollections(), 0,
                              ApplySettingsDialog::All);
-  QCOMPARE(dialog.selectedCategories(), ApplySettingsDialog::FieldCategories(ApplySettingsDialog::All));
+  QCOMPARE(dialog.selectedCategories(),
+           ApplySettingsDialog::FieldCategories(ApplySettingsDialog::All));
 }
 
 void TestApplySettingsDialog::testSelectNoneClearsMask() {

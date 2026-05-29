@@ -2,7 +2,10 @@
 // interface.
 #include "settingsmanager.h"
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
+#include "collection/launcherpreset.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "extensionutils.h"

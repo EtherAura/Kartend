@@ -19,7 +19,9 @@
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "detailspanemanager.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"

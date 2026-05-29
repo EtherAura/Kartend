@@ -1,7 +1,7 @@
 #ifndef ITEMWIDGETFACTORY_H
 #define ITEMWIDGETFACTORY_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
 #include <functional>
 #include <QObject>
 #include <QSet>

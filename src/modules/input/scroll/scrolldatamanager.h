@@ -1,7 +1,8 @@
 #ifndef SCROLLDATAMANAGER_H
 #define SCROLLDATAMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/collectionhierarchycache.h"
 #include <QDir>
 #include <QHash>
 #include <QList>

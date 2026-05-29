@@ -9,7 +9,8 @@
 //   - applyImmediateCenterSuppression
 // All operate on existing ViewportManager state.
 #include "animationmanager.h"
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"

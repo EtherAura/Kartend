@@ -1,7 +1,7 @@
 #include "navigationhelpers.h"
 
-#include "collectionutils.h"
-
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 #include <algorithm>
 
 namespace NavigationHelpers {

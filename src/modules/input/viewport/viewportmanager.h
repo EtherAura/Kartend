@@ -1,7 +1,8 @@
 #ifndef VIEWPORTMANAGER_H
 #define VIEWPORTMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "iviewportmanager.h"
 #include "setuputils.h"
 #include <QObject>

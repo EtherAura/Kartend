@@ -1,8 +1,10 @@
 #ifndef ISETTINGSMANAGER_H
 #define ISETTINGSMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "errorutils.h"
+#include "isettingsdialog.h" // for SettingsPage + ISettingsDialog
 #include <functional>
 #include <memory>
 #include <QList>
@@ -15,7 +17,6 @@ class INavigationManager;
 class IArtworkManager;
 class ICacheManager;
 class IDatabaseManager;
-class ISettingsDialog;
 
 struct SettingsDialogContext {
   QWidget *parent = nullptr;
@@ -42,6 +43,11 @@ struct SettingsDialogContext {
       std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
       std::function<void(int)> onRescanRequired)>
       createSettingsDialog;
+
+  /// Optional caller hint for the navigation row the dialog should land on
+  /// when it opens. Default leaves the dialog at its standard first row.
+  /// See SettingsPage for the curated set of public targets.
+  SettingsPage initialPage = SettingsPage::Default;
 };
 
 /**

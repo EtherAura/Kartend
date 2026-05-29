@@ -1,7 +1,9 @@
 #ifndef SEARCHMANAGER_H
 #define SEARCHMANAGER_H
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/collectionhierarchycache.h"
+#include "collection/generalsettings.h"
 #include "searchutils.h"
 #include "setuputils.h"
 #include "timerutils.h"

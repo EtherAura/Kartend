@@ -2,7 +2,8 @@
 #define SELECTIONDISPLAYMANAGER_H
 
 #include "artworkpreviewoverlay.h"
-#include "collectionutils.h"
+#include "collection/collectioncontext.h"
+#include "collection/generalsettings.h"
 #include "gridlayoutcalculator.h"
 #include <functional>
 #include <memory>

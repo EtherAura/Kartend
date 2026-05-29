@@ -17,7 +17,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "metadataproviderregistry.h"
 #include "pathutils.h"
 #include "retroarchutils.h"

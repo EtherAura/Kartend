@@ -11,7 +11,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collectionutils.h"
+#include "collection/helpers.h"
 #include "hoverscrollhandler.h"
 #include "idatabasemanager.h"
 #include "iselectionmanager.h"
@@ -21,6 +21,7 @@
 #include "wheeleventhandler.h"
 
 #include <QLoggingCategory>
+#include <QtCore/Qt>
 Q_DECLARE_LOGGING_CATEGORY(lcEventManager)
 #define debugLog(msg)                                                                              \
   do {                                                                                             \

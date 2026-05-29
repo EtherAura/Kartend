@@ -1,7 +1,7 @@
-#include "applicationmanager.h"
 #include "test_settingsdialog_scope.h"
+#include "applicationmanager.h"
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "settingsdialog.h"
 
 #include <QComboBox>
@@ -43,8 +43,7 @@ void TestSettingsDialogScope::testScopeChangeEmitsSignal() {
   QCOMPARE(combo->count(), 3);
 
   combo->setCurrentIndex(1);
-  QCOMPARE(dialog.currentSettingsScope(),
-           SettingsDialog::SettingsScope::CurrentAndSubcollections);
+  QCOMPARE(dialog.currentSettingsScope(), SettingsDialog::SettingsScope::CurrentAndSubcollections);
   QCOMPARE(spy.count(), 1);
 
   combo->setCurrentIndex(2);
@@ -110,10 +109,9 @@ void TestSettingsDialogScope::testNonPropagatableFieldsDisabledInWiderScope() {
   for (const char *name : kGatedFieldNames) {
     auto *w = dialog.findChild<QWidget *>(QString::fromLatin1(name));
     QVERIFY2(w, qPrintable(QStringLiteral("missing widget: %1").arg(name)));
-    QVERIFY2(!w->isEnabled(),
-             qPrintable(QStringLiteral("%1 should be disabled when scope is "
-                                       "CurrentAndSubcollections")
-                            .arg(name)));
+    QVERIFY2(!w->isEnabled(), qPrintable(QStringLiteral("%1 should be disabled when scope is "
+                                                        "CurrentAndSubcollections")
+                                             .arg(name)));
   }
 
   combo->setCurrentIndex(2); // All
@@ -121,8 +119,7 @@ void TestSettingsDialogScope::testNonPropagatableFieldsDisabledInWiderScope() {
     auto *w = dialog.findChild<QWidget *>(QString::fromLatin1(name));
     QVERIFY(w);
     QVERIFY2(!w->isEnabled(),
-             qPrintable(QStringLiteral("%1 should be disabled when scope is All")
-                            .arg(name)));
+             qPrintable(QStringLiteral("%1 should be disabled when scope is All").arg(name)));
   }
 }
 
@@ -137,9 +134,8 @@ void TestSettingsDialogScope::testFieldsReEnabledWhenScopeReturnsToCurrent() {
   for (const char *name : kGatedFieldNames) {
     auto *w = dialog.findChild<QWidget *>(QString::fromLatin1(name));
     QVERIFY(w);
-    QVERIFY2(w->isEnabled(),
-             qPrintable(QStringLiteral("%1 should be re-enabled when scope "
-                                       "returns to Current")
-                            .arg(name)));
+    QVERIFY2(w->isEnabled(), qPrintable(QStringLiteral("%1 should be re-enabled when scope "
+                                                       "returns to Current")
+                                            .arg(name)));
   }
 }

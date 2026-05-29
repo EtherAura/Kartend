@@ -2,6 +2,8 @@
 // UsageStatsStore and renders four tabs (most played / recently played /
 // per-collection breakdown / history) plus a header with whole-library totals.
 #include "statisticsdialog.h"
+#include "collection/collectionconfig.h"
+#include "collection/helpers.h"
 
 #include <algorithm>
 

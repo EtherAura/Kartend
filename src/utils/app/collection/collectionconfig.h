@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <QHash>
+#include <QMetaType>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -320,5 +321,10 @@ struct CollectionConfig {
         std::clamp(launcher.defaultLauncherIndex, 0, launcher.launcherCount() - 1);
   }
 };
+
+// Kartend-1iq9: registered here (instead of in the collectionutils.h
+// umbrella) so callers that take CollectionConfig through QVariant /
+// queued signals only pull in this leaf header.
+Q_DECLARE_METATYPE(CollectionConfig)
 
 #endif

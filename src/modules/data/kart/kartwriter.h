@@ -6,7 +6,8 @@
 #include <QObject>
 #include <QString>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
+#include "collection/launcherpreset.h"
 #include "errorutils.h"
 #include "kartformat.h"
 #include "kartmanifest.h"

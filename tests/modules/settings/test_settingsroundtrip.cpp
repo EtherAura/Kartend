@@ -11,7 +11,7 @@
 #include <QTest>
 #include <QTextStream>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 

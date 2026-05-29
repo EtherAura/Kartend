@@ -1,8 +1,7 @@
 #ifndef TOOLBARCONTROLLER_H
 #define TOOLBARCONTROLLER_H
 
-#include "collectionutils.h"
-
+#include "collection/generalsettings.h"
 #include <QHash>
 #include <QObject>
 
@@ -35,6 +34,7 @@ public:
     QToolButton *viewModeButton = nullptr;
     QToolButton *filterButton = nullptr;
     QToolButton *homeButton = nullptr;
+    QToolButton *collectionWarningBadge = nullptr;
     QLineEdit *searchBar = nullptr;
   };
 
@@ -65,6 +65,19 @@ public:
   /// visible iff useHomeView is on, icon is the user's homeViewIcon path
   /// (falling back to the themed go-home icon).
   void refreshHomeButton(const GeneralSettings &gs);
+
+  /// Wire the collection-warning badge: install the click handler that opens
+  /// Settings → Launchers and seed the icon to SP_MessageBoxWarning. The
+  /// badge stays hidden until refreshCollectionWarningBadge() finds an
+  /// unresolvable launcher path on the active collection.
+  void setupCollectionWarningBadge();
+
+  /// Recompute the badge state for the currently-active collection. Hides
+  /// the badge when the collection's launcher profile is clean; otherwise
+  /// shows it with a one-issue-per-line tooltip (delegating to
+  /// LauncherUtils::launcherPathIssues so the items-toolbar tooltip text
+  /// matches the sidebar's `⚠ Launcher path` rows verbatim).
+  void refreshCollectionWarningBadge();
 
   /// Apply the per-button visibility flags from @p gs to the toolbar's
   /// remaining user-toggleable widgets (filter button + search bar).
@@ -102,6 +115,7 @@ private:
   QToolButton *m_viewModeButton = nullptr;
   QToolButton *m_filterButton = nullptr;
   QToolButton *m_homeButton = nullptr;
+  QToolButton *m_collectionWarningBadge = nullptr;
   QLineEdit *m_searchBar = nullptr;
 
   QAction *m_searchModeAction = nullptr;

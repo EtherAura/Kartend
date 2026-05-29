@@ -31,6 +31,9 @@
 
 #include "attractmanager.h"
 #include "attractpanel.h"
+#include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
+#include "collection/helpers.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"

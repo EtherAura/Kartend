@@ -4,6 +4,7 @@
 // applyAppearance, paintEvent, captureLabelFontBaselines, applySidebarFont,
 // applyBubbleStyles. Member access only — these remain DetailsPane methods.
 
+#include <algorithm>
 #include <QColor>
 #include <QFont>
 #include <QLabel>
@@ -16,7 +17,7 @@
 #include <QSize>
 #include <QStyle>
 
-#include "collectionutils.h"
+#include "collection/collectionconfig.h"
 #include "detailspane.h"
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
