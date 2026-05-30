@@ -20,7 +20,7 @@ Combination Capacity:
     Easily supports 1 million+ unique filenames.
 
 Usage:
-    # Setup venv first (matches docs/seed-data.md):
+    # Setup venv first (matches docs/dev/seed-data.md):
     cd .scripts
     python -m venv .venv
     source .venv/bin/activate.fish  # or .venv/bin/activate for bash

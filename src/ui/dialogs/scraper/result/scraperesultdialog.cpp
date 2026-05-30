@@ -9,7 +9,10 @@
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
 #include "scraperesultdialogunified.h"
+#include "scraperesultselectionmodel.h"
+#include "scraperesultthumbnailloader.h"
 #include "singleitemview.h"
+#include "valuemarqueeticker.h"
 
 #include <limits>
 #include <QCheckBox>
@@ -79,7 +82,10 @@ constexpr int DIALOG_HEIGHT = 780;
 
 ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
                                        QList<Scraper::ScrapeCandidate> candidates, QWidget *parent)
-    : QDialog(parent), m_unified(std::make_unique<ScrapeResultDialogUnified>(this)) {
+    : QDialog(parent), m_unified(std::make_unique<ScrapeResultDialogUnified>(this)),
+      m_selectionModel(std::make_unique<ScrapeResultSelectionModel>(this)),
+      m_thumbLoader(std::make_unique<ScrapeResultThumbnailLoader>(this)),
+      m_marqueeTicker(std::make_unique<ValueMarqueeTicker>(this)) {
   setWindowTitle(tr("Scraper"));
   setModal(true);
   resize(DIALOG_WIDTH, DIALOG_HEIGHT);
@@ -156,7 +162,7 @@ void ScrapeResultDialog::hideEvent(QHideEvent *event) {
   // don't burn CPU updating widgets nobody can see. The itemCompleted
   // slot also short-circuits its pixmap-scale work via isVisible().
   m_liveTickTimer.stop();
-  m_marqueeTimer.stop();
+  m_marqueeTicker->pause();
   if (g_visibleInstanceCount > 0) {
     --g_visibleInstanceCount;
   }
@@ -173,7 +179,7 @@ void ScrapeResultDialog::showEvent(QShowEvent *event) {
   // a plain show() after a hide().
   if (m_service && m_service->isActive()) {
     if (m_liveTickTimerInited && !m_liveTickTimer.isActive()) m_liveTickTimer.start();
-    if (m_marqueeTimerInited && !m_marqueeTimer.isActive()) m_marqueeTimer.start();
+    m_marqueeTicker->resume();
   }
 }
 
@@ -429,19 +435,6 @@ void ScrapeResultDialog::setScraperContext(const ScraperContext &ctx) {
 
 void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QString &preItemPath) {
   m_unified->startUnifiedScrape(preCollectionIndex, preItemPath);
-}
-
-void ScrapeResultDialog::onCollectionTreeCurrentChanged(QTreeWidgetItem *current,
-                                                        QTreeWidgetItem *previous) {
-  m_unified->onCollectionTreeCurrentChanged(current, previous);
-}
-
-void ScrapeResultDialog::onCollectionCheckChanged(QTreeWidgetItem *item, int column) {
-  m_unified->onCollectionCheckChanged(item, column);
-}
-
-void ScrapeResultDialog::onItemCheckChanged(QListWidgetItem *item) {
-  m_unified->onItemCheckChanged(item);
 }
 
 void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {

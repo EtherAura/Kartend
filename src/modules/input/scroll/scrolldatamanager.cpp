@@ -2,7 +2,8 @@
 #include "artworkutils.h"
 #include "collection/collectioncontext.h"
 #include "collection/collectionhierarchycache.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include <algorithm>
 #include <QDir>
 #include <QFileInfo>

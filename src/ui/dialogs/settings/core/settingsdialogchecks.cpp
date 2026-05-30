@@ -213,173 +213,203 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   // (no per-control widgets), so compare the live list against the saved
   // baseline up front. Earlier guard so a preset edit always dirties the
   // dialog even when no other field changed.
-  if (m_generalSettings.launcherPresets != m_originalGeneralSettings.launcherPresets) {
+  if (m_generalSettings.launchers.launcherPresets !=
+      m_originalGeneralSettings.launchers.launcherPresets) {
     return true;
   }
   // GeneralSettingsPanel-owned fields (Selection & Display) — struct compare.
-  if (m_generalSettings.rememberSelection != m_originalGeneralSettings.rememberSelection ||
-      m_generalSettings.wrapNavigation != m_originalGeneralSettings.wrapNavigation ||
-      m_generalSettings.selectItemOnHover != m_originalGeneralSettings.selectItemOnHover ||
-      m_generalSettings.showTitleInPlaceholder !=
-          m_originalGeneralSettings.showTitleInPlaceholder) {
+  if (m_generalSettings.input.rememberSelection !=
+          m_originalGeneralSettings.input.rememberSelection ||
+      m_generalSettings.input.wrapNavigation != m_originalGeneralSettings.input.wrapNavigation ||
+      m_generalSettings.input.selectItemOnHover !=
+          m_originalGeneralSettings.input.selectItemOnHover ||
+      m_generalSettings.view.showTitleInPlaceholder !=
+          m_originalGeneralSettings.view.showTitleInPlaceholder) {
     return true;
   }
   // Splash fields live on SplashPanel, which keeps m_generalSettings live-
   // updated; compare struct-to-struct against the original snapshot rather
   // than going through the UI tree (the old widgets no longer exist on
   // ui_settingsdialog.h).
-  if (m_generalSettings.bootSplashEnabled != m_originalGeneralSettings.bootSplashEnabled ||
-      m_generalSettings.resumeFocusSplashEnabled !=
-          m_originalGeneralSettings.resumeFocusSplashEnabled ||
-      m_generalSettings.bootSplashTitle.trimmed() !=
-          m_originalGeneralSettings.bootSplashTitle.trimmed() ||
-      m_generalSettings.bootSplashSubtitle.trimmed() !=
-          m_originalGeneralSettings.bootSplashSubtitle.trimmed() ||
-      m_generalSettings.resumeFocusSplashTitle.trimmed() !=
-          m_originalGeneralSettings.resumeFocusSplashTitle.trimmed() ||
-      m_generalSettings.resumeFocusSplashSubtitle.trimmed() !=
-          m_originalGeneralSettings.resumeFocusSplashSubtitle.trimmed()) {
+  if (m_generalSettings.splash.bootSplashEnabled !=
+          m_originalGeneralSettings.splash.bootSplashEnabled ||
+      m_generalSettings.splash.resumeFocusSplashEnabled !=
+          m_originalGeneralSettings.splash.resumeFocusSplashEnabled ||
+      m_generalSettings.splash.bootSplashTitle.trimmed() !=
+          m_originalGeneralSettings.splash.bootSplashTitle.trimmed() ||
+      m_generalSettings.splash.bootSplashSubtitle.trimmed() !=
+          m_originalGeneralSettings.splash.bootSplashSubtitle.trimmed() ||
+      m_generalSettings.splash.resumeFocusSplashTitle.trimmed() !=
+          m_originalGeneralSettings.splash.resumeFocusSplashTitle.trimmed() ||
+      m_generalSettings.splash.resumeFocusSplashSubtitle.trimmed() !=
+          m_originalGeneralSettings.splash.resumeFocusSplashSubtitle.trimmed()) {
     return true;
   }
   // GeneralSettingsPanel-owned fields (Startup, Input Timing, Performance &
   // History) — struct compare against the original snapshot.
-  if (m_generalSettings.startupVideoEnabled != m_originalGeneralSettings.startupVideoEnabled ||
-      m_generalSettings.startupVideoPath.trimmed() !=
-          m_originalGeneralSettings.startupVideoPath.trimmed() ||
-      m_generalSettings.startupCollection != m_originalGeneralSettings.startupCollection ||
-      m_generalSettings.runtimeDetectionEnabled !=
-          m_originalGeneralSettings.runtimeDetectionEnabled ||
-      m_generalSettings.historyEnabled != m_originalGeneralSettings.historyEnabled ||
-      m_generalSettings.historyMaxEntries != m_originalGeneralSettings.historyMaxEntries ||
-      m_generalSettings.pixmapCacheSizeMB != m_originalGeneralSettings.pixmapCacheSizeMB ||
-      m_generalSettings.videoThumbnailExtractionTimeoutMs !=
-          m_originalGeneralSettings.videoThumbnailExtractionTimeoutMs ||
-      m_generalSettings.keyboardRepeatIntervalMs !=
-          m_originalGeneralSettings.keyboardRepeatIntervalMs ||
-      m_generalSettings.keyboardRepeatDelayMs != m_originalGeneralSettings.keyboardRepeatDelayMs ||
-      m_generalSettings.mouseWheelRows != m_originalGeneralSettings.mouseWheelRows ||
-      m_generalSettings.scrollAnimationDurationMs !=
-          m_originalGeneralSettings.scrollAnimationDurationMs ||
-      m_generalSettings.scrollVelocityMultiplier !=
-          m_originalGeneralSettings.scrollVelocityMultiplier ||
-      m_generalSettings.clickHoldDelayMs != m_originalGeneralSettings.clickHoldDelayMs ||
-      m_generalSettings.clickHoldRepeatIntervalMs !=
-          m_originalGeneralSettings.clickHoldRepeatIntervalMs ||
-      m_generalSettings.listKeyboardRepeatIntervalMs !=
-          m_originalGeneralSettings.listKeyboardRepeatIntervalMs ||
-      m_generalSettings.listClickHoldRepeatIntervalMs !=
-          m_originalGeneralSettings.listClickHoldRepeatIntervalMs) {
+  if (m_generalSettings.startup.startupVideoEnabled !=
+          m_originalGeneralSettings.startup.startupVideoEnabled ||
+      m_generalSettings.startup.startupVideoPath.trimmed() !=
+          m_originalGeneralSettings.startup.startupVideoPath.trimmed() ||
+      m_generalSettings.startup.startupCollection !=
+          m_originalGeneralSettings.startup.startupCollection ||
+      m_generalSettings.runtimeDetection.runtimeDetectionEnabled !=
+          m_originalGeneralSettings.runtimeDetection.runtimeDetectionEnabled ||
+      m_generalSettings.history.historyEnabled !=
+          m_originalGeneralSettings.history.historyEnabled ||
+      m_generalSettings.history.historyMaxEntries !=
+          m_originalGeneralSettings.history.historyMaxEntries ||
+      m_generalSettings.media.pixmapCacheSizeMB !=
+          m_originalGeneralSettings.media.pixmapCacheSizeMB ||
+      m_generalSettings.media.videoThumbnailExtractionTimeoutMs !=
+          m_originalGeneralSettings.media.videoThumbnailExtractionTimeoutMs ||
+      m_generalSettings.input.keyboardRepeatIntervalMs !=
+          m_originalGeneralSettings.input.keyboardRepeatIntervalMs ||
+      m_generalSettings.input.keyboardRepeatDelayMs !=
+          m_originalGeneralSettings.input.keyboardRepeatDelayMs ||
+      m_generalSettings.input.mouseWheelRows != m_originalGeneralSettings.input.mouseWheelRows ||
+      m_generalSettings.input.scrollAnimationDurationMs !=
+          m_originalGeneralSettings.input.scrollAnimationDurationMs ||
+      m_generalSettings.input.scrollVelocityMultiplier !=
+          m_originalGeneralSettings.input.scrollVelocityMultiplier ||
+      m_generalSettings.input.clickHoldDelayMs !=
+          m_originalGeneralSettings.input.clickHoldDelayMs ||
+      m_generalSettings.input.clickHoldRepeatIntervalMs !=
+          m_originalGeneralSettings.input.clickHoldRepeatIntervalMs ||
+      m_generalSettings.input.listKeyboardRepeatIntervalMs !=
+          m_originalGeneralSettings.input.listKeyboardRepeatIntervalMs ||
+      m_generalSettings.input.listClickHoldRepeatIntervalMs !=
+          m_originalGeneralSettings.input.listClickHoldRepeatIntervalMs) {
     return true;
   }
   // Title-tint fields owned by AppearanceColorsPanel — struct compare against
   // the original snapshot since the panel keeps m_generalSettings live.
-  if (m_generalSettings.titleTintSaturation != m_originalGeneralSettings.titleTintSaturation ||
-      m_generalSettings.titleTintLightness != m_originalGeneralSettings.titleTintLightness ||
-      m_generalSettings.titleBaseColor != m_originalGeneralSettings.titleBaseColor) {
+  if (m_generalSettings.appearance.titleTintSaturation !=
+          m_originalGeneralSettings.appearance.titleTintSaturation ||
+      m_generalSettings.appearance.titleTintLightness !=
+          m_originalGeneralSettings.appearance.titleTintLightness ||
+      m_generalSettings.appearance.titleBaseColor !=
+          m_originalGeneralSettings.appearance.titleBaseColor) {
     return true;
   }
   // Attract-mode fields owned by AttractPanel — struct compare against the
   // original snapshot since the panel keeps m_generalSettings live.
-  if (m_generalSettings.attractModeEnabled != m_originalGeneralSettings.attractModeEnabled ||
-      m_generalSettings.attractModeIdleTimeoutSec !=
-          m_originalGeneralSettings.attractModeIdleTimeoutSec ||
-      m_generalSettings.attractModeAutoScrollEnabled !=
-          m_originalGeneralSettings.attractModeAutoScrollEnabled ||
-      m_generalSettings.attractModeScrollSpeed !=
-          m_originalGeneralSettings.attractModeScrollSpeed ||
-      m_generalSettings.attractModeAdvanceSelectionEnabled !=
-          m_originalGeneralSettings.attractModeAdvanceSelectionEnabled ||
-      m_generalSettings.attractModeAdvanceSelectionIntervalSec !=
-          m_originalGeneralSettings.attractModeAdvanceSelectionIntervalSec ||
-      m_generalSettings.attractModeAdvanceSelectionRandom !=
-          m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
+  if (m_generalSettings.attract.attractModeEnabled !=
+          m_originalGeneralSettings.attract.attractModeEnabled ||
+      m_generalSettings.attract.attractModeIdleTimeoutSec !=
+          m_originalGeneralSettings.attract.attractModeIdleTimeoutSec ||
+      m_generalSettings.attract.attractModeAutoScrollEnabled !=
+          m_originalGeneralSettings.attract.attractModeAutoScrollEnabled ||
+      m_generalSettings.attract.attractModeScrollSpeed !=
+          m_originalGeneralSettings.attract.attractModeScrollSpeed ||
+      m_generalSettings.attract.attractModeAdvanceSelectionEnabled !=
+          m_originalGeneralSettings.attract.attractModeAdvanceSelectionEnabled ||
+      m_generalSettings.attract.attractModeAdvanceSelectionIntervalSec !=
+          m_originalGeneralSettings.attract.attractModeAdvanceSelectionIntervalSec ||
+      m_generalSettings.attract.attractModeAdvanceSelectionRandom !=
+          m_originalGeneralSettings.attract.attractModeAdvanceSelectionRandom) {
     return true;
   }
   // Marquee fields owned by MarqueePanel — same deferred-save shape as
   // AttractPanel, struct compare against the original snapshot.
-  if (m_generalSettings.marqueeEnabled != m_originalGeneralSettings.marqueeEnabled ||
-      m_generalSettings.marqueeScreenName != m_originalGeneralSettings.marqueeScreenName ||
-      m_generalSettings.marqueeMode != m_originalGeneralSettings.marqueeMode) {
+  if (m_generalSettings.marquee.marqueeEnabled !=
+          m_originalGeneralSettings.marquee.marqueeEnabled ||
+      m_generalSettings.marquee.marqueeScreenName !=
+          m_originalGeneralSettings.marquee.marqueeScreenName ||
+      m_generalSettings.marquee.marqueeMode != m_originalGeneralSettings.marquee.marqueeMode) {
     return true;
   }
   // Scraper options owned by ScraperSettingsPanel — also deferred-save
   // via panel.writeModel(); without this diff the dialog's "anything
   // changed?" check would miss them and skip persistence on close.
-  if (m_generalSettings.scraperOptions.preset != m_originalGeneralSettings.scraperOptions.preset ||
-      m_generalSettings.scraperOptions.mediaMaxDimension !=
-          m_originalGeneralSettings.scraperOptions.mediaMaxDimension ||
-      m_generalSettings.scraperOptions.mediaConcurrency !=
-          m_originalGeneralSettings.scraperOptions.mediaConcurrency ||
-      m_generalSettings.scraperOptions.mediaThrottleMs !=
-          m_originalGeneralSettings.scraperOptions.mediaThrottleMs ||
-      m_generalSettings.scraperOptions.batchItemConcurrency !=
-          m_originalGeneralSettings.scraperOptions.batchItemConcurrency ||
-      m_generalSettings.scraperOptions.rescrapeMode !=
-          m_originalGeneralSettings.scraperOptions.rescrapeMode ||
-      m_generalSettings.scraperOptions.skipRecentScrapeDays !=
-          m_originalGeneralSettings.scraperOptions.skipRecentScrapeDays) {
+  if (m_generalSettings.scraper.options.preset !=
+          m_originalGeneralSettings.scraper.options.preset ||
+      m_generalSettings.scraper.options.mediaMaxDimension !=
+          m_originalGeneralSettings.scraper.options.mediaMaxDimension ||
+      m_generalSettings.scraper.options.mediaConcurrency !=
+          m_originalGeneralSettings.scraper.options.mediaConcurrency ||
+      m_generalSettings.scraper.options.mediaThrottleMs !=
+          m_originalGeneralSettings.scraper.options.mediaThrottleMs ||
+      m_generalSettings.scraper.options.batchItemConcurrency !=
+          m_originalGeneralSettings.scraper.options.batchItemConcurrency ||
+      m_generalSettings.scraper.options.rescrapeMode !=
+          m_originalGeneralSettings.scraper.options.rescrapeMode ||
+      m_generalSettings.scraper.options.skipRecentScrapeDays !=
+          m_originalGeneralSettings.scraper.options.skipRecentScrapeDays) {
     return true;
   }
   // ScraperCredentialsPanel: full credential map compare. QHash
   // operator== checks size + key/value equality, so adding/removing
   // a provider or toggling any single field flips this.
-  if (m_generalSettings.scraperCredentials != m_originalGeneralSettings.scraperCredentials) {
+  if (m_generalSettings.scraper.credentials != m_originalGeneralSettings.scraper.credentials) {
     return true;
   }
   // Customizable toolbar fields owned by ToolbarPanel — struct compare.
-  if (m_generalSettings.toolbarShowGridViewButton !=
-          m_originalGeneralSettings.toolbarShowGridViewButton ||
-      m_generalSettings.toolbarShowListViewButton !=
-          m_originalGeneralSettings.toolbarShowListViewButton ||
-      m_generalSettings.toolbarShowCoverFlowViewButton !=
-          m_originalGeneralSettings.toolbarShowCoverFlowViewButton ||
-      m_generalSettings.toolbarShowHorizontalViewButton !=
-          m_originalGeneralSettings.toolbarShowHorizontalViewButton ||
-      m_generalSettings.toolbarShowHideSubcollectionsButton !=
-          m_originalGeneralSettings.toolbarShowHideSubcollectionsButton ||
-      m_generalSettings.toolbarShowTypeFilter != m_originalGeneralSettings.toolbarShowTypeFilter ||
-      m_generalSettings.toolbarShowTitleFilter !=
-          m_originalGeneralSettings.toolbarShowTitleFilter ||
-      m_generalSettings.toolbarShowSearchModeButton !=
-          m_originalGeneralSettings.toolbarShowSearchModeButton ||
-      m_generalSettings.toolbarShowSearchBar != m_originalGeneralSettings.toolbarShowSearchBar ||
-      m_generalSettings.toolbarGridViewButtonText !=
-          m_originalGeneralSettings.toolbarGridViewButtonText ||
-      m_generalSettings.toolbarListViewButtonText !=
-          m_originalGeneralSettings.toolbarListViewButtonText ||
-      m_generalSettings.toolbarCoverFlowViewButtonText !=
-          m_originalGeneralSettings.toolbarCoverFlowViewButtonText ||
-      m_generalSettings.toolbarHorizontalViewButtonText !=
-          m_originalGeneralSettings.toolbarHorizontalViewButtonText ||
-      m_generalSettings.toolbarHideSubcollectionsButtonText !=
-          m_originalGeneralSettings.toolbarHideSubcollectionsButtonText ||
-      m_generalSettings.toolbarTitleFilterText !=
-          m_originalGeneralSettings.toolbarTitleFilterText) {
+  if (m_generalSettings.toolbar.toolbarShowGridViewButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowGridViewButton ||
+      m_generalSettings.toolbar.toolbarShowListViewButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowListViewButton ||
+      m_generalSettings.toolbar.toolbarShowCoverFlowViewButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowCoverFlowViewButton ||
+      m_generalSettings.toolbar.toolbarShowHorizontalViewButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowHorizontalViewButton ||
+      m_generalSettings.toolbar.toolbarShowHideSubcollectionsButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowHideSubcollectionsButton ||
+      m_generalSettings.toolbar.toolbarShowTypeFilter !=
+          m_originalGeneralSettings.toolbar.toolbarShowTypeFilter ||
+      m_generalSettings.toolbar.toolbarShowTitleFilter !=
+          m_originalGeneralSettings.toolbar.toolbarShowTitleFilter ||
+      m_generalSettings.toolbar.toolbarShowSearchModeButton !=
+          m_originalGeneralSettings.toolbar.toolbarShowSearchModeButton ||
+      m_generalSettings.toolbar.toolbarShowSearchBar !=
+          m_originalGeneralSettings.toolbar.toolbarShowSearchBar ||
+      m_generalSettings.toolbar.toolbarGridViewButtonText !=
+          m_originalGeneralSettings.toolbar.toolbarGridViewButtonText ||
+      m_generalSettings.toolbar.toolbarListViewButtonText !=
+          m_originalGeneralSettings.toolbar.toolbarListViewButtonText ||
+      m_generalSettings.toolbar.toolbarCoverFlowViewButtonText !=
+          m_originalGeneralSettings.toolbar.toolbarCoverFlowViewButtonText ||
+      m_generalSettings.toolbar.toolbarHorizontalViewButtonText !=
+          m_originalGeneralSettings.toolbar.toolbarHorizontalViewButtonText ||
+      m_generalSettings.toolbar.toolbarHideSubcollectionsButtonText !=
+          m_originalGeneralSettings.toolbar.toolbarHideSubcollectionsButtonText ||
+      m_generalSettings.toolbar.toolbarTitleFilterText !=
+          m_originalGeneralSettings.toolbar.toolbarTitleFilterText) {
     return true;
   }
   // ControlsPanel-owned fields (Keyboard / Gamepad / Mouse) — struct compare.
-  if (m_generalSettings.keyNavUp != m_originalGeneralSettings.keyNavUp ||
-      m_generalSettings.keyNavDown != m_originalGeneralSettings.keyNavDown ||
-      m_generalSettings.keyNavLeft != m_originalGeneralSettings.keyNavLeft ||
-      m_generalSettings.keyNavRight != m_originalGeneralSettings.keyNavRight ||
-      m_generalSettings.keyConfirm != m_originalGeneralSettings.keyConfirm ||
-      m_generalSettings.keyBack != m_originalGeneralSettings.keyBack ||
-      m_generalSettings.keySearch != m_originalGeneralSettings.keySearch ||
-      m_generalSettings.keyHomeView != m_originalGeneralSettings.keyHomeView ||
-      m_generalSettings.gamepadUseDpad != m_originalGeneralSettings.gamepadUseDpad ||
-      m_generalSettings.gamepadUseLeftStick != m_originalGeneralSettings.gamepadUseLeftStick ||
-      m_generalSettings.gamepadConfirmButton != m_originalGeneralSettings.gamepadConfirmButton ||
-      m_generalSettings.gamepadBackButton != m_originalGeneralSettings.gamepadBackButton ||
-      m_generalSettings.gamepadToggleSidebarButton !=
-          m_originalGeneralSettings.gamepadToggleSidebarButton ||
-      m_generalSettings.artworkCycleModifier != m_originalGeneralSettings.artworkCycleModifier) {
+  if (m_generalSettings.keybindings.keyNavUp != m_originalGeneralSettings.keybindings.keyNavUp ||
+      m_generalSettings.keybindings.keyNavDown !=
+          m_originalGeneralSettings.keybindings.keyNavDown ||
+      m_generalSettings.keybindings.keyNavLeft !=
+          m_originalGeneralSettings.keybindings.keyNavLeft ||
+      m_generalSettings.keybindings.keyNavRight !=
+          m_originalGeneralSettings.keybindings.keyNavRight ||
+      m_generalSettings.keybindings.keyConfirm !=
+          m_originalGeneralSettings.keybindings.keyConfirm ||
+      m_generalSettings.keybindings.keyBack != m_originalGeneralSettings.keybindings.keyBack ||
+      m_generalSettings.keybindings.keySearch != m_originalGeneralSettings.keybindings.keySearch ||
+      m_generalSettings.keybindings.keyHomeView !=
+          m_originalGeneralSettings.keybindings.keyHomeView ||
+      m_generalSettings.gamepad.gamepadUseDpad !=
+          m_originalGeneralSettings.gamepad.gamepadUseDpad ||
+      m_generalSettings.gamepad.gamepadUseLeftStick !=
+          m_originalGeneralSettings.gamepad.gamepadUseLeftStick ||
+      m_generalSettings.gamepad.gamepadConfirmButton !=
+          m_originalGeneralSettings.gamepad.gamepadConfirmButton ||
+      m_generalSettings.gamepad.gamepadBackButton !=
+          m_originalGeneralSettings.gamepad.gamepadBackButton ||
+      m_generalSettings.gamepad.gamepadToggleSidebarButton !=
+          m_originalGeneralSettings.gamepad.gamepadToggleSidebarButton ||
+      m_generalSettings.input.artworkCycleModifier !=
+          m_originalGeneralSettings.input.artworkCycleModifier) {
     return true;
   }
-  if (m_generalSettings.useHomeView != m_originalGeneralSettings.useHomeView ||
-      m_generalSettings.homeViewLabel.trimmed() !=
-          m_originalGeneralSettings.homeViewLabel.trimmed() ||
-      m_generalSettings.homeViewIcon.trimmed() !=
-          m_originalGeneralSettings.homeViewIcon.trimmed()) {
+  if (m_generalSettings.startup.useHomeView != m_originalGeneralSettings.startup.useHomeView ||
+      m_generalSettings.startup.homeViewLabel.trimmed() !=
+          m_originalGeneralSettings.startup.homeViewLabel.trimmed() ||
+      m_generalSettings.startup.homeViewIcon.trimmed() !=
+          m_originalGeneralSettings.startup.homeViewIcon.trimmed()) {
     return true;
   }
   return false;

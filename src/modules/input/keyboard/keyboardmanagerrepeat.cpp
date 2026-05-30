@@ -10,7 +10,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "collectiontypes.h"
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
@@ -42,16 +42,17 @@ void KeyboardManager::beginHoldRepeat() {
   // mode
   int baseInterval;
   if (isListMode) {
-    baseInterval = m_generalSettings ? m_generalSettings->listKeyboardRepeatIntervalMs : 50;
+    baseInterval = m_generalSettings ? m_generalSettings->input.listKeyboardRepeatIntervalMs : 50;
   } else {
-    baseInterval = m_generalSettings ? m_generalSettings->keyboardRepeatIntervalMs : 260;
+    baseInterval = m_generalSettings ? m_generalSettings->input.keyboardRepeatIntervalMs : 260;
   }
   // scale the key-repeat cadence by the global scroll-velocity
   // multiplier. Higher multiplier → shorter interval → more items/second
   // while the arrow key is held. Helper guards against zero-division and
   // clamps the effective interval to at least 10ms to avoid saturating the
   // event loop.
-  const double velocityMult = m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
+  const double velocityMult =
+      m_generalSettings ? m_generalSettings->input.scrollVelocityMultiplier : 1.0;
   baseInterval = KeyboardHelpers::scaleRepeatInterval(baseInterval, velocityMult, 10);
   int verticalInterval = baseInterval;
   int horizontalInterval = baseInterval / 2;

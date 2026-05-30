@@ -121,16 +121,14 @@ public:
   // Delegated Getters
   // Manager accessors removed (Kartend-pefm). External callers route through
   // mainWindow->applicationManager()->getXxxManager(); internal callers
-  // use m_appManager directly. These three remain because they implement
-  // IMainWindow's pure-virtual accessors. Renamed without the "get" prefix
-  // so external grep for legacy 'mainWindow->getXxxManager' returns clean
-  // outside src/core/mainwindow*.cpp (Kartend-5wuk.1).
+  // use m_appManager directly. applicationManager() remains because it
+  // implements IMainWindow's sole pure-virtual manager accessor — the
+  // per-manager settingsManager()/scrollManager()/interactionManager()
+  // forwarders were dropped in Kartend-qjtz once the settings dialog moved
+  // to ApplicationContext-based sibling access.
   [[nodiscard]] ApplicationManager *applicationManager() const override {
     return m_appManager.get();
   }
-  [[nodiscard]] ISettingsManager *settingsManager() const override;
-  [[nodiscard]] ScrollManager *scrollManager() const override;
-  [[nodiscard]] InteractionManager *interactionManager() const override;
 
   /// Re-runs the playlist synthesis pass: drops any prior
   /// playlist-backed CollectionConfigs from m_collections, queries the live

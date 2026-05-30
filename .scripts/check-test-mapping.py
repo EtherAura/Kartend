@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
-"""Module → test directory mapping lint for Kartend.
+"""Directory mapping lint for Kartend's test tree.
 
-docs/testing.md documents that every `src/modules/<group>/<feature>/`
+docs/dev/testing.md documents that every `src/modules/<group>/<feature>/`
 feature owns a matching `tests/modules/<feature>/` folder, with the
 intermediate `behavior/data/input/media` group level dropped. Without a
 machine check, the two trees drift silently when a new module is added
 without a test folder, or when a test folder outlives its module.
 
-This lint walks both trees and fails when either direction breaks:
+This lint runs two sibling checks:
 
+  modules (bidirectional):
   - A `src/modules/<group>/<feature>/` with no `tests/modules/<feature>/`
     (unless the feature is in INTEGRATION_ONLY — UI-coordinator modules
     whose coverage lives entirely in tests/integration/).
   - A `tests/modules/<feature>/` with no `src/modules/<group>/<feature>/`.
+
+  utils (one-directional, test → src only):
+  - A `tests/utils/<cluster>/` with no `src/utils/<cluster>/`.
+    The flat tests/utils/ was split into app/db/fs/text/view clusters
+    mirroring src/utils/; this guards the mirror against drift
+    (a renamed/removed src cluster leaving an orphaned test folder).
+    The reverse direction is deliberately NOT enforced: many src/utils
+    clusters are header-only or intentionally untested (e.g. threading/),
+    so requiring a test folder per src cluster would be all false
+    positives. Presence, not file coverage — so no per-file allowlist.
 
 Pairs with .scripts/check-layering.py and .scripts/check-singleshot-comments.py
 in the maintenance-check CI job.
@@ -28,6 +39,8 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SRC_MODULES = REPO / "src" / "modules"
 TESTS_MODULES = REPO / "tests" / "modules"
+SRC_UTILS = REPO / "src" / "utils"
+TESTS_UTILS = REPO / "tests" / "utils"
 
 # Features whose coverage lives in tests/integration/ (UI-coordinator
 # managers that pull the full kartend_lib closure and can't be tested
@@ -49,14 +62,8 @@ INTEGRATION_ONLY: set[str] = {
 }
 
 
-def main() -> int:
-    if not SRC_MODULES.is_dir():
-        print(f"check-test-mapping: {SRC_MODULES} not found", file=sys.stderr)
-        return 2
-    if not TESTS_MODULES.is_dir():
-        print(f"check-test-mapping: {TESTS_MODULES} not found", file=sys.stderr)
-        return 2
-
+def check_modules() -> bool:
+    """src/modules <-> tests/modules, bidirectional. Returns True if clean."""
     # src/modules/<group>/<feature> — one entry per leaf feature dir.
     src_features: dict[str, str] = {}  # feature -> group
     for group_dir in sorted(SRC_MODULES.iterdir()):
@@ -102,13 +109,54 @@ def main() -> int:
                 "\nFix: rename the test folder to match the renamed feature, "
                 "or delete the test folder if the feature was removed."
             )
-        return 1
+        return False
 
     print(
         f"check-test-mapping: OK — {len(src_features)} src/modules features, "
         f"{len(test_features)} tests/modules folders aligned"
     )
-    return 0
+    return True
+
+
+def check_utils() -> bool:
+    """tests/utils -> src/utils, one-directional. Returns True if clean.
+
+    Only orphan test clusters fail (a tests/utils/<cluster>/ with no
+    src/utils/<cluster>/). src/utils clusters without a test folder are
+    allowed — see the module docstring for why the reverse isn't enforced.
+    """
+    src_clusters: set[str] = {d.name for d in SRC_UTILS.iterdir() if d.is_dir()}
+    test_clusters: set[str] = {d.name for d in TESTS_UTILS.iterdir() if d.is_dir()}
+
+    orphan_tests = sorted(c for c in test_clusters if c not in src_clusters)
+    if orphan_tests:
+        print("check-test-mapping: tests/utils folders with no matching src/utils cluster:")
+        for cluster in orphan_tests:
+            print(f"  tests/utils/{cluster}/  ->  src/utils/{cluster}/ (missing)")
+        print(
+            "\nFix: rename the test folder to match the renamed src/utils cluster, "
+            "or delete it if the cluster was removed."
+        )
+        return False
+
+    print(
+        f"check-test-mapping: OK — {len(test_clusters)} tests/utils folders all mirror a "
+        f"src/utils cluster ({len(src_clusters)} src/utils clusters; untested clusters allowed)"
+    )
+    return True
+
+
+def main() -> int:
+    for path in (SRC_MODULES, TESTS_MODULES, SRC_UTILS, TESTS_UTILS):
+        if not path.is_dir():
+            print(f"check-test-mapping: {path} not found", file=sys.stderr)
+            return 2
+
+    # Run both checks unconditionally so a single invocation reports every
+    # drift, rather than stopping at the first failing tree.
+    modules_ok = check_modules()
+    utils_ok = check_utils()
+    return 0 if (modules_ok and utils_ok) else 1
 
 
 if __name__ == "__main__":

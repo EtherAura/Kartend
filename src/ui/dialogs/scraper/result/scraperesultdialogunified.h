@@ -20,24 +20,27 @@ class MetadataLookupProvider;
 class ScrapeResultDialog;
 
 /// Owns the unified-flow behaviour previously embedded in ScrapeResultDialog:
-/// collection-tree population, per-collection item lists, the auto / interactive
-/// queue walker, the ScraperService signal handlers, the live-metadata panel
-/// renderer, and the per-150-ms marquee timer. Methods here read / write host
-/// state (m_scraperCtx, m_service, m_unifiedPage, m_collectionTree,
-/// m_unifiedItemsList, m_unifiedQueue, m_unifiedPhase, the live-metadata
-/// QLineEdit/QTextBrowser children, etc.) and host UI widgets via the
-/// friend-class privilege declared on ScrapeResultDialog. The host's other
-/// surfaces (legacy single-item candidate picker, BatchScrapeRunner progress
-/// view) remain on ScrapeResultDialog directly.
+/// the live-view panel builder, the auto / interactive queue walker, the
+/// ScraperService signal handlers, and the live-metadata panel renderer.
+/// Three sibling helpers — owned by the host alongside this one — hold the
+/// state and logic that used to sit on ScrapeResultDialog: the collection-tree
+/// + items-list selection model is ScrapeResultSelectionModel, the recent-media
+/// thumbnail decode/append is ScrapeResultThumbnailLoader, and the per-150-ms
+/// value marquee is ValueMarqueeTicker. Methods here read / write the host's
+/// remaining unified state (m_scraperCtx, m_service, m_unifiedPage,
+/// m_unifiedQueue, m_unifiedPhase, the live-metadata QLineEdit/QTextBrowser
+/// children, etc.) and host UI widgets via the friend-class privilege declared
+/// on ScrapeResultDialog. The host's other surfaces (legacy single-item
+/// candidate picker, BatchScrapeRunner progress view) remain on
+/// ScrapeResultDialog directly.
 ///
 /// Coupling: takes the host ScrapeResultDialog via the constructor so the
 /// helper can reach the shared state members the host's slot trampolines also
-/// read. State is intentionally NOT moved off the host — it stays where the
-/// existing access sites already reference it (host slots, setScraperService's
-/// connect table, the constructor's UI builder). This class is a method-
-/// organising extraction (Kartend-izpz, the 3fkz step-3 split) that pulls the
-/// ~1100 LOC of unified flow out of the 2566-LOC scraperesultdialog.cpp while
-/// keeping the SingleItem / Batch flows anchored on ScrapeResultDialog.
+/// read. The unified flow's own runtime state stays on the host; the
+/// collection-selection, thumbnail, and marquee responsibilities were lifted
+/// into the sibling helpers above so each owns the data its methods mutate.
+/// This pulls the unified flow out of scraperesultdialog.cpp while keeping the
+/// SingleItem / Batch flows anchored on ScrapeResultDialog.
 class ScrapeResultDialogUnified : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScrapeResultDialogUnified)
@@ -53,9 +56,6 @@ public:
   // Each method here is the body of a host slot of the same name. The host
   // keeps the slot declaration (Qt's connect() requires a QObject-derived
   // receiver) and forwards to these.
-  void onCollectionTreeCurrentChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
-  void onCollectionCheckChanged(QTreeWidgetItem *item, int column);
-  void onItemCheckChanged(QListWidgetItem *item);
   void onScrapeClicked();
   void showScrapeErrorDetails();
   void onServiceScrapeStarted(int total);
@@ -72,12 +72,8 @@ public:
 
   // ── Non-slot helpers ───────────────────────────────────────────────────
   void buildUnifiedPanel();
-  void populateCollectionTree();
-  void rebuildItemsList(int collectionIndex);
-  void applyCollectionCheckState(int collectionIndex, bool checked);
   void setUnifiedSetupEnabled(bool enabled);
   void updateUnifiedProgressLabel();
-  [[nodiscard]] int totalCheckedItemCount() const;
   void startNextCollectionInQueue();
   void runAutoCollection(int collectionIndex, const QStringList &items);
   void runInteractiveCollection(int collectionIndex, const QStringList &items);
@@ -87,8 +83,6 @@ public:
   void interactiveOnSkipped();
   void finishCurrentApply();
   void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
-  void appendThumbAsync(const QString &path);
-  void tickValueMarquees();
   void populateCustomFields(const QHash<QString, QString> &fields);
 
   /// Derive the media-asset list for the Unified-Interactive Apply path

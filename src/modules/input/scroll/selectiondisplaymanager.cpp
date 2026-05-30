@@ -55,11 +55,11 @@ void SelectionDisplayManager::applyGeneralSettings(const GeneralSettings *settin
   if (!settings) {
     return;
   }
-  if (settings->listCollectionColumnWidth > 0) {
-    m_collectionColumnWidth = settings->listCollectionColumnWidth;
+  if (settings->view.listCollectionColumnWidth > 0) {
+    m_collectionColumnWidth = settings->view.listCollectionColumnWidth;
   }
-  if (settings->listArtworkColumnWidth > 0) {
-    m_artworkColumnWidth = settings->listArtworkColumnWidth;
+  if (settings->view.listArtworkColumnWidth > 0) {
+    m_artworkColumnWidth = settings->view.listArtworkColumnWidth;
   }
 }
 

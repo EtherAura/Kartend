@@ -5,7 +5,7 @@
 // These touch no QSqlDatabase or worker-thread state — they operate only
 // on caller-supplied containers / strings.
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "preparedstatementcache.h"

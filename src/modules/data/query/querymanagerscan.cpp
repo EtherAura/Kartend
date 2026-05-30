@@ -14,7 +14,7 @@
 #include <QStringList>
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 
 QStringList QueryManager::loadOrScanCollection(int collectionIndex,
                                                const CollectionConfig &collection,

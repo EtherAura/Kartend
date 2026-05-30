@@ -23,7 +23,8 @@
 #include <stdexcept>
 
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"

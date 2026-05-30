@@ -5,7 +5,10 @@ target_sources(kartend_ui PRIVATE
   result/scraperesultdialog.cpp
   result/scraperesultdialogunified.cpp
   result/scraperesultdialogunified_runtime.cpp
+  result/scraperesultselectionmodel.cpp
+  result/scraperesultthumbnailloader.cpp
   result/singleitemview.cpp
+  result/valuemarqueeticker.cpp
   scrapejobgrouping.cpp
   scrapercredentialsdialog.cpp
   scrapercredentialspanel.cpp
@@ -16,7 +19,10 @@ target_sources(kartend_ui PRIVATE
   result/batchprogressview.h
   result/scraperesultdialog.h
   result/scraperesultdialogunified.h
+  result/scraperesultselectionmodel.h
+  result/scraperesultthumbnailloader.h
   result/singleitemview.h
+  result/valuemarqueeticker.h
   scrapejobgrouping.h
   scrapercredentialsdialog.h
   scrapercredentialspanel.h

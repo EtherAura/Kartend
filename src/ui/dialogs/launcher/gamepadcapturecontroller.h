@@ -4,6 +4,7 @@
 #include <QMetaObject>
 #include <QObject>
 
+class ApplicationContext;
 class SettingsDialog;
 class QCheckBox;
 class QLineEdit;
@@ -16,11 +17,12 @@ class QString;
 /// state of the sibling D-Pad / left-stick checkboxes while a capture is
 /// in flight).
 ///
-/// Coupling: takes its host SettingsDialog at construction so it can find
-/// MainWindow → InteractionManager → GamepadManager and re-trigger the
-/// dialog's checkForChanges. Widgets are bound explicitly via
-/// setWidgets(); the panel that owns them (ControlsPanel) hands them
-/// across.
+/// Coupling: takes its host SettingsDialog plus the ApplicationContext at
+/// construction. The GamepadManager is resolved through
+/// ctx->interactionManager()->gamepadManager() (Kartend-qjtz), not by
+/// dynamic_cast-ing the host's parent to IMainWindow. Widgets are bound
+/// explicitly via setWidgets(); the panel that owns them (ControlsPanel)
+/// hands them across.
 class GamepadCaptureController : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(GamepadCaptureController)
@@ -42,7 +44,7 @@ public:
     QCheckBox *useLeftStickCheckBox = nullptr;
   };
 
-  explicit GamepadCaptureController(SettingsDialog *host);
+  explicit GamepadCaptureController(SettingsDialog *host, const ApplicationContext *ctx);
 
   /// Install widget pointers. Triggers a refresh so the buttons reflect
   /// the current target state.
@@ -68,6 +70,7 @@ private:
   void onButtonPressed(const QString &buttonName);
 
   SettingsDialog *m_host;
+  const ApplicationContext *m_ctx = nullptr;
   Bindings m_bindings;
   Target m_target = Target::None;
   QMetaObject::Connection m_captureConnection;

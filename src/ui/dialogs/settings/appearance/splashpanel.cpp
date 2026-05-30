@@ -40,30 +40,32 @@ void SplashPanel::refresh() {
     return;
   }
   SettingsFormBinding::loadInto(ui->bootSplashCheckBox,
-                                m_model->generalSettings->bootSplashEnabled);
+                                m_model->generalSettings->splash.bootSplashEnabled);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashCheckBox,
-                                m_model->generalSettings->resumeFocusSplashEnabled);
+                                m_model->generalSettings->splash.resumeFocusSplashEnabled);
   SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit,
-                                m_model->generalSettings->bootSplashTitle);
+                                m_model->generalSettings->splash.bootSplashTitle);
   SettingsFormBinding::loadInto(ui->bootSplashSubtitleLineEdit,
-                                m_model->generalSettings->bootSplashSubtitle);
+                                m_model->generalSettings->splash.bootSplashSubtitle);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashTitleLineEdit,
-                                m_model->generalSettings->resumeFocusSplashTitle);
+                                m_model->generalSettings->splash.resumeFocusSplashTitle);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashSubtitleLineEdit,
-                                m_model->generalSettings->resumeFocusSplashSubtitle);
+                                m_model->generalSettings->splash.resumeFocusSplashSubtitle);
 }
 
 void SplashPanel::writeBack() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_model->generalSettings->bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
-  m_model->generalSettings->resumeFocusSplashEnabled = ui->resumeFocusSplashCheckBox->isChecked();
-  m_model->generalSettings->bootSplashTitle = ui->bootSplashTitleLineEdit->text().trimmed();
-  m_model->generalSettings->bootSplashSubtitle = ui->bootSplashSubtitleLineEdit->text().trimmed();
-  m_model->generalSettings->resumeFocusSplashTitle =
+  m_model->generalSettings->splash.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
+  m_model->generalSettings->splash.resumeFocusSplashEnabled =
+      ui->resumeFocusSplashCheckBox->isChecked();
+  m_model->generalSettings->splash.bootSplashTitle = ui->bootSplashTitleLineEdit->text().trimmed();
+  m_model->generalSettings->splash.bootSplashSubtitle =
+      ui->bootSplashSubtitleLineEdit->text().trimmed();
+  m_model->generalSettings->splash.resumeFocusSplashTitle =
       ui->resumeFocusSplashTitleLineEdit->text().trimmed();
-  m_model->generalSettings->resumeFocusSplashSubtitle =
+  m_model->generalSettings->splash.resumeFocusSplashSubtitle =
       ui->resumeFocusSplashSubtitleLineEdit->text().trimmed();
   emit changed();
 }

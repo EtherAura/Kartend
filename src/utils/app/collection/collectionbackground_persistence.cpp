@@ -1,10 +1,9 @@
 #include "collectionbackground_persistence.h"
 #include "collection/collectionbackground.h"
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 
 #include <QLoggingCategory>
 
-#include "helpers.h"
 #include "settingskeys.h"
 
 namespace keys = kartend::settings::keys;

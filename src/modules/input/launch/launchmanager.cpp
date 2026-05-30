@@ -3,8 +3,8 @@
 #include "launchmanager.h"
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
 #include "collection/launcherpreset.h"
+#include "collection/typehelpers.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "pathutils.h"
@@ -67,7 +67,7 @@ int LaunchManager::promptLauncherChoice(const QString &collectionName,
 }
 
 bool LaunchManager::runtimeDetectionEnabled() const {
-  return m_generalSettings && m_generalSettings->runtimeDetectionEnabled;
+  return m_generalSettings && m_generalSettings->runtimeDetection.runtimeDetectionEnabled;
 }
 
 QString LaunchManager::resolveCollectionUuid(int collectionIndex) const {
@@ -386,8 +386,9 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
         // resolve preset references so the chooser shows the
         // preset's current name instead of a stale inline copy.
         const LauncherConfig effective = LauncherUtils::resolvePreset(
-            collection.launcher.launcherAt(i),
-            m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+            collection.launcher.launcherAt(i), m_generalSettings
+                                                   ? m_generalSettings->launchers.launcherPresets
+                                                   : QList<LauncherPreset>{});
         launcherNames << (effective.name.trimmed().isEmpty()
                               ? collection.launcher.launcherDisplayName(i)
                               : effective.name.trimmed());
@@ -416,7 +417,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // inline ones; otherwise the inline fields are used as-is.
   const LauncherConfig launcher = LauncherUtils::resolvePreset(
       collection.launcher.launcherAt(resolvedLauncherIndex),
-      m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+      m_generalSettings ? m_generalSettings->launchers.launcherPresets : QList<LauncherPreset>{});
 
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;

@@ -3,7 +3,7 @@
 #include <QStringList>
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 namespace {
 
 int findParentCollectionIndex(const QStringList &parts, const QString &immediateParentName,

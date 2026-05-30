@@ -6,7 +6,7 @@
 // for the rationale of the friend pattern vs moving state.
 #include "detailspaneartwork.h"
 
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 #include "detailspane.h"
 #include "extensionutils.h"
 #include "itemartwork.h"

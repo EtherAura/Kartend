@@ -5,7 +5,7 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
 #include "interactionstateholder.h"
@@ -118,7 +118,7 @@ int ViewportManager::computeVerticalCenterDuration(int distance, bool repeatActi
     itemHeight = (*m_collections)[*m_currentCollectionIndex].gridLayout.itemHeight;
     vSpacing = (*m_collections)[*m_currentCollectionIndex].gridLayout.verticalSpacing;
   }
-  int speedLevel = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int speedLevel = m_generalSettings ? m_generalSettings->input.scrollAnimationDurationMs : 1500;
   return AnimationManager::computeVerticalCenterDuration(distance, itemHeight, vSpacing,
                                                          repeatActive, speedLevel);
 }

@@ -4,7 +4,7 @@
 
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "iartworkmanager.h" // unused but pulled along by ApplicationContext header chain
 #include "idatabasemanager.h"
 #include "iscrollmanager.h"

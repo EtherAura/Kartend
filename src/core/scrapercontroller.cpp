@@ -21,7 +21,8 @@
 #include "artworkutils.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
+#include "collection/validationhelpers.h"
 #include "detailspanemanager.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
@@ -151,7 +152,7 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
       writes.append(w);
     }
     const Scraper::RescrapeMode rescrapeMode =
-        static_cast<Scraper::RescrapeMode>(generalSettings->scraperOptions.rescrapeMode);
+        static_cast<Scraper::RescrapeMode>(generalSettings->scraper.options.rescrapeMode);
     (void)Scraper::applyScrapedItem(innerDb, uuid, filePath, artworkDir, baseName, result.item,
                                     writes, rescrapeMode);
   };
@@ -252,12 +253,12 @@ void ScraperController::promptResumePendingScrapeIfAny() {
   };
   m_scraperService->setContext(srvCtx);
 
-  // Auto-resume is gated by GeneralSettings::ScraperOptions::scrapeAutoResume.
+  // Auto-resume is gated by ScraperOptions::scrapeAutoResume.
   // Off by default — first-time users see the modal Resume / Discard prompt
   // below and learn the recovery path. Power users running unattended
   // overnight batches flip it on so a crash + relaunch self-heals without a
   // dialog blocking the resume.
-  const bool autoResume = generalSettings && generalSettings->scraperOptions.scrapeAutoResume;
+  const bool autoResume = generalSettings && generalSettings->scraper.options.scrapeAutoResume;
   if (autoResume) {
     m_scraperService->loadPendingState(/*consumeOnLoad=*/true);
     m_scraperService->resumeFromState(pending);

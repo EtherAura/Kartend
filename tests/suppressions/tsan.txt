@@ -1,0 +1,168 @@
+# ThreadSanitizer suppressions for known third-party / Qt-internal false
+# positives. See docs/dev/sanitizer-suppressions.md for the suppression
+# policy + audit notes (Kartend-3hjs.2). Each block below cites a closed
+# bd issue documenting the group's rationale.
+#
+# https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# ─── Group A: Qt internal event-queue mutex (Kartend-feqz) ──────────────
+# Qt synchronises queued-connection post→consume through the event
+# queue's QMutex, but QMutex's fast path is futex/atomic-based — not a
+# pthread_mutex TSan intercepts — so the happens-before edge is invisible.
+# TSan reports the queued-arg malloc on the posting thread as racing
+# with the queued-arg free on the consuming thread, even though Qt's
+# internal lock fully orders them. None of these are fixable in Kartend
+# code; re-evaluate when CI bumps Qt to a version that exposes the
+# QMutex futex acquire/release as TSan-visible atomics.
+
+# Qt::BlockingQueuedConnection slot dispatch: main thread heap-allocates a
+# QSlotObject and the worker thread reads its vtable. Synchronisation is
+# inside Qt's QMetaObject (via internal QMutex) and isn't visible to TSan.
+race:QtPrivate::QSlotObject
+
+# QObject::deleteLater() Qt event-queue lifecycle: deleteLater allocates a
+# deferred-deletion QEvent on the calling thread, posts it onto the
+# target object's thread, and the target's event loop frees it via
+# QCoreApplicationPrivate::sendPostedEvents. Qt synchronises via the
+# event-queue mutex, but the new/delete pair on the bare QEvent struct
+# isn't observable to TSan as happens-before.
+race:QObject::deleteLater
+race:QCoreApplicationPrivate::sendPostedEvents
+
+# Queued-connection arg lifecycle across the event-queue boundary: main
+# thread allocates the slot args via QMetaType::create (operator new + copy
+# ctor) into the QMetaCallEvent payload and the worker thread consumes
+# them via QMetaType::destroy (~QList → QArrayDataPointer::deref → operator
+# delete) after dispatching the slot. Surfaces under
+# test_databasemanager's destruct-mid-scan test, which exercises teardown
+# while the worker is still draining queued events.
+race:QMetaCallEvent
+race:QArrayDataPointer<CollectionConfig>::deref
+race:QArrayDataPointer<CollectionContext>::deref
+
+# ScrapeWriteWorker (and similar moveToThread'd QObject workers) receive
+# queued signals carrying heap-allocated payloads. Same Qt event-queue-mutex
+# happens-before edge as the QMetaCallEvent suppression above, but the
+# specific symbol on this stack is QMetaType::create.
+race:QMetaType::create
+
+# Queued QMetaObject::invokeMethod(obj, functor): the calling thread
+# heap-allocates a QtPrivate::QFunctorSlotObject wrapping the functor,
+# posts it to the target object's thread, and that thread runs it. Qt
+# orders the post-then-run pair through the event-queue mutex but its
+# fast path is futex/atomic-based — not a pthread_mutex TSan intercepts.
+race:invokeMethod
+
+# QNetworkAccessManager → main-thread queued QByteArray payload: the QNAM
+# thread allocates the response body via QByteArray::QByteArray and Qt
+# queues it across to the main-thread slot via the meta-call event queue.
+# Same fundamental pattern as the queued-arg suppressions above, but the
+# visible top frames on this stack are QByteArray-specific.
+race:QByteArray::reallocData
+race:QByteArray::QByteArray
+
+# ─── Group B: Qt thread lifecycle (Kartend-8fh5) ────────────────────────
+# QThread::wait + QFuture::waitForFinished provably synchronise the worker
+# thread before destructors proceed, but libQt6Core's stripped frames
+# hide the happens-before edge from TSan. The QtConcurrent thread pool
+# also reuses worker threads, so the access-history buffer keeps stale
+# addresses from the previous task and the next task on the same pooled
+# thread appears racy against the previous one's COW operations.
+
+# QueryManager destructor races: the destructor runs on the worker thread
+# (Qt deleteLater pattern), tearing down member state — the shared_ptr<
+# atomic_bool> control block, the QObject base, etc. — while the owning
+# DatabaseManager / test fixture on the main thread is still inside
+# requestCancelScan() or QObject::~QObject() reading those same members.
+# The atomic_bool itself is correctly synchronized via memory_order; the
+# control-block / vtable teardown isn't observable to TSan as a
+# happens-before edge across the deleteLater dispatch boundary.
+race:QueryManager::~QueryManager
+race:_Sp_counted_ptr_inplace
+race:_Sp_counted_base
+
+# QWaitCondition / QMutex tear-down at process exit: ApplicationManager
+# owns a QWaitCondition that's torn down from MainWindow::~MainWindow on
+# the main thread. TSan flags pthread_cond_destroy / pthread_mutex_destroy
+# against earlier waits on a worker thread that has already returned.
+race:pthread_cond_destroy
+race:pthread_mutex_destroy
+race:QWaitCondition::~QWaitCondition
+
+# QtTest's per-test "QtTest Watchdog" thread waits on a pthread_cond_t for
+# the test-timeout signal. When the test finishes, qExec cancels the
+# watchdog and frees its cond_var/mutex — but TSan flags the
+# pthread_cond_wait (which has already returned) as racing with operator
+# delete in the qRun teardown. Surfaces under CPU contention only.
+race:QTest::qRun
+
+# Qt copy-on-write data structures (QHash, QString, QByteArray, ...)
+# allocate their underlying buffers via QArrayData::allocate, often from
+# a worker QThread. Once the worker finishes and is joined, main thread
+# later frees the buffer through normal RAII (DatabaseManager /
+# QueryManager destructors). TSan can't establish the happens-before
+# edge through Qt's QThread::wait into the thread's earlier malloc.
+race:QArrayData::allocate
+
+# Realloc / detach path of the same COW buffers. When two QtConcurrent::run
+# tasks (BatchScrapeRunner::applyAndFinish dispatches one per item)
+# capture QString / QList members of the runner by value, the captures
+# share the COW source buffer. Pool-reuse artifact, not a real race.
+race:QArrayData::reallocateUnaligned
+
+# CacheManager::initialize() runs on a QtConcurrent::run worker thread.
+# ApplicationManager::~ApplicationManager() calls m_cacheInitFuture
+# .waitForFinished() before tearing the CacheManager down. TSan still
+# flags a race because Qt's QFuture::reportFinished -> waitForFinished
+# acquire chain doesn't propagate happens-before into the QMutex unlock
+# atomic that the worker did *inside* the now-freed CacheManager.
+race:CacheManager::initialize
+
+# Same teardown race seen from the destructor side: the QtConcurrent
+# cache-init lambda in ApplicationManager::initialize reads CacheManager
+# state while CacheManager::~CacheManager frees it.
+race:CacheManager::~CacheManager
+
+# ArtworkLoadDispatcher::dispatchBatch worker-thread lambda teardown:
+# QtConcurrent::run dispatches a worker that captures a QList<ArtworkInfo>
+# by move. When the worker returns, the captured QList destructs on the
+# pool worker thread, freeing each ArtworkInfo — which holds a
+# QPointer<ItemWidget>. The QPointer's underlying QWeakPointer atomically
+# derefs a refcount in the ItemWidget's d-pointer. Meanwhile the test's
+# main thread is qDeleteAll()-ing the same ItemWidgets.
+race:ArtworkInfo::~ArtworkInfo
+
+# HttpClient::drainHost first-use spin-up of QNetworkAccessManager's
+# internal QThread 'QNetworkAccessM': the first send() in the lifetime
+# of a test process triggers Qt's lazy QNAM thread initialisation. Qt's
+# QThread::start / QThread::wait pair synchronises this, but the
+# libQt6Core frames between pthread_create and the QNAM thread body are
+# stripped. Only the start-up window of a fresh QNAM is racy.
+race:Scraper::HttpClient::drainHost
+
+# ─── Group C: Third-party library sync primitives (Kartend-d4x4) ────────
+# These libraries use sync primitives TSan can't observe; the races
+# originate inside them. None are fixable in Kartend code; re-evaluate
+# when CI bumps the third-party dep or when the Qt Multimedia backend
+# switches off PulseAudio + GStreamer (e.g. to ffmpeg).
+
+# QThread + glib GMainContext wakeup: GMainContext writes to an eventfd
+# from the worker thread to wake the main loop, and the main thread reads
+# it on shutdown. glib's internal mutex covers this but the eventfd
+# handle write itself isn't ordered against the read in a way TSan can
+# observe.
+called_from_lib:libglib-2.0.so
+
+# QtMultimedia / PulseAudio backend: VideoPreviewWidget construction
+# triggers QPlatformMediaIntegration which spawns PulseAudio's
+# threaded-ml thread. All races here are inside libpulsecommon
+# (pa_mutex_lock vs pa_xmalloc on the threaded-ml thread); pulseaudio
+# uses its own sync primitives that TSan can't observe.
+called_from_lib:libpulsecommon
+
+# QtMultimedia / GStreamer backend: VideoThumbnailExtractor and other
+# media widgets fall through to the gstreamer backend on Linux when
+# ffmpeg isn't selected. gstreamer manages its own per-thread allocators
+# and frees on pipeline tear-down from a worker thread that TSan can't
+# reason about.
+called_from_lib:libgstreamer-1.0.so

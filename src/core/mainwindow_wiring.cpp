@@ -150,7 +150,8 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
+#include "collection/typehelpers.h"
 #include "databasemanager.h"
 #include "dbeventscontroller.h"
 #include "detailspanemanager.h"
@@ -354,7 +355,7 @@ void MainWindow::connectDatabaseManager() {
   // edit to the launcher block in Settings → Launchers re-resolves paths
   // and clears/raises the chip without waiting for the user to switch
   // collections. archiveOptionsChanged has no UI surface yet (LaunchManager
-  // reads collections fresh per launch — see docs/settings-hotreload.md).
+  // reads collections fresh per launch — see docs/dev/settings-hotreload.md).
   if (m_toolbarController) {
     auto refreshBadge = [this](int, const LauncherProfile &) {
       if (m_toolbarController) {
@@ -371,7 +372,7 @@ void MainWindow::connectDatabaseManager() {
   // scraperOptionsChanged / scraperOverridesChanged: ScreenScraperProvider
   //   re-reads ctx-routed scraper options on every fetch, and ScraperService
   //   re-reads scraperOverrides per item via the active collection. No
-  //   connect needed today; see docs/settings-hotreload.md.
+  //   connect needed today; see docs/dev/settings-hotreload.md.
 
   // DatabaseManager / SettingsManager → DetailsPaneManager (sidebar summary)
   if (details) {

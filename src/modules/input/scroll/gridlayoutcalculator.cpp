@@ -1,7 +1,7 @@
 // Stateless calculator for grid layout metrics and item positioning.
 #include "gridlayoutcalculator.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 
 #include <algorithm>
 #include <climits>

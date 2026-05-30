@@ -73,14 +73,14 @@ add_test(NAME LaunchManager COMMAND test_launchmanager)
 
 # PathUtils tests
 add_executable(test_pathutils
-  utils/test_pathutils.cpp
+  utils/fs/test_pathutils.cpp
 )
 target_link_libraries(test_pathutils PRIVATE kartend_utils Qt6::Test)
 add_test(NAME PathUtils COMMAND test_pathutils)
 
 # VideoUtils tests
 add_executable(test_videoutils
-  utils/test_videoutils.cpp
+  utils/view/test_videoutils.cpp
 )
 target_link_libraries(test_videoutils PRIVATE kartend_utils Qt6::Test)
 add_test(NAME VideoUtils COMMAND test_videoutils)
@@ -88,14 +88,14 @@ add_test(NAME VideoUtils COMMAND test_videoutils)
 # ExtensionUtils tests (image-decode allowlist guard — keeps scraped .pdf
 # manuals out of QImageReader / Qt's abort()-prone PDF image plugin)
 add_executable(test_extensionutils
-  utils/test_extensionutils.cpp
+  utils/fs/test_extensionutils.cpp
 )
 target_link_libraries(test_extensionutils PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ExtensionUtils COMMAND test_extensionutils)
 
 # SearchQueryParser tests (Kartend-9qv2). Pure string -> struct, no DB.
 add_executable(test_searchqueryparser
-  utils/test_searchqueryparser.cpp
+  utils/text/test_searchqueryparser.cpp
 )
 target_link_libraries(test_searchqueryparser PRIVATE kartend_utils Qt6::Test)
 add_test(NAME SearchQueryParser COMMAND test_searchqueryparser)
@@ -111,49 +111,49 @@ add_test(NAME CollectionFilesystemWatcher COMMAND test_collectionfilesystemwatch
 
 # ThemePreset tests (Kartend-y3rg). JSON round-trip + file I/O + apply.
 add_executable(test_themepreset
-  utils/test_themepreset.cpp
+  utils/app/test_themepreset.cpp
 )
 target_link_libraries(test_themepreset PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ThemePreset COMMAND test_themepreset)
 
 # PresentationProfile tests (Kartend-6pp5). JSON round-trip + apply + registry.
 add_executable(test_presentationprofile
-  utils/test_presentationprofile.cpp
+  utils/app/test_presentationprofile.cpp
 )
 target_link_libraries(test_presentationprofile PRIVATE kartend_utils Qt6::Test)
 add_test(NAME PresentationProfile COMMAND test_presentationprofile)
 
 # CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
 add_executable(test_collectionhealth
-  utils/test_collectionhealth.cpp
+  utils/db/test_collectionhealth.cpp
 )
 target_link_libraries(test_collectionhealth PRIVATE kartend_utils Qt6::Test)
 add_test(NAME CollectionHealth COMMAND test_collectionhealth)
 
 # MetadataQueue tests (Kartend-gtly). Pure analyzer over a metadata loader closure.
 add_executable(test_metadataqueue
-  utils/test_metadataqueue.cpp
+  utils/db/test_metadataqueue.cpp
 )
 target_link_libraries(test_metadataqueue PRIVATE kartend_utils Qt6::Test)
 add_test(NAME MetadataQueue COMMAND test_metadataqueue)
 
 # ArtworkCandidates tests (Kartend-y02i). Pure ranker, no filesystem.
 add_executable(test_artworkcandidates
-  utils/test_artworkcandidates.cpp
+  utils/view/test_artworkcandidates.cpp
 )
 target_link_libraries(test_artworkcandidates PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ArtworkCandidates COMMAND test_artworkcandidates)
 
 # FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
 add_executable(test_fuzzymatch
-  utils/test_fuzzymatch.cpp
+  utils/text/test_fuzzymatch.cpp
 )
 target_link_libraries(test_fuzzymatch PRIVATE kartend_utils Qt6::Test)
 add_test(NAME FuzzyMatch COMMAND test_fuzzymatch)
 
 # BulkEdit tests (Kartend-hrff). Pure logic over ItemMetadata, no DB.
 add_executable(test_bulkedit
-  utils/test_bulkedit.cpp
+  utils/db/test_bulkedit.cpp
 )
 target_link_libraries(test_bulkedit PRIVATE kartend_utils Qt6::Test)
 add_test(NAME BulkEdit COMMAND test_bulkedit)
@@ -164,7 +164,7 @@ add_test(NAME BulkEdit COMMAND test_bulkedit)
 # Forces the offscreen platform via add_test PROPERTIES so the binary runs
 # headless on CI without an X/Wayland session.
 add_executable(test_placeholderwarmer
-  utils/test_placeholderwarmer.cpp
+  utils/view/test_placeholderwarmer.cpp
 )
 target_link_libraries(test_placeholderwarmer PRIVATE kartend_utils Qt6::Test)
 add_test(NAME PlaceholderWarmer COMMAND test_placeholderwarmer)
@@ -208,7 +208,7 @@ target_link_libraries(test_pathstatusglyph PRIVATE kartend_ui kartend_input kart
 add_test(NAME PathStatusGlyph COMMAND test_pathstatusglyph)
 
 # GridUtils tests
-add_executable(test_gridutils utils/test_gridutils.cpp)
+add_executable(test_gridutils utils/view/test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME GridUtils COMMAND test_gridutils)
 
@@ -316,7 +316,7 @@ target_link_libraries(test_artworkmanager PRIVATE kartend_media kartend_data kar
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 
 # StringUtils tests (header-only)
-add_executable(test_stringutils utils/test_stringutils.cpp)
+add_executable(test_stringutils utils/text/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
 
@@ -324,14 +324,14 @@ add_test(NAME StringUtils COMMAND test_stringutils)
 # path sanitization). pathutils.cpp is compiled in because cliargs.cpp
 # routes --import-kart / --to through PathUtils::expandAndValidateCliPath.
 add_executable(test_cliargs
-  utils/test_cliargs.cpp
+  utils/app/test_cliargs.cpp
 )
 target_link_libraries(test_cliargs PRIVATE kartend_utils Qt6::Test)
 add_test(NAME CliArgs COMMAND test_cliargs)
 
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
-  utils/test_titlefilter.cpp
+  utils/text/test_titlefilter.cpp
 )
 target_link_libraries(test_titlefilter PRIVATE kartend_utils Qt6::Test)
 add_test(NAME TitleFilter COMMAND test_titlefilter)
@@ -341,7 +341,8 @@ add_test(NAME TitleFilter COMMAND test_titlefilter)
 # tree walk vs cycle detection) and so future additions live in their
 # cohesive home rather than accreting into a single mega-file.
 set(_kartend_collectionutils_test_sources
-  ${SRC_DIR}/utils/app/collection/helpers.cpp
+  ${SRC_DIR}/utils/app/collection/hierarchyhelpers.cpp
+  ${SRC_DIR}/utils/app/collection/typehelpers.cpp
   ${SRC_DIR}/utils/app/collection/collectionhierarchycache.cpp
   ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
@@ -359,7 +360,7 @@ set(_kartend_collectionutils_test_includes
 
 # alignment + viewtype + index validation + categorization + identity + context
 add_executable(test_collectionutils_alignment
-  utils/test_collectionutils_alignment.cpp
+  utils/app/test_collectionutils_alignment.cpp
   ${_kartend_collectionutils_test_sources}
 )
 target_include_directories(test_collectionutils_alignment PRIVATE
@@ -370,7 +371,7 @@ add_test(NAME CollectionUtilsAlignment COMMAND test_collectionutils_alignment)
 
 # ancestorIndexChain + hierarchyCache + descendant walks + applyCollectionRemoval
 add_executable(test_collectionutils_ancestry
-  utils/test_collectionutils_ancestry.cpp
+  utils/app/test_collectionutils_ancestry.cpp
   ${_kartend_collectionutils_test_sources}
 )
 target_include_directories(test_collectionutils_ancestry PRIVATE
@@ -381,7 +382,7 @@ add_test(NAME CollectionUtilsAncestry COMMAND test_collectionutils_ancestry)
 
 # wouldCreateCircularReference (corrupt-data + degenerate-cycle handling)
 add_executable(test_collectionutils_cycles
-  utils/test_collectionutils_cycles.cpp
+  utils/app/test_collectionutils_cycles.cpp
   ${_kartend_collectionutils_test_sources}
 )
 target_include_directories(test_collectionutils_cycles PRIVATE
@@ -399,7 +400,7 @@ add_test(NAME ScrapeJobGrouping COMMAND test_scrapejobgrouping)
 
 # ConfigValidation tests (schema + cross-collection diagnostics)
 add_executable(test_configvalidation
-  utils/test_configvalidation.cpp
+  utils/fs/test_configvalidation.cpp
 )
 target_link_libraries(test_configvalidation PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ConfigValidation COMMAND test_configvalidation)
@@ -422,28 +423,28 @@ add_test(NAME NavigationStackManager COMMAND test_navigationstackmanager)
 
 # DbMigrations tests (sqlite in-memory, no UI)
 add_executable(test_dbmigrations
-  utils/test_dbmigrations.cpp
+  utils/db/test_dbmigrations.cpp
 )
 target_link_libraries(test_dbmigrations PRIVATE kartend_utils Qt6::Test)
 add_test(NAME DbMigrations COMMAND test_dbmigrations)
 
 # ItemMetadata storage round-trip tests
 add_executable(test_itemmetadata
-  utils/test_itemmetadata.cpp
+  utils/db/test_itemmetadata.cpp
 )
 target_link_libraries(test_itemmetadata PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 
 # Per-item LRU cache (in-memory; no DB required)
 add_executable(test_itemmetadatacache
-  utils/test_itemmetadatacache.cpp
+  utils/db/test_itemmetadatacache.cpp
 )
 target_link_libraries(test_itemmetadatacache PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ItemMetadataCache COMMAND test_itemmetadatacache)
 
 # ItemArtwork storage + standard-type resolution tests
 add_executable(test_itemartwork
-  utils/test_itemartwork.cpp
+  utils/db/test_itemartwork.cpp
 )
 target_link_libraries(test_itemartwork PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ItemArtwork COMMAND test_itemartwork)
@@ -562,7 +563,7 @@ add_test(NAME HttpClient COMMAND test_httpclient)
 
 # LauncherProbe tests
 add_executable(test_launcherprobe
-  utils/test_launcherprobe.cpp
+  utils/fs/test_launcherprobe.cpp
 )
 target_link_libraries(test_launcherprobe PRIVATE kartend_utils Qt6::Test)
 add_test(NAME LauncherProbe COMMAND test_launcherprobe)
@@ -570,7 +571,7 @@ add_test(NAME LauncherProbe COMMAND test_launcherprobe)
 # LauncherUtils::launcherPathIssues — drives the items-toolbar warning
 # badge tooltip + the launch-gate dialog body (Kartend-w2n0).
 add_executable(test_launcherpathissues
-  utils/test_launcherpathissues.cpp
+  utils/app/test_launcherpathissues.cpp
 )
 target_link_libraries(test_launcherpathissues PRIVATE kartend_utils Qt6::Test)
 add_test(NAME LauncherPathIssues COMMAND test_launcherpathissues)
@@ -614,21 +615,21 @@ add_test(NAME ScraperServiceResume COMMAND test_scraperservice_resume)
 
 # ScrapeLogger tests (message-handler tee of kartend.scrape* to scrape.log)
 add_executable(test_scrapelogger
-  utils/test_scrapelogger.cpp
+  utils/app/test_scrapelogger.cpp
 )
 target_link_libraries(test_scrapelogger PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ScrapeLogger COMMAND test_scrapelogger)
 
 # RomHasher tests (streaming MD5/SHA1 for SS hash-based ROM ID)
 add_executable(test_romhasher
-  utils/test_romhasher.cpp
+  utils/fs/test_romhasher.cpp
 )
 target_link_libraries(test_romhasher PRIVATE kartend_utils Qt6::Test)
 add_test(NAME RomHasher COMMAND test_romhasher)
 
 # RetroArchUtils tests (retroarch.cfg parsing + libretro core discovery)
 add_executable(test_retroarchutils
-  utils/test_retroarchutils.cpp
+  utils/fs/test_retroarchutils.cpp
 )
 target_link_libraries(test_retroarchutils PRIVATE kartend_utils Qt6::Test)
 add_test(NAME RetroArchUtils COMMAND test_retroarchutils)
@@ -638,7 +639,7 @@ add_test(NAME RetroArchUtils COMMAND test_retroarchutils)
 # resolve to the same bundled .colors files the production app sees;
 # without this, discover_includesBundledSchemes would always fail.
 add_executable(test_kdecolorscheme
-  utils/test_kdecolorscheme.cpp
+  utils/view/test_kdecolorscheme.cpp
   ${SRC_DIR}/utils/view/kdecolorscheme.cpp
   ${SRC_DIR}/assets/resources.qrc
 )
@@ -660,35 +661,35 @@ add_test(NAME KdeColorScheme COMMAND test_kdecolorscheme)
 
 # SmartFilter tests
 add_executable(test_smartfilter
-  utils/test_smartfilter.cpp
+  utils/db/test_smartfilter.cpp
 )
 target_link_libraries(test_smartfilter PRIVATE kartend_utils Qt6::Test)
 add_test(NAME SmartFilter COMMAND test_smartfilter)
 
 # SmartPlaylistEvaluator tests
 add_executable(test_smartplaylistevaluator
-  utils/test_smartplaylistevaluator.cpp
+  utils/db/test_smartplaylistevaluator.cpp
 )
 target_link_libraries(test_smartplaylistevaluator PRIVATE kartend_utils Qt6::Test)
 add_test(NAME SmartPlaylistEvaluator COMMAND test_smartplaylistevaluator)
 
 # UsageStatsStore tests
 add_executable(test_usagestatsstore
-  utils/test_usagestatsstore.cpp
+  utils/db/test_usagestatsstore.cpp
 )
 target_link_libraries(test_usagestatsstore PRIVATE kartend_utils Qt6::Test)
 add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
 
 # HistoryStore tests
 add_executable(test_historystore
-  utils/test_historystore.cpp
+  utils/db/test_historystore.cpp
 )
 target_link_libraries(test_historystore PRIVATE kartend_utils Qt6::Test)
 add_test(NAME HistoryStore COMMAND test_historystore)
 
 # VariantGrouping tests (Kartend-skhk). Pure same-basename grouper.
 add_executable(test_variantgrouping
-  utils/test_variantgrouping.cpp
+  utils/db/test_variantgrouping.cpp
 )
 target_link_libraries(test_variantgrouping PRIVATE kartend_utils Qt6::Test)
 add_test(NAME VariantGrouping COMMAND test_variantgrouping)
@@ -697,7 +698,7 @@ add_test(NAME VariantGrouping COMMAND test_variantgrouping)
 # UI dialog has something to render. Reuses kartsuspiciouspaths.cpp so the
 # allowlist branch can be exercised without dragging in KartManager itself.
 add_executable(test_kartpreflight
-  utils/test_kartpreflight.cpp
+  modules/kart/test_kartpreflight.cpp
 )
 target_link_libraries(test_kartpreflight PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME KartPreflight COMMAND test_kartpreflight)
@@ -739,7 +740,7 @@ target_link_libraries(test_kartmerge PRIVATE kartend_data kartend_api kartend_ut
 add_test(NAME KartMerge COMMAND test_kartmerge)
 
 # SearchUtils smoke tests (header-only enum/struct)
-add_executable(test_searchutils utils/test_searchutils.cpp)
+add_executable(test_searchutils utils/text/test_searchutils.cpp)
 target_include_directories(test_searchutils PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_searchutils Qt6::Core Qt6::Test)
 add_test(NAME SearchUtils COMMAND test_searchutils)

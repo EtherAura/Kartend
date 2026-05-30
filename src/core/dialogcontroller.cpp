@@ -135,11 +135,12 @@ DialogController::FirstRunWizardResult DialogController::runFirstRunWizard() {
   return {result.accepted, result.pickedConfig};
 }
 
-DialogController::SettingsDialogFactory DialogController::makeSettingsDialogFactory() {
-  return [](QWidget *parent, const QList<CollectionConfig> &initialCollections, int initialIndex,
-            std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
-            std::function<void(int)> onRescanRequired) -> std::unique_ptr<ISettingsDialog> {
-    auto dlg = std::make_unique<SettingsDialog>(parent, initialCollections, initialIndex);
+DialogController::SettingsDialogFactory
+DialogController::makeSettingsDialogFactory(const ApplicationContext *ctx) {
+  return [ctx](QWidget *parent, const QList<CollectionConfig> &initialCollections, int initialIndex,
+               std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
+               std::function<void(int)> onRescanRequired) -> std::unique_ptr<ISettingsDialog> {
+    auto dlg = std::make_unique<SettingsDialog>(parent, initialCollections, initialIndex, ctx);
     // Wire concrete Qt signals here — they cannot cross the neutral
     // ISettingsDialog interface. The dialog object is the connection
     // context so each connection is torn down with the dialog.

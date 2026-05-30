@@ -23,6 +23,7 @@ namespace kart {
 class KartManager;
 }
 
+class ApplicationContext;
 class ISettingsManager;
 struct GeneralSettings;
 
@@ -104,11 +105,15 @@ public:
   /// Returns the factory closure SettingsDialogController uses to
   /// construct + signal-wire SettingsDialog. The factory's body lives
   /// here so this TU is the only place that knows the concrete dialog
-  /// class; the controller drives it through ISettingsDialog.
+  /// class; the controller drives it through ISettingsDialog. @p ctx is
+  /// captured into the closure and handed to each SettingsDialog so its
+  /// sibling-manager access goes through ApplicationContext (Kartend-qjtz)
+  /// rather than an IMainWindow forwarder.
   using SettingsDialogFactory = std::function<std::unique_ptr<ISettingsDialog>(
       QWidget *, const QList<CollectionConfig> &, int,
       std::function<void(const QList<CollectionConfig> &)>, std::function<void(int)>)>;
-  [[nodiscard]] static SettingsDialogFactory makeSettingsDialogFactory();
+  [[nodiscard]] static SettingsDialogFactory
+  makeSettingsDialogFactory(const ApplicationContext *ctx);
 
 private:
   QWidget *m_parent = nullptr;

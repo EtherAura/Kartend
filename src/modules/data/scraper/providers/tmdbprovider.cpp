@@ -59,7 +59,7 @@ QString TmdbProvider::currentToken() const {
   if (!m_settingsAccessor) return {};
   const GeneralSettings *settings = m_settingsAccessor();
   if (!settings) return {};
-  return settings->scraperCredentials.value(QString::fromLatin1(TMDB_PROVIDER_ID))
+  return settings->scraper.credentials.value(QString::fromLatin1(TMDB_PROVIDER_ID))
       .value(QString::fromLatin1(TMDB_TOKEN_FIELD));
 }
 

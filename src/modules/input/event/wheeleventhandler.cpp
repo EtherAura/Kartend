@@ -16,7 +16,8 @@
 
 #include "animationmanager.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/validationhelpers.h"
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "idetailspane.h"
@@ -334,12 +335,12 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   if (isHorizontalView) {
     rowDelta = (wheelSteps > 0) ? -1 : 1;
   } else {
-    int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
+    int rowMultiplier = m_generalSettings ? m_generalSettings->input.mouseWheelRows : 1;
     // Scale wheel step by the global scroll-velocity multiplier. Done on the
     // (row * wheelSteps) product so single-notch motion at 1.5× yields a
     // perceivable 1.5-row step rather than rounding down to 1.
     const double velocityMult =
-        m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
+        m_generalSettings ? m_generalSettings->input.scrollVelocityMultiplier : 1.0;
     rowDelta = -wheelSteps * rowMultiplier;
     if (velocityMult != 1.0) {
       // Round toward the direction of travel so tiny multipliers still move
@@ -360,7 +361,7 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   int selectionDelta = singleStep ? rowDelta : (rowDelta * gridWidth);
   int newSelection = currentSelection + selectionDelta;
 
-  bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
+  bool wrap = m_generalSettings ? m_generalSettings->input.wrapNavigation : false;
   bool wrapTriggered = false;
 
   if (wrap) {

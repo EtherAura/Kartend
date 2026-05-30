@@ -18,7 +18,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 #include "collectiontypes.h"
 #include "detailspane.h"
 #include "detailspanegalleryview.h"

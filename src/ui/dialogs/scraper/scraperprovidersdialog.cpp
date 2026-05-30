@@ -99,14 +99,14 @@ void ScraperProvidersDialog::populate() {
     row->setText(1, formatCategories(provider->categories()));
     row->setText(2, formatCapabilities(provider->capabilities()));
 
-    // Credentials: if the provider has an entry in scraperCredentials
+    // Credentials: if the provider has an entry in scraper.credentials
     // with at least one non-empty value, mark configured. Providers
     // that don't require any credentials surface as "(not required)" —
     // we infer this from the fact that the credential blob simply
     // never gets populated for them.
     QString credentialsLabel = tr("not configured");
     if (m_settings) {
-      const auto &all = m_settings->scraperCredentials;
+      const auto &all = m_settings->scraper.credentials;
       const auto it = all.find(provider->id());
       if (it != all.end()) {
         bool anyValue = false;

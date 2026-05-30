@@ -108,7 +108,7 @@ void ScraperCredentialsDialog::addField(QFormLayout *form, const QString &provid
   // Pre-populate from the live settings so editing-then-Cancel
   // doesn't lose the existing value.
   if (m_generalSettings) {
-    edit->setText(m_generalSettings->scraperCredentials.value(providerId).value(fieldName));
+    edit->setText(m_generalSettings->scraper.credentials.value(providerId).value(fieldName));
   }
   form->addRow(label, edit);
   m_fields.insert(providerId + QLatin1Char('/') + fieldName, edit);
@@ -126,12 +126,12 @@ void ScraperCredentialsDialog::onSave() {
       if (value.isEmpty()) {
         // Empty = "remove this credential". Cleaning up keeps the
         // [Scrapers] section honest about what's configured.
-        m_generalSettings->scraperCredentials[providerId].remove(fieldName);
-        if (m_generalSettings->scraperCredentials[providerId].isEmpty()) {
-          m_generalSettings->scraperCredentials.remove(providerId);
+        m_generalSettings->scraper.credentials[providerId].remove(fieldName);
+        if (m_generalSettings->scraper.credentials[providerId].isEmpty()) {
+          m_generalSettings->scraper.credentials.remove(providerId);
         }
       } else {
-        m_generalSettings->scraperCredentials[providerId][fieldName] = value;
+        m_generalSettings->scraper.credentials[providerId][fieldName] = value;
       }
     }
     // Scrub legacy dev_* keys. They used to be editable from this
@@ -141,11 +141,11 @@ void ScraperCredentialsDialog::onSave() {
     // who genuinely registered their own dev_id can drop the value
     // back into `[Scrapers] screenscraper/dev_id=` directly in the
     // INI; that path still works at runtime.
-    auto &ssBlob = m_generalSettings->scraperCredentials[QStringLiteral("screenscraper")];
+    auto &ssBlob = m_generalSettings->scraper.credentials[QStringLiteral("screenscraper")];
     ssBlob.remove(QStringLiteral("dev_id"));
     ssBlob.remove(QStringLiteral("dev_password"));
     if (ssBlob.isEmpty()) {
-      m_generalSettings->scraperCredentials.remove(QStringLiteral("screenscraper"));
+      m_generalSettings->scraper.credentials.remove(QStringLiteral("screenscraper"));
     }
     if (m_settingsManager) {
       // Logout silently leaving credentials on disk would defeat the purpose

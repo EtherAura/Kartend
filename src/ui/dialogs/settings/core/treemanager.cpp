@@ -5,7 +5,7 @@
 // have non-tree side effects.
 #include "treemanager.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 
 #include "collectiontreewidget.h"
 

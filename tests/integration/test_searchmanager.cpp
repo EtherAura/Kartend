@@ -200,7 +200,7 @@ void TestSearchManager::testFixtureExposesSearchManagerInDefaultState() {
 
   // The live wiring exposes SearchManager via InteractionManager::searchManager()
   // after setupReferences(). A regression in InteractionManager::setupReferences
-  // (interactionmanagersetup.cpp) that skipped the SearchManager setup would
+  // (interactionmanager_setup.cpp) that skipped the SearchManager setup would
   // surface either as a null pointer or as default state that drifted from
   // the spec the bare-construction tests above lock in.
   SearchManager *search = interaction->searchManager();

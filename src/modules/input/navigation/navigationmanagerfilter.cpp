@@ -2,7 +2,7 @@
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; this is a translation-unit split.
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "databasemanager.h"
 #include "iartworkmanager.h"
 #include "interactionmanager.h"
@@ -89,8 +89,8 @@ void NavigationManager::filterItemsAllCollections(const QString &searchText) {
     context.currentIndex = -1;
     context.isRootView = true;
     if (m_generalSettings) {
-      context.sortMode = m_generalSettings->sortMode;
-      context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+      context.sortMode = m_generalSettings->view.sortMode;
+      context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
     }
   }
   context.queryIncludeAllCollections = true;
@@ -226,12 +226,12 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
           context.config.artworkDirectory, context.config.name);
       context.artworkDirectory = context.config.artworkDirectory;
       if (m_generalSettings) {
-        context.sortMode = m_generalSettings->sortMode;
-        context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+        context.sortMode = m_generalSettings->view.sortMode;
+        context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
         // mirror toolbar filters so subcollection tile visibility
         // honors the active type filter / hide-subs toggle.
-        context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-        context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+        context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+        context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
       }
 
       // Preserve any active search across the reload. Without this, a reload

@@ -13,7 +13,7 @@
 
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
 #include "scrollmanager.h"
@@ -97,12 +97,12 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
 
   const int key = event->key();
 
-  const int searchKey =
-      m_generalSettings ? m_generalSettings->keySearch : static_cast<int>(Qt::Key_Slash);
+  const int searchKey = m_generalSettings ? m_generalSettings->keybindings.keySearch
+                                          : static_cast<int>(Qt::Key_Slash);
   const int backKey =
-      m_generalSettings ? m_generalSettings->keyBack : static_cast<int>(Qt::Key_Escape);
-  const int confirmKey =
-      m_generalSettings ? m_generalSettings->keyConfirm : static_cast<int>(Qt::Key_Return);
+      m_generalSettings ? m_generalSettings->keybindings.keyBack : static_cast<int>(Qt::Key_Escape);
+  const int confirmKey = m_generalSettings ? m_generalSettings->keybindings.keyConfirm
+                                           : static_cast<int>(Qt::Key_Return);
 
   auto isConfirmKey = [&](int k) -> bool { return KeyboardHelpers::isConfirmKey(k, confirmKey); };
 
@@ -140,14 +140,14 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   }
 
   // Arrow key handling
-  const int navLeftKey =
-      m_generalSettings ? m_generalSettings->keyNavLeft : static_cast<int>(Qt::Key_Left);
-  const int navRightKey =
-      m_generalSettings ? m_generalSettings->keyNavRight : static_cast<int>(Qt::Key_Right);
+  const int navLeftKey = m_generalSettings ? m_generalSettings->keybindings.keyNavLeft
+                                           : static_cast<int>(Qt::Key_Left);
+  const int navRightKey = m_generalSettings ? m_generalSettings->keybindings.keyNavRight
+                                            : static_cast<int>(Qt::Key_Right);
   const int navUpKey =
-      m_generalSettings ? m_generalSettings->keyNavUp : static_cast<int>(Qt::Key_Up);
-  const int navDownKey =
-      m_generalSettings ? m_generalSettings->keyNavDown : static_cast<int>(Qt::Key_Down);
+      m_generalSettings ? m_generalSettings->keybindings.keyNavUp : static_cast<int>(Qt::Key_Up);
+  const int navDownKey = m_generalSettings ? m_generalSettings->keybindings.keyNavDown
+                                           : static_cast<int>(Qt::Key_Down);
 
   const bool isNavKey =
       (key == navLeftKey || key == navRightKey || key == navUpKey || key == navDownKey);
@@ -178,10 +178,11 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   }
 
   // PageUp/PageDown for alphabetic navigation
-  const int alphaBackKey =
-      m_generalSettings ? m_generalSettings->keyAlphabeticBack : static_cast<int>(Qt::Key_PageUp);
-  const int alphaForwardKey = m_generalSettings ? m_generalSettings->keyAlphabeticForward
-                                                : static_cast<int>(Qt::Key_PageDown);
+  const int alphaBackKey = m_generalSettings ? m_generalSettings->keybindings.keyAlphabeticBack
+                                             : static_cast<int>(Qt::Key_PageUp);
+  const int alphaForwardKey = m_generalSettings
+                                  ? m_generalSettings->keybindings.keyAlphabeticForward
+                                  : static_cast<int>(Qt::Key_PageDown);
   if (key == alphaBackKey) {
     emit requestAlphabeticNavigation(false); // backward
     return true;
@@ -192,10 +193,10 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   }
 
   // Home/End for jumping to first/last item
-  const int jumpFirstKey =
-      m_generalSettings ? m_generalSettings->keyJumpFirst : static_cast<int>(Qt::Key_Home);
-  const int jumpLastKey =
-      m_generalSettings ? m_generalSettings->keyJumpLast : static_cast<int>(Qt::Key_End);
+  const int jumpFirstKey = m_generalSettings ? m_generalSettings->keybindings.keyJumpFirst
+                                             : static_cast<int>(Qt::Key_Home);
+  const int jumpLastKey = m_generalSettings ? m_generalSettings->keybindings.keyJumpLast
+                                            : static_cast<int>(Qt::Key_End);
   if (key == jumpFirstKey) {
     emit requestJumpToEdge(false); // jump to first item
     return true;
@@ -209,15 +210,16 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   // arrow / search / confirm key, and only outside the search bar (the
   // search-focused branch above returns before reaching here, so this is
   // already gated).
-  const int detailsKey =
-      m_generalSettings ? m_generalSettings->keyItemDetails : static_cast<int>(Qt::Key_I);
+  const int detailsKey = m_generalSettings ? m_generalSettings->keybindings.keyItemDetails
+                                           : static_cast<int>(Qt::Key_I);
   if (key == detailsKey) {
     emit requestItemDetails();
     return true;
   }
 
-  if (m_generalSettings && m_generalSettings->useHomeView && m_generalSettings->keyHomeView != 0 &&
-      key == m_generalSettings->keyHomeView) {
+  if (m_generalSettings && m_generalSettings->startup.useHomeView &&
+      m_generalSettings->keybindings.keyHomeView != 0 &&
+      key == m_generalSettings->keybindings.keyHomeView) {
     emit requestHomeView();
     return true;
   }
@@ -232,14 +234,14 @@ bool KeyboardManager::handleKeyRelease(QKeyEvent *event) {
 
   const int keyCode = event->key();
 
-  const int navLeftKey =
-      m_generalSettings ? m_generalSettings->keyNavLeft : static_cast<int>(Qt::Key_Left);
-  const int navRightKey =
-      m_generalSettings ? m_generalSettings->keyNavRight : static_cast<int>(Qt::Key_Right);
+  const int navLeftKey = m_generalSettings ? m_generalSettings->keybindings.keyNavLeft
+                                           : static_cast<int>(Qt::Key_Left);
+  const int navRightKey = m_generalSettings ? m_generalSettings->keybindings.keyNavRight
+                                            : static_cast<int>(Qt::Key_Right);
   const int navUpKey =
-      m_generalSettings ? m_generalSettings->keyNavUp : static_cast<int>(Qt::Key_Up);
-  const int navDownKey =
-      m_generalSettings ? m_generalSettings->keyNavDown : static_cast<int>(Qt::Key_Down);
+      m_generalSettings ? m_generalSettings->keybindings.keyNavUp : static_cast<int>(Qt::Key_Up);
+  const int navDownKey = m_generalSettings ? m_generalSettings->keybindings.keyNavDown
+                                           : static_cast<int>(Qt::Key_Down);
 
   const bool isNav = (keyCode == navLeftKey || keyCode == navRightKey || keyCode == navUpKey ||
                       keyCode == navDownKey);
@@ -299,7 +301,7 @@ void KeyboardManager::finalizeKeyRepeat(QKeyEvent *event, int direction, bool ve
 
   if (m_repeatStartTimer && !m_repeating) {
     // Use keyboardRepeatDelayMs for initial delay before repeating starts
-    int repeatDelay = m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs : 260;
+    int repeatDelay = m_generalSettings ? m_generalSettings->input.keyboardRepeatDelayMs : 260;
     m_repeatStartTimer->start(repeatDelay);
   }
 
@@ -315,7 +317,7 @@ void KeyboardManager::finalizeKeyRepeatForKey(Qt::Key key, int direction, bool v
 
   if (m_repeatStartTimer && !m_repeating) {
     // Use keyboardRepeatDelayMs for initial delay before repeating starts
-    int repeatDelay = m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs : 260;
+    int repeatDelay = m_generalSettings ? m_generalSettings->input.keyboardRepeatDelayMs : 260;
     m_repeatStartTimer->start(repeatDelay);
   }
 

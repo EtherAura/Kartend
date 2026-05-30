@@ -15,7 +15,7 @@
 #                                     matching tests/modules/<feature>/
 #   4. check-bd-id-leakage.py       — no Kartend-XXXX issue IDs in
 #                                     user-facing surfaces (readme,
-#                                     docs/guide/, AppStream metadata)
+#                                     docs/user/, AppStream metadata)
 #
 # Install with: .scripts/git-hooks/install.sh
 #

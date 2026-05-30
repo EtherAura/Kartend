@@ -89,7 +89,7 @@ public slots:
   /// Startup hook: if the on-disk pending-scrape state file is present
   /// (i.e. the previous run was interrupted mid-batch), prompt the user
   /// to Resume / Discard / Keep. Auto-resume short-circuits the prompt
-  /// when the user has opted in via GeneralSettings::ScraperOptions.
+  /// when the user has opted in via ScraperOptions.
   void promptResumePendingScrapeIfAny();
 
 private:

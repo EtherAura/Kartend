@@ -2,7 +2,7 @@
 #include "filtermanager.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "filterhelpers.h"
 #include "idatabasemanager.h"
 #include <QDir>

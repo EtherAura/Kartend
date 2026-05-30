@@ -209,7 +209,7 @@ void MainWindow::wireKartManager() {
     kart::KartManagerSetup kartSetup;
     kartSetup.ctx = &m_appContext;
     kartSetup.getCollections = [this]() { return &m_collections; };
-    kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
+    kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launchers.launcherPresets; };
     kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
     // Kartend-kmj1: round-trip the active collection's playlists through the
     // bundle. Returns a base IPlaylistManager* so the data layer doesn't

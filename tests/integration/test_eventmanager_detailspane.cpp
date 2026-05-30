@@ -1,5 +1,5 @@
-#include "applicationmanager.h"
 #include "test_eventmanager_detailspane.h"
+#include "applicationmanager.h"
 
 #include "detailspanemanager.h"
 #include "eventmanager.h"
@@ -14,7 +14,7 @@ void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
   QVERIFY(win);
-  InteractionManager *im = win->interactionManager();
+  InteractionManager *im = win->getApplicationManager()->getInteractionManager();
   QVERIFY(im);
   EventManager *em = im->eventManager();
   QVERIFY2(em, "InteractionManager must own a constructed EventManager after MainWindow setup");
@@ -37,7 +37,8 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_flipsVisibili
   QCOMPARE(spy.last().at(0).toBool(), !initial);
 }
 
-void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_doubleToggleRestoresInitialState() {
+void TestEventManagerDetailsPane::
+    detailsPaneManager_toggleSidebar_doubleToggleRestoresInitialState() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
@@ -49,7 +50,8 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_doubleToggleR
   QCOMPARE(mgr->isSidebarVisible(), initial);
 }
 
-void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_overridesVisibilityWhileSet() {
+void TestEventManagerDetailsPane::
+    detailsPaneManager_externallyHidden_overridesVisibilityWhileSet() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();

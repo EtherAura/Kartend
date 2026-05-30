@@ -28,7 +28,7 @@
 #include <utility>
 
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "workersignalspy.h"
@@ -86,7 +86,7 @@ void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
   // TSan sees consecutive tasks on a recycled pool thread as racing on
   // the same heap slot, and the libQt6Core frames around the COW
   // detach/copy are stripped in Ubuntu 24.04's qt6-base, so no race:
-  // pattern in .tsan_suppressions.txt can target them. The abspath /
+  // pattern in tests/suppressions/tsan.txt can target them. The abspath /
   // rel_path invariant this test asserts is also exercised in the
   // regular build matrix, so gating it under TSan loses no coverage of
   // the invariant — only of the parallel-dispatch path under the

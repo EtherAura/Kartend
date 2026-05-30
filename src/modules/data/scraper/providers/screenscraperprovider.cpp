@@ -1,5 +1,5 @@
 // ScreenScraper.fr provider. Reads dev+user creds from
-// GeneralSettings::scraperCredentials at every API call; resolves
+// GeneralSettings::scraper.credentials at every API call; resolves
 // the per-collection systemeid via the autodetect helper when no
 // manual override is set. Stage 1: filename-based ROM identification
 // only — hash- and archive-based ID are separate follow-up issues.
@@ -123,7 +123,7 @@ constexpr const char *SS_MEDIA_HOST = "neoclone.screenscraper.fr";
 constexpr const char *SS_JEUINFOS = "https://api.screenscraper.fr/api2/jeuInfos.php";
 // API-host pacing for jeuInfos.php. Fixed (one call per scrape, not
 // the bottleneck). Media-host pacing is *dynamic* and pulled from
-// GeneralSettings.scraperOptions on every fetch so the user can dial
+// GeneralSettings.scraper.options on every fetch so the user can dial
 // it from the Scraper settings panel without restarting.
 constexpr int SS_API_RATE_LIMIT_MS = 250;
 constexpr int SS_API_MAX_CONCURRENT = 2;
@@ -149,8 +149,8 @@ void registerHostThrottles(const GeneralSettings *settings) {
   int mediaConc = 6;
   int mediaThrottle = 100;
   if (settings) {
-    mediaConc = std::clamp(settings->scraperOptions.mediaConcurrency, 1, 16);
-    mediaThrottle = std::clamp(settings->scraperOptions.mediaThrottleMs, 0, 5000);
+    mediaConc = std::clamp(settings->scraper.options.mediaConcurrency, 1, 16);
+    mediaThrottle = std::clamp(settings->scraper.options.mediaThrottleMs, 0, 5000);
   }
   client->setRateLimit(QString::fromLatin1(SS_MEDIA_HOST), mediaThrottle, mediaConc);
 }
@@ -261,7 +261,7 @@ ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() c
   Credentials c;
   if (m_settingsAccessor) {
     if (const GeneralSettings *settings = m_settingsAccessor()) {
-      const auto blob = settings->scraperCredentials.value(QString::fromLatin1(SS_PROVIDER_ID));
+      const auto blob = settings->scraper.credentials.value(QString::fromLatin1(SS_PROVIDER_ID));
       c.devId = blob.value(QString::fromLatin1(SS_FIELD_DEV_ID));
       c.devPassword = blob.value(QString::fromLatin1(SS_FIELD_DEV_PASSWORD));
       c.userId = blob.value(QString::fromLatin1(SS_FIELD_USER_ID));
@@ -350,19 +350,19 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
   // worker entirely. SizeGated → measure the file (or, for archives, the
   // archive itself — SS hashes the inner ROM so the archive size is a
   // proxy) and skip when over the threshold. Always (default) → proceed.
-  auto hashMode = GeneralSettings::ScraperOptions::ScraperHashMode::Always;
+  auto hashMode = ScraperOptions::ScraperHashMode::Always;
   int maxHashableSizeMB = 4096;
   if (m_settingsAccessor) {
     if (const GeneralSettings *settings = m_settingsAccessor()) {
-      hashMode = settings->scraperOptions.hashMode;
-      maxHashableSizeMB = settings->scraperOptions.maxHashableSizeMB;
+      hashMode = settings->scraper.options.hashMode;
+      maxHashableSizeMB = settings->scraper.options.maxHashableSizeMB;
     }
   }
-  if (hashMode == GeneralSettings::ScraperOptions::ScraperHashMode::Never) {
+  if (hashMode == ScraperOptions::ScraperHashMode::Never) {
     runLookupAfterHash(trimmed, RomHasher::Result{}, std::move(callback));
     return;
   }
-  if (hashMode == GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated) {
+  if (hashMode == ScraperOptions::ScraperHashMode::SizeGated) {
     const qint64 sizeBytes = QFileInfo(filePath).size();
     const qint64 limitBytes = static_cast<qint64>(maxHashableSizeMB) * 1024 * 1024;
     if (sizeBytes > limitBytes) {
@@ -509,17 +509,15 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
     //     tagging is unreliable.
     //   ScraperOnly: never look at the filename. Pre-fix behaviour.
     const bool haveAnyHash = !hashes.md5.isEmpty() || !hashes.sha1.isEmpty();
-    auto regionSource = GeneralSettings::ScraperOptions::ScraperRegionSource::TrustScraperFirst;
+    auto regionSource = ScraperOptions::ScraperRegionSource::TrustScraperFirst;
     if (m_settingsAccessor) {
       if (const GeneralSettings *settings = m_settingsAccessor()) {
-        regionSource = settings->scraperOptions.regionSource;
+        regionSource = settings->scraper.options.regionSource;
       }
     }
     QString filenameRegionOverride;
-    if (regionSource ==
-            GeneralSettings::ScraperOptions::ScraperRegionSource::FilenameWhenAvailable ||
-        (regionSource == GeneralSettings::ScraperOptions::ScraperRegionSource::TrustScraperFirst &&
-         !haveAnyHash)) {
+    if (regionSource == ScraperOptions::ScraperRegionSource::FilenameWhenAvailable ||
+        (regionSource == ScraperOptions::ScraperRegionSource::TrustScraperFirst && !haveAnyHash)) {
       filenameRegionOverride = detectRegionFromFilename(trimmed);
     }
 
@@ -659,16 +657,16 @@ ScreenScraperParser::ParseOptions ScreenScraperProvider::buildParseOptions() con
     if (const GeneralSettings *settings = m_settingsAccessor()) {
       // mediaMaxDim drives server-side image downscaling on SS — the parser
       // appends it to media URLs when set.
-      parseOpts.mediaMaxDim = settings->scraperOptions.mediaMaxDimension;
+      parseOpts.mediaMaxDim = settings->scraper.options.mediaMaxDimension;
       // JPG output is gated on the user's preset preference — only the
       // Fastest preset honors it (where the bandwidth win outweighs the
       // quality loss). The setting's value is checked here instead of
       // just-the-preset so a Custom user can opt in deliberately.
-      parseOpts.preferJpg = settings->scraperOptions.preferJpgOutput;
+      parseOpts.preferJpg = settings->scraper.options.preferJpgOutput;
       // Fallback region for region-keyed fields when the matched item's
       // own region has no entry. Each item still honours its own region
       // first inside the parser.
-      parseOpts.preferredRegion = settings->scraperOptions.preferredScraperRegion;
+      parseOpts.preferredRegion = settings->scraper.options.preferredScraperRegion;
     }
   }
   // Free-text fields (description, genres, ...) follow the application UI
@@ -740,7 +738,7 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
   // strictly opt-in (no fallback).
   QString devId, devPassword, userId, userPassword;
   if (settings) {
-    const auto blob = settings->scraperCredentials.value(QStringLiteral("screenscraper"));
+    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
     devId = blob.value(QStringLiteral("dev_id"));
     devPassword = blob.value(QStringLiteral("dev_password"));
     userId = blob.value(QStringLiteral("user_id"));
@@ -791,7 +789,7 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
   // are optional and only add the tier boost.
   QString devId, devPassword, userId, userPassword;
   if (settings) {
-    const auto blob = settings->scraperCredentials.value(QStringLiteral("screenscraper"));
+    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
     devId = blob.value(QStringLiteral("dev_id"));
     devPassword = blob.value(QStringLiteral("dev_password"));
     userId = blob.value(QStringLiteral("user_id"));
@@ -838,7 +836,7 @@ void fetchHealthStatus(const GeneralSettings *settings,
   // the leecher tier in SS parlance) vs just warn.
   bool hasUserCreds = false;
   if (settings) {
-    const auto blob = settings->scraperCredentials.value(QStringLiteral("screenscraper"));
+    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
     hasUserCreds = !blob.value(QStringLiteral("user_id")).isEmpty() &&
                    !blob.value(QStringLiteral("user_password")).isEmpty();
   }

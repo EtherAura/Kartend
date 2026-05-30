@@ -6,7 +6,6 @@
  */
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
 #include "collection/launcherconfig.h"
 #include "launchmanager.h"
 #include <QDir>

@@ -27,7 +27,7 @@
 #include "cachemanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/collectionhierarchycache.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
 #include "collectionfilesystemwatcher.h"
@@ -124,7 +124,7 @@ void MainWindow::setupUI() {
   // publish the persisted text-zoom multiplier into the static
   // before any widget is constructed below — the upcoming applyGlobalUiFont
   // and the scrollManager / sidebar setup paths all read zoomedFontSize().
-  primeTextZoomFromSettings(m_generalSettings.uiTextZoomPercent);
+  primeTextZoomFromSettings(m_generalSettings.appearance.uiTextZoomPercent);
 
   // push the persisted global UI font to QApplication before any
   // widgets are constructed below, so menus/dialogs/toolbar all pick it up on
@@ -132,11 +132,11 @@ void MainWindow::setupUI() {
   applyGlobalUiFont(m_generalSettings);
 
   // Apply text appearance settings to ItemWidget statics
-  ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
-  ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
-  ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
+  ItemWidget::setTitleTintSaturation(m_generalSettings.appearance.titleTintSaturation);
+  ItemWidget::setTitleTintLightness(m_generalSettings.appearance.titleTintLightness);
+  ItemWidget::setTitleBaseColor(m_generalSettings.appearance.titleBaseColor);
 
-  ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
+  ItemWidget::setShowTitleInPlaceholder(m_generalSettings.view.showTitleInPlaceholder);
 
   setupUIReferences();
 
@@ -255,10 +255,10 @@ void MainWindow::setupUIReferences() {
   // Apply user-configured pixmap cache size. Routes through the shared
   // helper so QPixmapCache AND CacheManager::artworkCache both pick up
   // the user setting in lockstep (Kartend-10pb).
-  applyPixmapCacheBudget(m_generalSettings.pixmapCacheSizeMB);
+  applyPixmapCacheBudget(m_generalSettings.media.pixmapCacheSizeMB);
 
   VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
-      m_generalSettings.videoThumbnailExtractionTimeoutMs);
+      m_generalSettings.media.videoThumbnailExtractionTimeoutMs);
 
   stackedWidget = ui->stackedWidget;
   itemsPage = ui->itemsPage;

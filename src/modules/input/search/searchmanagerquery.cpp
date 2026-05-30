@@ -94,8 +94,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
               context.config.artworkDirectory, context.config.name);
           context.artworkDirectory = context.config.artworkDirectory;
           if (m_generalSettings) {
-            context.sortMode = m_generalSettings->sortMode;
-            context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+            context.sortMode = m_generalSettings->view.sortMode;
+            context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
           }
 
           const int totalItems =
@@ -219,8 +219,8 @@ void SearchManager::performDebouncedSearch() {
       SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
-    context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.sortMode = m_generalSettings->view.sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
   }
 
   switch (m_currentSearchMode) {

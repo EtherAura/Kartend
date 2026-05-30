@@ -4,7 +4,7 @@
 // dialog's button connect uses and implements the CollectionRemoverHost
 // selection/expansion adapters by delegating to TreeManager for the
 // tree-state queries.
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
 #include "settingsdialog.h"

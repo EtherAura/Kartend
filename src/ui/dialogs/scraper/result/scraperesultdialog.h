@@ -41,7 +41,10 @@ class IDatabaseManager;
 #include "applicationcontext_fwd.h"
 class MetadataLookupProvider;
 class ScrapeResultDialogUnified;
+class ScrapeResultSelectionModel;
+class ScrapeResultThumbnailLoader;
 class SingleItemScrapeView;
+class ValueMarqueeTicker;
 struct GeneralSettings;
 
 /// Unified scraper dialog. Replaces the old per-item-only ScrapeResultDialog
@@ -68,12 +71,15 @@ class ScrapeResultDialog : public QDialog {
   Q_DISABLE_COPY_MOVE(ScrapeResultDialog)
 
   // ScrapeResultDialogUnified (Kartend-izpz, 3fkz step 3) owns the
-  // unified-flow logic — collection tree, items list, queue walker, live
-  // metadata panel, ScraperService signal handlers. State stays on this
-  // host (the access sites already exist here and on the slot trampolines
-  // below); the unified controller reaches it through this friend
-  // declaration.
+  // unified-flow logic — queue walker, live metadata panel, ScraperService
+  // signal handlers. The selection model, thumbnail loader, and marquee
+  // ticker each own a slice of the live-view state that used to sit on this
+  // host; all four controllers reach the host's widgets through these
+  // friend declarations.
   friend class ScrapeResultDialogUnified;
+  friend class ScrapeResultSelectionModel;
+  friend class ScrapeResultThumbnailLoader;
+  friend class ValueMarqueeTicker;
 
 public:
   /// Outcome of a successful Apply. The `media` list mirrors the
@@ -111,7 +117,7 @@ public:
     /// Invoked after each successful interactive-mode scrape so the
     /// caller can persist metadata + write media bytes to disk. Mirrors
     /// the existing `Scraper::applyScrapedItem` call in
-    /// interactionmanagercontextmenu's runScrape lambda.
+    /// interactionmanager_contextmenu's runScrape lambda.
     std::function<void(int collectionIndex, const QString &filePath, const Result &result)>
         applyResult;
   };
@@ -209,9 +215,6 @@ protected:
 
 private slots:
   void onApply();
-  void onCollectionTreeCurrentChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
-  void onCollectionCheckChanged(QTreeWidgetItem *item, int column);
-  void onItemCheckChanged(QListWidgetItem *item);
   void onScrapeClicked();
   /// Opens a dialog listing the recorded scrape failure messages.
   /// Wired to the clickable error count in the unified counts label.
@@ -254,11 +257,14 @@ private:
   /// stay visually consistent.
   void updateSingleItemProgress(int completed);
 
-  // Unified-flow helpers — both the per-collection / queue walker and the
-  // Live metadata panel + marquee tick — moved into ScrapeResultDialogUnified
-  // (Kartend-izpz). The slots above are 1-line trampolines that forward into
-  // m_unified; state stays here so the trampolines and the legacy
-  // SingleItem/Batch paths keep their existing direct access.
+  // Unified-flow logic is split across four controllers (all friends):
+  // ScrapeResultDialogUnified (queue walker + live metadata panel +
+  // ScraperService handlers), ScrapeResultSelectionModel (collection-tree /
+  // items-list selection state), ScrapeResultThumbnailLoader (recent-media
+  // strip), and ValueMarqueeTicker (the per-150ms chip scroll). The first
+  // keeps its state on this host; the latter three own their slice of state
+  // directly. The onScrapeClicked slot above is a 1-line trampoline into
+  // m_unified.
 
   // m_provider, m_candidates, m_detailCache, m_currentRow, m_currentDetail
   // moved into SingleItemScrapeView in Kartend-xvci step 4. The view drives
@@ -360,13 +366,6 @@ private:
   /// a row re-fetches detail and refreshes the live metadata fields.
   QWidget *m_interactiveCandidateRow = nullptr;
   class QComboBox *m_interactiveCandidateCombo = nullptr;
-  /// Per-cell pause counter: while a value is parked at the
-  /// rightmost scroll position, this counts down before the cell
-  /// snaps back to cursor 0. Cells without entries are in the
-  /// advancing phase.
-  QHash<class QLineEdit *, int> m_marqueePauseTicks;
-  QTimer m_marqueeTimer; // Kartend-a911.6: value member
-  bool m_marqueeTimerInited = false;
 
   /// Provider-supplied health/load message surfaced before Apply.
   /// Populated from MetadataLookupProvider::fetchHealthStatus on
@@ -421,28 +420,6 @@ private:
   // ── Unified-flow state ──────────────────────────────────────────
   ScraperContext m_scraperCtx;
   Scraper::ScraperService *m_service = nullptr; ///< Non-owning; lives on MainWindow.
-  /// Per-collection-index inclusion sets. When a collection's tree
-  /// checkbox is on, this list dictates which item paths to scrape
-  /// from that collection (defaults to "all" when the collection is
-  /// first checked). Persists across collection clicks so the user
-  /// can freely switch between collections without losing per-item
-  /// selections.
-  QHash<int, QStringList> m_itemSelectionByCollection;
-  /// All item paths per collection — populated lazily as the user
-  /// clicks a collection in the tree (or via DB fetch). Cached so
-  /// re-clicking a collection doesn't re-hit the database.
-  QHash<int, QStringList> m_itemsCacheByCollection;
-  /// Per viewed-collection: item path → the collection index that
-  /// actually owns that item. For a plain collection every item maps
-  /// to the collection itself; for a "shell" parent that displays its
-  /// subcollections' items the entries point at the owning
-  /// subcollection. onScrapeClicked() uses this to route each item's
-  /// scraped artwork + metadata to its real owner instead of the
-  /// parent. Populated from the itemsRangeLoaded fetch alongside
-  /// m_itemsCacheByCollection.
-  QHash<int, QHash<QString, int>> m_itemOwnerByCollection;
-  /// Tree row → collection index map, populated when the tree is built.
-  QHash<QTreeWidgetItem *, int> m_treeItemToCollectionIndex;
   /// Snapshot at scrape time: queue of (collectionIndex, items) tuples
   /// to process in sequence. AutoRunning + Interactive both walk this.
   struct CollectionJob {
@@ -480,13 +457,23 @@ private:
   int m_interactiveCollectionIndex = -1;
   bool m_unifiedCancelled = false;
 
-  /// Owns the unified-flow methods (Kartend-izpz, 3fkz step 3). Constructed
-  /// once in the ctor with a back-pointer to `this`; all unified-flow logic
-  /// (collection tree, items list, queue walker, ScraperService signal
-  /// handlers, live-metadata panel, marquee tick) lives there. State stays
-  /// on this host class so the slot trampolines and the legacy
-  /// SingleItem / Batch paths keep their direct member access.
+  /// Owns the unified-flow queue walker, live-metadata panel renderer, and
+  /// ScraperService signal handlers. Constructed once in the ctor with a
+  /// back-pointer to `this`; the queue/run state it touches stays on this
+  /// host so the legacy SingleItem / Batch paths keep their direct member
+  /// access.
   std::unique_ptr<ScrapeResultDialogUnified> m_unified;
+  /// Owns the collection-tree + items-list selection state (which
+  /// collections/items are checked, the per-collection item cache, and the
+  /// owning-collection map). Built before buildUnifiedPanel wires the tree
+  /// signals to it.
+  std::unique_ptr<ScrapeResultSelectionModel> m_selectionModel;
+  /// Decodes + appends recent-media thumbnails to the live filmstrip off
+  /// the UI thread.
+  std::unique_ptr<ScrapeResultThumbnailLoader> m_thumbLoader;
+  /// Drives the per-150ms left-to-right scroll of overflowing value chips
+  /// in the live metadata panel.
+  std::unique_ptr<ValueMarqueeTicker> m_marqueeTicker;
 };
 
 #endif // SCRAPERESULTDIALOG_H

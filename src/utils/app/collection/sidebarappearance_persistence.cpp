@@ -1,10 +1,9 @@
 #include "sidebarappearance_persistence.h"
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 #include "collection/sidebarappearance.h"
 
 #include <QLoggingCategory>
 
-#include "helpers.h"
 #include "settingskeys.h"
 #include "uiconstants/detailspaneconstants.h"
 

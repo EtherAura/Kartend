@@ -217,17 +217,18 @@ bool AppearanceColorsPanel::hasChanges() const {
 void AppearanceColorsPanel::refresh() {
   if (!m_model || !m_model->generalSettings) return;
   SettingsFormBinding::loadInto(ui->titleSaturationSpinBox,
-                                m_model->generalSettings->titleTintSaturation);
+                                m_model->generalSettings->appearance.titleTintSaturation);
   SettingsFormBinding::loadInto(ui->titleLightnessSpinBox,
-                                m_model->generalSettings->titleTintLightness);
-  SettingsFormBinding::loadInto(ui->baseColorEdit, m_model->generalSettings->titleBaseColor);
+                                m_model->generalSettings->appearance.titleTintLightness);
+  SettingsFormBinding::loadInto(ui->baseColorEdit,
+                                m_model->generalSettings->appearance.titleBaseColor);
 }
 
 void AppearanceColorsPanel::writeBackGlobals() {
   if (!m_model || !m_model->generalSettings) return;
-  m_model->generalSettings->titleTintSaturation = ui->titleSaturationSpinBox->value();
-  m_model->generalSettings->titleTintLightness = ui->titleLightnessSpinBox->value();
-  m_model->generalSettings->titleBaseColor = ui->baseColorEdit->text().trimmed();
+  m_model->generalSettings->appearance.titleTintSaturation = ui->titleSaturationSpinBox->value();
+  m_model->generalSettings->appearance.titleTintLightness = ui->titleLightnessSpinBox->value();
+  m_model->generalSettings->appearance.titleBaseColor = ui->baseColorEdit->text().trimmed();
 }
 
 void AppearanceColorsPanel::updateBackgroundButtonForType() {
@@ -422,8 +423,8 @@ void AppearanceColorsPanel::onLoadColorScheme() {
   // ItemWidget::setTitleBaseColor on baseColorChanged); fire the signal
   // so a scheme with a Selection/BackgroundNormal entry takes effect on
   // the grid immediately.
-  if (m_model->generalSettings && !m_model->generalSettings->titleBaseColor.isEmpty()) {
-    emit baseColorChanged(m_model->generalSettings->titleBaseColor);
+  if (m_model->generalSettings && !m_model->generalSettings->appearance.titleBaseColor.isEmpty()) {
+    emit baseColorChanged(m_model->generalSettings->appearance.titleBaseColor);
   }
   emit changed();
 }

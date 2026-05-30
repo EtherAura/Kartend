@@ -4,7 +4,7 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "interactionmanager.h"
 #include "marqueewindow.h"
 #include "pathutils.h"
@@ -68,7 +68,7 @@ void MarqueeController::setupReferences(const MarqueeControllerSetup &setup) {
 
 void MarqueeController::applyMarqueeSettings() {
   if (QApplication::closingDown()) return;
-  if (!m_generalSettings || !m_generalSettings->marqueeEnabled) {
+  if (!m_generalSettings || !m_generalSettings->marquee.marqueeEnabled) {
     // Disable path: tear the window down so the user reclaims the
     // secondary monitor. The pointer is set to nullptr (rather than
     // hide()) so the next enable starts from a clean state — handles
@@ -87,7 +87,7 @@ void MarqueeController::applyMarqueeSettings() {
     }
     return;
   }
-  QScreen *target = resolveMarqueeScreen(m_generalSettings->marqueeScreenName);
+  QScreen *target = resolveMarqueeScreen(m_generalSettings->marquee.marqueeScreenName);
   if (!m_marqueeWindow) {
     m_marqueeWindow = new MarqueeWindow(target);
   } else {
@@ -104,7 +104,7 @@ void MarqueeController::applyMarqueeSettings() {
 }
 
 void MarqueeController::updateMarqueeArtwork() {
-  if (!m_marqueeWindow || !m_generalSettings || !m_generalSettings->marqueeEnabled) return;
+  if (!m_marqueeWindow || !m_generalSettings || !m_generalSettings->marquee.marqueeEnabled) return;
   if (!m_currentCollectionIndex || !m_collections) return;
 
   const int collectionIndex = *m_currentCollectionIndex;
@@ -112,7 +112,7 @@ void MarqueeController::updateMarqueeArtwork() {
   // Mode 2 — video / attract loop. Source priority: per-item preview
   // video (resolved like the details-pane preview) → collection's
   // backgroundVideo. Empty path stops playback and clears the window.
-  if (m_generalSettings->marqueeMode == 2) {
+  if (m_generalSettings->marquee.marqueeMode == 2) {
     if (!CollectionUtils::isValidIndex(collectionIndex, m_collections)) return;
     QString videoPath;
     if (auto *im = m_ctx ? m_ctx->interactionManager() : nullptr) {
@@ -142,7 +142,7 @@ void MarqueeController::updateMarqueeArtwork() {
   }
 
   QString artworkPath;
-  if (m_generalSettings->marqueeMode == 0) {
+  if (m_generalSettings->marquee.marqueeMode == 0) {
     // Item Artwork mode — the cover of the currently-selected item.
     if (!CollectionUtils::isValidIndex(collectionIndex, m_collections)) return;
     auto *im = m_ctx ? m_ctx->interactionManager() : nullptr;

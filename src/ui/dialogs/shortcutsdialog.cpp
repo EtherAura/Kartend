@@ -96,51 +96,53 @@ void ShortcutsDialog::populateContent() {
 
   // Left column: Navigation, Search
   auto *navSection = addSection(m_leftColumnLayout, tr("Navigation"));
-  addShortcut(navSection, keyText(settings.keyNavUp), tr("Move selection up"));
-  addShortcut(navSection, keyText(settings.keyNavDown), tr("Move selection down"));
-  addShortcut(navSection, keyText(settings.keyNavLeft), tr("Move selection left"));
-  addShortcut(navSection, keyText(settings.keyNavRight), tr("Move selection right"));
-  addShortcut(navSection, keyText(settings.keyConfirm),
+  addShortcut(navSection, keyText(settings.keybindings.keyNavUp), tr("Move selection up"));
+  addShortcut(navSection, keyText(settings.keybindings.keyNavDown), tr("Move selection down"));
+  addShortcut(navSection, keyText(settings.keybindings.keyNavLeft), tr("Move selection left"));
+  addShortcut(navSection, keyText(settings.keybindings.keyNavRight), tr("Move selection right"));
+  addShortcut(navSection, keyText(settings.keybindings.keyConfirm),
               tr("Open selected item / Enter subcollection"));
-  addShortcut(navSection, keyText(settings.keyBack),
+  addShortcut(navSection, keyText(settings.keybindings.keyBack),
               tr("Go back / Clear search / Exit search mode"));
-  addShortcut(navSection, keyText(settings.keyJumpFirst), tr("Jump to first item"));
-  addShortcut(navSection, keyText(settings.keyJumpLast), tr("Jump to last item"));
-  addShortcut(navSection, keyText(settings.keyAlphabeticBack),
+  addShortcut(navSection, keyText(settings.keybindings.keyJumpFirst), tr("Jump to first item"));
+  addShortcut(navSection, keyText(settings.keybindings.keyJumpLast), tr("Jump to last item"));
+  addShortcut(navSection, keyText(settings.keybindings.keyAlphabeticBack),
               tr("Jump to previous letter (alphabetic)"));
-  addShortcut(navSection, keyText(settings.keyAlphabeticForward),
+  addShortcut(navSection, keyText(settings.keybindings.keyAlphabeticForward),
               tr("Jump to next letter (alphabetic)"));
-  addShortcut(navSection, keyText(settings.keyItemDetails), tr("Open item detail page"));
-  if (settings.useHomeView && settings.keyHomeView != 0) {
-    addShortcut(navSection, keyText(settings.keyHomeView), tr("Jump to Home view"));
+  addShortcut(navSection, keyText(settings.keybindings.keyItemDetails),
+              tr("Open item detail page"));
+  if (settings.startup.useHomeView && settings.keybindings.keyHomeView != 0) {
+    addShortcut(navSection, keyText(settings.keybindings.keyHomeView), tr("Jump to Home view"));
   }
 
   auto *searchSection = addSection(m_leftColumnLayout, tr("Search"));
-  addShortcut(searchSection, keyText(settings.keySearch),
+  addShortcut(searchSection, keyText(settings.keybindings.keySearch),
               tr("Focus search bar / Toggle search mode"));
   addShortcut(searchSection, tr("Type letters"), tr("Quick filter (when search not focused)"));
-  addShortcut(searchSection, keyText(settings.keyBack), tr("Clear search text / Exit search"));
+  addShortcut(searchSection, keyText(settings.keybindings.keyBack),
+              tr("Clear search text / Exit search"));
 
   m_leftColumnLayout->addStretch();
 
   // Right column: Gamepad, Mouse, Window, View
   auto *gamepadSection = addSection(m_rightColumnLayout, tr("Gamepad"));
   addShortcut(gamepadSection, tr("D-pad"),
-              settings.gamepadUseDpad ? tr("Move selection (enabled)")
-                                      : tr("Move selection (disabled)"));
+              settings.gamepad.gamepadUseDpad ? tr("Move selection (enabled)")
+                                              : tr("Move selection (disabled)"));
   addShortcut(gamepadSection, tr("Left stick"),
-              settings.gamepadUseLeftStick ? tr("Move selection (enabled)")
-                                           : tr("Move selection (disabled)"));
-  addShortcut(gamepadSection, buttonText(settings.gamepadConfirmButton),
+              settings.gamepad.gamepadUseLeftStick ? tr("Move selection (enabled)")
+                                                   : tr("Move selection (disabled)"));
+  addShortcut(gamepadSection, buttonText(settings.gamepad.gamepadConfirmButton),
               tr("Confirm / Open selected item"));
-  addShortcut(gamepadSection, buttonText(settings.gamepadBackButton), tr("Back / Escape"));
-  addShortcut(gamepadSection, buttonText(settings.gamepadToggleSidebarButton),
+  addShortcut(gamepadSection, buttonText(settings.gamepad.gamepadBackButton), tr("Back / Escape"));
+  addShortcut(gamepadSection, buttonText(settings.gamepad.gamepadToggleSidebarButton),
               tr("Toggle details pane"));
 
   auto *mouseSection = addSection(m_rightColumnLayout, tr("Mouse"));
   addShortcut(mouseSection, tr("Middle-click"), tr("Open media preview overlay"));
   auto modifierLabel = [&]() -> QString {
-    switch (settings.artworkCycleModifier) {
+    switch (settings.input.artworkCycleModifier) {
     case static_cast<int>(Qt::ControlModifier):
       return tr("Ctrl");
     case static_cast<int>(Qt::AltModifier):

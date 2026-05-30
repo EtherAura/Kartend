@@ -106,7 +106,7 @@ signals:
   ///
   /// Pilot signal for the per-domain hot-reload contract; the per-collection
   /// signals below complete the rollout.
-  void scraperOptionsChanged(const GeneralSettings::ScraperOptions &options);
+  void scraperOptionsChanged(const ScraperOptions &options);
 
   // Per-collection hot-reload signals: emitted from saveCollections() after
   // a clean on-disk write, but only when the named sub-struct on the

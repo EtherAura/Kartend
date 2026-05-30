@@ -266,7 +266,7 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int start
   }
 
   int distance = qAbs(endVal - startVal);
-  int durationMs = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int durationMs = m_generalSettings ? m_generalSettings->input.scrollAnimationDurationMs : 1500;
   int duration =
       computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating, durationMs);
 
@@ -314,7 +314,7 @@ void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int sta
   // Use configured scroll animation duration for consistent glide feel.
   // The chaining from current position prevents stuttering while preserving
   // the smooth deceleration over the full duration.
-  int duration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs
+  int duration = m_generalSettings ? m_generalSettings->input.scrollAnimationDurationMs
                                    : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
 
   m_vScrollAnim->setDuration(duration);
@@ -347,7 +347,7 @@ void AnimationManager::startWheelScrollAnimationHorizontal(QScrollBar *hScrollBa
   m_hScrollAnim->setStartValue(effectiveStart);
   m_hScrollAnim->setEndValue(endVal);
 
-  int duration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs
+  int duration = m_generalSettings ? m_generalSettings->input.scrollAnimationDurationMs
                                    : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
   m_hScrollAnim->setDuration(duration);
   m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);

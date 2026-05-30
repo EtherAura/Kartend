@@ -172,12 +172,12 @@ public:
   // Owned sub-manager accessors - allows ApplicationContext to register them
   // ─────────────────────────────────────────────────────────────────────────
   [[nodiscard]] AnimationManager *animationManager() const { return m_animationManager.get(); }
-  [[nodiscard]] AttractManager *attractManager() const { return m_attractManager.get(); }
+  [[nodiscard]] AttractManager *attractManager() const override { return m_attractManager.get(); }
   [[nodiscard]] SelectionManager *selectionManager() const { return m_selectionManager.get(); }
   [[nodiscard]] ViewportManager *viewportManager() const { return m_viewportManager.get(); }
   [[nodiscard]] MouseManager *mouseManager() const { return m_mouseManager.get(); }
   [[nodiscard]] KeyboardManager *keyboardManager() const { return m_keyboardManager.get(); }
-  [[nodiscard]] GamepadManager *gamepadManager() const { return m_gamepadManager.get(); }
+  [[nodiscard]] GamepadManager *gamepadManager() const override { return m_gamepadManager.get(); }
   [[nodiscard]] EventManager *eventManager() const { return m_eventManager.get(); }
   [[nodiscard]] SearchManager *searchManager() const { return m_searchManager.get(); }
   [[nodiscard]] LaunchManager *launchManager() const { return m_launchManager.get(); }

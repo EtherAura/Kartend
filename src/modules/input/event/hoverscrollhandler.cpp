@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QWidget>
 
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "idetailspanemanager.h"
 #include "interactionstateholder.h"
 #include "iselectionmanager.h"
@@ -68,7 +68,7 @@ void HoverScrollHandler::setupReferences(const Setup &setup) {
 }
 
 bool HoverScrollHandler::handleEvent(QObject *obj, QEvent *event, bool isRestoringSelection) {
-  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || isRestoringSelection) {
+  if (!m_generalSettings || !m_generalSettings->input.selectItemOnHover || isRestoringSelection) {
     clearPendingScroll();
     return false;
   }
@@ -171,8 +171,9 @@ void HoverScrollHandler::commitPendingScroll() {
   const int visualIndex = m_pendingIndex;
   const QPoint stagedGlobalPos = m_pendingGlobalPos;
 
-  if (!widget || visualIndex < 0 || !m_generalSettings || !m_generalSettings->selectItemOnHover ||
-      !selectionMgr() || !scrollMgr() || !widget->isVisible()) {
+  if (!widget || visualIndex < 0 || !m_generalSettings ||
+      !m_generalSettings->input.selectItemOnHover || !selectionMgr() || !scrollMgr() ||
+      !widget->isVisible()) {
     clearPendingScroll();
     return;
   }
@@ -233,7 +234,7 @@ void HoverScrollHandler::commitPendingScroll() {
 }
 
 void HoverScrollHandler::pollCursorForContinue() {
-  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || !selectionMgr() ||
+  if (!m_generalSettings || !m_generalSettings->input.selectItemOnHover || !selectionMgr() ||
       !scrollMgr() || !m_itemScrollArea || !m_gridContainer) {
     return;
   }

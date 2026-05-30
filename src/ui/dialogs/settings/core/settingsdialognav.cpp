@@ -26,7 +26,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "settingsdialog.h"
 #include "settingskeys.h"
 #include "ui_settingsdialog.h"

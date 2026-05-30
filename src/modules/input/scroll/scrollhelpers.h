@@ -1,7 +1,6 @@
 #ifndef SCROLLHELPERS_H
 #define SCROLLHELPERS_H
 
-#include "collection/helpers.h"
 #include "collectiontypes.h"
 
 // Pure helpers extracted from scroll-module classes so movement-direction and

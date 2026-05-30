@@ -38,10 +38,10 @@ void TestAttractManager::testIsEnabledFollowsSettings() {
 
   QVERIFY(!mgr.isEnabled());
 
-  settings.attractModeEnabled = true;
+  settings.attract.attractModeEnabled = true;
   QVERIFY(mgr.isEnabled());
 
-  settings.attractModeEnabled = false;
+  settings.attract.attractModeEnabled = false;
   QVERIFY(!mgr.isEnabled());
 }
 

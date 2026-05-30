@@ -71,10 +71,10 @@ void MarqueePanel::refresh() {
     return;
   }
   SettingsFormBinding::loadInto(ui->marqueeEnabledCheckBox,
-                                m_model->generalSettings->marqueeEnabled);
+                                m_model->generalSettings->marquee.marqueeEnabled);
   {
     QSignalBlocker blocker(ui->marqueeScreenComboBox);
-    const QString saved = m_model->generalSettings->marqueeScreenName;
+    const QString saved = m_model->generalSettings->marquee.marqueeScreenName;
     int idx = ui->marqueeScreenComboBox->findData(saved);
     if (idx < 0) {
       // The saved screen is no longer present; surface that to the
@@ -90,8 +90,8 @@ void MarqueePanel::refresh() {
   }
   {
     QSignalBlocker blocker(ui->marqueeModeComboBox);
-    ui->marqueeModeComboBox->setCurrentIndex(
-        qBound(0, m_model->generalSettings->marqueeMode, ui->marqueeModeComboBox->count() - 1));
+    ui->marqueeModeComboBox->setCurrentIndex(qBound(
+        0, m_model->generalSettings->marquee.marqueeMode, ui->marqueeModeComboBox->count() - 1));
   }
 }
 
@@ -99,8 +99,9 @@ void MarqueePanel::writeBack() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_model->generalSettings->marqueeEnabled = ui->marqueeEnabledCheckBox->isChecked();
-  m_model->generalSettings->marqueeScreenName = ui->marqueeScreenComboBox->currentData().toString();
-  m_model->generalSettings->marqueeMode = ui->marqueeModeComboBox->currentIndex();
+  m_model->generalSettings->marquee.marqueeEnabled = ui->marqueeEnabledCheckBox->isChecked();
+  m_model->generalSettings->marquee.marqueeScreenName =
+      ui->marqueeScreenComboBox->currentData().toString();
+  m_model->generalSettings->marquee.marqueeMode = ui->marqueeModeComboBox->currentIndex();
   emit changed();
 }

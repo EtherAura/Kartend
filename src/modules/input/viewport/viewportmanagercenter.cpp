@@ -2,7 +2,7 @@
 #include "animationmanager.h"
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
 #include "interactionstateholder.h"

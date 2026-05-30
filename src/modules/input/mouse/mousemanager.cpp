@@ -4,7 +4,7 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "ikeyboardmanager.h"
 #include "interactionstateholder.h"
@@ -95,7 +95,7 @@ void MouseManager::startClickHoldTimer(const QPoint &clickPos, int selectedItemI
     connect(&m_clickHoldTimer, &QTimer::timeout, this, &MouseManager::onClickHoldTimerTimeout);
     m_clickHoldTimerInited = true;
   }
-  int delay = m_generalSettings ? m_generalSettings->clickHoldDelayMs : 500;
+  int delay = m_generalSettings ? m_generalSettings->input.clickHoldDelayMs : 500;
   m_clickHoldTimer.start(delay);
 }
 
@@ -188,9 +188,9 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
 
   int interval;
   if (isListMode) {
-    interval = m_generalSettings ? m_generalSettings->listClickHoldRepeatIntervalMs : 80;
+    interval = m_generalSettings ? m_generalSettings->input.listClickHoldRepeatIntervalMs : 80;
   } else {
-    interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+    interval = m_generalSettings ? m_generalSettings->input.clickHoldRepeatIntervalMs : 320;
   }
   m_mouseHoldTimer.start(interval);
 
@@ -243,9 +243,9 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemI
 
   int interval;
   if (isListMode) {
-    interval = m_generalSettings ? m_generalSettings->listClickHoldRepeatIntervalMs : 80;
+    interval = m_generalSettings ? m_generalSettings->input.listClickHoldRepeatIntervalMs : 80;
   } else {
-    interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+    interval = m_generalSettings ? m_generalSettings->input.clickHoldRepeatIntervalMs : 320;
   }
   m_mouseHoldTimer.start(interval);
 

@@ -3,7 +3,8 @@
 // These remain NavigationManager members; this is a translation-unit split.
 #include "collection/collectionconfig.h"
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "navigationmanager.h"
 
 #include "applicationcontext.h"
@@ -63,13 +64,13 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
         SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
     context.artworkDirectory = context.config.artworkDirectory;
     if (m_generalSettings) {
-      context.sortMode = m_generalSettings->sortMode;
-      context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+      context.sortMode = m_generalSettings->view.sortMode;
+      context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
       // mirror toolbar filters so the scroll pipeline can drop
       // subcollection tiles whose effective type doesn't match the active
       // filter, or hide them entirely.
-      context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-      context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+      context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+      context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
     }
 
     bool hasMediaDirectory = !context.config.mediaDirectory.trimmed().isEmpty();
@@ -118,7 +119,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
                              "tryUseCachedCountForStartup: SKIP - not initial startup";
     return false;
   }
-  if (!sessionMgr() || !m_generalSettings || !m_generalSettings->rememberSelection) {
+  if (!sessionMgr() || !m_generalSettings || !m_generalSettings->input.rememberSelection) {
     qCDebug(lcSearchDiag) << "[NavigationManager] tryUseCachedCountForStartup: "
                              "SKIP - no sessionManager or rememberSelection disabled";
     return false;
@@ -163,12 +164,12 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   minimalContext.config = context.config;
   minimalContext.artworkDirectory = context.artworkDirectory;
   if (m_generalSettings) {
-    minimalContext.sortMode = m_generalSettings->sortMode;
-    minimalContext.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    minimalContext.sortMode = m_generalSettings->view.sortMode;
+    minimalContext.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
     // minimal context still needs the toolbar filter so the
     // immediate cached viewport hides the same tiles the full reload would.
-    minimalContext.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-    minimalContext.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+    minimalContext.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+    minimalContext.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
   }
 
   // Store minimal context for now - will be replaced with full context
@@ -277,11 +278,11 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
 
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
-    context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.sortMode = m_generalSettings->view.sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
     // toolbar filter mirroring (see load context above).
-    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+    context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
   }
 
   // Use pre-computed UUIDs and directory maps from hierarchy cache

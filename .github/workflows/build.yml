@@ -287,7 +287,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/suppressions/lsan.txt
         run: |
           cd build/Sanitize
           ctest --output-on-failure
@@ -298,7 +298,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/suppressions/lsan.txt
         run: python3 .scripts/print-failed-tests.py --build-dir build/Sanitize
 
       - name: Smoke-test kartend binary (ASan/UBSan, full teardown)
@@ -399,7 +399,7 @@ jobs:
           # second_deadlock_stack=1 prints the full stack of both threads
           # involved in a lock-order inversion, which is how Qt event loop
           # deadlocks usually surface.
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/suppressions/tsan.txt
         run: |
           cd build/TSan
           ctest --output-on-failure
@@ -408,7 +408,7 @@ jobs:
         if: ${{ failure() }}
         env:
           QT_QPA_PLATFORM: offscreen
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/suppressions/tsan.txt
         run: python3 .scripts/print-failed-tests.py --build-dir build/TSan
 
   maintenance-check:
@@ -463,7 +463,7 @@ jobs:
 
       - name: Check bd issue ID leakage to user-facing surfaces
         # Blocks `Kartend-XXXX` issue IDs from landing in user-visible
-        # surfaces (readme.md, docs/guide/*.md wiki content, AppStream
+        # surfaces (readme.md, docs/user/*.md wiki content, AppStream
         # metadata). Allowed in code comments / CHANGELOG / dev docs.
         # See CONTRIBUTING.md → "Issue tracking conventions".
         run: python3 .scripts/check-bd-id-leakage.py

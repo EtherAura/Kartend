@@ -30,7 +30,7 @@
 #include <set>
 
 #include "appearancelayoutpanel.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "collectiontreewidget.h"
 #include "configurationpanel.h"
 #include "errordialog.h"

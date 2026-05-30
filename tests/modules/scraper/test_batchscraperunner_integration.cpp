@@ -21,6 +21,7 @@
  * invalidation hook regressed.
  */
 
+#include <memory>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QStandardPaths>
@@ -28,7 +29,6 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
-#include <memory>
 
 #include "applicationcontext.h"
 #include "batchscraperunner.h"
@@ -42,8 +42,7 @@ namespace {
 
 /// Spin the event loop until the runner emits `finished`, then return
 /// the captured summary. 5s timeout matches the unit-test fixture.
-Scraper::BatchScrapeRunner::Summary
-waitForFinish(Scraper::BatchScrapeRunner *runner) {
+Scraper::BatchScrapeRunner::Summary waitForFinish(Scraper::BatchScrapeRunner *runner) {
   Scraper::BatchScrapeRunner::Summary captured;
   bool done = false;
   QObject::connect(runner, &Scraper::BatchScrapeRunner::finished,
@@ -101,8 +100,7 @@ void TestBatchScrapeRunnerIntegration::initTestCase() {
       QStringLiteral("kartend-test-batchscraperunner-integration"));
 }
 
-void TestBatchScrapeRunnerIntegration::
-    writesLandInDatabaseAndCacheGetsInvalidated() {
+void TestBatchScrapeRunnerIntegration::writesLandInDatabaseAndCacheGetsInvalidated() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   // The runner dispatches each match to QtConcurrent::run for the
   // file-write phase. The pool threads' captured QString / QList<
@@ -111,7 +109,7 @@ void TestBatchScrapeRunnerIntegration::
   // racing on the same heap slot, but the libQt6Core frames between
   // QArrayDataPointer::detach and the memmove that does the copy are
   // stripped in Ubuntu 24.04's qt6-base packages, so no race: pattern
-  // in .tsan_suppressions.txt can target the actual offending frames.
+  // in tests/suppressions/tsan.txt can target the actual offending frames.
   // The correctness property this test asserts (cache invalidation
   // after the worker-thread DB write) is also covered under the
   // regular build matrix, so skipping the TSan run here doesn't lose
@@ -158,12 +156,10 @@ void TestBatchScrapeRunnerIntegration::
   // onWriteCompleted's invalidateMetadataCacheItem call ran on the main
   // thread after the queued reply landed.
   auto stub = std::make_shared<KartendTest::StubMetadataProvider>();
-  stub->byQuery[baseName] =
-      KartendTest::makeStubMatch("1", QStringLiteral("NEW TITLE"));
+  stub->byQuery[baseName] = KartendTest::makeStubMatch("1", QStringLiteral("NEW TITLE"));
 
-  Scraper::BatchScrapeRunner runner(
-      &ctx, stub, uuid, QStringList{sourcePath},
-      /*artworkDir=*/QString(), /*fetchPrimaryCover=*/false);
+  Scraper::BatchScrapeRunner runner(&ctx, stub, uuid, QStringList{sourcePath},
+                                    /*artworkDir=*/QString(), /*fetchPrimaryCover=*/false);
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
@@ -192,8 +188,7 @@ void TestBatchScrapeRunnerIntegration::
   db.reset();
 }
 
-void TestBatchScrapeRunnerIntegration::
-    cancelMidBatchAtHighConcurrencyDrainsCleanly() {
+void TestBatchScrapeRunnerIntegration::cancelMidBatchAtHighConcurrencyDrainsCleanly() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   // Same TSan pool-reuse limitation as the sibling test above. This one
   // is even more aggressive (kQueueSize=100 × kConcurrency=8) and would
@@ -240,8 +235,8 @@ void TestBatchScrapeRunnerIntegration::
   for (int i = 0; i < kQueueSize; ++i) {
     const QString base = QStringLiteral("stress_%1").arg(i, 3, 10, QLatin1Char('0'));
     paths.append(QStringLiteral("/m/%1.flac").arg(base));
-    stub->byQuery[base] = KartendTest::makeStubMatch(
-        QString::number(i), QStringLiteral("Title %1").arg(i));
+    stub->byQuery[base] =
+        KartendTest::makeStubMatch(QString::number(i), QStringLiteral("Title %1").arg(i));
   }
 
   // Track `finished` emissions via a counter so a double-emit would
@@ -250,10 +245,9 @@ void TestBatchScrapeRunnerIntegration::
   Scraper::BatchScrapeRunner::Summary captured;
   {
     Scraper::BatchScrapeRunner runner(&ctx, stub, uuid, paths,
-                                       /*artworkDir=*/QString(),
-                                       /*fetchPrimaryCover=*/false,
-                                       Scraper::RescrapeMode::Overwrite,
-                                       kConcurrency);
+                                      /*artworkDir=*/QString(),
+                                      /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Overwrite,
+                                      kConcurrency);
     QObject::connect(&runner, &Scraper::BatchScrapeRunner::finished,
                      [&captured, &finishedCount](const auto &s) {
                        captured = s;
@@ -289,12 +283,12 @@ void TestBatchScrapeRunnerIntegration::
   // 5s wait above well before reaching here.
 
   QCOMPARE(finishedCount, 1);
-  const int totalAccounted =
-      captured.scraped + captured.skipped + captured.errors;
+  const int totalAccounted = captured.scraped + captured.skipped + captured.errors;
   QVERIFY2(totalAccounted <= kQueueSize,
            qPrintable(QStringLiteral("totalAccounted=%1 > queueSize=%2 — "
                                      "indicates double-counting under cancel race")
-                          .arg(totalAccounted).arg(kQueueSize)));
+                          .arg(totalAccounted)
+                          .arg(kQueueSize)));
   QVERIFY2(totalAccounted >= 0, "summary counters went negative");
 
   // Spot-check: at least one item should have completed before cancel
@@ -302,15 +296,13 @@ void TestBatchScrapeRunnerIntegration::
   // actually exercise the in-flight cancel race we set out to test).
   // The check uses scraped, not totalAccounted, because skipped/errors
   // are paths that didn't go through the worker.
-  QVERIFY2(captured.scraped > 0,
-           "no items completed before cancel — warmup window too short, "
-           "test is not exercising the cancel-vs-write race");
+  QVERIFY2(captured.scraped > 0, "no items completed before cancel — warmup window too short, "
+                                 "test is not exercising the cancel-vs-write race");
 
   // For one item that DID complete, verify the metadata actually
   // landed. Catches a regression where a cancel-race causes the runner
   // to tick scraped++ but the worker's write was dropped.
-  const QString completedBase =
-      QStringLiteral("stress_%1").arg(0, 3, 10, QLatin1Char('0'));
+  const QString completedBase = QStringLiteral("stress_%1").arg(0, 3, 10, QLatin1Char('0'));
   const QString completedPath = QStringLiteral("/m/%1.flac").arg(completedBase);
   const auto loaded = db->loadItemMetadata(uuid, completedPath);
   if (loaded.title.isEmpty()) {
@@ -319,8 +311,7 @@ void TestBatchScrapeRunnerIntegration::
     // item that DID land.
     bool foundAny = false;
     for (int i = 0; i < kQueueSize; ++i) {
-      const QString p =
-          QStringLiteral("/m/stress_%1.flac").arg(i, 3, 10, QLatin1Char('0'));
+      const QString p = QStringLiteral("/m/stress_%1.flac").arg(i, 3, 10, QLatin1Char('0'));
       const auto m = db->loadItemMetadata(uuid, p);
       if (!m.title.isEmpty()) {
         foundAny = true;
@@ -329,7 +320,7 @@ void TestBatchScrapeRunnerIntegration::
       }
     }
     QVERIFY2(foundAny, "scraped > 0 but no metadata rows found in DB — "
-                        "indicates the worker write was dropped under cancel");
+                       "indicates the worker write was dropped under cancel");
   } else {
     QVERIFY(loaded.title.startsWith(QStringLiteral("Title ")));
   }

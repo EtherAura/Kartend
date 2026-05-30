@@ -206,12 +206,12 @@ void NavigationManager::loadCurrentAndSubcollections() {
       SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
-    context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.sortMode = m_generalSettings->view.sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
     // mirror toolbar filters so subcollection tile visibility
     // honors the active type filter / hide-subs toggle.
-    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+    context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
   }
 
   context.queryIncludeDescendants = true;
@@ -264,8 +264,8 @@ void NavigationManager::loadRootView() {
   context.subcollectionOverride = rootIndices;
   context.suppressVirtualFolders = true;
   if (m_generalSettings) {
-    context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.sortMode = m_generalSettings->view.sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
   }
 
   m_hasItemsQueryContext = true;
@@ -293,7 +293,7 @@ void NavigationManager::loadRootView() {
           m_itemsPage ? m_itemsPage->findChild<QLabel *>("itemsTitleLabel") : nullptr) {
     QString label;
     if (m_generalSettings) {
-      label = m_generalSettings->homeViewLabel.trimmed();
+      label = m_generalSettings->startup.homeViewLabel.trimmed();
     }
     titleLabel->setText(label.isEmpty() ? tr("Home") : label);
   }

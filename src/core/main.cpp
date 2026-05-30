@@ -18,7 +18,7 @@
 #include <cstdlib>
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "errordialog.h"
 #include "errorpresentation.h"
 #include "errorutils.h"
@@ -331,7 +331,7 @@ extern "C" auto main(int argc, char *argv[]) -> int {
     // lambda that fires after exec() begins, so it's safe to mutate the field
     // here, after MainWindow construction loaded settings from disk.
     if (!cliCollectionOverride.isEmpty()) {
-      window.m_generalSettings.startupCollection = cliCollectionOverride;
+      window.m_generalSettings.startup.startupCollection = cliCollectionOverride;
     }
     window.show();
     window.showStartupSplash();

@@ -5,7 +5,7 @@
 // Both remain NavigationManager members and access existing class state.
 #include "applicationcontext.h"
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "emptystatewidget.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -324,7 +324,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
 
   // Calculate selection index for initial scroll position
   int rememberedSelIdx = -1;
-  if (!searchActive && m_generalSettings && m_generalSettings->rememberSelection) {
+  if (!searchActive && m_generalSettings && m_generalSettings->input.rememberSelection) {
     rememberedSelIdx = lookupRememberedSelectionIndex(totalItems);
   }
 

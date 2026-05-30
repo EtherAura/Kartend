@@ -22,7 +22,7 @@
 
 #include "applicationcontext.h"
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "databasemanager.h"
 #include "sessionmanager.h"
 

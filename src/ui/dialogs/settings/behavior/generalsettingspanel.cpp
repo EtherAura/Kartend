@@ -45,37 +45,43 @@ void GeneralSettingsPanel::refresh() {
   }
   GeneralSettings *s = m_model->generalSettings;
   // Startup
-  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, s->useHomeView);
-  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, s->homeViewLabel);
-  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, s->homeViewIcon);
-  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startupVideoEnabled);
-  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startupVideoPath);
-  SettingsFormBinding::loadInto(ui->retroarchConfigLineEdit, s->retroarchConfigPath);
+  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, s->startup.useHomeView);
+  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, s->startup.homeViewLabel);
+  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, s->startup.homeViewIcon);
+  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startup.startupVideoEnabled);
+  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startup.startupVideoPath);
+  SettingsFormBinding::loadInto(ui->retroarchConfigLineEdit, s->launchers.retroarchConfigPath);
 
   // Selection & Display
-  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, s->rememberSelection);
-  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, s->wrapNavigation);
-  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, s->selectItemOnHover);
-  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox, s->showTitleInPlaceholder);
+  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, s->input.rememberSelection);
+  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, s->input.wrapNavigation);
+  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, s->input.selectItemOnHover);
+  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox, s->view.showTitleInPlaceholder);
 
   // Input & Scroll Timing
-  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, s->mouseWheelRows);
-  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox, s->scrollVelocityMultiplier);
-  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox, s->scrollAnimationDurationMs);
-  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, s->clickHoldDelayMs);
-  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox, s->clickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox, s->listClickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox, s->keyboardRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox, s->keyboardRepeatDelayMs);
-  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox, s->listKeyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, s->input.mouseWheelRows);
+  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox,
+                                s->input.scrollVelocityMultiplier);
+  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox,
+                                s->input.scrollAnimationDurationMs);
+  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, s->input.clickHoldDelayMs);
+  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox,
+                                s->input.clickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox,
+                                s->input.listClickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox, s->input.keyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox, s->input.keyboardRepeatDelayMs);
+  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox,
+                                s->input.listKeyboardRepeatIntervalMs);
 
   // Performance & History
-  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, s->pixmapCacheSizeMB);
-  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox, s->runtimeDetectionEnabled);
-  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, s->historyEnabled);
-  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, s->historyMaxEntries);
+  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, s->media.pixmapCacheSizeMB);
+  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox,
+                                s->runtimeDetection.runtimeDetectionEnabled);
+  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, s->history.historyEnabled);
+  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, s->history.historyMaxEntries);
   SettingsFormBinding::loadInto(ui->videoThumbnailTimeoutSpinBox,
-                                s->videoThumbnailExtractionTimeoutMs);
+                                s->media.videoThumbnailExtractionTimeoutMs);
 }
 
 void GeneralSettingsPanel::setStartupCollections(const QStringList &names,
@@ -126,37 +132,37 @@ void GeneralSettingsPanel::writeBack() {
   }
   GeneralSettings *s = m_model->generalSettings;
   // Startup
-  s->startupCollection = ui->startupCollectionComboBox->currentData().toString();
-  s->useHomeView = ui->useHomeViewCheckBox->isChecked();
-  s->homeViewLabel = ui->homeViewLabelLineEdit->text();
-  s->homeViewIcon = ui->homeViewIconLineEdit->text();
-  s->startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
-  s->startupVideoPath = ui->startupVideoPathLineEdit->text();
-  s->retroarchConfigPath = ui->retroarchConfigLineEdit->text();
+  s->startup.startupCollection = ui->startupCollectionComboBox->currentData().toString();
+  s->startup.useHomeView = ui->useHomeViewCheckBox->isChecked();
+  s->startup.homeViewLabel = ui->homeViewLabelLineEdit->text();
+  s->startup.homeViewIcon = ui->homeViewIconLineEdit->text();
+  s->startup.startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
+  s->startup.startupVideoPath = ui->startupVideoPathLineEdit->text();
+  s->launchers.retroarchConfigPath = ui->retroarchConfigLineEdit->text();
 
   // Selection & Display
-  s->rememberSelection = ui->rememberSelectionCheckBox->isChecked();
-  s->wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
-  s->selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
-  s->showTitleInPlaceholder = ui->showTitleInPlaceholderCheckBox->isChecked();
+  s->input.rememberSelection = ui->rememberSelectionCheckBox->isChecked();
+  s->input.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
+  s->input.selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
+  s->view.showTitleInPlaceholder = ui->showTitleInPlaceholderCheckBox->isChecked();
 
   // Input & Scroll Timing
-  s->mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
-  s->scrollVelocityMultiplier = ui->scrollVelocityMultiplierSpinBox->value();
-  s->scrollAnimationDurationMs = ui->scrollAnimationSpeedSpinBox->value();
-  s->clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
-  s->clickHoldRepeatIntervalMs = ui->clickHoldRepeatIntervalSpinBox->value();
-  s->listClickHoldRepeatIntervalMs = ui->listClickHoldRepeatSpinBox->value();
-  s->keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
-  s->keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
-  s->listKeyboardRepeatIntervalMs = ui->listKeyboardRepeatSpinBox->value();
+  s->input.mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
+  s->input.scrollVelocityMultiplier = ui->scrollVelocityMultiplierSpinBox->value();
+  s->input.scrollAnimationDurationMs = ui->scrollAnimationSpeedSpinBox->value();
+  s->input.clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
+  s->input.clickHoldRepeatIntervalMs = ui->clickHoldRepeatIntervalSpinBox->value();
+  s->input.listClickHoldRepeatIntervalMs = ui->listClickHoldRepeatSpinBox->value();
+  s->input.keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
+  s->input.keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
+  s->input.listKeyboardRepeatIntervalMs = ui->listKeyboardRepeatSpinBox->value();
 
   // Performance & History
-  s->pixmapCacheSizeMB = ui->pixmapCacheSpinBox->value();
-  s->runtimeDetectionEnabled = ui->runtimeDetectionCheckBox->isChecked();
-  s->historyEnabled = ui->historyEnabledCheckBox->isChecked();
-  s->historyMaxEntries = ui->historyMaxEntriesSpinBox->value();
-  s->videoThumbnailExtractionTimeoutMs = ui->videoThumbnailTimeoutSpinBox->value();
+  s->media.pixmapCacheSizeMB = ui->pixmapCacheSpinBox->value();
+  s->runtimeDetection.runtimeDetectionEnabled = ui->runtimeDetectionCheckBox->isChecked();
+  s->history.historyEnabled = ui->historyEnabledCheckBox->isChecked();
+  s->history.historyMaxEntries = ui->historyMaxEntriesSpinBox->value();
+  s->media.videoThumbnailExtractionTimeoutMs = ui->videoThumbnailTimeoutSpinBox->value();
 
   emit changed();
 }

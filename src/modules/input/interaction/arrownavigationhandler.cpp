@@ -3,7 +3,7 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "interactionstateholder.h"
 #include "iviewportmanager.h"
 #include "keyboardmanager.h"
@@ -348,5 +348,5 @@ int ArrowNavigationHandler::getTotalItems() const {
 }
 
 bool ArrowNavigationHandler::isWrapEnabled() const {
-  return m_generalSettings ? m_generalSettings->wrapNavigation : false;
+  return m_generalSettings ? m_generalSettings->input.wrapNavigation : false;
 }

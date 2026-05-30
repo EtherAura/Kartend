@@ -102,7 +102,7 @@ The [`.scripts/build.sh`](.scripts/build.sh) wrapper auto-detects
 Ninja, lld, and ccache, and keeps each flavor in its own tree
 (`build/ninja-release`, `build/ninja-debug`, …). Run
 `.scripts/build.sh --help` for the full flag list, or see
-[docs/building.md](docs/building.md) for PGO, sanitizers, custom
+[docs/dev/building.md](docs/dev/building.md) for PGO, sanitizers, custom
 toolchains, manual CMake, packaging, and uninstall.
 
 ### Dependencies
@@ -115,15 +115,15 @@ MultimediaWidgets, Network, LinguistTools). Optional: **Qt6 Gamepad**
 
 A cold release build takes roughly **5–10 minutes** on modern hardware
 the first time through; subsequent ccache-hit incremental builds finish
-in ~30 seconds. See [`docs/building.md`](docs/building.md) for distro
+in ~30 seconds. See [`docs/dev/building.md`](docs/dev/building.md) for distro
 package lists, debug/sanitizer/PGO modes, and CI reproduction.
 
 ## Documentation
 
 - **User guide / wiki** — [github.com/EtherAura/Kartend/wiki](https://github.com/EtherAura/Kartend/wiki)
-- **Build &amp; packaging** — [docs/building.md](docs/building.md)
-- **Architecture** — [docs/architecture.md](docs/architecture.md)
-- **Testing** — [docs/testing.md](docs/testing.md)
+- **Build &amp; packaging** — [docs/dev/building.md](docs/dev/building.md)
+- **Architecture** — [docs/dev/architecture.md](docs/dev/architecture.md)
+- **Testing** — [docs/dev/testing.md](docs/dev/testing.md)
 - **Contributing** — [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Security policy** — [SECURITY.md](SECURITY.md)
 

@@ -33,6 +33,7 @@
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
+#include "applicationcontext.h"
 #include "artworktabpanel.h"
 #include "attractpanel.h"
 #include "collectionremover.h"
@@ -46,7 +47,6 @@
 #include "gamepadmanager.h"
 #include "generalsettingspanel.h"
 #include "imainwindow.h"
-#include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
@@ -67,12 +67,13 @@
 #include "uiconstants/viewport.h"
 
 SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
-                               int initialIndex)
+                               int initialIndex, const ApplicationContext *ctx)
     : QDialog(parent), ui(new Ui::SettingsDialog), collectionTreeWidget(nullptr),
       currentTreeItem(nullptr), collections(initialCollections),
       originalCurrentCollectionIndex(initialIndex), currentCollectionIndex(initialIndex),
       m_workingCollections(initialCollections), m_gridWidthChangedForActiveCollection(false),
-      m_newGridWidthForActiveCollection(0), m_collectionSaved(true), m_isLoading(false) {
+      m_newGridWidthForActiveCollection(0), m_collectionSaved(true), m_isLoading(false),
+      m_ctx(ctx) {
   ui->setupUi(this);
   setWindowTitle(tr("Settings"));
   setModal(true);
@@ -86,7 +87,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Gamepad button-capture state machine. Constructed before
   // setupConnections() runs so the Detect-button click handlers can
   // dispatch through it.
-  m_gamepadCapture = new GamepadCaptureController(this);
+  m_gamepadCapture = new GamepadCaptureController(this, m_ctx);
 
   // Wire the SettingsModel pointer aggregate at the editable data fields
   // owned by this dialog. Done before constructing CollectionRemover so the
@@ -109,8 +110,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // so checkForChanges() picks up preset edits without other panels going
   // through the panel API to read presets (settingsdialoglaunchers.cpp still
   // reads m_generalSettings.launcherPresets directly for its presets combo).
-  ui->launcherPresetsPanel->setPresets(&m_generalSettings.launcherPresets);
-  ui->launcherPresetsPanel->setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
+  ui->launcherPresetsPanel->setPresets(&m_generalSettings.launchers.launcherPresets);
+  ui->launcherPresetsPanel->setRetroarchConfigOverride(
+      m_generalSettings.launchers.retroarchConfigPath);
   connect(ui->launcherPresetsPanel, &LauncherPresetsPanel::presetsChanged, this,
           &SettingsDialog::checkForChanges);
 
@@ -173,9 +175,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
           [this](const QString &c) {
             auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-            auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
-            if (!sm) return;
-            mainWindow->generalSettings().titleBaseColor = c;
+            auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
+            if (!mainWindow || !sm) return;
+            mainWindow->generalSettings().appearance.titleBaseColor = c;
             auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
             if (result.isError()) {
@@ -192,8 +194,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     // QObject::parent() — explicit because the enclosing constructor's
     // own `parent` argument is in scope and shadows the member function.
     auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-    auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
-    if (!sm) {
+    auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
+    if (!mainWindow || !sm) {
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;
@@ -210,8 +212,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
     auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
-    auto *sm = mainWindow ? mainWindow->settingsManager() : nullptr;
-    if (!sm) {
+    auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
+    if (!mainWindow || !sm) {
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;

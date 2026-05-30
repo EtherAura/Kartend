@@ -31,7 +31,8 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/validationhelpers.h"
 #include "collectiontypes.h"
 #include "databasemanager.h"
 #include "gridutils.h"

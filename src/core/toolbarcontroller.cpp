@@ -7,8 +7,8 @@
 #include "toolbarcontroller.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
 #include "collection/launcherconfig.h"
+#include "collection/typehelpers.h"
 
 #include "applicationmanager.h"
 #include "inavigationmanager.h"
@@ -152,10 +152,11 @@ void ToolbarController::applyToolbarCustomization(const GeneralSettings &gs) {
   // filter button stays on when *either* legacy flag (type or title) is on
   // so existing settings don't accidentally hide it.
   if (m_filterButton) {
-    m_filterButton->setVisible(gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter);
+    m_filterButton->setVisible(gs.toolbar.toolbarShowTypeFilter ||
+                               gs.toolbar.toolbarShowTitleFilter);
   }
   if (m_searchBar) {
-    m_searchBar->setVisible(gs.toolbarShowSearchBar);
+    m_searchBar->setVisible(gs.toolbar.toolbarShowSearchBar);
   }
   refreshHomeButton(gs);
 }
@@ -176,9 +177,9 @@ void ToolbarController::refreshHomeButton(const GeneralSettings &gs) {
   if (!m_homeButton) {
     return;
   }
-  m_homeButton->setVisible(gs.useHomeView);
+  m_homeButton->setVisible(gs.startup.useHomeView);
   QIcon icon;
-  const QString customPath = gs.homeViewIcon.trimmed();
+  const QString customPath = gs.startup.homeViewIcon.trimmed();
   if (!customPath.isEmpty()) {
     icon = QIcon(customPath);
   }
@@ -188,7 +189,7 @@ void ToolbarController::refreshHomeButton(const GeneralSettings &gs) {
   }
   m_homeButton->setIcon(icon);
   m_homeButton->setIconSize(QSize(18, 18));
-  const QString label = gs.homeViewLabel.trimmed();
+  const QString label = gs.startup.homeViewLabel.trimmed();
   m_homeButton->setToolTip(label.isEmpty() ? tr("Home") : label);
 }
 
@@ -276,10 +277,10 @@ void ToolbarController::refreshFilterToolbar() {
       const FilterRole role = roleIt.value();
       if (role == FilterRole::Type) {
         const QString chosen = action->data().toString();
-        if (m_mainWindow->m_generalSettings.collectionTypeFilter == chosen) {
+        if (m_mainWindow->m_generalSettings.view.collectionTypeFilter == chosen) {
           return;
         }
-        m_mainWindow->m_generalSettings.collectionTypeFilter = chosen;
+        m_mainWindow->m_generalSettings.view.collectionTypeFilter = chosen;
         if (settingsMgr()) {
           settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
         }
@@ -328,7 +329,7 @@ void ToolbarController::refreshFilterToolbar() {
     auto *typeGroup = new QActionGroup(menu);
     typeGroup->setExclusive(true);
 
-    const QString previous = m_mainWindow->m_generalSettings.collectionTypeFilter;
+    const QString previous = m_mainWindow->m_generalSettings.view.collectionTypeFilter;
     bool matchedPrevious = previous.isEmpty();
 
     QAction *allAction = menu->addAction(tr("<All types>"));
@@ -357,7 +358,7 @@ void ToolbarController::refreshFilterToolbar() {
     // so the toolbar reflects reality.
     if (!matchedPrevious) {
       allAction->setChecked(true);
-      m_mainWindow->m_generalSettings.collectionTypeFilter.clear();
+      m_mainWindow->m_generalSettings.view.collectionTypeFilter.clear();
       if (settingsMgr()) {
         settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
       }

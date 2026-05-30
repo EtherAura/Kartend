@@ -1,8 +1,8 @@
 name: Sync wiki
 
-# Mirrors docs/guide/*.md to the GitHub Wiki on every push to main.
+# Mirrors docs/user/*.md to the GitHub Wiki on every push to main.
 # The wiki is one-way: edits made via the GitHub Wiki web UI will be
-# overwritten by the next sync. docs/guide/ is the source of truth.
+# overwritten by the next sync. docs/user/ is the source of truth.
 #
 # _Sidebar.md / _Footer.md / _Header.md (wiki-special navigation pages)
 # are NOT propagated from source AND are protected from deletion in the
@@ -13,7 +13,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/guide/**'
+      - 'docs/user/**'
       - '.github/workflows/sync-wiki.yml'
       - '.scripts/wiki-rewrite-links.py'
   workflow_dispatch: {}
@@ -36,8 +36,8 @@ jobs:
 
       - name: Safety check
         run: |
-          if [[ ! -d docs/guide ]] || ! compgen -G 'docs/guide/*.md' > /dev/null; then
-            echo "::error::docs/guide/ is missing or empty; refusing to sync (would wipe the wiki)."
+          if [[ ! -d docs/user ]] || ! compgen -G 'docs/user/*.md' > /dev/null; then
+            echo "::error::docs/user/ is missing or empty; refusing to sync (would wipe the wiki)."
             exit 1
           fi
 
@@ -49,13 +49,13 @@ jobs:
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.wiki.git" \
             wiki
 
-      - name: Mirror docs/guide → wiki
+      - name: Mirror docs/user → wiki
         run: |
           # Step 1: copy non-underscore-prefixed .md files from source to wiki.
           # Underscore-prefixed names are wiki-special (_Sidebar, _Footer,
           # _Header) and must be authored on the wiki side; we never push them
           # from source.
-          for src in docs/guide/*.md; do
+          for src in docs/user/*.md; do
             base=$(basename "$src")
             case "$base" in
               _*) continue ;;
@@ -70,8 +70,8 @@ jobs:
             case "$base" in
               _*) continue ;;
             esac
-            if [[ ! -f "docs/guide/$base" ]]; then
-              echo "removing wiki/$base (no longer in docs/guide/)"
+            if [[ ! -f "docs/user/$base" ]]; then
+              echo "removing wiki/$base (no longer in docs/user/)"
               rm "$f"
             fi
           done
@@ -90,7 +90,7 @@ jobs:
             echo "Wiki already up to date; nothing to commit."
             exit 0
           fi
-          git commit -m "Sync from docs/guide @ ${GITHUB_SHA::8}
+          git commit -m "Sync from docs/user @ ${GITHUB_SHA::8}
 
           Source: ${{ github.repository }}@${{ github.sha }}"
           git push

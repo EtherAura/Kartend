@@ -11,7 +11,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "hoverscrollhandler.h"
 #include "idatabasemanager.h"
 #include "iselectionmanager.h"
@@ -165,7 +165,7 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
             (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
         const Qt::KeyboardModifier cycleMod =
             m_generalSettings
-                ? static_cast<Qt::KeyboardModifier>(m_generalSettings->artworkCycleModifier)
+                ? static_cast<Qt::KeyboardModifier>(m_generalSettings->input.artworkCycleModifier)
                 : Qt::ShiftModifier;
         if (cycleMod != Qt::NoModifier && mods == cycleMod) {
           emit artworkTypeCycleRequested(widget, visualIndex);

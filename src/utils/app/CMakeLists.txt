@@ -1,20 +1,36 @@
 target_sources(kartend_utils PRIVATE
   cliargs.cpp
+  collection/appearance_settings_persistence.cpp
   collection/archiveoptions_persistence.cpp
+  collection/attract_settings_persistence.cpp
   collection/collectionbackground_persistence.cpp
   collection/collectionfilterpreferences_persistence.cpp
   collection/collectionhierarchycache.cpp
   collection/collectionscalars_persistence.cpp
   collection/folderbrowsingoptions_persistence.cpp
+  collection/gamepad_settings_persistence.cpp
   collection/gridlayoutpreferences_persistence.cpp
-  collection/helpers.cpp
+  collection/hierarchyhelpers.cpp
+  collection/history_settings_persistence.cpp
+  collection/input_settings_persistence.cpp
+  collection/keybinding_settings_persistence.cpp
+  collection/launcher_settings_persistence.cpp
   collection/launcherconfig.cpp
   collection/launcherprofile_persistence.cpp
   collection/listviewoptions_persistence.cpp
+  collection/marquee_settings_persistence.cpp
+  collection/media_settings_persistence.cpp
   collection/presentationprofile.cpp
+  collection/runtime_detection_settings_persistence.cpp
+  collection/scraper_settings_persistence.cpp
   collection/scraperoverrides_persistence.cpp
   collection/sidebarappearance_persistence.cpp
+  collection/splash_settings_persistence.cpp
+  collection/startup_settings_persistence.cpp
   collection/themepreset.cpp
+  collection/toolbar_settings_persistence.cpp
+  collection/typehelpers.cpp
+  collection/view_settings_persistence.cpp
   errorpresentation_default.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
@@ -23,7 +39,12 @@ target_sources(kartend_utils PRIVATE
   applicationcontext.h
   applicationcontext_fwd.h
   cliargs.h
+  collection/appearance_settings.h
+  collection/appearance_settings_persistence.h
   collection/archiveoptions.h
+  collection/archiveoptions_persistence.h
+  collection/attract_settings.h
+  collection/attract_settings_persistence.h
   collection/collectionbackground.h
   collection/collectionbackground_persistence.h
   collection/collectionconfig.h
@@ -32,24 +53,52 @@ target_sources(kartend_utils PRIVATE
   collection/collectionfilterpreferences_persistence.h
   collection/collectionhierarchycache.h
   collection/collectionscalars_persistence.h
+  collection/enumstringhelpers.h
   collection/folderbrowsingoptions.h
+  collection/folderbrowsingoptions_persistence.h
+  collection/gamepad_settings.h
+  collection/gamepad_settings_persistence.h
   collection/generalsettings.h
   collection/gridlayoutpreferences.h
   collection/gridlayoutpreferences_persistence.h
-  collection/helpers.h
-  collection/archiveoptions_persistence.h
-  collection/folderbrowsingoptions_persistence.h
+  collection/hierarchyhelpers.h
+  collection/history_settings.h
+  collection/history_settings_persistence.h
+  collection/input_settings.h
+  collection/input_settings_persistence.h
+  collection/keybinding_settings.h
+  collection/keybinding_settings_persistence.h
+  collection/launcher_settings.h
+  collection/launcher_settings_persistence.h
   collection/launcherconfig.h
   collection/launcherpreset.h
   collection/launcherprofile_persistence.h
   collection/listviewoptions.h
   collection/listviewoptions_persistence.h
+  collection/marquee_settings.h
+  collection/marquee_settings_persistence.h
+  collection/media_settings.h
+  collection/media_settings_persistence.h
   collection/presentationprofile.h
+  collection/runtime_detection_settings.h
+  collection/runtime_detection_settings_persistence.h
+  collection/scraper_settings.h
+  collection/scraper_settings_persistence.h
   collection/scraperoverrides.h
   collection/scraperoverrides_persistence.h
   collection/sidebarappearance.h
   collection/sidebarappearance_persistence.h
+  collection/splash_settings.h
+  collection/splash_settings_persistence.h
+  collection/startup_settings.h
+  collection/startup_settings_persistence.h
   collection/themepreset.h
+  collection/toolbar_settings.h
+  collection/toolbar_settings_persistence.h
+  collection/typehelpers.h
+  collection/validationhelpers.h
+  collection/view_settings.h
+  collection/view_settings_persistence.h
   collectiontypes.h
   errorpresentation.h
   errorutils.h

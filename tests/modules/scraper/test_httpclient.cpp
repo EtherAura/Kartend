@@ -38,9 +38,7 @@ public:
     connect(m_server, &QTcpServer::newConnection, this, &FloodingServer::handleConnection);
   }
 
-  bool start() {
-    return m_server->listen(QHostAddress::LocalHost, 0);
-  }
+  bool start() { return m_server->listen(QHostAddress::LocalHost, 0); }
 
   quint16 port() const { return m_server->serverPort(); }
 
@@ -60,11 +58,10 @@ private slots:
         state->headersSent = true;
         // HTTP/1.1 with no Content-Length and Connection: close — the
         // body length is bounded only by when the server closes.
-        const QByteArray headers =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: application/octet-stream\r\n"
-            "Connection: close\r\n"
-            "\r\n";
+        const QByteArray headers = "HTTP/1.1 200 OK\r\n"
+                                   "Content-Type: application/octet-stream\r\n"
+                                   "Connection: close\r\n"
+                                   "\r\n";
         sock->write(headers);
         writeChunks(sock, state);
       }
@@ -121,15 +118,14 @@ private slots:
 };
 
 void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
-#if defined(__SANITIZE_THREAD__) ||                                                                \
-    (defined(__has_feature) && __has_feature(thread_sanitizer))
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("HttpClient::get spins up QNetworkAccessManager's internal QThread on first call, "
         "and the QNAM thread start-up window mallocs/frees Qt-internal heap buffers (QByteArray "
         "/ QArrayData) on the worker while the main thread is still inside drainHost. Qt's "
         "QThread::start / event-queue mutex synchronisation isn't observable through the "
         "stripped libQt6Core frames, so TSan flags it as a heap race on each new test process. "
-        "Pre-existing — same pattern .tsan_suppressions.txt already documents for other Qt "
-        "queued-connection arg flows. Re-enable once .tsan_suppressions.txt grows a "
+        "Pre-existing — same pattern tests/suppressions/tsan.txt already documents for other Qt "
+        "queued-connection arg flows. Re-enable once tests/suppressions/tsan.txt grows a "
         "called_from_lib:libQt6Core-scoped pattern that can match the stripped frames.");
 #endif
   // Cap at 4 KiB. Server will *try* to stream 1 MiB; we expect the
@@ -169,8 +165,7 @@ void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
 }
 
 void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
-#if defined(__SANITIZE_THREAD__) ||                                                                \
-    (defined(__has_feature) && __has_feature(thread_sanitizer))
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as "
         "responseExceedingCap_returnsResponseTooLargeError above — both tests trip the lazy "
         "QNAM-thread init in HttpClient::drainHost.");

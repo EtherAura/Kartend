@@ -3,21 +3,21 @@
 //
 // Holds the service signal handlers (onServiceScrapeStarted, onServiceItemBegan,
 // onServiceItemCompleted, onServicePickerNeeded, onServiceScrapeFinished,
-// onServiceScrapePaused, onServiceQuotaUpdated, plus the per-item /
+// onServiceScrapePaused, onServiceQuotaUpdated), plus the per-item /
 // per-collection orchestration that begins from onScrapeClicked
 // (startNextCollectionInQueue, runAutoCollection, runInteractiveCollection,
 // interactiveNextItem, interactiveOnLookupResult, interactiveOnApplied,
 // finishCurrentApply, interactiveOnSkipped) and the diagnostic helpers
-// (totalCheckedItemCount, updateUnifiedProgressLabel, showScrapeErrorDetails).
+// (updateUnifiedProgressLabel, showScrapeErrorDetails).
 //
 // All remain ScrapeResultDialogUnified members; this is purely a TU split
-// to bring the parent file out of the ~1900 LOC zone. The setup/UI assembly
-// half (buildUnifiedPanel, populateCollectionTree + tree-checkbox handlers,
-// rebuildItemsList, setUnifiedSetupEnabled, startUnifiedScrape) stays in
-// scraperesultdialogunified.cpp.
+// to bring the parent file out of the ~1900 LOC zone. The live-view assembly
+// half (buildUnifiedPanel, setUnifiedSetupEnabled, startUnifiedScrape) stays
+// in scraperesultdialogunified.cpp; the collection-tree + items-list selection
+// state moved to ScrapeResultSelectionModel.
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "scraperesultdialogunified.h"
 
 #include "scraperesultdialog.h"
@@ -25,7 +25,10 @@
 #include "applicationcontext.h"
 #include "batchprogressview.h"
 #include "mediatypecheckboxbuilder.h"
+#include "scraperesultselectionmodel.h"
+#include "scraperesultthumbnailloader.h"
 #include "singleitemview.h"
+#include "valuemarqueeticker.h"
 
 #include <algorithm>
 #include <limits>
@@ -86,15 +89,7 @@ void ScrapeResultDialogUnified::onServiceScrapeStarted(int total) {
   }
   m_dlg->m_liveTickTimer.start();
   // Value-marquee timer: scrolls overflowing chip text L→R then wraps.
-  // Lazy-init on first scrapeStart.
-  if (!m_dlg->m_marqueeTimerInited) {
-    m_dlg->m_marqueeTimer.setInterval(150);
-    connect(&m_dlg->m_marqueeTimer, &QTimer::timeout, this,
-            &ScrapeResultDialogUnified::tickValueMarquees);
-    m_dlg->m_marqueeTimerInited = true;
-  }
-  m_dlg->m_marqueePauseTicks.clear();
-  m_dlg->m_marqueeTimer.start();
+  m_dlg->m_marqueeTicker->start();
   updateUnifiedProgressLabel();
 }
 
@@ -169,7 +164,7 @@ void ScrapeResultDialogUnified::onServiceItemCompleted(int done, int total,
   // long batch doesn't grow it unbounded.
   for (const QString &p : mediaPaths) {
     if (p.isEmpty()) continue;
-    appendThumbAsync(p);
+    m_dlg->m_thumbLoader->appendThumbAsync(p);
   }
   updateUnifiedProgressLabel();
 }
@@ -221,8 +216,7 @@ void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperSe
   qCInfo(lcScrapeTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
                           << "skipped=" << s.skipped << "errors=" << s.errors;
   m_dlg->m_liveTickTimer.stop();
-  m_dlg->m_marqueeTimer.stop();
-  m_dlg->m_marqueePauseTicks.clear();
+  m_dlg->m_marqueeTicker->stop();
   if (m_dlg->m_interactiveCandidateRow) m_dlg->m_interactiveCandidateRow->hide();
   // Reset phase so a subsequent Scrape click isn't rejected by the
   // "if (m_dlg->m_unifiedPhase != Setup) return;" guard in onScrapeClicked.
@@ -275,15 +269,6 @@ void ScrapeResultDialogUnified::onServiceQuotaUpdated(const Scraper::QuotaStatus
   m_dlg->m_unifiedQuotaLabel->show();
 }
 
-int ScrapeResultDialogUnified::totalCheckedItemCount() const {
-  int total = 0;
-  for (auto it = m_dlg->m_itemSelectionByCollection.constBegin();
-       it != m_dlg->m_itemSelectionByCollection.constEnd(); ++it) {
-    total += it.value().size();
-  }
-  return total;
-}
-
 void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
   // Service-driven path: counters live on the ScraperService, not on
   // the legacy m_dlg->m_unified* fields. Read from whichever is the source
@@ -303,7 +288,7 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
     skipped = s.skipped;
     errors = s.errors;
   } else {
-    total = totalCheckedItemCount();
+    total = m_dlg->m_selectionModel->totalCheckedItemCount();
     done = m_dlg->m_unifiedItemsCompletedAcross;
     startMs = m_dlg->m_unifiedStartMs;
     scraped = m_dlg->m_unifiedScrapedTotal;
@@ -460,11 +445,12 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
   QList<int> checkedOrder;
   for (QTreeWidgetItem *row : rowsInOrder) {
     if (row->checkState(0) == Qt::Checked) {
-      checkedOrder.append(m_dlg->m_treeItemToCollectionIndex.value(row, -1));
+      checkedOrder.append(m_dlg->m_selectionModel->collectionIndexForRow(row));
     }
   }
   const auto ownerGroups = ScrapeJobGrouping::byOwningCollection(
-      checkedOrder, m_dlg->m_itemSelectionByCollection, m_dlg->m_itemOwnerByCollection,
+      checkedOrder, m_dlg->m_selectionModel->itemSelectionByCollection(),
+      m_dlg->m_selectionModel->itemOwnerByCollection(),
       static_cast<int>(m_dlg->m_scraperCtx.collections->size()));
   for (const auto &group : ownerGroups) {
     const int owner = group.first;
@@ -534,7 +520,7 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
   // that haven't been migrated to the service yet). This path keeps
   // working but does NOT survive dialog close / app exit.
   setUnifiedSetupEnabled(false);
-  m_dlg->m_unifiedProgressBar->setRange(0, totalCheckedItemCount());
+  m_dlg->m_unifiedProgressBar->setRange(0, m_dlg->m_selectionModel->totalCheckedItemCount());
   m_dlg->m_unifiedProgressBar->setValue(0);
   updateUnifiedProgressLabel();
   startNextCollectionInQueue();
@@ -595,11 +581,11 @@ void ScrapeResultDialogUnified::runAutoCollection(int collectionIndex, const QSt
   const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
   const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
   const Scraper::RescrapeMode rescrapeMode = static_cast<Scraper::RescrapeMode>(
-      m_dlg->m_scraperCtx.generalSettings->scraperOptions.rescrapeMode);
+      m_dlg->m_scraperCtx.generalSettings->scraper.options.rescrapeMode);
   const int itemConcurrency =
-      m_dlg->m_scraperCtx.generalSettings->scraperOptions.batchItemConcurrency;
+      m_dlg->m_scraperCtx.generalSettings->scraper.options.batchItemConcurrency;
   const int skipRecentDays =
-      m_dlg->m_scraperCtx.generalSettings->scraperOptions.skipRecentScrapeDays;
+      m_dlg->m_scraperCtx.generalSettings->scraper.options.skipRecentScrapeDays;
 
   // Translate the user's media-type checkboxes into the runner's
   // filter set. The synthetic `_metadata` key gates text-field
@@ -633,7 +619,7 @@ void ScrapeResultDialogUnified::runAutoCollection(int collectionIndex, const QSt
         // accumulates the prior queue items' completions before this
         // collection started — the +done below is per-collection
         // progress on top of that running total.
-        const int totalAcross = totalCheckedItemCount();
+        const int totalAcross = m_dlg->m_selectionModel->totalCheckedItemCount();
         m_dlg->m_unifiedProgressBar->setRange(0, totalAcross);
         m_dlg->m_unifiedProgressBar->setValue(m_dlg->m_unifiedItemsCompletedAcross + done);
         m_dlg->m_unifiedCurrentLabel->setText(

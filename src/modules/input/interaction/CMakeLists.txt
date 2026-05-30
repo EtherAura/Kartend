@@ -2,14 +2,14 @@ target_sources(kartend_input PRIVATE
   arrownavigationhandler.cpp
   interactionhelpers.cpp
   interactionmanager.cpp
-  interactionmanagercontextactions.cpp
-  interactionmanagercontextmenu.cpp
-  interactionmanagerenter.cpp
-  interactionmanagerholdscroll.cpp
-  interactionmanagerkeyboard.cpp
-  interactionmanagerselection.cpp
-  interactionmanagersetup.cpp
-  interactionmanagerwiring.cpp
+  interactionmanager_contextactions.cpp
+  interactionmanager_contextmenu.cpp
+  interactionmanager_enter.cpp
+  interactionmanager_holdscroll.cpp
+  interactionmanager_keyboard.cpp
+  interactionmanager_selection.cpp
+  interactionmanager_setup.cpp
+  interactionmanager_wiring.cpp
   arrownavigationhandler.h
   interactionhelpers.h
   interactionmanager.h

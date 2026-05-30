@@ -29,6 +29,7 @@ class QPropertyAnimation;
 class QPushButton;
 QT_END_NAMESPACE
 
+class ApplicationContext;
 class CollectionTreeWidget;
 class ConfigProfileController;
 class DetailsPaneManager;
@@ -54,7 +55,7 @@ public:
   Q_ENUM(SettingsScope)
 
   explicit SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
-                          int initialIndex = -1);
+                          int initialIndex = -1, const ApplicationContext *ctx = nullptr);
   ~SettingsDialog() override;
 
   // ISettingsDialog — neutral role interface for the data-layer controller.
@@ -322,6 +323,12 @@ private:
   /// per-tick UI sync (line edits, detect buttons, sibling checkbox
   /// lock state). Parented to this dialog.
   GamepadCaptureController *m_gamepadCapture = nullptr;
+  /// Sibling-manager access seam (Kartend-qjtz). Replaces the old
+  /// dynamic_cast<IMainWindow*>(parent()) forwarder path for reaching the
+  /// settings/scroll/interaction managers. May be null in tests, which
+  /// construct the dialog without an app context; the manager-touching
+  /// paths null-guard accordingly.
+  const ApplicationContext *m_ctx = nullptr;
   /// Multi-step collection-removal pipeline — owns the seven discrete
   /// steps (validate / capture-expanded / perform-removal /
   /// update-parents / rebuild-indices / restore-expanded /

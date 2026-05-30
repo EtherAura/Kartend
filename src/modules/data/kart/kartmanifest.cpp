@@ -1,6 +1,6 @@
 #include "kartmanifest.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
 

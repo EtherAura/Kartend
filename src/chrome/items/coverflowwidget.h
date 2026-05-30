@@ -110,6 +110,11 @@ protected:
   void hideEvent(QHideEvent *e) override;
 
 private:
+  // Cards drawn on each side of center. A class static (not a TU-local
+  // constant) because the split partials — paint/layout, keyboard paging,
+  // and pixmap-cache windowing — all need the same value.
+  static constexpr int kVisibleSideCards = 5;
+
   // Schedule an async pixmap load for @p path; the connect()ed lambda
   // owns the lookup-by-path so we don't have to reverse-scan m_pendingLoads
   // from a slot's sender() (QFutureWatcher<T> is not Q_OBJECT).

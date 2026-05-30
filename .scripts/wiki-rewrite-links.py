@@ -38,10 +38,10 @@ INTERNAL_MD_RE = re.compile(
 )
 
 
-def make_relative_replacer(repo: str, src_root: Path, src_subdir: str = "docs/guide"):
+def make_relative_replacer(repo: str, src_root: Path, src_subdir: str = "docs/user"):
     def replacer(match: re.Match) -> str:
         prefix, rel, suffix = match.groups()
-        # Resolve relative to docs/guide/ (the source layout)
+        # Resolve relative to docs/user/ (the source layout)
         target = os.path.normpath(os.path.join(src_subdir, rel))
         if target.startswith("./"):
             target = target[2:]

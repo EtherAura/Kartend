@@ -37,8 +37,8 @@ void TestSelectionDisplayManager::testConstructionInitialDefaults() {
 void TestSelectionDisplayManager::testApplyGeneralSettingsUpdatesPositiveWidths() {
   SelectionDisplayManager mgr;
   GeneralSettings settings;
-  settings.listCollectionColumnWidth = 240;
-  settings.listArtworkColumnWidth = 48;
+  settings.view.listCollectionColumnWidth = 240;
+  settings.view.listArtworkColumnWidth = 48;
 
   mgr.applyGeneralSettings(&settings);
 
@@ -55,8 +55,8 @@ void TestSelectionDisplayManager::testApplyGeneralSettingsIgnoresZeroOrNegativeW
   // been resized. The guard `width > 0` keeps the constructor defaults
   // in that case so the list view still renders a sensible header.
   GeneralSettings settings;
-  settings.listCollectionColumnWidth = 0;
-  settings.listArtworkColumnWidth = -5;
+  settings.view.listCollectionColumnWidth = 0;
+  settings.view.listArtworkColumnWidth = -5;
 
   mgr.applyGeneralSettings(&settings);
 

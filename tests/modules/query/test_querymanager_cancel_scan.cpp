@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "workersignalspy.h"

@@ -21,7 +21,7 @@
 #              -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON \
 #     && cmake --build build/TSan --parallel \
 #     && QT_QPA_PLATFORM=offscreen \
-#        TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/.tsan_suppressions.txt \
+#        TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt \
 #        ctest --test-dir build/TSan --output-on-failure'
 FROM ubuntu:24.04
 

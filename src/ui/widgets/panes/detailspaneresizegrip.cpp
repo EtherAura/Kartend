@@ -1,6 +1,6 @@
 #include "detailspaneresizegrip.h"
 
-#include "collection/helpers.h"
+#include "collection/enumstringhelpers.h"
 #include "uiconstants/detailspaneconstants.h"
 
 #include <algorithm>

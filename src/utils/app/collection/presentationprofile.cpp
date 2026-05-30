@@ -158,44 +158,44 @@ ErrorUtils::Result<PresentationProfile> importFromFile(const QString &filePath) 
 }
 
 void applyTo(const PresentationProfile &p, GeneralSettings &t) {
-  t.attractModeEnabled = p.attractModeEnabled;
-  t.attractModeIdleTimeoutSec = p.attractModeIdleTimeoutSec;
-  t.attractModeAutoScrollEnabled = p.attractModeAutoScrollEnabled;
-  t.attractModeScrollSpeed = p.attractModeScrollSpeed;
-  t.attractModeAdvanceSelectionEnabled = p.attractModeAdvanceSelectionEnabled;
-  t.attractModeAdvanceSelectionIntervalSec = p.attractModeAdvanceSelectionIntervalSec;
-  t.attractModeAdvanceSelectionRandom = p.attractModeAdvanceSelectionRandom;
-  t.marqueeEnabled = p.marqueeEnabled;
-  t.marqueeScreenName = p.marqueeScreenName;
-  t.marqueeMode = p.marqueeMode;
-  t.bootSplashEnabled = p.bootSplashEnabled;
-  t.resumeFocusSplashEnabled = p.resumeFocusSplashEnabled;
-  t.bootSplashTitle = p.bootSplashTitle;
-  t.bootSplashSubtitle = p.bootSplashSubtitle;
-  t.resumeFocusSplashTitle = p.resumeFocusSplashTitle;
-  t.resumeFocusSplashSubtitle = p.resumeFocusSplashSubtitle;
+  t.attract.attractModeEnabled = p.attractModeEnabled;
+  t.attract.attractModeIdleTimeoutSec = p.attractModeIdleTimeoutSec;
+  t.attract.attractModeAutoScrollEnabled = p.attractModeAutoScrollEnabled;
+  t.attract.attractModeScrollSpeed = p.attractModeScrollSpeed;
+  t.attract.attractModeAdvanceSelectionEnabled = p.attractModeAdvanceSelectionEnabled;
+  t.attract.attractModeAdvanceSelectionIntervalSec = p.attractModeAdvanceSelectionIntervalSec;
+  t.attract.attractModeAdvanceSelectionRandom = p.attractModeAdvanceSelectionRandom;
+  t.marquee.marqueeEnabled = p.marqueeEnabled;
+  t.marquee.marqueeScreenName = p.marqueeScreenName;
+  t.marquee.marqueeMode = p.marqueeMode;
+  t.splash.bootSplashEnabled = p.bootSplashEnabled;
+  t.splash.resumeFocusSplashEnabled = p.resumeFocusSplashEnabled;
+  t.splash.bootSplashTitle = p.bootSplashTitle;
+  t.splash.bootSplashSubtitle = p.bootSplashSubtitle;
+  t.splash.resumeFocusSplashTitle = p.resumeFocusSplashTitle;
+  t.splash.resumeFocusSplashSubtitle = p.resumeFocusSplashSubtitle;
 }
 
 PresentationProfile fromGeneralSettings(const GeneralSettings &s, const QString &name) {
   PresentationProfile p;
   p.schemaVersion = kCurrentSchemaVersion;
   p.name = name.isEmpty() ? QStringLiteral("Current") : name;
-  p.attractModeEnabled = s.attractModeEnabled;
-  p.attractModeIdleTimeoutSec = s.attractModeIdleTimeoutSec;
-  p.attractModeAutoScrollEnabled = s.attractModeAutoScrollEnabled;
-  p.attractModeScrollSpeed = s.attractModeScrollSpeed;
-  p.attractModeAdvanceSelectionEnabled = s.attractModeAdvanceSelectionEnabled;
-  p.attractModeAdvanceSelectionIntervalSec = s.attractModeAdvanceSelectionIntervalSec;
-  p.attractModeAdvanceSelectionRandom = s.attractModeAdvanceSelectionRandom;
-  p.marqueeEnabled = s.marqueeEnabled;
-  p.marqueeScreenName = s.marqueeScreenName;
-  p.marqueeMode = s.marqueeMode;
-  p.bootSplashEnabled = s.bootSplashEnabled;
-  p.resumeFocusSplashEnabled = s.resumeFocusSplashEnabled;
-  p.bootSplashTitle = s.bootSplashTitle;
-  p.bootSplashSubtitle = s.bootSplashSubtitle;
-  p.resumeFocusSplashTitle = s.resumeFocusSplashTitle;
-  p.resumeFocusSplashSubtitle = s.resumeFocusSplashSubtitle;
+  p.attractModeEnabled = s.attract.attractModeEnabled;
+  p.attractModeIdleTimeoutSec = s.attract.attractModeIdleTimeoutSec;
+  p.attractModeAutoScrollEnabled = s.attract.attractModeAutoScrollEnabled;
+  p.attractModeScrollSpeed = s.attract.attractModeScrollSpeed;
+  p.attractModeAdvanceSelectionEnabled = s.attract.attractModeAdvanceSelectionEnabled;
+  p.attractModeAdvanceSelectionIntervalSec = s.attract.attractModeAdvanceSelectionIntervalSec;
+  p.attractModeAdvanceSelectionRandom = s.attract.attractModeAdvanceSelectionRandom;
+  p.marqueeEnabled = s.marquee.marqueeEnabled;
+  p.marqueeScreenName = s.marquee.marqueeScreenName;
+  p.marqueeMode = s.marquee.marqueeMode;
+  p.bootSplashEnabled = s.splash.bootSplashEnabled;
+  p.resumeFocusSplashEnabled = s.splash.resumeFocusSplashEnabled;
+  p.bootSplashTitle = s.splash.bootSplashTitle;
+  p.bootSplashSubtitle = s.splash.bootSplashSubtitle;
+  p.resumeFocusSplashTitle = s.splash.resumeFocusSplashTitle;
+  p.resumeFocusSplashSubtitle = s.splash.resumeFocusSplashSubtitle;
   return p;
 }
 

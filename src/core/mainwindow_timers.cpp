@@ -47,7 +47,7 @@ void MainWindow::setupInitialTimers() {
   // explicitly skipped the wizard, firstRunComplete stays true forever and
   // the legacy empty-collections prompt remains as the backstop for power
   // users who later delete every collection.
-  if (!m_generalSettings.firstRunComplete) {
+  if (!m_generalSettings.startup.firstRunComplete) {
     // singleShot(0) defers the wizard to the next event-loop iteration so
     // MainWindow's constructor finishes (and the window appears) before the
     // modal pops — otherwise the wizard parents to a not-yet-shown widget.
@@ -125,7 +125,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
       context.scrollManager = m_appManager->getScrollManager();
       context.navigationManager = m_appManager->getNavigationManager();
       context.databaseManager = m_appManager->getDatabaseManager();
-      context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+      context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
       m_appManager->getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {
@@ -145,8 +145,8 @@ void MainWindow::setupInitialTimersWithCollections() {
     // Synthetic home view takes priority when explicitly requested AND the
     // user hasn't pinned a specific startup collection. A specific collection
     // wins so a CLI override (--collection) or per-launch override still works.
-    const QString startupName = m_generalSettings.startupCollection.trimmed();
-    if (m_generalSettings.useHomeView && startupName.isEmpty()) {
+    const QString startupName = m_generalSettings.startup.startupCollection.trimmed();
+    if (m_generalSettings.startup.useHomeView && startupName.isEmpty()) {
       if (m_appManager->getNavigationManager()) {
         if (m_dbEventsController) {
           m_dbEventsController->setSuppressStartupScanOverlays(true);

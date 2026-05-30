@@ -40,28 +40,33 @@ void ToolbarPanel::refresh() {
     return;
   }
   GeneralSettings *s = m_model->generalSettings;
-  SettingsFormBinding::loadInto(ui->toolbarGridViewVisibleCheckBox, s->toolbarShowGridViewButton);
-  SettingsFormBinding::loadInto(ui->toolbarListViewVisibleCheckBox, s->toolbarShowListViewButton);
+  SettingsFormBinding::loadInto(ui->toolbarGridViewVisibleCheckBox,
+                                s->toolbar.toolbarShowGridViewButton);
+  SettingsFormBinding::loadInto(ui->toolbarListViewVisibleCheckBox,
+                                s->toolbar.toolbarShowListViewButton);
   SettingsFormBinding::loadInto(ui->toolbarCoverFlowViewVisibleCheckBox,
-                                s->toolbarShowCoverFlowViewButton);
+                                s->toolbar.toolbarShowCoverFlowViewButton);
   SettingsFormBinding::loadInto(ui->toolbarHorizontalViewVisibleCheckBox,
-                                s->toolbarShowHorizontalViewButton);
+                                s->toolbar.toolbarShowHorizontalViewButton);
   SettingsFormBinding::loadInto(ui->toolbarHideSubcollectionsVisibleCheckBox,
-                                s->toolbarShowHideSubcollectionsButton);
-  SettingsFormBinding::loadInto(ui->toolbarTypeFilterVisibleCheckBox, s->toolbarShowTypeFilter);
-  SettingsFormBinding::loadInto(ui->toolbarTitleFilterVisibleCheckBox, s->toolbarShowTitleFilter);
+                                s->toolbar.toolbarShowHideSubcollectionsButton);
+  SettingsFormBinding::loadInto(ui->toolbarTypeFilterVisibleCheckBox,
+                                s->toolbar.toolbarShowTypeFilter);
+  SettingsFormBinding::loadInto(ui->toolbarTitleFilterVisibleCheckBox,
+                                s->toolbar.toolbarShowTitleFilter);
   SettingsFormBinding::loadInto(ui->toolbarSearchModeVisibleCheckBox,
-                                s->toolbarShowSearchModeButton);
-  SettingsFormBinding::loadInto(ui->toolbarSearchBarVisibleCheckBox, s->toolbarShowSearchBar);
-  SettingsFormBinding::loadInto(ui->toolbarGridViewTextEdit, s->toolbarGridViewButtonText);
-  SettingsFormBinding::loadInto(ui->toolbarListViewTextEdit, s->toolbarListViewButtonText);
+                                s->toolbar.toolbarShowSearchModeButton);
+  SettingsFormBinding::loadInto(ui->toolbarSearchBarVisibleCheckBox,
+                                s->toolbar.toolbarShowSearchBar);
+  SettingsFormBinding::loadInto(ui->toolbarGridViewTextEdit, s->toolbar.toolbarGridViewButtonText);
+  SettingsFormBinding::loadInto(ui->toolbarListViewTextEdit, s->toolbar.toolbarListViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarCoverFlowViewTextEdit,
-                                s->toolbarCoverFlowViewButtonText);
+                                s->toolbar.toolbarCoverFlowViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarHorizontalViewTextEdit,
-                                s->toolbarHorizontalViewButtonText);
+                                s->toolbar.toolbarHorizontalViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarHideSubcollectionsTextEdit,
-                                s->toolbarHideSubcollectionsButtonText);
-  SettingsFormBinding::loadInto(ui->toolbarTitleFilterTextEdit, s->toolbarTitleFilterText);
+                                s->toolbar.toolbarHideSubcollectionsButtonText);
+  SettingsFormBinding::loadInto(ui->toolbarTitleFilterTextEdit, s->toolbar.toolbarTitleFilterText);
 }
 
 void ToolbarPanel::writeBack() {
@@ -69,21 +74,22 @@ void ToolbarPanel::writeBack() {
     return;
   }
   GeneralSettings *s = m_model->generalSettings;
-  s->toolbarShowGridViewButton = ui->toolbarGridViewVisibleCheckBox->isChecked();
-  s->toolbarShowListViewButton = ui->toolbarListViewVisibleCheckBox->isChecked();
-  s->toolbarShowCoverFlowViewButton = ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
-  s->toolbarShowHorizontalViewButton = ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
-  s->toolbarShowHideSubcollectionsButton =
+  s->toolbar.toolbarShowGridViewButton = ui->toolbarGridViewVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowListViewButton = ui->toolbarListViewVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowCoverFlowViewButton = ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowHorizontalViewButton =
+      ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowHideSubcollectionsButton =
       ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
-  s->toolbarShowTypeFilter = ui->toolbarTypeFilterVisibleCheckBox->isChecked();
-  s->toolbarShowTitleFilter = ui->toolbarTitleFilterVisibleCheckBox->isChecked();
-  s->toolbarShowSearchModeButton = ui->toolbarSearchModeVisibleCheckBox->isChecked();
-  s->toolbarShowSearchBar = ui->toolbarSearchBarVisibleCheckBox->isChecked();
-  s->toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
-  s->toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
-  s->toolbarCoverFlowViewButtonText = ui->toolbarCoverFlowViewTextEdit->text();
-  s->toolbarHorizontalViewButtonText = ui->toolbarHorizontalViewTextEdit->text();
-  s->toolbarHideSubcollectionsButtonText = ui->toolbarHideSubcollectionsTextEdit->text();
-  s->toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
+  s->toolbar.toolbarShowTypeFilter = ui->toolbarTypeFilterVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowTitleFilter = ui->toolbarTitleFilterVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowSearchModeButton = ui->toolbarSearchModeVisibleCheckBox->isChecked();
+  s->toolbar.toolbarShowSearchBar = ui->toolbarSearchBarVisibleCheckBox->isChecked();
+  s->toolbar.toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
+  s->toolbar.toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
+  s->toolbar.toolbarCoverFlowViewButtonText = ui->toolbarCoverFlowViewTextEdit->text();
+  s->toolbar.toolbarHorizontalViewButtonText = ui->toolbarHorizontalViewTextEdit->text();
+  s->toolbar.toolbarHideSubcollectionsButtonText = ui->toolbarHideSubcollectionsTextEdit->text();
+  s->toolbar.toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
   emit changed();
 }

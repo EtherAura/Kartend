@@ -11,7 +11,7 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "collectiontreewidget.h"
 #include "settingsdialog.h"
 #include "treemanager.h"

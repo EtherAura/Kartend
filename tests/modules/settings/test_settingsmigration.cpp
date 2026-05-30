@@ -32,6 +32,7 @@ private slots:
   void futureIni_warnsButStillLoadsAllKnownKeys();
   void legacyIni_invokesV0ToV1Migration();
   void v1Ini_doesNotInvokeAnyMigration();
+  void misfiledSchemaIni_recognisedViaScraperOptionsFallback();
 
 private:
   void installFixture(const QString &fixtureName);
@@ -74,9 +75,9 @@ void TestSettingsMigration::legacyIni_loadsAllKnownKeysWithoutWarning() {
   GeneralSettings settings;
   mgr.loadGeneralSettings(settings);
 
-  QCOMPARE(settings.rememberSelection, false);
-  QCOMPARE(settings.pixmapCacheSizeMB, 128);
-  QCOMPARE(settings.titleTintSaturation, 120);
+  QCOMPARE(settings.input.rememberSelection, false);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 128);
+  QCOMPARE(settings.appearance.titleTintSaturation, 120);
 }
 
 void TestSettingsMigration::v1Ini_loadsCleanlyWithCurrentSchemaVersion() {
@@ -86,9 +87,9 @@ void TestSettingsMigration::v1Ini_loadsCleanlyWithCurrentSchemaVersion() {
   GeneralSettings settings;
   mgr.loadGeneralSettings(settings);
 
-  QCOMPARE(settings.rememberSelection, true);
-  QCOMPARE(settings.pixmapCacheSizeMB, 64);
-  QCOMPARE(settings.titleTintSaturation, 200);
+  QCOMPARE(settings.input.rememberSelection, true);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
+  QCOMPARE(settings.appearance.titleTintSaturation, 200);
 }
 
 void TestSettingsMigration::futureIni_warnsButStillLoadsAllKnownKeys() {
@@ -105,9 +106,9 @@ void TestSettingsMigration::futureIni_warnsButStillLoadsAllKnownKeys() {
 
   // All known keys still decode normally — unknown future keys are dropped
   // silently by QSettings on read.
-  QCOMPARE(settings.rememberSelection, false);
-  QCOMPARE(settings.pixmapCacheSizeMB, 200);
-  QCOMPARE(settings.titleTintSaturation, 50);
+  QCOMPARE(settings.input.rememberSelection, false);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 200);
+  QCOMPARE(settings.appearance.titleTintSaturation, 50);
 }
 
 void TestSettingsMigration::legacyIni_invokesV0ToV1Migration() {
@@ -128,8 +129,8 @@ void TestSettingsMigration::legacyIni_invokesV0ToV1Migration() {
 
   // Reading still produces the same values as legacyIni_loadsAllKnownKeysWithoutWarning;
   // the migration is a no-op so the load behavior is unchanged.
-  QCOMPARE(settings.rememberSelection, false);
-  QCOMPARE(settings.pixmapCacheSizeMB, 128);
+  QCOMPARE(settings.input.rememberSelection, false);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 128);
 }
 
 void TestSettingsMigration::v1Ini_doesNotInvokeAnyMigration() {
@@ -159,8 +160,44 @@ void TestSettingsMigration::v1Ini_doesNotInvokeAnyMigration() {
   QVERIFY2(capturedMigrationMessages.isEmpty(),
            qPrintable(QStringLiteral("Expected no migration log for v1 INI but got: %1")
                           .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
-  QCOMPARE(settings.rememberSelection, true);
-  QCOMPARE(settings.pixmapCacheSizeMB, 64);
+  QCOMPARE(settings.input.rememberSelection, true);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
+}
+
+void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallback() {
+  // An early build stamped the file-wide schemaVersion sentinel into
+  // [ScraperOptions] while load read it from [General], so a versioned file
+  // looked unversioned (v0) on every load and would re-run the v0->v1 step
+  // forever. The tolerant dual-location read falls back to the
+  // [ScraperOptions] copy when [General] lacks the key, so such a file must be
+  // recognised as its true version (1) and must NOT trigger the migration.
+  // Mirror v1Ini_doesNotInvokeAnyMigration: capture the migration category and
+  // assert it stayed silent.
+  installFixture(QStringLiteral("misfiled_schema.ini"));
+
+  static QStringList capturedMigrationMessages;
+  capturedMigrationMessages.clear();
+  auto previousHandler =
+      qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+        Q_UNUSED(type);
+        if (ctx.category && QByteArray(ctx.category) == "kartend.settingsmigrations") {
+          capturedMigrationMessages.append(msg);
+        }
+      });
+
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings settings;
+  mgr.loadGeneralSettings(settings);
+
+  qInstallMessageHandler(previousHandler);
+
+  QVERIFY2(capturedMigrationMessages.isEmpty(),
+           qPrintable(QStringLiteral("Expected no migration log for a file whose schemaVersion "
+                                     "lives in [ScraperOptions] but got: %1")
+                          .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
+  // The [General] keys still decode normally alongside the fallback read.
+  QCOMPARE(settings.input.rememberSelection, true);
+  QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
 }
 
 QTEST_GUILESS_MAIN(TestSettingsMigration)

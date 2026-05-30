@@ -285,7 +285,7 @@ case "$ARG" in
       rm -rf build/TSan
       cmake -S . -B build/TSan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON
       cmake --build build/TSan --parallel
-      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/.tsan_suppressions.txt ctest --test-dir build/TSan --output-on-failure
+      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt ctest --test-dir build/TSan --output-on-failure
     '
     ;;
 

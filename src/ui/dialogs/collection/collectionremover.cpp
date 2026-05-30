@@ -5,7 +5,8 @@
 #include "collectionremover.h"
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/validationhelpers.h"
 #include "settingsmodel.h"
 
 #include <QMessageBox>

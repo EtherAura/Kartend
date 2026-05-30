@@ -1,6 +1,7 @@
 // Sibling TU: appearance/styling application for NavigationManager.
 #include "artworkutils.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/validationhelpers.h"
 #include "collectionbackgroundcontroller.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -191,7 +192,8 @@ void NavigationManager::persistCurrentSelection() {
   }
 
   // Also cache the current viewport for instant startup
-  if (scrollMgr() && sessionMgr() && m_generalSettings && m_generalSettings->rememberSelection) {
+  if (scrollMgr() && sessionMgr() && m_generalSettings &&
+      m_generalSettings->input.rememberSelection) {
     int startIndex = 0;
     int totalItems = 0;
     QStringList filePaths;
@@ -221,7 +223,8 @@ void NavigationManager::persistCurrentSelection() {
                           << "sessionManager=" << static_cast<bool>(sessionMgr())
                           << "generalSettings=" << static_cast<bool>(m_generalSettings)
                           << "rememberSelection="
-                          << (m_generalSettings ? m_generalSettings->rememberSelection : false);
+                          << (m_generalSettings ? m_generalSettings->input.rememberSelection
+                                                : false);
   }
 }
 

@@ -155,12 +155,12 @@ auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
   context.filePaths = filePaths;
   context.fileNames = fileNames;
   if (m_generalSettings) {
-    context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.sortMode = m_generalSettings->view.sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
     // mirror toolbar filters so subcollection tile visibility
     // honors the active type filter / hide-subs toggle.
-    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
-    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
+    context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
   }
   if (m_allCollectionsActive) {
     context.config.showAllSubcollectionItems = true;
@@ -185,7 +185,7 @@ auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
   const bool searchActive = (m_searchBar && !m_searchBar->text().trimmed().isEmpty());
   return NavigationHelpers::calculateSelectionIndex(
       *m_currentCollectionIndex, *m_collections, totalItems, searchActive,
-      m_generalSettings->rememberSelection, [this](const QString &key) {
+      m_generalSettings->input.rememberSelection, [this](const QString &key) {
         return sessionMgr() ? sessionMgr()->getLastSelectedIndex(key) : -1;
       });
 }

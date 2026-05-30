@@ -31,7 +31,7 @@ private slots:
   void reorderOnly_doesNotFirePerDomainSignals();
 
   // Kartend-xsyt: emission tests for the remaining per-cluster signals so
-  // the matrix in docs/settings-hotreload.md is fully covered.
+  // the matrix in docs/dev/settings-hotreload.md is fully covered.
   void listViewChange_emitsOnlyListViewSignal();
   void folderBrowsingChange_emitsOnlyFolderBrowsingSignal();
   void collectionFilterChange_emitsOnlyFilterSignal();

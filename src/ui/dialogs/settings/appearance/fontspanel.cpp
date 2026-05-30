@@ -37,9 +37,9 @@ void FontsPanel::refresh() {
   // so the editingFinished / valueChanged → writeBack pipeline stays quiet
   // during programmatic hydration.
   SettingsFormBinding::loadInto(ui->globalUiFontFamilyEdit,
-                                m_model->generalSettings->globalUiFontFamily);
+                                m_model->generalSettings->appearance.globalUiFontFamily);
   SettingsFormBinding::loadInto(ui->globalUiFontSizeSpinBox,
-                                m_model->generalSettings->globalUiFontPointSize);
+                                m_model->generalSettings->appearance.globalUiFontPointSize);
 }
 
 void FontsPanel::onPick() {
@@ -70,7 +70,8 @@ void FontsPanel::writeBack() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_model->generalSettings->globalUiFontFamily = ui->globalUiFontFamilyEdit->text().trimmed();
-  m_model->generalSettings->globalUiFontPointSize = ui->globalUiFontSizeSpinBox->value();
+  m_model->generalSettings->appearance.globalUiFontFamily =
+      ui->globalUiFontFamilyEdit->text().trimmed();
+  m_model->generalSettings->appearance.globalUiFontPointSize = ui->globalUiFontSizeSpinBox->value();
   emit changed();
 }

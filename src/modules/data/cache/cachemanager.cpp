@@ -94,7 +94,7 @@ CacheManager::~CacheManager() {
   // captured the cancellation token by shared_ptr value, so in-flight
   // tasks return within milliseconds in the common case. If they don't
   // drain within the budget, CacheDiskStorage abandons the pool (the
-  // OS reaps at process exit; .lsan_suppressions.txt covers this path).
+  // OS reaps at process exit; tests/suppressions/lsan.txt covers this path).
   m_diskStorage->cancel();
   constexpr int kShutdownDrainMs = 2000;
   if (!m_diskStorage->drainWithBudget(kShutdownDrainMs)) {

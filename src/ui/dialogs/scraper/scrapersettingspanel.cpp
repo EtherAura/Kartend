@@ -100,12 +100,10 @@ void ScraperSettingsPanel::buildLayout() {
   perfForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
 
   m_presetCombo = new QComboBox(perfGroup);
-  m_presetCombo->addItem(tr("Fastest"), static_cast<int>(GeneralSettings::ScraperPreset::Fastest));
-  m_presetCombo->addItem(tr("Balanced"),
-                         static_cast<int>(GeneralSettings::ScraperPreset::Balanced));
-  m_presetCombo->addItem(tr("Best Quality"),
-                         static_cast<int>(GeneralSettings::ScraperPreset::BestQuality));
-  m_presetCombo->addItem(tr("Custom"), static_cast<int>(GeneralSettings::ScraperPreset::Custom));
+  m_presetCombo->addItem(tr("Fastest"), static_cast<int>(ScraperPreset::Fastest));
+  m_presetCombo->addItem(tr("Balanced"), static_cast<int>(ScraperPreset::Balanced));
+  m_presetCombo->addItem(tr("Best Quality"), static_cast<int>(ScraperPreset::BestQuality));
+  m_presetCombo->addItem(tr("Custom"), static_cast<int>(ScraperPreset::Custom));
   m_presetCombo->setMaximumWidth(kComboMaxWidth);
   m_presetCombo->setToolTip(tr("Fastest favors small downloads + high parallelism. Best Quality "
                                "requests original-resolution assets. Custom unlocks the three "
@@ -220,16 +218,16 @@ void ScraperSettingsPanel::buildLayout() {
 
   m_rescrapeCombo = new QComboBox(behaviorGroup);
   m_rescrapeCombo->addItem(tr("Overwrite — replace existing assets"),
-                           static_cast<int>(GeneralSettings::ScraperRescrapeMode::Overwrite));
+                           static_cast<int>(ScraperRescrapeMode::Overwrite));
   m_rescrapeCombo->addItem(tr("Fill missing — keep existing, only download what's missing"),
-                           static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing));
+                           static_cast<int>(ScraperRescrapeMode::FillMissing));
   // (Fill missing also skips the provider request entirely for items
   // whose checkboxes are already fully covered — see the refresh
   // window spinbox below.)
   m_rescrapeCombo->addItem(tr("Update changed — compare bytes, write only if different"),
-                           static_cast<int>(GeneralSettings::ScraperRescrapeMode::UpdateChanged));
+                           static_cast<int>(ScraperRescrapeMode::UpdateChanged));
   m_rescrapeCombo->addItem(tr("Skip — don't re-scrape items that already have metadata"),
-                           static_cast<int>(GeneralSettings::ScraperRescrapeMode::Skip));
+                           static_cast<int>(ScraperRescrapeMode::Skip));
   m_rescrapeCombo->setMaximumWidth(kComboMaxWidth);
   m_rescrapeCombo->setToolTip(tr("Per-asset policy: applied independently to each cover / "
                                  "screenshot / fanart / etc. so a new asset still downloads "
@@ -283,15 +281,12 @@ void ScraperSettingsPanel::buildLayout() {
   // users can opt out of hash-ID for slow archive collections and choose
   // when to trust their own filename's region tag over SS's match.
   m_hashModeCombo = new QComboBox(behaviorGroup);
-  m_hashModeCombo->addItem(
-      tr("Always hash"),
-      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::Always));
-  m_hashModeCombo->addItem(
-      tr("Skip large files…"),
-      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated));
-  m_hashModeCombo->addItem(
-      tr("Never hash (filename only)"),
-      static_cast<int>(GeneralSettings::ScraperOptions::ScraperHashMode::Never));
+  m_hashModeCombo->addItem(tr("Always hash"),
+                           static_cast<int>(ScraperOptions::ScraperHashMode::Always));
+  m_hashModeCombo->addItem(tr("Skip large files…"),
+                           static_cast<int>(ScraperOptions::ScraperHashMode::SizeGated));
+  m_hashModeCombo->addItem(tr("Never hash (filename only)"),
+                           static_cast<int>(ScraperOptions::ScraperHashMode::Never));
   m_hashModeCombo->setMaximumWidth(kComboMaxWidth);
   m_hashModeCombo->setToolTip(
       tr("ScreenScraper's hash-based ID is the most reliable match path but "
@@ -322,14 +317,12 @@ void ScraperSettingsPanel::buildLayout() {
   m_regionSourceCombo = new QComboBox(behaviorGroup);
   m_regionSourceCombo->addItem(
       tr("Trust scraper match (use filename only when hash fails)"),
-      static_cast<int>(GeneralSettings::ScraperOptions::ScraperRegionSource::TrustScraperFirst));
+      static_cast<int>(ScraperOptions::ScraperRegionSource::TrustScraperFirst));
   m_regionSourceCombo->addItem(
       tr("Trust filename region when present"),
-      static_cast<int>(
-          GeneralSettings::ScraperOptions::ScraperRegionSource::FilenameWhenAvailable));
-  m_regionSourceCombo->addItem(
-      tr("Always use scraper match (ignore filename)"),
-      static_cast<int>(GeneralSettings::ScraperOptions::ScraperRegionSource::ScraperOnly));
+      static_cast<int>(ScraperOptions::ScraperRegionSource::FilenameWhenAvailable));
+  m_regionSourceCombo->addItem(tr("Always use scraper match (ignore filename)"),
+                               static_cast<int>(ScraperOptions::ScraperRegionSource::ScraperOnly));
   m_regionSourceCombo->setMaximumWidth(kComboMaxWidth);
   m_regionSourceCombo->setToolTip(
       tr("Picks the region used for the title, release date, and box art:\n\n"
@@ -428,12 +421,11 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // dropdown doesn't lie about what's in effect.
   auto onNumericChanged = [this]() {
     if (m_loading) return;
-    const auto preset =
-        static_cast<GeneralSettings::ScraperPreset>(m_presetCombo->currentData().toInt());
-    if (preset != GeneralSettings::ScraperPreset::Custom) {
+    const auto preset = static_cast<ScraperPreset>(m_presetCombo->currentData().toInt());
+    if (preset != ScraperPreset::Custom) {
       QSignalBlocker b(m_presetCombo);
       m_presetCombo->setCurrentIndex(
-          m_presetCombo->findData(static_cast<int>(GeneralSettings::ScraperPreset::Custom)));
+          m_presetCombo->findData(static_cast<int>(ScraperPreset::Custom)));
     }
     writeModel();
     emit changed();
@@ -456,15 +448,14 @@ void ScraperSettingsPanel::connectChangeSignals() {
 
   connect(m_rescrapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
     if (m_loading) return;
-    const auto mode =
-        static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
-    m_rescrapeWarning->setVisible(mode == GeneralSettings::ScraperRescrapeMode::UpdateChanged);
+    const auto mode = static_cast<ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
+    m_rescrapeWarning->setVisible(mode == ScraperRescrapeMode::UpdateChanged);
     // The refresh-window controls only have meaning under modes that
     // pre-filter the queue (Skip, Fill missing). Hide them under
     // Overwrite / Update changed where every item already flows
     // through to the provider regardless.
-    const bool windowApplies = mode == GeneralSettings::ScraperRescrapeMode::Skip ||
-                               mode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+    const bool windowApplies =
+        mode == ScraperRescrapeMode::Skip || mode == ScraperRescrapeMode::FillMissing;
     if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
     if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
     writeModel();
@@ -509,9 +500,9 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // and also writes back the model so the change is durable.
   connect(m_hashModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
     if (m_loading) return;
-    const auto mode = static_cast<GeneralSettings::ScraperOptions::ScraperHashMode>(
-        m_hashModeCombo->currentData().toInt());
-    const bool sizeGated = mode == GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated;
+    const auto mode =
+        static_cast<ScraperOptions::ScraperHashMode>(m_hashModeCombo->currentData().toInt());
+    const bool sizeGated = mode == ScraperOptions::ScraperHashMode::SizeGated;
     if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
     if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
     writeModel();
@@ -586,20 +577,19 @@ void ScraperSettingsPanel::connectChangeSignals() {
 }
 
 void ScraperSettingsPanel::applyPresetToFields() {
-  const auto preset =
-      static_cast<GeneralSettings::ScraperPreset>(m_presetCombo->currentData().toInt());
+  const auto preset = static_cast<ScraperPreset>(m_presetCombo->currentData().toInt());
   PresetSnap snap;
   switch (preset) {
-  case GeneralSettings::ScraperPreset::Fastest:
+  case ScraperPreset::Fastest:
     snap = kFastest;
     break;
-  case GeneralSettings::ScraperPreset::Balanced:
+  case ScraperPreset::Balanced:
     snap = kBalanced;
     break;
-  case GeneralSettings::ScraperPreset::BestQuality:
+  case ScraperPreset::BestQuality:
     snap = kBestQuality;
     break;
-  case GeneralSettings::ScraperPreset::Custom:
+  case ScraperPreset::Custom:
     return; // leave existing values alone
   }
   // Block numeric signals while snapping so we don't re-trigger the
@@ -624,7 +614,7 @@ void ScraperSettingsPanel::refresh() {
     return;
   }
   m_loading = true;
-  const auto &opts = m_model->generalSettings->scraperOptions;
+  const auto &opts = m_model->generalSettings->scraper.options;
   m_presetCombo->setCurrentIndex(m_presetCombo->findData(static_cast<int>(opts.preset)));
   m_maxDimSpin->setValue(opts.mediaMaxDimension);
   m_concurrencySpin->setValue(opts.mediaConcurrency);
@@ -632,15 +622,14 @@ void ScraperSettingsPanel::refresh() {
   m_batchItemSpin->setValue(opts.batchItemConcurrency);
   m_preferJpgCheck->setChecked(opts.preferJpgOutput);
   m_rescrapeCombo->setCurrentIndex(m_rescrapeCombo->findData(static_cast<int>(opts.rescrapeMode)));
-  m_rescrapeWarning->setVisible(opts.rescrapeMode ==
-                                GeneralSettings::ScraperRescrapeMode::UpdateChanged);
+  m_rescrapeWarning->setVisible(opts.rescrapeMode == ScraperRescrapeMode::UpdateChanged);
   if (m_skipRecentDaysSpin) {
     QSignalBlocker b(m_skipRecentDaysSpin);
     m_skipRecentDaysSpin->setValue(qBound(0, opts.skipRecentScrapeDays, 365));
   }
   // Mirror the visibility rule from the rescrape-combo change handler.
-  const bool windowApplies = opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::Skip ||
-                             opts.rescrapeMode == GeneralSettings::ScraperRescrapeMode::FillMissing;
+  const bool windowApplies = opts.rescrapeMode == ScraperRescrapeMode::Skip ||
+                             opts.rescrapeMode == ScraperRescrapeMode::FillMissing;
   if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
   if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
   if (m_autoResumeCheck) {
@@ -665,8 +654,7 @@ void ScraperSettingsPanel::refresh() {
     QSignalBlocker b(m_maxHashableSizeSpin);
     m_maxHashableSizeSpin->setValue(qBound(1, opts.maxHashableSizeMB, 65536));
   }
-  const bool sizeGated =
-      opts.hashMode == GeneralSettings::ScraperOptions::ScraperHashMode::SizeGated;
+  const bool sizeGated = opts.hashMode == ScraperOptions::ScraperHashMode::SizeGated;
   if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
   if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
   if (m_regionSourceCombo) {
@@ -680,15 +668,14 @@ void ScraperSettingsPanel::writeModel() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  auto &opts = m_model->generalSettings->scraperOptions;
-  opts.preset = static_cast<GeneralSettings::ScraperPreset>(m_presetCombo->currentData().toInt());
+  auto &opts = m_model->generalSettings->scraper.options;
+  opts.preset = static_cast<ScraperPreset>(m_presetCombo->currentData().toInt());
   opts.mediaMaxDimension = m_maxDimSpin->value();
   opts.mediaConcurrency = m_concurrencySpin->value();
   opts.mediaThrottleMs = m_throttleSpin->value();
   opts.batchItemConcurrency = m_batchItemSpin->value();
   opts.preferJpgOutput = m_preferJpgCheck->isChecked();
-  opts.rescrapeMode =
-      static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
+  opts.rescrapeMode = static_cast<ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
   if (m_skipRecentDaysSpin) {
     opts.skipRecentScrapeDays = m_skipRecentDaysSpin->value();
   }
@@ -702,14 +689,14 @@ void ScraperSettingsPanel::writeModel() {
     opts.preferredScraperRegion = m_regionCombo->currentData().toString();
   }
   if (m_hashModeCombo) {
-    opts.hashMode = static_cast<GeneralSettings::ScraperOptions::ScraperHashMode>(
-        m_hashModeCombo->currentData().toInt());
+    opts.hashMode =
+        static_cast<ScraperOptions::ScraperHashMode>(m_hashModeCombo->currentData().toInt());
   }
   if (m_maxHashableSizeSpin) {
     opts.maxHashableSizeMB = m_maxHashableSizeSpin->value();
   }
   if (m_regionSourceCombo) {
-    opts.regionSource = static_cast<GeneralSettings::ScraperOptions::ScraperRegionSource>(
+    opts.regionSource = static_cast<ScraperOptions::ScraperRegionSource>(
         m_regionSourceCombo->currentData().toInt());
   }
 }

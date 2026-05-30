@@ -101,15 +101,15 @@ void MainWindow::setupPreviewVolumeSlider() {
   }
   {
     QSignalBlocker blocker(ui->previewVolumeSlider);
-    ui->previewVolumeSlider->setValue(m_generalSettings.previewVideoVolume);
+    ui->previewVolumeSlider->setValue(m_generalSettings.media.previewVideoVolume);
   }
-  VideoPreviewWidget::setGlobalVolume(m_generalSettings.previewVideoVolume);
+  VideoPreviewWidget::setGlobalVolume(m_generalSettings.media.previewVideoVolume);
 
   connect(ui->previewVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
-    if (value == m_generalSettings.previewVideoVolume) {
+    if (value == m_generalSettings.media.previewVideoVolume) {
       return;
     }
-    m_generalSettings.previewVideoVolume = value;
+    m_generalSettings.media.previewVideoVolume = value;
     VideoPreviewWidget::setGlobalVolume(value);
     if (m_appManager->getSettingsManager()) {
       m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
@@ -126,11 +126,11 @@ void MainWindow::applyTextZoom(int percent) {
   if (m_textZoomHud) {
     m_textZoomHud->showZoom(clamped);
   }
-  if (clamped == TextZoom::percent() && clamped == m_generalSettings.uiTextZoomPercent) {
+  if (clamped == TextZoom::percent() && clamped == m_generalSettings.appearance.uiTextZoomPercent) {
     return;
   }
   TextZoom::setPercent(clamped);
-  m_generalSettings.uiTextZoomPercent = clamped;
+  m_generalSettings.appearance.uiTextZoomPercent = clamped;
   if (m_appManager->getSettingsManager()) {
     m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }

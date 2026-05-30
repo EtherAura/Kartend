@@ -3,6 +3,21 @@ target_sources(kartend_data PRIVATE
   settingsdialogcontroller.cpp
   settingshelpers.cpp
   settingsmanager.cpp
+  settingsmanager_appearance.cpp
+  settingsmanager_attract.cpp
+  settingsmanager_gamepad.cpp
+  settingsmanager_history.cpp
+  settingsmanager_input.cpp
+  settingsmanager_keybindings.cpp
+  settingsmanager_launchers.cpp
+  settingsmanager_marquee.cpp
+  settingsmanager_media.cpp
+  settingsmanager_runtimedetection.cpp
+  settingsmanager_scraper.cpp
+  settingsmanager_splash.cpp
+  settingsmanager_startup.cpp
+  settingsmanager_toolbar.cpp
+  settingsmanager_view.cpp
   settingsmanagercollections.cpp
   settingsmigrations.cpp
   collectionhierarchybuilder.h

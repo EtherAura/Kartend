@@ -1,8 +1,8 @@
 #include "gamepadcapturecontroller.h"
 
+#include "applicationcontext.h"
 #include "gamepadmanager.h"
-#include "imainwindow.h"
-#include "interactionmanager.h"
+#include "iinteractionmanager.h"
 #include "settingsdialog.h"
 
 #include <QCheckBox>
@@ -11,15 +11,15 @@
 #include <QPushButton>
 
 namespace {
-GamepadManager *resolveGamepadManager(QObject *parent) {
-  auto *mainWindow = dynamic_cast<IMainWindow *>(parent);
-  auto *interaction = mainWindow ? mainWindow->interactionManager() : nullptr;
+GamepadManager *resolveGamepadManager(const ApplicationContext *ctx) {
+  auto *interaction = ctx ? ctx->interactionManager() : nullptr;
   return interaction ? interaction->gamepadManager() : nullptr;
 }
 } // namespace
 
-GamepadCaptureController::GamepadCaptureController(SettingsDialog *host)
-    : QObject(host), m_host(host) {}
+GamepadCaptureController::GamepadCaptureController(SettingsDialog *host,
+                                                   const ApplicationContext *ctx)
+    : QObject(host), m_host(host), m_ctx(ctx) {}
 
 void GamepadCaptureController::setWidgets(const Bindings &bindings) {
   m_bindings = bindings;
@@ -27,7 +27,7 @@ void GamepadCaptureController::setWidgets(const Bindings &bindings) {
 }
 
 void GamepadCaptureController::start(Target target) {
-  GamepadManager *gamepad = resolveGamepadManager(m_host ? m_host->parent() : nullptr);
+  GamepadManager *gamepad = resolveGamepadManager(m_ctx);
   if (!gamepad) {
     QMessageBox::information(m_host, tr("Gamepad"),
                              tr("Gamepad input is not available on this build/configuration."));
@@ -53,7 +53,7 @@ void GamepadCaptureController::start(Target target) {
 }
 
 void GamepadCaptureController::stop() {
-  if (GamepadManager *gamepad = resolveGamepadManager(m_host ? m_host->parent() : nullptr)) {
+  if (GamepadManager *gamepad = resolveGamepadManager(m_ctx)) {
     gamepad->endBindingCapture();
     QObject::disconnect(m_captureConnection);
     m_captureConnection = QMetaObject::Connection();

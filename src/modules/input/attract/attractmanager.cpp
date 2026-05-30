@@ -56,7 +56,7 @@ void AttractManager::setupReferences(const AttractManagerSetup &setup) {
 // Settings
 // ─────────────────────────────────────────────────────────────────────────────
 bool AttractManager::isEnabled() const {
-  return m_generalSettings && m_generalSettings->attractModeEnabled;
+  return m_generalSettings && m_generalSettings->attract.attractModeEnabled;
 }
 
 void AttractManager::reloadSettings() {
@@ -69,18 +69,18 @@ void AttractManager::reloadSettings() {
   // Always keep the interval in sync so that enabling attract mode later
   // doesn't fire with a stale / zero interval.
   const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-                                m_generalSettings->attractModeIdleTimeoutSec,
+                                m_generalSettings->attract.attractModeIdleTimeoutSec,
                                 UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
   m_idleTimer.setInterval(timeoutSec * 1000);
 
   // Sync the advance-selection interval too so a live settings change is
   // reflected without restarting attract mode.
   const int advanceSec = qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
-                                m_generalSettings->attractModeAdvanceSelectionIntervalSec,
+                                m_generalSettings->attract.attractModeAdvanceSelectionIntervalSec,
                                 UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
   m_advanceSelectionTimer.setInterval(advanceSec * 1000);
 
-  if (!m_generalSettings->attractModeEnabled) {
+  if (!m_generalSettings->attract.attractModeEnabled) {
     stopAttract();
     m_idleTimer.stop();
     return;
@@ -90,7 +90,7 @@ void AttractManager::reloadSettings() {
   // sub-features (auto-scroll, advance-selection) without forcing a full
   // restart.
   if (m_attractActive) {
-    if (m_generalSettings->attractModeAutoScrollEnabled) {
+    if (m_generalSettings->attract.attractModeAutoScrollEnabled) {
       if (!m_scrollTimer.isActive() && !m_bouncePaused) {
         m_scrollTimer.start(UIConstants::Attract::SCROLL_TICK_INTERVAL_MS);
       }
@@ -99,7 +99,7 @@ void AttractManager::reloadSettings() {
       m_bouncePauseTimer.stop();
       m_bouncePaused = false;
     }
-    if (m_generalSettings->attractModeAdvanceSelectionEnabled) {
+    if (m_generalSettings->attract.attractModeAdvanceSelectionEnabled) {
       if (!m_advanceSelectionTimer.isActive()) {
         m_advanceSelectionTimer.start();
       }
@@ -165,7 +165,7 @@ void AttractManager::resetIdleTimer() {
   // explicit reloadSettings() call.
   if (m_generalSettings) {
     const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-                                  m_generalSettings->attractModeIdleTimeoutSec,
+                                  m_generalSettings->attract.attractModeIdleTimeoutSec,
                                   UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
     m_idleTimer.setInterval(timeoutSec * 1000);
   }
@@ -196,8 +196,8 @@ void AttractManager::startAttract() {
     return;
   }
 
-  const bool wantScroll = m_generalSettings->attractModeAutoScrollEnabled;
-  const bool wantAdvance = m_generalSettings->attractModeAdvanceSelectionEnabled;
+  const bool wantScroll = m_generalSettings->attract.attractModeAutoScrollEnabled;
+  const bool wantAdvance = m_generalSettings->attract.attractModeAdvanceSelectionEnabled;
   if (!wantScroll && !wantAdvance) {
     // Both sub-features off — nothing for attract to do. Re-arm the idle
     // timer so we re-evaluate next time the user goes idle.
@@ -234,11 +234,11 @@ void AttractManager::startAttract() {
 }
 
 void AttractManager::startAdvanceSelectionTimerIfEnabled() {
-  if (!m_generalSettings || !m_generalSettings->attractModeAdvanceSelectionEnabled) {
+  if (!m_generalSettings || !m_generalSettings->attract.attractModeAdvanceSelectionEnabled) {
     return;
   }
   const int advanceSec = qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
-                                m_generalSettings->attractModeAdvanceSelectionIntervalSec,
+                                m_generalSettings->attract.attractModeAdvanceSelectionIntervalSec,
                                 UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
   m_advanceSelectionTimer.start(advanceSec * 1000);
 }
@@ -286,7 +286,7 @@ void AttractManager::onScrollTick() {
   }
 
   const double speed = m_generalSettings ? qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-                                                  m_generalSettings->attractModeScrollSpeed,
+                                                  m_generalSettings->attract.attractModeScrollSpeed,
                                                   UIConstants::Attract::MAX_SCROLL_SPEED_PX)
                                          : UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX;
 
@@ -335,7 +335,7 @@ void AttractManager::onAdvanceSelectionTick() {
   if (m_isShuttingDown && *m_isShuttingDown) {
     return;
   }
-  if (!m_generalSettings || !m_generalSettings->attractModeAdvanceSelectionEnabled) {
+  if (!m_generalSettings || !m_generalSettings->attract.attractModeAdvanceSelectionEnabled) {
     m_advanceSelectionTimer.stop();
     return;
   }
@@ -352,7 +352,7 @@ void AttractManager::onAdvanceSelectionTick() {
 
   const int current = selection->currentSelectedIndex();
   int next;
-  if (m_generalSettings->attractModeAdvanceSelectionRandom) {
+  if (m_generalSettings->attract.attractModeAdvanceSelectionRandom) {
     const auto range = AttractHelpers::randomAdvanceRange(current, total, m_scrollDirection);
     if (range.isEmpty()) {
       next = current; // Pathological state — falls through to the no-op return below.

@@ -8,7 +8,8 @@
 // handleScrollBranch, detectChanges).
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "databasemanager.h"
 #include "errorpresentation.h"
 #include "iartworkmanager.h"

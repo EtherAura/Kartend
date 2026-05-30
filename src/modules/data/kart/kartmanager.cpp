@@ -9,8 +9,8 @@
 #include <QtConcurrentRun>
 
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
 #include "collection/launcherpreset.h"
+#include "collection/typehelpers.h"
 #include "errorutils.h"
 #include "kartdb.h"
 // Kartend-a3ir: the previous #include of "kartmergedialog.h" was the last

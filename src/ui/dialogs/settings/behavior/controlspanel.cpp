@@ -40,25 +40,25 @@ void ControlsPanel::refresh() {
     QSignalBlocker blocker(edit);
     edit->setKeySequence(QKeySequence(key));
   };
-  setKeyEdit(ui->keyNavUpEdit, s->keyNavUp);
-  setKeyEdit(ui->keyNavDownEdit, s->keyNavDown);
-  setKeyEdit(ui->keyNavLeftEdit, s->keyNavLeft);
-  setKeyEdit(ui->keyNavRightEdit, s->keyNavRight);
-  setKeyEdit(ui->keyConfirmEdit, s->keyConfirm);
-  setKeyEdit(ui->keyBackEdit, s->keyBack);
-  setKeyEdit(ui->keySearchEdit, s->keySearch);
-  setKeyEdit(ui->keyHomeViewEdit, s->keyHomeView);
+  setKeyEdit(ui->keyNavUpEdit, s->keybindings.keyNavUp);
+  setKeyEdit(ui->keyNavDownEdit, s->keybindings.keyNavDown);
+  setKeyEdit(ui->keyNavLeftEdit, s->keybindings.keyNavLeft);
+  setKeyEdit(ui->keyNavRightEdit, s->keybindings.keyNavRight);
+  setKeyEdit(ui->keyConfirmEdit, s->keybindings.keyConfirm);
+  setKeyEdit(ui->keyBackEdit, s->keybindings.keyBack);
+  setKeyEdit(ui->keySearchEdit, s->keybindings.keySearch);
+  setKeyEdit(ui->keyHomeViewEdit, s->keybindings.keyHomeView);
 
-  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, s->gamepadUseDpad);
-  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, s->gamepadUseLeftStick);
-  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, s->gamepadConfirmButton);
-  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, s->gamepadBackButton);
+  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, s->gamepad.gamepadUseDpad);
+  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, s->gamepad.gamepadUseLeftStick);
+  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, s->gamepad.gamepadConfirmButton);
+  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, s->gamepad.gamepadBackButton);
   SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit,
-                                s->gamepadToggleSidebarButton);
+                                s->gamepad.gamepadToggleSidebarButton);
 
   {
     QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
-    const int comboIdx = ui->artworkCycleModifierComboBox->findData(s->artworkCycleModifier);
+    const int comboIdx = ui->artworkCycleModifierComboBox->findData(s->input.artworkCycleModifier);
     ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
   }
 }
@@ -121,30 +121,30 @@ void ControlsPanel::writeBack() {
     const int keyOnly = static_cast<int>(seq[0].key());
     return (keyOnly != 0) ? keyOnly : fallback;
   };
-  s->keyNavUp = singleKey(ui->keyNavUpEdit, s->keyNavUp);
-  s->keyNavDown = singleKey(ui->keyNavDownEdit, s->keyNavDown);
-  s->keyNavLeft = singleKey(ui->keyNavLeftEdit, s->keyNavLeft);
-  s->keyNavRight = singleKey(ui->keyNavRightEdit, s->keyNavRight);
-  s->keyConfirm = singleKey(ui->keyConfirmEdit, s->keyConfirm);
-  s->keyBack = singleKey(ui->keyBackEdit, s->keyBack);
-  s->keySearch = singleKey(ui->keySearchEdit, s->keySearch);
-  s->keyHomeView = singleKey(ui->keyHomeViewEdit, 0);
+  s->keybindings.keyNavUp = singleKey(ui->keyNavUpEdit, s->keybindings.keyNavUp);
+  s->keybindings.keyNavDown = singleKey(ui->keyNavDownEdit, s->keybindings.keyNavDown);
+  s->keybindings.keyNavLeft = singleKey(ui->keyNavLeftEdit, s->keybindings.keyNavLeft);
+  s->keybindings.keyNavRight = singleKey(ui->keyNavRightEdit, s->keybindings.keyNavRight);
+  s->keybindings.keyConfirm = singleKey(ui->keyConfirmEdit, s->keybindings.keyConfirm);
+  s->keybindings.keyBack = singleKey(ui->keyBackEdit, s->keybindings.keyBack);
+  s->keybindings.keySearch = singleKey(ui->keySearchEdit, s->keybindings.keySearch);
+  s->keybindings.keyHomeView = singleKey(ui->keyHomeViewEdit, 0);
 
-  s->gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
-  s->gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
+  s->gamepad.gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
+  s->gamepad.gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
   // Gamepad button strings: only commit non-empty values so a partial /
   // cancelled detect-button workflow doesn't blank the saved binding.
   const QString confirm = ui->gamepadConfirmButtonLineEdit->text().trimmed();
   if (!confirm.isEmpty()) {
-    s->gamepadConfirmButton = confirm;
+    s->gamepad.gamepadConfirmButton = confirm;
   }
   const QString back = ui->gamepadBackButtonLineEdit->text().trimmed();
   if (!back.isEmpty()) {
-    s->gamepadBackButton = back;
+    s->gamepad.gamepadBackButton = back;
   }
   const QString toggleSidebar = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
   if (!toggleSidebar.isEmpty()) {
-    s->gamepadToggleSidebarButton = toggleSidebar;
+    s->gamepad.gamepadToggleSidebarButton = toggleSidebar;
   }
 
   // Validate the combo's data is a known modifier; ignore stale entries
@@ -155,7 +155,7 @@ void ControlsPanel::writeBack() {
   case static_cast<int>(Qt::ControlModifier):
   case static_cast<int>(Qt::AltModifier):
   case static_cast<int>(Qt::MetaModifier):
-    s->artworkCycleModifier = rawModifier;
+    s->input.artworkCycleModifier = rawModifier;
     break;
   default:
     break;

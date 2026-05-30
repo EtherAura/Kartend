@@ -342,9 +342,9 @@ void ScraperService::startAutoCollection() {
   m_summaryAtCollectionStart = m_summary;
   m_bytesAtCollectionStart = m_totalBytesDownloaded;
   const auto rescrapeMode =
-      static_cast<Scraper::RescrapeMode>(m_ctx.generalSettings->scraperOptions.rescrapeMode);
-  const int itemConcurrency = m_ctx.generalSettings->scraperOptions.batchItemConcurrency;
-  const int skipRecentDays = m_ctx.generalSettings->scraperOptions.skipRecentScrapeDays;
+      static_cast<Scraper::RescrapeMode>(m_ctx.generalSettings->scraper.options.rescrapeMode);
+  const int itemConcurrency = m_ctx.generalSettings->scraper.options.batchItemConcurrency;
+  const int skipRecentDays = m_ctx.generalSettings->scraper.options.skipRecentScrapeDays;
   m_autoRunner = new BatchScrapeRunner(
       m_ctx.ctx, std::move(provider), job.collectionUuid, job.items, job.artworkDir,
       /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, skipRecentDays, this);

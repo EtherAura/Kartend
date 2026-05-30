@@ -125,7 +125,7 @@ void LauncherTabPanel::populateCoreCombo() {
   ui->coreComboBox->clear();
   QString configOverride;
   if (m_model && m_model->generalSettings) {
-    configOverride = m_model->generalSettings->retroarchConfigPath;
+    configOverride = m_model->generalSettings->launchers.retroarchConfigPath;
   }
   const QList<RetroArchUtils::Core> cores =
       RetroArchUtils::discoverCores(RetroArchUtils::resolveCoreDirectory(configOverride));

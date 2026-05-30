@@ -106,7 +106,7 @@ auto NavigationManager::handleNavigationFallback() -> void {
   // Home-view escape: if the user opted into the synthetic root view, an
   // empty stack from a parent==-1 collection routes back to home rather than
   // re-entering the first root collection.
-  if (m_generalSettings && m_generalSettings->useHomeView && previousIndex >= 0 &&
+  if (m_generalSettings && m_generalSettings->startup.useHomeView && previousIndex >= 0 &&
       previousIndex < (*m_collections).size() &&
       (*m_collections)[previousIndex].parentCollectionIndex == -1) {
     loadRootView();

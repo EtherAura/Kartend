@@ -271,7 +271,7 @@ void applyToCollection(const Scheme &scheme, CollectionConfig &config) {
 }
 
 void applyToGeneralSettings(const Scheme &scheme, GeneralSettings &settings) {
-  assignIfPresent(settings.titleBaseColor, scheme, "Selection", "BackgroundNormal");
+  assignIfPresent(settings.appearance.titleBaseColor, scheme, "Selection", "BackgroundNormal");
 }
 
 } // namespace KdeColorScheme

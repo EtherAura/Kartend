@@ -3,16 +3,6 @@ build-*/
 /Testing/
 *.tar.gz
 
-# .scripts/build-windows-cross.sh writes everything under build/ now
-# (build/windows-mingw/, build/windows-mingw-dist/, build/kartend-…zip),
-# so the build/ rule above covers all new artifacts. The two entries
-# below are transitional — they cover the *legacy* output paths so
-# stale root-owned dirs from older runs of the script stay invisible
-# until they're cleaned up. Drop these once the old dirs are gone:
-#   sudo rm -rf build-mingw build-mingw-tests build-windows-mingw \
-#       dist-windows-mingw kartend-windows-x64-mingw-preview.zip
-/dist-windows-mingw/
-/kartend-windows-x64-mingw-preview.zip
 *.o
 *.a
 *.so

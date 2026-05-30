@@ -23,11 +23,12 @@
 #include "collection/collectionscalars_persistence.h"
 #include "collection/folderbrowsingoptions_persistence.h"
 #include "collection/gridlayoutpreferences_persistence.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "collection/launcherprofile_persistence.h"
 #include "collection/listviewoptions_persistence.h"
 #include "collection/scraperoverrides_persistence.h"
 #include "collection/sidebarappearance_persistence.h"
+#include "collection/typehelpers.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "pathutils.h"
@@ -274,9 +275,9 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   }
 
   settings.beginGroup(keys::kGroupGeneral);
-  settings.setValue(keys::kRememberSelection, m_generalSettings.rememberSelection);
-  settings.setValue(keys::kWrapNavigation, m_generalSettings.wrapNavigation);
-  settings.setValue(keys::kSelectItemOnHover, m_generalSettings.selectItemOnHover);
+  settings.setValue(keys::kRememberSelection, m_generalSettings.input.rememberSelection);
+  settings.setValue(keys::kWrapNavigation, m_generalSettings.input.wrapNavigation);
+  settings.setValue(keys::kSelectItemOnHover, m_generalSettings.input.selectItemOnHover);
   settings.endGroup();
 
   for (const QString &sectionName : sectionNames) {

@@ -8,6 +8,7 @@
 #include <QString>
 
 class QFile;
+class QSettings;
 class SessionManager;
 #include "applicationcontext_fwd.h"
 
@@ -89,6 +90,62 @@ private:
   // a successful disk write so observers (background painter, sidebar
   // appearance, etc.) refresh only when their slice actually changed.
   void emitPerCollectionDiffs(const QList<CollectionConfig> &collections);
+
+  // Stamped into [General/schemaVersion] on save and checked on load (older
+  // builds wrote it into [ScraperOptions]; load tolerates both). A higher value
+  // than this build understands triggers a warn-on-load; a lower value drives
+  // the migration dispatcher. See settingsmigrations.*.
+  static constexpr int kSettingsSchemaVersion = 1;
+
+  // Path-security filter applied to hand-editable path fields on load (shared
+  // by the startup + launcher-preset loaders). Returns "" for an insecure
+  // value so a poisoned config can't feed shell metacharacters to QProcess.
+  static QString sanitizeLoadedPath(const QString &value, const QString &fieldName);
+
+  // ── Per-section general-settings I/O ──────────────────────────────────
+  // loadGeneralSettings / saveGeneralSettings are thin orchestration shells;
+  // each leaf section's persistence call (plus its load-side coercions and
+  // save-side clamps) lives in settingsmanager_<section>.cpp. The
+  // [General]-group loaders/savers run with the caller already inside
+  // keys::kGroupGeneral; the launcher-preset and scraper helpers manage their
+  // own groups. save* helpers copy settings.<section> into the m_generalSettings
+  // cache, re-apply the defensive clamps, then persist the cached value.
+  void loadInputSection(QSettings &s, GeneralSettings &settings);
+  void saveInputSection(QSettings &s, const GeneralSettings &settings);
+  void loadKeybindingsSection(QSettings &s, GeneralSettings &settings);
+  void saveKeybindingsSection(QSettings &s, const GeneralSettings &settings);
+  void loadGamepadSection(QSettings &s, GeneralSettings &settings);
+  void saveGamepadSection(QSettings &s, const GeneralSettings &settings);
+  void loadViewSection(QSettings &s, GeneralSettings &settings);
+  void saveViewSection(QSettings &s, const GeneralSettings &settings);
+  void loadAppearanceSection(QSettings &s, GeneralSettings &settings);
+  void saveAppearanceSection(QSettings &s, const GeneralSettings &settings);
+  void loadStartupSection(QSettings &s, GeneralSettings &settings);
+  void saveStartupSection(QSettings &s, const GeneralSettings &settings);
+  void loadMediaSection(QSettings &s, GeneralSettings &settings);
+  void saveMediaSection(QSettings &s, const GeneralSettings &settings);
+  void loadHistorySection(QSettings &s, GeneralSettings &settings);
+  void saveHistorySection(QSettings &s, const GeneralSettings &settings);
+  void loadAttractSection(QSettings &s, GeneralSettings &settings);
+  void saveAttractSection(QSettings &s, const GeneralSettings &settings);
+  void loadMarqueeSection(QSettings &s, GeneralSettings &settings);
+  void saveMarqueeSection(QSettings &s, const GeneralSettings &settings);
+  void loadSplashSection(QSettings &s, GeneralSettings &settings);
+  void saveSplashSection(QSettings &s, const GeneralSettings &settings);
+  void loadRuntimeDetectionSection(QSettings &s, GeneralSettings &settings);
+  void saveRuntimeDetectionSection(QSettings &s, const GeneralSettings &settings);
+  void loadToolbarSection(QSettings &s, GeneralSettings &settings);
+  void saveToolbarSection(QSettings &s, const GeneralSettings &settings);
+  // launcher scalars (retroarchConfigPath) ride in [General]; the preset array
+  // lives top-level, so the two halves are wired separately around endGroup().
+  void loadLaunchersScalars(QSettings &s, GeneralSettings &settings);
+  void saveLaunchersScalars(QSettings &s, const GeneralSettings &settings);
+  void loadLaunchersPresets(QSettings &s, GeneralSettings &settings);
+  void saveLaunchersPresets(QSettings &s);
+  // Scraper credentials ([Scrapers], keychain-aware) + options
+  // ([ScraperOptions], where the schema sentinel is stamped last).
+  void loadScraperSection(QSettings &s, GeneralSettings &settings);
+  void saveScraperSection(QSettings &s, const GeneralSettings &settings);
 };
 
 #endif // SETTINGSMANAGER_H

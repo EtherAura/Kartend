@@ -4,7 +4,7 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 
 ## Development Setup
 
-1. Install dependencies (see [docs/building.md](docs/building.md)):
+1. Install dependencies (see [docs/dev/building.md](docs/dev/building.md)):
    - Qt6 (Core, Gui, Widgets, Sql, Concurrent, Multimedia, MultimediaWidgets)
    - CMake 3.20+
    - C++23 compiler (Clang or GCC)
@@ -21,11 +21,30 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 
 ## Submitting Changes
 
-1. Fork the repository and create a feature branch from `main`.
-2. Make your changes. Follow the existing code style (enforced by `.clang-format` and `.clang-tidy`).
-3. Add tests for new functionality where applicable.
-4. Ensure `build.sh --maintenance` passes (format, lint, and build checks).
+1. Fork the repository and create a feature branch from `main`. Use one
+   branch per logical change, branched fresh off `main` — don't stack a new
+   change onto a prior, still-unmerged branch.
+2. Make your changes. Follow the existing code style (enforced by
+   `.clang-format` and `.clang-tidy`) and the architecture rules below.
+3. Add tests for new functionality where applicable. Tests that exercise
+   migrations or real SQL paths **must not mock the database** — use the real
+   on-disk SQLite via the integration harness (see
+   [docs/dev/testing.md](docs/dev/testing.md)).
+4. Run the maintenance gate before pushing:
+   ```bash
+   .scripts/build.sh --maintenance   # clang-format, clang-tidy, IWYU, cppcheck, layering
+   ```
+   **clang-format drift is fatal** and the formatter is pinned to
+   **clang-format-19** — a newer system clang-format reformats differently and
+   fails CI. clang-tidy / cppcheck / raw-`qDebug` findings surface as
+   non-fatal notices. Local Qt is newer than CI's pinned **Qt 6.4.2**, so
+   reproduce CI failures in the pinned image with `.scripts/ci-local.sh` (see
+   [docs/dev/ci-local.md](docs/dev/ci-local.md)).
 5. Open a pull request with a clear description of the changes.
+
+> **Automated agents** (Copilot, Claude Code, Codex, …) working in this repo
+> must get explicit maintainer approval before each `git commit` and
+> `git push`, and must not pass `--no-verify` / `--no-gpg-sign` unless asked.
 
 ### Quarterly lint review
 
@@ -36,6 +55,16 @@ moves fast and what was unworkable six months ago may be tractable now.
 Maintainers: scan the disabled-check list each quarter and try re-enabling
 one or two that look ripe. Even partial wins (a handful of cleanups followed
 by re-enabling a check) compound over time.
+
+The same cadence applies to **sanitizer suppressions**. The TSan and LSan
+lists live in [`tests/suppressions/tsan.txt`](tests/suppressions/tsan.txt) and
+[`tests/suppressions/lsan.txt`](tests/suppressions/lsan.txt); each entry cites
+the bd issue that justified it. These are meant to be *transient* workarounds
+for upstream (Qt, glib, PulseAudio, …) races and leaks, but without a review
+cadence they accrete forever and become permanent fixtures. Each quarter,
+re-evaluate whether a suppressed issue has since been fixed upstream and the
+entry can be dropped. The policy and audit notes are in
+[docs/dev/sanitizer-suppressions.md](docs/dev/sanitizer-suppressions.md).
 
 ### Optional pre-commit hook
 
@@ -63,12 +92,31 @@ in CI and will catch the drift there.
 - All `QTimer::singleShot` calls must have a comment explaining the delay
 - UI constants go in the topical `src/ui/uiconstants/<area>.h` subheader (e.g. `grid.h`, `dialog.h`, `icons.h`) — no magic numbers
 - Use `[[nodiscard]]` on const getters and factory functions
-- See [docs/architecture.md](docs/architecture.md), [docs/building.md](docs/building.md), and the rules baked into `.clang-format` / `.clang-tidy` for full conventions
-- Debugging: [docs/dev-debugging.md](docs/dev-debugging.md) covers logging-category filters (`lcPerfTrace`, `lcSearchDiag`, …), ASan / TSan / UBSan triage, attaching GDB/LLDB, Valgrind/heaptrack recipes, the Qt-specific crash patterns that come up most, and the rationale for the `QTimer::singleShot` "why" comment rule.
+- See [docs/dev/architecture.md](docs/dev/architecture.md), [docs/dev/building.md](docs/dev/building.md), and the rules baked into `.clang-format` / `.clang-tidy` for full conventions
+- Debugging: [docs/dev/dev-debugging.md](docs/dev/dev-debugging.md) covers logging-category filters (`lcPerfTrace`, `lcSearchDiag`, …), ASan / TSan / UBSan triage, attaching GDB/LLDB, Valgrind/heaptrack recipes, the Qt-specific crash patterns that come up most, and the rationale for the `QTimer::singleShot` "why" comment rule.
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for module hierarchy, signal flow, and ownership model.
+See [docs/dev/architecture.md](docs/dev/architecture.md) for module hierarchy, signal
+flow, and ownership model. A few rules are load-bearing and enforced:
+
+- **Layering DAG.** Module dependencies must follow the directed acyclic graph
+  enforced by `.scripts/check-layering.py` (run as part of `--maintenance`).
+  Introducing an edge that violates it fails the build. See
+  [docs/dev/layering.md](docs/dev/layering.md).
+- **`ApplicationContext` (ctx) access; no sibling-manager pointers in setup
+  structs.** A `*Setup` struct carries `const ApplicationContext *ctx` plus
+  only non-manager refs (widgets, value containers, callbacks); sibling
+  manager/service pointers are read through `ctx` so a manager can't pin its
+  siblings' lifetimes. `check-layering.py` fails the build if a `*Manager *` /
+  `*Service *` field is added to a `*Setup` struct. See
+  [docs/dev/layering.md](docs/dev/layering.md).
+- **`parent()` is a runtime lifetime guard, not just ownership metadata.**
+  Some call sites check `parent()` to decide whether an object is still
+  attached to its QObject tree before touching siblings. Before changing a
+  constructor's parent (e.g. `this` → `nullptr`), `grep -rn "parent()"
+  src/<module>` and confirm no live path depends on it. See
+  [docs/dev/architecture.md](docs/dev/architecture.md) (§ QObject lifecycle).
 
 ## Issue tracking conventions (beads / `bd`)
 
@@ -84,8 +132,17 @@ as cross-references to historical extraction or refactor work.
 
 **Beads IDs must NOT appear in:** user-facing string literals (tooltips,
 labels, dialogs, error messages), `readme.md`, AppStream metadata under
-`packaging/`, or the wiki content under `docs/guide/*.md`. End users see
+`packaging/`, or the wiki content under `docs/user/*.md`. End users see
 those surfaces and a `Kartend-XXXX` reference there is noise to them.
+
+**The `.beads/` database is not committed.** It's gitignored, so a fresh
+clone has no way to resolve a `Kartend-XXXX` reference back to its issue —
+`bd show Kartend-XXXX` only works for maintainers who carry the local
+database. Treat the IDs as opaque provenance markers, not links: every commit
+message, PR description, and code comment that cites one is written to stand
+on its own, so you are never expected to look an ID up to understand a change.
+Maintainers can still resolve them through the bd/Dolt sync when deeper
+archaeology is needed.
 
 ## Reporting Issues
 

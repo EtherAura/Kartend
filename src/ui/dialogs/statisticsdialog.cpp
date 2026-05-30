@@ -3,7 +3,8 @@
 // per-collection breakdown / history) plus a header with whole-library totals.
 #include "statisticsdialog.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 
 #include <algorithm>
 
@@ -310,7 +311,7 @@ void StatisticsDialog::refresh() {
   // syncing it doesn't bounce through onHistoryDisableToggled and write
   // back the same value.
   if (m_historyEnabledCheckBox) {
-    const bool on = m_generalSettings ? m_generalSettings->historyEnabled : true;
+    const bool on = m_generalSettings ? m_generalSettings->history.historyEnabled : true;
     m_historyEnabledCheckBox->blockSignals(true);
     m_historyEnabledCheckBox->setChecked(on);
     m_historyEnabledCheckBox->blockSignals(false);
@@ -627,7 +628,7 @@ void StatisticsDialog::onHistoryDisableToggled(bool checked) {
   // we still toggle the in-memory value so the next launch sees it; the
   // change just won't survive restart.
   if (m_generalSettings) {
-    m_generalSettings->historyEnabled = checked;
+    m_generalSettings->history.historyEnabled = checked;
     if (m_settingsManager) {
       // If the disk write fails the toggle still flips in-memory (which is the
       // documented behaviour without a SettingsManager); surface the failure so

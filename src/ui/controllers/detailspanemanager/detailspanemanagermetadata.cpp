@@ -9,7 +9,8 @@
 
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "detailspane.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"

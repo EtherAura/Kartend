@@ -15,8 +15,8 @@ void GamepadManager::updateDirectionFromInputs() {
     return;
   }
 
-  const bool useDpad = !m_generalSettings || m_generalSettings->gamepadUseDpad;
-  const bool useStick = !m_generalSettings || m_generalSettings->gamepadUseLeftStick;
+  const bool useDpad = !m_generalSettings || m_generalSettings->gamepad.gamepadUseDpad;
+  const bool useStick = !m_generalSettings || m_generalSettings->gamepad.gamepadUseLeftStick;
 
   const auto stick = GamepadHelpers::axisToDirections(
       m_axisX, m_axisY, m_activeDirection, UIConstants::Gamepad::AXIS_DEADZONE_ON,
@@ -86,11 +86,12 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
   }
 
   const QString confirm =
-      m_generalSettings ? m_generalSettings->gamepadConfirmButton : QStringLiteral("A");
+      m_generalSettings ? m_generalSettings->gamepad.gamepadConfirmButton : QStringLiteral("A");
   const QString back =
-      m_generalSettings ? m_generalSettings->gamepadBackButton : QStringLiteral("B");
-  const QString toggleSidebar =
-      m_generalSettings ? m_generalSettings->gamepadToggleSidebarButton : QStringLiteral("Y");
+      m_generalSettings ? m_generalSettings->gamepad.gamepadBackButton : QStringLiteral("B");
+  const QString toggleSidebar = m_generalSettings
+                                    ? m_generalSettings->gamepad.gamepadToggleSidebarButton
+                                    : QStringLiteral("Y");
 
   switch (GamepadHelpers::resolveButtonAction(normalized, confirm, back, toggleSidebar)) {
   case GamepadHelpers::ButtonAction::Confirm:

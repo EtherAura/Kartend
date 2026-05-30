@@ -84,7 +84,7 @@ bool MenuController::connectMenuAction(QAction *action, std::function<void()> ha
 }
 
 bool MenuController::connectVisibilityToggle(QAction *action, std::function<void(bool)> applyVisual,
-                                             bool GeneralSettings::*field) {
+                                             bool ViewSettings::*field) {
   if (!action || !m_ctx.mainWindow) {
     return false;
   }
@@ -95,7 +95,7 @@ bool MenuController::connectVisibilityToggle(QAction *action, std::function<void
     // persist explicit user toggle.
     if (m_ctx.getGeneralSettings) {
       if (auto *settings = m_ctx.getGeneralSettings()) {
-        settings->*field = checked;
+        settings->view.*field = checked;
         if (m_ctx.getSettingsManager) {
           if (auto *mgr = m_ctx.getSettingsManager()) {
             mgr->saveGeneralSettings(*settings);
@@ -169,7 +169,7 @@ void MenuController::setupActionShowMenuBar() {
         }
         syncHamburgerVisibility();
       },
-      &GeneralSettings::showMenuBar);
+      &ViewSettings::showMenuBar);
 }
 
 void MenuController::setupActionShowToolbar() {
@@ -181,7 +181,7 @@ void MenuController::setupActionShowToolbar() {
           m_ctx.ui->itemsTopBar->setVisible(checked);
         }
       },
-      &GeneralSettings::showToolbar);
+      &ViewSettings::showToolbar);
 }
 
 void MenuController::setupActionShowSidebar() {
@@ -276,7 +276,7 @@ void MenuController::setupSortActions() {
     connect(action, &QAction::triggered, this, [this, mode, reloadIfNeeded]() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->sortMode = mode;
+          settings->view.sortMode = mode;
           if (m_ctx.getSettingsManager) {
             if (auto *mgr = m_ctx.getSettingsManager()) {
               mgr->saveGeneralSettings(*settings);
@@ -295,7 +295,7 @@ void MenuController::setupSortActions() {
             [this, reloadIfNeeded](bool checked) {
               if (m_ctx.getGeneralSettings) {
                 if (auto *settings = m_ctx.getGeneralSettings()) {
-                  settings->excludeSubfoldersFromSort = checked;
+                  settings->view.excludeSubfoldersFromSort = checked;
                   if (m_ctx.getSettingsManager) {
                     if (auto *mgr = m_ctx.getSettingsManager()) {
                       mgr->saveGeneralSettings(*settings);
@@ -321,14 +321,14 @@ void MenuController::syncSortActions() {
   // entry, so the loop body is skipped and the previously-checked
   // menu action remains checked — matching the prior switch's behavior.
   for (const auto &entry : kSortActions) {
-    if (settings->sortMode != entry.mode) continue;
+    if (settings->view.sortMode != entry.mode) continue;
     if (QAction *action = m_ctx.ui->*entry.action) {
       action->setChecked(true);
     }
     break;
   }
   if (m_ctx.ui->actionSortSubfolders) {
-    m_ctx.ui->actionSortSubfolders->setChecked(settings->excludeSubfoldersFromSort);
+    m_ctx.ui->actionSortSubfolders->setChecked(settings->view.excludeSubfoldersFromSort);
   }
 }
 
@@ -364,7 +364,7 @@ void MenuController::setupFullscreenAction() {
     // affordance, not a change to the user's saved Show Menu Bar preference.
     if (m_ctx.getGeneralSettings) {
       if (auto *settings = m_ctx.getGeneralSettings()) {
-        settings->fullscreen = entering;
+        settings->view.fullscreen = entering;
         if (m_ctx.getSettingsManager) {
           if (auto *mgr = m_ctx.getSettingsManager()) {
             mgr->saveGeneralSettings(*settings);
@@ -383,14 +383,14 @@ void MenuController::applyPersistedViewState() {
   // Menu bar: setChecked() emits toggled (not triggered), so the persistence
   // lambda above is not re-entered during restore.
   if (m_ctx.ui && m_ctx.ui->actionShowMenuBar && m_ctx.ui->menubar) {
-    m_ctx.ui->actionShowMenuBar->setChecked(settings->showMenuBar);
-    m_ctx.ui->menubar->setVisible(settings->showMenuBar);
+    m_ctx.ui->actionShowMenuBar->setChecked(settings->view.showMenuBar);
+    m_ctx.ui->menubar->setVisible(settings->view.showMenuBar);
   }
 
   // Toolbar
   if (m_ctx.ui && m_ctx.ui->actionShowToolbar && m_ctx.ui->itemsTopBar) {
-    m_ctx.ui->actionShowToolbar->setChecked(settings->showToolbar);
-    m_ctx.ui->itemsTopBar->setVisible(settings->showToolbar);
+    m_ctx.ui->actionShowToolbar->setChecked(settings->view.showToolbar);
+    m_ctx.ui->itemsTopBar->setVisible(settings->view.showToolbar);
   }
 
   // Fullscreen: called from setupMenuBar() during MainWindow construction —
@@ -399,7 +399,7 @@ void MenuController::applyPersistedViewState() {
   // also hide the menu bar here to mirror the F11 lambda's coupling so the
   // restored chrome matches what the user saw when they last enabled it.
   if (m_fullscreenAction) {
-    if (settings->fullscreen) {
+    if (settings->view.fullscreen) {
       m_ctx.mainWindow->showFullScreen();
       if (m_ctx.mainWindow->menuBar()) {
         m_ctx.mainWindow->menuBar()->hide();
@@ -456,7 +456,7 @@ void MenuController::setupStatisticsAction() {
         GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
         ISettingsManager *settingsMgr =
             m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr;
-        const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
+        const bool runtimeOn = settings && settings->runtimeDetection.runtimeDetectionEnabled;
         StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr,
                                 m_ctx.mainWindow);
         // Wire the navigate-on-double-click signal: dismiss the dialog and

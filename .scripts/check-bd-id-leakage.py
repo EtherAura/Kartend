@@ -7,7 +7,7 @@ commit messages, CHANGELOG.md, and dev docs under `docs/` — but blocks
 them in surfaces the end user actually sees:
 
   - readme.md (project README)
-  - docs/guide/*.md (wiki content, mirrored to GitHub Wiki)
+  - docs/user/*.md (wiki content, mirrored to GitHub Wiki)
   - packaging/*.metainfo.xml, *.appdata.xml (AppStream metadata)
 
 This script scans those paths for `Kartend-XXXX` patterns and exits 1
@@ -36,7 +36,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 # them and bd IDs serve as legitimate cross-references there.
 USER_FACING_GLOBS: list[str] = [
     "readme.md",
-    "docs/guide/*.md",
+    "docs/user/*.md",
     "packaging/*.metainfo.xml",
     "packaging/*.appdata.xml",
 ]
@@ -89,7 +89,7 @@ def main() -> int:
             "feature / change in plain language. Bd IDs are allowed in "
             "code comments and dev docs (see CONTRIBUTING.md → 'Issue "
             "tracking conventions') but must not leak into user-facing "
-            "surfaces (readme.md, docs/guide/, AppStream metadata)."
+            "surfaces (readme.md, docs/user/, AppStream metadata)."
         )
         return 1
     surfaces = ", ".join(USER_FACING_GLOBS)

@@ -26,7 +26,7 @@
 #include "attractmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/typehelpers.h"
 #include "collectionfilesystemwatcher.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
@@ -165,17 +165,18 @@ void MainWindow::showStartupSplash() {
   // chained onto the video's dismissed signal so it still appears after
   // the user skips or the clip ends — keeping users with both features
   // configured from losing the splash.
-  if (m_generalSettings.startupVideoEnabled && !m_generalSettings.startupVideoPath.isEmpty()) {
+  if (m_generalSettings.startup.startupVideoEnabled &&
+      !m_generalSettings.startup.startupVideoPath.isEmpty()) {
     auto *videoOverlay = new StartupVideoOverlay(this);
     videoOverlay->setGeometry(rect());
     videoOverlay->raise();
-    if (videoOverlay->playVideo(m_generalSettings.startupVideoPath)) {
+    if (videoOverlay->playVideo(m_generalSettings.startup.startupVideoPath)) {
       videoOverlay->show();
       connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {
-        if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
+        if (m_generalSettings.splash.bootSplashEnabled && m_splashOverlay) {
           m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
-                                      m_generalSettings.bootSplashTitle,
-                                      m_generalSettings.bootSplashSubtitle);
+                                      m_generalSettings.splash.bootSplashTitle,
+                                      m_generalSettings.splash.bootSplashSubtitle);
         }
       });
       return;
@@ -184,17 +185,18 @@ void MainWindow::showStartupSplash() {
     // normal splash path so the user still gets a startup indicator.
     videoOverlay->deleteLater();
   }
-  if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
-    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup, m_generalSettings.bootSplashTitle,
-                                m_generalSettings.bootSplashSubtitle);
+  if (m_generalSettings.splash.bootSplashEnabled && m_splashOverlay) {
+    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
+                                m_generalSettings.splash.bootSplashTitle,
+                                m_generalSettings.splash.bootSplashSubtitle);
   }
 }
 
 void MainWindow::showFocusReturnSplash() {
-  if (m_generalSettings.resumeFocusSplashEnabled && m_splashOverlay) {
+  if (m_generalSettings.splash.resumeFocusSplashEnabled && m_splashOverlay) {
     m_splashOverlay->showSplash(SplashOverlay::Reason::FocusReturn,
-                                m_generalSettings.resumeFocusSplashTitle,
-                                m_generalSettings.resumeFocusSplashSubtitle);
+                                m_generalSettings.splash.resumeFocusSplashTitle,
+                                m_generalSettings.splash.resumeFocusSplashSubtitle);
   }
 }
 
@@ -204,18 +206,18 @@ void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
   // can still restore it after the user clears the override).
   static const QFont s_baseline = QApplication::font();
   QFont font = s_baseline;
-  const QString family = settings.globalUiFontFamily.trimmed();
+  const QString family = settings.appearance.globalUiFontFamily.trimmed();
   if (!family.isEmpty()) {
     font.setFamily(family);
   }
-  if (settings.globalUiFontPointSize > 0) {
-    font.setPointSize(settings.globalUiFontPointSize);
+  if (settings.appearance.globalUiFontPointSize > 0) {
+    font.setPointSize(settings.appearance.globalUiFontPointSize);
   }
   // layer the runtime text zoom on top so menus/dialogs/
   // toolbar scale at the same rate as item titles. Computed against the
   // size that was already chosen above (user override or baseline) so the
   // override stays the authoritative "100 %" reference.
-  font.setPointSize(std::max(1, font.pointSize() * settings.uiTextZoomPercent / 100));
+  font.setPointSize(std::max(1, font.pointSize() * settings.appearance.uiTextZoomPercent / 100));
   // setFont propagates to every widget that hasn't had setFont() called on
   // it explicitly, so menus, dialogs, and toolbar text all pick this up
   // without us walking the widget tree.
@@ -523,18 +525,8 @@ void MainWindow::resyncPlaylistCollections() {
   rebuildHierarchyCache();
 }
 
-// Manager accessors removed — callers go through m_appManager (internal) or
-// mainWindow->applicationManager()->getXxxManager() (external).
-// The three accessors below are kept because they implement IMainWindow's
-// pure-virtuals — that interface is the data/ui-facing handle and won't be
-// removed in this pass. Names dropped the "get" prefix per Kartend-5wuk.1
-// so a grep for 'mainWindow->getXxxManager' outside this file is clean.
-ISettingsManager *MainWindow::settingsManager() const {
-  return m_appManager->getSettingsManager();
-}
-ScrollManager *MainWindow::scrollManager() const {
-  return m_appManager->getScrollManager();
-}
-InteractionManager *MainWindow::interactionManager() const {
-  return m_appManager->getInteractionManager();
-}
+// Per-manager accessors removed in Kartend-qjtz — the settings dialog now
+// reaches its siblings through an injected ApplicationContext, so the
+// IMainWindow forwarders (settingsManager / scrollManager /
+// interactionManager) are gone. Internal callers use m_appManager directly;
+// external callers route through applicationManager()->getXxxManager().

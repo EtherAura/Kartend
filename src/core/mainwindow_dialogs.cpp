@@ -30,9 +30,10 @@
 #include "bulkeditdialog.h"
 #include "cachemanager.h"
 #include "collection/collectioncontext.h"
-#include "collection/helpers.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
+#include "collection/typehelpers.h"
+#include "collection/validationhelpers.h"
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
 #include "commandpalettedialog.h"
@@ -84,7 +85,7 @@ void MainWindow::openSettingsDialog(SettingsPage initialPage) {
   context.scrollManager = m_appManager->getScrollManager();
   context.navigationManager = m_appManager->getNavigationManager();
   context.databaseManager = m_appManager->getDatabaseManager();
-  context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+  context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
   context.initialPage = initialPage;
   settings->openSettingsDialog(context);
   // Settings may have flipped watchFilesystem on/off or changed a mediaDirectory;
@@ -141,7 +142,7 @@ void MainWindow::showFirstRunWizard() {
   // Always flip firstRunComplete — even when the user skipped without
   // picking a folder. They saw the wizard; auto-launching it again would
   // be obnoxious. Re-running stays available via Help → Setup Wizard…
-  m_generalSettings.firstRunComplete = true;
+  m_generalSettings.startup.firstRunComplete = true;
   if (m_appManager->getSettingsManager()) {
     m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }
@@ -575,7 +576,8 @@ void MainWindow::openCommandPalette() {
                        context.scrollManager = m_appManager->getScrollManager();
                        context.navigationManager = m_appManager->getNavigationManager();
                        context.databaseManager = m_appManager->getDatabaseManager();
-                       context.createSettingsDialog = DialogController::makeSettingsDialogFactory();
+                       context.createSettingsDialog =
+                           DialogController::makeSettingsDialogFactory(&m_appContext);
                        settings->openSettingsDialog(context);
                      }
                    }});

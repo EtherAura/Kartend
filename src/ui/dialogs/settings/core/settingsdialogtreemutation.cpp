@@ -15,7 +15,7 @@
 
 #include "applysettingsdialog.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/validationhelpers.h"
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "pathutils.h"
@@ -27,7 +27,7 @@
 
 void SettingsDialog::addCollection() {
   CreateCollectionDialog dialog(this);
-  dialog.setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
+  dialog.setRetroarchConfigOverride(m_generalSettings.launchers.retroarchConfigPath);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
@@ -131,7 +131,7 @@ void SettingsDialog::ensureRootCollectionExists() {
   // No root collection exists - prompt user to create one
   while (true) {
     CreateCollectionDialog dialog(this);
-    dialog.setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
+    dialog.setRetroarchConfigOverride(m_generalSettings.launchers.retroarchConfigPath);
     dialog.setWindowTitle(tr("Create Collection"));
     dialog.setIntroText(tr("No collections found. Set up your first collection to continue."));
 

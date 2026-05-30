@@ -1,6 +1,8 @@
 target_sources(kartend_chrome PRIVATE
   coverflowgallerystrip.cpp
   coverflowwidget.cpp
+  coverflowwidget_artwork.cpp
+  coverflowwidget_input.cpp
   itemplaceholderrenderer.cpp
   itemwidget.cpp
   itemwidgetindicator.cpp

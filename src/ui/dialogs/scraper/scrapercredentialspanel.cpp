@@ -153,7 +153,7 @@ void ScraperCredentialsPanel::refresh() {
     const QString providerId = fullKey.left(slash);
     const QString fieldName = fullKey.mid(slash + 1);
     it.value()->setText(
-        m_model->generalSettings->scraperCredentials.value(providerId).value(fieldName));
+        m_model->generalSettings->scraper.credentials.value(providerId).value(fieldName));
   }
   m_loading = false;
 }
@@ -168,12 +168,12 @@ void ScraperCredentialsPanel::writeModel() {
     const QString fieldName = fullKey.mid(slash + 1);
     const QString value = it.value()->text().trimmed();
     if (value.isEmpty()) {
-      m_model->generalSettings->scraperCredentials[providerId].remove(fieldName);
-      if (m_model->generalSettings->scraperCredentials[providerId].isEmpty()) {
-        m_model->generalSettings->scraperCredentials.remove(providerId);
+      m_model->generalSettings->scraper.credentials[providerId].remove(fieldName);
+      if (m_model->generalSettings->scraper.credentials[providerId].isEmpty()) {
+        m_model->generalSettings->scraper.credentials.remove(providerId);
       }
     } else {
-      m_model->generalSettings->scraperCredentials[providerId][fieldName] = value;
+      m_model->generalSettings->scraper.credentials[providerId][fieldName] = value;
     }
   }
   // Same legacy-key scrub as the old modal dialog: stale dev_* keys
@@ -181,11 +181,11 @@ void ScraperCredentialsPanel::writeModel() {
   // into the dev slot stops being silently downgraded. Only run when
   // the SS panel is the active one (or when no filter is set).
   if (m_providerFilter.isEmpty() || m_providerFilter == QLatin1String("screenscraper")) {
-    auto &ssBlob = m_model->generalSettings->scraperCredentials[QStringLiteral("screenscraper")];
+    auto &ssBlob = m_model->generalSettings->scraper.credentials[QStringLiteral("screenscraper")];
     ssBlob.remove(QStringLiteral("dev_id"));
     ssBlob.remove(QStringLiteral("dev_password"));
     if (ssBlob.isEmpty()) {
-      m_model->generalSettings->scraperCredentials.remove(QStringLiteral("screenscraper"));
+      m_model->generalSettings->scraper.credentials.remove(QStringLiteral("screenscraper"));
     }
   }
 }

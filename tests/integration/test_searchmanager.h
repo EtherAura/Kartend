@@ -10,7 +10,7 @@
  *
  * The fixture-backed test verifies the live wiring through
  * InteractionManager::searchManager() so a regression that breaks
- * setupReferences inside applicationmanager / interactionmanagersetup
+ * setupReferences inside applicationmanager / interactionmanager_setup
  * is caught here too.
  *
  * The full debounced search path (onSearchTextChanged, performDebouncedSearch)

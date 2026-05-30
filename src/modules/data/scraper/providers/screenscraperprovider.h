@@ -24,7 +24,7 @@ struct GeneralSettings;
 namespace ScreenScraperProviderHelpers {
 
 /// Hit SS's `ssuserInfos.php` with whatever credentials are currently
-/// in `settings.scraperCredentials["screenscraper"]` (falling back to
+/// in `settings.scraper.credentials["screenscraper"]` (falling back to
 /// the bundled dev_id for the dev fields when absent). The callback
 /// fires on the main thread with the parsed user-info struct or an
 /// error context. Used by the Scraper settings panel to surface "this

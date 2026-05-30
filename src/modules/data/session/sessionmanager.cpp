@@ -2,7 +2,7 @@
 // sessions.
 #include "sessionmanager.h"
 #include "collection/collectionconfig.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "errorutils.h"
 #include "pathutils.h"
 

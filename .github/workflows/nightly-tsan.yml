@@ -98,7 +98,7 @@ jobs:
       - name: Run Tests (TSan)
         env:
           QT_QPA_PLATFORM: offscreen
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/suppressions/tsan.txt
         run: |
           cd build/TSan
           ctest --output-on-failure

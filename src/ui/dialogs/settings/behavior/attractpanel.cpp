@@ -40,38 +40,42 @@ void AttractPanel::refresh() {
     return;
   }
   SettingsFormBinding::loadInto(ui->attractModeCheckBox,
-                                m_model->generalSettings->attractModeEnabled);
+                                m_model->generalSettings->attract.attractModeEnabled);
   SettingsFormBinding::loadInto(ui->attractIdleTimeoutSpinBox,
-                                m_model->generalSettings->attractModeIdleTimeoutSec);
+                                m_model->generalSettings->attract.attractModeIdleTimeoutSec);
   SettingsFormBinding::loadInto(ui->attractAutoScrollCheckBox,
-                                m_model->generalSettings->attractModeAutoScrollEnabled);
+                                m_model->generalSettings->attract.attractModeAutoScrollEnabled);
   // QDoubleSpinBox needs its own loadInto overload (already provided in
   // SettingsFormBinding) — let it block its valueChanged signal during the
   // programmatic set.
   SettingsFormBinding::loadInto(ui->attractScrollSpeedSpinBox,
-                                m_model->generalSettings->attractModeScrollSpeed);
-  SettingsFormBinding::loadInto(ui->attractAdvanceSelectionCheckBox,
-                                m_model->generalSettings->attractModeAdvanceSelectionEnabled);
-  SettingsFormBinding::loadInto(ui->attractAdvanceIntervalSpinBox,
-                                m_model->generalSettings->attractModeAdvanceSelectionIntervalSec);
-  SettingsFormBinding::loadInto(ui->attractAdvanceRandomCheckBox,
-                                m_model->generalSettings->attractModeAdvanceSelectionRandom);
+                                m_model->generalSettings->attract.attractModeScrollSpeed);
+  SettingsFormBinding::loadInto(
+      ui->attractAdvanceSelectionCheckBox,
+      m_model->generalSettings->attract.attractModeAdvanceSelectionEnabled);
+  SettingsFormBinding::loadInto(
+      ui->attractAdvanceIntervalSpinBox,
+      m_model->generalSettings->attract.attractModeAdvanceSelectionIntervalSec);
+  SettingsFormBinding::loadInto(
+      ui->attractAdvanceRandomCheckBox,
+      m_model->generalSettings->attract.attractModeAdvanceSelectionRandom);
 }
 
 void AttractPanel::writeBack() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_model->generalSettings->attractModeEnabled = ui->attractModeCheckBox->isChecked();
-  m_model->generalSettings->attractModeIdleTimeoutSec = ui->attractIdleTimeoutSpinBox->value();
-  m_model->generalSettings->attractModeAutoScrollEnabled =
+  m_model->generalSettings->attract.attractModeEnabled = ui->attractModeCheckBox->isChecked();
+  m_model->generalSettings->attract.attractModeIdleTimeoutSec =
+      ui->attractIdleTimeoutSpinBox->value();
+  m_model->generalSettings->attract.attractModeAutoScrollEnabled =
       ui->attractAutoScrollCheckBox->isChecked();
-  m_model->generalSettings->attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
-  m_model->generalSettings->attractModeAdvanceSelectionEnabled =
+  m_model->generalSettings->attract.attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
+  m_model->generalSettings->attract.attractModeAdvanceSelectionEnabled =
       ui->attractAdvanceSelectionCheckBox->isChecked();
-  m_model->generalSettings->attractModeAdvanceSelectionIntervalSec =
+  m_model->generalSettings->attract.attractModeAdvanceSelectionIntervalSec =
       ui->attractAdvanceIntervalSpinBox->value();
-  m_model->generalSettings->attractModeAdvanceSelectionRandom =
+  m_model->generalSettings->attract.attractModeAdvanceSelectionRandom =
       ui->attractAdvanceRandomCheckBox->isChecked();
   emit changed();
 }

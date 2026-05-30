@@ -11,7 +11,8 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/helpers.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/validationhelpers.h"
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h"
 #include "iscrollmanager.h"
@@ -62,7 +63,7 @@ auto SelectionRestoreCoordinator::shouldRestoreSelection() const -> bool {
   }
   const bool searchActive =
       m_searchBar && SelectionRestoreHelpers::searchTextIsActive(m_searchBar->text());
-  return SelectionRestoreHelpers::shouldRestoreSelection(m_generalSettings->rememberSelection,
+  return SelectionRestoreHelpers::shouldRestoreSelection(m_generalSettings->input.rememberSelection,
                                                          searchActive, scrollMgr() != nullptr,
                                                          interactionMgr() != nullptr);
 }

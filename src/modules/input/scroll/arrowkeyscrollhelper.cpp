@@ -121,7 +121,7 @@ auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY, int viewportHeight) 
 
 void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar, int current, int target) {
   // Get base duration from settings
-  int baseDuration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int baseDuration = m_generalSettings ? m_generalSettings->input.scrollAnimationDurationMs : 1500;
 
   int rowStride = m_itemHeight + m_verticalSpacing;
   int singleRowDuration = baseDuration + baseDuration;
