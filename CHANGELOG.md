@@ -72,11 +72,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Stale `mainwindow_dbevents.cpp` references in `mainwindow_wiring.cpp`
   comments.** The file was renamed to `dbeventscontroller.cpp` in an
-  earlier refactor (Kartend-hzef); the residual five doc-block
-  mentions are now updated. Pure-comment change — no behavioural
-  effect.
+  earlier refactor; the residual five doc-block mentions are now
+  updated. Pure-comment change — no behavioural effect.
+
+- **Settings dialog Cancel button now reverts live-saved panels.** The
+  base color, fonts, and splash panels apply changes immediately for
+  instant preview; Cancel previously left those edits committed.
+  Cancel now restores the last-saved baseline on those panels while
+  preserving the instant-feedback behaviour while the dialog is open.
+
+- **Scrape result dialog no longer crashes on dedup.** The dedup loop
+  used to call `finishCurrentApply()` mid-iteration on a dialog that
+  may have already been accepted/destroyed; it now tallies hits and
+  finishes once after the loop completes.
+
+- **Bounded correctness / lifecycle pass across batch, artwork,
+  playlist, settings I/O, and the scroll/navigation pipeline.** Closes
+  sixteen latent bugs that were individually subtle but collectively
+  significant: silent `SQLITE_BUSY` edit failures on the playlist DB
+  (per-connection `busy_timeout` now configured), artwork PNG cache
+  writes are atomic via `QSaveFile` + `fsync`, settings export/import
+  is atomic with round-trip test coverage, `PlaylistManager::addItem`'s
+  read-modify-write wrapped in a transaction, parentless
+  `MarqueeWindow` deleted on controller destruction, lock acquired
+  before `AdaptiveBatcher`'s early-return state read, `QPointer` (not
+  raw `this`) captured in `ArtworkManager`'s re-dispatch, the
+  `hideMissingArtwork` field included in `CollectionConfig` equality,
+  null-guarded `ArtworkManager` dereferences in navigation, recycled
+  virtual-folder widgets no longer accumulate duplicate double-click
+  connections, wheel-vertical scroll animation re-fires the canonical
+  completion slot, `navigateToItem`'s Connection handle owned via
+  `shared_ptr` (no leak on never-matched results), `m_appManager`
+  declared before its dependents so it outlives them at teardown,
+  `ConfigValidation` expands `~/%collection%` via the same `PathUtils`
+  helper as runtime (no more spurious "media directory does not
+  exist" warnings on `%collection%` collections), artwork
+  suppressed-result requeue funneled through `ArtworkWidgetRegistry`'s
+  coalesce + max-pending cap, and empty-chunk slots recover after a
+  bounded number of re-requests instead of sticking on "Loading…"
+  forever.
 
 ### Security
+
+- **Path traversal blocked across configuration and CLI seams.** The
+  `%collection%` substitution in `PathUtils::expandPath` validates the
+  collection name and refuses to expand traversal-unsafe values (the
+  placeholder stays literal and a warning is emitted), so a malicious
+  collection name can no longer escape the configured root. The
+  generic `PathUtils::validatePathSecurity` check now rejects any
+  `..` path segment — closing a CLI seam where
+  `--import-kart ../../etc/foo` slipped through (a literal `..`
+  inside a single filename stays allowed). And the Create Collection
+  dialog security-validates its folder, launcher, and core path
+  fields at acceptance, mirroring the settings dialog so a bad path
+  is rejected at creation time rather than only on a later re-save.
+
+- **Scraper providers hardened against untrusted remote data.** TMDB
+  bearer token and ScreenScraper passwords now travel in request
+  headers instead of query strings (no longer surfaced in logs or
+  referer leaks). Provider IDs are validated before being
+  interpolated into request URL paths — MBID must match the UUID
+  format, OpenLibrary work-keys must match `^OL[0-9]+W$`, TMDB
+  media-type and id are re-checked at the `fetchDetail` seam.
+  ScreenScraper assets whose remote `type` isn't a safe path
+  component are dropped (with a defense-in-depth re-check at the
+  on-disk write seam, since `type` becomes a directory name). And
+  ScreenScraper group/company scope keys are allowlist-validated at
+  parse time (downgrading to per-game scope when invalid), preventing
+  a malicious scope key from traversing out of `_shared/` as a
+  filename.
 
 ### Removed
 
