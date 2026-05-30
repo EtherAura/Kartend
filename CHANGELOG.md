@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+### Removed
+
+### Deprecated
+
+## [0.0.12] - 2026-05-30
+
+### Added
+
 - **Per-collection hot-reload signals are now wired to real receivers.**
   Six per-cluster `*Changed` signals (grid layout, sidebar appearance,
   collection background, list-view options, collection-filter
