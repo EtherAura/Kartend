@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QScrollArea>
 #include <QSettings>
 #include <QStandardPaths>
@@ -15,6 +16,46 @@
 namespace keys = kartend::settings::keys;
 
 namespace {
+
+// Atomically replace destPath with the contents of srcPath: read the source
+// into memory, write it through QSaveFile (which writes a temp file then does an
+// atomic rename-replace on commit()), then fsync the parent directory so the
+// rename survives a crash / power loss. Replaces the old
+// copy-to-.tmp / remove-dest / rename dance, which left no destination at all if
+// interrupted between the remove and the rename, and never fsync'd (Kartend-g2ox).
+// `context` is the caller name woven into error messages.
+ErrorUtils::Result<void> atomicReplaceFile(const QString &srcPath, const QString &destPath,
+                                           const char *context) {
+  QFile source(srcPath);
+  if (!source.open(QIODevice::ReadOnly)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                           "Failed to open source file", context)
+        .withDetails(QString("Source: %1, Error: %2").arg(srcPath, source.errorString()));
+  }
+  const QByteArray payload = source.readAll();
+  source.close();
+
+  QSaveFile out(destPath);
+  if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to open destination file for writing", context)
+        .withDetails(QString("Destination: %1, Error: %2").arg(destPath, out.errorString()));
+  }
+  if (out.write(payload) != payload.size()) {
+    out.cancelWriting();
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to write complete destination file", context)
+        .withDetails(QString("Destination: %1, Error: %2").arg(destPath, out.errorString()));
+  }
+  if (!out.commit()) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to finalize destination file", context)
+        .withDetails(QString("Destination: %1, Error: %2").arg(destPath, out.errorString()));
+  }
+  PathUtils::syncDirectory(QFileInfo(destPath).absolutePath());
+  return ErrorUtils::Result<void>::success();
+}
+
 bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
   QTextStream in(&device);
   QString currentSection;
@@ -183,28 +224,9 @@ auto SettingsUtils::exportConfig(const QString &destPath) -> ErrorUtils::Result<
     live.sync();
   }
 
-  // Atomic copy: write to a sibling .tmp, then rename onto the destination.
-  const QString tempPath = destPath + ".tmp";
-  if (QFile::exists(tempPath)) {
-    QFile::remove(tempPath);
-  }
-  if (!QFile::copy(sourcePath, tempPath)) {
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
-                                           "Failed to write export file",
-                                           "SettingsUtils::exportConfig")
-        .withDetails(QString("Source: %1, Temp: %2").arg(sourcePath, tempPath));
-  }
-  if (QFile::exists(destPath)) {
-    QFile::remove(destPath);
-  }
-  if (!QFile::rename(tempPath, destPath)) {
-    QFile::remove(tempPath);
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
-                                           "Failed to finalize export file",
-                                           "SettingsUtils::exportConfig")
-        .withDetails(QString("Destination: %1").arg(destPath));
-  }
-  return ErrorUtils::Result<void>::success();
+  // Atomic copy: read the just-synced source and write it onto the destination
+  // via QSaveFile + parent-dir fsync (Kartend-g2ox).
+  return atomicReplaceFile(sourcePath, destPath, "SettingsUtils::exportConfig");
 }
 
 auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Result<void> {
@@ -269,29 +291,16 @@ auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Resul
     }
   }
 
-  // Atomic replace: copy to .tmp next to the live config, then rename.
-  const QString tempPath = livePath + ".import.tmp";
-  if (QFile::exists(tempPath)) {
-    QFile::remove(tempPath);
+  // Atomic replace: install the source over the live config via QSaveFile +
+  // parent-dir fsync, so an interrupted import can't leave the live config
+  // missing or truncated (Kartend-g2ox).
+  if (auto result = atomicReplaceFile(sourcePath, livePath, "SettingsUtils::importConfig");
+      result.isError()) {
+    return result;
   }
-  if (!QFile::copy(sourcePath, tempPath)) {
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
-                                           "Failed to stage imported config",
-                                           "SettingsUtils::importConfig")
-        .withDetails(QString("Source: %1, Temp: %2").arg(sourcePath, tempPath));
-  }
-  if (QFile::exists(livePath)) {
-    QFile::remove(livePath);
-  }
-  if (!QFile::rename(tempPath, livePath)) {
-    QFile::remove(tempPath);
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
-                                           "Failed to install imported config",
-                                           "SettingsUtils::importConfig")
-        .withDetails(QString("Destination: %1").arg(livePath));
-  }
-  // Imported file's permissions inherit from the source; clamp to 0600
-  // so cleartext scraper credentials don't leak via an over-permissive import.
+  // QSaveFile creates the new file with umask permissions (not the source's);
+  // clamp to 0600 so cleartext scraper credentials don't leak via an
+  // over-permissive import.
   tightenConfigPermissions();
   return ErrorUtils::Result<void>::success();
 }

@@ -39,9 +39,11 @@ auto NavigationManager::performNavigationStackCleanup() -> void {
   if (m_MetadataSidebar) {
     m_MetadataSidebar->clearMetadata();
   }
-  artworkMgr()->stopSilentLoading();
-  if (artworkMgr()->getTimerCoordinator()) {
-    artworkMgr()->getTimerCoordinator()->stopAllTimers();
+  if (auto *art = artworkMgr()) {
+    art->stopSilentLoading();
+    if (art->getTimerCoordinator()) {
+      art->getTimerCoordinator()->stopAllTimers();
+    }
   }
 }
 

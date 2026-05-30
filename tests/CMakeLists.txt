@@ -329,6 +329,21 @@ add_executable(test_cliargs
 target_link_libraries(test_cliargs PRIVATE kartend_utils Qt6::Test)
 add_test(NAME CliArgs COMMAND test_cliargs)
 
+# CollectionConfig::operator== field coverage (guards against a new field being
+# added to the struct but forgotten in operator==).
+add_executable(test_collectionconfig
+  utils/app/test_collectionconfig.cpp
+)
+target_link_libraries(test_collectionconfig PRIVATE kartend_utils Qt6::Test)
+add_test(NAME CollectionConfig COMMAND test_collectionconfig)
+
+# SettingsUtils export/import atomic copy/replace round-trip (Kartend-g2ox).
+add_executable(test_settingsutils
+  utils/app/test_settingsutils.cpp
+)
+target_link_libraries(test_settingsutils PRIVATE kartend_utils Qt6::Test)
+add_test(NAME SettingsUtils COMMAND test_settingsutils)
+
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
   utils/text/test_titlefilter.cpp

@@ -7,6 +7,7 @@
 #include "threadpoolutils.h"
 
 #include <QApplication>
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -22,6 +23,69 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
+
+namespace {
+
+// Encode `image` to PNG in memory, then write it to `cachePath` via QSaveFile so
+// a crash mid-encode can't leave a truncated PNG on disk (which later loads as a
+// corrupt / blank thumbnail). Mirrors CacheDiskStorage::writeTimestamps, down to
+// the parent-directory fsync that makes the rename durable. Logs + returns false
+// on any failure; the caller skips to the next image (Kartend-6n5r).
+bool saveImageAtomically(const QString &cachePath, const QString &parentDir, const QImage &image) {
+  QByteArray pngBytes;
+  {
+    QBuffer buffer(&pngBytes);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+      ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                             "Failed to encode artwork PNG",
+                                                             "CacheDiskStorage::scheduleAsyncSave")
+                               .withDetails(QString("Path: %1").arg(cachePath)));
+      return false;
+    }
+  }
+
+  QSaveFile cacheFile(cachePath);
+  if (!cacheFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to open artwork cache PNG for writing",
+                                          "CacheDiskStorage::scheduleAsyncSave")
+            .withDetails(QString("Path: %1, Error: %2").arg(cachePath, cacheFile.errorString())));
+    return false;
+  }
+
+  const qint64 written = cacheFile.write(pngBytes);
+  if (written != pngBytes.size()) {
+    cacheFile.cancelWriting();
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to write complete artwork PNG payload",
+                                          "CacheDiskStorage::scheduleAsyncSave")
+            .withDetails(QString("Path: %1, Written: %2, Expected: %3, Error: %4")
+                             .arg(cachePath)
+                             .arg(written)
+                             .arg(pngBytes.size())
+                             .arg(cacheFile.errorString())));
+    return false;
+  }
+
+  if (!cacheFile.commit()) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to atomically commit artwork PNG",
+                                          "CacheDiskStorage::scheduleAsyncSave")
+            .withDetails(QString("Path: %1, Error: %2").arg(cachePath, cacheFile.errorString())));
+    return false;
+  }
+
+  // fsync the parent directory so the rename is durable across crash / power
+  // loss (matches writeTimestamps).
+  PathUtils::syncDirectory(parentDir);
+  return true;
+}
+
+} // namespace
 
 CacheDiskStorage::CacheDiskStorage()
     : m_cancelToken(std::make_shared<std::atomic_bool>(false)), m_pool(new QThreadPool()) {
@@ -244,13 +308,7 @@ void CacheDiskStorage::scheduleAsyncSave(bool shouldWriteMetadata,
                 .withDetails(QString("Path: %1").arg(parentDir)));
         continue;
       }
-      if (!image.save(cachePath, "PNG")) {
-        ErrorUtils::logError(
-            ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                              "Failed to persist artwork PNG to cache",
-                                              "CacheDiskStorage::scheduleAsyncSave")
-                .withDetails(QString("Path: %1").arg(cachePath)));
-      }
+      saveImageAtomically(cachePath, parentDir, image);
     }
 
     if (lcCacheManager().isDebugEnabled()) {

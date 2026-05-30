@@ -757,8 +757,18 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     // up. mid() copies the tail into a new QList so the original batch
     // can be released as soon as this call returns.
     QList<ArtworkInfo::Result> remainder = batchResults.mid(processed);
+    // Capture a QPointer (mirroring loadArtworkParallel's `self`) so the queued
+    // re-dispatch becomes a no-op if this manager is destroyed before the next
+    // tick, instead of dereferencing a dangling `this` (Kartend-zl1g).
+    QPointer<ArtworkManager> self(this);
     QMetaObject::invokeMethod(
-        this, [this, remainder]() { applyResultsToUi(remainder); }, Qt::QueuedConnection);
+        this,
+        [self, remainder]() {
+          if (self) {
+            self->applyResultsToUi(remainder);
+          }
+        },
+        Qt::QueuedConnection);
   }
 
   if (perfTrace) {

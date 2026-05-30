@@ -17,6 +17,7 @@
 #include "connectionpragmas.h"
 #include "errorutils.h"
 #include "pathutils.h"
+#include "uiconstants/database.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -83,15 +84,19 @@ bool PlaylistManager::initialize() {
   // Foreign keys must be enabled per-connection; the cascade in
   // playlist_items relies on it. Kartend-67wo: routed through the shared
   // PRAGMA helper so future additions to the standard set (e.g. a future
-  // mmap_size setting) reach this connection too. The other PRAGMA knobs
-  // (journal_mode/synchronous/busy_timeout) are intentionally left off
-  // here — this is a secondary connection to media.db whose primary
-  // openers already set those.
+  // mmap_size setting) reach this connection too. journal_mode (WAL) is a
+  // database-wide setting persisted in the file header by the primary openers,
+  // so it is intentionally left off here. busy_timeout, by contrast, is
+  // per-connection and is NOT inherited: without it this secondary writer takes
+  // an immediate SQLITE_BUSY (no retry) whenever a scan / metadata write holds
+  // the lock, surfacing as a silent playlist-edit failure — so give it the main
+  // connection's timeout, sized to tolerate long scan-worker write transactions
+  // (Kartend-3uls).
   MediaDbConnectionInit::PragmaConfig cfg;
   cfg.enableForeignKeys = true;
   cfg.enableWalWithFallback = false;
   cfg.setSynchronousNormal = false;
-  cfg.busyTimeoutMs = 0;
+  cfg.busyTimeoutMs = UIConstants::Database::MAIN_BUSY_TIMEOUT_MS;
   MediaDbConnectionInit::applyPragmas(m_db, cfg, QStringLiteral("PlaylistManager::initialize"));
 
   // Create the playlist tables locally (idempotent CREATE TABLE IF NOT EXISTS)
@@ -340,6 +345,20 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
     return false; // Idempotent: the chooser surface treats re-add as a no-op.
   }
 
+  // Wrap the position read + insert + touch in a transaction so the three
+  // statements are atomic: two interleaved addItem calls (or a re-entrant edit
+  // during a batch add) can't both compute the same MAX(position)+1 and collide
+  // on the (playlist_id, position) PK, and a half-applied add can't leave the
+  // insert without its updated_at stamp. Mirrors removeItem (Kartend-du3m).
+  if (!m_db.transaction()) {
+    auto err =
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to begin add-item transaction", "PlaylistManager::addItem")
+            .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    return false;
+  }
+
   // Append at the end. We compute the next position as MAX(position)+1 so
   // ordering survives concurrent writes without needing a separate counter.
   QSqlQuery posQuery(m_db);
@@ -352,6 +371,7 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
                                      "PlaylistManager::addItem")
                    .withDetails(posQuery.lastError().text());
     ErrorUtils::logError(err);
+    m_db.rollback();
     return false;
   }
   const int nextPosition = posQuery.value(0).toInt();
@@ -370,16 +390,28 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
                                      "Failed to insert playlist item", "PlaylistManager::addItem")
                    .withDetails(insert.lastError().text());
     ErrorUtils::logError(err);
+    m_db.rollback();
     return false;
   }
 
   // Stamp the parent's updated_at so a future "sort playlists by recency"
-  // (follow-up) can rely on it.
+  // (follow-up) can rely on it. Best-effort: a failed touch does not abort the
+  // transaction in SQLite, and the stamp is non-essential.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
   touch.addBindValue(isoNow());
   touch.addBindValue(playlistId);
   touch.exec();
+
+  if (!m_db.commit()) {
+    auto err =
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to commit add-item transaction", "PlaylistManager::addItem")
+            .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    m_db.rollback();
+    return false;
+  }
 
   emit playlistsChanged();
   return true;

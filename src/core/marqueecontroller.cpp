@@ -43,7 +43,15 @@ QScreen *resolveMarqueeScreen(const QString &screenName) {
 
 MarqueeController::MarqueeController(QObject *parent) : QObject(parent) {}
 
-MarqueeController::~MarqueeController() = default;
+MarqueeController::~MarqueeController() {
+  // m_marqueeWindow is a parentless top-level widget this controller owns. At
+  // teardown the event loop is already winding down, so the deleteLater() used
+  // on the live disable/rescreen path would never run — delete it directly to
+  // avoid an ASan/LSan leak on the full-teardown smoke path (Kartend-e3dg).
+  // Safe: the disable path nulls m_marqueeWindow after its deleteLater(), so a
+  // non-null pointer here never has a pending deletion (no double-free).
+  delete m_marqueeWindow;
+}
 
 void MarqueeController::setupReferences(const MarqueeControllerSetup &setup) {
   m_ctx = setup.ctx;

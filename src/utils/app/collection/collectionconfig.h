@@ -238,12 +238,12 @@ struct CollectionConfig {
            hideTitles == other.hideTitles &&
            hideSubcollectionTitles == other.hideSubcollectionTitles && filter == other.filter &&
            horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
-           viewType == other.viewType && background == other.background &&
-           archive == other.archive && expandMode == other.expandMode &&
-           watchFilesystem == other.watchFilesystem && folderBrowsing == other.folderBrowsing &&
-           listView == other.listView && customFontFamily == other.customFontFamily &&
-           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
-           isSmartPlaylist == other.isSmartPlaylist &&
+           viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
+           background == other.background && archive == other.archive &&
+           expandMode == other.expandMode && watchFilesystem == other.watchFilesystem &&
+           folderBrowsing == other.folderBrowsing && listView == other.listView &&
+           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
+           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

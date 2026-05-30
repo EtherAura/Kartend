@@ -40,12 +40,15 @@ public:
   /// corrupted when multiple batches overlap (common with QtConcurrent).
   /// Returns the recommended batch size for the next operation.
   int observeBatch(int itemsProcessed, qint64 elapsedMs) {
+    // Lock first: the itemsProcessed<=0 early return reads m_currentBatchSize,
+    // which every other path here mutates under m_mutex. Reading a non-atomic
+    // int without the lock is a data race (TSan) on a class that advertises
+    // thread safety (Kartend-u7tw).
+    QMutexLocker lock(&m_mutex);
     if (itemsProcessed <= 0) {
       return m_currentBatchSize;
     }
     double timePerItem = static_cast<double>(elapsedMs) / itemsProcessed;
-
-    QMutexLocker lock(&m_mutex);
 
     // Update exponential moving average
     if (m_avgTimePerItem <= 0.0) {
