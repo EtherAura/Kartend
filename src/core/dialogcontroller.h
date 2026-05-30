@@ -23,7 +23,7 @@ namespace kart {
 class KartManager;
 }
 
-class ApplicationContext;
+struct ApplicationContext;
 class ISettingsManager;
 struct GeneralSettings;
 

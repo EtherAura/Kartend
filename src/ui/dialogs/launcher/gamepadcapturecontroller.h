@@ -4,7 +4,7 @@
 #include <QMetaObject>
 #include <QObject>
 
-class ApplicationContext;
+struct ApplicationContext;
 class SettingsDialog;
 class QCheckBox;
 class QLineEdit;

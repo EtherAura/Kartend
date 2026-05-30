@@ -29,7 +29,7 @@ class QPropertyAnimation;
 class QPushButton;
 QT_END_NAMESPACE
 
-class ApplicationContext;
+struct ApplicationContext;
 class CollectionTreeWidget;
 class ConfigProfileController;
 class DetailsPaneManager;
