@@ -65,6 +65,13 @@ public:
   /// Call before exec() so the detected-cores dropdown is populated.
   void setRetroarchConfigOverride(const QString &path);
 
+  /// Security-validate the folder / launcher / core path fields before
+  /// accepting, mirroring SettingsDialog::saveCollectionFromUI. A path with
+  /// shell metacharacters must be rejected at creation rather than only on a
+  /// later re-save (Kartend-nkzx). The name is already gated live via the OK
+  /// button, so only the path fields are checked here.
+  void accept() override;
+
 private:
   void buildUi();
   /// Re-point the scraper combo at the default provider for the current

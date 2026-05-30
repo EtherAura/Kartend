@@ -1,10 +1,13 @@
 // Provides file path normalization, extension handling, and path manipulation.
 #include "pathutils.h"
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QStringList>
 
 #if defined(Q_OS_UNIX)
 #include <cerrno>
@@ -15,6 +18,11 @@
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
+
+// Per-module logging category. Defaults to warning level so a refused
+// %collection% substitution stays visible in release logs while letting
+// users silence it with QT_LOGGING_RULES="kartend.pathutils=false".
+Q_LOGGING_CATEGORY(lcPathUtils, "kartend.pathutils", QtWarningMsg)
 
 namespace PathUtils {
 
@@ -29,8 +37,20 @@ static QString expandPath(const QString &path, const QString &collectionName) {
     result = QDir::homePath();
   }
 
-  if (!collectionName.isEmpty()) {
-    result.replace("%collection%", collectionName, Qt::CaseInsensitive);
+  // Kartend-2ml9: validate at the substitution seam. A name like "../../etc"
+  // interpolated into a %collection% template would yield a traversal path, so
+  // this central seam (every validateAndExpandPath caller flows through it) is
+  // the last line of defense behind the definition-time checks. On failure we
+  // leave the placeholder literal: the resolved path then fails the downstream
+  // existence check rather than escaping the configured root.
+  if (!collectionName.isEmpty() && result.contains("%collection%", Qt::CaseInsensitive)) {
+    if (validateCollectionNameForSubstitution(collectionName).isOk()) {
+      result.replace("%collection%", collectionName, Qt::CaseInsensitive);
+    } else {
+      qCWarning(lcPathUtils).nospace()
+          << "Refusing to substitute traversal-unsafe collection name '" << collectionName
+          << "' into path '" << path << "'; leaving %collection% placeholder literal";
+    }
   }
   return result;
 }
@@ -133,6 +153,22 @@ Result<void> validatePathSecurity(const QString &path) {
   if (normalized.contains('\\')) {
     return ErrorContext::error(ErrorCode::InvalidFilePath, "Path contains backslash characters",
                                "PathUtils::validatePathSecurity");
+  }
+
+  // Reject any path component equal to `..` — a traversal segment that escapes
+  // the intended directory. The CLI seam (expandAndValidateCliPath) relies
+  // solely on this validator, and validateCollectionNameForSubstitution already
+  // rejects `..` for the same reason (Kartend-w13c). Backslashes are rejected
+  // above, so splitting on `/` covers every separator; a literal `..` inside a
+  // name (e.g. "my..file") is left alone — only a standalone segment traverses.
+  const QStringList segments = normalized.split(QLatin1Char('/'));
+  for (const QString &segment : segments) {
+    if (segment == QLatin1String("..")) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 "Path contains a '..' traversal segment",
+                                 "PathUtils::validatePathSecurity")
+          .withDetails(path);
+    }
   }
 
   return Result<void>::success();

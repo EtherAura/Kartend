@@ -19,6 +19,7 @@ private slots:
   void importKart_expandsTilde();
   void importKart_rejectsShellMetachars();
   void importKart_rejectsNullByte();
+  void importKart_rejectsTraversal();
   void to_rejectsShellMetachars();
   void exportKart_capturesNameAndOut();
   void onConflict_overwriteRecognized();
@@ -118,6 +119,17 @@ void TestCliArgs::importKart_rejectsNullByte() {
   badPath.append(QStringLiteral("/etc/passwd"));
   const auto opts = CliArgs::parseStartupArguments(
       {QStringLiteral("kartend"), QStringLiteral("--import-kart"), badPath});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestCliArgs::importKart_rejectsTraversal() {
+  // The CLI seam relies solely on validatePathSecurity, which now rejects a
+  // `..` traversal segment (Kartend-w13c) — `--import-kart ../../etc/foo` used
+  // to slip through the command-injection-only checks.
+  const auto opts =
+      CliArgs::parseStartupArguments({QStringLiteral("kartend"), QStringLiteral("--import-kart"),
+                                      QStringLiteral("../../etc/foo")});
   QVERIFY(opts.pathValidationError.isError());
   QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
 }

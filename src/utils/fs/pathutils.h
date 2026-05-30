@@ -30,10 +30,12 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 [[nodiscard]] QString normalizeDisplayName(const QString &input);
 
 /// Validates that a path doesn't contain unsupported shell metacharacters, null
-/// bytes, newlines, or other characters that could enable command injection.
-/// Ampersands are allowed because they are common in filenames and safe when
-/// paths are passed as process arguments without shell interpretation.
-/// Returns success if path is safe, or an error context describing the issue.
+/// bytes, newlines, backslashes, or a `..` traversal segment — characters that
+/// could enable command injection or let the path escape its intended directory
+/// (Kartend-w13c). Ampersands are allowed because they are common in filenames
+/// and safe when paths are passed as process arguments without shell
+/// interpretation. Returns success if path is safe, or an error context
+/// describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
 /// Validates a collection name before it is substituted into a launcher

@@ -7,6 +7,7 @@
 
 #include "pathutils.h"
 #include <QDir>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +26,11 @@ private slots:
   void testValidateAndExpandPath_withPlaceholder();
   void testValidateAndExpandPath_tildeExpansion();
   void testValidateAndExpandPath_tildeOnly();
+
+  // %collection% substitution seam guard (Kartend-2ml9)
+  void testExpandPathSeam_collectionNameGuard_data();
+  void testExpandPathSeam_collectionNameGuard();
+  void testValidateAndExpandPath_traversalNameDoesNotResolve();
 
   // tryValidateAndExpandPath tests (Result version)
   void testTryValidateAndExpandPath_validPath();
@@ -53,6 +59,8 @@ private slots:
   void testValidatePathSecurity_nullBytes();
   void testValidatePathSecurity_newlines();
   void testValidatePathSecurity_backslash();
+  void testValidatePathSecurity_traversalSegments_data();
+  void testValidatePathSecurity_traversalSegments();
 
   // syncDirectory tests
   void testSyncDirectory_existingDir();
@@ -142,6 +150,59 @@ void TestPathUtils::testValidateAndExpandPath_tildeOnly() {
 
   QVERIFY2(result.isOk(), "~ alone should expand to home directory");
   QCOMPARE(result.value(), QDir::homePath());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// %collection% substitution seam guard (Kartend-2ml9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testExpandPathSeam_collectionNameGuard_data() {
+  QTest::addColumn<QString>("collectionName");
+  QTest::addColumn<bool>("shouldSubstitute");
+
+  QTest::newRow("safe-simple") << QStringLiteral("Movies") << true;
+  QTest::newRow("safe-spaces") << QStringLiteral("Studio Ghibli Films") << true;
+  QTest::newRow("safe-dot-inside") << QStringLiteral("Vol.2") << true;
+  QTest::newRow("traversal-slashes") << QStringLiteral("../../etc") << false;
+  QTest::newRow("dotdot") << QStringLiteral("..") << false;
+  QTest::newRow("dot") << QStringLiteral(".") << false;
+  QTest::newRow("forward-slash") << QStringLiteral("a/b") << false;
+  QTest::newRow("backslash") << QStringLiteral("a\\b") << false;
+}
+
+void TestPathUtils::testExpandPathSeam_collectionNameGuard() {
+  QFETCH(QString, collectionName);
+  QFETCH(bool, shouldSubstitute);
+
+  // expandPathWithoutExistenceCheck exercises the substitution seam without
+  // requiring the target directory to exist on disk.
+  const QString tmpl = m_tempDir.path() + QStringLiteral("/%collection%/media");
+
+  if (!shouldSubstitute) {
+    QTest::ignoreMessage(QtWarningMsg,
+                         QRegularExpression(QStringLiteral("Refusing to substitute")));
+  }
+  const QString result = PathUtils::expandPathWithoutExistenceCheck(tmpl, collectionName);
+
+  if (shouldSubstitute) {
+    QString expected = tmpl;
+    expected.replace(QStringLiteral("%collection%"), collectionName);
+    QCOMPARE(result, expected);
+  } else {
+    // Refused: the placeholder is left literal so the template is unchanged and
+    // the unsafe name never reaches the resolved path.
+    QCOMPARE(result, tmpl);
+  }
+}
+
+void TestPathUtils::testValidateAndExpandPath_traversalNameDoesNotResolve() {
+  // End-to-end: unguarded, "<temp>/../../etc" would canonicalize to an existing
+  // path outside the root (e.g. /etc on Unix) and resolve. The seam refuses the
+  // substitution, leaving "<temp>/%collection%" which does not exist -> "".
+  const QString tmpl = m_tempDir.path() + QStringLiteral("/%collection%");
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Refusing to substitute")));
+  const QString result = PathUtils::validateAndExpandPath(tmpl, QStringLiteral("../../etc"));
+  QVERIFY2(result.isEmpty(), "Traversal collection name must not resolve to a filesystem path");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,6 +355,37 @@ void TestPathUtils::testValidatePathSecurity_newlines() {
 void TestPathUtils::testValidatePathSecurity_backslash() {
   auto result = PathUtils::validatePathSecurity("/path/with\\backslash");
   QVERIFY2(result.isError(), "Path with backslash should fail");
+}
+
+void TestPathUtils::testValidatePathSecurity_traversalSegments_data() {
+  QTest::addColumn<QString>("path");
+  QTest::addColumn<bool>("shouldFail");
+
+  // A standalone `..` segment traverses out of the intended directory and must
+  // be rejected (Kartend-w13c) — including via the CLI seam that relies solely
+  // on this validator.
+  QTest::newRow("absolute-with-dotdot") << "/home/user/../etc/passwd" << true;
+  QTest::newRow("leading-dotdot") << "../../etc/passwd" << true;
+  QTest::newRow("dotdot-alone") << ".." << true;
+  QTest::newRow("trailing-dotdot") << "/home/user/.." << true;
+  // A literal `..` inside a filename is not a traversal and stays allowed.
+  QTest::newRow("dotdot-inside-name") << "/home/user/my..file.zip" << false;
+  // A single-dot `.` segment is the current dir, not traversal — allowed.
+  QTest::newRow("single-dot-segment") << "/home/user/./games" << false;
+  QTest::newRow("clean-absolute") << "/home/user/games/rom.zip" << false;
+}
+
+void TestPathUtils::testValidatePathSecurity_traversalSegments() {
+  QFETCH(QString, path);
+  QFETCH(bool, shouldFail);
+
+  auto result = PathUtils::validatePathSecurity(path);
+  if (shouldFail) {
+    QVERIFY2(result.isError(), qPrintable(QStringLiteral("Path '%1' should fail").arg(path)));
+    QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+  } else {
+    QVERIFY2(result.isOk(), qPrintable(QStringLiteral("Path '%1' should pass").arg(path)));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

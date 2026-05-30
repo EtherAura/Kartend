@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -327,6 +328,37 @@ void CreateCollectionDialog::updateConditionalRows() {
 void CreateCollectionDialog::setIntroText(const QString &text) {
   m_introLabel->setText(text);
   m_introLabel->setVisible(!text.isEmpty());
+}
+
+void CreateCollectionDialog::accept() {
+  // Mirror SettingsDialog::saveCollectionFromUI: reject a path with shell
+  // metacharacters / backslashes / control characters at creation instead of
+  // silently accepting it and only catching it on a later re-save
+  // (Kartend-nkzx). Empty fields are optional and pass. corePath() already
+  // returns empty for a non-libretro launcher, so it is naturally skipped.
+  auto validatePath = [this](const QString &path, const QString &fieldName) -> bool {
+    if (path.isEmpty()) {
+      return true;
+    }
+    auto result = PathUtils::validatePathSecurity(path);
+    if (result.isError()) {
+      QMessageBox::warning(this, tr("Invalid Path"),
+                           tr("The %1 contains invalid characters:\n\n%2\n\n"
+                              "Please remove shell metacharacters, backslashes, "
+                              "or other special characters.")
+                               .arg(fieldName, result.error().message));
+      return false;
+    }
+    return true;
+  };
+
+  if (!validatePath(contentPath(), tr("Content Folder")) ||
+      !validatePath(artworkDirectory(), tr("Artwork Folder")) ||
+      !validatePath(launcherPath(), tr("Launcher")) || !validatePath(corePath(), tr("Core"))) {
+    return; // Keep the dialog open so the user can fix the offending field.
+  }
+
+  QDialog::accept();
 }
 
 QString CreateCollectionDialog::collectionName() const {
