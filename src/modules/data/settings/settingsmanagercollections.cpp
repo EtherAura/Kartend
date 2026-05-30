@@ -365,20 +365,31 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     return err;
   }
 
-  emitPerCollectionDiffs(collections);
+  // Commit the diff baseline BEFORE emitting the per-domain *Changed signals.
+  // A slot may synchronously re-enter saveCollections(): the live path is
+  // sidebarAppearanceChanged -> DetailsPaneManager::onSidebarAppearanceChanged
+  // -> updateSidebarLayout -> saveSidebarStateForCollection -> saveCollections.
+  // If the baseline were still the pre-save snapshot during that re-entry, the
+  // same field would re-diff and re-emit at every level, recursing without
+  // bound until the stack aborts (SIGABRT on details-sidebar tab switch).
+  // Snapshot the prior baseline, commit the new one, then diff against the
+  // snapshot so re-entrant saves observe no change and stop.
+  const QList<CollectionConfig> previouslySaved = m_lastSavedCollections;
   m_lastSavedCollections = collections;
+  emitPerCollectionDiffs(previouslySaved, collections);
 
   return ErrorUtils::Result<void>::success();
 }
 
-void SettingsManager::emitPerCollectionDiffs(const QList<CollectionConfig> &collections) {
+void SettingsManager::emitPerCollectionDiffs(const QList<CollectionConfig> &previous,
+                                             const QList<CollectionConfig> &collections) {
   // Identity is (name, mediaDirectory) UUID so a reorder of unchanged
   // collections doesn't fire spurious diffs; an added collection has no
   // matching old entry and skips the diff (collectionsModified covers the
   // add/remove lifecycle separately).
   QHash<QString, const CollectionConfig *> oldByUuid;
-  oldByUuid.reserve(m_lastSavedCollections.size());
-  for (const CollectionConfig &oldCfg : m_lastSavedCollections) {
+  oldByUuid.reserve(previous.size());
+  for (const CollectionConfig &oldCfg : previous) {
     const QString uuid = CollectionUtils::computeCollectionUuid(oldCfg.name, oldCfg.mediaDirectory);
     oldByUuid.insert(uuid, &oldCfg);
   }

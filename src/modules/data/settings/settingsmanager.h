@@ -84,12 +84,16 @@ private:
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                            QList<CollectionConfig> &collections, const bool &needsRewrite);
 
-  // Per-collection hot-reload diff. Compares `collections` against
-  // m_lastSavedCollections by (name, mediaDirectory) UUID and fires the
+  // Per-collection hot-reload diff. Compares `collections` against the
+  // `previous` snapshot by (name, mediaDirectory) UUID and fires the
   // per-leaf-struct *Changed signals. Called from saveCollections() after
   // a successful disk write so observers (background painter, sidebar
   // appearance, etc.) refresh only when their slice actually changed.
-  void emitPerCollectionDiffs(const QList<CollectionConfig> &collections);
+  // `previous` is passed explicitly (rather than read from
+  // m_lastSavedCollections) because the baseline is committed *before* this
+  // emit — see saveCollections() for why the ordering matters.
+  void emitPerCollectionDiffs(const QList<CollectionConfig> &previous,
+                              const QList<CollectionConfig> &collections);
 
   // Stamped into [General/schemaVersion] on save and checked on load (older
   // builds wrote it into [ScraperOptions]; load tolerates both). A higher value

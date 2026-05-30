@@ -38,6 +38,11 @@ private slots:
   void scraperOverridesChange_emitsOnlyScraperOverridesSignal();
   void launcherProfileChange_emitsOnlyLauncherProfileSignal();
   void collectionsModified_firesOnEverySave();
+
+  // A slot that re-enters saveCollections() in response to a per-domain diff
+  // signal must not recurse without bound. Regression guard for the SIGABRT on
+  // details-sidebar tab switch.
+  void reentrantSaveFromDiffSlot_doesNotRecurseUnbounded();
 };
 
 void TestPerDomainSignals::initTestCase() {
@@ -270,6 +275,38 @@ void TestPerDomainSignals::collectionsModified_firesOnEverySave() {
   mgr.saveCollections(collections);
 
   QCOMPARE(spy.count(), 2);
+}
+
+void TestPerDomainSignals::reentrantSaveFromDiffSlot_doesNotRecurseUnbounded() {
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{makeCol("A", "/tmp/a")};
+  mgr.saveCollections(collections); // seed the baseline
+
+  // Reproduces the live wiring that crashed the app: a slot connected to a
+  // per-domain diff signal synchronously re-saves the (already-updated)
+  // collections — exactly what DetailsPaneManager::onSidebarAppearanceChanged
+  // -> updateSidebarLayout -> saveSidebarStateForCollection -> saveCollections
+  // does. Before saveCollections committed its diff baseline ahead of the
+  // emit, the re-entrant save re-observed the same diff and re-fired the
+  // signal at every level, recursing until SIGABRT.
+  //
+  // The cap is only a safety net so a regression fails the assertion instead
+  // of aborting the whole test runner; correct behaviour never reaches it.
+  int emitCount = 0;
+  constexpr int kRecursionCap = 64;
+  QObject::connect(&mgr, &ISettingsManager::sidebarAppearanceChanged, &mgr, [&](int) {
+    if (++emitCount >= kRecursionCap) {
+      return;
+    }
+    mgr.saveCollections(collections);
+  });
+
+  collections[0].sidebar.sidebarVisible = !collections[0].sidebar.sidebarVisible;
+  mgr.saveCollections(collections);
+
+  // Exactly one diff: the outer save fires the signal once; the re-entrant
+  // save sees the committed baseline and produces no further change.
+  QCOMPARE(emitCount, 1);
 }
 
 QTEST_GUILESS_MAIN(TestPerDomainSignals)

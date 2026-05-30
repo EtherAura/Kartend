@@ -104,7 +104,19 @@ void DetailsPaneArtwork::applyPreviewSize() {
     return;
   }
   ui->artworkDisplay->setFixedSize(width, height);
-  ui->artworkDisplay->show();
+  // Vertical-dock artwork and the video preview share one slot. When a
+  // preview video is currently playing it owns the slot, so keep the
+  // freshly-sized artwork loaded (pixmap set below) but hidden. Mirrors the
+  // guard in DetailsPane::setArtworkSectionVisible — without it, re-entry
+  // here re-shows the artwork stacked under the live video on refresh paths
+  // that don't restart the video: a same-item reselect (setMetadata's
+  // videoUnchanged guard skips the normal hide) or a tab-switch re-push where
+  // loadArtwork's async decode completes after the video is already showing.
+  // showArtworkOnly() re-shows the artwork when the video stops.
+  const bool videoPlaying = m_host->m_videoPlayback.videoPreview &&
+                            m_host->m_videoPlayback.videoPreview->isVisible() &&
+                            !m_host->m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
+  ui->artworkDisplay->setVisible(!videoPlaying);
   QPixmap scaled =
       m_host->m_artworkSource.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   QPixmap centered(width, height);
