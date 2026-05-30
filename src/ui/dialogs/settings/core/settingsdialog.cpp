@@ -180,6 +180,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
             mainWindow->generalSettings().appearance.titleBaseColor = c;
             auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
+            m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
             if (result.isError()) {
               ErrorDialog::showError(this, result.error());
             }
@@ -201,6 +202,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     mainWindow->generalSettings() = m_generalSettings;
     auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
     mainWindow->applyGlobalUiFontFromSettings();
+    m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
     if (result.isError()) {
       ErrorDialog::showError(this, result.error());
     }
@@ -218,6 +220,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     }
     mainWindow->generalSettings() = m_generalSettings;
     auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
+    m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
     if (result.isError()) {
       ErrorDialog::showError(this, result.error());
     }
@@ -422,7 +425,32 @@ void SettingsDialog::reject() {
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
+  restoreLiveAppliedSettings();
   QDialog::reject();
+}
+
+void SettingsDialog::restoreLiveAppliedSettings() {
+  if (!m_liveSettingsApplied) {
+    return;
+  }
+  auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
+  auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
+  if (!mainWindow || !sm) {
+    return;
+  }
+  // The base-color / fonts / splash panels live-save to disk + the running app
+  // as the user edits, bypassing the deferred path resolveUnsavedChanges undoes.
+  // The (modal) dialog is the only thing mutating MainWindow's settings while it
+  // is open, so assigning the last-saved baseline back reverts exactly those
+  // live edits — including any that leaked through the fonts/splash whole-struct
+  // copy — without disturbing anything else (Kartend-9cngh).
+  mainWindow->generalSettings() = m_originalGeneralSettings;
+  const auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
+  ItemWidget::setTitleBaseColor(m_originalGeneralSettings.appearance.titleBaseColor);
+  mainWindow->applyGlobalUiFontFromSettings();
+  if (result.isError()) {
+    ErrorDialog::showError(this, result.error());
+  }
 }
 
 void SettingsDialog::setupButtonConnections() {

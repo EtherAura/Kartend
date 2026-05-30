@@ -641,10 +641,12 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
         m_downloadedBytes += bytes.size();
         m_result.downloads.append(dl);
       }
+      // Don't finish the apply from inside the loop: finishCurrentApply() can
+      // accept()/destroy the dialog on the legacy/test path, and the next loop
+      // iteration would then dereference a freed `this` (Kartend-5g0g2). Just
+      // tally the dedup hit here; the post-loop check finishes exactly once
+      // after every asset has been dispatched.
       --m_downloadsPending;
-      if (m_downloadsPending <= 0) {
-        m_unified->finishCurrentApply();
-      }
       continue;
     }
     // Per-game CRC short-circuit: append md5/sha1 hash hints to the
@@ -702,6 +704,17 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
   }
   qCInfo(lcScrapeTimings) << "DIALOG dispatch loop returned in" << applyTimer->elapsed() << "ms"
                           << "(should be near zero — all calls are async)";
+
+  // Every dedup hit above resolved synchronously without an async completion
+  // callback. If they accounted for all selected assets, m_downloadsPending is
+  // already drained and nothing else will finish the apply — so do it once,
+  // here, outside the loop (Kartend-5g0g2). Mixed/network selections keep
+  // m_downloadsPending > 0 and finish via their guarded per-download callbacks.
+  // finishCurrentApply() may delete the dialog, so `this` must not be touched
+  // after this point.
+  if (m_downloadsPending <= 0) {
+    m_unified->finishCurrentApply();
+  }
 }
 
 QString ScrapeResultDialog::formatDuration(qint64 ms) {

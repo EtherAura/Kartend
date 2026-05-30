@@ -267,6 +267,15 @@ private:
   /// Resolves unsaved changes prior to executing an action.
   auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave) -> bool;
 
+  /// Rolls back the live-save panels (base color / fonts / splash) on Cancel.
+  /// Those panels persist + apply immediately, bypassing the deferred-save path
+  /// that reject() otherwise reverts, so without this Cancel would leave their
+  /// edits on disk and applied to the running app (Kartend-9cngh). Restores
+  /// MainWindow's settings to the last-saved baseline (m_originalGeneralSettings),
+  /// re-persists, and re-applies the title-tint / UI-font side effects. No-op
+  /// unless a live-save actually fired (m_liveSettingsApplied).
+  void restoreLiveAppliedSettings();
+
   /// silent variant used by the Settings Mode auto-propagation
   /// path. Skips the per-category dialog and the post-apply summary because
   /// the user already opted in by selecting a non-`Current` mode — and the
@@ -314,6 +323,11 @@ private:
   QStringList m_workingAdditionalParentNames;
   GeneralSettings m_generalSettings;
   GeneralSettings m_originalGeneralSettings;
+  /// Set when a live-save panel (base color / fonts / splash) has written to
+  /// disk + the running app, so reject() knows it must roll those edits back to
+  /// m_originalGeneralSettings (Kartend-9cngh). Stays set after an interim Save;
+  /// the rollback is then a no-op because the baseline already matches.
+  bool m_liveSettingsApplied = false;
   /// Tracks collection indices that need a rescan due to database-affecting
   /// changes
   QSet<int> m_rescanRequired;
