@@ -140,7 +140,7 @@ void logSslConfigOnce() {
 }
 } // namespace
 
-void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
+void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallback callback,
                      qint64 maxResponseBytes, const QString &expectedContentTypePrefix) {
   logSslConfigOnce();
   if (!url.isValid()) {
@@ -150,7 +150,7 @@ void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback
     }
     return;
   }
-  PendingRequest req{url, userAgent, std::move(callback), maxResponseBytes,
+  PendingRequest req{url, headers, std::move(callback), maxResponseBytes,
                      expectedContentTypePrefix};
   const QString host = url.host();
   // Timestamped trace so we can see (a) when the caller enqueued vs.
@@ -241,8 +241,12 @@ void HttpClient::drainHost(const QString &host) {
 
 void HttpClient::send(const QString &host, PendingRequest request) {
   QNetworkRequest qreq(request.url);
-  if (!request.userAgent.isEmpty()) {
-    qreq.setHeader(QNetworkRequest::UserAgentHeader, request.userAgent);
+  // Raw headers verbatim, in caller order. User-Agent and any
+  // credential header (e.g. Authorization: Bearer) come through here;
+  // we deliberately never log them, so a token in a header never
+  // reaches scrape.log the way a query-string secret would.
+  for (const QPair<QByteArray, QByteArray> &header : request.headers) {
+    qreq.setRawHeader(header.first, header.second);
   }
   qreq.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                     QNetworkRequest::NoLessSafeRedirectPolicy);

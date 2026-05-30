@@ -139,6 +139,10 @@ QString userAgent() {
       .arg(QString::fromLatin1(APP_VERSION));
 }
 
+Scraper::HttpClient::RawHeaders userAgentHeader() {
+  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
+}
+
 // Re-applied on every fetchMediaBytes so the user can change the
 // concurrency/throttle settings live. API host stays at compile-time
 // defaults; the media host honors `mediaConcurrency` + `mediaThrottleMs`
@@ -522,7 +526,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
     }
 
     Scraper::HttpClient::instance()->get(
-        url, userAgent(),
+        url, userAgentHeader(),
         [this, callback = std::move(callback),
          filenameRegionOverride](ErrorUtils::Result<QByteArray> response) mutable {
           handleJeuInfosResponse(std::move(response), std::move(callback), filenameRegionOverride);
@@ -625,6 +629,17 @@ QUrl ScreenScraperProvider::buildJeuInfosUrl(const Credentials &creds, const QSt
                                              bool hasUser) const {
   QUrl url(QString::fromLatin1(SS_JEUINFOS));
   QUrlQuery q;
+  // SECURITY (Kartend-0gp7): devpassword / sspassword unavoidably travel
+  // in the query string. ScreenScraper's api2 endpoints authenticate only
+  // via query parameters — there is no header-based auth — so unlike TMDB
+  // (moved to an Authorization: Bearer header) these credentials cannot be
+  // relocated off the URL. The residual exposure is bounded: every request
+  // is HTTPS, so the query is encrypted on the wire and never appears in a
+  // cleartext Referer to a third party; and local scrape.log lines pass
+  // through redactedUrlForLog() (httpclient.cpp), which masks
+  // devpassword/sspassword/ssid/devid before anything is written. Upstream
+  // proxy access logs remain the only unmitigated sink and are outside our
+  // control. Same constraint applies to every other api2 builder below.
   q.addQueryItem(QStringLiteral("devid"), creds.devId);
   q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
   q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
@@ -710,7 +725,7 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
   // HttpClient::setRateLimit just replaces the policy entry.
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
   Scraper::HttpClient::instance()->get(
-      url, userAgent(),
+      url, userAgentHeader(),
       [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
@@ -772,7 +787,8 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
   q.addQueryItem(QStringLiteral("sspassword"), userPassword);
   url.setQuery(q);
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgentHeader(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
           return;
@@ -819,7 +835,8 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
   }
   url.setQuery(q);
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgentHeader(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
           return;

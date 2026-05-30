@@ -108,6 +108,55 @@ private:
   int m_chunkSize;
 };
 
+// Minimal HTTP/1.1 server that records the request head (request line +
+// headers, up to the blank-line terminator) and replies with a tiny
+// fixed body. Used to assert what HttpClient actually puts on the wire —
+// specifically that credential headers ride in the header block and not
+// in the request target.
+class CapturingServer : public QObject {
+  Q_OBJECT
+public:
+  explicit CapturingServer(QObject *parent = nullptr) : QObject(parent) {
+    m_server = new QTcpServer(this);
+    connect(m_server, &QTcpServer::newConnection, this, &CapturingServer::handleConnection);
+  }
+
+  bool start() { return m_server->listen(QHostAddress::LocalHost, 0); }
+  quint16 port() const { return m_server->serverPort(); }
+  // Captured request head (everything before the CRLFCRLF terminator).
+  QByteArray requestHead() const { return m_requestHead; }
+
+private slots:
+  void handleConnection() {
+    QTcpSocket *sock = m_server->nextPendingConnection();
+    if (!sock) return;
+
+    auto buffer = std::make_shared<QByteArray>();
+    connect(sock, &QTcpSocket::readyRead, this, [this, sock, buffer]() {
+      *buffer += sock->readAll();
+      const int term = buffer->indexOf("\r\n\r\n");
+      if (term < 0 || !m_requestHead.isEmpty()) return; // wait for full head / already served
+      m_requestHead = buffer->left(term);
+      const QByteArray body = "{}";
+      const QByteArray resp = "HTTP/1.1 200 OK\r\n"
+                              "Content-Type: application/json\r\n"
+                              "Content-Length: " +
+                              QByteArray::number(body.size()) +
+                              "\r\n"
+                              "Connection: close\r\n\r\n" +
+                              body;
+      sock->write(resp);
+      sock->flush();
+      sock->disconnectFromHost();
+    });
+    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+  }
+
+private:
+  QTcpServer *m_server = nullptr;
+  QByteArray m_requestHead;
+};
+
 } // namespace
 
 class TestHttpClient : public QObject {
@@ -115,6 +164,7 @@ class TestHttpClient : public QObject {
 private slots:
   void responseExceedingCap_returnsResponseTooLargeError();
   void responseUnderCap_returnsBodySuccessfully();
+  void requestHeaders_rideInHeaderBlockNotUrl();
 };
 
 void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
@@ -147,7 +197,7 @@ void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
   QEventLoop loop;
 
   Scraper::HttpClient::instance()->get(
-      url, QStringLiteral("test-agent"),
+      url, {{"User-Agent", "test-agent"}},
       [&](ErrorUtils::Result<QByteArray> response) {
         received = std::move(response);
         loop.quit();
@@ -188,7 +238,7 @@ void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
   QEventLoop loop;
 
   Scraper::HttpClient::instance()->get(
-      url, QStringLiteral("test-agent"),
+      url, {{"User-Agent", "test-agent"}},
       [&](ErrorUtils::Result<QByteArray> response) {
         received = std::move(response);
         loop.quit();
@@ -201,6 +251,54 @@ void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
   QVERIFY2(received.has_value(), "HttpClient callback never fired");
   QVERIFY2(!received->isError(), "Expected a successful result");
   QCOMPARE(received->value().size(), int(kServerTotal));
+}
+
+// Kartend-0gp7: credential headers (e.g. TMDB's Authorization: Bearer)
+// must be transmitted as request headers, never folded into the request
+// target where they'd leak via Referer / proxy access logs. This locks
+// in that HttpClient::get applies the RawHeaders list verbatim and keeps
+// the token out of the URL line.
+void TestHttpClient::requestHeaders_rideInHeaderBlockNotUrl() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests above — the lazy "
+        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
+#endif
+  CapturingServer server;
+  QVERIFY(server.start());
+
+  QUrl url;
+  url.setScheme("http");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/detail");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+
+  Scraper::HttpClient::instance()->get(
+      url, {{"User-Agent", "kartend-test"}, {"Authorization", "Bearer secret-token-123"}},
+      [&](ErrorUtils::Result<QByteArray> response) {
+        received = std::move(response);
+        loop.quit();
+      });
+
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(!received->isError(), "Expected a successful result");
+
+  const QByteArray head = server.requestHead();
+  QVERIFY2(!head.isEmpty(), "Server captured no request head");
+  // Both headers must be present, verbatim, in the request head.
+  QVERIFY2(head.contains("Authorization: Bearer secret-token-123"),
+           "Authorization header missing or altered on the wire");
+  QVERIFY2(head.contains("User-Agent: kartend-test"), "User-Agent header missing on the wire");
+  // The secret must NOT appear in the request line (GET <target> HTTP/1.1) —
+  // i.e. it never regressed back into the query string.
+  const QByteArray requestLine = head.left(head.indexOf("\r\n"));
+  QVERIFY2(!requestLine.contains("secret-token-123"),
+           "Bearer token leaked into the request target / URL");
 }
 
 QTEST_MAIN(TestHttpClient)

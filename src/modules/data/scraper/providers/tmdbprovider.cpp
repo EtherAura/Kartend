@@ -7,7 +7,7 @@
 
 #include <utility>
 
-#include <QNetworkRequest>
+#include <QRegularExpression>
 #include <QUrlQuery>
 
 #include "collection/generalsettings.h"
@@ -32,6 +32,21 @@ constexpr const char *TMDB_TOKEN_FIELD = "api_token";
 QString userAgent() {
   return QStringLiteral("Kartend/%1 (https://github.com/EtherAura/Kartend)")
       .arg(QString::fromLatin1(APP_VERSION));
+}
+
+Scraper::HttpClient::RawHeaders userAgentHeader() {
+  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
+}
+
+// v4 read-access token rides in the Authorization header, never the
+// query string: TMDB's v3 endpoints accept the bearer token this way,
+// and a header keeps the secret out of the logs / Referer / proxy
+// access logs that a `?api_key=` query param would expose (Kartend-0gp7).
+Scraper::HttpClient::RawHeaders authHeaders(const QString &token) {
+  Scraper::HttpClient::RawHeaders headers = userAgentHeader();
+  headers.append(
+      {QByteArrayLiteral("Authorization"), QByteArrayLiteral("Bearer ") + token.toUtf8()});
+  return headers;
 }
 
 void registerHostThrottles() {
@@ -93,18 +108,9 @@ void TmdbProvider::lookup(const QString &query, LookupCallback callback) {
   q.addQueryItem(QStringLiteral("include_adult"), QStringLiteral("false"));
   url.setQuery(q);
 
-  // TmdbProvider extends MetadataLookupProvider but the HttpClient API
-  // doesn't take per-request headers (only User-Agent). We work around
-  // that by appending the token as the standard `api_key` query param
-  // — TMDB v3 still accepts both `?api_key=...` (legacy) and the
-  // bearer header, and the user's token is shaped for either path.
-  // Future work: extend HttpClient to accept an Authorization header
-  // so we can use the v4 bearer-only form properly.
-  q.addQueryItem(QStringLiteral("api_key"), token);
-  url.setQuery(q);
-
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, authHeaders(token),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
           return;
@@ -133,17 +139,30 @@ void TmdbProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate, Detail
   const QString mediaType = candidate.providerSpecificId.left(colon);
   const QString tmdbId = candidate.providerSpecificId.mid(colon + 1);
 
+  // Defense-in-depth (Kartend-tjyh): ScrapeCandidate treats providerSpecificId
+  // as opaque, so re-validate the two path components before interpolating
+  // them into the request URL. The search parser already constrains these, but
+  // this guard keeps a future candidate source from injecting `../`/`?`/`#`.
+  static const QRegularExpression digits(
+      QRegularExpression::anchoredPattern(QStringLiteral("[0-9]+")));
+  if ((mediaType != QStringLiteral("movie") && mediaType != QStringLiteral("tv")) ||
+      !digits.match(tmdbId).hasMatch()) {
+    callback(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                             "TMDB candidate id has an invalid media type or id",
+                                             "TmdbProvider::fetchDetail"));
+    return;
+  }
+
   QUrl url(QString::fromLatin1(TMDB_API_BASE) + QLatin1Char('/') + mediaType + QLatin1Char('/') +
            tmdbId);
   QUrlQuery q;
-  q.addQueryItem(QStringLiteral("api_key"), token);
   q.addQueryItem(QStringLiteral("append_to_response"), mediaType == QStringLiteral("movie")
                                                            ? QStringLiteral("release_dates")
                                                            : QStringLiteral("content_ratings"));
   url.setQuery(q);
 
   Scraper::HttpClient::instance()->get(
-      url, userAgent(),
+      url, authHeaders(token),
       [callback = std::move(callback), mediaType](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
@@ -159,7 +178,7 @@ void TmdbProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   // for audit-trail consistency. Kartend-9ryx: scope the response to
   // image/* so a misrouted or hostile CDN response can't reach the
   // decoder.
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
                                        Scraper::HttpClient::kDefaultMaxResponseBytes,
                                        QStringLiteral("image/"));
 }

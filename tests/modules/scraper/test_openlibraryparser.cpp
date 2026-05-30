@@ -19,6 +19,7 @@ private slots:
   void parseSearchResponse_subtitleIncludesYearAndPublisher();
   void parseSearchResponse_thumbnailUrlPresentWhenCoverIdSet();
   void parseSearchResponse_skipsEntriesWithoutKey();
+  void parseSearchResponse_skipsMalformedWorkKey();
   void parseSearchResponse_emptyDocsArrayIsSuccess();
   void parseSearchResponse_malformedJsonReturnsError();
   void parseDetailResponse_extractsTitleSubjectsAndKey();
@@ -112,8 +113,7 @@ void TestOpenLibraryParser::parseSearchResponse_thumbnailUrlPresentWhenCoverIdSe
   const auto thumb = result.value()[0].thumbnailUrl.toString();
   QVERIFY2(thumb.contains("covers.openlibrary.org/b/id/8765432"), qPrintable(thumb));
   // The second candidate has no cover_i — thumbnail URL should be invalid.
-  QVERIFY(!result.value()[1].thumbnailUrl.isValid() ||
-          result.value()[1].thumbnailUrl.isEmpty());
+  QVERIFY(!result.value()[1].thumbnailUrl.isValid() || result.value()[1].thumbnailUrl.isEmpty());
 }
 
 void TestOpenLibraryParser::parseSearchResponse_skipsEntriesWithoutKey() {
@@ -123,9 +123,25 @@ void TestOpenLibraryParser::parseSearchResponse_skipsEntriesWithoutKey() {
   QCOMPARE(result.value().size(), 2);
 }
 
+void TestOpenLibraryParser::parseSearchResponse_skipsMalformedWorkKey() {
+  // A key that isn't OL<digits>W after the /works/ strip (here a path-traversal
+  // attempt) must be dropped, never interpolated into the detail URL path
+  // (Kartend-tjyh).
+  const QByteArray fixture = R"({
+    "docs": [
+      {"key": "/works/../../evil", "title": "Traversal"},
+      {"key": "/works/OL12345W", "title": "Valid"}
+    ]
+  })";
+  auto result = OpenLibraryParser::parseSearchResponse(fixture);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0].providerSpecificId, QStringLiteral("OL12345W"));
+}
+
 void TestOpenLibraryParser::parseSearchResponse_emptyDocsArrayIsSuccess() {
-  auto result = OpenLibraryParser::parseSearchResponse(
-      QByteArray(R"({"numFound":0,"start":0,"docs":[]})"));
+  auto result =
+      OpenLibraryParser::parseSearchResponse(QByteArray(R"({"numFound":0,"start":0,"docs":[]})"));
   QVERIFY(result.isOk());
   QCOMPARE(result.value().size(), 0);
 }
@@ -136,8 +152,8 @@ void TestOpenLibraryParser::parseSearchResponse_malformedJsonReturnsError() {
 }
 
 void TestOpenLibraryParser::parseDetailResponse_extractsTitleSubjectsAndKey() {
-  auto result = OpenLibraryParser::parseDetailResponse(DETAIL_FIXTURE_FLAT,
-                                                       QStringLiteral("OL12345W"));
+  auto result =
+      OpenLibraryParser::parseDetailResponse(DETAIL_FIXTURE_FLAT, QStringLiteral("OL12345W"));
   QVERIFY(result.isOk());
   const auto item = result.value();
   QCOMPARE(item.title, QStringLiteral("Foundation"));
@@ -156,8 +172,8 @@ void TestOpenLibraryParser::parseDetailResponse_descriptionAsObjectIsExtracted()
 }
 
 void TestOpenLibraryParser::parseDetailResponse_includesCoverMediaWhenCoversListPresent() {
-  auto result = OpenLibraryParser::parseDetailResponse(DETAIL_FIXTURE_FLAT,
-                                                       QStringLiteral("OL12345W"));
+  auto result =
+      OpenLibraryParser::parseDetailResponse(DETAIL_FIXTURE_FLAT, QStringLiteral("OL12345W"));
   QVERIFY(result.isOk());
   const auto item = result.value();
   QCOMPARE(item.media.size(), 2);
@@ -181,8 +197,7 @@ void TestOpenLibraryParser::appendCoverUrls_skipsZeroOrNegative() {
 void TestOpenLibraryParser::extractIsbnFromText_findsIsbn13WithDashes() {
   // Filename style with dashes inside the ISBN.
   const QString fname = QStringLiteral("978-0-451-52493-5 - Nineteen Eighty-Four.epub");
-  QCOMPARE(OpenLibraryParser::extractIsbnFromText(fname),
-           QStringLiteral("9780451524935"));
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(fname), QStringLiteral("9780451524935"));
 }
 
 void TestOpenLibraryParser::extractIsbnFromText_findsIsbn10WithoutPrefix() {
@@ -191,16 +206,14 @@ void TestOpenLibraryParser::extractIsbnFromText_findsIsbn10WithoutPrefix() {
 }
 
 void TestOpenLibraryParser::extractIsbnFromText_returnsEmptyForNoMatch() {
-  QCOMPARE(OpenLibraryParser::extractIsbnFromText(QStringLiteral("Just a title.epub")),
-           QString());
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(QStringLiteral("Just a title.epub")), QString());
 }
 
 void TestOpenLibraryParser::extractIsbnFromText_isbn13PreferredOverIsbn10WhenBothPresent() {
   // 13 is a strict superset of 10 in length terms; the extractor must
   // try ISBN-13 first or it'd return the first 10 digits of the 13.
   const QString text = QStringLiteral("ISBN 9780451524935 (also 0553293354)");
-  QCOMPARE(OpenLibraryParser::extractIsbnFromText(text),
-           QStringLiteral("9780451524935"));
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(text), QStringLiteral("9780451524935"));
 }
 
 QTEST_MAIN(TestOpenLibraryParser)

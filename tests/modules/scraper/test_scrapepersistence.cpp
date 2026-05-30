@@ -78,6 +78,8 @@ private slots:
   void metadataSidecar_writesJsonWithScrapedFields();
   void metadataSidecar_skippedWhenTitleEmpty();
   void metadataSidecar_fillMissingKeepsExisting();
+  void unsafeTypeSubdir_skippedNotWritten();
+  void unsafeSharedScopeKey_skippedNotWritten();
 };
 
 void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
@@ -90,9 +92,8 @@ void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
   const QList<Scraper::PendingMediaWrite> media = {
       makeMedia(QStringLiteral("front"), QStringLiteral("Front cover"), bytes)};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
-                                QStringLiteral("song"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
+                                                QStringLiteral("song"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
   QCOMPARE(result.mediaSkipped, 0);
@@ -117,14 +118,12 @@ void TestScrapePersistence::standardType_writesIntoPerTypeSubdir() {
   Scraper::ScrapedItem item;
   item.title = QStringLiteral("Test");
   const QList<Scraper::PendingMediaWrite> media = {
-      makeMedia(QStringLiteral("box"), QStringLiteral("Box art"),
-                QByteArray("BOX_BYTES")),
+      makeMedia(QStringLiteral("box"), QStringLiteral("Box art"), QByteArray("BOX_BYTES")),
       makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"),
                 QByteArray("SCREENSHOT_BYTES"))};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/g.bin", tmp.path(),
-                                QStringLiteral("g"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/g.bin", tmp.path(),
+                                                QStringLiteral("g"), item, media);
 
   QCOMPARE(result.mediaWritten, 2);
   QVERIFY(QFileInfo(tmp.path() + "/box/g.png").exists());
@@ -146,12 +145,10 @@ void TestScrapePersistence::nonStandardType_writesPerTypeAndSavesItemArtworkRow(
   // "back" is a custom (non-standard) type — needs an item_artwork
   // row pointing at the file or the sidebar gallery skips it.
   const QList<Scraper::PendingMediaWrite> media = {
-      makeMedia(QStringLiteral("back"), QStringLiteral("Back cover"),
-                QByteArray("BACK_BYTES"))};
+      makeMedia(QStringLiteral("back"), QStringLiteral("Back cover"), QByteArray("BACK_BYTES"))};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
-                                QStringLiteral("song"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
+                                                QStringLiteral("song"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
   const QString expectedPath = tmp.path() + "/back/song.png";
@@ -172,9 +169,8 @@ void TestScrapePersistence::emptyBytes_skipsWithFailureCounter() {
       makeMedia(QStringLiteral("front"), QStringLiteral("Front"), QByteArray()),
       makeMedia(QStringLiteral(""), QStringLiteral("Untyped"), QByteArray("X"))};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/x.flac", tmp.path(),
-                                QStringLiteral("x"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/x.flac", tmp.path(),
+                                                QStringLiteral("x"), item, media);
 
   QCOMPARE(result.mediaWritten, 0);
   QCOMPARE(result.mediaSkipped, 2);
@@ -200,8 +196,8 @@ void TestScrapePersistence::metadataSave_overwritesScrapedFieldsButPreservesUser
   item.releaseDate = QStringLiteral("2020-05-01");
   // contentRating intentionally empty — preserve user value.
 
-  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
-                            QStringLiteral("song"), item, {});
+  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"), item,
+                            {});
 
   QCOMPARE(db.metadataSaves.size(), 1);
   const auto saved = db.metadataSaves.first();
@@ -230,8 +226,8 @@ void TestScrapePersistence::metadataSave_mergesCustomFieldsWithExisting() {
   // explicitly picked this scrape).
   item.customFields.insert(QStringLiteral("catalogue_no"), QStringLiteral("XYZ999"));
 
-  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
-                            QStringLiteral("song"), item, {});
+  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"), item,
+                            {});
 
   QCOMPARE(db.metadataSaves.size(), 1);
   const QString mergedJson = db.metadataSaves.first().customFields;
@@ -249,9 +245,8 @@ void TestScrapePersistence::noDatabaseManager_stillWritesFilesAndSkipsMetadata()
   const QList<Scraper::PendingMediaWrite> media = {
       makeMedia(QStringLiteral("front"), QStringLiteral("Front"), QByteArray("F"))};
 
-  const auto result =
-      Scraper::applyScrapedItem(nullptr, "u1", "/m/x.flac", tmp.path(),
-                                QStringLiteral("x"), item, media);
+  const auto result = Scraper::applyScrapedItem(nullptr, "u1", "/m/x.flac", tmp.path(),
+                                                QStringLiteral("x"), item, media);
 
   // Files written, but metadata save flagged false (no DB to call).
   QCOMPARE(result.mediaWritten, 1);
@@ -309,10 +304,9 @@ void TestScrapePersistence::manualAsset_routesToManualDirectoryWithUrlExtension(
   CapturingDb db;
   Scraper::ScrapedItem item;
   item.title = QStringLiteral("Test");
-  const QList<Scraper::PendingMediaWrite> media = {
-      makeMediaWithUrl(QStringLiteral("manual"), QStringLiteral("Game manual"),
-                       QUrl(QStringLiteral("https://example.com/manuals/foo.pdf")),
-                       QByteArray("PDF"))};
+  const QList<Scraper::PendingMediaWrite> media = {makeMediaWithUrl(
+      QStringLiteral("manual"), QStringLiteral("Game manual"),
+      QUrl(QStringLiteral("https://example.com/manuals/foo.pdf")), QByteArray("PDF"))};
 
   const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
                                                 QStringLiteral("foo"), item, media);
@@ -333,8 +327,7 @@ void TestScrapePersistence::videoAsset_doesNotCreateItemArtworkRow() {
   Scraper::ScrapedItem item;
   const QList<Scraper::PendingMediaWrite> media = {
       makeMediaWithUrl(QStringLiteral("video"), QStringLiteral("V"),
-                       QUrl(QStringLiteral("https://example.com/foo.webm")),
-                       QByteArray("V"))};
+                       QUrl(QStringLiteral("https://example.com/foo.webm")), QByteArray("V"))};
 
   const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
                                                 QStringLiteral("foo"), item, media);
@@ -352,10 +345,9 @@ void TestScrapePersistence::videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix(
   QVERIFY(tmp.isValid());
   CapturingDb db;
   Scraper::ScrapedItem item;
-  const QList<Scraper::PendingMediaWrite> media = {
-      makeMediaWithUrl(QStringLiteral("video"), QStringLiteral("V"),
-                       QUrl(QStringLiteral("https://api.screenscraper.fr/api2/media.php?id=1")),
-                       QByteArray("V"))};
+  const QList<Scraper::PendingMediaWrite> media = {makeMediaWithUrl(
+      QStringLiteral("video"), QStringLiteral("V"),
+      QUrl(QStringLiteral("https://api.screenscraper.fr/api2/media.php?id=1")), QByteArray("V"))};
 
   const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
                                                 QStringLiteral("foo"), item, media);
@@ -380,9 +372,8 @@ void TestScrapePersistence::screenshot_writesIntoTypedSubdirNotFlatRoot() {
   const QList<Scraper::PendingMediaWrite> media = {
       makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"), shotBytes)};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
-                                QStringLiteral("foo"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
   QFile typed(tmp.path() + "/screenshot/foo.png");
@@ -403,9 +394,8 @@ void TestScrapePersistence::logo_writesIntoTypedSubdirNotFlatRoot() {
   const QList<Scraper::PendingMediaWrite> media = {
       makeMedia(QStringLiteral("logo"), QStringLiteral("Logo"), QByteArray("LOGO"))};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
-                                QStringLiteral("foo"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
   QVERIFY(QFile::exists(tmp.path() + "/logo/foo.png"));
@@ -426,9 +416,8 @@ void TestScrapePersistence::multipleCovers_eachWriteIntoOwnTypedSubdir() {
       makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"), shotBytes),
       makeMedia(QStringLiteral("box-3d"), QStringLiteral("Box (3D)"), boxBytes)};
 
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
-                                QStringLiteral("foo"), item, media);
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 2);
   QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
@@ -459,8 +448,7 @@ void TestScrapePersistence::metadataSidecar_writesJsonWithScrapedFields() {
   QCOMPARE(obj.value("developer").toString(), item.developer);
   QCOMPARE(obj.value("genre").toString(), item.genre);
   QCOMPARE(obj.value("source").toString(), QStringLiteral("screenscraper"));
-  QCOMPARE(obj.value("customFields").toObject().value("region").toString(),
-           QStringLiteral("jp"));
+  QCOMPARE(obj.value("customFields").toObject().value("region").toString(), QStringLiteral("jp"));
   // Empty fields are omitted, not written as empty strings.
   QVERIFY(!obj.contains("description"));
 }
@@ -497,6 +485,52 @@ void TestScrapePersistence::metadataSidecar_fillMissingKeepsExisting() {
   QFile f(tmp.path() + "/metadata/game.json");
   QVERIFY(f.open(QIODevice::ReadOnly));
   QCOMPARE(f.readAll(), original);
+}
+
+void TestScrapePersistence::unsafeTypeSubdir_skippedNotWritten() {
+  // A remote-controlled asset type that would traverse out of artworkDirectory
+  // as a subdirectory must be refused at the write seam (Kartend-xncf).
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("../evil"), QStringLiteral("Evil"), QByteArray("X"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/g.bin", tmp.path(),
+                                                QStringLiteral("g"), item, media);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QCOMPARE(result.mediaSkipped, 1);
+  QVERIFY(!result.firstFailures.isEmpty());
+  QVERIFY2(result.firstFailures.first().contains(QStringLiteral("unsafe media subdirectory")),
+           qPrintable(result.firstFailures.first()));
+}
+
+void TestScrapePersistence::unsafeSharedScopeKey_skippedNotWritten() {
+  // A group-scoped asset whose scopeKey would traverse out of _shared/ as a
+  // filename must be refused at the write seam (Kartend-xhbt). The type is
+  // safe, so only the scopeKey is the offending field.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  Scraper::PendingMediaWrite w =
+      makeMedia(QStringLiteral("fanart"), QStringLiteral("Fanart"), QByteArray("X"));
+  w.asset.scope = Scraper::MediaScope::Group;
+  w.asset.scopeKey = QStringLiteral("../../evil");
+  const QList<Scraper::PendingMediaWrite> media = {w};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/g.bin", tmp.path(),
+                                                QStringLiteral("g"), item, media);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QCOMPARE(result.mediaSkipped, 1);
+  QVERIFY(!result.firstFailures.isEmpty());
+  QVERIFY2(result.firstFailures.first().contains(QStringLiteral("unsafe shared scope key")),
+           qPrintable(result.firstFailures.first()));
 }
 
 QTEST_MAIN(TestScrapePersistence)

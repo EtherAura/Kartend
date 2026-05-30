@@ -25,6 +25,25 @@ namespace ScreenScraperParser {
 
 namespace {
 
+// SS controls the remote media `type` (used downstream as an on-disk
+// subdirectory) and the group/company `scopeKey` (used as a filename). Gate
+// both before they can reach a filesystem path in scrapepersistence.
+
+// A safe single path component: non-empty, no separators, not `.`/`..`. A
+// hostile `type` like "../../etc" is dropped (Kartend-xncf).
+bool isSafePathComponent(const QString &s) {
+  return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
+         s != QLatin1String(".") && s != QLatin1String("..");
+}
+
+// group/company ids are numeric SS identifiers; an allowlist is the tightest
+// gate for a value that becomes a filename (Kartend-xhbt).
+bool isValidScopeKey(const QString &s) {
+  static const QRegularExpression re(
+      QRegularExpression::anchoredPattern(QStringLiteral("[0-9A-Za-z_-]+")));
+  return re.match(s).hasMatch();
+}
+
 const QStringList REGION_PREFERENCES = {
     QStringLiteral("us"), QStringLiteral("wor"), QStringLiteral("eu"),
     QStringLiteral("jp"), QStringLiteral("ss"),
@@ -219,6 +238,10 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
     const QString type = m.value("type").toString();
     const QString url = m.value("url").toString();
     if (type.isEmpty() || url.isEmpty()) continue;
+    // Kartend-xncf: `type` is the on-disk subdirectory; drop any asset whose
+    // type isn't a safe single path component before it can traverse out of
+    // artworkDirectory.
+    if (!isSafePathComponent(type)) continue;
     const int rank = regionRank(m.value("region").toString());
     Scraper::MediaAsset asset;
     asset.type = type;
@@ -239,6 +262,13 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
       asset.scopeKey = QUrlQuery(assetUrl).queryItemValue(QStringLiteral("companyid"));
     } else {
       asset.scope = Scraper::MediaScope::Game;
+    }
+    // Kartend-xhbt: a group/company scopeKey becomes a shared filename. If SS
+    // returns a non-id value, drop back to per-game scope so the write uses the
+    // safe per-game baseName instead of the attacker-controlled key.
+    if (asset.scope != Scraper::MediaScope::Game && !isValidScopeKey(asset.scopeKey)) {
+      asset.scope = Scraper::MediaScope::Game;
+      asset.scopeKey.clear();
     }
     auto existing = byType.constFind(type);
     if (existing == byType.constEnd() || rank < existing.value().first) {

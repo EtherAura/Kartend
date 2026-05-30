@@ -28,6 +28,10 @@ QString userAgent() {
       .arg(QString::fromLatin1(APP_VERSION));
 }
 
+Scraper::HttpClient::RawHeaders userAgentHeader() {
+  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
+}
+
 void registerHostThrottles() {
   // Idempotent — HttpClient::setRateLimit just overwrites the entry
   // each time. MusicBrainz is the strict 1/sec; Cover Art Archive
@@ -74,7 +78,8 @@ void MusicBrainzProvider::lookup(const QString &query, LookupCallback callback) 
   url.setQuery(q);
 
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgentHeader(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
           return;
@@ -105,7 +110,8 @@ void MusicBrainzProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
   url.setQuery(q);
 
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgentHeader(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
           return;
@@ -123,7 +129,7 @@ void MusicBrainzProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   // Kartend-9ryx: pin the response to image/* — Cover Art Archive
   // occasionally returns HTML error pages on 502/503 and we don't want
   // the decoder seeing them.
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
                                        Scraper::HttpClient::kDefaultMaxResponseBytes,
                                        QStringLiteral("image/"));
 }

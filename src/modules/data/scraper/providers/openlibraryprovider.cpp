@@ -25,6 +25,10 @@ QString userAgent() {
       .arg(QString::fromLatin1(APP_VERSION));
 }
 
+Scraper::HttpClient::RawHeaders userAgentHeader() {
+  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
+}
+
 void registerHostThrottles() {
   Scraper::HttpClient *client = Scraper::HttpClient::instance();
   client->setRateLimit(QString::fromLatin1(OL_HOST), OL_RATE_LIMIT_MS);
@@ -71,7 +75,8 @@ void OpenLibraryProvider::lookup(const QString &query, LookupCallback callback) 
   url.setQuery(q);
 
   Scraper::HttpClient::instance()->get(
-      url, userAgent(), [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      url, userAgentHeader(),
+      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
           return;
@@ -96,7 +101,7 @@ void OpenLibraryProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
   const QUrl url(QString::fromLatin1(OL_WORKS_BASE) + workKey + QStringLiteral(".json"));
 
   Scraper::HttpClient::instance()->get(
-      url, userAgent(),
+      url, userAgentHeader(),
       [callback = std::move(callback), workKey](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(response.error());
@@ -113,7 +118,7 @@ void OpenLibraryProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   // Kartend-9ryx: media fetches must come back as image/* — a misconfigured
   // cover URL that 200s with text/html or application/json could otherwise
   // be fed straight into the image decoder below.
-  Scraper::HttpClient::instance()->get(url, userAgent(), std::move(callback),
+  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
                                        Scraper::HttpClient::kDefaultMaxResponseBytes,
                                        QStringLiteral("image/"));
 }

@@ -6,7 +6,9 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QList>
 #include <QObject>
+#include <QPair>
 #include <QQueue>
 #include <QString>
 #include <QUrl>
@@ -56,6 +58,14 @@ public:
 
   using ResponseCallback = std::function<void(ErrorUtils::Result<QByteArray> response)>;
 
+  /// Raw request headers as ordered name/value byte pairs, applied
+  /// verbatim via QNetworkRequest::setRawHeader. Callers pass a
+  /// User-Agent here (some upstreams reject bare requests) and any
+  /// credential header such as `Authorization: Bearer <token>`. Headers
+  /// are never logged, so this is the leak-safe way to send a secret —
+  /// see get().
+  using RawHeaders = QList<QPair<QByteArray, QByteArray>>;
+
   /// Default response-size cap. A hostile or buggy server can stream
   /// gigabytes into RAM otherwise — none of our legitimate scraper
   /// payloads (JSON metadata up to a few hundred KB, box art and
@@ -64,11 +74,19 @@ public:
   /// response while still stopping a runaway long before OOM.
   static constexpr qint64 kDefaultMaxResponseBytes = 256LL * 1024 * 1024;
 
-  /// Issue an HTTP GET with the supplied User-Agent (required by some
-  /// providers — MusicBrainz rejects bare requests). The callback fires
-  /// on the main thread when the reply completes (success or error).
-  /// Requests for the same host are queued behind any in-flight ones
-  /// to honour the rate limit.
+  /// Issue an HTTP GET. @p headers are applied verbatim as raw request
+  /// headers (see RawHeaders): callers pass a User-Agent here (required
+  /// by some providers — MusicBrainz rejects bare requests) and any
+  /// credential header such as Authorization. The callback fires on the
+  /// main thread when the reply completes (success or error). Requests
+  /// for the same host are queued behind any in-flight ones to honour
+  /// the rate limit.
+  ///
+  /// Headers are never logged. Query strings can be (the ENQ trace logs
+  /// them to show media presets) and are only redacted on a best-effort
+  /// keyword basis, and they additionally leak via Referer and upstream
+  /// proxy access logs — so a credential belongs in a header, not the
+  /// URL (Kartend-0gp7).
   ///
   /// @p maxResponseBytes caps the response body. If the server streams
   /// more than this, the reply is aborted and the callback fires with
@@ -81,7 +99,7 @@ public:
   /// hostile upstream that returns HTML / JSON / executable bytes is
   /// rejected before the body reaches the caller's decode path
   /// (Kartend-9ryx). Empty (default) disables the check.
-  void get(const QUrl &url, const QString &userAgent, ResponseCallback callback,
+  void get(const QUrl &url, const RawHeaders &headers, ResponseCallback callback,
            qint64 maxResponseBytes = kDefaultMaxResponseBytes,
            const QString &expectedContentTypePrefix = QString());
 
@@ -105,7 +123,7 @@ private:
 
   struct PendingRequest {
     QUrl url;
-    QString userAgent;
+    RawHeaders headers;
     ResponseCallback callback;
     qint64 maxResponseBytes = kDefaultMaxResponseBytes;
     /// See get(): non-empty -> the reply's Content-Type must

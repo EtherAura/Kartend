@@ -19,6 +19,16 @@ namespace {
 
 constexpr const char *COVER_BASE = "https://covers.openlibrary.org/b/id/";
 
+// Open Library work keys are `OL<digits>W`. A `key` that fails this shape
+// (after the /works/ strip) is untrusted junk that must never be interpolated
+// into the detail-fetch URL path — a `../`, `?`, or `#` there would redirect
+// the follow-up request to an attacker-influenced path (Kartend-tjyh).
+bool isValidWorkKey(const QString &key) {
+  static const QRegularExpression re(
+      QRegularExpression::anchoredPattern(QStringLiteral("OL[0-9]+W")));
+  return re.match(key).hasMatch();
+}
+
 QString joinStringArray(const QJsonArray &arr, const QString &sep = QStringLiteral(", ")) {
   QStringList parts;
   for (const auto &v : arr) {
@@ -69,7 +79,9 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
       key = key.mid(7);
     }
     c.providerSpecificId = key;
-    if (c.providerSpecificId.isEmpty()) {
+    if (!isValidWorkKey(c.providerSpecificId)) {
+      // Empty or malformed work key = unusable candidate (and an unsafe URL
+      // path component); skip it (Kartend-tjyh).
       continue;
     }
     const QString title = d.value("title").toString();

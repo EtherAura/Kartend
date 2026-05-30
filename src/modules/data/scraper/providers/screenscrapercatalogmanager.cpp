@@ -81,7 +81,7 @@ void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback call
     callback(staleFallback);
     return;
   }
-  m_httpClient->get(url, m_userAgent,
+  m_httpClient->get(url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
                     [callback = std::move(callback), cachePath, staleFallback,
                      errorMapper = m_errorMapper](ErrorUtils::Result<QByteArray> response) {
                       if (response.isError()) {
@@ -161,26 +161,28 @@ void ScreenScraperCatalogManager::ensureMediaTypeCatalog() const {
   // `ensureMediaTypeCatalog` is best-effort and we accept the small
   // UAF window as the practical tradeoff for not adding a QPointer-
   // style guard to a non-QObject helper.
-  m_httpClient->get(url, m_userAgent, [this, cachePath](ErrorUtils::Result<QByteArray> response) {
-    if (response.isError()) {
-      // Quiet log path — fetching the catalog is a polish
-      // refresh, not load-bearing for a scrape. The fallback
-      // behavior (raw SS tags as labels) is documented and
-      // acceptable when SS is having a bad day.
-      ErrorUtils::ErrorContext remapped =
-          m_errorMapper ? m_errorMapper(response.error()) : response.error();
-      ErrorUtils::logError(remapped);
-      return;
-    }
-    auto parsed = ScreenScraperMediaTypeCache::parseMediaTypesResponse(response.value());
-    if (parsed.isError() || parsed.value().isEmpty()) return;
-    for (const auto &mt : parsed.value()) {
-      if (!mt.type.isEmpty() && !mt.displayName.isEmpty()) {
-        m_mediaTypeLabels.insert(mt.type, mt.displayName);
-      }
-    }
-    if (!cachePath.isEmpty()) {
-      (void)ScreenScraperMediaTypeCache::saveMediaTypes(cachePath, parsed.value());
-    }
-  });
+  m_httpClient->get(
+      url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
+      [this, cachePath](ErrorUtils::Result<QByteArray> response) {
+        if (response.isError()) {
+          // Quiet log path — fetching the catalog is a polish
+          // refresh, not load-bearing for a scrape. The fallback
+          // behavior (raw SS tags as labels) is documented and
+          // acceptable when SS is having a bad day.
+          ErrorUtils::ErrorContext remapped =
+              m_errorMapper ? m_errorMapper(response.error()) : response.error();
+          ErrorUtils::logError(remapped);
+          return;
+        }
+        auto parsed = ScreenScraperMediaTypeCache::parseMediaTypesResponse(response.value());
+        if (parsed.isError() || parsed.value().isEmpty()) return;
+        for (const auto &mt : parsed.value()) {
+          if (!mt.type.isEmpty() && !mt.displayName.isEmpty()) {
+            m_mediaTypeLabels.insert(mt.type, mt.displayName);
+          }
+        }
+        if (!cachePath.isEmpty()) {
+          (void)ScreenScraperMediaTypeCache::saveMediaTypes(cachePath, parsed.value());
+        }
+      });
 }

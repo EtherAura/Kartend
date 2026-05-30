@@ -19,6 +19,7 @@ private slots:
   void parseSearchResponse_buildsArtistDashTitleDisplayName();
   void parseSearchResponse_subtitleConcatenatesDateCountryFormat();
   void parseSearchResponse_skipsEntriesWithoutMbid();
+  void parseSearchResponse_skipsNonUuidMbid();
   void parseSearchResponse_thumbnailUsesCoverArtArchiveUrl();
   void parseSearchResponse_emptyReleasesArrayIsSuccessNotError();
   void parseSearchResponse_malformedJsonReturnsError();
@@ -27,6 +28,7 @@ private slots:
   void parseDetailResponse_includesFrontAndBackCoverMedia();
   void parseDetailResponse_genresPreferredOverTags();
   void appendCoverArtUrls_skipsEmptyMbid();
+  void appendCoverArtUrls_skipsNonUuidMbid();
 };
 
 namespace {
@@ -37,7 +39,7 @@ const QByteArray SEARCH_FIXTURE = R"({
   "offset": 0,
   "releases": [
     {
-      "id": "abc-1",
+      "id": "11111111-1111-4111-8111-111111111111",
       "score": 95,
       "title": "Album A",
       "status": "Official",
@@ -47,7 +49,7 @@ const QByteArray SEARCH_FIXTURE = R"({
       "media": [{"format": "CD", "track-count": 10}]
     },
     {
-      "id": "def-2",
+      "id": "22222222-2222-4222-8222-222222222222",
       "score": 80,
       "title": "Album B",
       "artist-credit": [{"name": "Artist Y", "joinphrase": " feat. "},
@@ -65,7 +67,7 @@ const QByteArray SEARCH_FIXTURE = R"({
 })";
 
 const QByteArray DETAIL_FIXTURE = R"({
-  "id": "abc-1",
+  "id": "11111111-1111-4111-8111-111111111111",
   "title": "Album A",
   "artist-credit": [{"name": "Artist X"}],
   "date": "2020-05-01",
@@ -87,7 +89,7 @@ const QByteArray DETAIL_FIXTURE = R"({
 })";
 
 const QByteArray DETAIL_FIXTURE_TAGS_ONLY = R"({
-  "id": "qrs-3",
+  "id": "33333333-3333-4333-8333-333333333333",
   "title": "Tagged Album",
   "artist-credit": [{"name": "Tagged Artist"}],
   "media": [{"format": "Digital", "track-count": 1}],
@@ -107,7 +109,8 @@ void TestMusicBrainzParser::parseSearchResponse_returnsCandidatesSortedByScoreDe
   QVERIFY(result.isOk());
   const auto candidates = result.value();
   QCOMPARE(candidates.size(), 2);
-  QCOMPARE(candidates[0].providerSpecificId, QStringLiteral("abc-1"));
+  QCOMPARE(candidates[0].providerSpecificId,
+           QStringLiteral("11111111-1111-4111-8111-111111111111"));
   QCOMPARE(candidates[0].matchScore, 95);
   QCOMPARE(candidates[1].matchScore, 80);
 }
@@ -117,8 +120,7 @@ void TestMusicBrainzParser::parseSearchResponse_buildsArtistDashTitleDisplayName
   QVERIFY(result.isOk());
   QCOMPARE(result.value()[0].displayName, QStringLiteral("Artist X — Album A"));
   // joinphrase preserved verbatim (note the literal " feat. " glue).
-  QCOMPARE(result.value()[1].displayName,
-           QStringLiteral("Artist Y feat. Guest — Album B"));
+  QCOMPARE(result.value()[1].displayName, QStringLiteral("Artist Y feat. Guest — Album B"));
 }
 
 void TestMusicBrainzParser::parseSearchResponse_subtitleConcatenatesDateCountryFormat() {
@@ -134,12 +136,30 @@ void TestMusicBrainzParser::parseSearchResponse_skipsEntriesWithoutMbid() {
   QCOMPARE(result.value().size(), 2);
 }
 
+void TestMusicBrainzParser::parseSearchResponse_skipsNonUuidMbid() {
+  // A release whose id isn't a canonical UUID (here a path-traversal attempt)
+  // must be dropped, never turned into a coverartarchive.org URL path or a
+  // detail-fetch id (Kartend-tjyh).
+  const QByteArray fixture = R"({
+    "releases": [
+      {"id": "../../evil", "score": 99, "title": "Traversal"},
+      {"id": "11111111-1111-4111-8111-111111111111", "score": 50, "title": "Valid"}
+    ]
+  })";
+  auto result = MusicBrainzParser::parseSearchResponse(fixture);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0].providerSpecificId,
+           QStringLiteral("11111111-1111-4111-8111-111111111111"));
+}
+
 void TestMusicBrainzParser::parseSearchResponse_thumbnailUsesCoverArtArchiveUrl() {
   auto result = MusicBrainzParser::parseSearchResponse(SEARCH_FIXTURE);
   QVERIFY(result.isOk());
   const auto thumb = result.value()[0].thumbnailUrl.toString();
-  QVERIFY2(thumb.startsWith("https://coverartarchive.org/release/abc-1/"),
-           qPrintable(thumb));
+  QVERIFY2(
+      thumb.startsWith("https://coverartarchive.org/release/11111111-1111-4111-8111-111111111111/"),
+      qPrintable(thumb));
   QVERIFY(thumb.endsWith(".jpg"));
 }
 
@@ -173,7 +193,8 @@ void TestMusicBrainzParser::parseDetailResponse_storesMbidAndTrackCountInCustomF
   auto result = MusicBrainzParser::parseDetailResponse(DETAIL_FIXTURE);
   QVERIFY(result.isOk());
   const auto item = result.value();
-  QCOMPARE(item.customFields.value("musicbrainz_id"), QStringLiteral("abc-1"));
+  QCOMPARE(item.customFields.value("musicbrainz_id"),
+           QStringLiteral("11111111-1111-4111-8111-111111111111"));
   QCOMPARE(item.customFields.value("track_count"), QStringLiteral("12"));
   QCOMPARE(item.customFields.value("country"), QStringLiteral("US"));
   QCOMPARE(item.customFields.value("barcode"), QStringLiteral("0123456789"));
@@ -188,7 +209,8 @@ void TestMusicBrainzParser::parseDetailResponse_includesFrontAndBackCoverMedia()
   for (const auto &m : item.media) types.append(m.type);
   QVERIFY(types.contains(QStringLiteral("front")));
   QVERIFY(types.contains(QStringLiteral("back")));
-  QVERIFY(item.media.first().url.toString().contains("coverartarchive.org/release/abc-1"));
+  QVERIFY(item.media.first().url.toString().contains(
+      "coverartarchive.org/release/11111111-1111-4111-8111-111111111111"));
 }
 
 void TestMusicBrainzParser::parseDetailResponse_genresPreferredOverTags() {
@@ -204,8 +226,18 @@ void TestMusicBrainzParser::appendCoverArtUrls_skipsEmptyMbid() {
   Scraper::ScrapedItem item;
   MusicBrainzParser::appendCoverArtUrls(item, QString());
   QCOMPARE(item.media.size(), 0);
-  MusicBrainzParser::appendCoverArtUrls(item, QStringLiteral("xyz"));
+  MusicBrainzParser::appendCoverArtUrls(item,
+                                        QStringLiteral("11111111-1111-4111-8111-111111111111"));
   QCOMPARE(item.media.size(), 2);
+}
+
+void TestMusicBrainzParser::appendCoverArtUrls_skipsNonUuidMbid() {
+  Scraper::ScrapedItem item;
+  // A non-UUID id (the detail response's `id` is independent untrusted data)
+  // must not be interpolated into a cover URL (Kartend-tjyh).
+  MusicBrainzParser::appendCoverArtUrls(item, QStringLiteral("../../evil"));
+  MusicBrainzParser::appendCoverArtUrls(item, QStringLiteral("not-a-uuid"));
+  QCOMPARE(item.media.size(), 0);
 }
 
 QTEST_MAIN(TestMusicBrainzParser)

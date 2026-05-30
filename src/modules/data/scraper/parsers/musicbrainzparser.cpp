@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QRegularExpression>
 #include <QStringList>
 
 using ErrorUtils::ErrorCode;
@@ -20,6 +21,17 @@ namespace MusicBrainzParser {
 namespace {
 
 constexpr const char *COVER_ART_BASE = "https://coverartarchive.org/release/";
+
+// MusicBrainz release ids are canonical UUIDs. Anything else in the `id`
+// field is untrusted and must never be interpolated into a Cover Art Archive
+// URL path (or the detail-fetch path via providerSpecificId) — a `../`, `?`,
+// or `#` there would redirect the follow-up request (Kartend-tjyh).
+bool isValidMbid(const QString &mbid) {
+  static const QRegularExpression re(QRegularExpression::anchoredPattern(
+      QStringLiteral("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                     "[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")));
+  return re.match(mbid).hasMatch();
+}
 
 QString joinArtistCredit(const QJsonArray &credits) {
   QStringList parts;
@@ -124,8 +136,9 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
     const QJsonObject r = v.toObject();
     Scraper::ScrapeCandidate c;
     c.providerSpecificId = r.value("id").toString();
-    if (c.providerSpecificId.isEmpty()) {
-      // No MBID = unusable candidate; skip.
+    if (!isValidMbid(c.providerSpecificId)) {
+      // Missing or non-UUID MBID = unusable candidate (and an unsafe URL path
+      // component for the thumbnail / detail fetch); skip (Kartend-tjyh).
       continue;
     }
     const QString title = r.value("title").toString();
@@ -217,7 +230,9 @@ ErrorUtils::Result<Scraper::ScrapedItem> parseDetailResponse(const QByteArray &j
 }
 
 void appendCoverArtUrls(Scraper::ScrapedItem &item, const QString &mbid) {
-  if (mbid.isEmpty()) {
+  // The detail response's `id` is independent untrusted data; gate it on the
+  // same UUID check before building any Cover Art Archive URL (Kartend-tjyh).
+  if (!isValidMbid(mbid)) {
     return;
   }
   // Cover Art Archive serves canonical filenames at predictable URLs.

@@ -32,6 +32,9 @@ private slots:
   void parseDetailResponse_filenameOverridePreemptsRomRegion();
   void parseDetailResponse_freeTextFollowsPreferredLanguage();
   void parseDetailResponse_collapsesSsToScreenshot();
+  void parseDetailResponse_dropsUnsafeMediaType();
+  void parseDetailResponse_downgradesInvalidGroupScopeKey();
+  void parseDetailResponse_keepsValidGroupScopeKey();
 };
 
 namespace {
@@ -433,6 +436,76 @@ void TestScreenScraperParser::parseDetailResponse_collapsesSsToScreenshot() {
   }
   QVERIFY(types.contains(QStringLiteral("screenshot")));
   QVERIFY(!types.contains(QStringLiteral("ss")));
+}
+
+void TestScreenScraperParser::parseDetailResponse_dropsUnsafeMediaType() {
+  // A remote media `type` becomes an on-disk subdirectory; one that would
+  // traverse out of artworkDirectory must be dropped at parse time, while the
+  // safe asset alongside it survives (Kartend-xncf).
+  const QByteArray json = R"json({
+    "response": {"jeu": {
+      "id": "1",
+      "noms": [{"region": "us", "text": "Game"}],
+      "rom": {"romregions": "us"},
+      "medias": [
+        {"type": "../../etc", "region": "us", "url": "https://example.com/evil.png"},
+        {"type": "fanart", "region": "us", "url": "https://example.com/fanart.png"}
+      ]
+    }}
+  })json";
+  auto result = ScreenScraperParser::parseDetailResponse(json);
+  QVERIFY(result.isOk());
+  QStringList types;
+  for (const auto &m : result.value().media) {
+    types.append(m.type);
+  }
+  QVERIFY2(!types.contains(QStringLiteral("../../etc")), "Unsafe media type must be dropped");
+  QVERIFY(types.contains(QStringLiteral("fanart")));
+}
+
+void TestScreenScraperParser::parseDetailResponse_downgradesInvalidGroupScopeKey() {
+  // A group-scoped asset whose groupid isn't a numeric id would become an
+  // attacker-controlled shared filename; fall back to per-game scope so the
+  // safe baseName is used at write time (Kartend-xhbt).
+  const QByteArray json = R"json({
+    "response": {"jeu": {
+      "id": "1",
+      "noms": [{"region": "us", "text": "Game"}],
+      "rom": {"romregions": "us"},
+      "medias": [
+        {"type": "fanart", "region": "us",
+         "url": "https://www.screenscraper.fr/mediaGroup.php?groupid=../../evil"}
+      ]
+    }}
+  })json";
+  auto result = ScreenScraperParser::parseDetailResponse(json);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().media.size(), 1);
+  const auto &asset = result.value().media.first();
+  QCOMPARE(asset.scope, Scraper::MediaScope::Game);
+  QVERIFY(asset.scopeKey.isEmpty());
+}
+
+void TestScreenScraperParser::parseDetailResponse_keepsValidGroupScopeKey() {
+  // A numeric groupid is a legitimate shared-scope id and must be preserved so
+  // the dedup-by-group routing keeps working (Kartend-xhbt regression guard).
+  const QByteArray json = R"json({
+    "response": {"jeu": {
+      "id": "1",
+      "noms": [{"region": "us", "text": "Game"}],
+      "rom": {"romregions": "us"},
+      "medias": [
+        {"type": "fanart", "region": "us",
+         "url": "https://www.screenscraper.fr/mediaGroup.php?groupid=12345"}
+      ]
+    }}
+  })json";
+  auto result = ScreenScraperParser::parseDetailResponse(json);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().media.size(), 1);
+  const auto &asset = result.value().media.first();
+  QCOMPARE(asset.scope, Scraper::MediaScope::Group);
+  QCOMPARE(asset.scopeKey, QStringLiteral("12345"));
 }
 
 QTEST_MAIN(TestScreenScraperParser)

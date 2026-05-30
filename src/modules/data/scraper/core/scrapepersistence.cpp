@@ -43,6 +43,16 @@ namespace {
 // complete in the scrape-error details view.
 constexpr int MAX_REPORTED_FAILURES = 1000;
 
+// Defense-in-depth (Kartend-xncf / Kartend-xhbt): asset.type becomes a
+// subdirectory and asset.scopeKey a filename below. Both originate from remote
+// provider responses, so refuse to build a path from anything that isn't a
+// single safe component — this holds regardless of which provider produced the
+// asset, not just the ScreenScraper parser that validates at parse time.
+bool isSafePathComponent(const QString &s) {
+  return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
+         s != QLatin1String(".") && s != QLatin1String("..");
+}
+
 bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
   // Caller already mkpath'd the parent dir; this just streams the
   // bytes. QFile is fine here — these payloads are small images, and
@@ -208,6 +218,17 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
         subdir = write.asset.type;
         break;
       }
+      // Defense-in-depth (Kartend-xncf): never let a remote-derived
+      // subdirectory escape artworkDirectory. The hardcoded video/manual names
+      // are safe; this matters for the Image case where subdir == asset.type.
+      if (!isSafePathComponent(subdir)) {
+        ++result.mediaSkipped;
+        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+          result.firstFailures.append(
+              QStringLiteral("%1: unsafe media subdirectory").arg(write.asset.type));
+        }
+        continue;
+      }
       // Group/Company-scoped assets land in `_shared/` and use the
       // scope key (groupid / companyid) as the filename. This stops
       // the same theme-background or publisher-logo from being
@@ -216,6 +237,17 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       const bool sharedScope = kind == MediaKind::Image &&
                                write.asset.scope != Scraper::MediaScope::Game &&
                                !write.asset.scopeKey.isEmpty();
+      // Defense-in-depth (Kartend-xhbt): a shared scopeKey becomes the filename
+      // below; refuse it if it isn't a single safe component so it can't
+      // traverse out of the _shared/ directory.
+      if (sharedScope && !isSafePathComponent(write.asset.scopeKey)) {
+        ++result.mediaSkipped;
+        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+          result.firstFailures.append(
+              QStringLiteral("%1: unsafe shared scope key").arg(write.asset.type));
+        }
+        continue;
+      }
       const QString destDir = sharedScope ? artRoot.filePath(QStringLiteral("_shared/") + subdir)
                                           : artRoot.filePath(subdir);
       if (!QDir().mkpath(destDir)) {
