@@ -275,6 +275,14 @@ private:
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;
   TextZoomHud *m_textZoomHud = nullptr;
+  /// Declared BEFORE the controllers below (marquee / scrollEvents / dbEvents /
+  /// scraper / dialog) and before m_collectionWatcher, so it is destroyed LAST:
+  /// members destruct in reverse declaration order, and several of those owners
+  /// reach a manager through m_appManager during their own destruction (e.g.
+  /// MarqueeController, the filesystem watcher's rescan callback). Keep it first
+  /// or a controller's teardown slot/timer can deref a freed manager getter
+  /// (Kartend-rqsb).
+  std::unique_ptr<ApplicationManager> m_appManager;
   /// Drives the secondary-monitor "marquee" / topper window — owns the
   /// MarqueeWindow (lazily created on first enable) and the trailing-edge
   /// artwork-refresh debounce timer. applyMarqueeSettings() and
@@ -303,10 +311,11 @@ private:
   // MainWindow.
   ToolbarController *m_toolbarController = nullptr;
 
-  std::unique_ptr<ApplicationManager> m_appManager;
   /// Per-collection filesystem watcher driving incremental rescans. Owned by
   /// the MainWindow because its rescan callback closes over NavigationManager
-  /// (reached via m_appManager). Null until setupFilesystemWatcher() runs.
+  /// (reached via m_appManager). Declared after m_appManager (above) so it is
+  /// destroyed first, while m_appManager is still alive. Null until
+  /// setupFilesystemWatcher() runs.
   std::unique_ptr<CollectionFilesystemWatcher> m_collectionWatcher;
   DetailsPane *m_MetadataSidebar = nullptr;
 

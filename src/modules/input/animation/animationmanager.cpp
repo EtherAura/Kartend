@@ -326,6 +326,13 @@ void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int sta
   connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
           [this]() { emit requestVirtualViewUpdate(); });
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this, onFinished);
+  // Always re-fire the canonical vertical-finished slot so listeners wired in
+  // InteractionManager (programmaticScroll cleanup, verticalAnimationFinished
+  // consumers) still see the end-of-anim event after the user callback runs —
+  // the horizontal twin already does this; the wheel-vertical path didn't,
+  // leaving those listeners silently un-notified for wheel scrolls (Kartend-y74i).
+  connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
+          &AnimationManager::onVScrollAnimationFinished);
 
   m_vScrollAnim->start();
 }

@@ -4,9 +4,9 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
+#include "pathutils.h"
 
 #include <QDebug>
-#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QLoggingCategory>
@@ -61,10 +61,12 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
       result.addWarning(prefix + "no media directory specified");
     }
   } else {
-    QString expandedPath = config.mediaDirectory;
-    if (expandedPath.startsWith("~")) {
-      expandedPath = QDir::homePath() + expandedPath.mid(1);
-    }
+    // Expand ~ and %collection% via the same resolver the runtime uses
+    // (PathUtils::expandPath), so a %collection%-templated media dir is checked
+    // against its real on-disk location instead of always reporting "does not
+    // exist" (Kartend-k375).
+    const QString expandedPath =
+        PathUtils::expandPathWithoutExistenceCheck(config.mediaDirectory, config.name);
     QFileInfo mediaInfo(expandedPath);
     if (!mediaInfo.exists()) {
       result.addError(prefix + "media directory does not exist: " + config.mediaDirectory);
@@ -77,10 +79,8 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
 
   // Artwork directory validation (optional but validate if present)
   if (!config.artworkDirectory.isEmpty()) {
-    QString expandedPath = config.artworkDirectory;
-    if (expandedPath.startsWith("~")) {
-      expandedPath = QDir::homePath() + expandedPath.mid(1);
-    }
+    const QString expandedPath =
+        PathUtils::expandPathWithoutExistenceCheck(config.artworkDirectory, config.name);
     QFileInfo artworkInfo(expandedPath);
     if (!artworkInfo.exists()) {
       result.addWarning(prefix + "artwork directory does not exist: " + config.artworkDirectory);
@@ -104,10 +104,8 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
 
     // Check if it's an absolute or relative path
     if (launcherPath.contains('/') || launcherPath.startsWith("~")) {
-      QString expandedPath = launcherPath;
-      if (expandedPath.startsWith("~")) {
-        expandedPath = QDir::homePath() + expandedPath.mid(1);
-      }
+      const QString expandedPath =
+          PathUtils::expandPathWithoutExistenceCheck(launcherPath, config.name);
       QFileInfo launcherInfo(expandedPath);
       if (launcherInfo.exists()) {
         if (launcherInfo.isExecutable()) {

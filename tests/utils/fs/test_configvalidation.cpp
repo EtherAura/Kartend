@@ -34,6 +34,7 @@ private slots:
   void validateCollection_smallItemDimensionsWarn();
   void validateCollection_zeroGridWidthWarns();
   void validateCollection_optionalArtworkDirMissingIsWarning();
+  void validateCollection_collectionPlaceholderMediaDirIsExpanded();
 
   void validateAllCollections_emptyListWarns();
   void validateAllCollections_parentIndexOutOfRangeIsError();
@@ -153,6 +154,26 @@ void TestConfigValidation::validateCollection_missingMediaDirIsError() {
     }
   }
   QVERIFY(found);
+}
+
+void TestConfigValidation::validateCollection_collectionPlaceholderMediaDirIsExpanded() {
+  // Kartend-k375: a %collection%-templated media dir must validate against its
+  // real expanded location (PathUtils::expandPath), not the literal
+  // "%collection%" path which would always report "does not exist".
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString name = QStringLiteral("MyCollection");
+  QVERIFY(QDir(tmp.path()).mkdir(name));
+
+  CollectionConfig c = makeLeaf(name, tmp.path() + QStringLiteral("/%collection%"));
+  const auto r = ConfigValidation::validateCollection(c, 0);
+
+  // The expanded path (<tmp>/MyCollection) exists, so no "does not exist" media
+  // error and the collection validates cleanly.
+  for (const QString &e : r.errors) {
+    QVERIFY2(!e.contains(QStringLiteral("does not exist")), qPrintable(e));
+  }
+  QVERIFY(r.valid);
 }
 
 void TestConfigValidation::validateCollection_mediaPathIsFileNotDirIsError() {

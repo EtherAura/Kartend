@@ -69,9 +69,14 @@ auto WidgetPoolManager::acquire() -> ItemWidget * {
 }
 
 void WidgetPoolManager::disconnectAll(ItemWidget *widget) {
-  // Only disconnect subcollectionDoubleClicked - other signals were removed
-  // as EventManager intercepts all clicks before they reach ItemWidget
+  // Clear both double-click forwarding connections before the widget returns to
+  // the pool. Re-acquire (createSubcollectionWidget / createVirtualFolderWidget)
+  // reconnects whichever applies, so without disconnecting here a recycled
+  // widget accumulates one extra connection per reuse and fires the navigation
+  // slot N times on a single double-click (Kartend-pywa). Other ItemWidget click
+  // signals aren't connected — EventManager intercepts those before the widget.
   QObject::disconnect(widget, &ItemWidget::subcollectionDoubleClicked, nullptr, nullptr);
+  QObject::disconnect(widget, &ItemWidget::virtualFolderDoubleClicked, nullptr, nullptr);
 }
 
 void WidgetPoolManager::release(ItemWidget *widget) {

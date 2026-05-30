@@ -411,14 +411,22 @@ void MainWindow::navigateToItem(const QString &filePath) {
       PathUtils::validateAndExpandPath(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
   if (auto *im = m_appManager->getInteractionManager()) {
-    auto *conn = new QMetaObject::Connection;
+    // Kartend-swyk: own the Connection handle via shared_ptr instead of a
+    // manual new/delete. The delete previously ran only on the matching-path
+    // branch, so if the worker never emitted a result for filePath (collection
+    // emptied, path normalized, item removed, shutdown) the handle + captured
+    // lambda leaked and the dead comparison ran on every future emission. The
+    // connection is bound to `this`, so on teardown Qt disconnects it and frees
+    // the lambda, dropping the last shared_ptr ref to the handle. The signal is
+    // shared across paths (hence the resultPath filter), so Qt::SingleShot-
+    // Connection is unusable — it would fire on the first non-matching result.
+    auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(db, &IDatabaseManager::visualIndexForPathLoaded, this,
                     [conn, filePath, im](int visualIndex, const QString &resultPath) {
                       if (resultPath != filePath) {
                         return; // some other path's result — ignore
                       }
                       QObject::disconnect(*conn);
-                      delete conn;
                       if (visualIndex >= 0) {
                         im->selectItemByIndex(visualIndex, /*allowHorizontalScroll=*/true);
                       }
