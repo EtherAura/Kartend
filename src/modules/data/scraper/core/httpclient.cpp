@@ -150,6 +150,25 @@ void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallbac
     }
     return;
   }
+  // SSRF guard (Kartend-pugp.1): this is the single choke point for every
+  // scraper request, and some request URLs are response-derived and thus
+  // untrusted — most notably ScreenScraper's medias[].url, which arrives
+  // here verbatim via fetchMediaBytes. Refuse any non-HTTPS scheme so a
+  // hostile response can't steer a request at file:// / qrc:// / data:// /
+  // ftp:// or plaintext http:// against an internal/link-local host. Every
+  // provider builds on an https base, so this rejects nothing legitimate.
+  // QUrl normalises the scheme to lowercase, so an exact compare suffices.
+  // host()/scheme() are logged but the path+query are not — those can carry
+  // local file paths or the credential query params redactedUrlForLog masks.
+  if (url.scheme() != QLatin1String("https")) {
+    qCWarning(lcScraperHttp) << "Refusing non-HTTPS scraper request URL — scheme:" << url.scheme()
+                             << "host:" << url.host();
+    if (callback) {
+      callback(ErrorContext::error(ErrorCode::InvalidArgument, "Refused non-HTTPS request URL",
+                                   "Scraper::HttpClient::get"));
+    }
+    return;
+  }
   PendingRequest req{url, headers, std::move(callback), maxResponseBytes,
                      expectedContentTypePrefix};
   const QString host = url.host();
