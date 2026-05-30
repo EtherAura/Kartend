@@ -153,11 +153,17 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
     }
   }
 
-  // Only clear the fulfilled chunk from pending requests.
-  // Keeping empty-range requests pending prevents a tight request loop
-  // when the DB returns no rows (e.g., filter/count mismatch).
-  if (m_widgetFactory && !filePaths.isEmpty()) {
-    m_widgetFactory->clearPendingRangeRequest(offset);
+  // Clear the fulfilled chunk from pending requests. An empty (zero-row)
+  // response goes through onEmptyRangeResponse instead, which permits a bounded
+  // number of re-requests then stops — keeping a legitimately-empty chunk from
+  // either looping tightly or staying stuck on "Loading..." forever
+  // (Kartend-ejsf).
+  if (m_widgetFactory) {
+    if (!filePaths.isEmpty()) {
+      m_widgetFactory->clearPendingRangeRequest(offset);
+    } else {
+      m_widgetFactory->onEmptyRangeResponse(offset);
+    }
   }
 
   // Store data and get visual indices that were updated

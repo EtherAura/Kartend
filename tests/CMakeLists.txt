@@ -315,6 +315,13 @@ add_executable(test_artworkmanager
 target_link_libraries(test_artworkmanager PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 
+# ArtworkWidgetRegistry tests (enqueuePending coalesce + kMaxPending cap)
+add_executable(test_artworkwidgetregistry
+  modules/artwork/test_artworkwidgetregistry.cpp
+)
+target_link_libraries(test_artworkwidgetregistry PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME ArtworkWidgetRegistry COMMAND test_artworkwidgetregistry)
+
 # StringUtils tests (header-only)
 add_executable(test_stringutils utils/text/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)

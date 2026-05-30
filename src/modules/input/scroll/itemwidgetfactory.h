@@ -107,13 +107,37 @@ public:
    * @brief Clears pending range requests, allowing new requests after data
    * arrives.
    */
-  void clearPendingRangeRequests() { m_pendingRangeRequests.clear(); }
+  void clearPendingRangeRequests() {
+    m_pendingRangeRequests.clear();
+    m_emptyRangeAttempts.clear();
+  }
 
   /**
    * @brief Clears a single pending range request.
    * @param startIndex The chunk start index that was requested.
+   *
+   * Called when the chunk fills with rows — also resets its empty-response
+   * retry budget so a later transient emptiness gets the full allowance again.
    */
-  void clearPendingRangeRequest(int startIndex) { m_pendingRangeRequests.remove(startIndex); }
+  void clearPendingRangeRequest(int startIndex) {
+    m_pendingRangeRequests.remove(startIndex);
+    m_emptyRangeAttempts.remove(startIndex);
+  }
+
+  /**
+   * @brief Record that the chunk at @p startIndex came back with zero rows.
+   *
+   * A legitimately-empty chunk previously stayed pending forever, so prefetch /
+   * createMediaWidget never re-requested it and its slots showed "Loading..."
+   * until a collection switch (Kartend-ejsf). Allow a few re-requests — a
+   * transient count/filter over-report resolves quickly — then stop (leave it
+   * pending) so a persistently-empty chunk can't spin a tight request loop.
+   */
+  void onEmptyRangeResponse(int startIndex) {
+    if (++m_emptyRangeAttempts[startIndex] < kMaxEmptyRangeAttempts) {
+      m_pendingRangeRequests.remove(startIndex); // permit one more re-request
+    }
+  }
 
   /**
    * @brief Prefetch data for a specific range (used during scrollbar drag).
@@ -183,7 +207,13 @@ private:
   QHash<QString, QString> m_cachedArtworkPaths; // fullPath -> artworkPath from session cache
   QSet<int> m_pendingRangeRequests;             // Tracks chunk start indices with pending
                                                 // requests
-  int m_totalItemCount = 0;                     // Total items for adaptive chunk sizing
+  // Per-chunk count of consecutive empty (zero-row) responses. Bounds the
+  // re-requests of a chunk that keeps coming back empty so it can't spin a
+  // tight request loop; reset when the chunk fills or on a bulk clear
+  // (Kartend-ejsf).
+  QHash<int, int> m_emptyRangeAttempts;
+  static constexpr int kMaxEmptyRangeAttempts = 3;
+  int m_totalItemCount = 0;                               // Total items for adaptive chunk sizing
   const QList<CollectionConfig> *m_collections = nullptr; // Collection list for name lookup
   int m_collectionColumnWidth = 150;                      // Collection column width for list mode
   int m_artworkColumnWidth = 32;                          // Artwork column width for list mode

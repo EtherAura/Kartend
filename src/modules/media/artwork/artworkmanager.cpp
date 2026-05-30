@@ -640,20 +640,18 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
   // m_widgetRegistry's pending list so the next post-scroll
   // updateViewportArtwork picks them up instead, eliminating the trickle.
   if (isArtworkSuppressed()) {
-    QList<ArtworkInfo> requeued;
-    requeued.reserve(batchResults.size());
+    // Re-queue each result through enqueuePending so its same-(widget,path)
+    // coalesce and kMaxPending cap apply. The previous takePending() + append +
+    // setPending() wrote straight into the registry, bypassing both — a
+    // sustained scroll storm could then push m_pending well past the cap with
+    // duplicate (widget,path) entries (Kartend-ghmyu).
     for (const auto &r : batchResults) {
       if (r.widget.isNull()) continue;
       ArtworkInfo info;
       info.mediaItem = r.widget;
       info.artworkPath = r.artworkPath;
       info.widgetIdentity = r.widgetIdentity;
-      requeued.append(info);
-    }
-    if (!requeued.isEmpty()) {
-      QList<ArtworkInfo> existing = m_widgetRegistry->takePending();
-      existing.append(requeued);
-      m_widgetRegistry->setPending(std::move(existing));
+      m_widgetRegistry->enqueuePending(info);
     }
     return;
   }
