@@ -73,6 +73,13 @@ void fetchHealthStatus(const GeneralSettings *settings,
 /// with systemeid=0 (SS treats this as "search all systems" — lower
 /// match quality but doesn't hard-fail).
 class ScreenScraperProvider : public MetadataLookupProvider {
+  // Test seam (Kartend-hsboz): buildJeuInfosUrl and the sibling request
+  // builders are private but were extracted specifically so the SS query
+  // shape can be regression-tested without the network (see the member
+  // docs). Granting the test friendship keeps them off the public API while
+  // letting test_screenscraperprovider.cpp exercise them directly.
+  friend class TestScreenScraperProvider;
+
 public:
   using GeneralSettingsAccessor = std::function<const GeneralSettings *()>;
   /// Resolves the collection context for the next scrape. Returning

@@ -586,6 +586,14 @@ add_executable(test_screenscrapermediatypecache
 target_link_libraries(test_screenscrapermediatypecache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScreenScraperMediaTypeCache COMMAND test_screenscrapermediatypecache)
 
+# ScreenScraper provider request-URL/param construction tests (Kartend-hsboz):
+# jeuInfos.php credential placement + system/rom/hash param mapping, no HTTP.
+add_executable(test_screenscraperprovider
+  modules/scraper/test_screenscraperprovider.cpp
+)
+target_link_libraries(test_screenscraperprovider PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScreenScraperProvider COMMAND test_screenscraperprovider)
+
 # TMDB parser tests
 add_executable(test_tmdbparser
   modules/scraper/test_tmdbparser.cpp
