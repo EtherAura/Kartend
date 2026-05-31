@@ -562,6 +562,22 @@ add_executable(test_screenscraperparser
 target_link_libraries(test_screenscraperparser PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScreenScraperParser COMMAND test_screenscraperparser)
 
+# ScreenScraper quota tracker tests (Kartend-vyz9u): ssuser quota-block parsing
+# + no-op-preserves-prior-snapshot behaviour, no HTTP.
+add_executable(test_screenscraperquota
+  modules/scraper/test_screenscraperquota.cpp
+)
+target_link_libraries(test_screenscraperquota PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScreenScraperQuota COMMAND test_screenscraperquota)
+
+# ScreenScraper media-type catalog cache tests (Kartend-vyz9u): mediasJeuListe
+# parse, case-insensitive lookup, and on-disk round-trip.
+add_executable(test_screenscrapermediatypecache
+  modules/scraper/test_screenscrapermediatypecache.cpp
+)
+target_link_libraries(test_screenscrapermediatypecache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScreenScraperMediaTypeCache COMMAND test_screenscrapermediatypecache)
+
 # TMDB parser tests
 add_executable(test_tmdbparser
   modules/scraper/test_tmdbparser.cpp
