@@ -225,6 +225,11 @@ private:
   std::atomic<qint64> m_lastBatchCompletionTime; // For silent load cooldown
   bool m_continuousSilentLoad;
   bool m_persistentSilentLoad;
+  /// Per-instance cache-save cadence counters. Kartend-r2722: were
+  /// function-local statics in maybeTriggerCacheSave, shared across every
+  /// ArtworkManager instance and never reset.
+  int m_cacheUpdateCount = 0;
+  qint64 m_lastCacheSaveSize = 0;
 
   // Adaptive batching for performance-based batch sizing
   AdaptiveBatcher m_adaptiveBatcher;
@@ -232,6 +237,10 @@ private:
   /// Checks if artwork loading should be skipped due to shutdown or invalid
   /// state.
   [[nodiscard]] bool shouldSkipArtworkLoading();
+  /// Periodically schedules a deferred persistent cache save once the cache
+  /// has grown enough. Kartend-r2722: per-instance member (was a free function
+  /// with process-wide static counters shared across all instances).
+  void maybeTriggerCacheSave(ICacheManager *cacheManager);
   void clearArtworkWidgetState();
   [[nodiscard]] bool isArtworkSuppressed() const;
 };

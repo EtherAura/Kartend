@@ -105,6 +105,11 @@ private:
   /// destroyed) on close so the widget tree survives across re-opens.
   /// Reset to nullptr if the dialog is force-destroyed elsewhere.
   ScrapeResultDialog *m_scraperDialog = nullptr;
+  /// Per-instance guard so each controller wires its reused dialog's
+  /// unifiedScrapeFinished handler exactly once. Kartend-r2722: was a
+  /// process-wide static, so a 2nd ScraperController never connected and its
+  /// scrapes produced no summary / no grid refresh.
+  bool m_unifiedFinishedConnected = false;
 };
 
 #endif // SCRAPERCONTROLLER_H

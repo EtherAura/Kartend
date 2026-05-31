@@ -201,11 +201,15 @@ void MainWindow::showFocusReturnSplash() {
 }
 
 void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
-  // Compose the new application font from the persisted settings, falling
-  // back to whatever Qt picked at startup (read once into s_baseline so we
-  // can still restore it after the user clears the override).
-  static const QFont s_baseline = QApplication::font();
-  QFont font = s_baseline;
+  // Compose the new application font from the persisted settings, falling back
+  // to whatever Qt picked at startup, captured per-instance on first use so we
+  // can still restore it after the user clears the override (Kartend-r2722: a
+  // process-wide static here captured whatever the previous window/test left).
+  if (!m_uiFontBaselineCaptured) {
+    m_uiFontBaseline = QApplication::font();
+    m_uiFontBaselineCaptured = true;
+  }
+  QFont font = m_uiFontBaseline;
   const QString family = settings.appearance.globalUiFontFamily.trimmed();
   if (!family.isEmpty()) {
     font.setFamily(family);

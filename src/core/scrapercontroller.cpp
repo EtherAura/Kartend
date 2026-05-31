@@ -171,13 +171,13 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
   dialog->setScraperService(m_scraperService.get());
 
   // Post-completion housekeeping: refresh the active grid + sidebar +
-  // artwork cache once the scrape ends, then surface a summary box.
-  // UniqueConnection prevents the lambda from being attached multiple
-  // times if the user opens the dialog repeatedly — without it, one
-  // scrape-finish would pop N message boxes.
-  static bool s_unifiedFinishedConnected = false;
-  if (!s_unifiedFinishedConnected) {
-    s_unifiedFinishedConnected = true;
+  // artwork cache once the scrape ends, then surface a summary box. The dialog
+  // is reused across opens, so guard the connect to attach the lambda exactly
+  // once per controller — otherwise one scrape-finish would pop N message
+  // boxes. The guard is per-instance (not a process-wide static) so a 2nd
+  // controller still connects its own dialog (Kartend-r2722).
+  if (!m_unifiedFinishedConnected) {
+    m_unifiedFinishedConnected = true;
     QObject::connect(
         dialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
         [this](int scraped, int skipped, int errors, const QStringList &firstFailures) {

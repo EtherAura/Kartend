@@ -9,6 +9,7 @@
 #include "isettingsdialog.h" // for SettingsPage on openSettingsDialog signature
 #include <functional>
 #include <memory>
+#include <QFont>
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
@@ -204,7 +205,7 @@ public:
   /// settings load and again whenever the user changes the font in the
   /// Settings dialog. Honors the runtime text-zoom multiplier from
   /// @p settings.
-  static void applyGlobalUiFont(const GeneralSettings &settings);
+  void applyGlobalUiFont(const GeneralSettings &settings);
 
   /// current runtime text-zoom multiplier, expressed as
   /// percent (100 = unscaled). Read by every place that pushes a font size
@@ -265,6 +266,12 @@ protected:
 private:
   bool m_isShuttingDown = false;
   bool m_deferredStartupDone = false;
+  // Pristine application font, captured per-instance on the first
+  // applyGlobalUiFont call so clearing a font override restores Qt's default.
+  // Kartend-r2722: was a process-wide static that captured whatever font the
+  // previous MainWindow / test had already left on QApplication.
+  bool m_uiFontBaselineCaptured = false;
+  QFont m_uiFontBaseline;
   std::unique_ptr<MenuController> m_menuController;
   /// Central z-order coordinator for every registered overlay. Constructed
   /// before any overlay widget so each overlay's setLayerManager() call

@@ -95,10 +95,13 @@ auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
   return {immediateItems, extendedItems, remainingItems};
 }
 
-// Periodically triggers a deferred persistent cache save when size grows enough
-auto maybeTriggerCacheSave(ArtworkManager *self, ICacheManager *cacheManager) -> void {
-  static int updateCount = 0;
-  if (++updateCount % UIConstants::Cache::CHECK_INTERVAL != 0) {
+} // namespace
+
+// Periodically schedules a deferred persistent cache save once the cache has
+// grown enough. Per-instance counters (Kartend-r2722: were function-local
+// statics shared across every ArtworkManager instance and never reset).
+void ArtworkManager::maybeTriggerCacheSave(ICacheManager *cacheManager) {
+  if (++m_cacheUpdateCount % UIConstants::Cache::CHECK_INTERVAL != 0) {
     return;
   }
   if (!cacheManager) return;
@@ -106,17 +109,15 @@ auto maybeTriggerCacheSave(ArtworkManager *self, ICacheManager *cacheManager) ->
   if (cacheSize <= 0) {
     return;
   }
-  static qint64 lastSaveSize = 0;
-  if (cacheSize <= static_cast<qint64>(lastSaveSize * UIConstants::Cache::SAVE_GROWTH_FACTOR)) {
+  if (cacheSize <=
+      static_cast<qint64>(m_lastCacheSaveSize * UIConstants::Cache::SAVE_GROWTH_FACTOR)) {
     return;
   }
-  lastSaveSize = cacheSize;
-  Q_UNUSED(self)
+  m_lastCacheSaveSize = cacheSize;
   // Defer disk cache save to batch multiple cache entries -
   // prevents excessive I/O during rapid artwork loading
   cacheManager->scheduleSaveToDisk(UIConstants::Cache::SAVE_DEFER_MS);
 }
-} // namespace
 
 // Constructs the artwork manager and sets up timers. Kartend-davi: dispatcher
 // creation moves to setupReferences (the dispatcher needs the cache pointer,
@@ -353,7 +354,7 @@ void ArtworkManager::updateViewportArtwork() {
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 
-  maybeTriggerCacheSave(this, cacheMgr());
+  maybeTriggerCacheSave(cacheMgr());
 }
 
 // Build artwork path list for current collection (and descendants if enabled)
