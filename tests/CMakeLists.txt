@@ -260,6 +260,14 @@ add_executable(test_scanservice_persist
 target_link_libraries(test_scanservice_persist PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScanServicePersist COMMAND test_scanservice_persist)
 
+# QueryManager cache generation-token tests (Kartend-z8i0c): the pure
+# QueryCacheHash digests that drive count/range cache hit/miss/invalidate.
+add_executable(test_querymanagercache
+  modules/query/test_querymanagercache.cpp
+)
+target_link_libraries(test_querymanagercache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerCache COMMAND test_querymanagercache)
+
 # Regression test: broken symlinks survive a scan/prune cycle (Kartend-9mxh).
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_broken_symlinks

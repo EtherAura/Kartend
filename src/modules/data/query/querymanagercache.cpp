@@ -21,6 +21,7 @@
 #include <random>
 
 #include "errorutils.h"
+#include "querycachehash.h"
 #include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
@@ -122,22 +123,8 @@ QString QueryManager::buildUuidFilterClause(const QStringList &uuids, bool &useT
 }
 
 QByteArray QueryManager::computeUuidListHash(const QStringList &uuids) {
-  // Fast hash of UUID list - concatenate sizes and first/last UUIDs
-  // Full hash would be expensive for 3000+ UUIDs on every call
-  QByteArray data;
-  data.reserve(128);
-  data.append(QByteArray::number(uuids.size()));
-  if (!uuids.isEmpty()) {
-    data.append(uuids.first().toUtf8());
-    if (uuids.size() > 1) {
-      data.append(uuids.last().toUtf8());
-    }
-    // Include a middle element for extra collision resistance
-    if (uuids.size() > 2) {
-      data.append(uuids[uuids.size() / 2].toUtf8());
-    }
-  }
-  return QCryptographicHash::hash(data, QCryptographicHash::Md5);
+  // Pure generation-token hash — see querycachehash.h (Kartend-z8i0c).
+  return QueryCacheHash::uuidListHash(uuids);
 }
 
 bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
@@ -209,22 +196,8 @@ void QueryManager::clearSortedItemsCache() {
 
 QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QString &filter,
                                               SortMode sortMode) {
-  // Hash of UUIDs + filter + sortMode to detect when cache needs rebuilding
-  QByteArray data;
-  data.reserve(256);
-  data.append(QByteArray::number(uuids.size()));
-  if (!uuids.isEmpty()) {
-    data.append(uuids.first().toUtf8());
-    if (uuids.size() > 1) {
-      data.append(uuids.last().toUtf8());
-    }
-    if (uuids.size() > 2) {
-      data.append(uuids[uuids.size() / 2].toUtf8());
-    }
-  }
-  data.append(filter.toUtf8());
-  data.append(QByteArray::number(static_cast<int>(sortMode)));
-  return QCryptographicHash::hash(data, QCryptographicHash::Md5);
+  // Pure generation-token hash — see querycachehash.h (Kartend-z8i0c).
+  return QueryCacheHash::sortCacheHash(uuids, filter, sortMode);
 }
 
 void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids, const QString &filter,
