@@ -7,7 +7,7 @@ intermediate `behavior/data/input/media` group level dropped. Without a
 machine check, the two trees drift silently when a new module is added
 without a test folder, or when a test folder outlives its module.
 
-This lint runs two sibling checks:
+This lint runs three sibling checks:
 
   modules (bidirectional):
   - A `src/modules/<group>/<feature>/` with no `tests/modules/<feature>/`
@@ -25,6 +25,14 @@ This lint runs two sibling checks:
     so requiring a test folder per src cluster would be all false
     positives. Presence, not file coverage — so no per-file allowlist.
 
+  registration (file-level):
+  - Every `tests/**/test_*.cpp` must be referenced by a
+    `tests/**/CMakeLists.txt`. The unit suite hand-writes an
+    add_executable/add_test pair per file and the integration suite lists its
+    sources in INTEGRATION_TEST_SOURCES, so a new test file that nobody wires
+    in compiles into nothing and silently never runs. This is the backstop
+    the folder-level checks above can't provide.
+
 Pairs with .scripts/check-layering.py and .scripts/check-singleshot-comments.py
 in the maintenance-check CI job.
 
@@ -41,6 +49,7 @@ SRC_MODULES = REPO / "src" / "modules"
 TESTS_MODULES = REPO / "tests" / "modules"
 SRC_UTILS = REPO / "src" / "utils"
 TESTS_UTILS = REPO / "tests" / "utils"
+TESTS = REPO / "tests"
 
 # Features whose coverage lives in tests/integration/ (UI-coordinator
 # managers that pull the full kartend_lib closure and can't be tested
@@ -146,6 +155,46 @@ def check_utils() -> bool:
     return True
 
 
+def check_test_registration() -> bool:
+    """Every tests/**/test_*.cpp must be referenced by a tests/**/CMakeLists.txt.
+
+    tests/CMakeLists.txt registers ~100 tests with hand-written
+    add_executable/add_test triples and tests/integration/CMakeLists.txt lists
+    its sources in INTEGRATION_TEST_SOURCES. A new test_*.cpp that nobody wires
+    in compiles into nothing and silently never runs — this is the backstop.
+    Returns True if clean.
+    """
+    cpps = sorted(TESTS.rglob("test_*.cpp"))
+    cmake_text = "\n".join(
+        p.read_text(encoding="utf-8", errors="replace")
+        for p in TESTS.rglob("CMakeLists.txt")
+    )
+    # Test-file basenames are unique across the tree, and every CMakeLists
+    # reference ends in the literal basename (whether `sub/dir/test_x.cpp` or
+    # `test_x.cpp`), so an exact-basename substring test is unambiguous and
+    # prefix-collision-safe — `test_x.cpp` cannot match inside `test_xy.cpp`
+    # because the trailing `.cpp` must line up.
+    unregistered = [str(p.relative_to(REPO)) for p in cpps if p.name not in cmake_text]
+
+    if unregistered:
+        print(
+            "check-test-mapping: test_*.cpp files not registered in any "
+            "tests/**/CMakeLists.txt:"
+        )
+        for rel in unregistered:
+            print(f"  {rel}  ->  no add_executable / source-list entry; it silently never runs")
+        print(
+            "\nFix: register the test in tests/CMakeLists.txt (add_executable + "
+            "target_link_libraries + add_test), or add it to "
+            "INTEGRATION_TEST_SOURCES in tests/integration/CMakeLists.txt for a "
+            "UI-coordinator test. Delete the file if it is dead."
+        )
+        return False
+
+    print(f"check-test-mapping: OK — all {len(cpps)} test_*.cpp files are registered in CMake")
+    return True
+
+
 def main() -> int:
     for path in (SRC_MODULES, TESTS_MODULES, SRC_UTILS, TESTS_UTILS):
         if not path.is_dir():
@@ -156,7 +205,8 @@ def main() -> int:
     # drift, rather than stopping at the first failing tree.
     modules_ok = check_modules()
     utils_ok = check_utils()
-    return 0 if (modules_ok and utils_ok) else 1
+    registration_ok = check_test_registration()
+    return 0 if (modules_ok and utils_ok and registration_ok) else 1
 
 
 if __name__ == "__main__":
