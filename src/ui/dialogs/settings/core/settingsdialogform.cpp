@@ -269,12 +269,13 @@ void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
   ui->launcherPanel->browseCoreButton()->setVisible(showCore);
   ui->launcherPanel->labelCore()->setVisible(showCore);
   if (usesLibretroCore) {
-    ui->launcherPanel->coreLineEdit()->setToolTip("Path to libretro core file (.so/.dll/.dylib)");
+    ui->launcherPanel->coreLineEdit()->setToolTip(
+        tr("Path to libretro core file (.so/.dll/.dylib)"));
     ui->launcherPanel->launchParamsLineEdit()->setToolTip(
-        "Additional libretro frontend parameters");
+        tr("Additional libretro frontend parameters"));
   } else {
     ui->launcherPanel->launchParamsLineEdit()->setToolTip(
-        "Additional command-line parameters for the launcher");
+        tr("Additional command-line parameters for the launcher"));
   }
 
   // Update extract archives visibility based on launcher type

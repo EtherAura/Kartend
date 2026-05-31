@@ -576,9 +576,11 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
 
   QString extension = QFileInfo(filePath).suffix().toUpper();
   if (extension.isEmpty()) {
-    extension = "Unknown";
+    extension = tr("Unknown");
   }
-  ui->fileExtensionValue->setText(extension + " file");
+  // tr the whole "%1 file" phrase rather than concatenating " file": the
+  // suffix word order isn't fixed across languages.
+  ui->fileExtensionValue->setText(tr("%1 file").arg(extension));
 
   // Async stat() phase. Generation counter drops stale results when a
   // newer selection has started before this worker delivers (otherwise
@@ -597,7 +599,7 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
     if (myGen != m_fileInfoGen) return;
     const StatResult res = watcher->result();
     if (!res.exists) {
-      ui->filePathValue->setText("File not found");
+      ui->filePathValue->setText(tr("File not found"));
       ui->fileSizeValue->setText("-");
       ui->lastModifiedValue->setText("-");
       ui->fileExtensionValue->setText("-");
