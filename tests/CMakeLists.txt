@@ -964,3 +964,25 @@ add_test(NAME DetailPageHelpers COMMAND test_detailpagehelpers)
 if (TARGET kartend_core)
   add_subdirectory(integration)
 endif()
+
+# Kartend-kkeur: isolate every test's on-disk state.
+#
+# Most tests call QStandardPaths::setTestModeEnabled(true), which routes the
+# config/data/cache locations under a single shared ~/.qttest tree (derived
+# from $HOME). That isolates tests from the real user profile but NOT from
+# each other: under `ctest -j` the parallel test processes all write the same
+# kartend .ini and SQLite db, so they intermittently clobber each other —
+# surfacing as a DatabaseManager subprocess abort or a PerDomainSignals /
+# SettingsRoundtrip assertion failure that passes on a serial rerun.
+#
+# Give each test its own HOME so ~/.qttest resolves to a per-test directory;
+# cross-process collisions become impossible while full parallelism is kept.
+# This covers tests registered in THIS directory; the integration subdir does
+# the same for its own. APPEND (not set) so tests that already set ENVIRONMENT
+# (e.g. QT_QPA_PLATFORM=offscreen) keep it.
+get_property(_kartend_tests DIRECTORY PROPERTY TESTS)
+foreach(_test IN LISTS _kartend_tests)
+  set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
+  file(MAKE_DIRECTORY "${_test_home}")
+  set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+endforeach()

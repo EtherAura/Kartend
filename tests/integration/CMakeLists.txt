@@ -108,3 +108,14 @@ target_include_directories(test_integration PRIVATE
 # for AUTOUIC are also already configured at the top level.
 
 add_test(NAME Integration COMMAND test_integration)
+
+# Kartend-kkeur: give the integration test its own HOME so QStandardPaths test
+# mode (~/.qttest) is isolated from the unit tests under `ctest -j`. Mirrors
+# the per-test HOME loop at the end of tests/CMakeLists.txt — that loop only
+# sees tests registered in that directory, not this subdirectory's.
+get_property(_kartend_integration_tests DIRECTORY PROPERTY TESTS)
+foreach(_test IN LISTS _kartend_integration_tests)
+  set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
+  file(MAKE_DIRECTORY "${_test_home}")
+  set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+endforeach()
