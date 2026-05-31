@@ -257,6 +257,75 @@ private:
   QByteArray m_requestHead;
 };
 
+// Minimal HTTPS/1.1 server for the redirect-guard tests (Kartend-pugp.2). The
+// first request it sees is answered with a 302 to setLocation(); any later
+// request (i.e. a redirect the client was allowed to follow back to this same
+// host) is answered 200 with kRedirectBody. That lets one server cover both
+// "redirect blocked before contact" (only the 302 is ever served) and
+// "same-host redirect followed end to end" (302 then 200).
+class RedirectingServer : public QObject {
+  Q_OBJECT
+public:
+  static constexpr const char *kRedirectBody = "REDIRECTED-OK";
+
+  explicit RedirectingServer(QObject *parent = nullptr) : QObject(parent) {
+    m_server = new QSslServer(this);
+    m_server->setSslConfiguration(serverTlsConfig());
+    connect(m_server, &QTcpServer::pendingConnectionAvailable, this,
+            &RedirectingServer::handleConnection);
+  }
+
+  bool start() { return m_server->listen(QHostAddress::LocalHost, 0); }
+  quint16 port() const { return m_server->serverPort(); }
+  // Absolute URL sent in the first response's Location header. Set after
+  // start() when the target is this same server (the port is only known then).
+  void setLocation(const QByteArray &location) { m_location = location; }
+
+private slots:
+  void handleConnection() {
+    QTcpSocket *sock = m_server->nextPendingConnection();
+    if (!sock) return;
+
+    auto buffer = std::make_shared<QByteArray>();
+    auto responded = std::make_shared<bool>(false);
+    connect(sock, &QTcpSocket::readyRead, this, [this, sock, buffer, responded]() {
+      if (*responded) return;
+      *buffer += sock->readAll();
+      if (!buffer->contains("\r\n\r\n")) return;
+      *responded = true;
+
+      QByteArray resp;
+      if (!m_servedRedirect) {
+        m_servedRedirect = true;
+        resp = "HTTP/1.1 302 Found\r\n"
+               "Location: " +
+               m_location +
+               "\r\n"
+               "Content-Length: 0\r\n"
+               "Connection: close\r\n\r\n";
+      } else {
+        const QByteArray body = QByteArray(kRedirectBody);
+        resp = "HTTP/1.1 200 OK\r\n"
+               "Content-Type: text/plain\r\n"
+               "Content-Length: " +
+               QByteArray::number(body.size()) +
+               "\r\n"
+               "Connection: close\r\n\r\n" +
+               body;
+      }
+      sock->write(resp);
+      sock->flush();
+      sock->disconnectFromHost();
+    });
+    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+  }
+
+private:
+  QSslServer *m_server = nullptr;
+  QByteArray m_location;
+  bool m_servedRedirect = false;
+};
+
 } // namespace
 
 class TestHttpClient : public QObject {
@@ -264,6 +333,10 @@ class TestHttpClient : public QObject {
 private slots:
   void initTestCase();
   void nonHttpsUrl_isRefusedSynchronously();
+  void hostOutsideAllowlist_isRefusedSynchronously();
+  void allowlistedHost_servesBodyWithoutRedirect();
+  void redirectOutsideAllowlist_isRefused();
+  void redirectToAllowlistedHost_isFollowed();
   void responseExceedingCap_returnsResponseTooLargeError();
   void responseUnderCap_returnsBodySuccessfully();
   void requestHeaders_rideInHeaderBlockNotUrl();
@@ -311,6 +384,159 @@ void TestHttpClient::nonHttpsUrl_isRefusedSynchronously() {
     QVERIFY2(received->isError(), qPrintable(QStringLiteral("expected an error for %1").arg(spec)));
     QCOMPARE(received->error().code, ErrorCode::InvalidArgument);
   }
+}
+
+// Kartend-pugp.2: when a caller pins an allowlist (ScreenScraper media fetches
+// pass {"screenscraper.fr"}), an initial host outside it must be refused at the
+// choke point with no network work — same synchronous path as the https guard.
+// The look-alike entries are the ones that matter: a naive endsWith() check
+// would wrongly admit "evilscreenscraper.fr" (no dot boundary) and treating the
+// domain as a left-label ("screenscraper.fr.attacker.test") is the classic
+// suffix-match bypass.
+void TestHttpClient::hostOutsideAllowlist_isRefusedSynchronously() {
+  const QStringList allow = {QStringLiteral("screenscraper.fr")};
+  const QStringList rejected = {
+      QStringLiteral("https://evil.example/x"),                   // unrelated host
+      QStringLiteral("https://127.0.0.1/x"),                      // internal/loopback host
+      QStringLiteral("https://169.254.169.254/meta-data"),        // link-local metadata SSRF
+      QStringLiteral("https://evilscreenscraper.fr/x"),           // suffix look-alike, no dot
+      QStringLiteral("https://screenscraper.fr.attacker.test/x"), // domain as a left label
+  };
+
+  for (const QString &spec : rejected) {
+    std::optional<ErrorUtils::Result<QByteArray>> received;
+    bool firedSynchronously = false;
+    Scraper::HttpClient::instance()->get(
+        QUrl(spec), {{"User-Agent", "test-agent"}},
+        [&](ErrorUtils::Result<QByteArray> response) {
+          received = std::move(response);
+          firedSynchronously = true;
+        },
+        Scraper::HttpClient::kDefaultMaxResponseBytes, QString(), allow);
+
+    QVERIFY2(firedSynchronously,
+             qPrintable(QStringLiteral("callback did not fire synchronously for %1").arg(spec)));
+    QVERIFY2(received.has_value(), qPrintable(QStringLiteral("no result for %1").arg(spec)));
+    QVERIFY2(received->isError(), qPrintable(QStringLiteral("expected an error for %1").arg(spec)));
+    QCOMPARE(received->error().code, ErrorCode::InvalidArgument);
+  }
+}
+
+// Kartend-pugp.2: a host *inside* the allowlist passes the guard and is served
+// normally. This also confirms UserVerifiedRedirectPolicy (which the allowlist
+// path switches on) doesn't stall an ordinary, non-redirecting response.
+void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
+        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
+#endif
+  constexpr qint64 kServerTotal = 256;
+  FloodingServer server(kServerTotal, /*chunkSize=*/256);
+  QVERIFY(server.start());
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/img");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> response) {
+                                         received = std::move(response);
+                                         loop.quit();
+                                       },
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+                                       {QStringLiteral("127.0.0.1")});
+
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(!received->isError(), "Expected a successful result for an allowlisted host");
+  QCOMPARE(received->value().size(), int(kServerTotal));
+}
+
+// Kartend-pugp.2: the core SSRF-pivot defense. The server 302-redirects to an
+// off-allowlist host; the client must refuse it *before* contacting that host.
+// A refused redirect surfaces as ErrorCode::InvalidArgument — distinct from the
+// HostNotFoundError (DatabaseQueryFailed) we'd see if the redirect were instead
+// followed to the unresolved target, so this assertion proves we blocked rather
+// than merely failed to connect.
+void TestHttpClient::redirectOutsideAllowlist_isRefused() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
+        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
+#endif
+  RedirectingServer server;
+  QVERIFY(server.start());
+  server.setLocation("https://evil.example/pwned");
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/start");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> response) {
+                                         received = std::move(response);
+                                         loop.quit();
+                                       },
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+                                       {QStringLiteral("127.0.0.1")});
+
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(received->isError(), "Expected the off-allowlist redirect to be refused");
+  QCOMPARE(received->error().code, ErrorCode::InvalidArgument);
+}
+
+// Kartend-pugp.2: the allow side of redirect verification. A redirect back to a
+// host *inside* the allowlist (here the same loopback server) must be followed
+// to completion — this is what exercises the redirectAllowed() hand-off, so a
+// regression that aborted every redirect would fail here, not silently pass.
+void TestHttpClient::redirectToAllowlistedHost_isFollowed() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
+        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
+#endif
+  RedirectingServer server;
+  QVERIFY(server.start());
+  // Redirect back to this same server (host 127.0.0.1 is allowlisted) on a
+  // different path; the second request is answered 200 with kRedirectBody.
+  server.setLocation("https://127.0.0.1:" + QByteArray::number(server.port()) + "/followed");
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/start");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> response) {
+                                         received = std::move(response);
+                                         loop.quit();
+                                       },
+                                       Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+                                       {QStringLiteral("127.0.0.1")});
+
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(!received->isError(), "Expected the same-host redirect to be followed");
+  QCOMPARE(received->value(), QByteArray(RedirectingServer::kRedirectBody));
 }
 
 void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {

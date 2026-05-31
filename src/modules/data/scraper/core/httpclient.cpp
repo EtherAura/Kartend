@@ -71,6 +71,25 @@ QString redactedUrlForLog(const QUrl &url) {
       .toString(QUrl::RemoveScheme | QUrl::RemoveUserInfo | QUrl::RemovePort | QUrl::RemoveFragment)
       .left(200);
 }
+
+/// True if @p host equals one of @p allowedSuffixes or is a subdomain of
+/// one. The leading-dot boundary is load-bearing: matching plain
+/// endsWith("screenscraper.fr") would also accept the look-alikes
+/// "evilscreenscraper.fr" and "screenscraper.fr.attacker.test", which is
+/// exactly the bypass this guard exists to stop. QUrl lowercases host,
+/// but the compares stay case-insensitive defensively.
+bool hostMatchesAllowlist(const QString &host, const QStringList &allowedSuffixes) {
+  for (const QString &suffix : allowedSuffixes) {
+    if (host.compare(suffix, Qt::CaseInsensitive) == 0) {
+      return true;
+    }
+    const QString dotSuffix = QLatin1Char('.') + suffix;
+    if (host.size() > dotSuffix.size() && host.endsWith(dotSuffix, Qt::CaseInsensitive)) {
+      return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 HttpClient *HttpClient::instance() {
@@ -141,7 +160,8 @@ void logSslConfigOnce() {
 } // namespace
 
 void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallback callback,
-                     qint64 maxResponseBytes, const QString &expectedContentTypePrefix) {
+                     qint64 maxResponseBytes, const QString &expectedContentTypePrefix,
+                     const QStringList &allowedHostSuffixes) {
   logSslConfigOnce();
   if (!url.isValid()) {
     if (callback) {
@@ -169,8 +189,27 @@ void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallbac
     }
     return;
   }
-  PendingRequest req{url, headers, std::move(callback), maxResponseBytes,
-                     expectedContentTypePrefix};
+  // Host allowlist (Kartend-pugp.2): defense-in-depth on top of the https
+  // guard for callers whose URL is response-derived (medias[].url). When a
+  // caller pins an allowlist, refuse an initial host outside it here at the
+  // same choke point; send() additionally constrains redirects to the same
+  // set. Empty allowlist (every other caller) leaves the request unrestricted.
+  if (!allowedHostSuffixes.isEmpty() && !hostMatchesAllowlist(url.host(), allowedHostSuffixes)) {
+    qCWarning(lcScraperHttp) << "Refusing scraper request to host outside allowlist — host:"
+                             << url.host();
+    if (callback) {
+      callback(ErrorContext::error(ErrorCode::InvalidArgument,
+                                   "Refused request URL outside host allowlist",
+                                   "Scraper::HttpClient::get"));
+    }
+    return;
+  }
+  PendingRequest req{url,
+                     headers,
+                     std::move(callback),
+                     maxResponseBytes,
+                     expectedContentTypePrefix,
+                     allowedHostSuffixes};
   const QString host = url.host();
   // Timestamped trace so we can see (a) when the caller enqueued vs.
   // (b) when the request actually starts vs. (c) when the reply lands.
@@ -267,8 +306,18 @@ void HttpClient::send(const QString &host, PendingRequest request) {
   for (const QPair<QByteArray, QByteArray> &header : request.headers) {
     qreq.setRawHeader(header.first, header.second);
   }
+  // Redirect handling. The default NoLessSafeRedirectPolicy follows a 3xx to
+  // any https host. For host-pinned callers (Kartend-pugp.2) that is exactly
+  // the SSRF pivot we must block, so switch to UserVerifiedRedirectPolicy:
+  // QNAM then *pauses* on each redirect and waits for redirectAllowed() before
+  // contacting the new host, letting the redirected slot below reject an
+  // off-allowlist target before any connection is made (a plain abort() under
+  // an auto-following policy would race the request to the new host).
+  const QStringList allowedHostSuffixes = request.allowedHostSuffixes;
+  const bool restrictRedirects = !allowedHostSuffixes.isEmpty();
   qreq.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                    QNetworkRequest::NoLessSafeRedirectPolicy);
+                    restrictRedirects ? QNetworkRequest::UserVerifiedRedirectPolicy
+                                      : QNetworkRequest::NoLessSafeRedirectPolicy);
   // Explicit HTTP/2 opt-in so concurrent media downloads multiplex over
   // a single TCP+TLS connection. Without this Qt picks per-server, and
   // SS's CDN advertises h2 in its ALPN — but several Qt versions still
@@ -314,9 +363,32 @@ void HttpClient::send(const QString &host, PendingRequest request) {
             });
   }
 
+  // Verified-redirect guard (Kartend-pugp.2). Under UserVerifiedRedirectPolicy
+  // QNAM holds each redirect until we either let it proceed or abort. Allow a
+  // hop only to a host inside the caller's allowlist; otherwise abort before
+  // the new host is contacted and flag it so the finished slot reports a
+  // refused redirect (InvalidArgument) rather than a generic timeout. Shared
+  // with the finished slot the same way sizeCapExceeded distinguishes an
+  // oversize abort from a transfer-timeout abort.
+  auto redirectBlocked = std::make_shared<bool>(false);
+  if (restrictRedirects) {
+    connect(reply, &QNetworkReply::redirected, this,
+            [reply, redirectBlocked, allowedHostSuffixes, host, urlPath](const QUrl &target) {
+              if (hostMatchesAllowlist(target.host(), allowedHostSuffixes)) {
+                emit reply->redirectAllowed();
+                return;
+              }
+              *redirectBlocked = true;
+              qCWarning(lcScraperHttp)
+                  << "Refusing scraper redirect to host outside allowlist — from:" << host
+                  << urlPath << "to host:" << target.host();
+              reply->abort();
+            });
+  }
+
   connect(reply, &QNetworkReply::finished, this,
           [this, reply, host, callback = std::move(callback), perReq, urlPath, sizeCapExceeded,
-           expectedContentTypePrefix]() mutable {
+           redirectBlocked, expectedContentTypePrefix]() mutable {
             const qint64 ms = perReq->elapsed();
             // Definitive HTTP/2 readout. The connect-side attribute we
             // set asks Qt to *try* h2, but the actual negotiation can
@@ -376,13 +448,23 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                 // doesn't loop on a server that's deliberately flooding.
                 const bool oversizedResponse =
                     reply->error() == QNetworkReply::OperationCanceledError && *sizeCapExceeded;
-                const bool timedOut =
-                    reply->error() == QNetworkReply::OperationCanceledError && !*sizeCapExceeded;
+                // A refused redirect (Kartend-pugp.2) also surfaces as
+                // OperationCanceledError via our abort() in the redirected
+                // slot; the redirectBlocked flag tells it apart from the
+                // size-cap and transfer-timeout aborts so the user sees the
+                // real cause instead of a misleading "timed out".
+                const bool refusedRedirect =
+                    reply->error() == QNetworkReply::OperationCanceledError && *redirectBlocked;
+                const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError &&
+                                      !*sizeCapExceeded && !*redirectBlocked;
                 ErrorCode errorCode = ErrorCode::DatabaseQueryFailed;
                 QString errorMsg = QStringLiteral("HTTP request failed");
                 if (oversizedResponse) {
                   errorCode = ErrorCode::ResponseTooLarge;
                   errorMsg = QStringLiteral("Response exceeded size cap; aborted");
+                } else if (refusedRedirect) {
+                  errorCode = ErrorCode::InvalidArgument;
+                  errorMsg = QStringLiteral("Refused redirect to host outside allowlist");
                 } else if (timedOut) {
                   errorCode = ErrorCode::OperationCancelled;
                   errorMsg = QStringLiteral("Network request timed out");

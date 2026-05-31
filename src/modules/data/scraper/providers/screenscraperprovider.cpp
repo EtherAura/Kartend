@@ -120,6 +120,12 @@ QString detectRegionFromFilename(const QString &filenameOrBasename) {
 // queued media requests all sitting at inflight=1 even after the
 // dialog dispatched them in parallel.
 constexpr const char *SS_MEDIA_HOST = "neoclone.screenscraper.fr";
+// SSRF defense-in-depth (Kartend-pugp.2): medias[].url and any redirect it
+// follows are response-derived (untrusted), so fetchMediaBytes pins them to
+// ScreenScraper's own domain. Domain-level rather than the exact SS_MEDIA_HOST
+// so SS adding/rotating CDN subdomains keeps working — only a host (or
+// redirect) off screenscraper.fr entirely is refused, which is the SSRF case.
+constexpr const char *SS_MEDIA_HOST_SUFFIX = "screenscraper.fr";
 constexpr const char *SS_JEUINFOS = "https://api.screenscraper.fr/api2/jeuInfos.php";
 // API-host pacing for jeuInfos.php. Fixed (one call per scrape, not
 // the bottleneck). Media-host pacing is *dynamic* and pulled from
@@ -739,7 +745,11 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
       // "Access denied" pages under expired media URLs; the prefix
       // check turns those into structured errors instead of decode
       // failures.
-      QStringLiteral("image/"));
+      QStringLiteral("image/"),
+      // Kartend-pugp.2: url is response-derived; pin it (and its
+      // redirects) to ScreenScraper's domain so it can't be steered at
+      // an internal https host.
+      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
 }
 
 namespace ScreenScraperProviderHelpers {

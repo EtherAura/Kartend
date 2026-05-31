@@ -11,6 +11,7 @@
 #include <QPair>
 #include <QQueue>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include "errorutils.h"
@@ -99,9 +100,24 @@ public:
   /// hostile upstream that returns HTML / JSON / executable bytes is
   /// rejected before the body reaches the caller's decode path
   /// (Kartend-9ryx). Empty (default) disables the check.
+  ///
+  /// @p allowedHostSuffixes optionally pins the request — and every
+  /// redirect it follows — to a set of trusted domains (SSRF
+  /// defense-in-depth, Kartend-pugp.2). Each entry matches a host that
+  /// equals it or is a subdomain of it (so "screenscraper.fr" allows
+  /// "neoclone.screenscraper.fr" but not "evilscreenscraper.fr"). When
+  /// non-empty: the initial URL's host is checked here at the choke
+  /// point (refused with ErrorCode::InvalidArgument before any network
+  /// work, like the https guard), and the request runs under
+  /// UserVerifiedRedirectPolicy so a cross-domain redirect target is
+  /// aborted *before* it is contacted rather than followed. Empty
+  /// (default) leaves the request unrestricted and on the standard
+  /// NoLessSafeRedirectPolicy — set it only for callers whose URL is
+  /// derived from an untrusted response (ScreenScraper medias[].url).
   void get(const QUrl &url, const RawHeaders &headers, ResponseCallback callback,
            qint64 maxResponseBytes = kDefaultMaxResponseBytes,
-           const QString &expectedContentTypePrefix = QString());
+           const QString &expectedContentTypePrefix = QString(),
+           const QStringList &allowedHostSuffixes = QStringList());
 
   /// Configure the rate limit for a host. `intervalMs` is the minimum
   /// delay between consecutive request *starts* (not completions, so
@@ -131,6 +147,11 @@ private:
     /// with ErrorCode::InvalidArgument before the body reaches the
     /// caller (Kartend-9ryx).
     QString expectedContentTypePrefix;
+    /// See get(): non-empty -> the host (and every redirect host) must
+    /// match one of these domain suffixes, and the request runs under
+    /// UserVerifiedRedirectPolicy so off-domain redirects are aborted
+    /// before they are contacted (Kartend-pugp.2).
+    QStringList allowedHostSuffixes;
   };
 
   void enqueue(const QString &host, PendingRequest request);
