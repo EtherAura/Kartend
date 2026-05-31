@@ -26,6 +26,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    # Catch a hung build/test before it burns the 6h default. ~30 min covers
+    # the slowest matrix cell (~13 min) with cold-ccache + runner headroom.
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -156,6 +159,7 @@ jobs:
   # is untested and could rot silently.
   build-no-zstd:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -227,6 +231,7 @@ jobs:
 
   sanitizers:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
@@ -323,6 +328,9 @@ jobs:
   # GCC's on Qt-heavy code.
   thread-sanitizer:
     runs-on: ubuntu-24.04
+    # TSan is slower and more variable than the plain build; ~15 min observed,
+    # 45 leaves wide headroom while still well under the 6h default.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -413,7 +421,10 @@ jobs:
 
   maintenance-check:
     runs-on: ubuntu-24.04
-    
+    # clang-tidy maintenance build is the slowest Linux job (~52 min observed);
+    # 90 absorbs cold-ccache variance without false-failing a healthy run.
+    timeout-minutes: 90
+
     steps:
       - uses: actions/checkout@v6
       
@@ -513,6 +524,9 @@ jobs:
   # .zip artifact.
   windows-build-test:
     runs-on: windows-latest
+    # ~45 min observed warm; a cold vcpkg cache rebuilds deps from source and
+    # runs much longer, so 90 avoids false failures while bounding a true hang.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v6
