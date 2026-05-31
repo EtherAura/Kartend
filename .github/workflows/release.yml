@@ -322,7 +322,7 @@ jobs:
       - name: Upload kartend.exe for SignPath signing
         if: steps.signpath_check.outputs.configured == 'true'
         id: upload_kartend_exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unsigned-kartend-exe
           path: dist\kartend\kartend.exe
@@ -407,7 +407,7 @@ jobs:
       - name: Upload setup.exe for SignPath signing
         if: steps.signpath_check.outputs.configured == 'true'
         id: upload_setup_exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unsigned-setup-exe
           path: ${{ steps.installer.outputs.exe }}
