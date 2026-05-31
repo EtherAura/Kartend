@@ -35,6 +35,15 @@ add_executable(test_gridlayoutcalculator
 target_link_libraries(test_gridlayoutcalculator PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
+# VirtualScrollEngine range math (Kartend-tacgk): the pure overscan/clamp band
+# arithmetic (VirtualScrollMath::neededIndexBand) extracted from the engine,
+# plus the GridLayoutCalculator::getVisibleRowRange edge cases it consumes.
+add_executable(test_virtualscrollengine
+  modules/scroll/test_virtualscrollengine.cpp
+)
+target_link_libraries(test_virtualscrollengine PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME VirtualScrollEngine COMMAND test_virtualscrollengine)
+
 # ScrollDataStore tests (synthetic Home view tile population — Kartend-83iu)
 add_executable(test_scrolldatamanager
   modules/scroll/test_scrolldatamanager.cpp

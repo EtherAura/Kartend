@@ -28,6 +28,7 @@
 #include "textzoom.h"
 #include "timerutils.h"
 #include "virtualcontainermanager.h"
+#include "virtualscrollmath.h"
 #include "widgetpoolmanager.h"
 
 #include <algorithm>
@@ -179,32 +180,15 @@ void VirtualScrollEngine::updateVirtualView() {
 }
 
 auto VirtualScrollEngine::calculateNeededIndices() const -> NeededRange {
-  const int firstVisible = m_owner->getFirstVisibleRow();
-  const int lastVisible = m_owner->getLastVisibleRow();
-  const int startRow = qMax(0, firstVisible - 1);
-  int endRow = lastVisible + 1;
-
-  const int itemsPerRow = m_owner->m_metrics.itemsPerRow;
-  const int totalItems = m_owner->m_totalItems;
-  if (itemsPerRow <= 0 || totalItems <= 0) {
-    return {};
-  }
-  const int maxRow = ((totalItems + itemsPerRow - 1) / itemsPerRow) - 1;
-  if (maxRow < 0) {
-    return {};
-  }
-  endRow = std::min(endRow, maxRow);
-  if (endRow < startRow) {
-    return {};
-  }
-
   // Kartend-gro2: rows are contiguous and item indices are monotonic, so the
-  // QSet bookkeeping the old loop did was redundant. Encode the band as a
-  // half-open visual-index range (clamped to totalItems).
-  NeededRange range;
-  range.firstIndex = startRow * itemsPerRow;
-  range.lastIndex = std::min(((endRow + 1) * itemsPerRow) - 1, totalItems - 1);
-  return range;
+  // needed widgets form a single half-open band (no per-index QSet).
+  // Kartend-tacgk: the overscan + clamp arithmetic lives in the pure,
+  // unit-tested VirtualScrollMath::neededIndexBand; here we just feed it the
+  // current viewport rows and collection size from the owning ScrollManager.
+  const VirtualScrollMath::IndexBand band = VirtualScrollMath::neededIndexBand(
+      m_owner->getFirstVisibleRow(), m_owner->getLastVisibleRow(), m_owner->m_metrics.itemsPerRow,
+      m_owner->m_totalItems);
+  return NeededRange{band.firstIndex, band.lastIndex};
 }
 
 void VirtualScrollEngine::removeUnneededWidgets(const NeededRange &needed) {
