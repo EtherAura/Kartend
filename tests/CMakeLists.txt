@@ -241,6 +241,16 @@ add_executable(test_querymanager_cancel_scan
 target_link_libraries(test_querymanager_cancel_scan PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 
+# ScanService persist/prune round-trip tests (Kartend-7vubk): drive
+# scan -> saveItemsToDatabase -> prune against a real on-disk SQLite db seeded
+# with the production schema, covering insert, deletion-pruning, and the
+# cancel-is-a-no-op consistency guarantee.
+add_executable(test_scanservice_persist
+  modules/query/test_scanservice_persist.cpp
+)
+target_link_libraries(test_scanservice_persist PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScanServicePersist COMMAND test_scanservice_persist)
+
 # Regression test: broken symlinks survive a scan/prune cycle (Kartend-9mxh).
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_broken_symlinks
