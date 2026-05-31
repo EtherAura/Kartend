@@ -35,6 +35,7 @@ set(INTEGRATION_TEST_SOURCES
   test_selectiondisplaymanager.cpp
   test_detailspanemanager.cpp
   test_attractmanager.cpp
+  test_dbeventscontroller.cpp
   test_detailpagemanager.cpp
   test_kartmanager.cpp
   test_scanservice.cpp
@@ -61,6 +62,7 @@ set(INTEGRATION_TEST_HEADERS
   test_selectiondisplaymanager.h
   test_detailspanemanager.h
   test_attractmanager.h
+  test_dbeventscontroller.h
   test_detailpagemanager.h
   test_kartmanager.h
   test_scanservice.h

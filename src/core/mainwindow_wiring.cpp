@@ -61,8 +61,7 @@
 //     itemsLoaded               → refreshFilterToolbarOnItemsLoaded
 //     scanProgress              → onScanProgress
 //     scanStarting              → onScanStarting
-//     collectionScanCompleted   → onCollectionScanCompletedStartup
-//     collectionScanCompleted   → onCollectionScanCompletedOverlay
+//     collectionScanCompleted   → onCollectionScanCompleted
 //     scanItemsProgress         → onScanItemsProgress
 //   DatabaseManager → DetailsPaneManager (collection summary refresh)
 //     collectionScanCompleted   → refreshCollectionSummaryOnScanCompleted
@@ -316,9 +315,7 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(db, &DatabaseManager::scanProgress, decCtl, &DbEventsController::onScanProgress);
   QObject::connect(db, &DatabaseManager::scanStarting, decCtl, &DbEventsController::onScanStarting);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
-                   &DbEventsController::onCollectionScanCompletedStartup);
-  QObject::connect(db, &DatabaseManager::collectionScanCompleted, decCtl,
-                   &DbEventsController::onCollectionScanCompletedOverlay);
+                   &DbEventsController::onCollectionScanCompleted);
   QObject::connect(db, &DatabaseManager::scanItemsProgress, decCtl,
                    &DbEventsController::onScanItemsProgress);
 

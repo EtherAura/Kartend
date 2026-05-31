@@ -89,26 +89,37 @@ void DbEventsController::onScanStarting(const QString &name, int estimatedItems)
   }
 }
 
-void DbEventsController::onCollectionScanCompletedStartup(const QString & /*uuid*/) {
-  if (!m_suppressStartupScanOverlays) {
-    return;
+void DbEventsController::onCollectionScanCompleted(const QString & /*uuid*/) {
+  // Kartend-sg1lf: single slot for collectionScanCompleted (was two slots wired
+  // to the same signal). The startup-suppression bookkeeping must settle before
+  // the overlay/reload decision reads m_suppressStartupScanOverlays, so do it
+  // first here — the prior split relied on the two connections firing in that
+  // order, which nothing enforced.
+  //
+  // Startup-suppression bookkeeping (was onCollectionScanCompletedStartup): a
+  // startup scan finishing may release suppression once the last one lands.
+  if (m_suppressStartupScanOverlays) {
+    if (m_startupActiveScanCount > 0) {
+      --m_startupActiveScanCount;
+    }
+    if (m_startupActiveScanCount == 0) {
+      m_suppressStartupScanOverlays = false;
+    }
   }
-  if (m_startupActiveScanCount > 0) {
-    --m_startupActiveScanCount;
-  }
-  if (m_startupActiveScanCount == 0) {
-    m_suppressStartupScanOverlays = false;
-  }
-}
 
-void DbEventsController::onCollectionScanCompletedOverlay(const QString & /*uuid*/) {
-  // Hide scan overlay once ALL scans in a batch have completed. When
-  // showAllSubcollectionItems triggers scans of many descendants, we only
-  // hide the overlay when the last one finishes.
+  // Active-scan + overlay bookkeeping (was onCollectionScanCompletedOverlay).
+  // Hide the overlay only once ALL scans in a batch have completed — when
+  // showAllSubcollectionItems triggers scans of many descendants, we wait for
+  // the last one.
   if (m_activeScanCount > 0) {
     --m_activeScanCount;
   }
-  // Only hide overlay and reload when all scans are complete.
+  // Invariant: a startup scan is always also an active scan, and neither count
+  // goes negative. If this fires, the increment/decrement pairing has desynced
+  // (the exact failure mode the old two-counter split could hit silently).
+  Q_ASSERT(m_activeScanCount >= 0 && m_startupActiveScanCount >= 0 &&
+           m_startupActiveScanCount <= m_activeScanCount);
+
   if (m_activeScanCount != 0) {
     return;
   }
@@ -129,9 +140,14 @@ void DbEventsController::onCollectionScanCompletedOverlay(const QString & /*uuid
       !(*collections)[curIndex].showAllSubcollectionItems) {
     return;
   }
-  // Use a longer delay (150ms) to ensure the scan worker's commit is visible
-  // to the query worker before we request counts.
-  QTimer::singleShot(150, this, [this, curIndex]() {
+  // Kartend-sg1lf: defer to the next event-loop tick (not an arbitrary 150ms).
+  // The old delay guessed at cross-connection WAL-visibility lag, but the query
+  // worker's fetch paths (fetchItemCountImpl / fetchItemsRange) already call
+  // refreshWalView() — a BEGIN/COMMIT that forces a fresh read snapshot — so a
+  // reload issued after this commit is guaranteed to see the scan worker's rows
+  // regardless of timing. singleShot(0) only sidesteps reentrancy with the
+  // running signal emission; correctness no longer rides on the delay length.
+  QTimer::singleShot(0, this, [this, curIndex]() {
     if (auto *nav = m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr) {
       nav->safeReloadCollection(curIndex);
     }

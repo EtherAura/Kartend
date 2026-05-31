@@ -52,6 +52,12 @@ struct DbEventsControllerContext {
 class DbEventsController : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(DbEventsController)
+  // Kartend-sg1lf: the scan-counter state (m_activeScanCount,
+  // m_startupActiveScanCount, m_suppressStartupScanOverlays) is private; the
+  // test drives the scan slots and asserts the suppression-release timing and
+  // count invariants directly, without standing up the DatabaseManager.
+  friend class TestDbEventsController;
+
 public:
   explicit DbEventsController(QObject *parent = nullptr);
   ~DbEventsController() override;
@@ -72,8 +78,12 @@ public slots:
                                          const QHash<QString, QString> &names);
   void onScanProgress(int current, int total, const QString &name);
   void onScanStarting(const QString &name, int estimatedItems);
-  void onCollectionScanCompletedStartup(const QString &uuid);
-  void onCollectionScanCompletedOverlay(const QString &uuid);
+  // Kartend-sg1lf: single scan-completion slot. Was two slots
+  // (onCollectionScanCompletedStartup + onCollectionScanCompletedOverlay) wired
+  // to the same signal, where the connection order decided whether startup
+  // overlay suppression released before the final reload decision read it.
+  // Folding them into one ordered slot removes that emit-order dependency.
+  void onCollectionScanCompleted(const QString &uuid);
   void onScanItemsProgress(int itemsProcessed, int totalItems);
   void refreshCollectionSummaryOnScanCompleted(const QString &uuid);
 
@@ -86,8 +96,9 @@ private:
   // the count reaches zero, suppression releases.
   int m_startupActiveScanCount = 0;
   // Counter of in-flight scans regardless of suppression mode — used by
-  // onCollectionScanCompletedOverlay to detect when the last batch finishes
-  // and the loading overlay should hide.
+  // onCollectionScanCompleted to detect when the last batch finishes and the
+  // loading overlay should hide. Invariant: m_startupActiveScanCount never
+  // exceeds this (a startup scan is always also an active scan).
   int m_activeScanCount = 0;
 };
 

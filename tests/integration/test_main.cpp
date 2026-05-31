@@ -12,6 +12,7 @@
 #include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
 #include "test_attractmanager.h"
+#include "test_dbeventscontroller.h"
 #include "test_detailpagemanager.h"
 #include "test_detailspane_coverflow.h"
 #include "test_detailspanemanager.h"
@@ -112,6 +113,11 @@ int main(int argc, char *argv[]) {
   {
     TestNavigationManager nav;
     status |= QTest::qExec(&nav, argc, argv);
+  }
+  drainGlobalThreadPool();
+  {
+    TestDbEventsController dbEvents;
+    status |= QTest::qExec(&dbEvents, argc, argv);
   }
   drainGlobalThreadPool();
   {
