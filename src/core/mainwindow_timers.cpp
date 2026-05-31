@@ -48,11 +48,21 @@ void MainWindow::setupInitialTimers() {
   // the legacy empty-collections prompt remains as the backstop for power
   // users who later delete every collection.
   if (!m_generalSettings.startup.firstRunComplete) {
+    // Kartend-3vkjc: gate the independent startup tasks (playlist resync,
+    // orphan purge) before queuing the wizard. The gate is a plain bool set
+    // synchronously here during construction, so it is already in effect by
+    // the time any singleShot(0) fires — those tasks then defer themselves
+    // instead of mutating m_collections inside the wizard's modal nested loop.
+    m_startupTasksGated = true;
     // singleShot(0) defers the wizard to the next event-loop iteration so
     // MainWindow's constructor finishes (and the window appears) before the
     // modal pops — otherwise the wizard parents to a not-yet-shown widget.
     QTimer::singleShot(0, this, [this]() {
       showFirstRunWizard();
+      // Wizard done: release the gate and run any startup tasks that deferred
+      // themselves while it was open, in order, so the branch below reads a
+      // settled m_collections rather than state mutated mid-modal.
+      runDeferredStartupTasks();
       // After the wizard the user may still have an empty library (Skip
       // path). Fall through to the legacy prompt so they're not stranded
       // on a blank window with no obvious next step.
@@ -69,6 +79,22 @@ void MainWindow::setupInitialTimers() {
     setupInitialTimersEmptyCollections();
   } else {
     setupInitialTimersWithCollections();
+  }
+}
+
+void MainWindow::runDeferredStartupTasks() {
+  // Kartend-3vkjc: release the gate, then run whatever deferred itself while
+  // the wizard modal was open — resync before orphan purge, the same relative
+  // order they take on a normal (non-first-run) launch. resync rebuilds the
+  // playlist-backed rows in m_collections; the purge then sees the settled set.
+  m_startupTasksGated = false;
+  if (m_pendingResync) {
+    m_pendingResync = false;
+    resyncPlaylistCollections();
+  }
+  if (m_pendingOrphanPurge) {
+    m_pendingOrphanPurge = false;
+    maybePurgeOrphanCollectionData();
   }
 }
 

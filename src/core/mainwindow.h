@@ -266,6 +266,18 @@ protected:
 private:
   bool m_isShuttingDown = false;
   bool m_deferredStartupDone = false;
+  // Kartend-3vkjc: first-run startup gate. When the first-run wizard runs, its
+  // modal exec() spins a nested event loop; the independent startup
+  // singleShots (playlist resync, orphan purge) would otherwise fire inside it
+  // and mutate m_collections before setupInitialTimers' post-wizard branch
+  // reads it. While this gate is set (only when firstRunComplete was false),
+  // those tasks record themselves in the *_pending flags and return without
+  // running; runDeferredStartupTasks() releases the gate and runs them once,
+  // in order, after the wizard returns. firstRunComplete == true never sets
+  // the gate, so the steady-state launch path is unchanged.
+  bool m_startupTasksGated = false;
+  bool m_pendingResync = false;
+  bool m_pendingOrphanPurge = false;
   // Pristine application font, captured per-instance on the first
   // applyGlobalUiFont call so clearing a font override restores Qt's default.
   // Kartend-r2722: was a process-wide static that captured whatever font the
@@ -413,6 +425,12 @@ private:
   void setupInitialTimers();
   void setupInitialTimersEmptyCollections();
   void setupInitialTimersWithCollections();
+  // Kartend-3vkjc: release the first-run gate and run any startup tasks that
+  // deferred themselves while the wizard modal was open, in order.
+  void runDeferredStartupTasks();
+  // Orphan-collection-data purge with its first-run-gate + shutdown guards;
+  // shared by the deferred showEvent task and runDeferredStartupTasks.
+  void maybePurgeOrphanCollectionData();
 
   // Kartend-hzef step 2: scan-counter state moved to DbEventsController.
   // mainwindow_timers.cpp's loadInitialCollection still needs to set the

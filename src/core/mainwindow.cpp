@@ -470,6 +470,14 @@ void MainWindow::rebuildHierarchyCache() {
 }
 
 void MainWindow::resyncPlaylistCollections() {
+  // Kartend-3vkjc: while the first-run wizard modal is open, defer instead of
+  // mutating m_collections under it (both the startup singleShot and the
+  // playlistsChanged signal land here). runDeferredStartupTasks() runs this
+  // once after the wizard returns.
+  if (m_startupTasksGated) {
+    m_pendingResync = true;
+    return;
+  }
   // Strip any prior playlist-backed configs so a rename/delete in PlaylistManager
   // doesn't leave stale entries behind. INI-backed configs (isPlaylist=false)
   // are preserved verbatim because they're the canonical state — only the

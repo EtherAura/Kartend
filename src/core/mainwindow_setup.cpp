@@ -239,14 +239,23 @@ void MainWindow::showEvent(QShowEvent *event) {
   // paints (and the user sees the first frame) before the multi-second
   // table scan starts. Running synchronously inside showEvent blocks paint
   // and produces a visibly-frozen window on large libraries.
-  QTimer::singleShot(0, this, [this]() {
-    if (m_isShuttingDown || QApplication::closingDown()) {
-      return;
-    }
-    if (m_appManager->getDatabaseManager()) {
-      m_appManager->getDatabaseManager()->purgeOrphanCollectionData(m_collections);
-    }
-  });
+  QTimer::singleShot(0, this, [this]() { maybePurgeOrphanCollectionData(); });
+}
+
+void MainWindow::maybePurgeOrphanCollectionData() {
+  // Kartend-3vkjc: while the first-run wizard modal is open, defer instead of
+  // running under its nested event loop; runDeferredStartupTasks() runs this
+  // once after the wizard returns.
+  if (m_startupTasksGated) {
+    m_pendingOrphanPurge = true;
+    return;
+  }
+  if (m_isShuttingDown || QApplication::closingDown()) {
+    return;
+  }
+  if (m_appManager->getDatabaseManager()) {
+    m_appManager->getDatabaseManager()->purgeOrphanCollectionData(m_collections);
+  }
 }
 
 void MainWindow::setupUIReferences() {
