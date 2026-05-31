@@ -166,6 +166,13 @@ void SettingsDialog::saveCollectionFromUI(int index) {
 
   updateParentCollectionFromUI(collection, index);
 
+  // Kartend-i04uo: `collections` and `m_workingCollections` are kept
+  // element-identical. UI edits reach m_workingCollections ONLY through this
+  // method, so the bulk `collections = m_workingCollections` can't leak another
+  // index's unsaved edit. revertCurrentCollectionEdits writes the same value to
+  // both vectors per-index, and add/remove mutate both in lockstep (see
+  // collectionremover.cpp applying one removal map to each), so the bulk-vs-
+  // per-index asymmetry between save and revert never desyncs the two.
   m_workingCollections[index] = collection;
   collections = m_workingCollections;
   originalCollection = collection;
