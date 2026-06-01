@@ -464,23 +464,81 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
     return;
   }
   try {
-    // OR REPLACE: should a row already exist under newUuid (e.g. a
-    // rescan ran before the migration), the migrated row — which
-    // carries the real play history — wins over the fresh one.
-    QSqlQuery items(m_db);
-    items.prepare("UPDATE OR REPLACE items SET collection_uuid = ? WHERE collection_uuid = ?");
-    items.addBindValue(newUuid);
-    items.addBindValue(oldUuid);
-    if (!items.exec()) {
-      throw std::runtime_error(items.lastError().text().toStdString());
-    }
-    QSqlQuery cols(m_db);
-    cols.prepare("UPDATE OR REPLACE collections SET uuid = ? WHERE uuid = ?");
-    cols.addBindValue(newUuid);
-    cols.addBindValue(oldUuid);
-    if (!cols.exec()) {
-      throw std::runtime_error(cols.lastError().text().toStdString());
-    }
+    auto run = [&](const QString &sql, const QVariantList &binds) {
+      QSqlQuery q(m_db);
+      q.prepare(sql);
+      for (const QVariant &b : binds) {
+        q.addBindValue(b);
+      }
+      if (!q.exec()) {
+        throw std::runtime_error(q.lastError().text().toStdString());
+      }
+    };
+
+    // The old UPDATE OR REPLACE only re-keyed `items` + `collections`. On a
+    // (new_uuid, path) conflict REPLACE silently deleted the pre-existing target
+    // row — losing its usage columns and orphaning its item_metadata /
+    // item_artwork / launch_history (keyed independently by collection_uuid).
+    // It also never re-keyed the per-item child tables or playlist references at
+    // all, so a rename stranded curation, artwork overrides, play history, and
+    // playlist entries under the old uuid (Kartend-ndyf). Re-key every table
+    // explicitly and resolve conflicts deliberately, all inside the transaction.
+
+    // items: a rescan may have created fresh stubs under newUuid before this
+    // ran. Merge their usage onto the old (real-history) row — MAX so a
+    // post-rename launch on the stub isn't lost — then drop the stub so the
+    // re-key can't hit uniq_items_uuid_path.
+    run("UPDATE items SET "
+        "play_count = MAX(play_count, COALESCE((SELECT n.play_count FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "total_play_seconds = MAX(total_play_seconds, COALESCE((SELECT n.total_play_seconds "
+        "FROM items n WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "last_played = MAX(COALESCE(last_played,''), COALESCE((SELECT n.last_played FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),'')), "
+        "rating = MAX(rating, COALESCE((SELECT n.rating FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "artwork_path = COALESCE(NULLIF(items.artwork_path,''), (SELECT n.artwork_path FROM items "
+        "n "
+        "WHERE n.collection_uuid=? AND n.path=items.path AND n.artwork_path IS NOT NULL "
+        "AND n.artwork_path!='')) "
+        "WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path)",
+        {newUuid, newUuid, newUuid, newUuid, newUuid, oldUuid, newUuid});
+    run("DELETE FROM items WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items o "
+        "WHERE o.collection_uuid=? AND o.path=items.path)",
+        {newUuid, oldUuid});
+    run("UPDATE items SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // item_metadata (UNIQUE collection_uuid,path) + item_artwork (UNIQUE
+    // collection_uuid,path,artwork_type): the old rows hold the user's curation
+    // / artwork overrides; any newUuid rows are post-rename stubs. Drop the
+    // conflicting stubs (old wins), then re-key.
+    run("DELETE FROM item_metadata WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_metadata "
+        "o "
+        "WHERE o.collection_uuid=? AND o.path=item_metadata.path)",
+        {newUuid, oldUuid});
+    run("UPDATE item_metadata SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+    run("DELETE FROM item_artwork WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_artwork o "
+        "WHERE o.collection_uuid=? AND o.path=item_artwork.path "
+        "AND o.artwork_type=item_artwork.artwork_type)",
+        {newUuid, oldUuid});
+    run("UPDATE item_artwork SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // launch_history is append-only (no unique key) — just re-label every row.
+    run("UPDATE launch_history SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // Playlist references into this collection: nesting parent + per-item source
+    // refs. No unique constraint is at risk, so a plain re-key suffices.
+    run("UPDATE playlists SET parent_collection_uuid=? WHERE parent_collection_uuid=?",
+        {newUuid, oldUuid});
+    run("UPDATE playlist_items SET source_collection_uuid=? WHERE source_collection_uuid=?",
+        {newUuid, oldUuid});
+
+    // collections: drop any stale stub already sitting at newUuid, then re-key
+    // the real row (replacing the old OR REPLACE, which would silently delete).
+    run("DELETE FROM collections WHERE uuid=?", {newUuid});
+    run("UPDATE collections SET uuid=? WHERE uuid=?", {newUuid, oldUuid});
+
     if (!m_db.commit()) {
       throw std::runtime_error(m_db.lastError().text().toStdString());
     }
