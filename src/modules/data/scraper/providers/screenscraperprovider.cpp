@@ -610,8 +610,15 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   if (cands.isOk() && !cands.value().isEmpty()) {
     auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
     if (detail.isOk()) {
-      m_lastDetailId = cands.value().first().providerSpecificId;
-      m_lastDetail = detail.value();
+      const QString id = cands.value().first().providerSpecificId;
+      if (!id.isEmpty()) {
+        m_detailCacheOrder.removeAll(id); // refresh position if re-looked-up
+        m_detailCache.insert(id, detail.value());
+        m_detailCacheOrder.append(id);
+        while (m_detailCacheOrder.size() > kMaxDetailCacheEntries) {
+          m_detailCache.remove(m_detailCacheOrder.takeFirst());
+        }
+      }
     }
   }
   callback(cands);
@@ -722,11 +729,12 @@ void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidat
                                         DetailCallback callback) {
   if (!callback) return;
   // Detail came in the same response as the lookup — return the cached
-  // ScrapedItem when the cache key matches. The dialog always calls
-  // fetchDetail with a candidate from the most recent lookup, so the
-  // single-entry cache is sufficient.
-  if (!m_lastDetailId.isEmpty() && candidate.providerSpecificId == m_lastDetailId) {
-    callback(m_lastDetail);
+  // ScrapedItem when the id is still in the bounded cache. Keying by id (rather
+  // than a single last-lookup slot) means an intervening lookup for another
+  // batch item can't displace this one (Kartend-r4tj).
+  if (const auto it = m_detailCache.constFind(candidate.providerSpecificId);
+      it != m_detailCache.constEnd()) {
+    callback(it.value());
     return;
   }
   callback(ErrorUtils::ErrorContext::error(
