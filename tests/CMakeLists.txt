@@ -305,6 +305,15 @@ add_executable(test_querymanager_cross_collection_count
 target_link_libraries(test_querymanager_cross_collection_count PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME QueryManagerCrossCollectionCount COMMAND test_querymanager_cross_collection_count)
 
+# Regression test: a rescan that changes an existing collection's item set must
+# invalidate the query worker's sorted-items cache (Kartend-6r4g2).
+add_executable(test_querymanager_cache_invalidation
+  modules/query/test_querymanager_cache_invalidation.cpp
+  modules/query/workersignalspy.h
+)
+target_link_libraries(test_querymanager_cache_invalidation PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerCacheInvalidation COMMAND test_querymanager_cache_invalidation)
+
 # QueryManagerCrossCollectionTokens (Kartend-jb6d). Locks in that the
 # structured-token filters apply when queryIncludeAllCollections=true so a
 # future refactor of the cross-mode SQL path can't quietly drop the

@@ -80,8 +80,18 @@ public slots:
   void ensureScannedForContext(const CollectionContext &context,
                                const QList<CollectionConfig> &allCollections);
 
-  /// Invalidates collection cache on worker thread (async)
+  /// Invalidates collection cache on worker thread (async). Destructive: also
+  /// deletes the collection's item rows (the force-rescan path). For a
+  /// non-destructive cache drop after a background scan, use
+  /// invalidateQueryCaches() instead.
   void invalidateCollectionCache(const QString &collectionUuid);
+
+  /// Drops this worker's in-memory + temp-table query caches (uuid temp table,
+  /// sorted-items cache, playlist scope) WITHOUT deleting any rows. Wired to
+  /// scan completion so a background rescan that changed an existing
+  /// collection's item set can't leave stale ranges/counts behind — the
+  /// sorted-cache hash keys on the uuid list, not item contents (Kartend-6r4g2).
+  void invalidateQueryCaches();
 
   /// Drops the cached smart-playlist scope key so the next fetch re-evaluates
   /// the filter against current item data. Cheap (in-memory) — wired to launch

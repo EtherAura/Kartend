@@ -133,6 +133,15 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
           &DatabaseManager::scanItemsProgress);
   connect(m_scanWorker, &QueryManager::collectionScanCompleted, this,
           &DatabaseManager::collectionScanCompleted);
+  // A background scan (on m_scanWorker) commits item changes the query worker's
+  // caches can't see — the sorted-items cache keys on the collection uuid list,
+  // not item contents, so it would keep serving stale ranges/counts after a
+  // rescan adds/removes items. Drop the query worker's caches (non-destructive)
+  // on scan completion so the next fetch rebuilds from fresh data
+  // (Kartend-6r4g2). Runs on the query worker's thread via the queued context.
+  connect(
+      m_scanWorker, &QueryManager::collectionScanCompleted, m_worker,
+      [w = m_worker](const QString &) { w->invalidateQueryCaches(); }, Qt::QueuedConnection);
   connect(m_scanWorker, &QueryManager::collectionScanSummary, this,
           &DatabaseManager::collectionScanSummary);
 
