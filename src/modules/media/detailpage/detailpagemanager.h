@@ -3,8 +3,10 @@
 
 #include "idetailpagemanager.h"
 #include "idetailpageoverlay.h"
+#include "itemdetaildata.h"
 #include "setuputils.h"
 #include <QObject>
+#include <QString>
 
 class DatabaseManager;
 class DetailsPaneManager;
@@ -54,11 +56,26 @@ public:
   /// True while the detail-page overlay is showing.
   [[nodiscard]] bool isOverlayActive() const override;
 
+private slots:
+  /// Kartend-4p8o: receives the off-thread detail-page load. Drops a result
+  /// whose token no longer matches the latest request (the user opened another
+  /// item meanwhile), otherwise maps it into the overlay Payload and refreshes
+  /// the already-shown overlay.
+  void onItemDetailLoaded(const ItemDetailData &data, int requestToken);
+
 private:
   // ctx is the single source of truth for sibling managers (DetailsPaneManager,
   // DatabaseManager) — never cache them as direct fields.
   const ApplicationContext *m_ctx = nullptr;
   IDetailPageOverlay *m_overlay = nullptr;
+  // Kartend-4p8o: monotonically increasing per-open token; an async result is
+  // applied only when it still matches the latest request.
+  int m_detailLoadToken = 0;
+  // Cheap selection context for the in-flight load. filePath/itemName aren't
+  // part of ItemDetailData, so stash them to assemble the final Payload when
+  // the worker result lands.
+  QString m_pendingFilePath;
+  QString m_pendingItemName;
 };
 
 #endif // DETAILPAGEMANAGER_H

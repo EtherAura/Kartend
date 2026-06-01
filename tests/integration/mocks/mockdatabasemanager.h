@@ -74,10 +74,14 @@ public:
   }
   void invalidateMetadataCacheItem(const QString &, const QString &) override {}
 
-  [[nodiscard]] UsageStatsStore::ItemUsageStats
-  loadItemUsageStats(const QString &, const QString &) const override {
+  [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &,
+                                                                   const QString &) const override {
     return {};
   }
+  // Default no-op; tests that exercise the detail-page async path subclass and
+  // emit itemDetailLoaded themselves (see the base-class doc comment).
+  void loadItemDetailAsync(int, const QString &, const QString &, const QString &, const QString &,
+                           const QString &) override {}
   void recordItemLaunch(const QString &, const QString &) override {}
   void recordItemPlaySession(const QString &, const QString &, qint64) override {}
   [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const override {

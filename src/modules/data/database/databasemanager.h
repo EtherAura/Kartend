@@ -66,6 +66,12 @@ public:
                        const QList<CollectionConfig> &allCollections, int offset, int limit,
                        const QString &filter = QString()) override;
 
+  /// Kartend-4p8o: dispatch the detail-page load to the query worker; the
+  /// result arrives on the itemDetailLoaded signal.
+  void loadItemDetailAsync(int requestToken, const QString &collectionUuid, const QString &filePath,
+                           const QString &artworkDir, const QString &videoDir,
+                           const QString &manualDir) override;
+
   /// Finds the visual index of a specific file path in the current sorted
   /// order. Used to restore selection after sort mode changes.
   void fetchVisualIndexForPath(const CollectionContext &context,
@@ -198,6 +204,9 @@ signals:
   void requestFetchVisualIndexForPath(const CollectionContext &context,
                                       const QList<CollectionConfig> &allCollections,
                                       const QString &filePath);
+  void requestLoadItemDetail(int requestToken, const QString &collectionUuid,
+                             const QString &filePath, const QString &artworkDir,
+                             const QString &videoDir, const QString &manualDir);
   void requestInvalidateCache(const QString &collectionUuid);
 
   // Internal signal to trigger background scan on dedicated scan worker.

@@ -11,6 +11,7 @@
 #include "errorutils.h"
 #include "historystore.h"
 #include "itemartwork.h"
+#include "itemdetaildata.h"
 #include "itemmetadata.h"
 #include "usagestatsstore.h"
 
@@ -108,6 +109,16 @@ public:
 
   [[nodiscard]] virtual UsageStatsStore::ItemUsageStats
   loadItemUsageStats(const QString &collectionUuid, const QString &path) const = 0;
+
+  /// Asynchronously load everything the item detail page shows — metadata,
+  /// usage, resolved artwork/video/manual paths, file info — off the UI thread
+  /// (Kartend-4p8o). Runs the reads on the query-worker connection plus the
+  /// filesystem probes, then emits itemDetailLoaded with the same
+  /// @p requestToken so a stale result (selection moved on) can be dropped.
+  virtual void loadItemDetailAsync(int requestToken, const QString &collectionUuid,
+                                   const QString &filePath, const QString &artworkDir,
+                                   const QString &videoDir, const QString &manualDir) = 0;
+
   virtual void recordItemLaunch(const QString &collectionUuid, const QString &path) = 0;
   virtual void recordItemPlaySession(const QString &collectionUuid, const QString &path,
                                      qint64 seconds) = 0;
@@ -180,6 +191,9 @@ signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
+  /// Result of loadItemDetailAsync (Kartend-4p8o); @p requestToken echoes the
+  /// call so DetailPageManager can ignore a result for a superseded selection.
+  void itemDetailLoaded(const ItemDetailData &data, int requestToken);
   /// `requestedCollectionIndex` echoes the CollectionContext::currentIndex
   /// the fetch was issued for. itemsRangeLoaded is a shared signal, so a
   /// consumer with several fetches in flight at once (e.g. the Scraper

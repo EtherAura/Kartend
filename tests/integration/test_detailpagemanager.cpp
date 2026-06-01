@@ -1,10 +1,14 @@
 #include "test_detailpagemanager.h"
 
+#include "applicationcontext.h"
 #include "applicationmanager.h"
 #include "detailpagemanager.h"
 #include "idetailpageoverlay.h"
+#include "idetailspanemanager.h"
+#include "itemdetaildata.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"
+#include "mocks/mockdatabasemanager.h"
 
 #include <QTest>
 
@@ -27,6 +31,44 @@ public:
   int hideCount = 0;
   bool active = false;
   Payload lastPayload;
+};
+
+/// Minimal IDetailsPaneManager that hands back a caller-set ItemContext. Only
+/// currentItemContext() matters for DetailPageManager; the rest are no-ops.
+class StubDetailsPaneManager : public IDetailsPaneManager {
+public:
+  void toggleSidebar() override {}
+  void updateSidebarMetadata(ItemWidget *) override {}
+  void updateSidebarMetadata(const QString &, const QString &) override {}
+  void refreshSidebarMetadataImmediate() override {}
+  void applySidebarStateForCollection(int) override {}
+  void updateSidebarLayout(int) override {}
+  [[nodiscard]] bool isSidebarVisible() const override { return false; }
+  [[nodiscard]] IDetailsPane *sidebarWidget() const override { return nullptr; }
+  [[nodiscard]] const ItemContext &currentItemContext() const override { return ctx; }
+
+  ItemContext ctx;
+};
+
+/// Capturing DatabaseManager double: records the async detail request and lets
+/// the test emit the result on demand (the inherited itemDetailLoaded signal),
+/// so the orchestration can be driven deterministically without a worker
+/// thread. No own Q_OBJECT needed — it only emits a base-class signal.
+class CapturingDetailDb : public KartendTest::MockDatabaseManager {
+public:
+  void loadItemDetailAsync(int token, const QString &, const QString &filePath, const QString &,
+                           const QString &, const QString &) override {
+    ++requestCount;
+    lastToken = token;
+    lastFilePath = filePath;
+  }
+  void emitDetailLoaded(const ItemDetailData &data, int token) {
+    emit itemDetailLoaded(data, token);
+  }
+
+  int requestCount = 0;
+  int lastToken = -1;
+  QString lastFilePath;
 };
 
 } // namespace
@@ -129,4 +171,125 @@ void TestDetailPageManager::testFixtureExposesDetailPageManagerViaApplicationMan
   // on the invalid item context).
   QVERIFY(detailPage != nullptr);
   QVERIFY(!detailPage->isOverlayActive());
+}
+
+void TestDetailPageManager::testShowForCurrentSelectionShowsCheapOverlayThenRequestsLoad() {
+  StubDetailsPaneManager pane;
+  pane.ctx.filePath = QStringLiteral("/games/sonic.bin");
+  pane.ctx.itemName = QStringLiteral("Sonic");
+  pane.ctx.uuid = QStringLiteral("uuid-1");
+
+  CapturingDetailDb db;
+  StubDetailPageOverlay overlay;
+  ApplicationContext ctx;
+  ctx.managers.detailsPaneManager = &pane;
+  ctx.managers.databaseManager = &db;
+
+  DetailPageManager mgr;
+  DetailPageManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.overlay = &overlay;
+  mgr.setupReferences(setup);
+
+  mgr.showForCurrentSelection();
+
+  // Kartend-4p8o: the overlay is shown immediately with the cheap fields and
+  // no artwork (that comes from the async load), so the open never blocks on
+  // the DB / filesystem.
+  QCOMPARE(overlay.showCount, 1);
+  QCOMPARE(overlay.lastPayload.filePath, QStringLiteral("/games/sonic.bin"));
+  QCOMPARE(overlay.lastPayload.itemName, QStringLiteral("Sonic"));
+  QVERIFY(overlay.lastPayload.artwork.isEmpty());
+
+  // The detail load was dispatched for that file with a fresh (positive) token.
+  QCOMPARE(db.requestCount, 1);
+  QCOMPARE(db.lastFilePath, QStringLiteral("/games/sonic.bin"));
+  QVERIFY(db.lastToken > 0);
+}
+
+void TestDetailPageManager::testItemDetailLoadedPopulatesOverlay() {
+  StubDetailsPaneManager pane;
+  pane.ctx.filePath = QStringLiteral("/games/sonic.bin");
+  pane.ctx.itemName = QStringLiteral("Sonic");
+  pane.ctx.uuid = QStringLiteral("uuid-1");
+
+  CapturingDetailDb db;
+  StubDetailPageOverlay overlay;
+  ApplicationContext ctx;
+  ctx.managers.detailsPaneManager = &pane;
+  ctx.managers.databaseManager = &db;
+
+  DetailPageManager mgr;
+  DetailPageManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.overlay = &overlay;
+  mgr.setupReferences(setup);
+
+  mgr.showForCurrentSelection();
+  QCOMPARE(overlay.showCount, 1);
+
+  ItemDetailData data;
+  data.valid = true;
+  data.metadata.title = QStringLiteral("Sonic the Hedgehog"); // wins over the file stem
+  data.manualPath = QStringLiteral("/manuals/sonic.pdf");
+  data.typedArtwork.append({QStringLiteral("front"), QStringLiteral("/art/front/sonic.png")});
+  data.videoPath = QStringLiteral("/video/sonic.mp4");
+  data.fileSize = 4096;
+  data.fileExtension = QStringLiteral(".bin");
+  db.emitDetailLoaded(data, db.lastToken);
+
+  // The overlay was refreshed with the loaded payload.
+  QCOMPARE(overlay.showCount, 2);
+  QCOMPARE(overlay.lastPayload.itemName, QStringLiteral("Sonic the Hedgehog"));
+  QCOMPARE(overlay.lastPayload.manualPath, QStringLiteral("/manuals/sonic.pdf"));
+  QCOMPARE(overlay.lastPayload.fileSize, qint64(4096));
+  // Gallery order: video tile first, then the typed 'front' tile.
+  QCOMPARE(overlay.lastPayload.artwork.size(), 2);
+  QVERIFY(overlay.lastPayload.artwork.first().isVideo);
+  QCOMPARE(overlay.lastPayload.artwork.first().path, QStringLiteral("/video/sonic.mp4"));
+  QCOMPARE(overlay.lastPayload.artwork.at(1).path, QStringLiteral("/art/front/sonic.png"));
+}
+
+void TestDetailPageManager::testStaleItemDetailResultIsIgnored() {
+  StubDetailsPaneManager pane;
+  pane.ctx.filePath = QStringLiteral("/a");
+  pane.ctx.itemName = QStringLiteral("A");
+  pane.ctx.uuid = QStringLiteral("uuid-a");
+
+  CapturingDetailDb db;
+  StubDetailPageOverlay overlay;
+  ApplicationContext ctx;
+  ctx.managers.detailsPaneManager = &pane;
+  ctx.managers.databaseManager = &db;
+
+  DetailPageManager mgr;
+  DetailPageManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.overlay = &overlay;
+  mgr.setupReferences(setup);
+
+  mgr.showForCurrentSelection(); // token for item A
+  const int staleToken = db.lastToken;
+
+  // The user opens item B before A's load returns.
+  pane.ctx.filePath = QStringLiteral("/b");
+  pane.ctx.itemName = QStringLiteral("B");
+  pane.ctx.uuid = QStringLiteral("uuid-b");
+  mgr.showForCurrentSelection(); // cheap show for B
+  QCOMPARE(overlay.showCount, 2);
+
+  // A's (now stale) result arrives — must be dropped, not painted over B.
+  ItemDetailData stale;
+  stale.valid = true;
+  stale.metadata.title = QStringLiteral("A-details");
+  db.emitDetailLoaded(stale, staleToken);
+  QCOMPARE(overlay.showCount, 2); // unchanged
+
+  // B's current result is applied.
+  ItemDetailData fresh;
+  fresh.valid = true;
+  fresh.metadata.title = QStringLiteral("B-details");
+  db.emitDetailLoaded(fresh, db.lastToken);
+  QCOMPARE(overlay.showCount, 3);
+  QCOMPARE(overlay.lastPayload.itemName, QStringLiteral("B-details"));
 }

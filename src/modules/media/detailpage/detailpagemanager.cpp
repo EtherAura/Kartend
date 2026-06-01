@@ -1,19 +1,11 @@
-// Coordinates the item detail page (overlay + data load).
+// Coordinates the item detail page (overlay + async data load).
 #include "detailpagemanager.h"
 
-#include <QDateTime>
-#include <QFileInfo>
-#include <QHash>
-#include <QStringList>
-
 #include "applicationcontext.h"
-#include "artworkutils.h"
 #include "detailpagehelpers.h"
 #include "idatabasemanager.h"
-#include "idetailpageoverlay.h"
 #include "idetailspanemanager.h"
 #include "itemartwork.h"
-#include "videoutils.h"
 
 DetailPageManager::DetailPageManager(QObject *parent) : QObject(parent) {}
 DetailPageManager::~DetailPageManager() = default;
@@ -26,11 +18,17 @@ void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
   // DetailPageOverlay header for the signal symbol. The connection is now
   // made in MainWindow alongside the overlay's other UI-layer wiring;
   // DetailPageManager just builds payloads and drives showWith().
+
+  // Kartend-4p8o: receive the off-thread detail-page load result. The DB lives
+  // for the app lifetime, so a one-time UniqueConnection here needs no teardown.
+  if (IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr) {
+    connect(db, &IDatabaseManager::itemDetailLoaded, this, &DetailPageManager::onItemDetailLoaded,
+            Qt::UniqueConnection);
+  }
 }
 
 void DetailPageManager::showForCurrentSelection() {
   IDetailsPaneManager *detailsPane = m_ctx ? m_ctx->detailsPaneManager() : nullptr;
-  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_overlay || !detailsPane) {
     return;
   }
@@ -41,86 +39,73 @@ void DetailPageManager::showForCurrentSelection() {
     return;
   }
 
+  // Kartend-4p8o: show the overlay immediately with the cheap fields (no DB,
+  // no filesystem) so the open feels instant, then load metadata + artwork +
+  // file info off the UI thread and refresh when it lands. The previous inline
+  // path issued three synchronous DB reads plus uncached directory scans before
+  // the overlay ever appeared, stalling the UI on slow / cold storage.
+  IDetailPageOverlay::Payload cheap;
+  cheap.filePath = itemCtx.filePath;
+  cheap.itemName = itemCtx.itemName;
+  m_overlay->showWith(cheap);
+
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (!db) {
+    // No async source (e.g. a bare test fixture): the cheap overlay stands.
+    return;
+  }
+
+  // Stash the cheap context — filePath/itemName aren't carried in
+  // ItemDetailData — and bump the token so a result for a previously-selected
+  // item (the user moved on before the load finished) is ignored on arrival.
+  m_pendingFilePath = itemCtx.filePath;
+  m_pendingItemName = itemCtx.itemName;
+  const int token = ++m_detailLoadToken;
+  db->loadItemDetailAsync(token, itemCtx.uuid, itemCtx.filePath, itemCtx.artworkDir,
+                          itemCtx.videoDir, itemCtx.manualDir);
+}
+
+void DetailPageManager::onItemDetailLoaded(const ItemDetailData &data, int requestToken) {
+  // Drop a stale result: the user opened another item while this one loaded.
+  if (requestToken != m_detailLoadToken || !m_overlay || !data.valid) {
+    return;
+  }
+
   IDetailPageOverlay::Payload payload;
-  payload.filePath = itemCtx.filePath;
-  payload.itemName = itemCtx.itemName;
+  payload.filePath = m_pendingFilePath;
+  payload.itemName =
+      DetailPagePayloadBuilder::pickDisplayTitle(m_pendingItemName, data.metadata.title);
+  payload.metadata = data.metadata;
+  payload.usage = data.usage;
+  payload.manualPath = data.manualPath;
+  payload.fileSize = data.fileSize;
+  payload.fileModified = data.fileModified;
+  payload.fileExtension = data.fileExtension;
 
-  const QString baseName = QFileInfo(itemCtx.filePath).completeBaseName();
-
-  // ── Metadata + manual + usage ────────────────────────────────────────
-  if (db && !itemCtx.uuid.isEmpty()) {
-    payload.metadata = db->loadItemMetadata(itemCtx.uuid, itemCtx.filePath);
-    payload.usage = db->loadItemUsageStats(itemCtx.uuid, itemCtx.filePath);
-    payload.itemName =
-        DetailPagePayloadBuilder::pickDisplayTitle(payload.itemName, payload.metadata.title);
-    payload.manualPath = ItemMetadataStore::resolveManualFile(payload.metadata.manualPath, baseName,
-                                                              itemCtx.manualDir);
+  // Typed tiles in standard-then-custom order; the worker resolved the paths,
+  // the UI owns the labels (standard display name, or the custom type id).
+  for (const auto &[type, path] : data.typedArtwork) {
+    const QString label = ItemArtworkStore::standardTypeDisplayName(type);
+    payload.artwork.append({label.isEmpty() ? type : label, path, /*isVideo=*/false});
   }
-
-  // ── Artwork tiles (every standard type + any custom override the user
-  // configured). Mirrors DetailsPaneManager::updateSidebarMetadata's gallery
-  // build so the same set of artworks shows up here. ───────────────────
-  QHash<QString, QString> overridesByType;
-  QStringList customOrder;
-  if (db && !itemCtx.uuid.isEmpty()) {
-    const auto rows = db->loadItemArtwork(itemCtx.uuid, itemCtx.filePath);
-    overridesByType = DetailPagePayloadBuilder::buildArtworkOverrideMap(rows);
-    customOrder = DetailPagePayloadBuilder::collectCustomArtworkTypes(rows);
-  }
-
-  auto pushArtwork = [&](const QString &type, const QString &label) {
-    const QString resolved = ItemArtworkStore::resolveArtworkPath(
-        overridesByType.value(type), baseName, itemCtx.artworkDir, type);
-    if (!resolved.isEmpty()) {
-      payload.artwork.append({label, resolved});
-    }
-  };
-  for (const QString &type : ItemArtworkStore::standardTypes()) {
-    pushArtwork(type, ItemArtworkStore::standardTypeDisplayName(type));
-  }
-  for (const QString &type : customOrder) {
-    pushArtwork(type, type);
-  }
-
-  // Fall back to the flat-layout artwork the sidebar's preview pane shows
-  // ({artworkDir}/{baseName}.{ext}). Most users haven't migrated to the
-  // type-subdirectory layout that ItemArtworkStore::resolveArtworkPath
-  // expects, so without this the hero pane would be empty for the common
-  // case. Prepend so it's the first thing shown; only added when no typed
-  // artwork already covered the same file.
-  if (!itemCtx.artworkDir.isEmpty()) {
-    const QString fallback = ArtworkUtils::findArtworkForFile(
-        QFileInfo(itemCtx.filePath).fileName(), itemCtx.artworkDir);
-    if (!fallback.isEmpty()) {
-      bool alreadyListed = false;
-      for (const auto &entry : payload.artwork) {
-        if (entry.path == fallback) {
-          alreadyListed = true;
-          break;
-        }
-      }
-      if (!alreadyListed) {
-        payload.artwork.prepend({tr("Cover"), fallback, /*isVideo=*/false});
+  // Flat-layout fallback cover, prepended so it leads — but only when no typed
+  // tile already covers the same file (mirrors the prior ordering).
+  if (!data.fallbackCoverPath.isEmpty()) {
+    bool alreadyListed = false;
+    for (const auto &entry : payload.artwork) {
+      if (entry.path == data.fallbackCoverPath) {
+        alreadyListed = true;
+        break;
       }
     }
-  }
-
-  // Prepend the video tile so the gallery follows the video-first ordering
-  // the sidebar uses. Mirrors DetailsPaneManager::updateSidebarMetadata's
-  // video lookup; an empty videoDir or missing file just yields no tile.
-  if (!itemCtx.videoDir.isEmpty()) {
-    const QString videoPath = VideoUtils::findVideoForFile(itemCtx.filePath, itemCtx.videoDir);
-    if (!videoPath.isEmpty()) {
-      payload.artwork.prepend({tr("Video"), videoPath, /*isVideo=*/true});
+    if (!alreadyListed) {
+      payload.artwork.prepend({tr("Cover"), data.fallbackCoverPath, /*isVideo=*/false});
     }
   }
-
-  // ── File info ────────────────────────────────────────────────────────
-  const auto fileFields =
-      DetailPagePayloadBuilder::buildFileInfoFields(QFileInfo(itemCtx.filePath));
-  payload.fileSize = fileFields.fileSize;
-  payload.fileModified = fileFields.fileModified;
-  payload.fileExtension = fileFields.fileExtension;
+  // Video tile leads the gallery (video-first ordering the sidebar uses).
+  if (!data.videoPath.isEmpty()) {
+    payload.artwork.prepend({tr("Video"), data.videoPath, /*isVideo=*/true});
+  }
 
   m_overlay->showWith(payload);
 }

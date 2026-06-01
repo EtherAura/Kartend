@@ -3,6 +3,7 @@
 
 #include "loggingcategories.h"
 #include <atomic>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -16,14 +17,19 @@
 #include <QtGlobal>
 #include <stdexcept>
 
+#include "artworkutils.h"
 #include "collection/collectioncontext.h"
 #include "errorutils.h"
+#include "itemartwork.h"
+#include "itemmetadata.h"
 #include "pathutils.h"
 #include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
 #include "searchqueryparser.h"
 #include "uiconstants/database.h"
+#include "usagestatsstore.h"
+#include "videoutils.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -489,4 +495,85 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
                           << query.lastError().text();
     emit visualIndexForPathLoaded(-1, filePath);
   }
+}
+
+void QueryManager::loadItemDetail(int requestToken, const QString &collectionUuid,
+                                  const QString &filePath, const QString &artworkDir,
+                                  const QString &videoDir, const QString &manualDir) {
+  assertOwnerThread();
+  ItemDetailData data;
+  if (!ensureDatabaseAvailable("QueryManager::loadItemDetail")) {
+    emit itemDetailLoaded(data, requestToken); // valid == false
+    return;
+  }
+  // See the freshest committed rows from the scan worker (same guard the fetch
+  // paths use) — the detail page is often opened right after a scan.
+  refreshWalView();
+
+  const QString baseName = QFileInfo(filePath).completeBaseName();
+
+  // Per-item artwork overrides keyed by type (empty without a DB row); custom
+  // (non-standard) types keep their stored order so the gallery lists them
+  // after the standard set. The DB-backed fields below only load with a uuid,
+  // but typed-artwork resolution runs regardless — a hash-only / DAT-less item
+  // still surfaces standard-subdir artwork (matches the prior inline path).
+  QHash<QString, QString> overridesByType;
+  QStringList customOrder;
+  if (!collectionUuid.isEmpty()) {
+    if (auto md = ItemMetadataStore::load(m_db, collectionUuid, filePath); md.isOk()) {
+      data.metadata = md.value();
+    }
+    if (auto us = UsageStatsStore::loadForItem(m_db, collectionUuid, filePath); us.isOk()) {
+      data.usage = us.value();
+    }
+    data.manualPath =
+        ItemMetadataStore::resolveManualFile(data.metadata.manualPath, baseName, manualDir);
+
+    if (auto aw = ItemArtworkStore::loadAllForItem(m_db, collectionUuid, filePath); aw.isOk()) {
+      const auto &rows = aw.value();
+      overridesByType.reserve(rows.size());
+      for (const auto &row : rows) {
+        overridesByType.insert(row.artworkType, row.manualPath);
+        if (!ItemArtworkStore::isStandardType(row.artworkType)) {
+          customOrder.append(row.artworkType);
+        }
+      }
+    }
+  }
+
+  const auto resolveType = [&](const QString &type) {
+    const QString resolved = ItemArtworkStore::resolveArtworkPath(overridesByType.value(type),
+                                                                  baseName, artworkDir, type);
+    if (!resolved.isEmpty()) {
+      data.typedArtwork.append({type, resolved});
+    }
+  };
+  for (const QString &type : ItemArtworkStore::standardTypes()) {
+    resolveType(type);
+  }
+  for (const QString &type : customOrder) {
+    resolveType(type);
+  }
+
+  // Flat-layout fallback cover ({artworkDir}/{baseName}.{ext}) via the cached
+  // directory scan (Kartend-4p8o: was findArtworkForFile, an uncached scan).
+  if (!artworkDir.isEmpty()) {
+    data.fallbackCoverPath =
+        ArtworkUtils::findArtworkForFileCached(QFileInfo(filePath).fileName(), artworkDir);
+  }
+  if (!videoDir.isEmpty()) {
+    data.videoPath = VideoUtils::findVideoForFile(filePath, videoDir);
+  }
+
+  // File info — the per-open stat is part of the stall this moves off the UI
+  // thread.
+  if (const QFileInfo fi(filePath); fi.exists()) {
+    data.fileSize = fi.size();
+    data.fileModified = fi.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
+    data.fileExtension =
+        fi.suffix().isEmpty() ? QString() : QStringLiteral(".%1").arg(fi.suffix().toLower());
+  }
+
+  data.valid = true;
+  emit itemDetailLoaded(data, requestToken);
 }

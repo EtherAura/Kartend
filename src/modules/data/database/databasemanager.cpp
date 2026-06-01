@@ -56,6 +56,9 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
   qRegisterMetaType<QHash<QString, qint64>>("QHash<QString, qint64>");
+  // Kartend-4p8o: ItemDetailData crosses the query-worker -> main-thread queued
+  // connection (itemDetailLoaded), so it needs an explicit meta-type.
+  qRegisterMetaType<ItemDetailData>("ItemDetailData");
 
   initDatabase();
 
@@ -87,6 +90,7 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   connect(this, &DatabaseManager::requestFetchVisualIndexForPath, m_worker,
           &QueryManager::fetchVisualIndexForPath);
+  connect(this, &DatabaseManager::requestLoadItemDetail, m_worker, &QueryManager::loadItemDetail);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
           &QueryManager::invalidateCollectionCache);
 
@@ -114,6 +118,8 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
           &DatabaseManager::onWorkerItemsRangeLoaded);
   connect(m_worker, &QueryManager::visualIndexForPathLoaded, this,
           &DatabaseManager::visualIndexForPathLoaded);
+  // Forward the worker's detail-load result straight out as our own signal.
+  connect(m_worker, &QueryManager::itemDetailLoaded, this, &IDatabaseManager::itemDetailLoaded);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
   connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
 
@@ -264,6 +270,13 @@ void DatabaseManager::fetchVisualIndexForPath(const CollectionContext &context,
                                               const QList<CollectionConfig> &allCollections,
                                               const QString &filePath) {
   emit requestFetchVisualIndexForPath(context, allCollections, filePath);
+}
+
+void DatabaseManager::loadItemDetailAsync(int requestToken, const QString &collectionUuid,
+                                          const QString &filePath, const QString &artworkDir,
+                                          const QString &videoDir, const QString &manualDir) {
+  emit requestLoadItemDetail(requestToken, collectionUuid, filePath, artworkDir, videoDir,
+                             manualDir);
 }
 
 void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {

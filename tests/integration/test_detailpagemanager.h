@@ -8,10 +8,13 @@
  * a stub IDetailPageOverlay that records calls. The fixture-backed test
  * confirms the live wiring through ApplicationManager.
  *
- * Payload assembly (4 DB queries + artwork resolution) inside
- * showForCurrentSelection needs the DatabaseManager + DetailsPaneManager
- * graph and is exercised by the live UI smoke and the existing details-pane
- * fixture tests. Here we lock the defensive null-guards and forwarder contracts.
+ * Kartend-4p8o made the load asynchronous: showForCurrentSelection shows the
+ * overlay immediately with cheap fields, then dispatches loadItemDetailAsync
+ * and refreshes the overlay when itemDetailLoaded fires. The async tests below
+ * drive that orchestration with a stub DetailsPaneManager + a capturing
+ * DatabaseManager, asserting the cheap-first show, the request dispatch, the
+ * post-result update, and that a stale result (token mismatch) is dropped. The
+ * actual off-thread DB/filesystem work is covered by the live UI.
  */
 
 #ifndef KARTEND_TESTS_TEST_DETAILPAGEMANAGER_H
@@ -29,6 +32,11 @@ private slots:
   void testIsOverlayActiveDelegatesToOverlay();
   void testHideOverlayDelegatesToOverlay();
   void testShowForCurrentSelectionWithoutContextIsNoOp();
+
+  // Kartend-4p8o: async load orchestration.
+  void testShowForCurrentSelectionShowsCheapOverlayThenRequestsLoad();
+  void testItemDetailLoadedPopulatesOverlay();
+  void testStaleItemDetailResultIsIgnored();
 
   void testFixtureExposesDetailPageManagerViaApplicationManager();
 };

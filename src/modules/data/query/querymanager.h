@@ -3,6 +3,7 @@
 
 #include "collection/collectioncontext.h"
 #include "errorutils.h"
+#include "itemdetaildata.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
 #include <QDateTime>
@@ -62,6 +63,15 @@ public slots:
                                const QList<CollectionConfig> &allCollections,
                                const QString &filePath);
 
+  /// Off-thread loader for the item detail page (Kartend-4p8o). Runs the
+  /// metadata / usage / artwork DB reads on this worker's own connection plus
+  /// the artwork + video filesystem probes, then emits itemDetailLoaded so the
+  /// UI can fill the already-shown overlay without blocking the main thread.
+  /// `requestToken` is echoed back unchanged so DetailPageManager can drop a
+  /// stale result when the selection has moved on.
+  void loadItemDetail(int requestToken, const QString &collectionUuid, const QString &filePath,
+                      const QString &artworkDir, const QString &videoDir, const QString &manualDir);
+
   // Scans the current collection (and descendants when
   // showAllSubcollectionItems is set) if a rescan is needed, without blocking
   // query operations in another worker. Handles connection availability and
@@ -79,6 +89,8 @@ signals:
                    const QHash<QString, int> &fileToCollectionIndex);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
+  /// Result of loadItemDetail (Kartend-4p8o). `requestToken` echoes the call.
+  void itemDetailLoaded(const ItemDetailData &data, int requestToken);
   /// Trailing `requestedCollectionIndex` echoes CollectionContext::currentIndex
   /// so concurrent fetchItemsRange callers can match a result to its request
   /// — see IDatabaseManager::itemsRangeLoaded.
