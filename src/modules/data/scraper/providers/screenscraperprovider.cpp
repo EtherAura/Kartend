@@ -556,9 +556,17 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   const QByteArray bytes = response.value();
   // Diagnostic: when KARTEND_SCRAPER_DUMP_JSON is set, write each raw
   // jeuInfos.php response to disk so the exact SS payload shape (region
-  // keys, media tags, …) can be inspected. Off by default; the file
-  // path is logged so it is easy to find.
+  // keys, media tags, …) can be inspected. Off by default; the file path is
+  // logged so it is easy to find.
+  //
+  // PRIVACY: each response embeds the SS `ssuser` account block (login id,
+  // quota counters, membership level). The request URL — which also carries
+  // devid/devpassword/ssid/sspassword — is NOT dumped, but treat these files as
+  // sensitive. Retention is bounded to the most recent kMaxRetainedScraperDumps
+  // so an opt-in debugging session can't accumulate them unbounded; clear the
+  // scraper-dump/ directory when done.
   if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
+    constexpr int kMaxRetainedScraperDumps = 50;
     const QString dumpDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                                 .filePath(QStringLiteral("scraper-dump"));
     if (QDir().mkpath(dumpDir)) {
@@ -569,6 +577,14 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
         dumpFile.write(bytes);
         dumpFile.close();
         qWarning("[scraper-dump] wrote raw jeuInfos response to %s", qUtf8Printable(dumpPath));
+      }
+      // Prune oldest dumps beyond the retention cap. The ms-epoch filename is a
+      // fixed 13 digits (until year ~2286), so a Name sort is chronological.
+      QDir dir(dumpDir);
+      const QStringList dumps =
+          dir.entryList({QStringLiteral("jeuInfos-*.json")}, QDir::Files, QDir::Name);
+      for (int i = 0; i < dumps.size() - kMaxRetainedScraperDumps; ++i) {
+        dir.remove(dumps.at(i));
       }
     }
   }
