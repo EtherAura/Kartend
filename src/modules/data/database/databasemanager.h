@@ -1,6 +1,8 @@
 #ifndef DATABASEMANAGER_H
 #define DATABASEMANAGER_H
 
+#include <functional>
+
 #include <QSqlDatabase>
 
 #include "filemapcache.h"
@@ -245,6 +247,15 @@ private slots:
 private:
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
+
+  /// Queues a media.db write to run on the query worker's thread/connection
+  /// instead of the GUI-thread connection, so frequent automatic writes
+  /// (launch / session / history) don't block the UI on the scan's write lock
+  /// (Kartend-fkvs / Kartend-30s24). Fire-and-forget: errors are logged on the
+  /// worker. Only safe for writes with no synchronous read-back on the main
+  /// connection — the per-item usage/history reads are cache-mediated and
+  /// cosmetic, so brief staleness self-corrects.
+  void queueWorkerWrite(std::function<void(QSqlDatabase &)> op);
 
   // ctx is the single source of truth for sibling managers (SessionManager).
   const ApplicationContext *m_ctx = nullptr;

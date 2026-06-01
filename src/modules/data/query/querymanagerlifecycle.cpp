@@ -76,3 +76,10 @@ void QueryManager::invalidateSmartPlaylistScope() {
   // sees a key mismatch and re-evaluates the filter against current item data.
   m_cachedPlaylistScopeKey.clear();
 }
+
+void QueryManager::runWrite(const std::function<void(QSqlDatabase &)> &op) {
+  assertOwnerThread();
+  if (op && m_db.isOpen()) {
+    op(m_db);
+  }
+}

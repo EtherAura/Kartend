@@ -6,6 +6,7 @@
 #include "itemdetaildata.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
+#include <functional>
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
@@ -88,6 +89,13 @@ public slots:
   /// mid-session instead of staying frozen on their first evaluation
   /// (Kartend-s9jw).
   void invalidateSmartPlaylistScope();
+
+  /// Runs a write closure against this worker's connection, on the worker
+  /// thread. DatabaseManager queues frequent GUI-thread media.db writes
+  /// (launch/session/history) here via a queued QMetaObject::invokeMethod so the
+  /// UI never blocks on a write that contends with a background scan
+  /// (Kartend-fkvs / Kartend-30s24). Must only be invoked on the owner thread.
+  void runWrite(const std::function<void(QSqlDatabase &)> &op);
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,

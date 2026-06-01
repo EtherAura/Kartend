@@ -5,6 +5,7 @@
 #include "databasemanager.h"
 
 #include <atomic>
+#include <QMetaObject>
 #include <QMetaType>
 #include <QSet>
 #include <QSqlError>
@@ -872,12 +873,30 @@ UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QStrin
   return result.value();
 }
 
-void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
-  auto result = UsageStatsStore::recordLaunch(m_db, collectionUuid, path);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
+void DatabaseManager::queueWorkerWrite(std::function<void(QSqlDatabase &)> op) {
+  if (!m_worker || !op) {
     return;
   }
+  // Queued onto the worker's thread: the closure runs against the worker's
+  // connection (m_db there), never the GUI-thread connection. Ordering is
+  // preserved (single worker thread, FIFO event queue), so successive
+  // increment-style writes for the same item still apply in order.
+  QMetaObject::invokeMethod(
+      m_worker, [w = m_worker, op = std::move(op)]() { w->runWrite(op); }, Qt::QueuedConnection);
+}
+
+void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
+  // Fires on every launch — potentially while a background scan holds the WAL
+  // write lock — so run it on the worker connection rather than blocking the UI
+  // (Kartend-fkvs). Usage is read back only by the sidebar/stats display
+  // (cache-mediated, cosmetic), so the brief eventual-consistency window is
+  // acceptable; invalidate so the next read refreshes once the write lands.
+  queueWorkerWrite([collectionUuid, path](QSqlDatabase &db) {
+    auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+    }
+  });
   m_metadataCache.invalidateUsage(collectionUuid, path);
   // play_count / last_played changed -> smart playlists like "Recently
   // launched" / "Most played" must re-evaluate (Kartend-s9jw).
@@ -886,11 +905,12 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
                                             qint64 seconds) {
-  auto result = UsageStatsStore::recordPlaySession(m_db, collectionUuid, path, seconds);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
-    return;
-  }
+  queueWorkerWrite([collectionUuid, path, seconds](QSqlDatabase &db) {
+    auto result = UsageStatsStore::recordPlaySession(db, collectionUuid, path, seconds);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+    }
+  });
   m_metadataCache.invalidateUsage(collectionUuid, path);
 }
 
@@ -970,17 +990,22 @@ bool DatabaseManager::resetAllUsageStats() {
 
 void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QString &path,
                                          const QString &name, int maxEntries) {
-  auto result = HistoryStore::recordLaunch(m_db, collectionUuid, path, name);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
-    return;
-  }
-  if (maxEntries > 0) {
-    auto trim = HistoryStore::trimToMaxEntries(m_db, maxEntries);
-    if (trim.isError()) {
-      ErrorUtils::logError(trim.error());
+  // Also fires on launch (same hook as recordItemLaunch). The history log is
+  // read only by the history dialog, so route the append + trim onto the worker
+  // connection instead of blocking the launch on the UI thread (Kartend-fkvs).
+  queueWorkerWrite([collectionUuid, path, name, maxEntries](QSqlDatabase &db) {
+    auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+      return;
     }
-  }
+    if (maxEntries > 0) {
+      auto trim = HistoryStore::trimToMaxEntries(db, maxEntries);
+      if (trim.isError()) {
+        ErrorUtils::logError(trim.error());
+      }
+    }
+  });
 }
 
 QList<HistoryStore::HistoryEntry> DatabaseManager::loadRecentHistory(int limit) const {
