@@ -217,27 +217,6 @@ void ArtworkManager::initializeCache() {
   }
 }
 
-// Loads artwork, processes it, and caches only in CacheManager to avoid
-// duplicate in-memory residency
-auto ArtworkManager::loadArtworkFromFile(const QString &artworkPath) -> QPixmap {
-  QPixmap cached = getCachedPixmap(artworkPath);
-  if (!cached.isNull()) {
-    return cached;
-  }
-  if (!QFile::exists(artworkPath)) {
-    return {};
-  }
-  QPixmap pixmap(artworkPath);
-  if (pixmap.isNull()) {
-    return {};
-  }
-  QPixmap processedPixmap = ArtworkManager::createProcessedArtwork(pixmap);
-  if (auto *cache = cacheMgr(); cache && !processedPixmap.isNull()) {
-    cache->cacheArtwork(artworkPath, processedPixmap);
-  }
-  return processedPixmap;
-}
-
 // Delegates to ArtworkUtils::findArtworkForFile for artwork path resolution
 auto ArtworkManager::findArtworkForFile(const QString &fileName, const QString &artworkDirectory)
     -> QString {

@@ -190,7 +190,6 @@ public:
 
   [[nodiscard]] static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
   [[nodiscard]] QPixmap getCachedPixmap(const QString &artworkPath);
-  [[nodiscard]] QPixmap loadArtworkFromFile(const QString &artworkPath);
 
   ~ArtworkManager() override;
 
