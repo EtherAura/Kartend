@@ -62,6 +62,17 @@ void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
   // Invalidate sorted items cache - forces rebuild on next fetchItemCount
   clearSortedItemsCache();
 
+  // Smart-playlist scopes are derived from item data, so a collection data
+  // change must drop the cached scope too (Kartend-s9jw).
+  m_cachedPlaylistScopeKey.clear();
+
   QueryManagerInternal::clearCollectionFromDatabaseByUuid(m_db, m_statementCache, collectionUuid);
   emit cacheInvalidated(collectionUuid);
+}
+
+void QueryManager::invalidateSmartPlaylistScope() {
+  assertOwnerThread();
+  // Clearing the key alone is enough: the next ensurePlaylistScopePopulated
+  // sees a key mismatch and re-evaluates the filter against current item data.
+  m_cachedPlaylistScopeKey.clear();
 }

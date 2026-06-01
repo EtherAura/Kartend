@@ -208,6 +208,10 @@ signals:
                              const QString &filePath, const QString &artworkDir,
                              const QString &videoDir, const QString &manualDir);
   void requestInvalidateCache(const QString &collectionUuid);
+  // Queued -> QueryManager::invalidateSmartPlaylistScope on the worker thread,
+  // fired after usage-stat writes (launch / reset) so smart playlists keyed on
+  // play data re-evaluate instead of staying stale (Kartend-s9jw).
+  void requestInvalidateSmartPlaylistScope();
 
   // Internal signal to trigger background scan on dedicated scan worker.
   void requestEnsureScannedForContext(const CollectionContext &context,

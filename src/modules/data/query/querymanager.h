@@ -82,6 +82,13 @@ public slots:
   /// Invalidates collection cache on worker thread (async)
   void invalidateCollectionCache(const QString &collectionUuid);
 
+  /// Drops the cached smart-playlist scope key so the next fetch re-evaluates
+  /// the filter against current item data. Cheap (in-memory) — wired to launch
+  /// / usage-reset events so smart playlists like "Recently launched" refresh
+  /// mid-session instead of staying frozen on their first evaluation
+  /// (Kartend-s9jw).
+  void invalidateSmartPlaylistScope();
+
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                    const QHash<QString, QString> &fileToArtworkDir,

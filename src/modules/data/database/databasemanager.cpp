@@ -93,6 +93,8 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestLoadItemDetail, m_worker, &QueryManager::loadItemDetail);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
           &QueryManager::invalidateCollectionCache);
+  connect(this, &DatabaseManager::requestInvalidateSmartPlaylistScope, m_worker,
+          &QueryManager::invalidateSmartPlaylistScope);
 
   // Background scanning is handled by the scan worker.
   connect(this, &DatabaseManager::requestEnsureScannedForContext, m_scanWorker,
@@ -819,6 +821,9 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
     return;
   }
   m_metadataCache.invalidateUsage(collectionUuid, path);
+  // play_count / last_played changed -> smart playlists like "Recently
+  // launched" / "Most played" must re-evaluate (Kartend-s9jw).
+  emit requestInvalidateSmartPlaylistScope();
 }
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
@@ -897,6 +902,9 @@ bool DatabaseManager::resetAllUsageStats() {
   // resetAllUsageStats is a deliberate user action — flushing the
   // whole per-item cache here is fine; the next selection refills it.
   m_metadataCache.clear();
+  // All play_count / last_played values just changed -> drop smart-playlist
+  // scope so play-data-keyed playlists re-evaluate (Kartend-s9jw).
+  emit requestInvalidateSmartPlaylistScope();
   return true;
 }
 
