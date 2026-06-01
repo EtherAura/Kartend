@@ -40,7 +40,13 @@ void applyConnectionPragmas(QSqlDatabase &db) {
   // propagate to every connection opener.
   MediaDbConnectionInit::PragmaConfig cfg;
   cfg.busyTimeoutMs = UIConstants::Database::MAIN_BUSY_TIMEOUT_MS;
-  cfg.setSynchronousNormal = false; // main connection keeps default for now
+  // Kartend-fkvs: align with the worker connections (synchronous=NORMAL under
+  // WAL). The main connection previously kept SQLite's default (FULL), so the
+  // same media.db was written at two durability levels depending on which
+  // connection committed. NORMAL under WAL is the documented safe setting
+  // (durable across app crashes; only the last commit is at risk on an OS/power
+  // loss) and cuts the fsync cost of GUI-thread writes that contend with scans.
+  cfg.setSynchronousNormal = true;
   MediaDbConnectionInit::applyPragmas(db, cfg,
                                       QStringLiteral("DatabaseSchema::applyConnectionPragmas"));
 }

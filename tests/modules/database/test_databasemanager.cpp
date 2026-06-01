@@ -56,6 +56,7 @@ private slots:
   void testResolveRelativeFilePath_resolvesViaMap();
 
   // Collection-uuid reconcile -----------------------------------------------
+  void testMainConnectionUsesWalAndNormalSync();
   void testMigrateCollectionUuid_movesItemAndCollectionRows();
   void testMigrateCollectionUuid_mergesConflictsAndChildTables();
   void testPurgeOrphanCollectionData_dropsRowsNotInLiveSet();
@@ -273,6 +274,27 @@ int scalar(QSqlDatabase &db, const QString &sql) {
   return (q.exec(sql) && q.next()) ? q.value(0).toInt() : -1;
 }
 } // namespace
+
+void TestDatabaseManager::testMainConnectionUsesWalAndNormalSync() {
+  // Kartend-fkvs: the GUI-thread connection must run WAL (so it doesn't block
+  // worker readers/writers more than necessary) and synchronous=NORMAL (so the
+  // same media.db isn't written at two durability levels). The connection is
+  // created on this (main) thread, so querying it here is thread-safe.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+
+  QSqlDatabase main = QSqlDatabase::database(db.connectionName());
+  QVERIFY2(main.isValid() && main.isOpen(), "main media.db connection is not open");
+
+  QSqlQuery jm(main);
+  QVERIFY(jm.exec(QStringLiteral("PRAGMA journal_mode")) && jm.next());
+  QCOMPARE(jm.value(0).toString().toLower(), QStringLiteral("wal"));
+
+  QSqlQuery sync(main);
+  QVERIFY(sync.exec(QStringLiteral("PRAGMA synchronous")) && sync.next());
+  QCOMPARE(sync.value(0).toInt(), 1); // 1 == NORMAL
+}
 
 void TestDatabaseManager::testMigrateCollectionUuid_movesItemAndCollectionRows() {
   m_session = std::make_unique<SessionManager>();
