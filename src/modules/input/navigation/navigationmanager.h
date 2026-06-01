@@ -16,6 +16,7 @@
 #include <QPointer>
 #include <QStringList>
 #include <QTimer>
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -372,6 +373,15 @@ private:
   // keystroke. Invalidated when collection changes.
   int m_cachedExpandedContextIndex = -1;
   CollectionContext m_cachedExpandedContext;
+
+  // Memoizes getHasSubAndItems() so route resolution doesn't re-stat media
+  // directories on the GUI thread on every navigation (Kartend-motei). Keyed by
+  // collection index -> (hasSub, hasItems); the whole map is dropped on
+  // collectionsModified (collection add/remove/reorder/config edit), the same
+  // trigger that rebuilds the hierarchy cache, since that's when the FS layout
+  // and index keys can change.
+  mutable QHash<int, std::pair<bool, bool>> m_hasSubAndItemsCache;
+  QMetaObject::Connection m_collectionsModifiedConn;
 };
 
 #endif

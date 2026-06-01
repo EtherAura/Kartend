@@ -71,6 +71,17 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
 
+  // Drop the has-sub/has-items memo when collections change — the coarse
+  // collectionsModified() signal is the same trigger that rebuilds the
+  // hierarchy cache, so cached answers and their index keys can no longer be
+  // trusted past it.
+  m_hasSubAndItemsCache.clear();
+  QObject::disconnect(m_collectionsModifiedConn);
+  if (auto *settings = settingsMgr()) {
+    m_collectionsModifiedConn = connect(settings, &ISettingsManager::collectionsModified, this,
+                                        [this]() { m_hasSubAndItemsCache.clear(); });
+  }
+
   // Callbacks
   m_isShuttingDown = setup.isShuttingDown;
   m_refreshTitleCounts = setup.refreshTitleCounts;
@@ -307,6 +318,13 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
     return false;
   }
 
+  if (const auto cached = m_hasSubAndItemsCache.constFind(collectionIndex);
+      cached != m_hasSubAndItemsCache.constEnd()) {
+    hasSub = cached->first;
+    hasItems = cached->second;
+    return hasSub || hasItems;
+  }
+
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
   for (const auto &coll : (*m_collections)) {
@@ -363,6 +381,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
     }
   }
 
+  m_hasSubAndItemsCache.insert(collectionIndex, {hasSub, hasItems});
   return (hasItems || hasSub);
 }
 
