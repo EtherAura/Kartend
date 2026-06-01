@@ -181,6 +181,13 @@ private:
   QSqlDatabase m_db;
   QString m_connectionName;
 
+  // Nesting depth for DbTransaction on m_db. Lets a transaction-wrapped helper
+  // (e.g. populateQueryUuidsTempTable) join an outer transaction (e.g.
+  // populateSortedItemsCache) instead of issuing a second BEGIN that SQLite
+  // silently drops — keeping the cache build atomic (Kartend-gv7f). Single
+  // worker connection, so a plain int is sufficient (no cross-thread sharing).
+  int m_txnDepth = 0;
+
   // LRU cache of prepared QSqlQuery statements bound to m_db. Reuses
   // compiled statements across slot invocations; reset on every get() so
   // stale bound values can't leak across reuse.
