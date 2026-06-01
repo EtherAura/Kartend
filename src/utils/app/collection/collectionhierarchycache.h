@@ -159,7 +159,7 @@ public:
     return it.value();
   }
 
-  [[nodiscard]] bool isValid() const { return m_collections; }
+  [[nodiscard]] bool isValid() const { return m_built; }
 
 private:
   /// Cycle-safe descendant walk over the merged child graph. Without the
@@ -183,7 +183,10 @@ private:
     return result;
   }
 
-  const QList<CollectionConfig> *m_collections = nullptr;
+  // True once rebuild() has run. Replaces a former raw pointer to the caller's
+  // collection list (Kartend-5zxk) — the cache never dereferenced it, so the
+  // pointer was a latent UAF with no upside.
+  bool m_built = false;
   QHash<int, QList<int>> m_directChildren;       // primary ∪ linked, primary first
   QHash<int, QList<int>> m_linkedDirectChildren; // linked-only subset
   QHash<int, QList<int>> m_allDescendants;
