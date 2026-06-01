@@ -16,6 +16,12 @@ namespace {
 // fall back to a quarter of their duration in onMediaStatusChanged.
 constexpr int kSeekPositionMs = 1000;
 
+// Kartend-i9ydp: LRU bound on the frame cache. Each entry costs 1, so this is
+// a cap on the number of cached frames (incl. null-failure markers) — enough
+// to keep a scrolled video-heavy collection warm without growing for the
+// process lifetime.
+constexpr int kMaxCachedThumbnails = 256;
+
 } // namespace
 
 VideoThumbnailExtractor *VideoThumbnailExtractor::instance() {
@@ -24,6 +30,7 @@ VideoThumbnailExtractor *VideoThumbnailExtractor::instance() {
 }
 
 VideoThumbnailExtractor::VideoThumbnailExtractor() {
+  m_cache.setMaxCost(kMaxCachedThumbnails);
   // QMediaPlayer / QAudioOutput / QVideoSink + the timeout timer are
   // constructed lazily on the first requestFrame() call; see
   // ensureMediaPipeline(). Eager construction would spin up the
@@ -76,7 +83,8 @@ VideoThumbnailExtractor::~VideoThumbnailExtractor() {
 }
 
 QPixmap VideoThumbnailExtractor::cached(const QString &videoPath) const {
-  return m_cache.value(videoPath);
+  const QPixmap *pix = m_cache.object(videoPath);
+  return pix ? *pix : QPixmap();
 }
 
 bool VideoThumbnailExtractor::hasCacheEntry(const QString &videoPath) const {
@@ -88,8 +96,8 @@ void VideoThumbnailExtractor::requestFrame(const QString &videoPath) {
     return;
   }
 
-  if (m_cache.contains(videoPath)) {
-    const QPixmap pix = m_cache.value(videoPath);
+  if (const QPixmap *cachedPix = m_cache.object(videoPath)) {
+    const QPixmap pix = *cachedPix;
     // Emit asynchronously even on a cache hit so callers see the same
     // sync/async signal contract as a miss — otherwise a slot connected
     // with AutoConnection that mutates the gallery (e.g. adds another tile)
@@ -180,10 +188,11 @@ void VideoThumbnailExtractor::finishCurrent(const QPixmap &pixmap) {
   m_seekedForCurrent = false;
 
   // Cache even null pixmaps so failed extractions don't keep retrying on
-  // every selection change. The cost is that a transient failure (e.g. file
-  // briefly inaccessible) sticks until the application restarts; acceptable
-  // for an initial implementation.
-  m_cache.insert(path, pixmap);
+  // every selection change. Kartend-i9ydp: the bounded QCache owns each entry
+  // and evicts the least-recently-used once kMaxCachedThumbnails is exceeded,
+  // so a transient failure no longer sticks for the whole process lifetime —
+  // it just ages out like any other entry.
+  m_cache.insert(path, new QPixmap(pixmap));
   emit frameReady(path, pixmap);
 
   if (!m_queue.isEmpty()) {

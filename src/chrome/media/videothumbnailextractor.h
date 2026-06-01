@@ -1,7 +1,7 @@
 #ifndef VIDEOTHUMBNAILEXTRACTOR_H
 #define VIDEOTHUMBNAILEXTRACTOR_H
 
-#include <QHash>
+#include <QCache>
 #include <QObject>
 #include <QPixmap>
 #include <QQueue>
@@ -75,7 +75,10 @@ private:
   QMediaPlayer *m_player = nullptr;
   QAudioOutput *m_audioOutput = nullptr;
   QVideoSink *m_sink = nullptr;
-  QHash<QString, QPixmap> m_cache;
+  // Kartend-i9ydp: bounded LRU (was an unbounded QHash that kept one decoded
+  // frame per video for the process lifetime). Stores null-pixmap entries too,
+  // to record prior extraction failures; max cost is set in the constructor.
+  QCache<QString, QPixmap> m_cache;
   QQueue<QString> m_queue;
   QString m_currentPath;
   bool m_seekedForCurrent = false;
