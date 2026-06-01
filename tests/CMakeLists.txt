@@ -305,6 +305,15 @@ add_executable(test_querymanager_cross_collection_count
 target_link_libraries(test_querymanager_cross_collection_count PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME QueryManagerCrossCollectionCount COMMAND test_querymanager_cross_collection_count)
 
+# Regression test: a rescan that changes an existing collection's item set must
+# invalidate the query worker's sorted-items cache (Kartend-6r4g2).
+add_executable(test_querymanager_cache_invalidation
+  modules/query/test_querymanager_cache_invalidation.cpp
+  modules/query/workersignalspy.h
+)
+target_link_libraries(test_querymanager_cache_invalidation PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerCacheInvalidation COMMAND test_querymanager_cache_invalidation)
+
 # QueryManagerCrossCollectionTokens (Kartend-jb6d). Locks in that the
 # structured-token filters apply when queryIncludeAllCollections=true so a
 # future refactor of the cross-mode SQL path can't quietly drop the
@@ -972,15 +981,19 @@ add_executable(test_filterhelpers
 target_link_libraries(test_filterhelpers PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME FilterHelpers COMMAND test_filterhelpers)
 
-# Filter hot-path benchmarks. Labelled "benchmark" so default ctest runs skip
-# them — invoke with `ctest -L benchmark` to track regression. Walltime
-# numbers vary by hardware; compare against a stored baseline.
+# Filter hot-path benchmarks. Labelled "benchmark" so a regression run can
+# target them with `ctest -L benchmark`. NOTE: a LABELS property alone does NOT
+# exclude a test from the default set, so a plain `ctest` still runs this
+# (~2.6s, harmless); pass `ctest -LE benchmark` to skip it (Kartend-egd3a).
+# Walltime numbers vary by hardware; compare against a stored baseline.
 add_executable(bench_filterhelpers
   benchmarks/bench_filterhelpers.cpp
 )
 target_link_libraries(bench_filterhelpers PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
-set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")# GamepadHelpers tests (pure helpers extracted from GamepadManager)
+set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
+
+# GamepadHelpers tests (pure helpers extracted from GamepadManager)
 add_executable(test_gamepadhelpers
   modules/gamepad/test_gamepadhelpers.cpp
 )

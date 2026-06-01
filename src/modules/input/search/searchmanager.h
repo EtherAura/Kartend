@@ -7,6 +7,7 @@
 #include "searchutils.h"
 #include "setuputils.h"
 #include "timerutils.h"
+#include <QHash>
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
@@ -133,6 +134,15 @@ private:
   QWidget *m_itemsPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
+
+  // Memoizes hasDirectItemsForIndex() so toggling search mode / entering a
+  // collection doesn't re-stat one or many media directories on the UI thread
+  // (Kartend-xkxka) — allowAllFor() probes every candidate root per toggle.
+  // Keyed by collection index; the whole map is dropped on collectionsModified
+  // (the same trigger that rebuilds the hierarchy cache), since that's when
+  // indices and media-dir config can change.
+  mutable QHash<int, bool> m_hasDirectItemsCache;
+  QMetaObject::Connection m_collectionsModifiedConn;
 
   TimerUtils::DebouncedTimer *m_searchDebounceTimer = nullptr;
   QMetaObject::Connection m_searchItemsLoadedConn;

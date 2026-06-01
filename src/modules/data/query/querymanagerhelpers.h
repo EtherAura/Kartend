@@ -361,6 +361,73 @@ private:
   QSqlDatabase &m_db;
 };
 
+// Depth-tracking transaction guard for a single QSqlDatabase connection.
+// SQLite has no nested BEGIN: a second transaction() silently fails, and a
+// nested commit() would close the *outer* transaction early — so a cache build
+// that calls helper methods which each BEGIN/COMMIT on their own was silently
+// non-atomic, and a failed BEGIN/commit went unnoticed (Kartend-gv7f). Only the
+// outermost guard issues transaction()/commit()/rollback(); nested guards defer
+// to it. The depth counter is owned by the connection's manager and shared by
+// reference so every transaction site on that connection coordinates.
+//
+// Usage:
+//   DbTransaction txn(m_db, m_txnDepth);
+//   if (!txn.active()) return false;   // outermost BEGIN failed -> bail
+//   ... do work; on any error just `return false` (no manual rollback) ...
+//   return txn.commit();               // real commit when outermost, else no-op
+// A guard destroyed without a successful commit() rolls back (only when it owns
+// the transaction), so every early-return error path is covered automatically.
+class DbTransaction {
+public:
+  DbTransaction(QSqlDatabase &db, int &depth) : m_db(db), m_depth(depth) {
+    m_outermost = (m_depth == 0);
+    if (m_outermost) {
+      m_began = m_db.transaction();
+    }
+    ++m_depth;
+  }
+
+  DbTransaction(const DbTransaction &) = delete;
+  auto operator=(const DbTransaction &) -> DbTransaction & = delete;
+  DbTransaction(DbTransaction &&) = delete;
+  auto operator=(DbTransaction &&) -> DbTransaction & = delete;
+
+  ~DbTransaction() {
+    if (m_depth > 0) {
+      --m_depth;
+    }
+    if (m_outermost && m_began && !m_committed) {
+      m_db.rollback();
+    }
+  }
+
+  // False only when this guard owns the transaction and BEGIN failed; the
+  // caller should bail. Nested guards always return true (the outer guard owns
+  // the live transaction).
+  [[nodiscard]] bool active() const { return m_outermost ? m_began : true; }
+
+  // Commit the transaction. Only the outermost guard commits for real; nested
+  // guards defer to it and report success. Returns false if the real commit
+  // failed or the outermost BEGIN never succeeded.
+  bool commit() {
+    if (!m_outermost) {
+      return true;
+    }
+    if (!m_began) {
+      return false;
+    }
+    m_committed = m_db.commit();
+    return m_committed;
+  }
+
+private:
+  QSqlDatabase &m_db;
+  int &m_depth;
+  bool m_outermost = false;
+  bool m_began = false;
+  bool m_committed = false;
+};
+
 // ───────────────────────────────────────────────────────────────────────────
 // Pure list/map post-processing — promoted out of the QueryManager class.
 // Operate only on caller-supplied containers (no QSqlDatabase, no worker

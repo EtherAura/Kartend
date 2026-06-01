@@ -102,12 +102,20 @@ void VirtualScrollEngine::updateVirtualView() {
     return;
   }
 
+  // Detect whether the per-widget visual config changed since the last pass.
+  // When it hasn't (the common smooth-scroll case), ensureWidgetForIndex skips
+  // re-pushing title/font/corner/dimension setters to every visible widget and
+  // only repositions them (Kartend-8ucd).
+  const WidgetVisualConfig currentConfig = currentWidgetVisualConfig();
+  m_widgetVisualConfigDirty = (currentConfig != m_lastWidgetVisualConfig);
+
   QElapsedTimer perfEnsureTimer;
   if (perfTrace) perfEnsureTimer.start();
   for (int visualIndex = needed.firstIndex; visualIndex <= needed.lastIndex; ++visualIndex) {
     ensureWidgetForIndex(visualIndex);
   }
   if (perfTrace) perfEnsureMs = perfEnsureTimer.elapsed();
+  m_lastWidgetVisualConfig = currentConfig;
 
   if (m_owner->m_activeWidgets.isEmpty() && m_owner->m_emptyViewDebugBudget > 0) {
     --m_owner->m_emptyViewDebugBudget;
@@ -490,6 +498,26 @@ void VirtualScrollEngine::disconnectScrollEvents() {
   }
 }
 
+// Snapshots the visual config currently applied to materialized widgets. Must
+// stay in lockstep with the setters in ensureWidgetForIndex's existing-widget
+// branch so a real config change is detected as a signature change.
+VirtualScrollEngine::WidgetVisualConfig VirtualScrollEngine::currentWidgetVisualConfig() const {
+  WidgetVisualConfig cfg;
+  if (!m_owner) {
+    return cfg;
+  }
+  const bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
+  const int rawFont = isListMode ? m_owner->m_context.config.listView.listFontSize
+                                 : m_owner->m_context.config.gridLayout.fontSize;
+  cfg.hideTitles = m_owner->m_context.config.hideTitles;
+  cfg.hideSubcollectionTitles = m_owner->m_context.config.hideSubcollectionTitles;
+  cfg.fontSize = TextZoom::zoomedFontSize(rawFont);
+  cfg.cornerRadius = m_owner->m_context.config.gridLayout.cornerRadius;
+  cfg.itemWidth = m_owner->m_metrics.itemWidth;
+  cfg.itemHeight = m_owner->m_metrics.itemHeight;
+  return cfg;
+}
+
 // Ensures a widget exists for the visual index; orders click handling to emit
 // first so InteractionManager controls selection and scrolling
 // subcollections and media items
@@ -506,16 +534,23 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     if (!existing->isVisible()) {
       existing->show();
     }
-    bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
-    int fontSize = isListMode ? m_owner->m_context.config.listView.listFontSize
-                              : m_owner->m_context.config.gridLayout.fontSize;
-    // same as the bulk-update branch above.
-    fontSize = TextZoom::zoomedFontSize(fontSize);
-    existing->setHideTitles(m_owner->m_context.config.hideTitles);
-    existing->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
-    existing->setFontSize(fontSize);
-    existing->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
-    existing->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
+    // On smooth-scroll frames the visual config is unchanged, so only the
+    // geometry below needs updating; skip the (otherwise-redundant, though
+    // individually early-out-guarded) title/font/corner/dimension setters
+    // (Kartend-8ucd). m_widgetVisualConfigDirty is recomputed once per
+    // updateVirtualView pass.
+    if (m_widgetVisualConfigDirty) {
+      bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
+      int fontSize = isListMode ? m_owner->m_context.config.listView.listFontSize
+                                : m_owner->m_context.config.gridLayout.fontSize;
+      // same as the bulk-update branch above.
+      fontSize = TextZoom::zoomedFontSize(fontSize);
+      existing->setHideTitles(m_owner->m_context.config.hideTitles);
+      existing->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
+      existing->setFontSize(fontSize);
+      existing->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
+      existing->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
+    }
     QPoint position = m_owner->getItemPosition(visualIndex);
     existing->setGeometry(position.x(), position.y(), m_owner->m_metrics.itemWidth,
                           m_owner->m_metrics.itemHeight);

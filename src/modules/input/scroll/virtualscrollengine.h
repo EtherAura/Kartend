@@ -75,6 +75,23 @@ private:
   void removeUnneededWidgets(const NeededRange &needed);
   void updateArtworkIfAllowed();
 
+  // Snapshot of the per-widget visual config (everything ensureWidgetForIndex
+  // pushes onto a materialized widget except geometry). During smooth scroll
+  // only positions change, so re-pushing title/font/corner/dimension setters to
+  // every visible widget ~60×/s is wasted work (Kartend-8ucd). updateVirtualView
+  // computes the current signature once per pass and only re-applies the setters
+  // when it differs from the last applied one; geometry is always set.
+  struct WidgetVisualConfig {
+    bool hideTitles = false;
+    bool hideSubcollectionTitles = false;
+    int fontSize = -1;
+    int cornerRadius = -1;
+    int itemWidth = -1;
+    int itemHeight = -1;
+    bool operator==(const WidgetVisualConfig &) const = default;
+  };
+  [[nodiscard]] WidgetVisualConfig currentWidgetVisualConfig() const;
+
   // Back-pointer to the owning ScrollManager. QPointer guards against
   // dangling reads if a future refactor changes the destruction order
   // — VirtualScrollEngine is Qt-parented under ScrollManager so under
@@ -89,6 +106,12 @@ private:
   // skipping it ~60×/s during animation eliminates a hot path. Initialized
   // to INT_MIN so the first call after construction always raises.
   int m_lastRaisedSelectionIndex = std::numeric_limits<int>::min();
+
+  // Last visual config applied to materialized widgets, and whether the current
+  // updateVirtualView pass saw a change (drives the skip in ensureWidgetForIndex).
+  // Defaults differ from any real config so the first pass always re-applies.
+  WidgetVisualConfig m_lastWidgetVisualConfig;
+  bool m_widgetVisualConfigDirty = true;
 };
 
 #endif // VIRTUALSCROLLENGINE_H

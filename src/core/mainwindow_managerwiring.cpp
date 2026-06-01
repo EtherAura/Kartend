@@ -21,6 +21,7 @@
 #include "detailspanemanager.h"
 #include "dialogcontroller.h"
 #include "eventmanager.h"
+#include "gamepadmanager.h"
 #include "interactionmanager.h"
 #include "iplaylistmanager.h"
 #include "isettingsmanager.h"
@@ -94,6 +95,11 @@ void MainWindow::wireInteractionManager() {
                 if (auto *attract = interaction->attractManager()) {
                   attract->setSuspended(true);
                 }
+                // Stop routing gamepad presses/directions to the frontend while
+                // the launched program is foregrounded (Kartend-5rpt).
+                if (auto *gamepad = interaction->gamepadManager()) {
+                  gamepad->setSuspended(true);
+                }
               }
             });
     connect(launch, &LaunchManager::runtimeFinished, this, [this](const QString & /*filePath*/) {
@@ -106,6 +112,9 @@ void MainWindow::wireInteractionManager() {
       if (auto *interaction = m_appManager->getInteractionManager()) {
         if (auto *attract = interaction->attractManager()) {
           attract->setSuspended(false);
+        }
+        if (auto *gamepad = interaction->gamepadManager()) {
+          gamepad->setSuspended(false);
         }
       }
       // Bring Kartend back to the foreground when the tracked child

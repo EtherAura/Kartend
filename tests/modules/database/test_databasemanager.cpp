@@ -56,7 +56,9 @@ private slots:
   void testResolveRelativeFilePath_resolvesViaMap();
 
   // Collection-uuid reconcile -----------------------------------------------
+  void testMainConnectionUsesWalAndNormalSync();
   void testMigrateCollectionUuid_movesItemAndCollectionRows();
+  void testMigrateCollectionUuid_mergesConflictsAndChildTables();
   void testPurgeOrphanCollectionData_dropsRowsNotInLiveSet();
 
 private:
@@ -273,6 +275,27 @@ int scalar(QSqlDatabase &db, const QString &sql) {
 }
 } // namespace
 
+void TestDatabaseManager::testMainConnectionUsesWalAndNormalSync() {
+  // Kartend-fkvs: the GUI-thread connection must run WAL (so it doesn't block
+  // worker readers/writers more than necessary) and synchronous=NORMAL (so the
+  // same media.db isn't written at two durability levels). The connection is
+  // created on this (main) thread, so querying it here is thread-safe.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+
+  QSqlDatabase main = QSqlDatabase::database(db.connectionName());
+  QVERIFY2(main.isValid() && main.isOpen(), "main media.db connection is not open");
+
+  QSqlQuery jm(main);
+  QVERIFY(jm.exec(QStringLiteral("PRAGMA journal_mode")) && jm.next());
+  QCOMPARE(jm.value(0).toString().toLower(), QStringLiteral("wal"));
+
+  QSqlQuery sync(main);
+  QVERIFY(sync.exec(QStringLiteral("PRAGMA synchronous")) && sync.next());
+  QCOMPARE(sync.value(0).toInt(), 1); // 1 == NORMAL
+}
+
 void TestDatabaseManager::testMigrateCollectionUuid_movesItemAndCollectionRows() {
   m_session = std::make_unique<SessionManager>();
   auto appCtx = makeCtxWithSession(m_session.get());
@@ -297,6 +320,85 @@ void TestDatabaseManager::testMigrateCollectionUuid_movesItemAndCollectionRows()
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='new-uuid'"), 1);
   // Play history rides along with the migrated row.
   QCOMPARE(scalar(insp, "SELECT play_count FROM items WHERE path='/m/a.bin'"), 7);
+}
+
+void TestDatabaseManager::testMigrateCollectionUuid_mergesConflictsAndChildTables() {
+  // Kartend-ndyf: a rename must re-key every collection-uuid-keyed table, merge
+  // a conflicting fresh stub's usage instead of dropping it, and leave no rows
+  // (or orphans) under the old uuid.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  for (const char *t : {"items", "collections", "item_metadata", "item_artwork", "launch_history",
+                        "playlist_items", "playlists"}) {
+    QVERIFY(runSql(insp, QStringLiteral("DELETE FROM %1").arg(t)));
+  }
+
+  // id=1 is the real (renamed) collection; id=2 is the fresh row a post-rename
+  // rescan created under the new uuid before the migration ran.
+  QVERIFY(runSql(insp, "INSERT INTO collections (id, name, last_scanned, uuid) VALUES "
+                       "(1, 'C', 'x', 'old-uuid'), (2, 'C', 'x', 'new-uuid')"));
+  // Real (old-uuid) rows carrying the history/curation.
+  QVERIFY(runSql(insp, "INSERT INTO items (collection_id, path, name, last_modified, play_count, "
+                       "last_played, rating, collection_uuid) VALUES "
+                       "(1, '/m/a.bin', 'a', 'x', 7, '2026-05-20T00:00:00Z', 5, 'old-uuid'), "
+                       "(1, '/m/b.bin', 'b', 'x', 3, NULL, 0, 'old-uuid')"));
+  // Fresh stub under new-uuid (distinct collection_id), same path as /m/a.bin,
+  // with a small post-rename play_count that must survive the merge.
+  QVERIFY(runSql(insp, "INSERT INTO items (collection_id, path, name, last_modified, play_count, "
+                       "collection_uuid) VALUES (2, '/m/a.bin', 'a', 'x', 2, 'new-uuid')"));
+  QVERIFY(runSql(insp, "INSERT INTO item_metadata (collection_uuid, path, updated_at) "
+                       "VALUES ('old-uuid', '/m/a.bin', 'x')"));
+  QVERIFY(runSql(insp, "INSERT INTO item_artwork (collection_uuid, path, artwork_type, updated_at) "
+                       "VALUES ('old-uuid', '/m/a.bin', 'box', 'x')"));
+  QVERIFY(runSql(insp, "INSERT INTO launch_history (collection_uuid, path, name, launched_at) "
+                       "VALUES ('old-uuid', '/m/a.bin', 'a', 'x')"));
+  QVERIFY(runSql(insp, "INSERT INTO playlists (id, name, parent_collection_uuid) "
+                       "VALUES ('p1', 'PL', 'old-uuid')"));
+  QVERIFY(runSql(insp, "INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
+                       "source_path, added_at) VALUES ('p1', 0, 'old-uuid', '/m/a.bin', 'x')"));
+
+  db.migrateCollectionUuid(QStringLiteral("old-uuid"), QStringLiteral("new-uuid"));
+
+  // Nothing left under the old uuid anywhere.
+  for (const char *t : {"items", "item_metadata", "item_artwork", "launch_history"}) {
+    QCOMPARE(
+        scalar(insp,
+               QStringLiteral("SELECT COUNT(*) FROM %1 WHERE collection_uuid='old-uuid'").arg(t)),
+        0);
+  }
+  QCOMPARE(
+      scalar(insp, "SELECT COUNT(*) FROM playlist_items WHERE source_collection_uuid='old-uuid'"),
+      0);
+
+  // items: exactly one /m/a.bin row under new-uuid, with the MERGED (max) usage.
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='new-uuid' "
+                        "AND path='/m/a.bin'"),
+           1);
+  QCOMPARE(scalar(insp, "SELECT play_count FROM items WHERE collection_uuid='new-uuid' "
+                        "AND path='/m/a.bin'"),
+           7); // max(7, 2)
+  QCOMPARE(scalar(insp, "SELECT rating FROM items WHERE collection_uuid='new-uuid' "
+                        "AND path='/m/a.bin'"),
+           5);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='new-uuid'"), 2);
+
+  // Child tables rode along to the new uuid (no orphaning).
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM item_metadata WHERE collection_uuid='new-uuid'"), 1);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM item_artwork WHERE collection_uuid='new-uuid'"), 1);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM launch_history WHERE collection_uuid='new-uuid'"), 1);
+  QCOMPARE(
+      scalar(insp, "SELECT COUNT(*) FROM playlist_items WHERE source_collection_uuid='new-uuid'"),
+      1);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM playlists WHERE parent_collection_uuid='new-uuid'"),
+           1);
+  // The stub collections row was dropped and the real one re-keyed: one row.
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='new-uuid'"), 1);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='old-uuid'"), 0);
 }
 
 void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() {

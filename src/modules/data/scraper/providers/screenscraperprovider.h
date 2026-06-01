@@ -13,6 +13,7 @@
 #include <functional>
 #include <optional>
 
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -189,15 +190,18 @@ private:
   GeneralSettingsAccessor m_settingsAccessor;
   CollectionAccessor m_collectionAccessor;
   StageReporter m_stageReporter;
-  /// SS's jeuInfos.php returns the candidate AND the full detail in
-  /// one response — there's no separate detail endpoint. We cache
-  /// the full ScrapedItem during lookup() keyed on the candidate's
-  /// providerSpecificId so fetchDetail() returns it without a second
-  /// roundtrip. Single-entry cache (overwritten on each lookup) is
-  /// enough — the dialog calls fetchDetail right after lookup and
-  /// never re-fetches an older candidate.
-  mutable QString m_lastDetailId;
-  mutable Scraper::ScrapedItem m_lastDetail;
+  /// SS's jeuInfos.php returns the candidate AND the full detail in one
+  /// response — there's no separate detail endpoint. We cache the full
+  /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so
+  /// fetchDetail() returns it without a second roundtrip. Kartend-r4tj: this was
+  /// a single overwritten entry that relied on the batch runner calling
+  /// fetchDetail synchronously before the next item's lookup completed —
+  /// unenforced, and a future async hop would make fetchDetail miss/serve the
+  /// wrong item. A small bounded id-keyed map removes that ordering dependency;
+  /// FIFO eviction keeps it from growing across a large batch.
+  static constexpr int kMaxDetailCacheEntries = 64;
+  mutable QHash<QString, Scraper::ScrapedItem> m_detailCache;
+  mutable QStringList m_detailCacheOrder; // insertion order for FIFO eviction
 
   /// Live per-account quota, refreshed from the `ssuser` block of
   /// every jeuInfos.php response by m_quota.updateFromResponse().

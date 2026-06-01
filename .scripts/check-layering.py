@@ -109,9 +109,16 @@ def main() -> int:
     #   chrome/  — modules/, ui/, core/ are above; utils/ + chrome/ are OK
     # The eventual hchk split will make this CMake-enforced; until then the
     # lint is the only guardrail.
+    # The middle module layers (data/input/media) sit below ui/ + core/, so an
+    # upward #include into either is a layering violation. chrome/ + utils/ +
+    # sibling modules/ are at-or-below them and remain allowed. Interim guard
+    # until the STATIC-lib split makes this CMake-enforced (Kartend-4nvtf).
     layer_upward = {
         "utils": {"modules", "chrome", "ui", "core"},
         "chrome": {"modules", "ui", "core"},
+        "modules/data": {"ui", "core"},
+        "modules/input": {"ui", "core"},
+        "modules/media": {"ui", "core"},
     }
     violations: list[tuple[str, str, str, str]] = []  # (layer, file, include, target)
 
@@ -250,8 +257,9 @@ def main() -> int:
         return 1
 
     print(
-        "check-layering: OK — src/utils/ and src/chrome/ stay within "
-        "their layers; setup structs carry only ctx + non-manager refs; "
+        "check-layering: OK — src/utils/, src/chrome/, and "
+        "src/modules/{data,input,media}/ stay within their layers; setup "
+        "structs carry only ctx + non-manager refs; "
         "no legacy MainWindow::getXxxManager() callers outside mainwindow*; "
         "IMainWindow exposes only applicationManager(); ctx accessor styles "
         "stay distinct (ApplicationContext no-get-prefix, controller-ctx "

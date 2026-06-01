@@ -51,17 +51,43 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
   return filePaths;
 }
 
+void QueryManager::invalidateQueryCaches() {
+  assertOwnerThread();
+  // Drop the in-memory + temp-table query caches without touching item rows.
+  // The sorted-items cache validity hash keys on (collection uuids, filter,
+  // sortMode) — NOT item contents — so adding/removing items in an existing
+  // collection (e.g. a background rescan) leaves the hash matching and the
+  // cache serving stale ranges/counts. The scan worker that commits those
+  // changes is a different QueryManager instance, so it can't clear this
+  // (query) worker's caches itself; DatabaseManager wires scan completion to
+  // this slot (Kartend-6r4g2 / Kartend-fkvs).
+  m_cachedQueryUuidsHash.clear();
+  clearSortedItemsCache();
+  m_cachedPlaylistScopeKey.clear();
+}
+
 void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
   assertOwnerThread();
   // Cancel any ongoing scan before clearing cache to prevent lock conflicts
   requestCancelScan();
 
-  // Invalidate UUID temp table cache so next query repopulates
-  m_cachedQueryUuidsHash.clear();
-
-  // Invalidate sorted items cache - forces rebuild on next fetchItemCount
-  clearSortedItemsCache();
+  // Drop the query caches (uuid temp table, sorted-items, playlist scope).
+  invalidateQueryCaches();
 
   QueryManagerInternal::clearCollectionFromDatabaseByUuid(m_db, m_statementCache, collectionUuid);
   emit cacheInvalidated(collectionUuid);
+}
+
+void QueryManager::invalidateSmartPlaylistScope() {
+  assertOwnerThread();
+  // Clearing the key alone is enough: the next ensurePlaylistScopePopulated
+  // sees a key mismatch and re-evaluates the filter against current item data.
+  m_cachedPlaylistScopeKey.clear();
+}
+
+void QueryManager::runWrite(const std::function<void(QSqlDatabase &)> &op) {
+  assertOwnerThread();
+  if (op && m_db.isOpen()) {
+    op(m_db);
+  }
 }

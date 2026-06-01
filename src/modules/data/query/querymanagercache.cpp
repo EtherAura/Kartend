@@ -70,8 +70,19 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   }
   clearQueryUuidsTempTable();
 
-  // Wrap in transaction for much faster batch inserts
-  m_db.transaction();
+  // Wrap in transaction for much faster batch inserts. Depth-tracked: when this
+  // runs inside buildSortedItemsCache's transaction it joins that one rather
+  // than issuing a second BEGIN (which SQLite drops) and a commit that would
+  // close the outer transaction early (Kartend-gv7f).
+  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth);
+  if (!txn.active()) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                              "Failed to begin transaction to populate query_uuids",
+                              "QueryManager::populateQueryUuidsTempTable")
+            .withDetails(m_db.lastError().text()));
+    return false;
+  }
 
   constexpr int BATCH_SIZE = KartendDb::BatchSizes::UuidListBatch;
 
@@ -94,17 +105,15 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
     }
 
     if (!ins.exec()) {
-      m_db.rollback();
       ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                  "Failed to populate query_uuids batch",
                                                  "QueryManager::populateQueryUuidsTempTable")
                                .withDetails(ins.lastError().text()));
-      return false;
+      return false; // txn rolls back on scope exit when it owns the transaction
     }
   }
 
-  m_db.commit();
-  return true;
+  return txn.commit();
 }
 
 QString QueryManager::buildUuidFilterClause(const QStringList &uuids, bool &useTempTable) {
@@ -267,13 +276,23 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
                           << "', sortMode=" << static_cast<int>(sortMode);
   }
 
-  m_db.transaction();
+  // Outer transaction for the whole cache build. ensureQueryUuidsPopulated
+  // below nests under this via the shared depth counter so the build stays
+  // atomic (Kartend-gv7f). Every error path just returns false; the guard rolls
+  // back on scope exit.
+  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth);
+  if (!txn.active()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                               "Failed to begin transaction to build sorted cache",
+                                               "QueryManager::populateSortedItemsCache")
+                             .withDetails(m_db.lastError().text()));
+    return false;
+  }
 
   // Clear existing cache
   {
     QSqlQuery clear(m_db);
     if (!clear.exec("DELETE FROM sorted_items_cache")) {
-      m_db.rollback();
       return false;
     }
   }
@@ -290,7 +309,6 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
   bool useTempTable = uuids.size() > MAX_UUIDS_FOR_IN_CLAUSE;
   if (useTempTable && !ensureQueryUuidsPopulated(uuids)) {
-    m_db.rollback();
     return false;
   }
 
@@ -448,7 +466,6 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   }
 
   if (!selectQuery.exec()) {
-    m_db.rollback();
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to fetch sorted items for cache",
                                                "QueryManager::populateSortedItemsCache")
@@ -533,7 +550,6 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
       if (paths.size() >= INSERT_BATCH_SIZE) {
         if (!flushBatch()) {
-          m_db.rollback();
           return false;
         }
       }
@@ -547,7 +563,6 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
       if (paths.size() >= INSERT_BATCH_SIZE) {
         if (!flushBatch()) {
-          m_db.rollback();
           return false;
         }
       }
@@ -556,11 +571,16 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
   // Flush remaining
   if (!flushBatch()) {
-    m_db.rollback();
     return false;
   }
 
-  m_db.commit();
+  if (!txn.commit()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                               "Failed to commit sorted items cache",
+                                               "QueryManager::populateSortedItemsCache")
+                             .withDetails(m_db.lastError().text()));
+    return false;
+  }
 
   m_sortedItemsCacheValid = true;
   m_sortedItemsCacheHash = newHash;

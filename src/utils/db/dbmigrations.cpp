@@ -72,8 +72,43 @@ static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &orig
     return;
   }
 
-  // Attempt a best-effort de-duplication and retry.
-  // Keep the first row (min(rowid)) for each (collection_uuid, path).
+  // Best-effort de-duplication and retry. Wrap merge + delete + retry in a
+  // transaction so a failure can't leave the table half-deduped and still
+  // missing its unique index (Kartend-l793).
+  const bool began = db.transaction();
+
+  // Before dropping duplicates, merge each group's user-data columns onto the
+  // surviving (min rowid) row. The old code kept the first-inserted row
+  // verbatim, silently losing play_count / last_played / rating / artwork that
+  // a later duplicate carried. Usage writes target (collection_uuid, path) so
+  // duplicates normally hold identical values; MAX / COALESCE picks the
+  // populated one when they diverge. Only v1 columns exist here — later
+  // migrations (total_play_seconds, date_added, ...) run against the already
+  // de-duplicated table. Restricted to groups with duplicates so a clean table
+  // isn't rewritten row-by-row.
+  QSqlQuery merge(db);
+  if (!merge.exec("UPDATE items SET "
+                  "play_count = (SELECT MAX(d.play_count) FROM items d "
+                  "WHERE d.collection_uuid = items.collection_uuid AND d.path = items.path), "
+                  "last_played = (SELECT MAX(d.last_played) FROM items d "
+                  "WHERE d.collection_uuid = items.collection_uuid AND d.path = items.path), "
+                  "rating = (SELECT MAX(d.rating) FROM items d "
+                  "WHERE d.collection_uuid = items.collection_uuid AND d.path = items.path), "
+                  "artwork_path = COALESCE(NULLIF(items.artwork_path, ''), "
+                  "(SELECT MAX(d.artwork_path) FROM items d "
+                  "WHERE d.collection_uuid = items.collection_uuid AND d.path = items.path "
+                  "AND d.artwork_path IS NOT NULL AND d.artwork_path != '')) "
+                  "WHERE rowid IN (SELECT MIN(rowid) FROM items "
+                  "GROUP BY collection_uuid, path HAVING COUNT(*) > 1)")) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to merge duplicate item usage data before de-duplication",
+                              origin)
+            .withDetails(merge.lastError().text()));
+  }
+
+  // Keep the first row (min(rowid)) for each (collection_uuid, path); its
+  // user-data columns now hold the merged values.
   QSqlQuery dedupe(db);
   dedupe.exec("DELETE FROM items WHERE rowid NOT IN (SELECT MIN(rowid) FROM "
               "items GROUP BY collection_uuid, path)");
@@ -84,6 +119,16 @@ static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &orig
                                      "Failed to create unique index after de-duplication", origin)
                    .withDetails(retry.lastError().text());
     ErrorUtils::logError(err);
+    if (began) {
+      db.rollback();
+    }
+    return;
+  }
+  if (began && !db.commit()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to commit item de-duplication", origin)
+                             .withDetails(db.lastError().text()));
+    db.rollback();
   }
 }
 

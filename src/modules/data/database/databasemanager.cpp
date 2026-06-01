@@ -5,6 +5,7 @@
 #include "databasemanager.h"
 
 #include <atomic>
+#include <QMetaObject>
 #include <QMetaType>
 #include <QSet>
 #include <QSqlError>
@@ -93,6 +94,8 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestLoadItemDetail, m_worker, &QueryManager::loadItemDetail);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
           &QueryManager::invalidateCollectionCache);
+  connect(this, &DatabaseManager::requestInvalidateSmartPlaylistScope, m_worker,
+          &QueryManager::invalidateSmartPlaylistScope);
 
   // Background scanning is handled by the scan worker.
   connect(this, &DatabaseManager::requestEnsureScannedForContext, m_scanWorker,
@@ -130,6 +133,15 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
           &DatabaseManager::scanItemsProgress);
   connect(m_scanWorker, &QueryManager::collectionScanCompleted, this,
           &DatabaseManager::collectionScanCompleted);
+  // A background scan (on m_scanWorker) commits item changes the query worker's
+  // caches can't see — the sorted-items cache keys on the collection uuid list,
+  // not item contents, so it would keep serving stale ranges/counts after a
+  // rescan adds/removes items. Drop the query worker's caches (non-destructive)
+  // on scan completion so the next fetch rebuilds from fresh data
+  // (Kartend-6r4g2). Runs on the query worker's thread via the queued context.
+  connect(
+      m_scanWorker, &QueryManager::collectionScanCompleted, m_worker,
+      [w = m_worker](const QString &) { w->invalidateQueryCaches(); }, Qt::QueuedConnection);
   connect(m_scanWorker, &QueryManager::collectionScanSummary, this,
           &DatabaseManager::collectionScanSummary);
 
@@ -462,23 +474,81 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
     return;
   }
   try {
-    // OR REPLACE: should a row already exist under newUuid (e.g. a
-    // rescan ran before the migration), the migrated row — which
-    // carries the real play history — wins over the fresh one.
-    QSqlQuery items(m_db);
-    items.prepare("UPDATE OR REPLACE items SET collection_uuid = ? WHERE collection_uuid = ?");
-    items.addBindValue(newUuid);
-    items.addBindValue(oldUuid);
-    if (!items.exec()) {
-      throw std::runtime_error(items.lastError().text().toStdString());
-    }
-    QSqlQuery cols(m_db);
-    cols.prepare("UPDATE OR REPLACE collections SET uuid = ? WHERE uuid = ?");
-    cols.addBindValue(newUuid);
-    cols.addBindValue(oldUuid);
-    if (!cols.exec()) {
-      throw std::runtime_error(cols.lastError().text().toStdString());
-    }
+    auto run = [&](const QString &sql, const QVariantList &binds) {
+      QSqlQuery q(m_db);
+      q.prepare(sql);
+      for (const QVariant &b : binds) {
+        q.addBindValue(b);
+      }
+      if (!q.exec()) {
+        throw std::runtime_error(q.lastError().text().toStdString());
+      }
+    };
+
+    // The old UPDATE OR REPLACE only re-keyed `items` + `collections`. On a
+    // (new_uuid, path) conflict REPLACE silently deleted the pre-existing target
+    // row — losing its usage columns and orphaning its item_metadata /
+    // item_artwork / launch_history (keyed independently by collection_uuid).
+    // It also never re-keyed the per-item child tables or playlist references at
+    // all, so a rename stranded curation, artwork overrides, play history, and
+    // playlist entries under the old uuid (Kartend-ndyf). Re-key every table
+    // explicitly and resolve conflicts deliberately, all inside the transaction.
+
+    // items: a rescan may have created fresh stubs under newUuid before this
+    // ran. Merge their usage onto the old (real-history) row — MAX so a
+    // post-rename launch on the stub isn't lost — then drop the stub so the
+    // re-key can't hit uniq_items_uuid_path.
+    run("UPDATE items SET "
+        "play_count = MAX(play_count, COALESCE((SELECT n.play_count FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "total_play_seconds = MAX(total_play_seconds, COALESCE((SELECT n.total_play_seconds "
+        "FROM items n WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "last_played = MAX(COALESCE(last_played,''), COALESCE((SELECT n.last_played FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),'')), "
+        "rating = MAX(rating, COALESCE((SELECT n.rating FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "artwork_path = COALESCE(NULLIF(items.artwork_path,''), (SELECT n.artwork_path FROM items "
+        "n "
+        "WHERE n.collection_uuid=? AND n.path=items.path AND n.artwork_path IS NOT NULL "
+        "AND n.artwork_path!='')) "
+        "WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path)",
+        {newUuid, newUuid, newUuid, newUuid, newUuid, oldUuid, newUuid});
+    run("DELETE FROM items WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items o "
+        "WHERE o.collection_uuid=? AND o.path=items.path)",
+        {newUuid, oldUuid});
+    run("UPDATE items SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // item_metadata (UNIQUE collection_uuid,path) + item_artwork (UNIQUE
+    // collection_uuid,path,artwork_type): the old rows hold the user's curation
+    // / artwork overrides; any newUuid rows are post-rename stubs. Drop the
+    // conflicting stubs (old wins), then re-key.
+    run("DELETE FROM item_metadata WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_metadata "
+        "o "
+        "WHERE o.collection_uuid=? AND o.path=item_metadata.path)",
+        {newUuid, oldUuid});
+    run("UPDATE item_metadata SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+    run("DELETE FROM item_artwork WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_artwork o "
+        "WHERE o.collection_uuid=? AND o.path=item_artwork.path "
+        "AND o.artwork_type=item_artwork.artwork_type)",
+        {newUuid, oldUuid});
+    run("UPDATE item_artwork SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // launch_history is append-only (no unique key) — just re-label every row.
+    run("UPDATE launch_history SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // Playlist references into this collection: nesting parent + per-item source
+    // refs. No unique constraint is at risk, so a plain re-key suffices.
+    run("UPDATE playlists SET parent_collection_uuid=? WHERE parent_collection_uuid=?",
+        {newUuid, oldUuid});
+    run("UPDATE playlist_items SET source_collection_uuid=? WHERE source_collection_uuid=?",
+        {newUuid, oldUuid});
+
+    // collections: drop any stale stub already sitting at newUuid, then re-key
+    // the real row (replacing the old OR REPLACE, which would silently delete).
+    run("DELETE FROM collections WHERE uuid=?", {newUuid});
+    run("UPDATE collections SET uuid=? WHERE uuid=?", {newUuid, oldUuid});
+
     if (!m_db.commit()) {
       throw std::runtime_error(m_db.lastError().text().toStdString());
     }
@@ -812,22 +882,44 @@ UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QStrin
   return result.value();
 }
 
-void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
-  auto result = UsageStatsStore::recordLaunch(m_db, collectionUuid, path);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
+void DatabaseManager::queueWorkerWrite(std::function<void(QSqlDatabase &)> op) {
+  if (!m_worker || !op) {
     return;
   }
+  // Queued onto the worker's thread: the closure runs against the worker's
+  // connection (m_db there), never the GUI-thread connection. Ordering is
+  // preserved (single worker thread, FIFO event queue), so successive
+  // increment-style writes for the same item still apply in order.
+  QMetaObject::invokeMethod(
+      m_worker, [w = m_worker, op = std::move(op)]() { w->runWrite(op); }, Qt::QueuedConnection);
+}
+
+void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
+  // Fires on every launch — potentially while a background scan holds the WAL
+  // write lock — so run it on the worker connection rather than blocking the UI
+  // (Kartend-fkvs). Usage is read back only by the sidebar/stats display
+  // (cache-mediated, cosmetic), so the brief eventual-consistency window is
+  // acceptable; invalidate so the next read refreshes once the write lands.
+  queueWorkerWrite([collectionUuid, path](QSqlDatabase &db) {
+    auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+    }
+  });
   m_metadataCache.invalidateUsage(collectionUuid, path);
+  // play_count / last_played changed -> smart playlists like "Recently
+  // launched" / "Most played" must re-evaluate (Kartend-s9jw).
+  emit requestInvalidateSmartPlaylistScope();
 }
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
                                             qint64 seconds) {
-  auto result = UsageStatsStore::recordPlaySession(m_db, collectionUuid, path, seconds);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
-    return;
-  }
+  queueWorkerWrite([collectionUuid, path, seconds](QSqlDatabase &db) {
+    auto result = UsageStatsStore::recordPlaySession(db, collectionUuid, path, seconds);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+    }
+  });
   m_metadataCache.invalidateUsage(collectionUuid, path);
 }
 
@@ -897,6 +989,9 @@ bool DatabaseManager::resetAllUsageStats() {
   // resetAllUsageStats is a deliberate user action — flushing the
   // whole per-item cache here is fine; the next selection refills it.
   m_metadataCache.clear();
+  // All play_count / last_played values just changed -> drop smart-playlist
+  // scope so play-data-keyed playlists re-evaluate (Kartend-s9jw).
+  emit requestInvalidateSmartPlaylistScope();
   return true;
 }
 
@@ -904,17 +999,22 @@ bool DatabaseManager::resetAllUsageStats() {
 
 void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QString &path,
                                          const QString &name, int maxEntries) {
-  auto result = HistoryStore::recordLaunch(m_db, collectionUuid, path, name);
-  if (result.isError()) {
-    ErrorUtils::logError(result.error());
-    return;
-  }
-  if (maxEntries > 0) {
-    auto trim = HistoryStore::trimToMaxEntries(m_db, maxEntries);
-    if (trim.isError()) {
-      ErrorUtils::logError(trim.error());
+  // Also fires on launch (same hook as recordItemLaunch). The history log is
+  // read only by the history dialog, so route the append + trim onto the worker
+  // connection instead of blocking the launch on the UI thread (Kartend-fkvs).
+  queueWorkerWrite([collectionUuid, path, name, maxEntries](QSqlDatabase &db) {
+    auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
+    if (result.isError()) {
+      ErrorUtils::logError(result.error());
+      return;
     }
-  }
+    if (maxEntries > 0) {
+      auto trim = HistoryStore::trimToMaxEntries(db, maxEntries);
+      if (trim.isError()) {
+        ErrorUtils::logError(trim.error());
+      }
+    }
+  });
 }
 
 QList<HistoryStore::HistoryEntry> DatabaseManager::loadRecentHistory(int limit) const {

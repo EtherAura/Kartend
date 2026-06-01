@@ -5,9 +5,23 @@
 
 #include <QApplication>
 
+void GamepadManager::setSuspended(bool suspended) {
+  if (m_suspended == suspended) {
+    return;
+  }
+  m_suspended = suspended;
+  if (suspended) {
+    // Drop any held direction + keyboard repeat so movement doesn't stick
+    // under the launched program. applyActiveDirection(None) handles the
+    // keyboard reset; gating the dispatch chokepoints below keeps further
+    // presses/directions from routing until resume.
+    applyActiveDirection(Direction::None);
+  }
+}
+
 void GamepadManager::updateDirectionFromInputs() {
 #if defined(KARTEND_HAS_QT_GAMEPAD) || defined(KARTEND_HAS_SDL2_GAMEPAD)
-  if (shuttingDown()) {
+  if (shuttingDown() || m_suspended) {
     return;
   }
 
@@ -71,7 +85,7 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
 }
 
 void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
-  if (shuttingDown()) {
+  if (shuttingDown() || m_suspended) {
     return;
   }
 

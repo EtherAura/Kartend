@@ -143,6 +143,14 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           sudo apt-get install -y gdb
+          BIN="build/${{ matrix.build_type }}-${{ matrix.compiler }}/tests/integration/test_integration"
+          # Guard against silent rot (Kartend-i15r4): if the binary path moves,
+          # the old `|| true` made this diagnostic a no-op with no signal. Emit a
+          # GitHub warning annotation instead so the gap is visible in the log.
+          if [ ! -x "$BIN" ]; then
+            echo "::warning::SIGILL diagnostic skipped — integration binary not found at $BIN (path moved? update build.yml)"
+            exit 0
+          fi
           gdb -batch \
             -ex 'set pagination off' \
             -ex 'handle SIGILL stop print pass' \
@@ -150,7 +158,7 @@ jobs:
             -ex 'thread apply all bt full' \
             -ex 'info registers' \
             -ex 'x/16i $pc-32' \
-            --args build/${{ matrix.build_type }}-${{ matrix.compiler }}/tests/integration/test_integration \
+            --args "$BIN" \
             testFixtureBuildsWithoutTouchingRealConfig || true
 
   # Build with zstd explicitly disabled. Kart compression falls back to

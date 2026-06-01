@@ -6,6 +6,7 @@
 #include "itemdetaildata.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
+#include <functional>
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
@@ -79,8 +80,32 @@ public slots:
   void ensureScannedForContext(const CollectionContext &context,
                                const QList<CollectionConfig> &allCollections);
 
-  /// Invalidates collection cache on worker thread (async)
+  /// Invalidates collection cache on worker thread (async). Destructive: also
+  /// deletes the collection's item rows (the force-rescan path). For a
+  /// non-destructive cache drop after a background scan, use
+  /// invalidateQueryCaches() instead.
   void invalidateCollectionCache(const QString &collectionUuid);
+
+  /// Drops this worker's in-memory + temp-table query caches (uuid temp table,
+  /// sorted-items cache, playlist scope) WITHOUT deleting any rows. Wired to
+  /// scan completion so a background rescan that changed an existing
+  /// collection's item set can't leave stale ranges/counts behind — the
+  /// sorted-cache hash keys on the uuid list, not item contents (Kartend-6r4g2).
+  void invalidateQueryCaches();
+
+  /// Drops the cached smart-playlist scope key so the next fetch re-evaluates
+  /// the filter against current item data. Cheap (in-memory) — wired to launch
+  /// / usage-reset events so smart playlists like "Recently launched" refresh
+  /// mid-session instead of staying frozen on their first evaluation
+  /// (Kartend-s9jw).
+  void invalidateSmartPlaylistScope();
+
+  /// Runs a write closure against this worker's connection, on the worker
+  /// thread. DatabaseManager queues frequent GUI-thread media.db writes
+  /// (launch/session/history) here via a queued QMetaObject::invokeMethod so the
+  /// UI never blocks on a write that contends with a background scan
+  /// (Kartend-fkvs / Kartend-30s24). Must only be invoked on the owner thread.
+  void runWrite(const std::function<void(QSqlDatabase &)> &op);
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
@@ -180,6 +205,13 @@ private:
   ISessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
+
+  // Nesting depth for DbTransaction on m_db. Lets a transaction-wrapped helper
+  // (e.g. populateQueryUuidsTempTable) join an outer transaction (e.g.
+  // populateSortedItemsCache) instead of issuing a second BEGIN that SQLite
+  // silently drops — keeping the cache build atomic (Kartend-gv7f). Single
+  // worker connection, so a plain int is sufficient (no cross-thread sharing).
+  int m_txnDepth = 0;
 
   // LRU cache of prepared QSqlQuery statements bound to m_db. Reuses
   // compiled statements across slot invocations; reset on every get() so

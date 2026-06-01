@@ -680,7 +680,18 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     const bool metaOk = meta.exec();
 
     if (upsertOk && deleteOk && metaOk) {
-      (void)m_db.commit();
+      if (!m_db.commit()) {
+        // A dropped commit leaves the scan metadata unpersisted, so
+        // needsRescan() keeps returning true and the collection re-scans every
+        // launch (Kartend-gv7f). Surface it and roll back rather than swallow.
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to commit staged scan results",
+                                          "ScanService::saveItemsToDatabase")
+                       .withDetails(m_db.lastError().text());
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+        m_db.rollback();
+      }
     } else {
       m_db.rollback();
     }

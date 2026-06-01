@@ -556,9 +556,17 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   const QByteArray bytes = response.value();
   // Diagnostic: when KARTEND_SCRAPER_DUMP_JSON is set, write each raw
   // jeuInfos.php response to disk so the exact SS payload shape (region
-  // keys, media tags, …) can be inspected. Off by default; the file
-  // path is logged so it is easy to find.
+  // keys, media tags, …) can be inspected. Off by default; the file path is
+  // logged so it is easy to find.
+  //
+  // PRIVACY: each response embeds the SS `ssuser` account block (login id,
+  // quota counters, membership level). The request URL — which also carries
+  // devid/devpassword/ssid/sspassword — is NOT dumped, but treat these files as
+  // sensitive. Retention is bounded to the most recent kMaxRetainedScraperDumps
+  // so an opt-in debugging session can't accumulate them unbounded; clear the
+  // scraper-dump/ directory when done.
   if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
+    constexpr int kMaxRetainedScraperDumps = 50;
     const QString dumpDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                                 .filePath(QStringLiteral("scraper-dump"));
     if (QDir().mkpath(dumpDir)) {
@@ -569,6 +577,14 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
         dumpFile.write(bytes);
         dumpFile.close();
         qWarning("[scraper-dump] wrote raw jeuInfos response to %s", qUtf8Printable(dumpPath));
+      }
+      // Prune oldest dumps beyond the retention cap. The ms-epoch filename is a
+      // fixed 13 digits (until year ~2286), so a Name sort is chronological.
+      QDir dir(dumpDir);
+      const QStringList dumps =
+          dir.entryList({QStringLiteral("jeuInfos-*.json")}, QDir::Files, QDir::Name);
+      for (int i = 0; i < dumps.size() - kMaxRetainedScraperDumps; ++i) {
+        dir.remove(dumps.at(i));
       }
     }
   }
@@ -594,8 +610,15 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   if (cands.isOk() && !cands.value().isEmpty()) {
     auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
     if (detail.isOk()) {
-      m_lastDetailId = cands.value().first().providerSpecificId;
-      m_lastDetail = detail.value();
+      const QString id = cands.value().first().providerSpecificId;
+      if (!id.isEmpty()) {
+        m_detailCacheOrder.removeAll(id); // refresh position if re-looked-up
+        m_detailCache.insert(id, detail.value());
+        m_detailCacheOrder.append(id);
+        while (m_detailCacheOrder.size() > kMaxDetailCacheEntries) {
+          m_detailCache.remove(m_detailCacheOrder.takeFirst());
+        }
+      }
     }
   }
   callback(cands);
@@ -706,11 +729,12 @@ void ScreenScraperProvider::fetchDetail(const Scraper::ScrapeCandidate &candidat
                                         DetailCallback callback) {
   if (!callback) return;
   // Detail came in the same response as the lookup — return the cached
-  // ScrapedItem when the cache key matches. The dialog always calls
-  // fetchDetail with a candidate from the most recent lookup, so the
-  // single-entry cache is sufficient.
-  if (!m_lastDetailId.isEmpty() && candidate.providerSpecificId == m_lastDetailId) {
-    callback(m_lastDetail);
+  // ScrapedItem when the id is still in the bounded cache. Keying by id (rather
+  // than a single last-lookup slot) means an intervening lookup for another
+  // batch item can't displace this one (Kartend-r4tj).
+  if (const auto it = m_detailCache.constFind(candidate.providerSpecificId);
+      it != m_detailCache.constEnd()) {
+    callback(it.value());
     return;
   }
   callback(ErrorUtils::ErrorContext::error(

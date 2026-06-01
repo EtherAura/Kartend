@@ -25,7 +25,11 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   m_expandedArtworkDirs.clear();
   m_mediaDirToArtworkDir.clear();
   m_descendantUuids.clear();
-  m_collections = &collections;
+  // Mark the cache built. We deliberately do NOT stash &collections: the cache
+  // only ever needs to know "has rebuild run", and holding a raw pointer to the
+  // caller's list invited a UAF if that list was freed/reallocated without a
+  // rebuild (Kartend-5zxk). All lookups read the precomputed maps below.
+  m_built = true;
 
   // Primary children — single parent per collection via parentCollectionIndex.
   for (int i = 0; i < collections.size(); ++i) {

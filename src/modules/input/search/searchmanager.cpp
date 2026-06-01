@@ -69,6 +69,17 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_itemsPage = setup.getItemsPage();
   m_collections = setup.getCollections();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
+
+  // Drop the direct-items memo whenever collections are added/removed/reordered
+  // — the coarse collectionsModified() signal is the same trigger that rebuilds
+  // the hierarchy cache, so cached "has direct items" answers and their index
+  // keys can no longer be trusted past it.
+  m_hasDirectItemsCache.clear();
+  QObject::disconnect(m_collectionsModifiedConn);
+  if (auto *settings = settingsMgr()) {
+    m_collectionsModifiedConn = connect(settings, &ISettingsManager::collectionsModified, this,
+                                        [this]() { m_hasDirectItemsCache.clear(); });
+  }
 }
 
 void SearchManager::toggleSearchMode() {
@@ -220,25 +231,31 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
     return false;
   }
 
+  const auto cached = m_hasDirectItemsCache.constFind(idx);
+  if (cached != m_hasDirectItemsCache.constEnd()) {
+    return cached.value();
+  }
+
   const CollectionConfig &collCfg = (*m_collections)[idx];
 
-  // Check database via ScrollManager's reference if available
-  if (scrollMgr()) {
-    // For now, use filesystem check as fallback
-  }
+  const auto compute = [&collCfg]() -> bool {
+    QString mediaDir = SettingsUtils::expandConfigVariables(collCfg.mediaDirectory, collCfg.name);
+    if (mediaDir.trimmed().isEmpty()) {
+      return false;
+    }
+    QDir dir(mediaDir);
+    if (!dir.exists()) {
+      return false;
+    }
+    const QStringList filters = collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
+    const QStringList files =
+        filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
+    return !files.isEmpty();
+  };
 
-  QString mediaDir = SettingsUtils::expandConfigVariables(collCfg.mediaDirectory, collCfg.name);
-  if (mediaDir.trimmed().isEmpty()) {
-    return false;
-  }
-  QDir dir(mediaDir);
-  if (!dir.exists()) {
-    return false;
-  }
-  const QStringList filters = collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
-  const QStringList files =
-      filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
-  return !files.isEmpty();
+  const bool result = compute();
+  m_hasDirectItemsCache.insert(idx, result);
+  return result;
 }
 
 bool SearchManager::allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs) const {

@@ -6,10 +6,12 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QStringList>
 #include <QTemporaryDir>
 
@@ -42,6 +44,41 @@ constexpr int ARCHIVE_EXTRACT_TIMEOUT_MS = 600000;
 // guard — a zip-bomb-style archive with millions of empty entries
 // won't make us walk forever.
 constexpr int MAX_INNER_FILES_INSPECTED = 4096;
+
+// Disk-fill DoS guard (Kartend-y4nz). The extractor runs to completion before
+// the file-count guard above, so a compression bomb could otherwise fill the
+// volume first. While extracting we poll the temp dir's total size and abort if
+// it crosses a ceiling = min(absolute cap, free space - safety margin). The
+// absolute cap is generous so legit multi-GB disc images still extract; the
+// free-space bound stops a bomb exhausting a small volume below that cap.
+constexpr qint64 MAX_EXTRACTED_BYTES = qint64(24) * 1024 * 1024 * 1024;      // 24 GiB
+constexpr qint64 EXTRACT_FREE_SPACE_MARGIN = qint64(1) * 1024 * 1024 * 1024; // keep 1 GiB free
+constexpr int EXTRACT_POLL_INTERVAL_MS = 500;
+// Bound the size-walk itself so a millions-of-tiny-files archive can't make the
+// poll loop walk forever; hitting it is itself bomb-like, so we abort.
+constexpr int MAX_EXTRACT_WALK_ENTRIES = 200000;
+
+// True once the extracted tree's cumulative regular-file bytes exceed `ceiling`
+// (or the entry count crosses MAX_EXTRACT_WALK_ENTRIES — a many-tiny-files
+// bomb). Walks lazily and early-exits, so a normal ROM (a handful of files)
+// costs almost nothing per poll.
+bool extractionExceedsCeiling(const QString &root, qint64 ceiling) {
+  QDirIterator it(root, QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  qint64 total = 0;
+  int walked = 0;
+  while (it.hasNext()) {
+    it.next();
+    if (++walked > MAX_EXTRACT_WALK_ENTRIES) {
+      return true;
+    }
+    total += it.fileInfo().size();
+    if (total > ceiling) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Streaming CRC-32 (the reflected zip/PNG polynomial 0xEDB88320 — the
 // identifier No-Intro / Redump DATs and ScreenScraper key on). Qt's
@@ -231,9 +268,42 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   QProcess proc;
   proc.setWorkingDirectory(tmp.path());
   proc.start(extractor, args);
-  if (!proc.waitForFinished(ARCHIVE_EXTRACT_TIMEOUT_MS)) {
+
+  // Disk-fill ceiling: the smaller of an absolute cap and the free space (less
+  // a margin) at extraction start, so a compression bomb can't exhaust the
+  // volume (Kartend-y4nz).
+  const qint64 freeBytes = QStorageInfo(tmp.path()).bytesAvailable();
+  const qint64 freeBudget =
+      freeBytes > EXTRACT_FREE_SPACE_MARGIN ? freeBytes - EXTRACT_FREE_SPACE_MARGIN : 0;
+  const qint64 ceiling =
+      freeBudget > 0 ? qMin(MAX_EXTRACTED_BYTES, freeBudget) : MAX_EXTRACTED_BYTES;
+
+  // Poll rather than block on a single waitForFinished so we can kill the
+  // extractor the moment its output crosses the ceiling — the file-count guard
+  // below only runs after extraction has already finished filling the disk.
+  QElapsedTimer clock;
+  clock.start();
+  bool finished = false;
+  bool overSize = false;
+  while (clock.elapsed() < ARCHIVE_EXTRACT_TIMEOUT_MS) {
+    if (proc.waitForFinished(EXTRACT_POLL_INTERVAL_MS)) {
+      finished = true;
+      break;
+    }
+    if (extractionExceedsCeiling(tmp.path(), ceiling)) {
+      overSize = true;
+      break;
+    }
+  }
+  if (!finished) {
     proc.kill();
     proc.waitForFinished(1000);
+    if (overSize) {
+      return ErrorContext::error(ErrorCode::InvalidArgument,
+                                 "Archive extraction exceeded the size limit",
+                                 "RomHasher::hashArchiveInnerRom")
+          .withDetails(archivePath);
+    }
     return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
                                "RomHasher::hashArchiveInnerRom")
         .withDetails(archivePath);

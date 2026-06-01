@@ -152,18 +152,17 @@ void ScreenScraperCatalogManager::ensureMediaTypeCatalog() const {
   url.setQuery(q);
 
   if (!m_httpClient) return;
-  // Use a mutable-this lambda to write back the populated map. The
-  // catalog manager's lifetime is tied to the provider, which is
-  // tied to the registry — when the registry releases the provider,
-  // any in-flight fetch's callback would run on a freed `this`. The
-  // HttpClient callback is fired on the main thread and the registry
-  // tear-down is also main-thread, so the race is serialised;
-  // `ensureMediaTypeCatalog` is best-effort and we accept the small
-  // UAF window as the practical tradeoff for not adding a QPointer-
-  // style guard to a non-QObject helper.
+  // The callback writes back to m_mediaTypeLabels, so it must capture `this`.
+  // The manager's lifetime is tied to the provider/registry; if the registry
+  // releases the provider mid-fetch, this callback would run on a freed `this`.
+  // Both the callback and registry tear-down run on the main thread, so a
+  // weak-token entry check is race-free: if the token has expired the manager
+  // is gone and we bail before touching `this` (Kartend-t5n7).
   m_httpClient->get(
       url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
-      [this, cachePath](ErrorUtils::Result<QByteArray> response) {
+      [this, cachePath,
+       alive = std::weak_ptr<int>(m_lifetimeToken)](ErrorUtils::Result<QByteArray> response) {
+        if (alive.expired()) return; // provider torn down mid-fetch
         if (response.isError()) {
           // Quiet log path — fetching the catalog is a polish
           // refresh, not load-bearing for a scrape. The fallback
