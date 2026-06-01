@@ -154,8 +154,11 @@ struct ErrorContext {
   }
 };
 
-// Result type combining a value with optional error context
-template <typename T> class Result {
+// Result type combining a value with optional error context.
+// Class-level [[nodiscard]]: discarding any returned Result (notably
+// Result<void> from validators) silently bypasses the structured error model,
+// so make ignoring one a compile-time warning (Kartend-pftc).
+template <typename T> class [[nodiscard]] Result {
 public:
   Result(T value) : m_value(std::move(value)), m_error() {} // NOLINT(google-explicit-constructor)
   Result(ErrorContext error)                                // NOLINT(google-explicit-constructor)
@@ -189,7 +192,7 @@ private:
 };
 
 // Specialization for void result (just success/failure)
-template <> class Result<void> {
+template <> class [[nodiscard]] Result<void> {
 public:
   Result() : m_error() {}
   Result(ErrorContext error) : m_error(std::move(error)) {} // NOLINT(google-explicit-constructor)
