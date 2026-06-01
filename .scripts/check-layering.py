@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Module-layering lint for Kartend.
 
-Kartend's `src/` is organized into layers, but the build links everything
-into one OBJECT library, so the layering is not compiler-enforced. This
-script enforces the invariants that must always hold:
+Kartend's `src/` is organized into per-area OBJECT libraries (kartend_utils,
+_api, _chrome, _data, _input, _media, _ui, _core) with an explicit
+target_link_libraries DAG. But OBJECT libs propagate only usage requirements
+(include dirs, compile defs) — every area's .o files land in each consumer
+regardless — so a cross-layer `#include` still compiles. The layering is thus
+not link-enforced; this script enforces the invariants that must always hold:
 
     src/utils/    is the foundation layer and MUST NOT depend on any
                   higher layer (src/modules/, src/chrome/, src/ui/,
@@ -19,10 +22,10 @@ script enforces the invariants that must always hold:
 It maps every quoted `#include "x.h"` in those directories to the area
 its header actually lives in and fails if a file reaches upward.
 
-This is the first guardrail for issue "module folders don't enforce
-layering" — the eventual fix is to split each top-level module into its
-own library with explicit `target_link_libraries`. Until then, this lint
-stops the foundation/chrome layers from silently accreting upward edges.
+This lint backstops the layering until the per-area OBJECT libs are
+converted to STATIC (Kartend-q3vfq), which would turn a cross-layer include
+into a link error. Until then, it stops the foundation/chrome (and
+data/input/media) layers from silently accreting upward edges.
 
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
 """
