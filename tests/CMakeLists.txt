@@ -153,6 +153,13 @@ add_executable(test_artworkcandidates
 target_link_libraries(test_artworkcandidates PRIVATE kartend_utils Qt6::Test)
 add_test(NAME ArtworkCandidates COMMAND test_artworkcandidates)
 
+# ArtworkCompose tests (Kartend-63wg): composeArtworkCard scale/center/mask.
+add_executable(test_artworkcompose
+  utils/view/test_artworkcompose.cpp
+)
+target_link_libraries(test_artworkcompose PRIVATE kartend_utils Qt6::Test Qt6::Gui)
+add_test(NAME ArtworkCompose COMMAND test_artworkcompose)
+
 # FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.
 add_executable(test_fuzzymatch
   utils/text/test_fuzzymatch.cpp

@@ -3,7 +3,9 @@
 
 #include "errorutils.h"
 
+#include <QColor>
 #include <QHash>
+#include <QImage>
 #include <QMutex>
 #include <QSet>
 #include <QString>
@@ -131,6 +133,29 @@ private:
  */
 [[nodiscard]] QString findArtworkForFileCached(const QString &fileName,
                                                const QString &artworkDirectory);
+
+/**
+ * @brief Compose the final item-card image: scale-to-fit + center on a
+ * background + rounded-corner mask, at the physical target size.
+ *
+ * Kartend-63wg: this is the per-tile work ItemWidget::onArtworkChanged used
+ * to do on the GUI thread for every delivered pixmap. Extracted so the
+ * artwork worker can produce the finished card off-thread (QImage + QPainter
+ * are reentrant; QPixmap is not) and the GUI just sets it. ItemWidget still
+ * calls this for the placeholder / size-mismatch fallback paths, so the two
+ * stay pixel-identical.
+ *
+ * @p source decoded artwork (any DPR; treated as raw pixels).
+ * @p targetWidthLogical / @p targetHeightLogical the label's logical size.
+ * @p dpr device pixel ratio; output is sized targetW*dpr x targetH*dpr and
+ *    tagged with @p dpr so it renders crisp at the logical size.
+ * @p cornerRadiusLogical rounded-corner radius in logical px; <=0 disables.
+ * @p background fill behind the letterboxed artwork.
+ * Returns a null QImage when the target size is empty or @p source is null.
+ */
+[[nodiscard]] QImage composeArtworkCard(const QImage &source, int targetWidthLogical,
+                                        int targetHeightLogical, qreal dpr, int cornerRadiusLogical,
+                                        const QColor &background);
 
 /**
  * @brief Find artwork file with structured error reporting.

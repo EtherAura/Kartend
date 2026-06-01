@@ -1,6 +1,7 @@
 // Media item widget displaying artwork, title, and selection state with pulse
 // animation.
 #include "itemwidget.h"
+#include "artworkutils.h"
 #include "propertyutils.h"
 #include "uiconstants/animation.h"
 #include "uiconstants/collectionicon.h"
@@ -469,6 +470,12 @@ void ItemWidget::onArtworkChanged() {
     drawTitleOnPlaceholder(placeholder);
     imageLabel->setPixmap(placeholder);
     imageLabel->setStyleSheet(QString());
+  } else if (m_storedIsComposed) {
+    // Kartend-63wg: the worker already produced the final corner-masked card at
+    // this tile's size — set it straight onto the label with no scale/composite.
+    // applyResultsToUi only routes here when the card matches the live size.
+    imageLabel->setPixmap(displayPixmap);
+    imageLabel->setStyleSheet(QString());
   } else {
     // Get the screen DPR for the final output
     qreal dpr = 1.0;
@@ -476,48 +483,14 @@ void ItemWidget::onArtworkChanged() {
       dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
     }
 
-    // Physical dimensions for the output
-    int physicalW = qRound(width * dpr);
-    int physicalH = qRound(height * dpr);
-
-    // Create a copy of source with DPR=1 so we work in raw physical pixels
-    QPixmap sourceNoDpr = displayPixmap;
-    sourceNoDpr.setDevicePixelRatio(1.0);
-
-    // Scale to fit within physical target size
-    QPixmap scaledArtwork =
-        sourceNoDpr.scaled(physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    // Create result at physical size
-    QPixmap resultPixmap(physicalW, physicalH);
-    resultPixmap.fill(palette().color(QPalette::Mid));
-
-    // Center using physical pixel coordinates
-    {
-      QPainter painter(&resultPixmap);
-      painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-      int offsetX = (physicalW - scaledArtwork.width()) / 2;
-      int offsetY = (physicalH - scaledArtwork.height()) / 2;
-      painter.drawPixmap(offsetX, offsetY, scaledArtwork);
-    }
-
-    // Apply corner radius masking (in physical pixels)
-    if (m_cornerRadius > 0) {
-      int physicalRadius = qRound(m_cornerRadius * dpr);
-      QPixmap maskedPixmap(physicalW, physicalH);
-      maskedPixmap.fill(Qt::transparent);
-
-      QPainter maskPainter(&maskedPixmap);
-      maskPainter.setRenderHint(QPainter::Antialiasing, true);
-
-      QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH), physicalRadius, physicalRadius);
-      maskPainter.setClipPath(clipPath);
-      maskPainter.drawPixmap(0, 0, resultPixmap);
-      maskPainter.end();
-
-      resultPixmap = maskedPixmap;
-    }
+    // Kartend-63wg: scale-to-fit + center-on-background + corner-mask now lives
+    // in ArtworkUtils::composeArtworkCard so the worker can produce the same
+    // card off-thread; this GUI path is the placeholder + size-mismatch
+    // fallback, kept pixel-identical by sharing that helper.
+    const QImage card =
+        ArtworkUtils::composeArtworkCard(displayPixmap.toImage(), width, height, dpr,
+                                         m_cornerRadius, palette().color(QPalette::Mid));
+    QPixmap resultPixmap = QPixmap::fromImage(card);
 
     // user-supplied placeholder image is also "placeholder art" —
     // overlay the title only when the real artwork is missing (storedPixmap
@@ -526,13 +499,24 @@ void ItemWidget::onArtworkChanged() {
       drawTitleOnPlaceholder(resultPixmap, dpr);
     }
 
-    // Set DPR on final result for proper display
-    resultPixmap.setDevicePixelRatio(dpr);
-
     imageLabel->setPixmap(resultPixmap);
     imageLabel->setStyleSheet(QString());
   }
   if (nameLabel) {
     nameLabel->raise();
   }
+}
+
+ItemWidget::ArtworkRenderSpec ItemWidget::artworkRenderSpec() const {
+  // Kartend-63wg: snapshot the inputs onArtworkChanged composes from, so the
+  // artwork worker can build the finished card off-thread. An unsized label
+  // (not laid out yet) yields an empty labelSize → the worker skips compositing
+  // and the GUI composites on delivery.
+  ArtworkRenderSpec spec;
+  if (imageLabel) {
+    spec.labelSize = imageLabel->size();
+  }
+  spec.cornerRadius = m_cornerRadius;
+  spec.background = palette().color(QPalette::Mid);
+  return spec;
 }

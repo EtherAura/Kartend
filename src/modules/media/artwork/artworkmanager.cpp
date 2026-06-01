@@ -509,9 +509,16 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artwor
     widgetIdentity = widget->getFilePath();
   }
 
+  // Kartend-63wg: snapshot the tile's render spec so the worker can produce the
+  // finished card off-thread. An unsized label (not laid out yet) yields an
+  // empty size and the worker skips compositing (GUI composites on delivery).
+  const ItemWidget::ArtworkRenderSpec spec = widget->artworkRenderSpec();
   m_widgetRegistry->enqueuePending(ArtworkInfo{.mediaItem = QPointer<ItemWidget>(widget),
                                                .artworkPath = artworkPath,
-                                               .widgetIdentity = widgetIdentity});
+                                               .widgetIdentity = widgetIdentity,
+                                               .targetLabelSize = spec.labelSize,
+                                               .cornerRadius = spec.cornerRadius,
+                                               .backgroundColor = spec.background});
 
   if (!shouldDefer) {
     scheduleViewportUpdate();
@@ -743,7 +750,18 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
       }
     }
     if (!QApplication::closingDown()) {
-      widget->setArtworkPixmap(pixmap);
+      // Kartend-63wg: if the worker composed the final card and the tile is
+      // still the size it was composed for, set it straight through (no GUI
+      // scale/composite). Otherwise (worker skipped it, or the tile resized
+      // mid-flight) fall back to compositing the raw pixmap on the GUI thread.
+      if (!result.composedCard.isNull() &&
+          result.composedForSize == widget->artworkRenderSpec().labelSize) {
+        QPixmap card = QPixmap::fromImage(result.composedCard);
+        card.setDevicePixelRatio(result.composedCard.devicePixelRatio());
+        widget->setComposedArtwork(card);
+      } else {
+        widget->setArtworkPixmap(pixmap);
+      }
       widget->update();
       ++applied;
     } else {

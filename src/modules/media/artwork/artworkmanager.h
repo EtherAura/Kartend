@@ -2,10 +2,12 @@
 #define ARTWORKMANAGER_H
 
 #include <atomic>
+#include <QColor>
 #include <QImage>
 #include <QObject>
 #include <QPixmap>
 #include <QPointer>
+#include <QSize>
 
 #include "adaptivebatcher.h"
 #include "artworkpathcatalog.h"
@@ -41,6 +43,16 @@ struct ArtworkInfo {
   /// but never share an absolute path (Kartend-j0lb.8).
   QString widgetIdentity;
 
+  /// Kartend-63wg: render spec snapshotted from the widget at dispatch so the
+  /// worker can produce the finished, corner-masked card off the GUI thread
+  /// instead of every delivered pixmap paying a main-thread scale+composite.
+  /// targetLabelSize is the artwork label's logical size; an invalid/empty
+  /// size means "not laid out yet" and the worker skips compositing (the GUI
+  /// falls back to its own composite on delivery).
+  QSize targetLabelSize;
+  int cornerRadius = 0;
+  QColor backgroundColor;
+
   struct Result {
     QPointer<ItemWidget> widget;
     QString artworkPath;
@@ -52,7 +64,15 @@ struct ArtworkInfo {
     /// against the widget's *current* identity to detect mid-flight recycling
     /// across collections that share a basename (Kartend-j0lb.8).
     QString widgetIdentity;
+    /// Raw decoded artwork (BOX_SIZE). Always cached by path and used by the
+    /// GUI composite fallback when the card couldn't be (or was) composed at
+    /// the wrong size.
     QImage image;
+    /// Kartend-63wg: the finished, corner-masked card composed on the worker,
+    /// sized for composedForSize (the label's logical size at dispatch). Null
+    /// when the widget wasn't laid out at dispatch; the GUI then composites.
+    QImage composedCard;
+    QSize composedForSize;
     bool loadedFromDiskCache = false;
   };
 };

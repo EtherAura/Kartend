@@ -1,11 +1,13 @@
 #ifndef ITEMWIDGET_H
 #define ITEMWIDGET_H
 
+#include <QColor>
 #include <QElapsedTimer>
 #include <QFrame>
 #include <QPixmap>
 #include <QPropertyAnimation>
 #include <QRect>
+#include <QSize>
 #include <QTimer>
 
 #include "ui_itemwidget.h"
@@ -27,14 +29,31 @@ class ItemWidget : public QWidget {
   QPropertyAnimation *pulseAnimation = nullptr;
   qreal m_pulseOpacity = 1.0;
   QPixmap storedPixmap;
+  // Kartend-63wg: true when storedPixmap is a worker-composed final card (set
+  // via setComposedArtwork) rather than raw artwork — onArtworkChanged then
+  // sets it straight through instead of re-scaling + re-compositing.
+  bool m_storedIsComposed = false;
 
 public:
+  /// Kartend-63wg: the inputs onArtworkChanged uses to compose a tile's card,
+  /// snapshotted so the artwork worker can do that compositing off the GUI
+  /// thread. An empty labelSize means the artwork label isn't laid out yet.
+  struct ArtworkRenderSpec {
+    QSize labelSize;
+    int cornerRadius = 0;
+    QColor background;
+  };
+  [[nodiscard]] ArtworkRenderSpec artworkRenderSpec() const;
   explicit ItemWidget(QWidget *parent = nullptr);
   ~ItemWidget() override;
 
   void setItemName(const QString &name);
   void setFilePath(const QString &path);
   void setArtworkPixmap(const QPixmap &pixmap);
+  /// Kartend-63wg: set an already-composed final card (corner-masked, sized to
+  /// the artwork label) produced by the artwork worker. onArtworkChanged sets
+  /// it straight onto the label with no further scale/composite.
+  void setComposedArtwork(const QPixmap &card);
   void setPlaceholderArtworkPixmap(const QPixmap &pixmap);
   virtual void setSelected(bool selected);
   void resetForReuse();

@@ -1,5 +1,6 @@
 #include "artworkloaddispatcher.h"
 
+#include "artworkutils.h"
 #include "cachemanager.h"
 #include "extensionutils.h"
 #include "icachemanager.h"
@@ -114,12 +115,25 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
     if (img.isNull()) {
       continue;
     }
+    // Kartend-63wg: compose the finished, corner-masked card here on the worker
+    // when the widget's render spec was captured at dispatch (laid-out widget).
+    // The GUI then just sets it instead of re-scaling + re-compositing per tile.
+    // The raw `img` is still delivered (and cached by path) for the composite
+    // fallback the GUI uses if the tile resized since dispatch.
+    QImage composed;
+    if (info.targetLabelSize.isValid() && !info.targetLabelSize.isEmpty()) {
+      composed = ArtworkUtils::composeArtworkCard(img, info.targetLabelSize.width(),
+                                                  info.targetLabelSize.height(), dpr,
+                                                  info.cornerRadius, info.backgroundColor);
+    }
     results.append(
         ArtworkInfo::Result{.widget = info.mediaItem,
                             .artworkPath = info.artworkPath,
                             .artworkBaseName = QFileInfo(info.artworkPath).completeBaseName(),
                             .widgetIdentity = info.widgetIdentity,
                             .image = img,
+                            .composedCard = composed,
+                            .composedForSize = composed.isNull() ? QSize() : info.targetLabelSize,
                             .loadedFromDiskCache = loadedFromDiskCache});
   }
   return results;

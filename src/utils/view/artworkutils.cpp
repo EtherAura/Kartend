@@ -8,9 +8,54 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QPainter>
+#include <QPainterPath>
 #include <QtConcurrent>
 
 namespace ArtworkUtils {
+
+QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targetHeightLogical,
+                          qreal dpr, int cornerRadiusLogical, const QColor &background) {
+  const int physicalW = qRound(targetWidthLogical * dpr);
+  const int physicalH = qRound(targetHeightLogical * dpr);
+  if (physicalW <= 0 || physicalH <= 0 || source.isNull()) {
+    return {};
+  }
+
+  // Work in raw physical pixels: strip any DPR off the source so scaled()
+  // targets the physical card size directly.
+  QImage sourceNoDpr = source;
+  sourceNoDpr.setDevicePixelRatio(1.0);
+  const QImage scaledArtwork =
+      sourceNoDpr.scaled(physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+  QImage result(physicalW, physicalH, QImage::Format_ARGB32_Premultiplied);
+  result.fill(background);
+  {
+    QPainter painter(&result);
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+    const int offsetX = (physicalW - scaledArtwork.width()) / 2;
+    const int offsetY = (physicalH - scaledArtwork.height()) / 2;
+    painter.drawImage(offsetX, offsetY, scaledArtwork);
+  }
+
+  if (cornerRadiusLogical > 0) {
+    const int physicalRadius = qRound(cornerRadiusLogical * dpr);
+    QImage masked(physicalW, physicalH, QImage::Format_ARGB32_Premultiplied);
+    masked.fill(Qt::transparent);
+    QPainter maskPainter(&masked);
+    maskPainter.setRenderHint(QPainter::Antialiasing, true);
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH), physicalRadius, physicalRadius);
+    maskPainter.setClipPath(clipPath);
+    maskPainter.drawImage(0, 0, result);
+    maskPainter.end();
+    result = masked;
+  }
+
+  result.setDevicePixelRatio(dpr);
+  return result;
+}
 
 namespace {
 /// Subdirectories under the artwork root that can supply an item's

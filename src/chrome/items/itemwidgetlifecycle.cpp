@@ -173,6 +173,9 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
     return;
   }
 
+  // Kartend-63wg: raw artwork — onArtworkChanged still scales + composites it.
+  m_storedIsComposed = false;
+
   bool shouldDefer = property(PropertyKeys::DeferArtworkUpdate).toBool();
   if (shouldDefer) {
     storedPixmap = pixmap;
@@ -183,6 +186,36 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
   QPointer<ItemWidget> ptr = this;
   // Defer artwork display until next event loop iteration - allows
   // the pixmap to be stored before triggering the visual update
+  QTimer::singleShot(0, this, [ptr]() {
+    if (ptr) {
+      ptr->onArtworkChanged();
+    }
+  });
+  if (nameLabel) {
+    nameLabel->raise();
+  }
+}
+
+// Kartend-63wg: set a worker-composed final card. Mirrors setArtworkPixmap's
+// defer handling, but flags the stored pixmap as already-composed so
+// onArtworkChanged sets it straight onto the label (no scale/composite/mask).
+void ItemWidget::setComposedArtwork(const QPixmap &card) {
+  if (!imageLabel) {
+    return;
+  }
+
+  m_storedIsComposed = true;
+
+  bool shouldDefer = property(PropertyKeys::DeferArtworkUpdate).toBool();
+  if (shouldDefer) {
+    storedPixmap = card;
+    return;
+  }
+
+  storedPixmap = card;
+  QPointer<ItemWidget> ptr = this;
+  // Defer to the next event-loop iteration so the card is stored before the
+  // visual update runs — same store-then-apply ordering as setArtworkPixmap.
   QTimer::singleShot(0, this, [ptr]() {
     if (ptr) {
       ptr->onArtworkChanged();
