@@ -4,14 +4,18 @@
 #include "artworkutils.h"
 #include "extensionutils.h"
 #include "overlaylayermanager.h"
+#include "uiconstants/artwork.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"
 #include "videoutils.h"
 
 #include <QFileInfo>
 #include <QFrame>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QImage>
+#include <QImageReader>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayoutItem>
@@ -20,6 +24,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QtConcurrent>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -491,10 +496,39 @@ void ArtworkPreviewOverlay::rebuildGalleryStrip() {
     if (entry.isVideo) {
       btn->setText(QStringLiteral("▶"));
     } else {
-      QPixmap pix(entry.path);
-      if (!pix.isNull()) {
-        btn->setIcon(QIcon(pix));
-      }
+      // Decode-at-size off the GUI thread: a full-res QPixmap(path) per entry
+      // spiked RAM by hundreds of MB and froze overlay-open on 4K-source
+      // galleries (Kartend-r4m0). Mirror the coverflow strip — decode at 2x the
+      // icon edge for crisp downscale, capture only value copies, and parent the
+      // watcher to the button so the result is dropped if the strip is rebuilt
+      // (deleteLater) before the worker finishes.
+      const QString path = entry.path;
+      const int decodeEdge = iconSize * 2;
+      auto *watcher = new QFutureWatcher<QImage>(btn);
+      connect(watcher, &QFutureWatcher<QImage>::finished, btn, [btn, watcher]() {
+        const QImage img = watcher->result();
+        if (!img.isNull()) {
+          btn->setIcon(QIcon(QPixmap::fromImage(img)));
+        }
+        watcher->deleteLater();
+      });
+      watcher->setFuture(QtConcurrent::run([path, decodeEdge]() -> QImage {
+        if (!ExtensionUtils::isDecodableImagePath(path)) {
+          return {};
+        }
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
+        const QSize originalSize = reader.size();
+        if (originalSize.isValid()) {
+          QSize scaled = originalSize;
+          scaled.scale(decodeEdge, decodeEdge, Qt::KeepAspectRatio);
+          reader.setScaledSize(scaled);
+        } else {
+          reader.setScaledSize(QSize(decodeEdge, decodeEdge));
+        }
+        return reader.read();
+      }));
     }
     const int captured = i;
     connect(btn, &QToolButton::clicked, this, [this, captured]() { showGalleryEntry(captured); });
