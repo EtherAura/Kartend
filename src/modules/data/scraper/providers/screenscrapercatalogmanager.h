@@ -5,6 +5,7 @@
 #include "screenscrapersystems.h"
 
 #include <functional>
+#include <memory>
 
 #include <QHash>
 #include <QList>
@@ -87,6 +88,13 @@ private:
   CredentialsResolver m_credentialsResolver;
   ErrorMapper m_errorMapper;
   mutable QHash<QString, QString> m_mediaTypeLabels;
+
+  // Liveness token for in-flight HttpClient callbacks that capture `this`.
+  // Held by the manager; callbacks capture a weak_ptr and bail if it has
+  // expired (provider torn down mid-fetch). Callbacks and teardown both run on
+  // the main thread, so an entry check is race-free and closes the UAF window
+  // ensureMediaTypeCatalog used to accept (Kartend-t5n7).
+  std::shared_ptr<int> m_lifetimeToken = std::make_shared<int>(0);
 };
 
 #endif // SCREENSCRAPERCATALOGMANAGER_H
