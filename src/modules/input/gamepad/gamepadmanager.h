@@ -48,6 +48,13 @@ public:
   void endBindingCapture();
   [[nodiscard]] bool isBindingCaptureActive() const { return m_bindingCaptureActive; }
 
+  // Suspends gamepad input dispatch while a tracked child process is running,
+  // mirroring AttractManager::setSuspended (Kartend-5rpt). Polling continues so
+  // button edge-state stays synced (no phantom press on resume), but presses /
+  // directions are not routed to the frontend. Entering suspend also clears any
+  // held direction so movement doesn't stick under the launched program.
+  void setSuspended(bool suspended);
+
 signals:
   void requestSelectionMove(int direction, bool vertical);
   void requestEnterAction();
@@ -104,6 +111,7 @@ private:
   bool m_buttonR3 = false;
 
   bool m_bindingCaptureActive = false;
+  bool m_suspended = false;
 
   Direction m_activeDirection = Direction::None;
 
