@@ -92,6 +92,7 @@ private slots:
   void v1AddsItemColumns();
   void v1AddsUniqueItemsIndex();
   void v1DeduplicatesBeforeUniqueIndex();
+  void v1DeduplicateMergesUsageData();
   void v2AddsPerformanceIndexes();
   void v3AddsMetaTable();
   void v4AddsFileSizeColumnAndIndex();
@@ -223,6 +224,56 @@ void TestDbMigrations::v1DeduplicatesBeforeUniqueIndex() {
   QVERIFY(q.exec("SELECT COUNT(*) FROM items WHERE collection_uuid='u1'"));
   QVERIFY(q.next());
   QCOMPARE(q.value(0).toInt(), 2);
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v1DeduplicateMergesUsageData() {
+  // Regression for Kartend-l793: the dedup must not silently drop usage/rating
+  // data carried by a later duplicate when the surviving (min rowid) row lacks
+  // it. Seed the survivor with LOW values and a duplicate with HIGH values, and
+  // confirm the survivor ends up with the merged (MAX) values.
+  const QString conn = "test_v1_dedupe_merge";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+
+  QSqlQuery q(db);
+  // Pre-add the v1 user-data columns so duplicates can carry diverging values
+  // before migrations run (mimicking an older DB that already had them).
+  QVERIFY(q.exec("ALTER TABLE items ADD COLUMN collection_uuid TEXT DEFAULT ''"));
+  QVERIFY(q.exec("ALTER TABLE items ADD COLUMN artwork_path TEXT"));
+  QVERIFY(q.exec("ALTER TABLE items ADD COLUMN play_count INTEGER DEFAULT 0"));
+  QVERIFY(q.exec("ALTER TABLE items ADD COLUMN last_played TEXT"));
+  QVERIFY(q.exec("ALTER TABLE items ADD COLUMN rating INTEGER DEFAULT 0"));
+
+  // Survivor (min rowid) is the empty first-inserted row; the duplicate carries
+  // the real usage data that the old code would have dropped.
+  QVERIFY(q.exec("INSERT INTO items (name, path, collection_uuid, play_count, last_played, rating, "
+                 "artwork_path) VALUES ('a', '/dup', 'u1', 0, NULL, 0, NULL)"));
+  QVERIFY(q.exec("INSERT INTO items (name, path, collection_uuid, play_count, last_played, rating, "
+                 "artwork_path) VALUES ('a-copy', '/dup', 'u1', 7, '2026-05-30T10:00:00Z', 4, "
+                 "'/art/a.png')"));
+  QVERIFY(q.exec("INSERT INTO items (name, path, collection_uuid, play_count) "
+                 "VALUES ('b', '/uniq', 'u1', 3)"));
+
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QVERIFY(indexExists(db, "uniq_items_uuid_path"));
+
+  // One row survives for /dup, and it carries the merged usage data.
+  QVERIFY(q.exec("SELECT play_count, last_played, rating, artwork_path FROM items "
+                 "WHERE collection_uuid='u1' AND path='/dup'"));
+  QVERIFY(q.next());
+  QCOMPARE(q.value(0).toInt(), 7);
+  QCOMPARE(q.value(1).toString(), QStringLiteral("2026-05-30T10:00:00Z"));
+  QCOMPARE(q.value(2).toInt(), 4);
+  QCOMPARE(q.value(3).toString(), QStringLiteral("/art/a.png"));
+  QVERIFY(!q.next()); // exactly one /dup row remains
+
+  // The unique row is untouched.
+  QVERIFY(q.exec("SELECT play_count FROM items WHERE collection_uuid='u1' AND path='/uniq'"));
+  QVERIFY(q.next());
+  QCOMPARE(q.value(0).toInt(), 3);
 
   closeAndRemove(db, conn);
 }
