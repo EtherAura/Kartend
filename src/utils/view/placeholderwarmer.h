@@ -3,10 +3,10 @@
 
 #include <functional>
 
+#include <QImage>
 #include <QString>
 #include <QStringList>
 
-class QPixmap;
 struct CollectionConfig;
 
 /// Batch-export of procedural placeholder PNGs into a collection's artwork
@@ -37,6 +37,9 @@ struct Result {
   /// First handful of failure descriptions, capped so the UI summary stays
   /// short. Format: "<absolute media path>: <reason>".
   QStringList firstFailures;
+  /// Kartend-qe9a: true when the run stopped early because the cancel
+  /// predicate fired; the counts reflect work done up to that point.
+  bool cancelled = false;
 };
 
 /// Pre-flight problems detected before any file I/O happens. The dialog
@@ -71,20 +74,37 @@ struct PreflightResult {
                                         const QString &artworkDirectoryOverride);
 
 /// Tile factory signature: (width, height, cornerRadius) -> ready-to-save
-/// pixmap. The production caller passes ItemWidget::buildPlaceholderTile so
-/// warmed PNGs match the live grid render exactly; tests pass a stub so
-/// they don't need a QApplication or the widget statics.
-using TileFactory = std::function<QPixmap(int width, int height, int cornerRadius)>;
+/// QImage. Kartend-qe9a: QImage (not QPixmap) so the render runs off the GUI
+/// thread; the production caller snapshots the theme on the GUI thread and
+/// renders via ItemPlaceholderRenderer::buildTileImage so warmed PNGs match
+/// the live grid. Tests pass a stub so they don't need a QApplication.
+using TileFactory = std::function<QImage(int width, int height, int cornerRadius)>;
+
+/// Progress callback: (itemsScanned, itemsExported) so far. Kartend-qe9a:
+/// invoked periodically during the walk so a worker run can drive a progress
+/// UI. Called on the thread exportMissingPlaceholders runs on (a worker), so
+/// the caller must marshal to the GUI thread itself. Empty = no reporting.
+using ProgressFn = std::function<void(qint64 scanned, qint64 exported)>;
+
+/// Cancel predicate: return true to stop the walk early (Kartend-qe9a). Polled
+/// once per item; must be safe to call from the worker thread (e.g. read an
+/// atomic). Empty = never cancel.
+using CancelFn = std::function<bool()>;
 
 /// Run the export. Caller is expected to have called `preflight` and bailed
 /// on a non-None error. @p artworkDirectoryOverride mirrors `preflight`.
 /// @p tileWidth/tileHeight/cornerRadius come from CollectionConfig fields
 /// of the same name so generated PNGs match what the live grid renders.
-/// @p tileFactory builds the pixmap (see TileFactory).
+/// @p tileFactory builds the image (see TileFactory). @p onProgress and
+/// @p isCancelled (Kartend-qe9a) let a worker run report progress and bail
+/// early; both are optional. Safe to run on a worker thread — it touches only
+/// the filesystem and the supplied callbacks.
 [[nodiscard]] Result exportMissingPlaceholders(const CollectionConfig &collection,
                                                const QString &artworkDirectoryOverride,
                                                int tileWidth, int tileHeight, int cornerRadius,
-                                               const TileFactory &tileFactory);
+                                               const TileFactory &tileFactory,
+                                               const ProgressFn &onProgress = {},
+                                               const CancelFn &isCancelled = {});
 
 } // namespace PlaceholderWarmer
 

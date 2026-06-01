@@ -12,16 +12,20 @@
 #include <QColor>
 #include <QLabel>
 
-auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, bool applyGradient,
-                                      const QColor &baseOverride, double lineAlphaScale)
-    -> QPixmap {
+ItemPlaceholderRenderer::TileTheme ItemWidget::currentTileTheme() {
   ItemPlaceholderRenderer::TileTheme theme;
   if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
     theme.tileColor = QColor(s_tileColor);
   }
   theme.accentColor = titleTint();
+  return theme;
+}
+
+auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, bool applyGradient,
+                                      const QColor &baseOverride, double lineAlphaScale)
+    -> QPixmap {
   return ItemPlaceholderRenderer::buildTile(width, height, cornerRadius, applyGradient,
-                                            baseOverride, lineAlphaScale, theme);
+                                            baseOverride, lineAlphaScale, currentTileTheme());
 }
 
 // Instance wrapper used by per-item rendering — delegates with the widget's

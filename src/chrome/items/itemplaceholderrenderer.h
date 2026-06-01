@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QFont>
+#include <QImage>
 #include <QPixmap>
 #include <QString>
 
@@ -38,6 +39,17 @@ struct TileTheme {
 [[nodiscard]] QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
                                 const QColor &baseOverride, double lineAlphaScale,
                                 const TileTheme &theme);
+
+/// QImage core of buildTile — the actual hatch + noise + gradient + corner
+/// mask, with no QPixmap and no QApplication lookups, so it is safe to call
+/// off the GUI thread (Kartend-qe9a: PlaceholderWarmer renders export tiles on
+/// a worker). @p base is the resolved background color (no palette default;
+/// the caller snapshots it on the GUI thread) and @p noiseSeed seeds the
+/// deterministic dither. buildTile is a thin GUI-thread wrapper: it resolves
+/// the palette default, computes its cache key, and wraps this in a QPixmap.
+[[nodiscard]] QImage buildTileImage(int width, int height, int cornerRadius, bool applyGradient,
+                                    const QColor &base, double lineAlphaScale,
+                                    const TileTheme &theme, quint64 noiseSeed);
 
 /// Title-overlay inputs threaded through drawTitle.
 struct TitleStyle {

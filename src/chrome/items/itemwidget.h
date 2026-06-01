@@ -10,6 +10,7 @@
 #include <QSize>
 #include <QTimer>
 
+#include "itemplaceholderrenderer.h"
 #include "ui_itemwidget.h"
 #include <QString>
 
@@ -121,6 +122,12 @@ public:
                                       bool applyGradient = true,
                                       const QColor &baseOverride = QColor(),
                                       double lineAlphaScale = 1.0);
+
+  /// Kartend-qe9a: snapshot the placeholder tile theme (per-collection tile
+  /// color + resolved title-tint accent) from ItemWidget's static config on
+  /// the GUI thread, so a worker can render placeholder tiles via
+  /// ItemPlaceholderRenderer::buildTileImage without touching QApplication.
+  [[nodiscard]] static ItemPlaceholderRenderer::TileTheme currentTileTheme();
 
   // Static configuration for title appearance (set from GeneralSettings)
   static void setTitleTintSaturation(int saturation);

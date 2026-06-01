@@ -8,8 +8,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QPainter>
-#include <QPixmap>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -37,12 +37,13 @@ CollectionConfig collectionWith(const QString &mediaDir, const QString &artworkD
   return cfg;
 }
 
-/// 1x1 red pixmap. Cheap stand-in for the real placeholder so the test
-/// doesn't need ItemWidget or any of its theme statics.
-QPixmap fakeTile(int w, int h, int /*radius*/) {
-  QPixmap p(std::max(1, w), std::max(1, h));
-  p.fill(Qt::red);
-  return p;
+/// 1x1 red image. Cheap stand-in for the real placeholder so the test
+/// doesn't need ItemWidget or any of its theme statics. QImage (not QPixmap)
+/// matches the off-thread TileFactory signature (Kartend-qe9a).
+QImage fakeTile(int w, int h, int /*radius*/) {
+  QImage img(std::max(1, w), std::max(1, h), QImage::Format_ARGB32);
+  img.fill(Qt::red);
+  return img;
 }
 
 } // namespace

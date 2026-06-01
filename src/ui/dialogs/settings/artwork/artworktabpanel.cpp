@@ -10,16 +10,24 @@
 #include "ui_artworktabpanel.h"
 
 #include <algorithm>
+#include <atomic>
+#include <memory>
 #include <QApplication>
 #include <QCheckBox>
+#include <QColor>
 #include <QCursor>
 #include <QFileDialog>
 #include <QFrame>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPalette>
+#include <QPointer>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QStringList>
+#include <QtConcurrent>
 #include <QVBoxLayout>
 
 ArtworkTabPanel::ArtworkTabPanel(QWidget *parent) : QWidget(parent), ui(new Ui::ArtworkTabPanel) {
@@ -186,30 +194,85 @@ void ArtworkTabPanel::onExportPlaceholderPngs() {
     return;
   }
 
-  // Synchronous run — cover-art generation is cheap (a few hundred items
-  // tile in well under a second) and a progress dialog would more than
-  // double the surface area. Wait cursor signals "I'm working" for the
-  // larger libraries.
-  QApplication::setOverrideCursor(Qt::WaitCursor);
-  const auto result = PlaceholderWarmer::exportMissingPlaceholders(
-      cfg, liveArtworkDir, cfg.gridLayout.itemWidth, cfg.gridLayout.itemHeight,
-      cfg.gridLayout.cornerRadius,
-      [](int w, int h, int r) { return ItemWidget::buildPlaceholderTile(w, h, r); });
-  QApplication::restoreOverrideCursor();
+  // Kartend-qe9a: run the export on a worker behind a cancelable progress
+  // dialog. Multi-thousand-item libraries used to freeze the GUI behind a wait
+  // cursor while the walk rendered + saved every tile. The render theme + base
+  // are snapshotted here on the GUI thread so the worker can render each tile
+  // to a QImage via ItemPlaceholderRenderer::buildTileImage without touching
+  // QApplication / QPixmap off the GUI thread.
+  const ItemPlaceholderRenderer::TileTheme theme = ItemWidget::currentTileTheme();
+  const QColor base = palette().color(QPalette::Mid);
+  PlaceholderWarmer::TileFactory factory = [theme, base](int w, int h, int r) {
+    const quint64 seed =
+        (static_cast<quint64>(w) << 32) | (static_cast<quint64>(h) << 16) | static_cast<quint64>(r);
+    return ItemPlaceholderRenderer::buildTileImage(w, h, r, /*applyGradient=*/true, base,
+                                                   /*lineAlphaScale=*/1.0, theme, seed);
+  };
 
-  QString summary =
-      tr("Scanned %1 items.\nExported %2 new placeholder PNGs.\n"
-         "Skipped %3 items that already had artwork.")
-          .arg(QString::number(result.itemsScanned), QString::number(result.itemsExported),
-               QString::number(result.itemsAlreadyHadArtwork));
-  if (result.itemsFailed > 0) {
-    summary += QStringLiteral("\n\n") + tr("Failed: %1\n%2")
-                                            .arg(QString::number(result.itemsFailed),
-                                                 result.firstFailures.join(QChar('\n')));
-    QMessageBox::warning(this, tr("Placeholder export finished with errors"), summary);
-  } else {
-    QMessageBox::information(this, tr("Placeholder export complete"), summary);
-  }
+  auto *progress =
+      new QProgressDialog(tr("Exporting placeholder artwork…"), tr("Cancel"), 0, 0, this);
+  progress->setWindowModality(Qt::WindowModal);
+  progress->setMinimumDuration(0);
+  progress->setAutoClose(false);
+  progress->setAutoReset(false);
+
+  auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+  connect(progress, &QProgressDialog::canceled, this, [cancelFlag]() { cancelFlag->store(true); });
+
+  QPointer<QProgressDialog> progressPtr = progress;
+  const PlaceholderWarmer::ProgressFn onProgress = [progressPtr](qint64 scanned, qint64 exported) {
+    // Invoked on the worker thread — marshal the label update to the GUI.
+    QMetaObject::invokeMethod(qApp, [progressPtr, scanned, exported]() {
+      if (progressPtr) {
+        progressPtr->setLabelText(QObject::tr("Scanned %1 items, exported %2 placeholders…")
+                                      .arg(QString::number(scanned), QString::number(exported)));
+      }
+    });
+  };
+  const PlaceholderWarmer::CancelFn isCancelled = [cancelFlag]() { return cancelFlag->load(); };
+
+  // Capture inputs by value — the worker outlives this stack frame and the
+  // model's CollectionConfig may change underneath it.
+  const CollectionConfig cfgCopy = cfg;
+  const QString artworkDirCopy = liveArtworkDir;
+  const int tileW = cfg.gridLayout.itemWidth;
+  const int tileH = cfg.gridLayout.itemHeight;
+  const int tileR = cfg.gridLayout.cornerRadius;
+
+  QPointer<ArtworkTabPanel> self = this;
+  auto *watcher = new QFutureWatcher<PlaceholderWarmer::Result>(this);
+  connect(watcher, &QFutureWatcher<PlaceholderWarmer::Result>::finished, this,
+          [self, watcher, progress]() {
+            watcher->deleteLater();
+            progress->close();
+            progress->deleteLater();
+            if (!self) {
+              return;
+            }
+            const PlaceholderWarmer::Result result = watcher->result();
+            if (result.cancelled) {
+              return; // user canceled — no summary
+            }
+            QString summary = tr("Scanned %1 items.\nExported %2 new placeholder PNGs.\n"
+                                 "Skipped %3 items that already had artwork.")
+                                  .arg(QString::number(result.itemsScanned),
+                                       QString::number(result.itemsExported),
+                                       QString::number(result.itemsAlreadyHadArtwork));
+            if (result.itemsFailed > 0) {
+              summary += QStringLiteral("\n\n") + tr("Failed: %1\n%2")
+                                                      .arg(QString::number(result.itemsFailed),
+                                                           result.firstFailures.join(QChar('\n')));
+              QMessageBox::warning(self, tr("Placeholder export finished with errors"), summary);
+            } else {
+              QMessageBox::information(self, tr("Placeholder export complete"), summary);
+            }
+          });
+
+  watcher->setFuture(QtConcurrent::run([cfgCopy, artworkDirCopy, tileW, tileH, tileR, factory,
+                                        onProgress, isCancelled]() {
+    return PlaceholderWarmer::exportMissingPlaceholders(cfgCopy, artworkDirCopy, tileW, tileH,
+                                                        tileR, factory, onProgress, isCancelled);
+  }));
 }
 
 void ArtworkTabPanel::onBrowsePlaceholderArtwork() {

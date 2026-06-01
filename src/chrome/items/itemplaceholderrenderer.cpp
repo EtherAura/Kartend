@@ -23,53 +23,12 @@
 
 namespace ItemPlaceholderRenderer {
 
-QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
-                  const QColor &baseOverride, double lineAlphaScale, const TileTheme &theme) {
+QImage buildTileImage(int width, int height, int cornerRadius, bool applyGradient,
+                      const QColor &base, double lineAlphaScale, const TileTheme &theme,
+                      quint64 noiseSeed) {
   if (width <= 0 || height <= 0) {
     return {};
   }
-  // Per-size cache: avoids thrash when the sidebar (different size) and
-  // item tiles (item-card size) call this helper in alternation. The
-  // cached-theme guard wipes the cache whenever the user picks a new tile
-  // color so a stale tile doesn't leak into the next render.
-  static QHash<quint64, QPixmap> cache;
-  static QString cachedTileColorKey;
-  // Read the palette base from the global app palette by default. Callers
-  // (e.g. DetailsPane) can pass their own widget-instance Mid so a custom
-  // palette inherited from an ancestor is honoured — without this override
-  // the sidebar's pattern was visibly lighter than item tiles.
-  QColor base =
-      baseOverride.isValid() ? baseOverride : QApplication::palette().color(QPalette::Mid);
-  constexpr int kKeyWidthShiftBits = 48;
-  constexpr int kKeyHeightShiftBits = 32;
-  constexpr quint64 kRgbaMask32 = 0xffffffffULL;
-  quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
-                (static_cast<quint64>(height) << kKeyHeightShiftBits) |
-                (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  // Mix corner radius into the key so a 0-radius sidebar and a rounded
-  // item tile of the same size each get their own cache entry. One bit
-  // for the gradient flag so seamless and gradient variants don't
-  // collide. The base color is already part of `key` via base.rgba()
-  // above, so an override automatically gets its own cache slot.
-  key ^= static_cast<quint64>(cornerRadius) << 16;
-  if (applyGradient) {
-    key ^= 0x1ULL;
-  }
-  // Quantize the alpha scale into the key so the sidebar's dimmed variant
-  // doesn't collide with the full-intensity item tile.
-  key ^= static_cast<quint64>(std::clamp(lineAlphaScale * 100.0, 0.0, 200.0)) << 24;
-  const QString themeKey = theme.tileColor.isValid() ? theme.tileColor.name() : QString();
-  if (cachedTileColorKey != themeKey) {
-    cache.clear();
-    cachedTileColorKey = themeKey;
-  }
-  auto cacheIt = cache.constFind(key);
-  if (cacheIt != cache.constEnd()) {
-    return cacheIt.value();
-  }
-
-  QPixmap pixmap(width, height);
-  pixmap.fill(Qt::transparent);
 
   int baseLightness = base.lightness();
   constexpr int kLightnessDarkThreshold = 128;
@@ -135,8 +94,10 @@ QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
   // behavior even when tileColor is overriding the fill.
   const QColor bgColor = theme.tileColor.isValid() ? theme.tileColor : base;
 
+  QImage img(width, height, QImage::Format_ARGB32_Premultiplied);
+  img.fill(Qt::transparent);
   {
-    QPainter painter(&pixmap);
+    QPainter painter(&img);
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.fillRect(0, 0, width, height, bgColor);
 
@@ -150,8 +111,8 @@ QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
     }
   }
 
-  QImage img = pixmap.toImage();
-  QRandomGenerator generator(static_cast<quint32>(key ^ UIConstants::Placeholder::NOISE_SEED));
+  QRandomGenerator generator(
+      static_cast<quint32>(noiseSeed ^ UIConstants::Placeholder::NOISE_SEED));
   const int noiseAmp = UIConstants::Placeholder::NOISE_AMPLITUDE;
   const int stride = UIConstants::Placeholder::NOISE_STRIDE;
   if (noiseAmp > 0 && stride > 0) {
@@ -174,10 +135,9 @@ QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
       }
     }
   }
-  pixmap = QPixmap::fromImage(img);
 
   if (applyGradient) {
-    QPainter painter(&pixmap);
+    QPainter painter(&img);
     QLinearGradient gradient(0, 0, 0, height);
     QColor top(bgColor.red(), bgColor.green(), bgColor.blue(),
                UIConstants::Placeholder::GRADIENT_TOP_ALPHA);
@@ -189,18 +149,64 @@ QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
   }
 
   if (cornerRadius > 0) {
-    QPixmap maskedPixmap(width, height);
-    maskedPixmap.fill(Qt::transparent);
-    QPainter maskPainter(&maskedPixmap);
+    QImage masked(width, height, QImage::Format_ARGB32_Premultiplied);
+    masked.fill(Qt::transparent);
+    QPainter maskPainter(&masked);
     maskPainter.setRenderHint(QPainter::Antialiasing, true);
     QPainterPath clipPath;
     clipPath.addRoundedRect(QRectF(0, 0, width, height), cornerRadius, cornerRadius);
     maskPainter.setClipPath(clipPath);
-    maskPainter.drawPixmap(0, 0, pixmap);
+    maskPainter.drawImage(0, 0, img);
     maskPainter.end();
-    pixmap = maskedPixmap;
+    img = masked;
   }
 
+  return img;
+}
+
+QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
+                  const QColor &baseOverride, double lineAlphaScale, const TileTheme &theme) {
+  if (width <= 0 || height <= 0) {
+    return {};
+  }
+  // Per-size cache: avoids thrash when the sidebar (different size) and item
+  // tiles call this helper in alternation. The cached-theme guard wipes the
+  // cache whenever the user picks a new tile color so a stale tile doesn't leak
+  // into the next render.
+  static QHash<quint64, QPixmap> cache;
+  static QString cachedTileColorKey;
+  // Default to the global app palette Mid; callers (e.g. DetailsPane) can pass
+  // their own widget-instance Mid so an inherited custom palette is honoured.
+  const QColor base =
+      baseOverride.isValid() ? baseOverride : QApplication::palette().color(QPalette::Mid);
+  constexpr int kKeyWidthShiftBits = 48;
+  constexpr int kKeyHeightShiftBits = 32;
+  constexpr quint64 kRgbaMask32 = 0xffffffffULL;
+  quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
+                (static_cast<quint64>(height) << kKeyHeightShiftBits) |
+                (static_cast<quint64>(base.rgba()) & kRgbaMask32);
+  // Mix corner radius + the gradient flag + the quantized alpha scale into the
+  // key so otherwise same-size variants get their own cache slots.
+  key ^= static_cast<quint64>(cornerRadius) << 16;
+  if (applyGradient) {
+    key ^= 0x1ULL;
+  }
+  key ^= static_cast<quint64>(std::clamp(lineAlphaScale * 100.0, 0.0, 200.0)) << 24;
+  const QString themeKey = theme.tileColor.isValid() ? theme.tileColor.name() : QString();
+  if (cachedTileColorKey != themeKey) {
+    cache.clear();
+    cachedTileColorKey = themeKey;
+  }
+  auto cacheIt = cache.constFind(key);
+  if (cacheIt != cache.constEnd()) {
+    return cacheIt.value();
+  }
+
+  // Render via the shared QImage core (seed = cache key, so the dither stays
+  // stable per cache slot — identical output to the previous inline path),
+  // then wrap in a QPixmap and cache.
+  const QPixmap pixmap = QPixmap::fromImage(
+      buildTileImage(width, height, cornerRadius, applyGradient, base, lineAlphaScale, theme, key));
   cache.insert(key, pixmap);
   return pixmap;
 }

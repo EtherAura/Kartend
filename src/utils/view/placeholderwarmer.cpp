@@ -9,8 +9,8 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QObject>
-#include <QPixmap>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -127,7 +127,8 @@ PreflightResult preflight(const CollectionConfig &collection,
 
 Result exportMissingPlaceholders(const CollectionConfig &collection,
                                  const QString &artworkDirectoryOverride, int tileWidth,
-                                 int tileHeight, int cornerRadius, const TileFactory &tileFactory) {
+                                 int tileHeight, int cornerRadius, const TileFactory &tileFactory,
+                                 const ProgressFn &onProgress, const CancelFn &isCancelled) {
   Result result;
 
   const auto pre = preflight(collection, artworkDirectoryOverride);
@@ -146,6 +147,12 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
   QDirIterator it(pre.resolvedMediaDirectory, QDir::Files | QDir::NoDotAndDotDot,
                   QDirIterator::Subdirectories);
   while (it.hasNext()) {
+    // Kartend-qe9a: bail early when the caller (worker run behind a progress
+    // dialog) requests cancellation; the counts so far stand.
+    if (isCancelled && isCancelled()) {
+      result.cancelled = true;
+      break;
+    }
     const QString fullPath = it.next();
     const QFileInfo fi(fullPath);
     const QString ext = fi.suffix().toLower();
@@ -153,6 +160,11 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
       continue;
     }
     ++result.itemsScanned;
+    // Report progress periodically (not per item) so a worker run can drive a
+    // progress UI without flooding it with cross-thread updates.
+    if (onProgress && (result.itemsScanned % 16) == 0) {
+      onProgress(result.itemsScanned, result.itemsExported);
+    }
 
     // Skip if any image with the matching base/full name already exists in
     // the artwork dir — the resolver would pick that up before our PNG, so
@@ -166,12 +178,11 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
 
     // Use the live render path so warmed PNGs are pixel-identical to the
     // grid's lazy fallback; no second source of truth for placeholder look.
-    const QPixmap tile = tileFactory ? tileFactory(tileWidth, tileHeight, cornerRadius) : QPixmap();
+    const QImage tile = tileFactory ? tileFactory(tileWidth, tileHeight, cornerRadius) : QImage();
     if (tile.isNull()) {
       ++result.itemsFailed;
       if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
-        result.firstFailures.append(
-            tr("%1: placeholder render returned null pixmap").arg(fullPath));
+        result.firstFailures.append(tr("%1: placeholder render returned null image").arg(fullPath));
       }
       continue;
     }
@@ -189,6 +200,9 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
     ++result.itemsExported;
   }
 
+  if (onProgress) {
+    onProgress(result.itemsScanned, result.itemsExported);
+  }
   return result;
 }
 
