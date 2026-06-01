@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <QColor>
+#include <QFutureWatcher>
 #include <QImage>
 #include <QObject>
 #include <QPixmap>
@@ -160,6 +161,11 @@ public:
   void startSilentLoading();
   void startEarlyDentryPrewarm(int collectionIndex) override;
   void preloadArtworkForCollection();
+  /// Kartend-cl86n: continuation of preloadArtworkForCollection, run on the GUI
+  /// thread once the off-thread catalog build finishes — checks for an empty
+  /// catalog and starts the silent-load timers. Split out because the build is
+  /// now asynchronous (QFutureWatcher).
+  void onCatalogBuilt();
   void stopSilentLoading() override;
   void processPersistentSilentLoad();
   void processContinuousSilentLoad();
@@ -228,6 +234,13 @@ private:
   /// silently-cached / silent-pending sets) that consumes that list.
   /// Internal mutex; safe to call from any thread.
   ArtworkPathCatalog m_pathCatalog;
+  /// Kartend-cl86n: watches the off-thread catalog build kicked from
+  /// preloadArtworkForCollection so the collection switch no longer blocks the
+  /// GUI on a parallel directory enumeration. A new build supersedes any
+  /// in-flight one (setFuture replaces what we watch; the catalog's generation
+  /// guard drops a stale build's appends). Inited lazily on first use.
+  QFutureWatcher<void> m_catalogBuildWatcher;
+  bool m_catalogWatcherInited = false;
   /// Per-widget artwork bookkeeping (loaded set, widget→path map,
   /// pending queue, per-item type overrides). Owns its own QMutex and
   /// the destroyed-cleanup connections installed by track(). Parented

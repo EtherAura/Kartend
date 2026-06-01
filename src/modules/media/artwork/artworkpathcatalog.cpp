@@ -11,29 +11,6 @@
 #include <QtConcurrent>
 #include <QThreadPool>
 
-void ArtworkPathCatalog::appendDirImagesNoLock(const QString &dirPath, QSet<QString> &processedDirs,
-                                               QStringList &out) {
-  if (dirPath.isEmpty()) {
-    return;
-  }
-  const QString normalized = QDir(dirPath).absolutePath();
-  if (processedDirs.contains(normalized)) {
-    return;
-  }
-  QDir dir(dirPath);
-  if (!dir.exists()) {
-    processedDirs.insert(normalized);
-    return;
-  }
-  const QStringList exts = ExtensionUtils::imageFilters();
-  dir.setNameFilters(exts);
-  const QStringList files = dir.entryList(QDir::Files);
-  for (const QString &file : files) {
-    out.append(dir.absoluteFilePath(file));
-  }
-  processedDirs.insert(normalized);
-}
-
 QStringList ArtworkPathCatalog::collectArtworkDirs(const QList<CollectionConfig> *collections,
                                                    int collectionIndex, bool includeDescendants) {
   if (!collections || collectionIndex < 0 || collectionIndex >= collections->size()) {
@@ -61,75 +38,63 @@ QStringList ArtworkPathCatalog::collectArtworkDirs(const QList<CollectionConfig>
   return dirs.values();
 }
 
-void ArtworkPathCatalog::buildFromCollection(const QList<CollectionConfig> *collections,
-                                             int currentIndex) {
+QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConfig> *collections,
+                                                      int currentIndex) {
+  int generation = 0;
   {
     QMutexLocker locker(&m_mutex);
+    generation = ++m_buildGeneration;
     m_allPaths.clear();
     m_index = 0;
   }
 
   if (!collections || currentIndex < 0 || currentIndex >= collections->size()) {
-    return;
+    return QtConcurrent::run([] {});
   }
-  const CollectionConfig &collection = (*collections)[currentIndex];
+  const bool includeDescendants = (*collections)[currentIndex].showAllSubcollectionItems;
+  const QStringList allDirs = collectArtworkDirs(collections, currentIndex, includeDescendants);
 
-  QSet<QString> processedDirectories;
-  if (!collection.artworkDirectory.isEmpty()) {
-    processedDirectories.insert(QDir(collection.artworkDirectory).absolutePath());
-  }
+  // Warm the dentry cache for these dirs in the background so the enumeration
+  // below (and later per-file stats) hit warm caches. Unchanged from before.
+  QThreadPool::globalInstance()->start([allDirs]() {
+    auto &cache = ArtworkUtils::DirectoryCache::instance();
+    cache.prewarmDirectories(allDirs);
+    cache.processQueuedDirectories();
+    qCDebug(lcPerfTrace) << "Background dentry warmup complete: dirs=" << allDirs.size();
+  });
 
-  if (collection.showAllSubcollectionItems) {
-    std::function<void(int)> collectDirsRecursive = [&](int parentIdx) {
-      for (int i = 0; i < collections->size(); ++i) {
-        if ((*collections)[i].parentCollectionIndex == parentIdx) {
-          const QString artDir = (*collections)[i].artworkDirectory;
-          if (!artDir.isEmpty()) {
-            processedDirectories.insert(QDir(artDir).absolutePath());
-          }
-          collectDirsRecursive(i);
-        }
-      }
-    };
-    collectDirsRecursive(currentIndex);
-
-    const QStringList allDirs = processedDirectories.values();
-    QThreadPool::globalInstance()->start([allDirs]() {
-      auto &cache = ArtworkUtils::DirectoryCache::instance();
-      cache.prewarmDirectories(allDirs);
-      cache.processQueuedDirectories();
-      qCDebug(lcPerfTrace) << "Background dentry warmup complete: dirs=" << allDirs.size();
-    });
-
-    QMutex pathsMutex;
-    QtConcurrent::blockingMap(allDirs, [this, &pathsMutex](const QString &dirPath) {
+  // Kartend-cl86n: enumerate the artwork dirs on a worker (was a GUI-thread
+  // QtConcurrent::blockingMap, so a collection switch stalled the UI on a
+  // parallel dir scan over cold storage). One sequential pool task keeps the
+  // cost off the GUI thread and avoids the nested-pool exhaustion a parallel
+  // map dispatched from a pool task could hit; allDirs is captured by value so
+  // it outlives this call. Appends are generation-guarded so a superseded
+  // build (a newer collection switch) drops its stale results instead of
+  // polluting the list the newer build cleared.
+  return QtConcurrent::run([this, generation, allDirs]() {
+    const QStringList exts = ExtensionUtils::imageFilters();
+    for (const QString &dirPath : allDirs) {
       QDir dir(dirPath);
       if (!dir.exists()) {
-        return;
+        continue;
       }
-      const QStringList exts = ExtensionUtils::imageFilters();
       dir.setNameFilters(exts);
       const QStringList files = dir.entryList(QDir::Files);
       if (files.isEmpty()) {
-        return;
+        continue;
       }
       QStringList fullPaths;
       fullPaths.reserve(files.size());
       for (const QString &file : files) {
         fullPaths.append(dir.absoluteFilePath(file));
       }
-      QMutexLocker outerLock(&pathsMutex);
-      QMutexLocker innerLock(&m_mutex);
-      m_allPaths.append(fullPaths);
-    });
-  } else {
-    QStringList scanned;
-    appendDirImagesNoLock(collection.artworkDirectory, processedDirectories, scanned);
-    if (!scanned.isEmpty()) {
       QMutexLocker locker(&m_mutex);
-      m_allPaths.append(scanned);
+      if (generation != m_buildGeneration) {
+        return; // a newer build superseded this one
+      }
+      m_allPaths.append(fullPaths);
     }
-  }
+  });
 }
 
 int ArtworkPathCatalog::totalPaths() const {

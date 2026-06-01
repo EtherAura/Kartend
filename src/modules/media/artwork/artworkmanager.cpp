@@ -165,6 +165,11 @@ ICacheManager *ArtworkManager::cacheMgr() const {
 
 // Destructor stops timers, cancels in-flight dispatch, and clears widget state.
 ArtworkManager::~ArtworkManager() {
+  // Kartend-cl86n: the off-thread catalog build task captures &m_pathCatalog,
+  // so it must not outlive this manager. Wait for any in-flight build before
+  // our members tear down. No-op when no build was ever kicked / already done.
+  m_catalogBuildWatcher.waitForFinished();
+
   // Tell the dispatcher to stop accepting new work; its destructor (run when
   // Qt's parent-child cleanup tears it down below) will drain the pool.
   if (m_dispatcher) {

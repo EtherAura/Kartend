@@ -1,6 +1,7 @@
 #ifndef ARTWORKPATHCATALOG_H
 #define ARTWORKPATHCATALOG_H
 
+#include <QFuture>
 #include <QList>
 #include <QMutex>
 #include <QSet>
@@ -23,10 +24,15 @@ public:
   ArtworkPathCatalog() = default;
 
   /// Walks @p collections from @p currentIndex to populate the path list.
-  /// Includes descendants when showAllSubcollectionItems is set, with
-  /// parallel directory scans and a background dentry-prewarm pass.
-  /// Resets the silent-load cursor.
-  void buildFromCollection(const QList<CollectionConfig> *collections, int currentIndex);
+  /// Includes descendants when showAllSubcollectionItems is set. Kartend-cl86n:
+  /// the directory enumeration runs off the calling thread — this clears the
+  /// list + resets the cursor synchronously, kicks a background dentry-prewarm
+  /// pass and the scan, and returns a QFuture that completes once the path list
+  /// is populated. A later build supersedes an earlier one: each call bumps a
+  /// generation counter and a stale build's appends are dropped, so callers can
+  /// fire-and-watch on every collection switch without cancelling first.
+  [[nodiscard]] QFuture<void> buildFromCollection(const QList<CollectionConfig> *collections,
+                                                  int currentIndex);
 
   /// Collects every artwork directory reachable from the given collection,
   /// optionally including descendants. Used by early dentry-prewarm callers.
@@ -63,14 +69,16 @@ public:
   void clearAll();
 
 private:
-  static void appendDirImagesNoLock(const QString &dirPath, QSet<QString> &processedDirs,
-                                    QStringList &out);
-
   mutable QMutex m_mutex;
   QStringList m_allPaths;
   int m_index = 0;
   QSet<QString> m_silentlyCached;
   QSet<QString> m_silentPending;
+  /// Kartend-cl86n: bumped on every buildFromCollection. A background scan
+  /// captures the value at kick time and only appends while it still matches,
+  /// so a superseded build (rapid collection switch) can't pour stale paths
+  /// into the list the newer build just cleared.
+  int m_buildGeneration = 0;
 };
 
 #endif // ARTWORKPATHCATALOG_H

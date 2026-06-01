@@ -81,7 +81,26 @@ void ArtworkManager::preloadArtworkForCollection() {
     return;
   }
 
-  m_pathCatalog.buildFromCollection(collections, *currentCollectionIndex);
+  // Kartend-cl86n: the catalog build (parallel directory enumeration) used to
+  // run synchronously here, blocking the GUI thread on a collection switch over
+  // cold storage. It now runs off-thread; the silent-load timers start in
+  // onCatalogBuilt once the path list is ready. Connect the watcher once.
+  if (!m_catalogWatcherInited) {
+    connect(&m_catalogBuildWatcher, &QFutureWatcher<void>::finished, this,
+            &ArtworkManager::onCatalogBuilt);
+    m_catalogWatcherInited = true;
+  }
+  // setFuture supersedes any in-flight build: we stop watching the old future
+  // (so its finished won't fire onCatalogBuilt) and the catalog's generation
+  // guard drops the superseded build's stale appends.
+  m_catalogBuildWatcher.setFuture(
+      m_pathCatalog.buildFromCollection(collections, *currentCollectionIndex));
+}
+
+// Kartend-cl86n: GUI-thread continuation once the off-thread catalog build
+// finishes. An empty catalog means nothing to silent-load; otherwise start the
+// continuous + persistent silent-load timers that walk the path list.
+void ArtworkManager::onCatalogBuilt() {
   if (m_pathCatalog.isEmpty()) {
     m_silentLoadingActive = false;
     return;
