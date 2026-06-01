@@ -8,14 +8,17 @@
 #include "uiconstants/artwork.h"
 #include "videothumbnailextractor.h"
 
+#include <QFutureWatcher>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
 #include <QPen>
+#include <QPointer>
 #include <QPolygon>
 #include <QSize>
+#include <QtConcurrent>
 #include <QWidget>
 
 namespace {
@@ -107,26 +110,55 @@ QPixmap CoverFlowGalleryStrip::thumbPixmap(int entryIdx, int size) {
     return pm;
   }
 
-  // Artwork entry: load + scale to thumb size, with caching. The extension
-  // guard keeps non-image entries (e.g. a .pdf manual) away from QImageReader
-  // — leaving `img` null routes them to the placeholder branch below.
-  QImage img;
-  if (ExtensionUtils::isDecodableImagePath(entry.path)) {
-    QImageReader reader(entry.path);
+  // Artwork entry (Kartend-jga1): decode + scale off the GUI thread instead of
+  // running QImageReader::read() inside paint() on a cache miss (first paint of
+  // a populated row decoded N images mid-frame -> visible stutter). Cache a
+  // placeholder now so paint() returns immediately and doesn't re-dispatch on
+  // every frame; the async result overwrites the entry and repaints. Mirrors
+  // the video branch above and the card-artwork worker decode path. The cache
+  // is cleared on every setGalleryForIndex, so a result that lands after a
+  // gallery switch just drops into a cache that's about to be cleared again.
+  QPixmap placeholder(size, size);
+  placeholder.fill(m_host->palette().color(QPalette::Mid));
+  m_host->m_galleryThumbCache.insert(key, placeholder);
+
+  const QString path = entry.path;
+  QPointer<CoverFlowGalleryStrip> self = this;
+  auto *watcher = new QFutureWatcher<QImage>(this);
+  connect(watcher, &QFutureWatcher<QImage>::finished, this, [self, watcher, key, size]() {
+    watcher->deleteLater();
+    if (!self || !self->m_host) {
+      return;
+    }
+    const QImage img = watcher->result();
+    QPixmap pm;
+    if (!img.isNull()) {
+      pm =
+          QPixmap::fromImage(img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+      // Non-image entry (e.g. a .pdf manual) or a decode failure: keep the
+      // neutral placeholder so the slot stays consistent.
+      pm = QPixmap(size, size);
+      pm.fill(self->m_host->palette().color(QPalette::Mid));
+    }
+    self->m_host->m_galleryThumbCache.insert(key, pm);
+    self->m_host->update();
+  });
+  // Decode at 2x the thumb edge for crisp downscale, off the GUI thread.
+  // Captures only value copies (path, size), so it's safe even if this strip
+  // is destroyed before it finishes — the parented watcher is what carries the
+  // result back, and it won't fire after destruction.
+  watcher->setFuture(QtConcurrent::run([path, size]() -> QImage {
+    if (!ExtensionUtils::isDecodableImagePath(path)) {
+      return {};
+    }
+    QImageReader reader(path);
     reader.setAutoTransform(true);
     reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
     reader.setScaledSize(QSize(size * 2, size * 2));
-    img = reader.read();
-  }
-  QPixmap pm;
-  if (!img.isNull()) {
-    pm = QPixmap::fromImage(img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  } else {
-    pm = QPixmap(size, size);
-    pm.fill(m_host->palette().color(QPalette::Mid));
-  }
-  m_host->m_galleryThumbCache.insert(key, pm);
-  return pm;
+    return reader.read();
+  }));
+  return placeholder;
 }
 
 void CoverFlowGalleryStrip::paint(QPainter &painter) {
