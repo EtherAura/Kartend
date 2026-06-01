@@ -88,11 +88,17 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
       for (const QString &file : files) {
         fullPaths.append(dir.absoluteFilePath(file));
       }
+      // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't see
+      // that ArtworkManager's destructor waitForFinished()s this build before
+      // m_pathCatalog is torn down, so the QtConcurrent lambda never outlives
+      // `this`. The captured pointer is safe. (Same pattern as CacheManager's
+      // disk-size walk.)
       QMutexLocker locker(&m_mutex);
       if (generation != m_buildGeneration) {
         return; // a newer build superseded this one
       }
       m_allPaths.append(fullPaths);
+      // NOLINTEND(clang-analyzer-core.NullDereference)
     }
   });
 }
