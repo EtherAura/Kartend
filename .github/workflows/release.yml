@@ -69,6 +69,25 @@ jobs:
             fail=1
           fi
 
+          # AppStream metainfo date — bump-version.sh stamps the most-recent
+          # <release> date at bump time, which release.yml never validated. A
+          # missing/malformed/future date makes appstreamcli warn and looks
+          # broken in software centers, so gate it: must be a well-formed
+          # calendar date that isn't in the future relative to the build day
+          # (UTC). It need not equal the tag day — bumping a few days before
+          # tagging is normal.
+          METAINFO_DATE="$(awk 'match($0, /<release[[:space:]][^>]*date="([0-9]{4}-[0-9]{2}-[0-9]{2})"/, a) { print a[1]; exit }' packaging/io.github.EtherAura.Kartend.metainfo.xml)"
+          if [ -z "$METAINFO_DATE" ]; then
+            echo "::error file=packaging/io.github.EtherAura.Kartend.metainfo.xml::most-recent <release> is missing a well-formed date=\"YYYY-MM-DD\" attribute"
+            fail=1
+          elif ! REL_EPOCH="$(date -u -d "$METAINFO_DATE" +%s 2>/dev/null)"; then
+            echo "::error file=packaging/io.github.EtherAura.Kartend.metainfo.xml::most-recent <release> date '$METAINFO_DATE' is not a valid calendar date"
+            fail=1
+          elif [ "$REL_EPOCH" -gt "$(date -u +%s)" ]; then
+            echo "::error file=packaging/io.github.EtherAura.Kartend.metainfo.xml::most-recent <release> date '$METAINFO_DATE' is in the future (today UTC is $(date -u +%Y-%m-%d))"
+            fail=1
+          fi
+
           if [ "$fail" -ne 0 ]; then
             echo "::error::Tag v$TAG_VERSION does not match all version metadata. Fix the listed files and re-tag."
             exit 1
