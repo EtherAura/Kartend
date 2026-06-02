@@ -624,6 +624,16 @@ add_executable(test_openlibraryparser
 target_link_libraries(test_openlibraryparser PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME OpenLibraryParser COMMAND test_openlibraryparser)
 
+# Provider request-construction tests (searchUrl building + metadata) for
+# the API-backed providers and the generic WebSearchProvider. Qt6::Network
+# arrives transitively via kartend_utils — the provider ctors touch
+# HttpClient::instance() (lazy singleton, no traffic).
+add_executable(test_providerrequests
+  modules/scraper/test_providerrequests.cpp
+)
+target_link_libraries(test_providerrequests PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ProviderRequests COMMAND test_providerrequests)
+
 # MetadataProviderRegistry tests
 # Must compile the MusicBrainz provider too because the registry's
 # builtIn() instantiates one. Qt6::Network is needed because the
