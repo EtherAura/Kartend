@@ -25,6 +25,12 @@
 # This script does NOT touch sha256sums in PKGBUILD — that is filled in
 # automatically by .github/workflows/release.yml after the tag is pushed
 # (see the 'Update PKGBUILD sha256sums on default branch' step).
+#
+# It also intentionally does NOT touch the Flatpak manifest's runtime-version
+# (packaging/io.github.EtherAura.Kartend.yml). That field is the org.kde.Platform
+# (KDE/Qt) runtime version, decoupled from the app's semver by design — bump it
+# only as a deliberate KDE-runtime migration, not on every release. See the
+# comment at the top of that manifest for the full Qt-version-per-target map.
 
 set -euo pipefail
 
