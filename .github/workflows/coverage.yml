@@ -55,7 +55,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
+          ccache --set-config=max_size=2G
           ccache --zero-stats
 
       - name: Configure CMake (Debug + coverage)
@@ -79,7 +79,7 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build/coverage --output-on-failure
+        run: ctest --test-dir build/coverage --output-on-failure -LE benchmark
 
       - name: Capture coverage data
         run: |

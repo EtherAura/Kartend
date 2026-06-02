@@ -91,7 +91,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
+          ccache --set-config=max_size=2G
           ccache --zero-stats
 
       - name: Create build directory
@@ -123,7 +123,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
-          ctest --output-on-failure
+          ctest --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics
         # Kartend-oieo: unified Linux + Windows failure-detail path; see
@@ -201,7 +201,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=512M
+          ccache --set-config=max_size=1G
           ccache --zero-stats
 
       - name: Configure CMake
@@ -226,7 +226,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           cd build/no-zstd
-          ctest --output-on-failure
+          ctest --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics
         if: ${{ failure() }}
@@ -271,7 +271,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
+          ccache --set-config=max_size=2G
           ccache --zero-stats
 
       - name: Create build directory
@@ -303,7 +303,7 @@ jobs:
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/suppressions/lsan.txt
         run: |
           cd build/Sanitize
-          ctest --output-on-failure
+          ctest --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics (ASan/UBSan)
         if: ${{ failure() }}
@@ -383,7 +383,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
+          ccache --set-config=max_size=2G
           ccache --zero-stats
 
       - name: Configure CMake (Debug + TSan)
@@ -418,7 +418,7 @@ jobs:
           TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/suppressions/tsan.txt
         run: |
           cd build/TSan
-          ctest --output-on-failure
+          ctest --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics (TSan)
         if: ${{ failure() }}
@@ -460,7 +460,7 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
+          ccache --set-config=max_size=2G
           ccache --zero-stats
           
       - name: Check module layering
@@ -494,6 +494,19 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends shellcheck
           shellcheck -S warning .scripts/*.sh
+
+      - name: Validate AppStream + desktop metadata
+        # appstreamcli validate (--pedantic) is the Flathub/distro gate;
+        # desktop-file-validate catches malformed .desktop entries. Both are
+        # cheap and build-independent. Previously unchecked — release.yml only
+        # compared the latest <release> version to the tag, so malformed
+        # metainfo could ship. The one --pedantic note here
+        # (cid-contains-uppercase-letter) is inherent to the EtherAura GitHub
+        # namespace and is informational only; appstreamcli still exits 0.
+        run: |
+          sudo apt-get install -y --no-install-recommends appstream desktop-file-utils
+          appstreamcli validate --pedantic packaging/*.metainfo.xml
+          desktop-file-validate packaging/*.desktop
 
       - name: Run maintenance build script
         run: |
@@ -606,7 +619,7 @@ jobs:
         # the gate stays close to the reason.
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics
         # Kartend-oieo: unified Linux + Windows failure-detail path. The
