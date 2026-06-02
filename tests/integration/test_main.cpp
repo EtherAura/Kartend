@@ -6,6 +6,12 @@
  * QTest::qExec(). Using one QApplication for the whole binary mirrors how
  * Kartend runs in production and avoids per-test QApplication churn that
  * Qt does not officially support.
+ *
+ * An optional leading positional argument selects a single suite by class name
+ * (e.g. `test_integration TestScanService`). ctest registers one entry per
+ * class via that selector (Kartend-40hxp) so `ctest -j` parallelizes across
+ * classes and a failure names the class instead of one opaque result. With no
+ * selector the binary runs every suite in registry order.
  */
 
 #include "errorpresentation.h"
@@ -39,6 +45,9 @@
 #include <QThreadPool>
 #include <QtPlugin>
 
+#include <cstring>
+#include <vector>
+
 namespace {
 // QtConcurrent's global thread pool keeps idle worker threads alive between
 // tasks. When TSan runs the integration suite, those persistent threads
@@ -53,6 +62,135 @@ void drainGlobalThreadPool() {
   pool->waitForDone();
   pool->setExpiryTimeout(30'000);
 }
+
+struct Suite {
+  const char *name;
+  int (*run)(int, char **);
+};
+
+// Suite registry. Each captureless lambda constructs its test object in a fresh
+// scope and runs it through QTest::qExec. The names are the ctest entry
+// suffixes registered in tests/integration/CMakeLists.txt — keep the two lists
+// in sync. Order matches the historical run order: the lighter smoke test runs
+// first and the heavier full-ApplicationManager kart/scan suites run last
+// (Kartend-r9u0) so an "all suites" run keeps early-failure feedback fast.
+const Suite kSuites[] = {
+    {"TestMainWindowSmoke",
+     [](int c, char **v) {
+       TestMainWindowSmoke t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSettingsDialogScope",
+     [](int c, char **v) {
+       TestSettingsDialogScope t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestApplySettingsDialog",
+     [](int c, char **v) {
+       TestApplySettingsDialog t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestApplicationManagerLifecycle",
+     [](int c, char **v) {
+       TestApplicationManagerLifecycle t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestNavigationManager",
+     [](int c, char **v) {
+       TestNavigationManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDbEventsController",
+     [](int c, char **v) {
+       TestDbEventsController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestEventManagerDetailsPane",
+     [](int c, char **v) {
+       TestEventManagerDetailsPane t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDetailsPaneCoverflow",
+     [](int c, char **v) {
+       TestDetailsPaneCoverflow t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSettingsDialogChanges",
+     [](int c, char **v) {
+       TestSettingsDialogChanges t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSettingsDialogNavigation",
+     [](int c, char **v) {
+       TestSettingsDialogNavigation t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSettingsDialogPerf",
+     [](int c, char **v) {
+       TestSettingsDialogPerf t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestScrapeDialogPerf",
+     [](int c, char **v) {
+       TestScrapeDialogPerf t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestScrollManager",
+     [](int c, char **v) {
+       TestScrollManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSelectionOverlayManager",
+     [](int c, char **v) {
+       TestSelectionOverlayManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestVirtualContainerManager",
+     [](int c, char **v) {
+       TestVirtualContainerManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestFilterManager",
+     [](int c, char **v) {
+       TestFilterManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSearchManager",
+     [](int c, char **v) {
+       TestSearchManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestSelectionDisplayManager",
+     [](int c, char **v) {
+       TestSelectionDisplayManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDetailsPaneManager",
+     [](int c, char **v) {
+       TestDetailsPaneManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestAttractManager",
+     [](int c, char **v) {
+       TestAttractManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDetailPageManager",
+     [](int c, char **v) {
+       TestDetailPageManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestKartManager",
+     [](int c, char **v) {
+       TestKartManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestScanService",
+     [](int c, char **v) {
+       TestScanService t;
+       return QTest::qExec(&t, c, v);
+     }},
+};
 } // namespace
 
 int main(int argc, char *argv[]) {
@@ -85,129 +223,40 @@ int main(int argc, char *argv[]) {
                                                      const ErrorUtils::ErrorContext & /*ctx*/,
                                                      bool /*allowContinue*/) { return true; });
 
+  // An optional leading positional argument selects a single suite so the
+  // per-class ctest entries fan out across cores under `ctest -j`
+  // (Kartend-40hxp). A leading '-' marks a QTest option (e.g. -o,
+  // -maxwarnings), not a class name, so fall through to running every suite.
+  // The selector token is stripped before the args reach QTest::qExec, which
+  // would otherwise read it as a test-function filter.
+  const char *only = nullptr;
+  int execArgc = argc;
+  char **execArgv = argv;
+  std::vector<char *> execArgs;
+  if (argc > 1 && argv[1][0] != '-') {
+    only = argv[1];
+    execArgs.push_back(argv[0]);
+    for (int i = 2; i < argc; ++i) {
+      execArgs.push_back(argv[i]);
+    }
+    execArgc = static_cast<int>(execArgs.size());
+    execArgv = execArgs.data();
+  }
+
   int status = 0;
-  {
-    TestMainWindowSmoke smoke;
-    status |= QTest::qExec(&smoke, argc, argv);
+  bool matched = false;
+  for (const auto &suite : kSuites) {
+    if (only && std::strcmp(only, suite.name) != 0) {
+      continue;
+    }
+    matched = true;
+    status |= suite.run(execArgc, execArgv);
+    drainGlobalThreadPool();
   }
-  drainGlobalThreadPool();
-  {
-    TestSettingsDialogScope scope;
-    status |= QTest::qExec(&scope, argc, argv);
+
+  if (only && !matched) {
+    qCritical("Unknown integration suite: %s", only);
+    return 2;
   }
-  drainGlobalThreadPool();
-  {
-    TestApplySettingsDialog applySettings;
-    status |= QTest::qExec(&applySettings, argc, argv);
-  }
-  drainGlobalThreadPool();
-  // ApplicationManager lifecycle tests build their own bare ApplicationManager
-  // instances (no MainWindow). DatabaseManager now suffixes its Qt SQL
-  // connection names per-instance, so this suite no longer needs to be
-  // ordered relative to the MainWindow-based tests above.
-  {
-    TestApplicationManagerLifecycle appLifecycle;
-    status |= QTest::qExec(&appLifecycle, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestNavigationManager nav;
-    status |= QTest::qExec(&nav, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestDbEventsController dbEvents;
-    status |= QTest::qExec(&dbEvents, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestEventManagerDetailsPane emDp;
-    status |= QTest::qExec(&emDp, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestDetailsPaneCoverflow dpCf;
-    status |= QTest::qExec(&dpCf, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSettingsDialogChanges sdCh;
-    status |= QTest::qExec(&sdCh, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSettingsDialogNavigation sdNav;
-    status |= QTest::qExec(&sdNav, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSettingsDialogPerf sdPerf;
-    status |= QTest::qExec(&sdPerf, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestScrapeDialogPerf scrapePerf;
-    status |= QTest::qExec(&scrapePerf, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestScrollManager sm;
-    status |= QTest::qExec(&sm, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSelectionOverlayManager som;
-    status |= QTest::qExec(&som, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestVirtualContainerManager vcm;
-    status |= QTest::qExec(&vcm, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestFilterManager fm;
-    status |= QTest::qExec(&fm, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSearchManager search;
-    status |= QTest::qExec(&search, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestSelectionDisplayManager selectionDisplay;
-    status |= QTest::qExec(&selectionDisplay, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestDetailsPaneManager detailsPane;
-    status |= QTest::qExec(&detailsPane, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestAttractManager attract;
-    status |= QTest::qExec(&attract, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestDetailPageManager detailPage;
-    status |= QTest::qExec(&detailPage, argc, argv);
-  }
-  drainGlobalThreadPool();
-  // Kartend-r9u0: KartManager + ScanService integration coverage.
-  // Kept last in the chain so the (heavier, full-ApplicationManager)
-  // kart tests don't slow the early-failure feedback for the lighter
-  // tests above.
-  {
-    TestKartManager kart;
-    status |= QTest::qExec(&kart, argc, argv);
-  }
-  drainGlobalThreadPool();
-  {
-    TestScanService scanService;
-    status |= QTest::qExec(&scanService, argc, argv);
-  }
-  drainGlobalThreadPool();
   return status;
 }

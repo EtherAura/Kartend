@@ -109,7 +109,40 @@ target_include_directories(test_integration PRIVATE
 # QObject-derived test classes without manual moc invocations. Search paths
 # for AUTOUIC are also already configured at the top level.
 
-add_test(NAME Integration COMMAND test_integration)
+# Register one ctest entry per test class (Kartend-40hxp). Every entry runs the
+# same shared binary with a class-name selector (see kSuites in test_main.cpp)
+# so `ctest -j` parallelizes across classes and a failure names the class
+# instead of one opaque "Integration" result. Keep this list in sync with
+# kSuites in test_main.cpp.
+set(INTEGRATION_TEST_CLASSES
+  TestMainWindowSmoke
+  TestSettingsDialogScope
+  TestApplySettingsDialog
+  TestApplicationManagerLifecycle
+  TestNavigationManager
+  TestDbEventsController
+  TestEventManagerDetailsPane
+  TestDetailsPaneCoverflow
+  TestSettingsDialogChanges
+  TestSettingsDialogNavigation
+  TestSettingsDialogPerf
+  TestScrapeDialogPerf
+  TestScrollManager
+  TestSelectionOverlayManager
+  TestVirtualContainerManager
+  TestFilterManager
+  TestSearchManager
+  TestSelectionDisplayManager
+  TestDetailsPaneManager
+  TestAttractManager
+  TestDetailPageManager
+  TestKartManager
+  TestScanService
+)
+foreach(_integration_class IN LISTS INTEGRATION_TEST_CLASSES)
+  add_test(NAME Integration.${_integration_class}
+           COMMAND test_integration ${_integration_class})
+endforeach()
 
 # Kartend-kkeur: give the integration test its own HOME so QStandardPaths test
 # mode (~/.qttest) is isolated from the unit tests under `ctest -j`. Mirrors
