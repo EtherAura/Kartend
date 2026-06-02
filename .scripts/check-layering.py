@@ -3,10 +3,12 @@
 
 Kartend's `src/` is organized into per-area OBJECT libraries (kartend_utils,
 _api, _chrome, _data, _input, _media, _ui, _core) with an explicit
-target_link_libraries DAG. But OBJECT libs propagate only usage requirements
-(include dirs, compile defs) — every area's .o files land in each consumer
-regardless — so a cross-layer `#include` still compiles. The layering is thus
-not link-enforced; this script enforces the invariants that must always hold:
+target_link_libraries DAG. Each area publishes only its OWN dirs on its PUBLIC
+include path and inherits lower layers through the DAG, so an upward
+`#include "foo.h"` by basename already fails to compile — the header simply
+isn't on that layer's include path. This lint is not a substitute for that
+compile-time check; it catches the residual cases include-scoping can't (and
+several DI/accessor invariants that aren't about include paths at all):
 
     src/utils/    is the foundation layer and MUST NOT depend on any
                   higher layer (src/modules/, src/chrome/, src/ui/,
@@ -22,10 +24,20 @@ not link-enforced; this script enforces the invariants that must always hold:
 It maps every quoted `#include "x.h"` in those directories to the area
 its header actually lives in and fails if a file reaches upward.
 
-This lint backstops the layering until the per-area OBJECT libs are
-converted to STATIC (Kartend-q3vfq), which would turn a cross-layer include
-into a link error. Until then, it stops the foundation/chrome (and
-data/input/media) layers from silently accreting upward edges.
+The per-area include-scoping already fails an upward basename `#include` at
+compile time. This lint additionally catches what that scoping cannot: a
+subpath-style upward include that resolves through the `src/ui` umbrella
+(e.g. `#include "dialogs/settingsdialog.h"` from a lower layer — `src/ui` is on
+every layer's path for uiconstants/, so the subpath form compiles), and
+basename collisions that would silently mask a real violation. It keeps the
+foundation/chrome (and data/input/media) layers from accreting upward edges.
+
+NOTE: converting these OBJECT libs to STATIC would NOT add link-time layering
+enforcement (Kartend-q3vfq, investigated & declined): usage requirements
+propagate identically for OBJECT and STATIC, and every area links into one
+executable (CMakeLists.txt: `target_link_libraries(kartend PRIVATE
+${KARTEND_AREA_LIBS})`), so all symbols resolve at the final link regardless.
+STATIC would only risk dropping Qt meta-object TUs the linker sees as unused.
 
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
 """
@@ -107,12 +119,11 @@ def main() -> int:
     # What's "upward" depends on which layer we're checking:
     #   utils/   — nothing above is reachable (utils is the floor)
     #   chrome/  — modules/, ui/, core/ are above; utils/ + chrome/ are OK
-    # The eventual hchk split will make this CMake-enforced; until then the
-    # lint is the only guardrail.
     # The middle module layers (data/input/media) sit below ui/ + core/, so an
     # upward #include into either is a layering violation. chrome/ + utils/ +
-    # sibling modules/ are at-or-below them and remain allowed. Interim guard
-    # until the STATIC-lib split makes this CMake-enforced (Kartend-4nvtf).
+    # sibling modules/ are at-or-below them and remain allowed. The per-area
+    # include-scoping already fails an upward basename include at compile time;
+    # this lint guards the residual subpath/collision cases it can't.
     layer_upward = {
         "utils": {"modules", "chrome", "ui", "core"},
         "chrome": {"modules", "ui", "core"},
