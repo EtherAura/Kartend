@@ -198,6 +198,21 @@ bool isArchivePath(const QString &filePath) {
   return false;
 }
 
+QStringList extractorCandidates(const QString &archivePath) {
+  // 7z first (widest format coverage), then unzip ONLY for .zip — it cannot read
+  // gz/xz/bz2/tar/7z/rar — then bsdtar/libarchive for the rest. Without the .zip
+  // gate, a non-zip archive on a box that has unzip but not 7z was handed to
+  // unzip and failed, silently dropping the ROM to filename-only SS matching
+  // even when bsdtar could have extracted it (Kartend-akaww).
+  QStringList candidates;
+  candidates << QStringLiteral("7z");
+  if (archivePath.toLower().endsWith(QStringLiteral(".zip"))) {
+    candidates << QStringLiteral("unzip");
+  }
+  candidates << QStringLiteral("bsdtar");
+  return candidates;
+}
+
 ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   if (archivePath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path",
@@ -226,14 +241,12 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   }
   const QString resolvedArchivePath = info.absoluteFilePath();
 
-  // Pick whichever extractor the user has on PATH. Same priority order
-  // as LaunchManager's extractor — 7z first because it handles the
-  // widest format set; unzip / bsdtar as fallbacks for stripped-down
-  // installs.
+  // Pick the first format-capable extractor the user has on PATH. The candidate
+  // list is gated by extension (extractorCandidates) so a non-.zip archive is
+  // never handed to unzip, which can't read it.
   QString extractor;
   QStringList args;
-  for (const QString &cmd :
-       {QStringLiteral("7z"), QStringLiteral("unzip"), QStringLiteral("bsdtar")}) {
+  for (const QString &cmd : extractorCandidates(resolvedArchivePath)) {
     if (!QStandardPaths::findExecutable(cmd).isEmpty()) {
       extractor = cmd;
       break;
@@ -242,7 +255,7 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   if (extractor.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found",
                                "RomHasher::hashArchiveInnerRom")
-        .withDetails("Install 7z, unzip, or bsdtar to hash inner ROMs");
+        .withDetails("Install 7z or bsdtar to hash inner ROMs (unzip handles only .zip)");
   }
 
   // QTemporaryDir auto-cleans on destruction so we don't accumulate

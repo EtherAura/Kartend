@@ -37,6 +37,7 @@ private slots:
   void archiveMissingPathReturnsError();
   void hashesSymlinkTargetSameAsDirect();
   void brokenSymlinkReturnsError();
+  void extractorCandidates_unzipOnlyOfferedForZip();
 
 private:
   QTemporaryDir m_dir;
@@ -258,6 +259,34 @@ void TestRomHasher::brokenSymlinkReturnsError() {
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
 #endif
+}
+
+void TestRomHasher::extractorCandidates_unzipOnlyOfferedForZip() {
+  // unzip reads only .zip; offering it for gz/xz/bz2/tar/7z/rar is the bug that
+  // dropped those archives to filename-only matching when 7z was absent
+  // (Kartend-akaww). A format-capable extractor (7z, bsdtar) must always be
+  // offered, with 7z kept first so it wins when installed.
+  const auto zip = RomHasher::extractorCandidates(QStringLiteral("/data/item.zip"));
+  QVERIFY(zip.contains(QStringLiteral("unzip")));
+  QVERIFY(zip.contains(QStringLiteral("7z")));
+  QVERIFY(zip.contains(QStringLiteral("bsdtar")));
+  QCOMPARE(zip.first(), QStringLiteral("7z"));
+
+  const QStringList nonZip = {QStringLiteral(".gz"),  QStringLiteral(".xz"),
+                              QStringLiteral(".bz2"), QStringLiteral(".tar"),
+                              QStringLiteral(".7z"),  QStringLiteral(".rar")};
+  for (const QString &ext : nonZip) {
+    const auto cands = RomHasher::extractorCandidates(QStringLiteral("/data/item") + ext);
+    QVERIFY2(!cands.contains(QStringLiteral("unzip")), qPrintable(ext));
+    QVERIFY2(cands.contains(QStringLiteral("7z")), qPrintable(ext));
+    QVERIFY2(cands.contains(QStringLiteral("bsdtar")), qPrintable(ext));
+  }
+
+  // Extension match is case-insensitive.
+  QVERIFY(RomHasher::extractorCandidates(QStringLiteral("/data/ITEM.ZIP"))
+              .contains(QStringLiteral("unzip")));
+  QVERIFY(!RomHasher::extractorCandidates(QStringLiteral("/data/ITEM.GZ"))
+               .contains(QStringLiteral("unzip")));
 }
 
 QTEST_MAIN(TestRomHasher)

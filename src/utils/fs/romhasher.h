@@ -2,6 +2,7 @@
 #define ROMHASHER_H
 
 #include <QString>
+#include <QStringList>
 
 #include "errorutils.h"
 
@@ -48,6 +49,13 @@ struct Result {
 /// LaunchManager::isArchiveFile (kept here so the hasher doesn't pull
 /// LaunchManager into the scraper module).
 [[nodiscard]] bool isArchivePath(const QString &filePath);
+
+/// Archive extractors (command names, in priority order) able to handle
+/// `archivePath`'s format. `unzip` reads only `.zip`, so it is omitted for
+/// `.gz`/`.xz`/`.bz2`/`.tar`/`.7z`/`.rar`, where it would fail; `7z` and
+/// `bsdtar` cover the broad set. The caller runs the first that is present on
+/// PATH. Exposed so the capability matrix can be unit-tested without the tools.
+[[nodiscard]] QStringList extractorCandidates(const QString &archivePath);
 
 /// Extract the archive at `archivePath` to a temporary directory,
 /// pick the largest regular file inside, and return its hash. The
