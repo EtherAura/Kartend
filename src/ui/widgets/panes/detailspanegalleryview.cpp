@@ -12,6 +12,7 @@
 #include "ui_detailspane.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
+#include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
@@ -375,7 +376,7 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
         if (host && !host->isScrollIdle()) {
           // Re-arm the recursive retry chain in 50ms while a scroll is
           // mid-glide — see the block comment above for the full rationale.
-          QTimer::singleShot(50, selfGuard.data(), *fire);
+          QTimer::singleShot(UIConstants::Timing::UI_SETTLE_RETRY_MS, selfGuard.data(), *fire);
           return;
         }
         VideoThumbnailExtractor::instance()->requestFrame(videoPath);

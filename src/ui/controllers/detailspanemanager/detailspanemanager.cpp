@@ -15,6 +15,7 @@
 #include "pathutils.h"
 #include "timerutils.h"
 #include "uiconstants/detailspaneconstants.h"
+#include "uiconstants/timing.h"
 #include "videoutils.h"
 #include <algorithm>
 #include <QApplication>
@@ -268,7 +269,8 @@ void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
     // immediate position lands the sidebar overlapping the scrollbar. Only
     // applies to Overlay mode — Fixed mode lives in m_mainHorizontalLayout
     // and absolute-positioning it would wreck the layout dock.
-    QTimer::singleShot(50, this, [this]() { positionSidebarOverlay(); });
+    QTimer::singleShot(UIConstants::Timing::UI_SETTLE_RETRY_MS, this,
+                       [this]() { positionSidebarOverlay(); });
   }
 }
 

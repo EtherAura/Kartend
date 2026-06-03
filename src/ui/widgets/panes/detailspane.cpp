@@ -47,6 +47,7 @@
 #include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
+#include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 #include "videoutils.h"
@@ -206,7 +207,7 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
     // next fire — once the animation truly settles, the predicate
     // returns false and we proceed (Kartend-9q8d round 6).
     if (m_videoPlayback.scrollIdlePredicate && !m_videoPlayback.scrollIdlePredicate()) {
-      m_videoPlayback.videoStartTimer->start(50);
+      m_videoPlayback.videoStartTimer->start(UIConstants::Timing::UI_SETTLE_RETRY_MS);
       return;
     }
     // In vertical dock the video replaces the artwork (cramped narrow panel

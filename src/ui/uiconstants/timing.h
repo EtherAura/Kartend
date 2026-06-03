@@ -36,6 +36,12 @@ inline constexpr int SETTINGS_RETRY_BASE_MS = 50;
 inline constexpr int USER_IDLE_THRESHOLD_MS = 2000;
 /// Delay after resize before re-centering selection
 inline constexpr int RESIZE_RECENTER_DELAY_MS = 150;
+/// Re-arm interval for a geometry-dependent action deferred until the UI
+/// settles: retry every ~50ms while a scroll glide is mid-flight or the
+/// startup viewport geometry isn't final yet, then proceed once it is.
+/// Shared by the sidebar-overlay placement, the deferred video start, and
+/// the gallery preview-resolve retry chain.
+inline constexpr int UI_SETTLE_RETRY_MS = 50;
 /// Default per-item video thumbnail extraction timeout (ms).
 inline constexpr int DEFAULT_VIDEO_THUMBNAIL_TIMEOUT_MS = 4000;
 /// Minimum configurable video thumbnail extraction timeout (ms). Floors
