@@ -302,7 +302,11 @@ inline void logError(const ErrorContext &ctx) {
   case ErrorCode::UnknownError:
     return "UnknownError";
   }
-  return "Unknown";
+  // The switch above has no default and covers every enumerator, so -Wswitch
+  // flags a newly-added ErrorCode at compile time instead of letting it fall
+  // through to a generic string. This point is reachable only via an
+  // out-of-range cast (Kartend-ww6k).
+  Q_UNREACHABLE();
 }
 
 } // namespace ErrorUtils
