@@ -14,6 +14,7 @@
 #include <QVBoxLayout>
 
 #include "starratingwidget.h"
+#include "uiconstants/dialog.h"
 
 namespace {
 
@@ -36,7 +37,8 @@ EditMetadataDialog::EditMetadataDialog(QWidget *parent) : QDialog(parent) {
 
 void EditMetadataDialog::setupUi() {
   setWindowTitle(tr("Edit item metadata"));
-  resize(560, 520);
+  resize(UIConstants::EditMetadataDialog::DEFAULT_WIDTH,
+         UIConstants::EditMetadataDialog::DEFAULT_HEIGHT);
 
   auto *outerLayout = new QVBoxLayout(this);
 
@@ -52,7 +54,7 @@ void EditMetadataDialog::setupUi() {
   m_notesEdit->setTabChangesFocus(true);
   // Cap height so the dialog stays compact; the field still scrolls when
   // the user writes more than fits.
-  m_notesEdit->setFixedHeight(96);
+  m_notesEdit->setFixedHeight(UIConstants::EditMetadataDialog::NOTES_FIELD_HEIGHT);
   form->addRow(tr("Notes:"), m_notesEdit);
 
   m_tagsEdit = new QLineEdit(this);

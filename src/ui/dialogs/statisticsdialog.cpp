@@ -31,10 +31,9 @@
 #include "idatabasemanager.h"
 #include "isettingsmanager.h"
 #include "pathutils.h"
+#include "uiconstants/dialog.h"
 
 namespace {
-constexpr int DIALOG_WIDTH = 920;
-constexpr int DIALOG_HEIGHT = 640;
 constexpr int TOP_LIST_LIMIT = 50;
 constexpr int RECENT_LIST_LIMIT = 50;
 constexpr int NEVER_LIST_LIMIT = 50;
@@ -51,7 +50,8 @@ StatisticsDialog::StatisticsDialog(IDatabaseManager *databaseManager,
       m_settingsManager(settingsManager) {
   setWindowTitle(tr("Usage Statistics"));
   setModal(true);
-  resize(DIALOG_WIDTH, DIALOG_HEIGHT);
+  resize(UIConstants::StatisticsDialog::DEFAULT_WIDTH,
+         UIConstants::StatisticsDialog::DEFAULT_HEIGHT);
   setupUI();
   refresh();
 }

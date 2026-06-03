@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "fuzzymatch.h"
+#include "uiconstants/dialog.h"
 
 CommandPaletteDialog::CommandPaletteDialog(QWidget *parent) : QDialog(parent) {
   setupUi();
@@ -19,7 +20,8 @@ void CommandPaletteDialog::setupUi() {
   // Borderless-ish chrome works best for a Spotlight-style picker but Qt's
   // platform handling of frameless windows varies; stick with the default
   // QDialog frame for now and keep the dialog small / centered.
-  resize(560, 380);
+  resize(UIConstants::CommandPaletteDialog::DEFAULT_WIDTH,
+         UIConstants::CommandPaletteDialog::DEFAULT_HEIGHT);
 
   auto *outer = new QVBoxLayout(this);
   m_searchEdit = new QLineEdit(this);

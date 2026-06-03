@@ -66,13 +66,9 @@
 #include "pathutils.h"
 #include "scrapejobgrouping.h"
 #include "scrapelogging.h"
+#include "uiconstants/dialog.h"
 
 namespace {
-
-// Default size — modest baseline; dialog reflows responsively when
-// the user resizes (narrower → fewer chips per row, wider → more).
-constexpr int DIALOG_WIDTH = 900;
-constexpr int DIALOG_HEIGHT = 780;
 
 // FlowLayout extracted to flowlayout.{h,cpp} (Kartend-3fkz step 1).
 // renderDetailHtml + the detail HTML payload moved into SingleItemScrapeView
@@ -88,12 +84,14 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
       m_marqueeTicker(std::make_unique<ValueMarqueeTicker>(this)) {
   setWindowTitle(tr("Scraper"));
   setModal(true);
-  resize(DIALOG_WIDTH, DIALOG_HEIGHT);
+  resize(UIConstants::ScrapeResultDialog::DEFAULT_WIDTH,
+         UIConstants::ScrapeResultDialog::DEFAULT_HEIGHT);
   // Hard floor so the dialog stays usable on low-res screens, but
   // well below the preferred size so the user can shrink the window
   // and the FlowLayout-based metadata chips wrap accordingly. The
   // user can still drag-resize larger; we just clamp the lower edge.
-  setMinimumSize(640, 520);
+  setMinimumSize(UIConstants::ScrapeResultDialog::MIN_WIDTH,
+                 UIConstants::ScrapeResultDialog::MIN_HEIGHT);
   buildUi();
 
   // Hand the candidate list + cache + fetch driver to the view. This

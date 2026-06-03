@@ -21,6 +21,14 @@ inline constexpr int ABOUT_HEIGHT = 200;
 // dialog consistently.
 // =============================================================================
 namespace ScrapeResultDialog {
+/// Preferred (initial) dialog size; the dialog reflows responsively when
+/// the user resizes (narrower → fewer chips per row, wider → more).
+inline constexpr int DEFAULT_WIDTH = 900;
+inline constexpr int DEFAULT_HEIGHT = 780;
+/// Hard lower bound so the dialog stays usable on low-res screens while
+/// still letting the user shrink it below the preferred size.
+inline constexpr int MIN_WIDTH = 640;
+inline constexpr int MIN_HEIGHT = 520;
 /// Minimum width of the left-side collection tree.
 inline constexpr int COLLECTION_TREE_MIN_WIDTH = 220;
 /// Outer layout spacing for the dialog root.
@@ -42,6 +50,36 @@ inline constexpr int CANDIDATE_LABEL_MIN_WIDTH = 78;
 inline constexpr int THUMBS_STRIP_MAX_HEIGHT = 108;
 inline constexpr int THUMBS_STRIP_SPACING = 2;
 } // namespace ScrapeResultDialog
+
+// =============================================================================
+// Statistics dialog (usage / play-history surface).
+// =============================================================================
+namespace StatisticsDialog {
+/// Preferred (initial) dialog size.
+inline constexpr int DEFAULT_WIDTH = 920;
+inline constexpr int DEFAULT_HEIGHT = 640;
+} // namespace StatisticsDialog
+
+// =============================================================================
+// Command palette (Spotlight-style command picker) — small + centered.
+// =============================================================================
+namespace CommandPaletteDialog {
+/// Preferred (initial) dialog size.
+inline constexpr int DEFAULT_WIDTH = 560;
+inline constexpr int DEFAULT_HEIGHT = 380;
+} // namespace CommandPaletteDialog
+
+// =============================================================================
+// Edit-item-metadata dialog.
+// =============================================================================
+namespace EditMetadataDialog {
+/// Preferred (initial) dialog size.
+inline constexpr int DEFAULT_WIDTH = 560;
+inline constexpr int DEFAULT_HEIGHT = 520;
+/// Fixed height of the notes field — keeps the dialog compact; the field
+/// scrolls when the user writes past it.
+inline constexpr int NOTES_FIELD_HEIGHT = 96;
+} // namespace EditMetadataDialog
 } // namespace UIConstants
 
 #endif
