@@ -16,6 +16,7 @@
 // via the `using namespace` below.
 
 #include "scanservice.h"
+#include "scanservice_internal.h"
 
 #include "batchsizes.h"
 #include "preparedstatementcache.h"
@@ -55,59 +56,14 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using namespace QueryManagerInternal;
+using namespace ScanServiceInternal;
 
-// ============================================================================
-// Shared constants + helpers — mirrored from scanservice.cpp's anonymous
-// namespace because the persist-side functions below reference them. Each
-// TU's anon namespace keeps its own copy (constexpr / internal-linkage);
-// the alternative would be a tiny private header for these symbols. Keep
-// the two copies in sync if the originals change.
-// ============================================================================
+// APPLY_BATCH_SIZE is persist-only; the rest of the shared scan-pipeline
+// constants + helpers (BATCH_SIZE, COMMIT_INTERVAL_BATCHES,
+// PROGRESS_REPORT_INTERVAL, execAndLog, ScanProgressThrottle) now live in
+// scanservice_internal.h.
 namespace {
-constexpr int BATCH_SIZE = KartendDb::BatchSizes::FilesystemScanBatch;
-constexpr int COMMIT_INTERVAL_BATCHES = KartendDb::BatchSizes::ScanCommitInterval;
-constexpr int PROGRESS_REPORT_INTERVAL = 50000;
 constexpr int APPLY_BATCH_SIZE = KartendDb::BatchSizes::StagedScanApplyBatch;
-
-[[nodiscard]] std::optional<ErrorContext>
-execAndLog(QSqlQuery &query, const QString &failureMessage, const QString &callerLocation) {
-  if (query.exec()) {
-    return std::nullopt;
-  }
-  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, failureMessage, callerLocation)
-                 .withDetails(query.lastError().text());
-  ErrorUtils::logError(err);
-  return err;
-}
-
-class ScanProgressThrottle {
-public:
-  using Emitter = std::function<void(int processed, int total)>;
-
-  ScanProgressThrottle(int minIntervalMs, Emitter emitter)
-      : m_minIntervalMs(minIntervalMs), m_emitter(std::move(emitter)) {
-    m_timer.start();
-    m_lastEmitMs = -minIntervalMs;
-  }
-
-  void report(int processed, int total, bool force = false) {
-    if (force) {
-      m_emitter(processed, total);
-      m_lastEmitMs = m_timer.elapsed();
-      return;
-    }
-    const qint64 nowMs = m_timer.elapsed();
-    if (nowMs - m_lastEmitMs < m_minIntervalMs) return;
-    m_emitter(processed, total);
-    m_lastEmitMs = nowMs;
-  }
-
-private:
-  QElapsedTimer m_timer;
-  qint64 m_lastEmitMs = 0;
-  int m_minIntervalMs;
-  Emitter m_emitter;
-};
 } // namespace
 
 // ============================================================================

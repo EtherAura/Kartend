@@ -21,6 +21,7 @@
 // (maybeAbsolutizeItemPaths, clearCollectionFromDatabaseByUuid) are also
 // declared there.
 #include "scanservice.h"
+#include "scanservice_internal.h"
 
 #include "batchsizes.h"
 #include "preparedstatementcache.h"
@@ -64,68 +65,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using namespace QueryManagerInternal;
-
-// ============================================================================
-// Shared constants for all scan phases
-// ============================================================================
-namespace {
-constexpr int BATCH_SIZE = KartendDb::BatchSizes::FilesystemScanBatch;
-constexpr int COMMIT_INTERVAL_BATCHES = KartendDb::BatchSizes::ScanCommitInterval;
-constexpr int PROGRESS_REPORT_INTERVAL = 50000;
-
-// Kartend-a911.2: executes a prepared query and logs a DatabaseQueryFailed
-// warning on failure. Returns nullopt on success, the constructed
-// ErrorContext on failure (already logged) so callers that also need to
-// emit errorOccurred or unwind control flow can do so without rebuilding
-// the error. Centralises bind-count diagnostics + lastError forwarding
-// across the scan pipeline.
-[[nodiscard]] std::optional<ErrorContext>
-execAndLog(QSqlQuery &query, const QString &failureMessage, const QString &callerLocation) {
-  if (query.exec()) {
-    return std::nullopt;
-  }
-  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, failureMessage, callerLocation)
-                 .withDetails(query.lastError().text());
-  ErrorUtils::logError(err);
-  return err;
-}
-
-// Kartend-7axx: the four scan/save pipelines all open-coded the same
-// throttle pattern (lambda over a QElapsedTimer + a lastEmitMs cursor).
-// Factor it once so adding a new pipeline doesn't grow a fifth copy.
-class ScanProgressThrottle {
-public:
-  using Emitter = std::function<void(int processed, int total)>;
-
-  ScanProgressThrottle(int minIntervalMs, Emitter emitter)
-      : m_minIntervalMs(minIntervalMs), m_emitter(std::move(emitter)) {
-    m_timer.start();
-    // Initialise so the first non-force report always fires (legacy
-    // behaviour from each pipeline's open-coded copy).
-    m_lastEmitMs = -minIntervalMs;
-  }
-
-  /// Named `report`, not `emit`, because Qt's emit-keyword macro would
-  /// expand to nothing and produce a syntax error at the call site.
-  void report(int processed, int total, bool force = false) {
-    if (force) {
-      m_emitter(processed, total);
-      m_lastEmitMs = m_timer.elapsed();
-      return;
-    }
-    const qint64 nowMs = m_timer.elapsed();
-    if (nowMs - m_lastEmitMs < m_minIntervalMs) return;
-    m_emitter(processed, total);
-    m_lastEmitMs = nowMs;
-  }
-
-private:
-  QElapsedTimer m_timer;
-  qint64 m_lastEmitMs = 0;
-  int m_minIntervalMs;
-  Emitter m_emitter;
-};
-} // namespace
+using namespace ScanServiceInternal;
 
 ScanService::ScanService(QSqlDatabase &db, PreparedStatementCache &cache, QObject *parent)
     : QObject(parent), m_db(db), m_cache(cache) {}
