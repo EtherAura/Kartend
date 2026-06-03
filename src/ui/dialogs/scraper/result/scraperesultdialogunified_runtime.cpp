@@ -71,6 +71,29 @@
 #include "scrapejobgrouping.h"
 #include "scrapelogging.h"
 
+namespace {
+
+// Clears every scraped textual field on @p item — used when the user unchecks
+// the "_metadata" pseudo-type so apply preserves the DB's existing text rather
+// than overwriting it with the scrape. Keep in sync with ScrapedItem's textual
+// fields (Kartend-iq04t).
+void stripTextualFields(Scraper::ScrapedItem &item) {
+  item.title.clear();
+  item.description.clear();
+  item.genre.clear();
+  item.developer.clear();
+  item.publisher.clear();
+  item.releaseDate.clear();
+  item.contentRating.clear();
+  item.players.clear();
+  item.tagsJson.clear();
+  item.customFields.clear();
+  item.sourceProviderId.clear();
+  item.runtimeSeconds = -1;
+}
+
+} // namespace
+
 void ScrapeResultDialogUnified::onServiceScrapeStarted(int total) {
   qCInfo(lcScrapeTimings) << "DIALOG service.scrapeStarted total=" << total;
   setUnifiedSetupEnabled(false);
@@ -728,18 +751,7 @@ void ScrapeResultDialogUnified::interactiveOnApplied() {
   ScrapeResultDialog::Result delivered = m_dlg->m_result;
   auto *metaCheck = m_dlg->m_mediaTypeChecks.value(QStringLiteral("_metadata"));
   if (metaCheck && !metaCheck->isChecked()) {
-    delivered.item.title.clear();
-    delivered.item.description.clear();
-    delivered.item.genre.clear();
-    delivered.item.developer.clear();
-    delivered.item.publisher.clear();
-    delivered.item.releaseDate.clear();
-    delivered.item.contentRating.clear();
-    delivered.item.players.clear();
-    delivered.item.tagsJson.clear();
-    delivered.item.customFields.clear();
-    delivered.item.sourceProviderId.clear();
-    delivered.item.runtimeSeconds = -1;
+    stripTextualFields(delivered.item);
   }
   if (m_dlg->m_scraperCtx.applyResult) {
     m_dlg->m_scraperCtx.applyResult(m_dlg->m_interactiveCollectionIndex,
@@ -771,18 +783,7 @@ void ScrapeResultDialogUnified::finishCurrentApply() {
       ScrapeResultDialog::Result delivered = m_dlg->m_result;
       auto *metaCheck = m_dlg->m_mediaTypeChecks.value(QStringLiteral("_metadata"));
       if (metaCheck && !metaCheck->isChecked()) {
-        delivered.item.title.clear();
-        delivered.item.description.clear();
-        delivered.item.genre.clear();
-        delivered.item.developer.clear();
-        delivered.item.publisher.clear();
-        delivered.item.releaseDate.clear();
-        delivered.item.contentRating.clear();
-        delivered.item.players.clear();
-        delivered.item.tagsJson.clear();
-        delivered.item.customFields.clear();
-        delivered.item.sourceProviderId.clear();
-        delivered.item.runtimeSeconds = -1;
+        stripTextualFields(delivered.item);
       }
       if (m_dlg->m_scraperCtx.applyResult && !m_dlg->m_interactiveItems.isEmpty()) {
         // The service is the source of truth for which collection
