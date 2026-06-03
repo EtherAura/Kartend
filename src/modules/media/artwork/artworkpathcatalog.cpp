@@ -5,7 +5,6 @@
 #include "extensionutils.h"
 #include "loggingcategories.h"
 
-#include <functional>
 #include <QDir>
 #include <QMutexLocker>
 #include <QtConcurrent>
@@ -17,23 +16,31 @@ QStringList ArtworkPathCatalog::collectArtworkDirs(const QList<CollectionConfig>
     return {};
   }
   QSet<QString> dirs;
-  const CollectionConfig &collection = (*collections)[collectionIndex];
-  if (!collection.artworkDirectory.isEmpty()) {
-    dirs.insert(QDir(collection.artworkDirectory).absolutePath());
-  }
+  const auto addDir = [&dirs](const QString &artworkDirectory) {
+    if (!artworkDirectory.isEmpty()) {
+      dirs.insert(QDir(artworkDirectory).absolutePath());
+    }
+  };
+  addDir((*collections)[collectionIndex].artworkDirectory);
   if (includeDescendants) {
-    std::function<void(int)> walk = [&](int parentIdx) {
+    // Iterative DFS over child collections with a visited set: a cyclic
+    // parentCollectionIndex (validation doesn't forbid one — the hierarchy cache
+    // dedups cycles with its own visited set) would otherwise recurse forever
+    // and overflow the stack (Kartend-tqg3r).
+    QSet<int> visited;
+    visited.insert(collectionIndex);
+    QList<int> stack;
+    stack.append(collectionIndex);
+    while (!stack.isEmpty()) {
+      const int parentIdx = stack.takeLast();
       for (int i = 0; i < collections->size(); ++i) {
-        if ((*collections)[i].parentCollectionIndex == parentIdx) {
-          const QString artDir = (*collections)[i].artworkDirectory;
-          if (!artDir.isEmpty()) {
-            dirs.insert(QDir(artDir).absolutePath());
-          }
-          walk(i);
+        if ((*collections)[i].parentCollectionIndex == parentIdx && !visited.contains(i)) {
+          visited.insert(i);
+          addDir((*collections)[i].artworkDirectory);
+          stack.append(i);
         }
       }
-    };
-    walk(collectionIndex);
+    }
   }
   return dirs.values();
 }

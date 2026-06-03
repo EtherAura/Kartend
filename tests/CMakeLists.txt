@@ -375,6 +375,13 @@ add_executable(test_artworkwidgetregistry
 target_link_libraries(test_artworkwidgetregistry PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ArtworkWidgetRegistry COMMAND test_artworkwidgetregistry)
 
+# ArtworkPathCatalog tests (collection-tree walk + cyclic-parent guard, Kartend-tqg3r)
+add_executable(test_artworkpathcatalog
+  modules/artwork/test_artworkpathcatalog.cpp
+)
+target_link_libraries(test_artworkpathcatalog PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME ArtworkPathCatalog COMMAND test_artworkpathcatalog)
+
 # StringUtils tests (header-only)
 add_executable(test_stringutils utils/text/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
