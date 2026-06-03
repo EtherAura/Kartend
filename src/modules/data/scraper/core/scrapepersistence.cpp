@@ -116,10 +116,38 @@ QString extensionForAsset(const QUrl &url, MediaKind kind) {
   Q_UNREACHABLE();
 }
 
+// Bound scraped customFields so a pathological response can't bloat the DB row
+// + sidecar: at most kMaxCustomFields entries, the key + value each truncated
+// to a sane length. Defensive — a legitimate scrape carries a handful of short
+// fields. Keys are sorted so the surviving subset is deterministic when the
+// input exceeds the count cap (Kartend-mk792).
+constexpr int kMaxCustomFields = 64;
+constexpr int kMaxCustomFieldKeyLen = 128;
+constexpr int kMaxCustomFieldValueLen = 4096;
+
+QHash<QString, QString> capCustomFields(const QHash<QString, QString> &fields) {
+  QStringList keys = fields.keys();
+  keys.sort();
+  QHash<QString, QString> capped;
+  for (const QString &rawKey : keys) {
+    if (capped.size() >= kMaxCustomFields) {
+      break;
+    }
+    const QString key = rawKey.trimmed();
+    if (key.isEmpty()) {
+      continue;
+    }
+    capped.insert(key.left(kMaxCustomFieldKeyLen),
+                  fields.value(rawKey).left(kMaxCustomFieldValueLen));
+  }
+  return capped;
+}
+
 QString mergeCustomFields(const QString &existingJson, const QHash<QString, QString> &additions) {
   // Parse existing customFields JSON (may be empty), merge additions
-  // (additions win), serialise back. Keeps user-entered keys that the
-  // scrape didn't touch.
+  // (additions win), serialise back. Keeps user-entered keys that the scrape
+  // didn't touch. Additions are capped first so a pathological scrape response
+  // can't bloat the row.
   QJsonObject merged;
   if (!existingJson.trimmed().isEmpty()) {
     const auto doc = QJsonDocument::fromJson(existingJson.toUtf8());
@@ -127,8 +155,8 @@ QString mergeCustomFields(const QString &existingJson, const QHash<QString, QStr
       merged = doc.object();
     }
   }
-  for (auto it = additions.constBegin(); it != additions.constEnd(); ++it) {
-    if (it.key().trimmed().isEmpty()) continue;
+  const QHash<QString, QString> capped = capCustomFields(additions);
+  for (auto it = capped.constBegin(); it != capped.constEnd(); ++it) {
     merged.insert(it.key(), it.value());
   }
   if (merged.isEmpty()) {
@@ -378,7 +406,8 @@ bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseNa
   }
   if (!scraped.customFields.isEmpty()) {
     QJsonObject custom;
-    for (auto it = scraped.customFields.constBegin(); it != scraped.customFields.constEnd(); ++it) {
+    const QHash<QString, QString> capped = capCustomFields(scraped.customFields);
+    for (auto it = capped.constBegin(); it != capped.constEnd(); ++it) {
       const QString trimmed = it.value().trimmed();
       if (!trimmed.isEmpty()) {
         custom.insert(it.key(), trimmed);

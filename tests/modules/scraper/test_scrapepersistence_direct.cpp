@@ -58,6 +58,7 @@ private slots:
   void preservesExistingFieldsWhenScrapeIsEmpty();
   void overwritesScrapedFieldsWhenBothPresent();
   void mergesCustomFieldsScrapeWinsOnSharedKeys();
+  void capsCustomFieldCountAndValueSize();
   void emptyCollectionUuidReturnsFalseAndNoSave();
   void emptySourcePathReturnsFalseAndNoSave();
   void closedDatabaseReturnsFalse();
@@ -202,6 +203,48 @@ void TestScrapePersistenceDirect::mergesCustomFieldsScrapeWinsOnSharedKeys() {
   QCOMPARE(got.value(QStringLiteral("region")), QStringLiteral("EU"));
   QCOMPARE(got.value(QStringLiteral("userNote")), QStringLiteral("keep me"));
   QCOMPARE(got.value(QStringLiteral("genre2")), QStringLiteral("RPG"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestScrapePersistenceDirect::capsCustomFieldCountAndValueSize() {
+  const QString conn = QStringLiteral("test_direct_custom_cap");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+
+  ItemMetadataStore::ItemMetadata existing;
+  existing.collectionUuid = QStringLiteral("u1");
+  existing.path = QStringLiteral("/m/g.bin");
+  QVERIFY(ItemMetadataStore::save(db, existing).isOk());
+
+  // A pathological response: far more fields than the cap (64), plus one value
+  // way over the per-field size cap (4096).
+  Scraper::ScrapedItem scraped;
+  for (int i = 0; i < 200; ++i) {
+    scraped.customFields.insert(QStringLiteral("field%1").arg(i, 3, 10, QChar('0')),
+                                QStringLiteral("v"));
+  }
+  scraped.customFields.insert(QStringLiteral("field000"), QString(5000, QChar('x')));
+
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
+                                             QStringLiteral("/m/g.bin"), scraped, {}));
+
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
+  QVERIFY(loaded.isOk());
+  const auto fields = ItemMetadataStore::parseCustomFields(loaded.value().customFields);
+
+  // The persisted field count is bounded.
+  QVERIFY2(fields.size() <= 64,
+           qPrintable(QStringLiteral("expected <= 64 custom fields, got %1").arg(fields.size())));
+
+  // The oversized value was truncated. "field000" sorts first, so it survives
+  // the count cap.
+  QHash<QString, QString> got;
+  for (const auto &kv : fields) {
+    got.insert(kv.first, kv.second);
+  }
+  QVERIFY(got.contains(QStringLiteral("field000")));
+  QCOMPARE(got.value(QStringLiteral("field000")).size(), 4096);
 
   closeAndRemove(db, conn);
 }
