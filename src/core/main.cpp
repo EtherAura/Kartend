@@ -339,8 +339,14 @@ extern "C" auto main(int argc, char *argv[]) -> int {
   }
   // MainWindow is now destroyed - all our cleanup (saves, etc.) is done.
 
-  // Give the fire-and-forget save tasks a moment to complete on the global
-  // pool. These are just small JSON writes, should be <100ms.
+  // This is NOT waiting for saves: cache + session writes are synchronous on
+  // the shutdown thread now (Kartend-x2by) — they used to be fire-and-forget
+  // and this same 200ms sleep routinely dropped them on slow disks. What's
+  // left on the global pool here is abandoned fire-and-forget artwork work:
+  // path cataloging + silent loads dispatched via globalInstance()->start /
+  // QtConcurrent::run (see artworkpathcatalog.cpp, artworksilentloading.cpp).
+  // The bounded wait is a best-effort window for those to finish before exit,
+  // not a durability guarantee (Kartend-snb2q).
   QThreadPool::globalInstance()->waitForDone(200);
 
   if (smokeTestMode) {
