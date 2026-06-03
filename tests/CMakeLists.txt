@@ -872,6 +872,15 @@ add_executable(test_settingshelpers
 target_link_libraries(test_settingshelpers PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME SettingsHelpers COMMAND test_settingshelpers)
 
+# CollectionConfig::operator== field-coverage test (Kartend-bztw8). Pure value
+# type lives in kartend_utils; guards against a future field being added to the
+# struct but forgotten in operator== (breaks settings-dialog dirty-tracking).
+add_executable(test_collectionconfigequality
+  modules/settings/test_collectionconfigequality.cpp
+)
+target_link_libraries(test_collectionconfigequality PRIVATE kartend_utils Qt6::Test)
+add_test(NAME CollectionConfigEquality COMMAND test_collectionconfigequality)
+
 # SettingsManager migration / schemaVersion tests (Kartend-39g9). Links
 # against the full kartend object-lib aggregate because SettingsManager
 # pulls in a wide dependency footprint (path/error/config-validation utils,
