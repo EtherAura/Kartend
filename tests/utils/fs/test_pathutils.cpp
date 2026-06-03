@@ -44,6 +44,7 @@ private slots:
   void testTruncatePathForDisplay_exactLength();
   void testTruncatePathForDisplay_longPath();
   void testTruncatePathForDisplay_customLength();
+  void testTruncatePathForDisplay_belowMinLength();
 
   // normalizeDisplayName tests
   void testNormalizeDisplayName_underscores();
@@ -269,6 +270,19 @@ void TestPathUtils::testTruncatePathForDisplay_customLength() {
 
   QCOMPARE(result.length(), 20);
   QVERIFY(result.startsWith("..."));
+}
+
+void TestPathUtils::testTruncatePathForDisplay_belowMinLength() {
+  // maxLength below 3 leaves no room for the "..." prefix. It must clamp to 3
+  // so the result never exceeds the original — the old code passed a negative
+  // to QString::right, which returned the whole (longer) string (Kartend-3pxm).
+  const QString longPath = "/home/user/very/long/path/that/exceeds/any/tiny/maxLength";
+  for (int maxLength : {0, 1, 2}) {
+    const QString result = PathUtils::truncatePathForDisplay(longPath, maxLength);
+    QVERIFY2(result.length() <= longPath.length(),
+             qPrintable(QStringLiteral("maxLength=%1 produced a longer string").arg(maxLength)));
+    QCOMPARE(result, QStringLiteral("..."));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

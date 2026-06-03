@@ -92,6 +92,10 @@ QString expandPathWithoutExistenceCheck(const QString &path, const QString &coll
 }
 
 QString truncatePathForDisplay(const QString &path, int maxLength) {
+  // Need room for the "..." prefix: a maxLength below 3 would make
+  // path.right(maxLength - 3) negative, which QString::right returns as the
+  // whole string — yielding a result longer than the input (Kartend-3pxm).
+  maxLength = qMax(maxLength, 3);
   if (path.length() <= maxLength) {
     return path;
   }
