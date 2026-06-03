@@ -36,6 +36,7 @@ private slots:
   void parseDetailResponse_dropsUnsafeMediaType();
   void parseDetailResponse_downgradesInvalidGroupScopeKey();
   void parseDetailResponse_keepsValidGroupScopeKey();
+  void parseUserInfoResponse_nonJsonBodyRejectedRegardlessOfPrefix();
 };
 
 namespace {
@@ -511,6 +512,24 @@ void TestScreenScraperParser::parseDetailResponse_keepsValidGroupScopeKey() {
   const auto &asset = result.value().media.first();
   QCOMPARE(asset.scope, Scraper::MediaScope::Group);
   QCOMPARE(asset.scopeKey, QStringLiteral("12345"));
+}
+
+void TestScreenScraperParser::parseUserInfoResponse_nonJsonBodyRejectedRegardlessOfPrefix() {
+  // SS emits plain-text errors at HTTP 200. The unified guard treats any
+  // non-JSON body as such an error, so bodies that don't start with "Erreur"
+  // — the quota message, or an HTML proxy page — are now rejected up front
+  // instead of falling through to a confusing JSON parse error (Kartend-8u13o).
+  auto quota = ScreenScraperParser::parseUserInfoResponse(
+      QByteArrayLiteral("Le quota de requetes journalier est atteint"));
+  QVERIFY(quota.isError());
+  QVERIFY2(quota.error().message.contains(QStringLiteral("rejected")),
+           qPrintable(quota.error().message));
+
+  auto html = ScreenScraperParser::parseUserInfoResponse(
+      QByteArrayLiteral("<html><body>502 Bad Gateway</body></html>"));
+  QVERIFY(html.isError());
+  QVERIFY2(html.error().message.contains(QStringLiteral("rejected")),
+           qPrintable(html.error().message));
 }
 
 QTEST_MAIN(TestScreenScraperParser)

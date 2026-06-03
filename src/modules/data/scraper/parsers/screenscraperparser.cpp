@@ -42,6 +42,16 @@ bool isSafePathComponent(const QString &s) {
          s != QLatin1String(".") && s != QLatin1String("..");
 }
 
+// SS returns plain-text error blobs at HTTP 200 instead of JSON — "Erreur de
+// login : ...", "Le quota ... est atteint", or (via a misbehaving proxy) an
+// HTML page. A valid response always starts with '{', so any non-JSON body is
+// one of these. One definition so every entry point reacts identically, instead
+// of the old per-path mix where the user/infra paths also required an "Erreur"
+// prefix and so silently missed "Le quota ..." and HTML bodies (Kartend-8u13o).
+bool ssPlainTextError(const QByteArray &json) {
+  return !QString::fromUtf8(json.left(64)).trimmed().startsWith(QLatin1Char('{'));
+}
+
 // group/company ids are numeric SS identifiers; an allowlist is the tightest
 // gate for a value that becomes a filename (Kartend-xhbt).
 bool isValidScopeKey(const QString &s) {
@@ -615,8 +625,7 @@ ErrorUtils::Result<ScreenScraperUserInfo> parseUserInfoResponse(const QByteArray
   // de login : ...", "Le quota ... est atteint", etc.) at HTTP 200.
   // Catch those before JSON parsing so the surfaced error is the
   // actual SS message rather than an opaque "invalid JSON".
-  const QString head = QString::fromUtf8(json.left(64)).trimmed();
-  if (!head.startsWith('{') && head.startsWith(QLatin1String("Erreur"))) {
+  if (ssPlainTextError(json)) {
     return ErrorContext::error(ErrorCode::InvalidArgument,
                                QStringLiteral("ScreenScraper rejected the user-info request"),
                                "ScreenScraperParser::parseUserInfoResponse")
@@ -647,8 +656,7 @@ std::optional<ScreenScraperUserInfo> extractUserInfo(const QByteArray &json) {
   // omits it. Any parse failure (plain-text error blob, garbage,
   // missing block) yields nullopt so the caller keeps its prior
   // quota snapshot rather than treating the absence as an error.
-  const QString head = QString::fromUtf8(json.left(64)).trimmed();
-  if (!head.startsWith('{')) return std::nullopt;
+  if (ssPlainTextError(json)) return std::nullopt;
   QJsonParseError err{};
   const QJsonDocument doc = parseTolerant(json, &err);
   if (doc.isNull() || !doc.isObject()) return std::nullopt;
@@ -662,8 +670,7 @@ ErrorUtils::Result<ScreenScraperInfraInfo> parseInfraInfoResponse(const QByteArr
   // Same plain-text-error guard as parseUserInfoResponse — SS sends
   // French error blobs at HTTP 200 when the dev creds are bad, and
   // those would otherwise come back as opaque JSON failures.
-  const QString head = QString::fromUtf8(json.left(64)).trimmed();
-  if (!head.startsWith('{') && head.startsWith(QLatin1String("Erreur"))) {
+  if (ssPlainTextError(json)) {
     return ErrorContext::error(ErrorCode::InvalidArgument,
                                QStringLiteral("ScreenScraper rejected the infra-info request"),
                                "ScreenScraperParser::parseInfraInfoResponse")
