@@ -53,15 +53,24 @@ inline void calculateGridMetrics(int totalItems, int itemsPerRow, int itemWidth,
                                  int &logicalHeight, double &scrollScale, bool &isClipped) {
   int totalRows = (itemsPerRow > 0) ? ((totalItems + itemsPerRow - 1) / itemsPerRow) : 1;
 
+  // Symmetric with the height clamp below: itemsPerRow has no upper cap
+  // (clampValues dropped the width cap), so compute in int64 to avoid silent
+  // int overflow, then clamp to Qt's max widget size.
+  constexpr int MAX_WIDTH = kQtMaxWidgetSize - 1000; // Safety margin
   if (itemsPerRow > 0) {
-    int horizontalSpacingContribution =
-        (itemsPerRow > 1 ? (itemsPerRow - 1) * horizontalSpacing : 0);
-    int calculatedWidth = margins * 2 + itemsPerRow * itemWidth + horizontalSpacingContribution;
-    actualGridWidth = calculatedWidth;
-    totalWidth = calculatedWidth;
+    const qint64 horizontalSpacingContribution =
+        (itemsPerRow > 1 ? static_cast<qint64>(itemsPerRow - 1) * horizontalSpacing : 0);
+    const qint64 rawWidth = static_cast<qint64>(margins) * 2 +
+                            static_cast<qint64>(itemsPerRow) * itemWidth +
+                            horizontalSpacingContribution;
+    const int clampedWidth = static_cast<int>(qMin(rawWidth, static_cast<qint64>(MAX_WIDTH)));
+    actualGridWidth = clampedWidth;
+    totalWidth = clampedWidth;
   } else {
-    totalWidth = margins * 2 + itemWidth;
-    actualGridWidth = totalWidth;
+    const qint64 rawWidth = static_cast<qint64>(margins) * 2 + itemWidth;
+    const int clampedWidth = static_cast<int>(qMin(rawWidth, static_cast<qint64>(MAX_WIDTH)));
+    totalWidth = clampedWidth;
+    actualGridWidth = clampedWidth;
   }
 
   // Use int64 to avoid overflow during calculation

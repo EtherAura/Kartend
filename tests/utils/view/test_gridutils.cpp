@@ -45,6 +45,7 @@ private slots:
   void testCalculateGridMetrics_singleColumn();
   void testCalculateGridMetrics_emptyGrid();
   void testCalculateGridMetrics_minimumDimensions();
+  void testCalculateGridMetrics_widthClampedOnOverflow();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,6 +258,22 @@ void TestGridUtils::testCalculateGridMetrics_minimumDimensions() {
 
   QVERIFY(totalWidth >= minWidth);
   QVERIFY(totalHeight >= minHeight);
+}
+
+void TestGridUtils::testCalculateGridMetrics_widthClampedOnOverflow() {
+  int totalWidth = 0, totalHeight = 0, actualGridWidth = 0;
+
+  // itemsPerRow * itemWidth far exceeds INT_MAX. Pre-fix this overflowed int
+  // silently (clampValues no longer caps the width); now it is computed in
+  // int64 and clamped to kQtMaxWidgetSize - 1000, symmetric with the height
+  // clamp (Kartend-4cmu).
+  GridUtils::calculateGridMetrics(1000000, 100000, 100000, 100, 10, 10, 20, totalWidth,
+                                  totalHeight, actualGridWidth);
+
+  constexpr int kMaxWidth = 16777215 - 1000;
+  QCOMPARE(totalWidth, kMaxWidth);
+  QCOMPARE(actualGridWidth, kMaxWidth);
+  QVERIFY(totalWidth > 0); // clamped, not overflowed to a negative
 }
 
 QTEST_MAIN(TestGridUtils)
