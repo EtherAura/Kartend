@@ -369,7 +369,7 @@ private:
   /// sidebar-mode change.
   void updateScrollManagerSidebarShrinking();
   void connectSearchComponents();
-  void connectScrollBars() const;
+  void connectScrollBars();
   /// Wire and refresh the toolbar's filter button. Idempotent — installs
   /// the QMenu::triggered handler the first time and rebuilds the action
   /// list on every call. Delegates to the ToolbarController.

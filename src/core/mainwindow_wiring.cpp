@@ -566,7 +566,7 @@ void MainWindow::connectFilterToolbar() {
   }
 }
 
-void MainWindow::connectScrollBars() const {
+void MainWindow::connectScrollBars() {
   if (!ui->itemScrollArea || !m_appManager->getNavigationManager()) {
     return;
   }
