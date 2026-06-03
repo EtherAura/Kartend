@@ -260,7 +260,12 @@ void ScraperController::promptResumePendingScrapeIfAny() {
   // dialog blocking the resume.
   const bool autoResume = generalSettings && generalSettings->scraper.options.scrapeAutoResume;
   if (autoResume) {
-    m_scraperService->loadPendingState(/*consumeOnLoad=*/true);
+    // Discard the state we already loaded above rather than loading it a second
+    // time with consumeOnLoad — the re-read's value was thrown away and, if the
+    // file changed between the two reads, consume would delete a different state
+    // than the one being resumed. Mirrors the manual Resume branch below
+    // (Kartend-h2736).
+    m_scraperService->discardPendingState();
     m_scraperService->resumeFromState(pending);
     openScraperDialog();
     return;
