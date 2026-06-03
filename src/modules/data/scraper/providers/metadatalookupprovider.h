@@ -2,6 +2,7 @@
 #define METADATALOOKUPPROVIDER_H
 
 #include <functional>
+#include <type_traits>
 
 #include <QByteArray>
 #include <QList>
@@ -112,5 +113,14 @@ public:
   using StageReporter = std::function<void(const QString &stage)>;
   virtual void setStageReporter(StageReporter /*reporter*/) {}
 };
+
+// Providers are owned and deleted through a MetadataLookupProvider* (often a
+// MetadataProvider*) by the result dialog and batch driver, so the destructor
+// must be virtual or that delete is UB. It is — inherited from
+// MetadataProvider's `virtual ~MetadataProvider() = default;`. Lock the
+// invariant in so dropping that base destructor fails loudly here (Kartend-q9w8q).
+static_assert(std::has_virtual_destructor_v<MetadataLookupProvider>,
+              "MetadataLookupProvider is deleted polymorphically through base pointers; its "
+              "destructor must be virtual.");
 
 #endif // METADATALOOKUPPROVIDER_H
