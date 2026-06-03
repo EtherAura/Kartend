@@ -130,12 +130,12 @@ ArtworkManager::ArtworkManager(QObject *parent)
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
       m_continuousSilentLoad(false), m_persistentSilentLoad(false),
       m_adaptiveBatcher(AdaptiveBatcher::Config{
-          UIConstants::Artwork::BATCH_HIGH, // initialBatchSize
-          2,                                // minBatchSize
-          30,                               // maxBatchSize
-          50,  // targetTimeMs - Target 50ms per batch for responsive UI
-          0.3, // smoothingFactor
-          10   // historySize
+          UIConstants::Artwork::BATCH_HIGH,                 // initialBatchSize
+          UIConstants::Artwork::ADAPTIVE_BATCHER_MIN_SIZE,  // minBatchSize
+          UIConstants::Artwork::ADAPTIVE_BATCHER_MAX_SIZE,  // maxBatchSize
+          UIConstants::Artwork::ADAPTIVE_BATCHER_TARGET_MS, // targetTimeMs
+          UIConstants::Artwork::ADAPTIVE_BATCHER_SMOOTHING, // smoothingFactor
+          UIConstants::Artwork::ADAPTIVE_BATCHER_HISTORY    // historySize
       }) {
   m_widgetRegistry = new ArtworkWidgetRegistry(this);
   // Kartend-davi: construct with no cache up front so cancelAll paths work
@@ -660,7 +660,7 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
   // so the next tick can paint between the two halves. The cap counts
   // total iterations (applied + skipped) so a batch full of stale
   // widgets still progresses without a giant 30-item sweep.
-  constexpr int kMaxPerTick = 8;
+  constexpr int kMaxPerTick = UIConstants::Artwork::MAX_DECODE_PER_TICK;
   int applied = 0;
   int skipped = 0;
   int processed = 0;

@@ -32,7 +32,8 @@ QPixmap loadAndScale(const QString &path, int targetSize) {
   reader.setAutoTransform(true);
   reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
   // Cap the decoded size so very large source images don't waste memory.
-  QSize bounded(targetSize * 2, targetSize * 2);
+  const int decodeSize = targetSize * UIConstants::Artwork::COVERFLOW_DECODE_OVERSAMPLE;
+  QSize bounded(decodeSize, decodeSize);
   if (reader.size().isValid() && reader.size().width() > bounded.width()) {
     reader.setScaledSize(reader.size().scaled(bounded, Qt::KeepAspectRatio));
   }
@@ -144,7 +145,8 @@ void CoverFlowWidget::pruneScaledPixmapCache() {
   // entries as the user scrolls through a large collection (the profile
   // run that motivated Kartend-g6ft saw it climb to 2200 entries
   // ≈ 500MB before any teardown).
-  const int budget = (kVisibleSideCards * 2 + 1) * 4;
+  const int budget =
+      (kVisibleSideCards * 2 + 1) * UIConstants::Artwork::COVERFLOW_PIXMAP_CACHE_PER_CARD;
   if (static_cast<int>(m_scaledPixmapCache.size()) <= budget) {
     return;
   }
@@ -186,7 +188,8 @@ void CoverFlowWidget::cancelPendingScales() {
 void CoverFlowWidget::prunePixmapCache() {
   // Bound the cache so collections with thousands of items don't keep all
   // their pixmaps resident. Keep at most 4× the visible window worth.
-  const int budget = (kVisibleSideCards * 2 + 1) * 4;
+  const int budget =
+      (kVisibleSideCards * 2 + 1) * UIConstants::Artwork::COVERFLOW_PIXMAP_CACHE_PER_CARD;
   if (static_cast<int>(m_pixmapCache.size()) <= budget) {
     return;
   }

@@ -47,6 +47,22 @@ inline constexpr int SILENT_LOAD_COOLDOWN_MS = 500;
 inline constexpr int START_SILENT_LOAD_AFTER_ITEMS_MS = 150;
 /// Delay before reapplying filter after artwork load
 inline constexpr int FILTER_REAPPLY_DELAY_MS = 150;
+
+// AdaptiveBatcher::Config tuning for the artwork-decode batcher — promoted
+// from the positional constructor tuple (easy to transpose) (Kartend-o12mq).
+inline constexpr int ADAPTIVE_BATCHER_MIN_SIZE = 2;
+inline constexpr int ADAPTIVE_BATCHER_MAX_SIZE = 30;
+inline constexpr int ADAPTIVE_BATCHER_TARGET_MS = 50; ///< target ms per batch
+inline constexpr double ADAPTIVE_BATCHER_SMOOTHING = 0.3;
+inline constexpr int ADAPTIVE_BATCHER_HISTORY = 10;
+/// Max decoded artwork results applied to widgets per UI tick (keeps the main
+/// thread responsive during scroll).
+inline constexpr int MAX_DECODE_PER_TICK = 8;
+/// CoverFlow scaled-pixmap cache budget = (visible-side-cards window) × this.
+inline constexpr int COVERFLOW_PIXMAP_CACHE_PER_CARD = 4;
+/// CoverFlow decodes artwork at this multiple of the target size so the
+/// downscale stays crisp.
+inline constexpr int COVERFLOW_DECODE_OVERSAMPLE = 2;
 } // namespace Artwork
 } // namespace UIConstants
 
