@@ -187,21 +187,72 @@ void appendCoverUrls(Scraper::ScrapedItem &item, qint64 coverId) {
   item.media.append(large);
 }
 
+namespace {
+
+// ISBN-10: 9 digits followed by a check char (0-9 or X). Valid iff
+// sum(value[i] * (10 - i)) % 11 == 0, with a trailing 'X' counting as 10.
+bool isValidIsbn10(const QString &isbn) {
+  if (isbn.size() != 10) {
+    return false;
+  }
+  int sum = 0;
+  for (int i = 0; i < 10; ++i) {
+    const QChar c = isbn.at(i);
+    int value = 0;
+    if (i == 9 && (c == QLatin1Char('X') || c == QLatin1Char('x'))) {
+      value = 10;
+    } else if (c.isDigit()) {
+      value = c.digitValue();
+    } else {
+      return false;
+    }
+    sum += value * (10 - i);
+  }
+  return sum % 11 == 0;
+}
+
+// ISBN-13: 13 digits. Valid iff sum(digit[i] * w) % 10 == 0 with the
+// alternating 1,3,1,3,... weight schedule.
+bool isValidIsbn13(const QString &isbn) {
+  if (isbn.size() != 13) {
+    return false;
+  }
+  int sum = 0;
+  for (int i = 0; i < 13; ++i) {
+    const QChar c = isbn.at(i);
+    if (!c.isDigit()) {
+      return false;
+    }
+    sum += c.digitValue() * ((i % 2 == 0) ? 1 : 3);
+  }
+  return sum % 10 == 0;
+}
+
+} // namespace
+
 QString extractIsbnFromText(const QString &text) {
-  // Try ISBN-13 first (more specific). Optional leading "ISBN", optional
-  // hyphens within the digits run. We strip the dashes before returning
-  // the canonical digits-only form.
+  // Try ISBN-13 first (more specific), then ISBN-10. The leading "ISBN" and
+  // internal hyphens/spaces are optional; we strip the separators to the
+  // canonical form. Only a capture whose check digit validates is returned —
+  // an unvalidated 10-digit run (a year, an internal id) otherwise fed a bogus
+  // isbn= query and auto-applied wrong matches in batch (Kartend-tipud). All
+  // matches are scanned so a real ISBN later in the string isn't shadowed by an
+  // earlier invalid run.
   static const QRegularExpression isbn13(QStringLiteral("(?:ISBN[- :]*)?(97[89](?:[- ]?\\d){10})"),
                                          QRegularExpression::CaseInsensitiveOption);
-  static const QRegularExpression isbn10(QStringLiteral("(?:ISBN[- :]*)?(\\d(?:[- ]?\\d){9})"),
-                                         QRegularExpression::CaseInsensitiveOption);
+  static const QRegularExpression isbn10(
+      QStringLiteral("(?:ISBN[- :]*)?(\\d(?:[- ]?\\d){8}[- ]?[\\dXx])"),
+      QRegularExpression::CaseInsensitiveOption);
   for (const auto *re : {&isbn13, &isbn10}) {
-    const auto match = re->match(text);
-    if (match.hasMatch()) {
-      QString digits = match.captured(1);
+    auto it = re->globalMatch(text);
+    while (it.hasNext()) {
+      QString digits = it.next().captured(1);
       digits.remove(QChar('-'));
       digits.remove(QChar(' '));
-      return digits;
+      const bool valid = digits.size() == 13 ? isValidIsbn13(digits) : isValidIsbn10(digits);
+      if (valid) {
+        return digits;
+      }
     }
   }
   return {};

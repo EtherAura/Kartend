@@ -30,6 +30,10 @@ private slots:
   void extractIsbnFromText_findsIsbn10WithoutPrefix();
   void extractIsbnFromText_returnsEmptyForNoMatch();
   void extractIsbnFromText_isbn13PreferredOverIsbn10WhenBothPresent();
+  void extractIsbnFromText_rejectsInvalidTenDigitRun();
+  void extractIsbnFromText_skipsInvalidRunAndFindsValidIsbn();
+  void extractIsbnFromText_acceptsIsbn10WithXCheckDigit();
+  void extractIsbnFromText_rejectsInvalidIsbn13();
 };
 
 namespace {
@@ -214,6 +218,32 @@ void TestOpenLibraryParser::extractIsbnFromText_isbn13PreferredOverIsbn10WhenBot
   // try ISBN-13 first or it'd return the first 10 digits of the 13.
   const QString text = QStringLiteral("ISBN 9780451524935 (also 0553293354)");
   QCOMPARE(OpenLibraryParser::extractIsbnFromText(text), QStringLiteral("9780451524935"));
+}
+
+void TestOpenLibraryParser::extractIsbnFromText_rejectsInvalidTenDigitRun() {
+  // A bare 10-digit run that isn't a valid ISBN-10 (its check digit doesn't
+  // compute) must NOT be treated as an ISBN — that fed a bogus isbn= query and
+  // auto-applied wrong matches in batch (Kartend-tipud).
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(QStringLiteral("Episode 1234567890.mkv")),
+           QString());
+}
+
+void TestOpenLibraryParser::extractIsbnFromText_skipsInvalidRunAndFindsValidIsbn() {
+  // An invalid run earlier in the string must not shadow a real ISBN later.
+  const QString text = QStringLiteral("id 1234567890 isbn 0553293354.epub");
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(text), QStringLiteral("0553293354"));
+}
+
+void TestOpenLibraryParser::extractIsbnFromText_acceptsIsbn10WithXCheckDigit() {
+  // A valid ISBN-10 whose check digit is 'X' (=10) must be captured + validated.
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(QStringLiteral("020161622X.epub")),
+           QStringLiteral("020161622X"));
+}
+
+void TestOpenLibraryParser::extractIsbnFromText_rejectsInvalidIsbn13() {
+  // A 978/979-prefixed 13-digit run with a wrong check digit is rejected, not
+  // queried.
+  QCOMPARE(OpenLibraryParser::extractIsbnFromText(QStringLiteral("9780451524936")), QString());
 }
 
 QTEST_MAIN(TestOpenLibraryParser)
