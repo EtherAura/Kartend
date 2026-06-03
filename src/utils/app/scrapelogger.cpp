@@ -152,6 +152,13 @@ void setEnabled(bool enabled) {
     restrictLogPermissionsLocked(g_logFile);
     g_bytesThisGeneration = g_logFile->size();
     if (!g_handlerInstalled) {
+      // Capture-once + never-uninstall: g_chainedHandler is whatever handler
+      // was active at first enable, and scrapeMessageHandler always chains to
+      // it so the stderr sink survives. ScrapeLogger is thus the outermost
+      // handler by construction — any process-wide handler it must coexist
+      // with has to be installed earlier (see the ordering invariant on
+      // setEnabled() in scrapelogger.h). A later qInstallMessageHandler that
+      // replaces without chaining would silently shadow this one.
       g_chainedHandler = qInstallMessageHandler(scrapeMessageHandler);
       g_handlerInstalled = true;
     }
