@@ -246,6 +246,51 @@ QUrl rewriteMediaUrl(const QUrl &source, int maxDim, bool preferJpg) {
 /// keep one asset per (type) — preferring the item's own region per
 /// `regionPrefs` — so the dialog's media checkbox panel doesn't show
 /// 6 box-2D variants and a Japanese cart gets Japanese box art.
+struct CanonicalMedia {
+  QString type;
+  QString label;
+};
+
+// Map an SS media `type` to its canonical Kartend type + display label. SS
+// serves a few assets under multiple tags that denote the *same* picture —
+// `ss`/`screenshot`, `box-2D`/`front`, `sstitle`, `manuel`/`manual` — and those
+// must collapse to one on-disk type. Everything else keeps its SS tag so
+// distinct visual variants (wheel-hd / wheel / screenmarquee / fanart / theme /
+// box-2D-back / bezel-* / ...) get distinct subdirectories and never collide.
+// `mediaTypeLabels` is the runtime catalog used for friendly labels of tags
+// Kartend doesn't hardcode. Computing this BEFORE the dedup in mapMedia is what
+// lets variant tags collapse to one entry instead of two (Kartend-xh56j).
+CanonicalMedia canonicalMediaType(const QString &ssType,
+                                  const QHash<QString, QString> &mediaTypeLabels) {
+  const QString lower = ssType.toLower();
+  if (lower == QStringLiteral("box-2d")) {
+    return {QStringLiteral("front"), QStringLiteral("Box (front)")};
+  }
+  if (lower == QStringLiteral("screenshot") || lower == QStringLiteral("ss")) {
+    return {QStringLiteral("screenshot"), QStringLiteral("Screenshot")};
+  }
+  if (lower == QStringLiteral("sstitle")) {
+    return {QStringLiteral("title"), QStringLiteral("Title screen")};
+  }
+  if (lower == QStringLiteral("manuel") || lower == QStringLiteral("manual")) {
+    // SS uses the French "manuel"; some providers use "manual". Same asset,
+    // locale spelling — collapse so MediaKind dispatch routes the file to
+    // {artwork}/manual/<base>.pdf regardless of which spelling arrived.
+    return {QStringLiteral("manual"), QStringLiteral("Manual")};
+  }
+  // Unknown-to-Kartend SS tag: keep the SS type; use the runtime catalog's
+  // friendly label when present (case-insensitive — SS mixes case), else the
+  // type itself.
+  QString label = ssType;
+  if (!mediaTypeLabels.isEmpty()) {
+    const auto it = mediaTypeLabels.constFind(lower);
+    if (it != mediaTypeLabels.constEnd() && !it.value().isEmpty()) {
+      label = it.value();
+    }
+  }
+  return {ssType, label};
+}
+
 QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, bool preferJpg,
                                     const QHash<QString, QString> &mediaTypeLabels,
                                     const QStringList &regionPrefs) {
@@ -265,9 +310,15 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
     // artworkDirectory.
     if (!isSafePathComponent(type)) continue;
     const int rank = regionRank(m.value("region").toString());
+    // Normalize to the canonical type FIRST so multi-tag variants (ss +
+    // screenshot, box-2D + front, manuel + manual) collapse to one type BEFORE
+    // the dedup below. Doing it after the dedup let both variants survive and
+    // then normalize to the same type, silently overwriting each other
+    // downstream — non-deterministic last-write-wins (Kartend-xh56j).
+    const CanonicalMedia canon = canonicalMediaType(type, mediaTypeLabels);
     Scraper::MediaAsset asset;
-    asset.type = type;
-    asset.label = type;
+    asset.type = canon.type;
+    asset.label = canon.label;
     asset.url = rewriteMediaUrl(QUrl(url), mediaMaxDim, preferJpg);
     // Scope detection drives the persistence layer's per-game vs
     // _shared/ routing. SS exposes three media endpoints; the URL
@@ -292,9 +343,9 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
       asset.scope = Scraper::MediaScope::Game;
       asset.scopeKey.clear();
     }
-    auto existing = byType.constFind(type);
+    auto existing = byType.constFind(canon.type);
     if (existing == byType.constEnd() || rank < existing.value().first) {
-      byType.insert(type, qMakePair(rank, asset));
+      byType.insert(canon.type, qMakePair(rank, asset));
     }
   }
   QList<Scraper::MediaAsset> out;
@@ -302,61 +353,8 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
   for (const auto &pair : byType) {
     out.append(pair.second);
   }
-  // Only normalise SS types that have a *unique* canonical Kartend
-  // name — `box-2D` → `front`, `sstitle` → `title`, `screenshot`
-  // stays, and `manuel`/`manual` collapse to one locale-neutral
-  // `manual` (locale duplicates, not visual variants). Everything
-  // else keeps its SS-provided type so distinct visual variants get
-  // distinct on-disk subdirectories and never collide:
-  //   wheel-hd / wheel / wheel-carbon / wheel-steel — different logo styles,
-  //   screenmarquee / marquee — different marquee art,
-  //   fanart / theme — different background art,
-  //   box-2D-back / box-2D-side / box-3D / box-texture / bezel-* / ...
-  //
-  // The dialog shows each variant as a separate checkbox; the
-  // persistence layer writes each one to {artwork}/<ss-type>/, with
-  // its own item_artwork DB row for non-standard types. Storage is
-  // collision-free; the only de-dup point is byType above (region
-  // preference for the *same* SS-side type).
-  for (auto &asset : out) {
-    const QString lower = asset.type.toLower();
-    QString mapped;
-    QString label;
-    if (lower == QStringLiteral("box-2d")) {
-      mapped = QStringLiteral("front");
-      label = QStringLiteral("Box (front)");
-    } else if (lower == QStringLiteral("screenshot") || lower == QStringLiteral("ss")) {
-      // SS serves the in-game screenshot under the short tag `ss`;
-      // some responses also use the long `screenshot`. Same asset —
-      // collapse both to the canonical `screenshot` type.
-      mapped = QStringLiteral("screenshot");
-      label = QStringLiteral("Screenshot");
-    } else if (lower == QStringLiteral("sstitle")) {
-      mapped = QStringLiteral("title");
-      label = QStringLiteral("Title screen");
-    } else if (lower == QStringLiteral("manuel") || lower == QStringLiteral("manual")) {
-      // SS uses the French "manuel"; some other providers use the
-      // English "manual". Same asset, locale spelling — collapse to
-      // one tag so the persistence layer's MediaKind dispatch
-      // routes the file to `{artwork}/manual/<base>.pdf` (rather
-      // than treating it as an image) regardless of which spelling
-      // arrived. Not a visual variant.
-      mapped = QStringLiteral("manual");
-      label = QStringLiteral("Manual");
-    }
-    if (!mapped.isEmpty()) {
-      asset.type = mapped;
-      asset.label = label;
-    } else if (!mediaTypeLabels.isEmpty()) {
-      // Unknown-to-Kartend SS tag: fall back to the runtime catalog's
-      // friendly label when we have it. Lookup is case-insensitive
-      // because SS mixes case (`box-2D` vs `bezel-16-9`).
-      const auto it = mediaTypeLabels.constFind(asset.type.toLower());
-      if (it != mediaTypeLabels.constEnd() && !it.value().isEmpty()) {
-        asset.label = it.value();
-      }
-    }
-  }
+  // Types/labels are already canonical (canonicalMediaType ran before the dedup
+  // above), so `out` holds at most one asset per canonical type.
   std::sort(out.begin(), out.end(), [](const Scraper::MediaAsset &a, const Scraper::MediaAsset &b) {
     if (a.type == b.type) return false;
     if (a.type == QStringLiteral("front")) return true;

@@ -33,6 +33,7 @@ private slots:
   void parseDetailResponse_filenameOverridePreemptsRomRegion();
   void parseDetailResponse_freeTextFollowsPreferredLanguage();
   void parseDetailResponse_collapsesSsToScreenshot();
+  void parseDetailResponse_collapsesBothSsAndScreenshotToOne();
   void parseDetailResponse_dropsUnsafeMediaType();
   void parseDetailResponse_downgradesInvalidGroupScopeKey();
   void parseDetailResponse_keepsValidGroupScopeKey();
@@ -442,6 +443,39 @@ void TestScreenScraperParser::parseDetailResponse_collapsesSsToScreenshot() {
   }
   QVERIFY(types.contains(QStringLiteral("screenshot")));
   QVERIFY(!types.contains(QStringLiteral("ss")));
+}
+
+void TestScreenScraperParser::parseDetailResponse_collapsesBothSsAndScreenshotToOne() {
+  // A response carrying BOTH the short `ss` and long `screenshot` tags must
+  // collapse to a SINGLE canonical `screenshot` entry, with region preference
+  // picking the winner deterministically. Before the fix both survived the
+  // raw-type dedup and then both normalized to `screenshot`, so one silently
+  // overwrote the other downstream (last-write-wins) (Kartend-xh56j).
+  const QByteArray json = R"json({
+    "response": {"jeu": {
+      "id": "1",
+      "noms": [{"region": "us", "text": "Game"}],
+      "rom": {"romregions": "us"},
+      "medias": [
+        {"type": "ss", "region": "jp", "url": "https://example.com/ss-jp.png"},
+        {"type": "screenshot", "region": "us", "url": "https://example.com/ss-us.png"}
+      ]
+    }}
+  })json";
+  auto result = ScreenScraperParser::parseDetailResponse(json);
+  QVERIFY(result.isOk());
+  int screenshotCount = 0;
+  QString winnerUrl;
+  for (const auto &m : result.value().media) {
+    QVERIFY(m.type != QStringLiteral("ss"));
+    if (m.type == QStringLiteral("screenshot")) {
+      ++screenshotCount;
+      winnerUrl = m.url.toString();
+    }
+  }
+  QCOMPARE(screenshotCount, 1);
+  // The US asset outranks the JP one (rom region is US), deterministically.
+  QVERIFY2(winnerUrl.contains(QStringLiteral("ss-us")), qPrintable(winnerUrl));
 }
 
 void TestScreenScraperParser::parseDetailResponse_dropsUnsafeMediaType() {
