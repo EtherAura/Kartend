@@ -280,10 +280,10 @@ LibraryOnboardingWizard::LibraryOnboardingWizard(QWidget *parent) : QWizard(pare
     m_result.pickedConfig.type = field(QString::fromLatin1(kFieldType)).toString().trimmed();
     m_result.pickedConfig.artworkDirectory =
         field(QString::fromLatin1(kFieldArtworkDir)).toString().trimmed();
-    // Pull the chosen launcher from the LauncherPage. page() ids are
-    // assigned in addPage order; the launcher page is the 4th (0-indexed
-    // 3).
-    if (auto *launcherPage = dynamic_cast<LauncherPage *>(page(3))) {
+    // Pull the chosen launcher from the LauncherPage, located by the id captured
+    // when it was added — reordering the buildXxxPage() calls can't silently
+    // point this at the wrong page (Kartend-5a5da).
+    if (auto *launcherPage = dynamic_cast<LauncherPage *>(page(m_launcherPageId))) {
       const auto sel = launcherPage->chosen();
       if (!sel.binary.isEmpty()) {
         m_result.pickedConfig.launcher.launcherPath = sel.binary;
@@ -303,7 +303,7 @@ void LibraryOnboardingWizard::buildTypePage() {
   addPage(new TypePage(this));
 }
 void LibraryOnboardingWizard::buildLauncherPage() {
-  addPage(new LauncherPage(this));
+  m_launcherPageId = addPage(new LauncherPage(this));
 }
 void LibraryOnboardingWizard::buildSummaryPage() {
   addPage(new SummaryPage(this));

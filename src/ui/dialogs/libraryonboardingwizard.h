@@ -53,6 +53,11 @@ private:
   /// Pulled from each page's field by the validator so Finish builds the
   /// full CollectionConfig without re-reading widgets.
   Result m_result;
+
+  /// addPage() id of the LauncherPage, captured when it's added so the Finish
+  /// handler finds it regardless of page order (its rows aren't field-registered,
+  /// so it has to be located and queried directly). -1 until built.
+  int m_launcherPageId = -1;
 };
 
 #endif // LIBRARYONBOARDINGWIZARD_H
