@@ -487,9 +487,13 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
       allItems.append({selectQuery.value(0).toString(), selectQuery.value(1).toString()});
     }
 
-    // Fisher-Yates shuffle
-    auto seed = static_cast<unsigned>(QDateTime::currentMSecsSinceEpoch());
-    std::mt19937 rng(seed);
+    // Fisher-Yates shuffle. Seed mt19937's full state from std::random_device via
+    // seed_seq rather than a single truncated wall-clock value: two rebuilds in the
+    // same millisecond used to yield identical orders, and 32 bits weakly seed a
+    // 19937-bit state (Kartend-qir8).
+    std::random_device rd;
+    std::seed_seq seq{rd(), rd(), rd(), rd(), rd(), rd(), rd(), rd()};
+    std::mt19937 rng(seq);
     for (int i = allItems.size() - 1; i > 0; --i) {
       std::uniform_int_distribution<int> dist(0, i);
       int j = dist(rng);
