@@ -90,8 +90,16 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   // Dismissed on the successful return so the cache directory persists.
   auto cleanupTargetDir = qScopeGuard([&uniqueDir]() { QDir(uniqueDir).removeRecursively(); });
 
-  // Use system tools to extract (7z is most universal)
-  QStringList extractors = {"7z", "unzip", "bsdtar"};
+  // Use system tools to extract. unzip reads only .zip, so gate it on the
+  // extension — handing a non-zip archive (gz/xz/bz2/tar/...) to unzip fails even
+  // when bsdtar, which handles them, is installed (Kartend-9ys3w; mirrors the
+  // RomHasher::extractorCandidates fix in Kartend-akaww). 7z stays first.
+  QStringList extractors;
+  extractors << "7z";
+  if (archivePath.toLower().endsWith(QStringLiteral(".zip"))) {
+    extractors << "unzip";
+  }
+  extractors << "bsdtar";
   QString extractor;
 
   for (const QString &cmd : extractors) {
@@ -104,7 +112,7 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   if (extractor.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails("Install 7z, unzip, or bsdtar to extract archives");
+        .withDetails("Install 7z or bsdtar to extract archives (unzip handles only .zip)");
   }
 
   QProcess process;
