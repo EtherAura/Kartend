@@ -235,6 +235,16 @@ add_executable(test_cachemanager
 target_link_libraries(test_cachemanager PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME CacheManager COMMAND test_cachemanager)
 
+# CacheDiskStorage cancellation / drain-with-budget tests (Kartend-3qyih).
+# Exercises the cooperative-cancel token + bounded-drain shutdown of the disk
+# write pool directly — the path the LSan QThreadPool suppression covers, which
+# test_cachemanager only touched indirectly via the in-memory orchestrator.
+add_executable(test_cachediskstorage
+  modules/cache/test_cachediskstorage.cpp
+)
+target_link_libraries(test_cachediskstorage PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME CacheDiskStorage COMMAND test_cachediskstorage)
+
 # PlaylistManager tests
 add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
