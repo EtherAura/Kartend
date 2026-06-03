@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
@@ -54,20 +55,20 @@ bool isSafePathComponent(const QString &s) {
 }
 
 bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
-  // Caller already mkpath'd the parent dir; this just streams the
-  // bytes. QFile is fine here — these payloads are small images, and
-  // a partial write of a JPG just shows up as a corrupt thumbnail
-  // (which the user can fix by re-running the scrape).
-  QFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+  // Caller already mkpath'd the parent dir. QSaveFile writes to a temp sibling
+  // and commit() atomically renames it into place, so a crash or short write
+  // mid-stream leaves the previous file (or none) rather than a truncated one.
+  // This is reused for the metadata sidecar, where partial JSON is worse than a
+  // corrupt thumbnail and would fail to parse on the next load (Kartend-z2bh1).
+  QSaveFile f(filePath);
+  if (!f.open(QIODevice::WriteOnly)) {
     return false;
   }
   if (f.write(bytes) != bytes.size()) {
-    f.close();
+    f.cancelWriting();
     return false;
   }
-  f.close();
-  return true;
+  return f.commit();
 }
 
 bool isStandardArtworkType(const QString &type) {
