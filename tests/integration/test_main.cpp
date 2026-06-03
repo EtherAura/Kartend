@@ -26,6 +26,7 @@
 #include "test_filtermanager.h"
 #include "test_kartmanager.h"
 #include "test_mainwindow_smoke.h"
+#include "test_menucontroller.h"
 #include "test_navigationmanager.h"
 #include "test_scanservice.h"
 #include "test_scrapedialog_perf.h"
@@ -78,6 +79,11 @@ const Suite kSuites[] = {
     {"TestMainWindowSmoke",
      [](int c, char **v) {
        TestMainWindowSmoke t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestMenuController",
+     [](int c, char **v) {
+       TestMenuController t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestSettingsDialogScope",

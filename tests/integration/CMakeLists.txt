@@ -17,6 +17,7 @@ set(INTEGRATION_TEST_SOURCES
   mainwindowfixture.cpp
   mocks/mockedmainwindowfixture.cpp
   test_mainwindow_smoke.cpp
+  test_menucontroller.cpp
   test_settingsdialog_scope.cpp
   test_applysettingsdialog.cpp
   test_applicationmanager_lifecycle.cpp
@@ -44,6 +45,7 @@ set(INTEGRATION_TEST_SOURCES
 set(INTEGRATION_TEST_HEADERS
   mainwindowfixture.h
   test_mainwindow_smoke.h
+  test_menucontroller.h
   test_settingsdialog_scope.h
   test_applysettingsdialog.h
   test_applicationmanager_lifecycle.h
@@ -116,6 +118,7 @@ target_include_directories(test_integration PRIVATE
 # kSuites in test_main.cpp.
 set(INTEGRATION_TEST_CLASSES
   TestMainWindowSmoke
+  TestMenuController
   TestSettingsDialogScope
   TestApplySettingsDialog
   TestApplicationManagerLifecycle
