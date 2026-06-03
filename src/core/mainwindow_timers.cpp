@@ -143,15 +143,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
     // Now open settings dialog for the user to configure the collection
     if (m_appManager->getSettingsManager()) {
       currentCollectionIndex = 0;
-      SettingsDialogContext context;
-      context.parent = this;
-      context.collections = &m_collections;
-      context.currentCollectionIndex = &currentCollectionIndex;
-      context.detailsPaneManager = m_appManager->getDetailsPaneManager();
-      context.scrollManager = m_appManager->getScrollManager();
-      context.navigationManager = m_appManager->getNavigationManager();
-      context.databaseManager = m_appManager->getDatabaseManager();
-      context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
+      SettingsDialogContext context = makeSettingsDialogContext();
       m_appManager->getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {

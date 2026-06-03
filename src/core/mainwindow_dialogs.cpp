@@ -72,11 +72,7 @@
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
-void MainWindow::openSettingsDialog(SettingsPage initialPage) {
-  auto *settings = m_appManager ? m_appManager->getSettingsManager() : nullptr;
-  if (!settings) {
-    return;
-  }
+SettingsDialogContext MainWindow::makeSettingsDialogContext() {
   SettingsDialogContext context;
   context.parent = this;
   context.collections = &m_collections;
@@ -86,6 +82,15 @@ void MainWindow::openSettingsDialog(SettingsPage initialPage) {
   context.navigationManager = m_appManager->getNavigationManager();
   context.databaseManager = m_appManager->getDatabaseManager();
   context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
+  return context;
+}
+
+void MainWindow::openSettingsDialog(SettingsPage initialPage) {
+  auto *settings = m_appManager ? m_appManager->getSettingsManager() : nullptr;
+  if (!settings) {
+    return;
+  }
+  SettingsDialogContext context = makeSettingsDialogContext();
   context.initialPage = initialPage;
   settings->openSettingsDialog(context);
   // Settings may have flipped watchFilesystem on/off or changed a mediaDirectory;
@@ -576,16 +581,7 @@ void MainWindow::openCommandPalette() {
                      // Mirror ctx.onOpenSettings (mainwindow_setup createMenuBar) so the
                      // palette opens the same dialog the Settings menu entry uses.
                      if (auto *settings = m_appManager->getSettingsManager()) {
-                       SettingsDialogContext context;
-                       context.parent = this;
-                       context.collections = &m_collections;
-                       context.currentCollectionIndex = &currentCollectionIndex;
-                       context.detailsPaneManager = m_appManager->getDetailsPaneManager();
-                       context.scrollManager = m_appManager->getScrollManager();
-                       context.navigationManager = m_appManager->getNavigationManager();
-                       context.databaseManager = m_appManager->getDatabaseManager();
-                       context.createSettingsDialog =
-                           DialogController::makeSettingsDialogFactory(&m_appContext);
+                       SettingsDialogContext context = makeSettingsDialogContext();
                        settings->openSettingsDialog(context);
                      }
                    }});

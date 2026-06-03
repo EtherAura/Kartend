@@ -57,6 +57,7 @@ class MenuController;
 class MarqueeController;
 class DbEventsController;
 class DialogController;
+struct SettingsDialogContext;
 class ScraperController;
 class ScrollEventsController;
 class TextZoomHud;
@@ -370,6 +371,11 @@ private:
   void updateScrollManagerSidebarShrinking();
   void connectSearchComponents();
   void connectScrollBars();
+  /// Builds the SettingsDialogContext shared by every "open settings" entry
+  /// point (menu, command palette, first-run timer) so adding a field touches
+  /// one place. Does not set initialPage — callers needing a non-default page
+  /// set it on the returned context.
+  [[nodiscard]] SettingsDialogContext makeSettingsDialogContext();
   /// Wire and refresh the toolbar's filter button. Idempotent — installs
   /// the QMenu::triggered handler the first time and rebuilds the action
   /// list on every call. Delegates to the ToolbarController.
