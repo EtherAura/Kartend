@@ -104,20 +104,23 @@ jobs:
 
       - name: Surface coverage in step summary + enforce floor
         env:
-          # Floors track the observed CI baseline minus a small tolerance.
-          # Earlier baseline (post integration-test-harness landing) was 27.2%
-          # lines / 39.6% functions; once the per-manager integration suites
-          # landed, the local gcov 15 measurement on 2026-05-22 showed 35.79%
-          # lines / 46.87% functions. The floor is set to that baseline minus
-          # ~0.5pp on each metric — tight enough to catch gross regressions
-          # (deleted suite, accidentally disabled job, half a manager going
-          # untested), loose enough to absorb the CI gcov-11 vs local gcov-15
-          # measurement drift and small benign refactors. Raise manually when
-          # coverage improves enough to justify it (no ongoing ratchet).
-          # Set either var to 0 to disable that metric's enforcement
+          # Floors track the observed local-gcov-15 baseline minus a tolerance
+          # that absorbs the CI gcov-11 vs local gcov-15 measurement drift
+          # (empirically <=0.8pp) plus small benign refactors. History:
+          # post integration-test-harness 27.2% lines / 39.6% functions;
+          # per-manager integration suites -> 2026-05-22 showed 35.79% / 46.87%
+          # (floor 35 / 46). The 2026-06-03 module test-gap pass (CacheDiskStorage
+          # cancel/drain, MenuController sync, extractArchiveToTemp + launchItem
+          # cleanup, CollectionConfig::operator==) raised it to 38.3% lines /
+          # 54.1% functions (lcov 2.3.1). New floors sit ~2pp under that, i.e.
+          # ~1.5pp/1.3pp below the worst-case CI reading — tight enough to catch
+          # gross regressions (deleted suite, accidentally disabled job, half a
+          # manager going untested), loose enough to survive the drift. Raise
+          # manually when coverage improves enough to justify it (no ongoing
+          # ratchet). Set either var to 0 to disable that metric's enforcement
           # (report-only).
-          KARTEND_COVERAGE_MIN_LINES: '35'
-          KARTEND_COVERAGE_MIN_FUNCTIONS: '46'
+          KARTEND_COVERAGE_MIN_LINES: '36'
+          KARTEND_COVERAGE_MIN_FUNCTIONS: '52'
         run: |
           # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
           # Capture the percentage and write a GitHub step summary.
