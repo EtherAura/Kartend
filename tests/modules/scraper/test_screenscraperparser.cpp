@@ -2,6 +2,7 @@
 // network. Fixtures shaped to match the real jeuInfos.php response.
 #include <QByteArray>
 #include <QObject>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -331,6 +332,10 @@ void TestScreenScraperParser::parseDetailResponse_recoversFromTrailingGarbage() 
   // Edition (USA)".
   QByteArray polluted = FIXTURE;
   polluted.append("\n<br />Notice: Undefined index ...\nat line 42\n");
+  // The tolerant path must announce itself (Kartend-sqpxf) so an unexpected jump
+  // in trailing garbage is observable; assert the warning is emitted.
+  QTest::ignoreMessage(QtWarningMsg,
+                       QRegularExpression(QStringLiteral("tolerated trailing garbage")));
   auto result = ScreenScraperParser::parseDetailResponse(polluted);
   QVERIFY(result.isOk());
   QCOMPARE(result.value().title, QStringLiteral("Game (US)"));

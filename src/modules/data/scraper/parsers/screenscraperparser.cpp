@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QStringList>
 #include <QTextDocumentFragment>
@@ -20,6 +21,11 @@
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
+
+// Warning level: the tolerant-truncation path below should be rare, so surfacing
+// it by default helps spot a provider/format change. Logs only byte offsets,
+// never the remote payload (Kartend-sqpxf).
+Q_LOGGING_CATEGORY(lcScreenScraperParser, "kartend.scrape.parser", QtWarningMsg)
 
 namespace ScreenScraperParser {
 
@@ -143,6 +149,12 @@ QJsonDocument parseTolerant(const QByteArray &json, QJsonParseError *outErr) {
     QJsonParseError retryErr{};
     QJsonDocument retry = QJsonDocument::fromJson(json.left(err.offset), &retryErr);
     if (retryErr.error == QJsonParseError::NoError) {
+      // Observable record of the truncation: how many bytes were valid JSON vs.
+      // the total received, so an unexpected jump in trailing garbage is visible
+      // without ever logging the (remote-controlled) payload itself.
+      qCWarning(lcScreenScraperParser)
+          << "tolerated trailing garbage: parsed valid JSON prefix of" << err.offset << "of"
+          << json.size() << "received bytes";
       if (outErr) *outErr = retryErr;
       return retry;
     }
