@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -96,6 +97,12 @@ public:
   selectInteractiveMediaForApply(const Scraper::ScrapedItem &detail) const;
 
 private:
+  /// Translates the user's media-type checkboxes (m_dlg->m_mediaTypeChecks)
+  /// into the runner's lowercased filter set, splitting the synthetic
+  /// "_metadata" entry off into @p writeMetadata. Shared by onScrapeClicked
+  /// + runAutoCollection.
+  [[nodiscard]] QSet<QString> buildMediaFilter(bool &writeMetadata) const;
+
   ScrapeResultDialog *m_dlg = nullptr;
 };
 

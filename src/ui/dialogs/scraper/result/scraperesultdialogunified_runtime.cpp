@@ -402,6 +402,22 @@ void ScrapeResultDialogUnified::showScrapeErrorDetails() {
   dlg.exec();
 }
 
+QSet<QString> ScrapeResultDialogUnified::buildMediaFilter(bool &writeMetadata) const {
+  writeMetadata = true;
+  QSet<QString> mediaFilter;
+  for (auto it = m_dlg->m_mediaTypeChecks.constBegin(); it != m_dlg->m_mediaTypeChecks.constEnd();
+       ++it) {
+    if (it.key() == QLatin1String("_metadata")) {
+      writeMetadata = it.value()->isChecked();
+      continue;
+    }
+    if (it.value()->isChecked()) {
+      mediaFilter.insert(it.key().toLower());
+    }
+  }
+  return mediaFilter;
+}
+
 void ScrapeResultDialogUnified::onScrapeClicked() {
   if (m_dlg->m_unifiedPhase != ScrapeResultDialog::UnifiedPhase::Setup) return;
   if (!m_dlg->m_scraperCtx.collections) return;
@@ -480,21 +496,9 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
                              tr("Pick at least one collection (and one item) before scraping."));
     return;
   }
-  // Translate user picks into runner config. Filter keys are
-  // lowercased: the runner matches each asset's `type.toLower()`
-  // against this set, so a mixed-case key (e.g. "support-2D") would
-  // otherwise never match and that media type would silently never
-  // download.
-  QSet<QString> mediaFilter;
+  // Translate user picks into runner config (see buildMediaFilter).
   bool writeMetadata = true;
-  for (auto it = m_dlg->m_mediaTypeChecks.constBegin(); it != m_dlg->m_mediaTypeChecks.constEnd();
-       ++it) {
-    if (it.key() == QLatin1String("_metadata")) {
-      writeMetadata = it.value()->isChecked();
-      continue;
-    }
-    if (it.value()->isChecked()) mediaFilter.insert(it.key().toLower());
-  }
+  const QSet<QString> mediaFilter = buildMediaFilter(writeMetadata);
   const auto mode = m_dlg->m_modeAutoRadio->isChecked()
                         ? Scraper::ScraperService::Mode::Auto
                         : Scraper::ScraperService::Mode::Interactive;
@@ -587,22 +591,11 @@ void ScrapeResultDialogUnified::runAutoCollection(int collectionIndex, const QSt
   const int skipRecentDays =
       m_dlg->m_scraperCtx.generalSettings->scraper.options.skipRecentScrapeDays;
 
-  // Translate the user's media-type checkboxes into the runner's
-  // filter set. The synthetic `_metadata` key gates text-field
-  // persistence and is consumed here (stripped from the filter set,
-  // routed to setWriteMetadata instead). Empty media filter → runner
-  // falls back to legacy "front only" behaviour; non-empty → runner
-  // fetches every matching type per item in parallel.
-  QSet<QString> mediaFilter;
+  // Empty media filter → runner falls back to legacy "front only" behaviour;
+  // non-empty → runner fetches every matching type per item in parallel (see
+  // buildMediaFilter for the checkbox → filter translation + _metadata split).
   bool writeMetadata = true;
-  for (auto it = m_dlg->m_mediaTypeChecks.constBegin(); it != m_dlg->m_mediaTypeChecks.constEnd();
-       ++it) {
-    if (it.key() == QLatin1String("_metadata")) {
-      writeMetadata = it.value()->isChecked();
-      continue;
-    }
-    if (it.value()->isChecked()) mediaFilter.insert(it.key().toLower());
-  }
+  const QSet<QString> mediaFilter = buildMediaFilter(writeMetadata);
 
   auto *runner = new Scraper::BatchScrapeRunner(
       m_dlg->m_scraperCtx.ctx, std::move(provider), uuid, items, artworkDir,
