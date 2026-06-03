@@ -15,6 +15,7 @@
 #include <QVBoxLayout>
 #include <QWizardPage>
 
+#include "uiconstants/color.h"
 #include "uiconstants/grid.h"
 
 namespace {
@@ -107,7 +108,7 @@ public:
 
     auto *hint = new QLabel(this);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     hint->setText(tr("The folder is scanned recursively. Subfolders become subcollections "
                      "you can browse into. Nothing is moved or modified — Kartend only reads "
                      "from the folder."));

@@ -1,5 +1,7 @@
 #include "artworkwizarddialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -37,7 +39,7 @@ void ArtworkWizardDialog::setupUi() {
 
   auto *outer = new QVBoxLayout(this);
   m_progressLabel = new QLabel(this);
-  m_progressLabel->setStyleSheet("color: palette(mid);");
+  m_progressLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
   outer->addWidget(m_progressLabel);
 
   m_headerLabel = new QLabel(this);
@@ -48,7 +50,7 @@ void ArtworkWizardDialog::setupUi() {
   m_pathLabel = new QLabel(this);
   m_pathLabel->setWordWrap(true);
   m_pathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  m_pathLabel->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_pathLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(m_pathLabel);
 
   // Two-column body: candidate list left, larger preview right.
@@ -70,7 +72,7 @@ void ArtworkWizardDialog::setupUi() {
   m_emptyLabel = new QLabel(
       tr("No fuzzy-name matches in the artwork directory. Use Browse… to pick a file manually."),
       this);
-  m_emptyLabel->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_emptyLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   m_emptyLabel->setWordWrap(true);
   m_emptyLabel->setVisible(false);
   outer->addWidget(m_emptyLabel);

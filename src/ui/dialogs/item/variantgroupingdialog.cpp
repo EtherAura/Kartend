@@ -1,5 +1,7 @@
 #include "variantgroupingdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -27,7 +29,7 @@ void VariantGroupingDialog::setupUi(const QList<VariantGrouping::VariantGroup> &
                               "accessible from the grid."),
                            this);
   intro->setWordWrap(true);
-  intro->setStyleSheet("color: palette(mid); font-style: italic;");
+  intro->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(intro);
 
   m_summaryLabel = new QLabel(this);

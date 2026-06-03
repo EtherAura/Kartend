@@ -1,5 +1,7 @@
 #include "bulkeditdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -54,7 +56,7 @@ void BulkEditDialog::setupUi() {
 
   m_parameterHint = new QLabel(this);
   m_parameterHint->setWordWrap(true);
-  m_parameterHint->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_parameterHint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(m_parameterHint);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);

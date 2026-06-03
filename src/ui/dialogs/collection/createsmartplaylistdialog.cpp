@@ -3,6 +3,8 @@
 // that Designer would offer little above just laying them out in code.
 #include "createsmartplaylistdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -190,7 +192,7 @@ void CreateSmartPlaylistDialog::buildUI() {
                                "items across all collections."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_EXTENSION, page);
   }
@@ -202,7 +204,7 @@ void CreateSmartPlaylistDialog::buildUI() {
                                      "real cover image (not the procedural placeholder)."),
                                   page);
     m_hasArtworkNote->setWordWrap(true);
-    m_hasArtworkNote->setStyleSheet("color: palette(mid); font-style: italic;");
+    m_hasArtworkNote->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addWidget(m_hasArtworkNote);
     l->addStretch();
     m_paramsStack->insertWidget(PAGE_HAS_ARTWORK, page);
@@ -221,7 +223,7 @@ void CreateSmartPlaylistDialog::buildUI() {
                                "re-scanning a known item does NOT reset it."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_DATE_ADDED, page);
   }
@@ -233,7 +235,7 @@ void CreateSmartPlaylistDialog::buildUI() {
     auto *l = new QVBoxLayout(page);
     auto *note = new QLabel(description, page);
     note->setWordWrap(true);
-    note->setStyleSheet("color: palette(mid); font-style: italic;");
+    note->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addWidget(note);
     l->addStretch();
     m_paramsStack->insertWidget(pageIndex, page);
@@ -262,7 +264,7 @@ void CreateSmartPlaylistDialog::buildUI() {
                                "playlist alongside others."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_COLLECTION, page);
   }
@@ -280,7 +282,7 @@ void CreateSmartPlaylistDialog::buildUI() {
                       "for ASCII characters). Empty text matches nothing."),
                    page);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: palette(mid); font-style: italic;");
+    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_TITLE_SEARCH, page);
   }

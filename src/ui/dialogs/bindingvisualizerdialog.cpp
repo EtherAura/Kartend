@@ -1,5 +1,7 @@
 #include "bindingvisualizerdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -99,7 +101,7 @@ void BindingVisualizerDialog::setupUi() {
 
   auto *outer = new QVBoxLayout(this);
   m_statusLabel = new QLabel(tr("Press any key or gamepad button to identify it."), this);
-  m_statusLabel->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_statusLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   m_statusLabel->setWordWrap(true);
   outer->addWidget(m_statusLabel);
 

@@ -1,5 +1,7 @@
 #include "layoutprofilesdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -26,7 +28,7 @@ void LayoutProfilesDialog::setupUi() {
          "Apply targets the current collection."),
       this);
   header->setWordWrap(true);
-  header->setStyleSheet("color: palette(mid); font-style: italic;");
+  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(header);
 
   m_list = new QListWidget(this);

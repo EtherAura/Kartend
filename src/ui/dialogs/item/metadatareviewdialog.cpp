@@ -1,5 +1,7 @@
 #include "metadatareviewdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -17,7 +19,7 @@ void MetadataReviewDialog::setupUi() {
   auto *outer = new QVBoxLayout(this);
 
   m_progressLabel = new QLabel(this);
-  m_progressLabel->setStyleSheet("color: palette(mid);");
+  m_progressLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
   outer->addWidget(m_progressLabel);
 
   m_headerLabel = new QLabel(this);
@@ -28,7 +30,7 @@ void MetadataReviewDialog::setupUi() {
   m_pathLabel = new QLabel(this);
   m_pathLabel->setWordWrap(true);
   m_pathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  m_pathLabel->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_pathLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(m_pathLabel);
 
   m_missingLabel = new QLabel(this);

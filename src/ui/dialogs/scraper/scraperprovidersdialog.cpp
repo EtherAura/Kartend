@@ -1,5 +1,7 @@
 #include "scraperprovidersdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QLabel>
@@ -48,7 +50,7 @@ void ScraperProvidersDialog::setupUi() {
 
   auto *header = new QLabel(
       tr("Built-in metadata providers. Credentials are edited via Settings → Scrapers."), this);
-  header->setStyleSheet("color: palette(mid); font-style: italic;");
+  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   header->setWordWrap(true);
   outer->addWidget(header);
 

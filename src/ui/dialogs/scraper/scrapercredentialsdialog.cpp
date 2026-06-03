@@ -4,6 +4,8 @@
 // is provider-agnostic via the m_fields map.
 #include "scrapercredentialsdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -38,7 +40,7 @@ void ScraperCredentialsDialog::buildUi() {
                               "config file under the [Scrapers] section."),
                            this);
   intro->setWordWrap(true);
-  intro->setStyleSheet("color: palette(mid);");
+  intro->setStyleSheet(UIConstants::Color::MUTED_TEXT);
   root->addWidget(intro);
 
   // ── TMDB ────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 #include "kartpreflightdialog.h"
 
+#include "uiconstants/color.h"
+
 #include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QLabel>
@@ -25,7 +27,7 @@ void KartPreflightDialog::setupUi(const KartPreflight::PreflightReport &report) 
                     "and merge; Cancel aborts without writing anything to disk."),
                  this);
   header->setWordWrap(true);
-  header->setStyleSheet("color: palette(mid); font-style: italic;");
+  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
   outer->addWidget(header);
 
   m_summaryLabel = new QLabel(this);

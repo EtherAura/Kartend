@@ -31,6 +31,13 @@ inline constexpr const char *VALIDATION_ERROR_FG = "#d05050";
   const QString style = QStringLiteral("color: %1;").arg(hex);
   return bold ? style + QStringLiteral(" font-weight: bold;") : style;
 }
+
+/// Stylesheet for muted/secondary text. Uses the palette's mid role so it tracks
+/// the active theme. Centralized so restyling the ~26 dim palette(mid) labels is
+/// one edit instead of dozens of duplicated inline strings (Kartend-975p6).
+inline constexpr const char *MUTED_TEXT = "color: palette(mid);";
+/// Muted text with italic — the dim-italic "hint" label style used across dialogs.
+inline constexpr const char *MUTED_ITALIC_TEXT = "color: palette(mid); font-style: italic;";
 } // namespace Color
 } // namespace UIConstants
 
