@@ -25,10 +25,7 @@ public:
   // --- Stack Operations ---
 
   /// Push a collection index onto the navigation stack
-  void push(int collectionIndex) {
-    m_stack.append(collectionIndex);
-    m_depth++;
-  }
+  void push(int collectionIndex) { m_stack.append(collectionIndex); }
 
   /// Pop and return the top collection index, or -1 if empty
   [[nodiscard]] int pop() {
@@ -36,7 +33,6 @@ public:
       return -1;
     }
     int index = m_stack.takeLast();
-    m_depth = qMax(0, m_depth - 1);
     return index;
   }
 
@@ -44,18 +40,15 @@ public:
   [[nodiscard]] int top() const { return m_stack.isEmpty() ? -1 : m_stack.last(); }
 
   /// Clear the entire navigation stack
-  void clear() {
-    m_stack.clear();
-    m_depth = 0;
-  }
+  void clear() { m_stack.clear(); }
 
   // --- State Queries ---
 
   /// Returns true if the navigation stack is empty
   [[nodiscard]] bool isEmpty() const { return m_stack.isEmpty(); }
 
-  /// Returns the current navigation depth
-  [[nodiscard]] int depth() const { return m_depth; }
+  /// Returns the current navigation depth (== stack size; kept for callers).
+  [[nodiscard]] int depth() const { return m_stack.size(); }
 
   /// Returns the number of items on the stack
   [[nodiscard]] int size() const { return m_stack.size(); }
@@ -78,7 +71,6 @@ public:
 
 private:
   QList<int> m_stack;
-  int m_depth = 0;
   bool m_inProgress = false;
 };
 
