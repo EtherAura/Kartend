@@ -13,7 +13,16 @@
 #   -modernize-use-designated-initializers    — Qt structs predate C99-style designated init
 #   -modernize-use-nodiscard                  — [[nodiscard]] only on getters/factories by convention
 #   -modernize-return-braced-init-list        — readability tradeoff with explicit type
-#   -modernize-use-ranges                     — Qt 6.4 (CI pin) std::ranges support is partial
+#   -modernize-use-ranges                     — reassessed 2026-06 (Kartend-17l6n): std::ranges
+#                                               algorithms are ALREADY used in-tree (e.g.
+#                                               querymanagerstatichelpers, navigationmanagerfilter,
+#                                               sessionmanager, artworkwidgetregistry) and build on
+#                                               the Qt 6.4 CI pin, so the check itself is not blocked.
+#                                               Kept off because its auto-rewrites can target Qt
+#                                               containers whose std::ranges-concept conformance is
+#                                               only partial on 6.4 — re-enable and apply the fixes
+#                                               once they're verified under the LLVM-19 / Qt-6.4 CI
+#                                               container, or after the CI Qt bump lands.
 #
 # readability-*:
 #   -readability-implicit-bool-conversion     — project rule: implicit-null is preferred
