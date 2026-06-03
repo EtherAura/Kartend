@@ -32,6 +32,7 @@ private slots:
   void hierarchyCache_directChildren_skipsSelfLink();
   void hierarchyCache_directChildren_skipsUnknownLinkName();
   void hierarchyCache_directChildren_skipsLinkEqualToPrimary();
+  void hierarchyCache_directChildren_duplicateNameResolvesToFirst();
   void hierarchyCache_allDescendants_handlesMutualLinkCycle();
   void hierarchyCache_allDescendants_excludesSelf();
 
@@ -146,6 +147,25 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_includesLinkedPa
 
   QCOMPARE(cache.directChildren(0), QList<int>{2});
   QCOMPARE(cache.directChildren(1), QList<int>{2});
+}
+
+void TestCollectionUtilsAncestry::hierarchyCache_directChildren_duplicateNameResolvesToFirst() {
+  // Two collections share the name "Reference" (validation only warns, never
+  // blocks). An additionalParentNames link to "Reference" must resolve to the
+  // FIRST, not be overwritten to the last by QHash::insert (Kartend-58kq).
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Reference", /*isSub=*/false, -1); // 0 — first "Reference"
+  cs << makeCollection("Reference", /*isSub=*/false, -1); // 1 — duplicate name
+  CollectionConfig movies = makeCollection("Movies", /*isSub=*/false, -1);
+  movies.additionalParentNames << QStringLiteral("Reference");
+  cs << movies; // 2
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  // The first "Reference" (index 0) owns the name; the link resolves there.
+  QCOMPARE(cache.directChildren(0), QList<int>{2});
+  QVERIFY(cache.directChildren(1).isEmpty());
 }
 
 void TestCollectionUtilsAncestry::hierarchyCache_linkedDirectChildren_returnsLinkedOnly() {

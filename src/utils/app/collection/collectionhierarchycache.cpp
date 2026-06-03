@@ -47,7 +47,13 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   QHash<QString, int> nameToIndex;
   nameToIndex.reserve(collections.size());
   for (int i = 0; i < collections.size(); ++i) {
-    nameToIndex.insert(collections[i].name, i);
+    // First-wins on duplicate names: validation only warns about dup collection
+    // names (never blocks), and QHash::insert would overwrite — resolving every
+    // additionalParentNames link to the LAST duplicate. Keep the first so
+    // resolution stays stable as duplicates are added (Kartend-58kq).
+    if (!nameToIndex.contains(collections[i].name)) {
+      nameToIndex.insert(collections[i].name, i);
+    }
   }
   for (int i = 0; i < collections.size(); ++i) {
     for (const QString &parentName : collections[i].additionalParentNames) {
