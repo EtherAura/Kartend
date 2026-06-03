@@ -9,6 +9,8 @@
 #include "collection/launcherconfig.h"
 #include "launchmanager.h"
 #include <QDir>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
@@ -84,9 +86,30 @@ private slots:
   void testPreview_detectsUnresolvedPlaceholder();
   void testPreview_unclosedQuoteParameterSurfacedAsWarning();
 
+  // Archive extraction (extractArchiveToTemp) + isArchiveFile coverage.
+  void testIsArchiveFile_recognizesKnownExtensions();
+  void testExtractArchive_rejectsUnsafeArchivePath();
+  void testExtractArchive_extractsTargetFile();
+  void testExtractArchive_missingTargetExtensionCleansUpExtractionDir();
+
 private:
+  // Builds a .zip named <baseName>.zip holding the given (name -> bytes) files
+  // in a fresh temp dir. Returns the archive path, or an empty string when no
+  // archive-creation tool (zip/bsdtar/7z) is available — the QSKIP at the call
+  // site keeps the suite green on minimal CI images.
+  QString makeZipFixture(const QString &baseName,
+                         const QList<QPair<QString, QByteArray>> &entries);
+  // True when extractArchiveToTemp will find one of its extractors on PATH.
+  static bool extractorAvailable();
+  // Absolute path of the per-archive extraction dir extractArchiveToTemp uses
+  // for an archive whose completeBaseName is <baseName>.
+  static QString extractionDirFor(const QString &baseName);
+
   QString m_tempExecutable;
   QString m_tempNonExecutable;
+  // Owns the temp dirs holding zip fixtures so the archives outlive the call
+  // that creates them; torn down in cleanupTestCase.
+  QList<QTemporaryDir *> m_fixtureDirs;
 };
 
 void TestLaunchManager::initTestCase() {
@@ -135,6 +158,81 @@ void TestLaunchManager::cleanupTestCase() {
   if (!m_tempNonExecutable.isEmpty()) {
     QFile::remove(m_tempNonExecutable);
   }
+  // extractArchiveToTemp writes under the real temp dir (test mode doesn't
+  // redirect TempLocation); remove anything the extraction slots left behind.
+  QDir(extractionDirFor("kartend_extract_ok")).removeRecursively();
+  QDir(extractionDirFor("kartend_extract_miss")).removeRecursively();
+  qDeleteAll(m_fixtureDirs);
+  m_fixtureDirs.clear();
+}
+
+bool TestLaunchManager::extractorAvailable() {
+  static const QStringList kExtractors = {QStringLiteral("7z"), QStringLiteral("unzip"),
+                                          QStringLiteral("bsdtar")};
+  for (const QString &tool : kExtractors) {
+    if (!QStandardPaths::findExecutable(tool).isEmpty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+QString TestLaunchManager::extractionDirFor(const QString &baseName) {
+  return QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+         QStringLiteral("/kartend_extract/") + baseName;
+}
+
+QString TestLaunchManager::makeZipFixture(const QString &baseName,
+                                          const QList<QPair<QString, QByteArray>> &entries) {
+  auto *dir = new QTemporaryDir();
+  if (!dir->isValid()) {
+    delete dir;
+    return {};
+  }
+  m_fixtureDirs.append(dir);
+
+  QStringList entryNames;
+  for (const auto &entry : entries) {
+    const QString path = dir->filePath(entry.first);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+      return {};
+    }
+    f.write(entry.second);
+    f.close();
+    entryNames << entry.first;
+  }
+
+  const QString archivePath = dir->filePath(baseName + QStringLiteral(".zip"));
+
+  // Prefer `zip`; fall back to bsdtar (libarchive infers zip from the
+  // extension) or 7z. The result is a plain .zip so any of
+  // extractArchiveToTemp's extractors (7z/unzip/bsdtar) can open it.
+  auto tryCreate = [&](const char *toolName, const QStringList &args, bool inDir) -> bool {
+    const QString tool = QStandardPaths::findExecutable(QLatin1String(toolName));
+    if (tool.isEmpty()) {
+      return false;
+    }
+    QProcess proc;
+    if (inDir) {
+      proc.setWorkingDirectory(dir->path());
+    }
+    proc.start(tool, args);
+    return proc.waitForFinished(15000) && proc.exitCode() == 0 && QFileInfo::exists(archivePath);
+  };
+
+  const QStringList zipArgs = QStringList{QStringLiteral("-q"), archivePath} + entryNames;
+  const QStringList bsdtarArgs = QStringList{QStringLiteral("-a"), QStringLiteral("-cf"),
+                                             archivePath, QStringLiteral("-C"), dir->path()} +
+                                 entryNames;
+  const QStringList sevenZipArgs =
+      QStringList{QStringLiteral("a"), QStringLiteral("-tzip"), archivePath} + entryNames;
+
+  if (tryCreate("zip", zipArgs, true) || tryCreate("bsdtar", bsdtarArgs, false) ||
+      tryCreate("7z", sevenZipArgs, true)) {
+    return archivePath;
+  }
+  return {};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -848,6 +946,78 @@ void TestLaunchManager::testPreview_detectsUnresolvedPlaceholder() {
     }
   }
   QVERIFY(sawPlaceholderWarning);
+}
+
+// ---------------------------------------------------------------------------
+// Archive extraction (extractArchiveToTemp) + isArchiveFile
+// ---------------------------------------------------------------------------
+
+void TestLaunchManager::testIsArchiveFile_recognizesKnownExtensions() {
+  QVERIFY(LaunchManager::isArchiveFile("/media/Backups/disc.zip"));
+  QVERIFY(LaunchManager::isArchiveFile("/media/Backups/DISC.ZIP")); // case-insensitive
+  QVERIFY(LaunchManager::isArchiveFile("/media/Backups/disc.7z"));
+  QVERIFY(LaunchManager::isArchiveFile("/media/Backups/disc.tar"));
+  QVERIFY(LaunchManager::isArchiveFile("/media/Backups/disc.tar.gz"));
+  QVERIFY(!LaunchManager::isArchiveFile("/media/Movies/feature.iso"));
+  QVERIFY(!LaunchManager::isArchiveFile("/media/Notes/readme.txt"));
+  QVERIFY(!LaunchManager::isArchiveFile("/media/Notes/noextension"));
+}
+
+void TestLaunchManager::testExtractArchive_rejectsUnsafeArchivePath() {
+  // The archive path goes through the same security gate as launch media, so a
+  // shell-metacharacter path must be rejected before any extractor runs (this
+  // branch needs no tool).
+  auto result = LaunchManager::extractArchiveToTemp("/tmp/inject;rm -rf ~.zip", ".iso");
+  QVERIFY2(result.isError(), "an archive path failing security validation must be rejected");
+}
+
+void TestLaunchManager::testExtractArchive_extractsTargetFile() {
+  if (!extractorAvailable()) {
+    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QString base = QStringLiteral("kartend_extract_ok");
+  QDir(extractionDirFor(base)).removeRecursively(); // no stale cache from a prior run
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")},
+      {QStringLiteral("manual.txt"), QByteArrayLiteral("x")}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso");
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  const QString extracted = result.value();
+  QVERIFY2(extracted.endsWith(QLatin1String("disc.iso")),
+           qPrintable(QStringLiteral("expected the .iso, got: %1").arg(extracted)));
+  QVERIFY(QFileInfo::exists(extracted));
+  // The returned file must live under the per-archive extraction tree.
+  QVERIFY(extracted.contains(QLatin1String("/kartend_extract/")));
+}
+
+void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtractionDir() {
+  // The leak-relevant path: when extraction yields no file with the requested
+  // extension, extractArchiveToTemp must report an error AND remove the
+  // per-archive extraction dir it created (the qScopeGuard), so /tmp doesn't
+  // accumulate orphaned archive contents.
+  if (!extractorAvailable()) {
+    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QString base = QStringLiteral("kartend_extract_miss");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("readme.txt"), QByteArrayLiteral("no disc image here")}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso");
+  QVERIFY2(result.isError(), "extraction must fail when no target-extension file is present");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+  QVERIFY2(!QDir(extractionDir).exists(),
+           "the per-archive extraction dir must be removed when no target file is found");
 }
 
 QTEST_MAIN(TestLaunchManager)
