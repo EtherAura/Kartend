@@ -288,6 +288,10 @@ void SettingsDialog::onContentDirectoryChanged() {
 }
 
 void SettingsDialog::updateFieldVisibility() {
+  // The line edits / buttons dereferenced below are unconditional widgets from
+  // each panel's .ui, created by setupUi, so these accessors never return null
+  // here — unlike the conditionally-built buttons (duplicate / editLinkedParents)
+  // that callers null-guard. Direct dereference is intentional (Kartend-22s4k).
   bool hasContentDir = !ui->configurationPanel->mediaDirLineEdit()->text().trimmed().isEmpty();
 
   // Launcher path / params + label visibility tracks hasContentDir; toggling
