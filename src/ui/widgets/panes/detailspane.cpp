@@ -860,16 +860,19 @@ auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
   const qint64 megaBytes = kiloBytes * UIConstants::Metadata::FILE_SIZE_KB;
   const qint64 gigaBytes = megaBytes * UIConstants::Metadata::FILE_SIZE_KB;
 
+  // Units and the number/unit spacing go through tr() so translators control both
+  // the label and its placement; the value itself stays QString::number (C locale)
+  // to keep "1.00"-style formatting stable (Kartend-b0p96).
   if (bytes >= gigaBytes) {
-    return QString::number(bytes / static_cast<double>(gigaBytes), 'f', 2) + " GB";
+    return tr("%1 GB").arg(QString::number(bytes / static_cast<double>(gigaBytes), 'f', 2));
   }
   if (bytes >= megaBytes) {
-    return QString::number(bytes / static_cast<double>(megaBytes), 'f', 2) + " MB";
+    return tr("%1 MB").arg(QString::number(bytes / static_cast<double>(megaBytes), 'f', 2));
   }
   if (bytes >= kiloBytes) {
-    return QString::number(bytes / static_cast<double>(kiloBytes), 'f', 2) + " KB";
+    return tr("%1 KB").arg(QString::number(bytes / static_cast<double>(kiloBytes), 'f', 2));
   }
-  return QString::number(bytes) + " bytes";
+  return tr("%1 bytes").arg(QString::number(bytes));
 }
 
 // Load artwork from specified directory

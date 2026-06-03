@@ -457,16 +457,18 @@ QString DetailPageOverlay::formatFileSize(qint64 bytes) {
   const qint64 kb = UIConstants::Metadata::FILE_SIZE_KB;
   const qint64 mb = kb * UIConstants::Metadata::FILE_SIZE_KB;
   const qint64 gb = mb * UIConstants::Metadata::FILE_SIZE_KB;
+  // Units/spacing via tr() for translator control; value stays QString::number
+  // (C locale) so "1.00"-style formatting is stable (Kartend-b0p96).
   if (bytes >= gb) {
-    return QString::number(bytes / static_cast<double>(gb), 'f', 2) + QStringLiteral(" GB");
+    return tr("%1 GB").arg(QString::number(bytes / static_cast<double>(gb), 'f', 2));
   }
   if (bytes >= mb) {
-    return QString::number(bytes / static_cast<double>(mb), 'f', 2) + QStringLiteral(" MB");
+    return tr("%1 MB").arg(QString::number(bytes / static_cast<double>(mb), 'f', 2));
   }
   if (bytes >= kb) {
-    return QString::number(bytes / static_cast<double>(kb), 'f', 2) + QStringLiteral(" KB");
+    return tr("%1 KB").arg(QString::number(bytes / static_cast<double>(kb), 'f', 2));
   }
-  return QString::number(bytes) + QStringLiteral(" bytes");
+  return tr("%1 bytes").arg(QString::number(bytes));
 }
 
 QString DetailPageOverlay::formatRuntime(int seconds) {
