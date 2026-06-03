@@ -6,6 +6,8 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
+#include "uiconstants/color.h"
+
 CollectionHealthDialog::CollectionHealthDialog(QWidget *parent) : QDialog(parent) {
   setupUi();
 }
@@ -53,7 +55,7 @@ void CollectionHealthDialog::setReport(const QString &collectionName,
   } else {
     m_summaryLabel->setText(
         tr("%1 issue(s) across %2 item(s).").arg(issueCount).arg(report.totalItems));
-    m_summaryLabel->setStyleSheet("color: #d05050; font-weight: bold;");
+    m_summaryLabel->setStyleSheet(UIConstants::Color::errorLabelStyleSheet(true));
   }
 
   // Detail panel: per-category section, each with the count and a

@@ -17,6 +17,7 @@
 #include <QWizardPage>
 
 #include "launcherprobe.h"
+#include "uiconstants/color.h"
 
 namespace {
 
@@ -68,7 +69,7 @@ public:
     form->addRow(LibraryOnboardingWizard::tr("Media folder:"), dirContainer);
 
     m_validation = new QLabel(this);
-    m_validation->setStyleSheet("color: #d05050;");
+    m_validation->setStyleSheet(UIConstants::Color::errorLabelStyleSheet());
     m_validation->setWordWrap(true);
     form->addRow(QString(), m_validation);
 

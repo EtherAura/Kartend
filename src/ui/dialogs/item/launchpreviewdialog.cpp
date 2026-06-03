@@ -6,6 +6,8 @@
 #include <QPlainTextEdit>
 #include <QVBoxLayout>
 
+#include "uiconstants/color.h"
+
 namespace {
 
 QString quoteIfNeeded(const QString &arg) {
@@ -81,7 +83,7 @@ void LaunchPreviewDialog::setupUi() {
   // Red-ish accent so warnings catch the user's eye against the rest of
   // the read-only text. palette() colors don't have a "warning" slot so a
   // muted red works in both light and dark themes.
-  m_warningsLabel->setStyleSheet("color: #d05050; font-weight: bold;");
+  m_warningsLabel->setStyleSheet(UIConstants::Color::errorLabelStyleSheet(true));
   outer->addWidget(m_warningsLabel);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
@@ -138,6 +140,6 @@ void LaunchPreviewDialog::setPreview(const QString &itemTitle, const QString &la
       lines.append(QStringLiteral("• ") + w);
     }
     m_warningsLabel->setText(lines.join(QLatin1Char('\n')));
-    m_warningsLabel->setStyleSheet("color: #d05050; font-weight: bold;");
+    m_warningsLabel->setStyleSheet(UIConstants::Color::errorLabelStyleSheet(true));
   }
 }
