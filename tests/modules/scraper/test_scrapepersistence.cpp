@@ -80,6 +80,9 @@ private slots:
   void metadataSidecar_fillMissingKeepsExisting();
   void unsafeTypeSubdir_skippedNotWritten();
   void unsafeSharedScopeKey_skippedNotWritten();
+  void updateChanged_identicalBytesSkipped();
+  void updateChanged_sizeMismatchRewritten();
+  void updateChanged_sameSizeDifferentBytesRewritten();
 };
 
 void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
@@ -531,6 +534,86 @@ void TestScrapePersistence::unsafeSharedScopeKey_skippedNotWritten() {
   QVERIFY(!result.firstFailures.isEmpty());
   QVERIFY2(result.firstFailures.first().contains(QStringLiteral("unsafe shared scope key")),
            qPrintable(result.firstFailures.first()));
+}
+
+// --- UpdateChanged byte-compare (Kartend-h1e8d) ---------------------------
+// writeMediaFiles is the DB-free file-I/O half, so these drive it directly
+// with RescrapeMode::UpdateChanged after seeding the destination on disk.
+
+void TestScrapePersistence::updateChanged_identicalBytesSkipped() {
+  // Existing file byte-identical to the incoming payload → keep it, skip write.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const auto bytes = QByteArray("IDENTICAL_PAYLOAD_OF_SOME_LENGTH");
+  QVERIFY(QDir().mkpath(tmp.path() + "/screenshot"));
+  {
+    QFile seed(tmp.path() + "/screenshot/foo.png");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    QCOMPARE(seed.write(bytes), static_cast<qint64>(bytes.size()));
+  }
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"), bytes)};
+
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::UpdateChanged);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QCOMPARE(result.mediaSkipped, 1);
+  QFile after(tmp.path() + "/screenshot/foo.png");
+  QVERIFY(after.open(QIODevice::ReadOnly));
+  QCOMPARE(after.readAll(), bytes);
+}
+
+void TestScrapePersistence::updateChanged_sizeMismatchRewritten() {
+  // Different size can't match — the size() short-circuit must report "changed"
+  // (so the new bytes are written) without needing to read the existing file.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const auto incoming = QByteArray("FRESH_LONGER_REPLACEMENT_PAYLOAD");
+  QVERIFY(QDir().mkpath(tmp.path() + "/screenshot"));
+  {
+    QFile seed(tmp.path() + "/screenshot/foo.png");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    QCOMPARE(seed.write(QByteArray("OLD_SHORTER")), static_cast<qint64>(11));
+  }
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"), incoming)};
+
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::UpdateChanged);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QCOMPARE(result.mediaSkipped, 0);
+  QFile after(tmp.path() + "/screenshot/foo.png");
+  QVERIFY(after.open(QIODevice::ReadOnly));
+  QCOMPARE(after.readAll(), incoming);
+}
+
+void TestScrapePersistence::updateChanged_sameSizeDifferentBytesRewritten() {
+  // Same size but different content — the chunked compare must detect the
+  // mismatch and rewrite with the incoming bytes.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const auto incoming = QByteArray("AAAAAAAAAAAAAAAA"); // 16 bytes
+  const auto existing = QByteArray("BBBBBBBBBBBBBBBB"); // 16 bytes, same size
+  QCOMPARE(incoming.size(), existing.size());
+  QVERIFY(QDir().mkpath(tmp.path() + "/screenshot"));
+  {
+    QFile seed(tmp.path() + "/screenshot/foo.png");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    QCOMPARE(seed.write(existing), static_cast<qint64>(existing.size()));
+  }
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"), incoming)};
+
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::UpdateChanged);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QCOMPARE(result.mediaSkipped, 0);
+  QFile after(tmp.path() + "/screenshot/foo.png");
+  QVERIFY(after.open(QIODevice::ReadOnly));
+  QCOMPARE(after.readAll(), incoming);
 }
 
 QTEST_MAIN(TestScrapePersistence)

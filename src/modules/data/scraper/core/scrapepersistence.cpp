@@ -191,14 +191,27 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
     if (rescrapeMode == RescrapeMode::FillMissing) {
       return QStringLiteral("FillMissing — kept existing file at %1").arg(destFile);
     }
-    // UpdateChanged: read existing bytes, byte-compare against the
-    // incoming payload. Heavy files (videos, manuals) read the entire
-    // existing copy off disk — that's the documented cost of this
-    // mode and surfaces as the "Update changed (slow)" UI hint.
+    // UpdateChanged: byte-compare the existing file against the incoming
+    // payload. Different sizes can't be equal, so reject on size() first and
+    // skip the read entirely — the common re-scrape case, where the old code
+    // read the whole existing copy (e.g. a 30 MB video) into RAM just to find a
+    // guaranteed mismatch, multiplied by scan concurrency (Kartend-h1e8d).
+    if (fi.size() != incoming.size()) return std::nullopt;
     QFile f(destFile);
     if (!f.open(QIODevice::ReadOnly)) return std::nullopt; // can't read = treat as missing
-    const QByteArray existing = f.readAll();
-    if (existing == incoming) {
+    // Same size: stream-compare in 64 KB blocks against the already-in-RAM
+    // incoming payload so we never hold a second full copy of a large asset.
+    qint64 offset = 0;
+    while (!f.atEnd()) {
+      const QByteArray block = f.read(64 * 1024);
+      if (block.isEmpty()) return std::nullopt; // read error → treat as changed
+      if (offset + block.size() > incoming.size() ||
+          block != QByteArray::fromRawData(incoming.constData() + offset, block.size())) {
+        return std::nullopt; // differs → write
+      }
+      offset += block.size();
+    }
+    if (offset == incoming.size()) {
       return QStringLiteral("UpdateChanged — bytes match existing file at %1").arg(destFile);
     }
     return std::nullopt;
