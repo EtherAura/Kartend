@@ -4,12 +4,15 @@
  */
 
 #include "stringutils.h"
+#include <QLocale>
 #include <QTest>
 
 class TestStringUtils : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
+  void cleanupTestCase();
   void formatCountNumber_zero();
   void formatCountNumber_smallValues();
   void formatCountNumber_threeDigits();
@@ -20,7 +23,23 @@ private slots:
   void formatCountNumber_negative();
   void formatCountNumber_negativeThousands();
   void formatCountNumber_largeQint64();
+  void formatCountNumber_respectsLocale();
+
+private:
+  QLocale m_originalLocale;
 };
+
+void TestStringUtils::initTestCase() {
+  // formatCountNumber now formats via the default QLocale, so pin a known one
+  // (en_US) — its ',' grouping keeps the assertions below deterministic
+  // regardless of the host / CI locale. Restored in cleanupTestCase.
+  m_originalLocale = QLocale();
+  QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+}
+
+void TestStringUtils::cleanupTestCase() {
+  QLocale::setDefault(m_originalLocale);
+}
 
 void TestStringUtils::formatCountNumber_zero() {
   QCOMPARE(StringUtils::formatCountNumber(0), QStringLiteral("0"));
@@ -56,21 +75,32 @@ void TestStringUtils::formatCountNumber_billions() {
 }
 
 void TestStringUtils::formatCountNumber_negative() {
-  // Small negatives (size <= 3) are returned unchanged
   QCOMPARE(StringUtils::formatCountNumber(-1), QStringLiteral("-1"));
   QCOMPARE(StringUtils::formatCountNumber(-42), QStringLiteral("-42"));
+  // Regression guard for the sign bug: the old hand-rolled grouping inserted
+  // a separator right after the minus sign, yielding "-,123" (Kartend-ixrhn).
+  QCOMPARE(StringUtils::formatCountNumber(-123), QStringLiteral("-123"));
 }
 
 void TestStringUtils::formatCountNumber_negativeThousands() {
-  // -1000 (size 5): comma inserted at pos 2 -> "-1,000"
   QCOMPARE(StringUtils::formatCountNumber(-1000), QStringLiteral("-1,000"));
-  // -1000000 (size 8): commas at pos 5 then pos 2 -> "-1,000,000"
   QCOMPARE(StringUtils::formatCountNumber(-1000000), QStringLiteral("-1,000,000"));
 }
 
 void TestStringUtils::formatCountNumber_largeQint64() {
   QCOMPARE(StringUtils::formatCountNumber(9223372036854775807LL),
            QStringLiteral("9,223,372,036,854,775,807"));
+}
+
+void TestStringUtils::formatCountNumber_respectsLocale() {
+  // The fix delegates to QLocale, so the grouping separator follows the active
+  // locale: a dot in de_DE, a comma in en_US. This is the whole point of the
+  // change — the old code hardcoded ',' (Kartend-ixrhn).
+  const QLocale previous = QLocale();
+  QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
+  QCOMPARE(StringUtils::formatCountNumber(1234567), QStringLiteral("1.234.567"));
+  QLocale::setDefault(previous);
+  QCOMPARE(StringUtils::formatCountNumber(1234567), QStringLiteral("1,234,567"));
 }
 
 QTEST_APPLESS_MAIN(TestStringUtils)
