@@ -92,7 +92,17 @@ private slots:
   void testExtractArchive_extractsTargetFile();
   void testExtractArchive_missingTargetExtensionCleansUpExtractionDir();
 
+  // launchItem extracted-dir cleanup when the launcher fails to start (Kartend-dyu1k).
+  void testLaunchItem_failedStartRemovesExtractedDir();
+
 private:
+  // Creates an executable file whose shebang points at a nonexistent
+  // interpreter: it passes validateLauncherPath (exists + executable) but
+  // QProcess::startDetached fails to exec it, so launchItem reaches its
+  // extracted-dir cleanup. Returns the absolute path (empty on failure); the
+  // owning temp dir is tracked in m_fixtureDirs.
+  QString makeFailingLauncher();
+
   // Builds a .zip named <baseName>.zip holding the given (name -> bytes) files
   // in a fresh temp dir. Returns the archive path, or an empty string when no
   // archive-creation tool (zip/bsdtar/7z) is available — the QSKIP at the call
@@ -233,6 +243,27 @@ QString TestLaunchManager::makeZipFixture(const QString &baseName,
     return archivePath;
   }
   return {};
+}
+
+QString TestLaunchManager::makeFailingLauncher() {
+  auto *dir = new QTemporaryDir();
+  if (!dir->isValid()) {
+    delete dir;
+    return {};
+  }
+  m_fixtureDirs.append(dir);
+
+  const QString path = dir->filePath(QStringLiteral("broken_launcher"));
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return {};
+  }
+  f.write("#!/kartend-test/no/such/interpreter-xyz\n");
+  f.close();
+  if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
+    return {};
+  }
+  return path;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1018,6 +1049,56 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
   QVERIFY2(!QDir(extractionDir).exists(),
            "the per-archive extraction dir must be removed when no target file is found");
+}
+
+void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
+#ifdef Q_OS_WIN
+  QSKIP("The shebang-to-nonexistent-interpreter failing-launcher trick is POSIX-specific");
+#else
+  // End-to-end: an archive item whose launcher fails to start must not leave
+  // its extracted contents behind in /tmp. launchItem extracts the archive,
+  // builds + validates the (broken) launcher, then QProcess::startDetached
+  // fails and the qScopeGuard removes the extraction dir. Error dialogs route
+  // through ErrorPresentation (Kartend-dyu1k); with no override installed its
+  // default just logs, so this headless run doesn't hang on a modal.
+  if (!extractorAvailable()) {
+    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QString launcher = makeFailingLauncher();
+  QVERIFY2(!launcher.isEmpty(), "could not create the failing-launcher fixture");
+  QVERIFY2(LaunchManager::validateLauncherPath(launcher).isOk(),
+           "the fixture launcher must pass validation so the only failure is startDetached");
+
+  const QString base = QStringLiteral("kartend_launch_fail");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".iso");
+  collection.launcher.launcherPath = launcher;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+
+  // Runtime detection stays off (no ctx/settings wired) -> the detached path,
+  // whose startDetached failure is the branch that cleans up the extraction.
+  manager.launchItem(zip, 0);
+
+  QVERIFY2(!QDir(extractionDir).exists(),
+           "the extracted archive dir must be removed when the launcher fails to start");
+#endif
 }
 
 QTEST_MAIN(TestLaunchManager)

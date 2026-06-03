@@ -6,6 +6,7 @@
 #include "collection/launcherpreset.h"
 #include "collection/typehelpers.h"
 #include "configvalidation.h"
+#include "errorpresentation.h"
 #include "errorutils.h"
 #include "pathutils.h"
 #include "setuputils.h"
@@ -16,7 +17,6 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
-#include <QMessageBox>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScopeGuard>
@@ -348,7 +348,10 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
 
 void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int launcherIndex) {
   if ((!m_collections) || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
-    QMessageBox::warning(nullptr, tr("Invalid Collection"), tr("Invalid collection specified."));
+    ErrorPresentation::showError(
+        nullptr, ErrorContext::warning(ErrorCode::InvalidCollectionContext,
+                                       tr("Invalid collection specified."),
+                                       QStringLiteral("LaunchManager::launchItem")));
     return;
   }
 
@@ -440,10 +443,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
     auto extractResult = extractArchiveToTemp(filePath, collection.archive.extractedExtension);
     if (extractResult.isError()) {
       ErrorUtils::logError(extractResult.error());
-      QMessageBox::warning(nullptr, "Extraction Error",
-                           QString("Failed to extract archive:\n%1\n\n%2")
-                               .arg(filePath)
-                               .arg(extractResult.error().message));
+      ErrorPresentation::showError(nullptr, extractResult.error());
       return;
     }
     launchFilePath = extractResult.value();
@@ -454,15 +454,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   auto commandResult = buildLaunchCommand(launcher, collection.name, launchFilePath);
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
-    const QString msg = commandResult.error().message;
-    if (commandResult.hasErrorCode(ErrorCode::InvalidFilePath)) {
-      QMessageBox::warning(nullptr, "Invalid File Path",
-                           QString("%1\n\nPath: %2").arg(msg, filePath));
-    } else if (msg.contains("core", Qt::CaseInsensitive)) {
-      QMessageBox::warning(nullptr, tr("Invalid Core Path"), msg);
-    } else {
-      QMessageBox::warning(nullptr, tr("Launch Error"), msg);
-    }
+    ErrorPresentation::showError(nullptr, commandResult.error());
     return;
   }
 
@@ -473,10 +465,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   auto launcherPathResult = validateLauncherPath(cmd.program);
   if (launcherPathResult.isError()) {
     ErrorUtils::logError(launcherPathResult.error());
-    QMessageBox::warning(nullptr, "Invalid Launcher",
-                         QString("Launcher validation failed: %1\n\nPath: %2")
-                             .arg(launcherPathResult.error().message)
-                             .arg(cmd.program));
+    ErrorPresentation::showError(nullptr, launcherPathResult.error());
     return;
   }
 
@@ -492,9 +481,11 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // can already mutate the user's config directory.
   QFileInfo launcherCheck(launcherPath);
   if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
-    QMessageBox::critical(
-        nullptr, tr("Launch Error"),
-        tr("Launcher is no longer accessible or executable:\n%1").arg(launcherPath));
+    ErrorPresentation::showError(
+        nullptr, ErrorContext::critical(
+                     ErrorCode::InvalidFilePath,
+                     tr("Launcher is no longer accessible or executable:\n%1").arg(launcherPath),
+                     QStringLiteral("LaunchManager::launchItem")));
     return;
   }
 
@@ -528,13 +519,15 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   bool success = QProcess::startDetached(launcherPath, cmd.arguments, launcherDir);
 
   if (!success) {
-    QString errorMsg = QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
-                               "sure the launcher path is correct and the file is executable.")
-                           .arg(launcherPath)
-                           .arg(launcherPath)
-                           .arg(cmd.arguments.join(" "));
+    const QString errorMsg = QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
+                                     "sure the launcher path is correct and the file is executable.")
+                                 .arg(launcherPath)
+                                 .arg(launcherPath)
+                                 .arg(cmd.arguments.join(" "));
 
-    QMessageBox::critical(nullptr, tr("Launch Error"), errorMsg);
+    ErrorPresentation::showError(
+        nullptr, ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
+                                        QStringLiteral("LaunchManager::launchItem")));
     return;
   }
 
@@ -550,9 +543,11 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // Only one tracked child at a time; reject overlapping launches so the
   // overlay state stays coherent.
   if (m_trackedChild) {
-    QMessageBox::information(
-        nullptr, tr("Already Running"),
-        tr("Another tracked item is currently running:\n%1").arg(m_trackedFilePath));
+    ErrorPresentation::showError(
+        nullptr, ErrorContext::info(ErrorCode::OperationCancelled,
+                                    tr("Another tracked item is currently running:\n%1")
+                                        .arg(m_trackedFilePath),
+                                    QStringLiteral("LaunchManager::launchTracked")));
     return false;
   }
 
@@ -609,8 +604,11 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     // for crashes after start, and we want to keep the overlay up
     // until the process is actually gone.
     if (error == QProcess::FailedToStart) {
-      QMessageBox::critical(nullptr, tr("Launch Error"),
-                            tr("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+      ErrorPresentation::showError(
+          nullptr, ErrorContext::critical(ErrorCode::UnknownError,
+                                          tr("Failed to start tracked launcher:\n%1")
+                                              .arg(child->errorString()),
+                                          QStringLiteral("LaunchManager::launchTracked")));
       cleanup();
     }
   });
