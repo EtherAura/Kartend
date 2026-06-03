@@ -12,6 +12,7 @@ QT_BEGIN_NAMESPACE
 class QComboBox;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 QT_END_NAMESPACE
@@ -56,7 +57,12 @@ private slots:
 
 private:
   void buildUI();
+  /// Enable Ok only when the name is non-blank AND the selected criterion's
+  /// required parameter (if any) is filled in, so an always-empty playlist
+  /// can't be created silently.
+  void updateOkButtonState();
 
+  QPushButton *m_okButton = nullptr;
   QLineEdit *m_nameEdit = nullptr;
   QComboBox *m_kindCombo = nullptr;
   QStackedWidget *m_paramsStack = nullptr;

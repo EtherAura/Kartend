@@ -296,12 +296,21 @@ void CreateSmartPlaylistDialog::buildUI() {
   root->addWidget(m_paramsStack);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-  // Disable Ok until the name is non-blank — prevents accepting and then
-  // hitting the createSmartPlaylist InvalidArgument branch.
-  auto *okBtn = buttons->button(QDialogButtonBox::Ok);
-  okBtn->setEnabled(false);
+  // Disable Ok until the form is complete: a non-blank name AND, for criteria
+  // that need one, a non-empty parameter. Re-evaluated when the name, the
+  // criterion, or a criterion parameter changes so a "By extension" / "Title
+  // contains" / "By collection" with an empty parameter can't be accepted into
+  // an always-empty playlist (Kartend-dsvaq).
+  m_okButton = buttons->button(QDialogButtonBox::Ok);
+  m_okButton->setEnabled(false);
   connect(m_nameEdit, &QLineEdit::textChanged, this,
-          [okBtn](const QString &t) { okBtn->setEnabled(!t.trimmed().isEmpty()); });
+          &CreateSmartPlaylistDialog::updateOkButtonState);
+  connect(m_extensionsEdit, &QLineEdit::textChanged, this,
+          &CreateSmartPlaylistDialog::updateOkButtonState);
+  connect(m_titleSearchEdit, &QLineEdit::textChanged, this,
+          &CreateSmartPlaylistDialog::updateOkButtonState);
+  connect(m_collectionCombo, &QComboBox::currentIndexChanged, this,
+          &CreateSmartPlaylistDialog::updateOkButtonState);
   connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   root->addWidget(buttons);
@@ -315,6 +324,29 @@ void CreateSmartPlaylistDialog::buildUI() {
 void CreateSmartPlaylistDialog::onKindChanged(int index) {
   const int page = m_kindCombo->itemData(index).toInt();
   m_paramsStack->setCurrentIndex(page);
+  updateOkButtonState();
+}
+
+void CreateSmartPlaylistDialog::updateOkButtonState() {
+  if (!m_okButton) {
+    return;
+  }
+  const bool nameOk = m_nameEdit && !m_nameEdit->text().trimmed().isEmpty();
+  bool paramOk = true;
+  switch (m_kindCombo ? m_kindCombo->currentData().toInt() : -1) {
+  case PAGE_BY_EXTENSION:
+    paramOk = m_extensionsEdit && !m_extensionsEdit->text().trimmed().isEmpty();
+    break;
+  case PAGE_BY_TITLE_SEARCH:
+    paramOk = m_titleSearchEdit && !m_titleSearchEdit->text().trimmed().isEmpty();
+    break;
+  case PAGE_BY_COLLECTION:
+    paramOk = m_collectionCombo && m_collectionCombo->currentIndex() >= 0;
+    break;
+  default:
+    break;
+  }
+  m_okButton->setEnabled(nameOk && paramOk);
 }
 
 void CreateSmartPlaylistDialog::setInitialName(const QString &name) {
