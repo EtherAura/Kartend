@@ -49,6 +49,8 @@ private slots:
   void testParseParameters_mixedQuotes();
   void testParseParameters_unclosedQuotes();
   void testParseParameters_rejectsNewlines();
+  void testParseParameters_backslashEscapesSpecials();
+  void testParseParameters_backslashBeforeOrdinaryCharPreserved();
 
   // buildLaunchCommand tests
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
@@ -533,6 +535,56 @@ void TestLaunchManager::testParseParameters_rejectsNewlines() {
   result = LaunchManager::parseParameters("--foo\rbar");
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+}
+
+void TestLaunchManager::testParseParameters_backslashEscapesSpecials() {
+  // A backslash makes the next special character literal: quotes no longer
+  // toggle quoting, an escaped space joins the param, and \\ collapses to one
+  // backslash (Kartend-xi2mj).
+  auto result = LaunchManager::parseParameters("say \\\"hi\\\"");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 2);
+  QCOMPARE(result.value()[0], "say");
+  QCOMPARE(result.value()[1], "\"hi\"");
+
+  // Escaped single quote, literal, outside quoting.
+  result = LaunchManager::parseParameters("it\\'s");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "it's");
+
+  // Escaped space keeps one argument together without needing quotes.
+  result = LaunchManager::parseParameters("two\\ words");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "two words");
+
+  // Escaped backslash collapses to a single literal backslash.
+  result = LaunchManager::parseParameters("a\\\\b");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "a\\b");
+
+  // An escaped quote inside a quoted run stays literal and does not close it.
+  result = LaunchManager::parseParameters("\"a\\\"b\"");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "a\"b");
+}
+
+void TestLaunchManager::testParseParameters_backslashBeforeOrdinaryCharPreserved() {
+  // A backslash that doesn't precede a special char is kept literal, so existing
+  // params with stray backslashes (paths, regex) are unchanged (Kartend-xi2mj).
+  auto result = LaunchManager::parseParameters("C:\\path\\to");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "C:\\path\\to");
+
+  // A trailing lone backslash is also kept literal.
+  result = LaunchManager::parseParameters("end\\");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "end\\");
 }
 
 void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters() {

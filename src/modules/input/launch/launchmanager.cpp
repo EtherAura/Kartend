@@ -643,6 +643,20 @@ auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::R
   for (int i = 0; i < params.length(); ++i) {
     QChar currentChar = params[i];
 
+    // Backslash escapes the next character when that character is one the parser
+    // would otherwise treat specially — a quote, a separator space, or a
+    // backslash — so a param can carry a literal quote (Kartend-xi2mj). Works
+    // inside and outside quotes. A backslash before any other character (e.g. a
+    // path separator) is left literal so existing params are unaffected.
+    if (currentChar == '\\' && i + 1 < params.length()) {
+      const QChar next = params[i + 1];
+      if (next == '"' || next == '\'' || next == ' ' || next == '\\') {
+        currentParam.append(next);
+        ++i;
+        continue;
+      }
+    }
+
     if (!inQuotes && (currentChar == '"' || currentChar == '\'')) {
       inQuotes = true;
       quoteChar = currentChar;
