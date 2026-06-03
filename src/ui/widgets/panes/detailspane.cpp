@@ -19,6 +19,7 @@
 #include "collection/enumstringhelpers.h"
 #include "itemartwork.h"
 #include "loggingcategories.h"
+#include "stringutils.h"
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
@@ -853,26 +854,10 @@ void DetailsPane::resizeEvent(QResizeEvent *event) {
   }
 }
 
-// Formats file size into human-readable string with appropriate units (KB, MB,
-// GB)
+// Human-readable file size (KB/MB/GB). Delegates to the shared StringUtils
+// helper so the logic isn't duplicated with DetailPageOverlay (Kartend-kp7up).
 auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
-  const qint64 kiloBytes = UIConstants::Metadata::FILE_SIZE_KB;
-  const qint64 megaBytes = kiloBytes * UIConstants::Metadata::FILE_SIZE_KB;
-  const qint64 gigaBytes = megaBytes * UIConstants::Metadata::FILE_SIZE_KB;
-
-  // Units and the number/unit spacing go through tr() so translators control both
-  // the label and its placement; the value itself stays QString::number (C locale)
-  // to keep "1.00"-style formatting stable (Kartend-b0p96).
-  if (bytes >= gigaBytes) {
-    return tr("%1 GB").arg(QString::number(bytes / static_cast<double>(gigaBytes), 'f', 2));
-  }
-  if (bytes >= megaBytes) {
-    return tr("%1 MB").arg(QString::number(bytes / static_cast<double>(megaBytes), 'f', 2));
-  }
-  if (bytes >= kiloBytes) {
-    return tr("%1 KB").arg(QString::number(bytes / static_cast<double>(kiloBytes), 'f', 2));
-  }
-  return tr("%1 bytes").arg(QString::number(bytes));
+  return StringUtils::formatFileSize(bytes);
 }
 
 // Load artwork from specified directory

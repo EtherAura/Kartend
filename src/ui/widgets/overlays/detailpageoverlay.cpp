@@ -24,7 +24,7 @@
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
 #include "itemmetadata.h"
-#include "uiconstants/metadata.h"
+#include "stringutils.h"
 #include "videothumbnailextractor.h"
 
 namespace {
@@ -454,21 +454,7 @@ void DetailPageOverlay::rebuildMetadataGrid(const Payload &payload) {
 }
 
 QString DetailPageOverlay::formatFileSize(qint64 bytes) {
-  const qint64 kb = UIConstants::Metadata::FILE_SIZE_KB;
-  const qint64 mb = kb * UIConstants::Metadata::FILE_SIZE_KB;
-  const qint64 gb = mb * UIConstants::Metadata::FILE_SIZE_KB;
-  // Units/spacing via tr() for translator control; value stays QString::number
-  // (C locale) so "1.00"-style formatting is stable (Kartend-b0p96).
-  if (bytes >= gb) {
-    return tr("%1 GB").arg(QString::number(bytes / static_cast<double>(gb), 'f', 2));
-  }
-  if (bytes >= mb) {
-    return tr("%1 MB").arg(QString::number(bytes / static_cast<double>(mb), 'f', 2));
-  }
-  if (bytes >= kb) {
-    return tr("%1 KB").arg(QString::number(bytes / static_cast<double>(kb), 'f', 2));
-  }
-  return tr("%1 bytes").arg(QString::number(bytes));
+  return StringUtils::formatFileSize(bytes);
 }
 
 QString DetailPageOverlay::formatRuntime(int seconds) {
