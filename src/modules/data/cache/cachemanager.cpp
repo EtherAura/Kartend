@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QThread>
 #include <QtConcurrent/QtConcurrentRun>
 
 namespace {
@@ -163,6 +164,13 @@ void CacheManager::setArtworkCacheBudgetMB(int megabytes) {
 
 // Initializes persistent cache metadata from disk
 auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
+  // QPixmap construction + QGuiApplication::primaryScreen() below are GUI-thread
+  // only. Uncalled from decode workers today, but assert the contract so a future
+  // worker-side caller fails loudly instead of touching QPixmap off-thread
+  // (Kartend-u61vf; the inverse of ArtworkLoadDispatcher::processBatchOnWorker).
+  Q_ASSERT_X(QThread::currentThread() == QCoreApplication::instance()->thread(),
+             "CacheManager::getArtwork",
+             "QPixmap-returning cache reads must run on the GUI thread");
   if (artworkPath.isEmpty()) {
     return {};
   }
@@ -227,6 +235,10 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
 }
 
 auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixmap {
+  // GUI-thread only — returns a QPixmap (Kartend-u61vf).
+  Q_ASSERT_X(QThread::currentThread() == QCoreApplication::instance()->thread(),
+             "CacheManager::getArtworkFromMemoryOnly",
+             "QPixmap-returning cache reads must run on the GUI thread");
   if (artworkPath.isEmpty()) {
     return {};
   }
