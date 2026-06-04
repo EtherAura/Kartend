@@ -339,10 +339,12 @@ void Store::clearAll() {
 QString defaultPath() {
   const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
   if (cacheDir.isEmpty()) {
-    // Fallback for headless / sandbox setups where CacheLocation is
-    // empty. Using a temp file means the cache won't persist, but
-    // the rest of Kartend keeps working.
-    return QStringLiteral("datcache.sqlite");
+    // Fallback for headless / sandbox setups where CacheLocation is empty. Use
+    // an absolute temp path: with WAL the -wal/-shm sidecars are written next to
+    // the db, and a bare relative name would resolve against a CWD that changes
+    // when Kartend launches players via QProcess (Kartend-i7qd). The cache won't
+    // persist, but the rest of Kartend keeps working.
+    return QDir::temp().filePath(QStringLiteral("datcache.sqlite"));
   }
   QDir().mkpath(cacheDir);
   return QDir(cacheDir).filePath(QStringLiteral("datcache.sqlite"));
