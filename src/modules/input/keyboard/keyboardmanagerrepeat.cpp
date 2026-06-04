@@ -58,11 +58,9 @@ void KeyboardManager::beginHoldRepeat() {
   int horizontalInterval = baseInterval / 2;
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
 
-  if (!m_repeatTimer) {
-    m_repeatTimer = new QTimer(this);
-    m_repeatTimer->setSingleShot(false);
-    connect(m_repeatTimer, &QTimer::timeout, this, &KeyboardManager::onRepeatStep);
-  }
+  // m_repeatTimer is created + connected once in initTimers() (ctor), so the
+  // lazy create here was dead and a second run would have double-connected
+  // onRepeatStep (Kartend-6bt1).
   if (m_repeatStartTimer) {
     m_repeatStartTimer->stop();
   }
