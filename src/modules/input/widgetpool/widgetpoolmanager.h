@@ -36,7 +36,13 @@ public:
   // Set the parent widget for newly created widgets
   void setWidgetParent(QWidget *parent);
 
-  // Acquire a widget from the pool or create a new one
+  // Acquire a widget from the pool or create a new one.
+  //
+  // CONTRACT: a recycled widget still holds the name / path / artwork / selected
+  // state it had before release(). The caller MUST fully configure it
+  // (ItemWidget::configureBaseWidget, which runs resetForReuse) before showing
+  // it — acquire() does not clear prior state, so skipping that paints stale data
+  // (Kartend-8jzs).
   [[nodiscard]] ItemWidget *acquire();
 
   // Return a widget to the pool for reuse
