@@ -153,10 +153,13 @@ auto GridLayoutCalculator::adjustForFilter(const GridMetrics &baseMetrics, int f
         (filteredItemCount + baseMetrics.itemsPerRow - 1) / baseMetrics.itemsPerRow;
   }
 
-  // Recalculate total height for filtered count
+  // Recalculate total height for filtered count. Two margins (top + bottom) to
+  // match calculateMetrics and the horizontal branch — the single-margin form
+  // left filtered views one margin short, clipping the last row / offsetting
+  // centering by MARGINS px (Kartend-57ja).
   int verticalSpacingContribution =
       (adjusted.totalRows > 1) ? (adjusted.totalRows - 1) * baseMetrics.verticalSpacing : 0;
-  adjusted.totalHeight = baseMetrics.margins + adjusted.totalRows * baseMetrics.itemHeight +
+  adjusted.totalHeight = baseMetrics.margins * 2 + adjusted.totalRows * baseMetrics.itemHeight +
                          verticalSpacingContribution;
 
   return adjusted;

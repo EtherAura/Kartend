@@ -128,6 +128,11 @@ void TestGridLayoutCalculator::testAdjustForFilter_multipleRows() {
   GridMetrics filtered = GridLayoutCalculator::adjustForFilter(m_metrics, filteredCount);
 
   QCOMPARE(filtered.totalRows, 3); // ceil(10/4) = 3
+  // Two margins (top + bottom), matching calculateMetrics — the filtered height
+  // was short by one margin before Kartend-57ja, clipping the last row.
+  const int expectedHeight = m_metrics.margins * 2 + filtered.totalRows * m_metrics.itemHeight +
+                             (filtered.totalRows - 1) * m_metrics.verticalSpacing;
+  QCOMPARE(filtered.totalHeight, expectedHeight);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
