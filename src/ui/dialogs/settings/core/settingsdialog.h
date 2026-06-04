@@ -27,6 +27,7 @@ class QResizeEvent;
 class QGraphicsDropShadowEffect;
 class QPropertyAnimation;
 class QPushButton;
+class QTimer;
 QT_END_NAMESPACE
 
 struct ApplicationContext;
@@ -371,6 +372,10 @@ private:
   // the button once attached (Qt manages lifetime via QWidget::setGraphicsEffect).
   QGraphicsDropShadowEffect *m_saveButtonGlow = nullptr;
   QPropertyAnimation *m_saveButtonGlowAnim = nullptr;
+  /// Coalesces resize-driven updateGridWidthLimits: restarted on every
+  /// resizeEvent so only the last resize recalculates, not one singleShot per
+  /// tick (Kartend-20utj). Lazily constructed on first resize.
+  QTimer *m_gridWidthLimitsTimer = nullptr;
 
   bool eventFilter(QObject *obj, QEvent *event) override;
 

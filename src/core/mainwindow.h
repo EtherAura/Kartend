@@ -288,6 +288,10 @@ private:
   // previous MainWindow / test had already left on QApplication.
   bool m_uiFontBaselineCaptured = false;
   QFont m_uiFontBaseline;
+  /// Coalesces resize-driven recenter: restarted on every resizeEvent so only
+  /// the last resize in a drag re-centers, instead of one singleShot per tick
+  /// (Kartend-20utj). Lazily constructed on first resize.
+  QTimer *m_resizeRecenterTimer = nullptr;
   std::unique_ptr<MenuController> m_menuController;
   /// Central z-order coordinator for every registered overlay. Constructed
   /// before any overlay widget so each overlay's setLayerManager() call

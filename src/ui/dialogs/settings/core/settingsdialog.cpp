@@ -628,7 +628,14 @@ void SettingsDialog::hideEvent(QHideEvent *event) {
 
 void SettingsDialog::resizeEvent(QResizeEvent *event) {
   QDialog::resizeEvent(event);
-  // Delay recalculation until resize animation/settling completes
-  QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
-                     &SettingsDialog::updateGridWidthLimits);
+  // A drag fires many resizeEvents; use one restartable timer so only the final
+  // resize recalculates the grid-width limits, not one singleShot per tick
+  // (Kartend-20utj).
+  if (!m_gridWidthLimitsTimer) {
+    m_gridWidthLimitsTimer = new QTimer(this);
+    m_gridWidthLimitsTimer->setSingleShot(true);
+    connect(m_gridWidthLimitsTimer, &QTimer::timeout, this,
+            &SettingsDialog::updateGridWidthLimits);
+  }
+  m_gridWidthLimitsTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);
 }

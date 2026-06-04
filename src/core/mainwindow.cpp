@@ -303,14 +303,19 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
     }
   }
 
-  // Re-center on current selection after resize completes
-  // Defer re-centering until after resize animation completes -
-  // prevents visual jump during resize drag
-  QTimer::singleShot(UIConstants::Timing::RESIZE_RECENTER_DELAY_MS, this, [this]() {
-    if (!QApplication::closingDown() && m_appManager->getInteractionManager()) {
-      m_appManager->getInteractionManager()->recenterCurrentSelection();
-    }
-  });
+  // Re-center on current selection after the resize settles. A drag fires many
+  // resizeEvents; use one restartable timer so only the final resize recenters,
+  // instead of queuing a fresh singleShot per tick (Kartend-20utj).
+  if (!m_resizeRecenterTimer) {
+    m_resizeRecenterTimer = new QTimer(this);
+    m_resizeRecenterTimer->setSingleShot(true);
+    connect(m_resizeRecenterTimer, &QTimer::timeout, this, [this]() {
+      if (!QApplication::closingDown() && m_appManager->getInteractionManager()) {
+        m_appManager->getInteractionManager()->recenterCurrentSelection();
+      }
+    });
+  }
+  m_resizeRecenterTimer->start(UIConstants::Timing::RESIZE_RECENTER_DELAY_MS);
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
