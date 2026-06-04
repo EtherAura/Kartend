@@ -146,7 +146,12 @@ bool MainWindow::event(QEvent *event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
-  if ((m_appManager->getInteractionManager()) &&
+  // A late key event between m_isShuttingDown and InteractionManager teardown
+  // would otherwise reach a just-cleared manager (closeEvent clears its
+  // selection + blocks its signals); fall through to the base handler then,
+  // matching the shutdown short-circuit on the other event paths (Kartend-0j6o).
+  if (!m_isShuttingDown && !QApplication::closingDown() &&
+      m_appManager->getInteractionManager() &&
       m_appManager->getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
@@ -319,9 +324,13 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
-  return (m_appManager->getInteractionManager())
-             ? m_appManager->getInteractionManager()->eventFilter(watched, event)
-             : QMainWindow::eventFilter(watched, event);
+  // Don't route filtered events into a tearing-down InteractionManager
+  // (Kartend-0j6o) — hand them to the base filter during shutdown.
+  if (m_isShuttingDown || QApplication::closingDown() ||
+      !m_appManager->getInteractionManager()) {
+    return QMainWindow::eventFilter(watched, event);
+  }
+  return m_appManager->getInteractionManager()->eventFilter(watched, event);
 }
 
 void MainWindow::refreshTitleCounts() {
