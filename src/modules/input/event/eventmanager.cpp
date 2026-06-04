@@ -229,14 +229,20 @@ bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
     if (viewportMgr()) {
       viewportMgr()->setContinuousScrollActive(true);
     }
-    // Clear continuous scroll state after user finishes scrollbar interaction -
-    // allows time for the drag/click to complete before re-enabling
-    // auto-centering
-    QTimer::singleShot(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS, this, [this]() {
-      if (viewportMgr()) {
-        viewportMgr()->setContinuousScrollActive(false);
-      }
-    });
+    // Clear continuous-scroll state once the user stops interacting. One
+    // restartable timer so rapid presses restart the countdown instead of
+    // queuing multiple singleShots — an earlier of which would fire mid-drag and
+    // clear the flag, re-enabling auto-centering prematurely (Kartend-otha).
+    if (!m_continuousScrollClearTimer) {
+      m_continuousScrollClearTimer = new QTimer(this);
+      m_continuousScrollClearTimer->setSingleShot(true);
+      connect(m_continuousScrollClearTimer, &QTimer::timeout, this, [this]() {
+        if (viewportMgr()) {
+          viewportMgr()->setContinuousScrollActive(false);
+        }
+      });
+    }
+    m_continuousScrollClearTimer->start(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS);
     emit requestStopRepeat(true);
     emit scrollbarClicked();
     return false;

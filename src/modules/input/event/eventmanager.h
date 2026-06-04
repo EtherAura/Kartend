@@ -17,6 +17,7 @@ class QLineEdit;
 class QMouseEvent;
 class QScrollBar;
 class QStackedWidget;
+class QTimer;
 class QWidget;
 QT_END_NAMESPACE
 
@@ -189,6 +190,10 @@ private:
   QLineEdit *m_searchBar = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
+  /// Restartable countdown that clears continuous-scroll state after the user
+  /// stops interacting with the scrollbar. Coalesces rapid presses so an earlier
+  /// timer can't clear the flag mid-drag (Kartend-otha). Lazily constructed.
+  QTimer *m_continuousScrollClearTimer = nullptr;
 
   // Hover-to-select state machine. Owns its dwell timer + pending widget
   // pointer so EventManager only forwards Enter / MouseMove events into it.
