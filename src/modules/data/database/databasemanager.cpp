@@ -1003,16 +1003,34 @@ void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QS
   // read only by the history dialog, so route the append + trim onto the worker
   // connection instead of blocking the launch on the UI thread (Kartend-fkvs).
   queueWorkerWrite([collectionUuid, path, name, maxEntries](QSqlDatabase &db) {
+    // Append + trim in one transaction so a crash between them can't leave the
+    // history table over the cap (Kartend-5rcf). If the transaction can't start,
+    // fall back to the prior autocommit behaviour rather than dropping the write.
+    const bool inTransaction = db.transaction();
     auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
     if (result.isError()) {
       ErrorUtils::logError(result.error());
+      if (inTransaction) {
+        db.rollback();
+      }
       return;
     }
     if (maxEntries > 0) {
       auto trim = HistoryStore::trimToMaxEntries(db, maxEntries);
       if (trim.isError()) {
         ErrorUtils::logError(trim.error());
+        if (inTransaction) {
+          db.rollback();
+        }
+        return;
       }
+    }
+    if (inTransaction && !db.commit()) {
+      ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseTransactionFailed,
+                                               "Failed to commit history append+trim",
+                                               "DatabaseManager::recordHistoryEntry")
+                               .withDetails(db.lastError().text()));
+      db.rollback();
     }
   });
 }
