@@ -392,13 +392,10 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     return;
   }
 
-  // Flush any pending grid-width persistence before shutdown so the final
-  // user-adjusted width is not lost when closing immediately after changes.
-  if (m_gridWidthDebouncer && m_gridWidthDebouncer->hasPendingSave() &&
-      m_appManager->getSettingsManager()) {
-    m_gridWidthDebouncer->flushPendingSave();
-  }
-
+  // No explicit grid-width flush here: a width change is applied to m_collections
+  // immediately and shutdown() below persists m_collections synchronously, so the
+  // final width is saved without the debounced timer's separate INI write
+  // (Kartend-rbkf6).
   m_isShuttingDown = true;
 
   // Hide window immediately so user sees instant visual response

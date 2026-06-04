@@ -51,14 +51,6 @@ public:
   /// The finalize stage uses the generation to detect staleness.
   void triggerPrecalc();
 
-  /// True when a save callback is queued but hasn't fired yet — used by
-  /// closeEvent to decide whether to flush.
-  [[nodiscard]] bool hasPendingSave() const;
-
-  /// Force the queued save to fire immediately. Used during shutdown so the
-  /// user's last grid-width adjustment hits disk.
-  void flushPendingSave();
-
 private:
   void onPrecalcStage();
   void onFinalizeStage();

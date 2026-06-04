@@ -35,16 +35,6 @@ void GridWidthDebouncer::triggerPrecalc() {
   m_precalcTimer->trigger();
 }
 
-bool GridWidthDebouncer::hasPendingSave() const {
-  return m_saveTimer && m_saveTimer->isPending();
-}
-
-void GridWidthDebouncer::flushPendingSave() {
-  if (m_saveTimer) {
-    m_saveTimer->triggerImmediate();
-  }
-}
-
 void GridWidthDebouncer::onPrecalcStage() {
   // Mark this generation as the one whose finalize stage we're queuing. If
   // another adjustment increments pending before finalize fires, finalize
