@@ -103,6 +103,11 @@ void MainWindow::wireInteractionManager() {
               }
             });
     connect(launch, &LaunchManager::runtimeFinished, this, [this](const QString & /*filePath*/) {
+      // A tracked child can exit during/after shutdown; don't re-arm
+      // attract/gamepad or re-raise the closing window then (Kartend-42n7u).
+      if (m_isShuttingDown) {
+        return;
+      }
       if (m_nowPlayingOverlay) {
         m_nowPlayingOverlay->hideOverlay();
       }
