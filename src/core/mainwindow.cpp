@@ -178,6 +178,11 @@ void MainWindow::showStartupSplash() {
     if (videoOverlay->playVideo(m_generalSettings.startup.startupVideoPath)) {
       videoOverlay->show();
       connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {
+        // The video can be dismissed while the window is tearing down; don't
+        // touch splash/settings state during shutdown (Kartend-jtic).
+        if (m_isShuttingDown || QApplication::closingDown()) {
+          return;
+        }
         if (m_generalSettings.splash.bootSplashEnabled && m_splashOverlay) {
           m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
                                       m_generalSettings.splash.bootSplashTitle,
