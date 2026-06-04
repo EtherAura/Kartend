@@ -279,6 +279,9 @@ private:
   bool m_startupTasksGated = false;
   bool m_pendingResync = false;
   bool m_pendingOrphanPurge = false;
+  // Guards connectDatabaseManager() — one-shot wiring whose non-UniqueConnection
+  // and lambda edges would double-fire if it ever ran twice (Kartend-x8spn).
+  bool m_databaseManagerConnected = false;
   // Pristine application font, captured per-instance on the first
   // applyGlobalUiFont call so clearing a font override restores Qt's default.
   // Kartend-r2722: was a process-wide static that captured whatever font the

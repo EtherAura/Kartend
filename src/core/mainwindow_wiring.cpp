@@ -257,6 +257,16 @@ void MainWindow::onSidebarLayoutChanged() {
 // =====================================================================
 
 void MainWindow::connectDatabaseManager() {
+  // One-shot wiring (called once from setup). Several edges below — and the
+  // lambda connects, which Qt::UniqueConnection can't dedup — would double-fire
+  // on a second run: two scan overlays, two rebuildHierarchyCache, two error
+  // dialogs. Make the function idempotent rather than rely on per-connect
+  // UniqueConnection that can't cover the lambdas (Kartend-x8spn).
+  if (m_databaseManagerConnected) {
+    return;
+  }
+  m_databaseManagerConnected = true;
+
   auto *db = m_appManager->getDatabaseManager();
   auto *nav = m_appManager->getNavigationManager();
   auto *scroll = m_appManager->getScrollManager();
