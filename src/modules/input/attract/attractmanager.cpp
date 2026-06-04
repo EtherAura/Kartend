@@ -13,6 +13,7 @@
 #include "uiconstants/attract.h"
 
 #include <QRandomGenerator>
+#include <QScopeGuard>
 #include <QScrollBar>
 
 #include <QLoggingCategory>
@@ -370,6 +371,10 @@ void AttractManager::onAdvanceSelectionTick() {
   // → onActivityDetected handler skips it (otherwise attract would stop on its
   // own first tick).
   m_drivingSelection = true;
+  // Reset via a scope guard: requestSelectIndex runs slots synchronously and
+  // arbitrarily deep — if one throws or tears the manager down, a bare reset
+  // would be skipped, leaving the flag stuck true and permanently suppressing
+  // real-input detection (Kartend-77ay).
+  const auto guard = qScopeGuard([this]() { m_drivingSelection = false; });
   emit requestSelectIndex(next);
-  m_drivingSelection = false;
 }
