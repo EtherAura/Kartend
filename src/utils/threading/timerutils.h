@@ -15,6 +15,13 @@ namespace TimerUtils {
  * @brief A generic debounced timer that coalesces rapid calls into single
  * executions.
  *
+ * Thread-affinity: NOT thread-safe. trigger() / triggerImmediate() / cancel()
+ * drive an internal QTimer, which Qt requires to be touched only from the thread
+ * that owns it. These are UI-thread coalescers — call them from the
+ * DebouncedTimer's own (typically the GUI) thread; a cross-thread call is
+ * undefined behaviour. Marshal through a QueuedConnection if a worker thread
+ * needs to trigger one (Kartend-3pi4).
+ *
  * Usage:
  *   DebouncedTimer timer(100, this);  // 100ms debounce interval
  *   connect(&timer, &DebouncedTimer::triggered, this,
@@ -46,6 +53,10 @@ private:
  * @brief Coordinator for layout and viewport update debouncing.
  *
  * Provides centralized debounced timers for common UI update patterns.
+ *
+ * Thread-affinity: NOT thread-safe — it owns DebouncedTimers, so drive it only
+ * from its own (GUI) thread; cross-thread scheduling is undefined behaviour
+ * (Kartend-3pi4).
  */
 class Coordinator : public QObject {
   Q_OBJECT
