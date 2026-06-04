@@ -121,6 +121,8 @@ void ToolbarController::syncViewModeButton(ViewType viewType) {
     case ViewType::Horizontal:
       tip = tr("Layout: Horizontal (click to change)");
       break;
+    case ViewType::Count:
+      break; // sentinel, never a runtime value
     }
     m_viewModeButton->setToolTip(tip);
   }

@@ -33,12 +33,10 @@
 #include <QMenuBar>
 
 namespace {
-// Layout-action table — mirrored from menucontroller.cpp's anonymous
-// namespace because setupLayoutActions / syncLayoutActions live here. Each
-// TU keeps its own constexpr copy; the struct + array are pure metadata so
-// duplication is cheap and the alternative (a private header shared between
-// TUs) would add a tiny header just for two declarations. Keep the two
-// copies in sync if a new ViewType is added.
+// Layout-action table: one entry per ViewType, mapping the menu's layout action
+// to its view. The toolbar's parallel layout switch (ToolbarController) is
+// already -Wswitch-enforced; the static_assert below ties this array to the
+// ViewType enum so adding a ViewType forces a new row here too (Kartend-ox2go).
 struct LayoutActionEntry {
   QAction *Ui_MainWindow::*action;
   ViewType viewType;
@@ -50,6 +48,10 @@ constexpr LayoutActionEntry kLayoutActions[] = {
     {&Ui_MainWindow::actionLayoutCoverFlow, ViewType::CoverFlow},
     {&Ui_MainWindow::actionLayoutHorizontal, ViewType::Horizontal},
 };
+static_assert(sizeof(kLayoutActions) / sizeof(kLayoutActions[0]) ==
+                  static_cast<size_t>(ViewType::Count),
+              "kLayoutActions must list every ViewType; add the new row when a "
+              "ViewType is added.");
 } // namespace
 
 void MenuController::setupRecentMenu() {

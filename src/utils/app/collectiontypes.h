@@ -51,7 +51,16 @@ enum class BackgroundType { Color = 0, Image = 1, Video = 2 };
 /// top-to-bottom then left-to-right. The collection's `gridWidth` is reused
 /// as "items per column" (the fixed dimension) instead of items per row, and
 /// the items area scrolls horizontally instead of vertically.
-enum class ViewType { Grid = 0, List = 1, CoverFlow = 2, Horizontal = 3 };
+enum class ViewType {
+  Grid = 0,
+  List = 1,
+  CoverFlow = 2,
+  Horizontal = 3,
+  // Sentinel == number of real view types. Keep last; used by static_asserts
+  // that keep per-ViewType tables complete when a view type is added
+  // (Kartend-ox2go). Never a runtime value, so it is never serialized.
+  Count
+};
 
 /// Sort mode for collection items
 enum class SortMode {
