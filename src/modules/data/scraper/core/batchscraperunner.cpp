@@ -40,12 +40,6 @@ namespace {
 /// block the UI on close. Mirrors DatabaseManager's SHUTDOWN_WAIT_MS
 /// budget for the same reason.
 constexpr int kWriteWorkerShutdownWaitMs = 2000;
-
-/// Upper bound on per-collection failure messages retained for the
-/// scrape-error details view. High enough to stay diagnostically
-/// complete for a badly-misconfigured collection, bounded so a
-/// pathological all-failing run can't grow the list without limit.
-constexpr int kMaxReportedFailures = 1000;
 } // namespace
 
 BatchScrapeRunner::BatchScrapeRunner(const ApplicationContext *ctx,

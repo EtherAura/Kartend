@@ -15,6 +15,14 @@
 /// without circular includes.
 namespace Scraper {
 
+/// Upper bound on the per-run failure messages retained for the scrape-error
+/// details view — high enough to stay diagnostically complete for a
+/// badly-misconfigured run, bounded so a pathological all-failing run can't grow
+/// the list without limit. Shared by the persistence, batch-runner, and service
+/// layers that append to a run's firstFailures so the bound can't drift
+/// (Kartend-ubmkx).
+inline constexpr int kMaxReportedFailures = 1000;
+
 /// Where a piece of media lives in the provider's data model — used by
 /// the persistence layer to route group/company-scoped art into a
 /// `_shared/` directory instead of duplicating it per game. Drives

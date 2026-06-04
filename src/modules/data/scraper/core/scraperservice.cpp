@@ -24,14 +24,6 @@ namespace Scraper {
 namespace {
 Q_LOGGING_CATEGORY(lcScraperService, "kartend.scraperservice", QtWarningMsg)
 constexpr int kCurrentStateVersion = 1;
-/// Cap on the per-run failure-message list surfaced in the error
-/// details popup. Bounded so a run with a broken provider doesn't
-/// produce an unreadable wall of text.
-// Upper bound on retained failure messages surfaced in the scrape-error
-// details view — generous enough to stay diagnostically complete,
-// bounded so a pathological all-failing run can't grow the list without
-// limit. Mirrors BatchScrapeRunner's per-collection cap.
-constexpr int kMaxReportedFailures = 1000;
 } // namespace
 
 int ScraperService::PendingState::totalRemaining() const {

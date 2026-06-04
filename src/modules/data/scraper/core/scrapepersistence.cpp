@@ -39,11 +39,6 @@ namespace Scraper {
 
 namespace {
 
-// Bounded so a pathological all-failing run can't grow the retained
-// failure list without limit; high enough to stay diagnostically
-// complete in the scrape-error details view.
-constexpr int MAX_REPORTED_FAILURES = 1000;
-
 // Defense-in-depth (Kartend-xncf / Kartend-xhbt): asset.type becomes a
 // subdirectory and asset.scopeKey a filename below. Both originate from remote
 // provider responses, so refuse to build a path from anything that isn't a
@@ -235,7 +230,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
     for (const auto &write : media) {
       if (write.bytes.isEmpty() || write.asset.type.isEmpty()) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
               QStringLiteral("%1: empty bytes or type").arg(write.asset.type));
         }
@@ -265,7 +260,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // are safe; this matters for the Image case where subdir == asset.type.
       if (!isSafePathComponent(subdir)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
               QStringLiteral("%1: unsafe media subdirectory").arg(write.asset.type));
         }
@@ -284,7 +279,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // traverse out of the _shared/ directory.
       if (sharedScope && !isSafePathComponent(write.asset.scopeKey)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
               QStringLiteral("%1: unsafe shared scope key").arg(write.asset.type));
         }
@@ -294,7 +289,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
                                           : artRoot.filePath(subdir);
       if (!QDir().mkpath(destDir)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
               QStringLiteral("%1: could not create %2").arg(write.asset.type, destDir));
         }
@@ -317,14 +312,14 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
         // in firstFailures so the dialog can surface it to the user
         // instead of an opaque "N skipped".
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(QStringLiteral("%1: %2").arg(write.asset.type, *reason));
         }
         continue;
       }
       if (!writeBytesAtomically(destFile, write.bytes)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
+        if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
               QStringLiteral("%1: write failed (%2)").arg(write.asset.type, destFile));
         }
