@@ -1,9 +1,13 @@
 #include "textzoom.h"
 
 #include <algorithm>
+#include <atomic>
 
 namespace {
-int g_textZoomPercent = TextZoom::DEFAULT_PERCENT;
+// Atomic so off-thread readers (item factory / virtual scroll / cover-flow
+// renderer) can't race the main-thread setPercent/primeFromSettings writers
+// (Kartend-wmlj).
+std::atomic<int> g_textZoomPercent{TextZoom::DEFAULT_PERCENT};
 } // namespace
 
 namespace TextZoom {
@@ -17,15 +21,17 @@ void primeFromSettings(int p) {
 }
 
 int setPercent(int p) {
-  g_textZoomPercent = std::clamp(p, MIN_PERCENT, MAX_PERCENT);
-  return g_textZoomPercent;
+  const int clamped = std::clamp(p, MIN_PERCENT, MAX_PERCENT);
+  g_textZoomPercent = clamped;
+  return clamped;
 }
 
 int zoomedFontSize(int baseSize) {
-  if (baseSize <= 0 || g_textZoomPercent == 100) {
+  const int pct = g_textZoomPercent;
+  if (baseSize <= 0 || pct == 100) {
     return baseSize;
   }
-  return std::max(1, baseSize * g_textZoomPercent / 100);
+  return std::max(1, baseSize * pct / 100);
 }
 
 } // namespace TextZoom
