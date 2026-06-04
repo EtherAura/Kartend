@@ -792,15 +792,15 @@ DatabaseManager::loadItemMetadataBatch(const QString &collectionUuid,
     return out;
   }
 
-  // Merge in the freshly-loaded rows and back-populate the cache for any
-  // row that actually had data — empty stubs (no row in item_metadata)
-  // are intentionally NOT cached to match loadItemMetadata's policy.
+  // Merge in the freshly-loaded rows and back-populate the cache for every one,
+  // exactly as loadItemMetadata does: it caches any non-error load — including a
+  // manually-curated row whose `source` is empty, and a not-found empty stub
+  // (both invalidated when the row later gains data). The old `!source.isEmpty()`
+  // guard skipped both, re-querying them on every batch pre-flight (Kartend-l6mx).
   const auto &loaded = result.value();
   for (auto it = loaded.constBegin(); it != loaded.constEnd(); ++it) {
     out.insert(it.key(), it.value());
-    if (!it.value().source.isEmpty()) {
-      m_metadataCache.putMetadata(collectionUuid, it.key(), it.value());
-    }
+    m_metadataCache.putMetadata(collectionUuid, it.key(), it.value());
   }
 
   return out;
