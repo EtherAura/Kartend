@@ -33,6 +33,7 @@ private slots:
   void hierarchyCache_directChildren_skipsUnknownLinkName();
   void hierarchyCache_directChildren_skipsLinkEqualToPrimary();
   void hierarchyCache_directChildren_duplicateNameResolvesToFirst();
+  void hierarchyCache_directChildren_outOfRangeParentTreatedAsRoot();
   void hierarchyCache_allDescendants_handlesMutualLinkCycle();
   void hierarchyCache_allDescendants_excludesSelf();
 
@@ -228,6 +229,21 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsUnknownLink
 
   // Only the primary parent should claim Movies.
   QCOMPARE(cache.directChildren(0), QList<int>{1});
+}
+
+void TestCollectionUtilsAncestry::hierarchyCache_directChildren_outOfRangeParentTreatedAsRoot() {
+  // clampValues leaves parentCollectionIndex unchecked and validation only warns,
+  // so an out-of-range index must not append into a phantom bucket for a
+  // collection that doesn't exist — it's treated as a root instead (Kartend-vhw4).
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Video", /*isSub=*/false, -1);
+  cs << makeCollection("Orphan", /*isSub=*/true, 99); // parent index past the end
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  QVERIFY(cache.directChildren(99).isEmpty()); // no phantom parent bucket
+  QVERIFY(cache.directChildren(0).isEmpty());  // and not a child of the real root
 }
 
 void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsLinkEqualToPrimary() {

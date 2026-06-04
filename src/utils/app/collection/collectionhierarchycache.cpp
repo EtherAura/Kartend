@@ -32,9 +32,13 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   m_built = true;
 
   // Primary children — single parent per collection via parentCollectionIndex.
+  // Bound the parent: clampValues leaves parentCollectionIndex unchecked and
+  // validation only warns, so an out-of-range index would otherwise append into
+  // a phantom m_directChildren bucket for a collection that doesn't exist
+  // (Kartend-vhw4). An out-of-range parent is treated as no parent (a root).
   for (int i = 0; i < collections.size(); ++i) {
     int parent = collections[i].parentCollectionIndex;
-    if (parent >= 0) {
+    if (parent >= 0 && parent < collections.size()) {
       m_directChildren[parent].append(i);
     }
   }
