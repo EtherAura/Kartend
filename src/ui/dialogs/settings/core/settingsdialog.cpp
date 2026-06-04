@@ -320,7 +320,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   }
 
   originalCurrentCollectionIndex = currentCollectionIndex;
-  loadGeneralSettingsToUI();
+  // loadGeneralSettingsToUI() already ran above: its panels read m_generalSettings
+  // and its startup-collection combo reads the main window's live collections —
+  // neither changes during the collection-loading block between, so a second full
+  // call (12 panel refreshes + combo repopulate + baseline recapture) was
+  // redundant (Kartend-edy1c).
 
   // Initialize button states after setup is complete
   m_collectionSaved = true;
