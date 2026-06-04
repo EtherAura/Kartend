@@ -109,15 +109,24 @@ void MainWindow::setupUI() {
   // correct startup state; the deferred call appends playlists + rebuilds.
   if (PlaylistManager *playlistManager = m_appManager->getPlaylistManager()) {
     playlistManager->initialize();
-    QObject::connect(playlistManager, &PlaylistManager::playlistsChanged, this,
-                     [this]() { resyncPlaylistCollections(); });
   }
   rebuildHierarchyCache();
   // Defer playlist resync one event-loop tick so the freshly built hierarchy
   // cache has settled before resyncPlaylistCollections() reads it. Running
   // synchronously here would race rebuildHierarchyCache's downstream
   // signal-driven updates and produce a half-built collection list.
-  QTimer::singleShot(0, this, [this]() { resyncPlaylistCollections(); });
+  //
+  // Wire playlistsChanged only AFTER this initial resync: resync calls
+  // ensureFavoritesPlaylist(), whose first-run playlistsChanged would otherwise
+  // re-enter resync and run the full erase+reload+rebuildHierarchyCache twice at
+  // startup (Kartend-r50e7). Later (runtime) playlist edits still resync.
+  QTimer::singleShot(0, this, [this]() {
+    resyncPlaylistCollections();
+    if (PlaylistManager *pm = m_appManager->getPlaylistManager()) {
+      QObject::connect(pm, &PlaylistManager::playlistsChanged, this,
+                       [this]() { resyncPlaylistCollections(); });
+    }
+  });
 
   m_appManager->getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
