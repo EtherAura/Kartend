@@ -373,6 +373,17 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
   return success;
 }
 
+namespace {
+// Carries the driver's native error code alongside the message so the retry loop
+// below can decide retry-vs-abort on the stable SQLite result code rather than a
+// locale/phrasing-fragile text match (Kartend-5s54).
+struct SqlStepError : std::runtime_error {
+  explicit SqlStepError(const QSqlError &e)
+      : std::runtime_error(e.text().toStdString()), nativeCode(e.nativeErrorCode()) {}
+  QString nativeCode;
+};
+} // namespace
+
 bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collection,
                                                   const QString &uuid, const QString &extSignature,
                                                   int &legacyIdOut) {
@@ -426,7 +437,7 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
         insert.addBindValue(extSignature);
         insert.addBindValue(uuid);
         if (!insert.exec()) {
-          throw std::runtime_error(insert.lastError().text().toStdString());
+          throw SqlStepError(insert.lastError());
         }
       }
 
@@ -440,14 +451,21 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
       }
 
       if (!m_db.commit()) {
-        throw std::runtime_error(m_db.lastError().text().toStdString());
+        throw SqlStepError(m_db.lastError());
       }
       prepareSuccess = true;
     } catch (const std::exception &e) {
       m_db.rollback();
 
-      QString errorText = ErrorUtils::exceptionMessage(e);
-      bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
+      const QString errorText = ErrorUtils::exceptionMessage(e);
+      // Prefer the driver's native result code (locale/phrasing-stable):
+      // SQLITE_BUSY = 5, SQLITE_LOCKED = 6. Keep the text match as a fallback so
+      // detection never regresses if a driver reports no native code (Kartend-5s54).
+      bool isLockError = errorText.contains(QLatin1String("locked"), Qt::CaseInsensitive);
+      if (const auto *sqlErr = dynamic_cast<const SqlStepError *>(&e)) {
+        const int code = sqlErr->nativeCode.toInt();
+        isLockError = isLockError || code == 5 || code == 6;
+      }
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {
         auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
