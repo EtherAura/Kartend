@@ -49,7 +49,15 @@ public:
   };
 
   virtual void initialize() = 0;
+  /// Persist the session synchronously. IMPORTANT: a NO-OP once the app is
+  /// closing (QApplication::closingDown()). At/after shutdown, call
+  /// saveToDiskForShutdown() instead — calling this one then silently drops the
+  /// save (Kartend-ke02).
   virtual void saveToDisk() = 0;
+  /// Shutdown counterpart to saveToDisk(): persists synchronously even while the
+  /// app is closing. For the off-thread two-phase close, snapshot on the GUI
+  /// thread with snapshotSessionJsonBytesForShutdown() and write the bytes via
+  /// saveSessionBytesToDiskForShutdown() instead.
   virtual void saveToDiskForShutdown() = 0;
 
   [[nodiscard]] virtual QByteArray snapshotSessionJsonBytesForShutdown() const = 0;
