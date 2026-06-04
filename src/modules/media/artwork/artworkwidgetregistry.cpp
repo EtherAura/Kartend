@@ -137,15 +137,24 @@ void ArtworkWidgetRegistry::clearAll() {
 }
 
 void ArtworkWidgetRegistry::blockSignalsAndClearAll() {
-  QMutexLocker locker(&m_mutex);
-  for (const auto &widget : m_loaded) {
+  // Snapshot the tracked widgets and clear our maps under the lock, then call
+  // QObject::blockSignals() on the snapshot outside it — touching QObject
+  // internals while holding m_mutex invites lock-ordering surprises
+  // (Kartend-cmao). QList is copy-on-write so the snapshot is cheap, and
+  // QPointer null-checks guard a widget destroyed in between.
+  QList<QPointer<ItemWidget>> widgets;
+  {
+    QMutexLocker locker(&m_mutex);
+    widgets = m_loaded;
+    m_loaded.clear();
+    m_widgetToPath.clear();
+    m_pending.clear();
+  }
+  for (const QPointer<ItemWidget> &widget : widgets) {
     if (widget) {
       widget->blockSignals(true);
     }
   }
-  m_loaded.clear();
-  m_widgetToPath.clear();
-  m_pending.clear();
 }
 
 void ArtworkWidgetRegistry::clearLoadedOnly() {
