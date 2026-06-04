@@ -77,13 +77,22 @@ QString apply(int collectionIndex, const QString &displayName) {
   if (collectionIndex < 0 || displayName.isEmpty()) {
     return displayName;
   }
-  QReadLocker locker(&registryLock());
-  const auto it = registry().constFind(collectionIndex);
-  if (it == registry().constEnd() || !it->enabled || it->compiled.isEmpty()) {
-    return displayName;
+  // Copy the compiled patterns (QList is copy-on-write, so this is cheap) under
+  // the read lock, then drop the lock before the regex loop + simplified(). apply()
+  // runs per item on the DB-interception/UI path, and holding the read lock across
+  // the whole match would block a settings save's write lock
+  // (rebuildFromCollections) for the full per-item matching duration (Kartend-99o3).
+  QList<QRegularExpression> compiled;
+  {
+    QReadLocker locker(&registryLock());
+    const auto it = registry().constFind(collectionIndex);
+    if (it == registry().constEnd() || !it->enabled || it->compiled.isEmpty()) {
+      return displayName;
+    }
+    compiled = it->compiled;
   }
   QString out = displayName;
-  for (const QRegularExpression &re : it->compiled) {
+  for (const QRegularExpression &re : compiled) {
     out.remove(re);
   }
   // Patterns commonly leave double spaces or leading/trailing whitespace
