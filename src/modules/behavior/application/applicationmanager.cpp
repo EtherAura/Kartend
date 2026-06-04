@@ -120,27 +120,50 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   // CollectionConfigs can be appended to m_collections in the same setup pass.
   m_playlistManager = std::make_unique<PlaylistManager>(nullptr);
 
+  // Managers 7-11 use the nullptr-ctx ctor and resolve siblings later in
+  // setupReferences(), so they don't read ctx during construction. Register each
+  // into ctx the instant it exists anyway, so ctx is fully populated when
+  // initialize() returns — a future manager added here that DOES need one of
+  // these at construction time gets a live pointer instead of a silent null
+  // (Kartend-zarc4). MainWindow::initializeAppContext re-registers them (and the
+  // InteractionManager-owned sub-managers) before any setupReferences() runs.
+
   // 7. ScrollManager — DatabaseManager is now resolved through ApplicationContext
   // during ScrollManager::setupReferences().
   m_scrollManager = std::make_unique<ScrollManager>(nullptr);
+  if (ctx) {
+    ctx->managers.scrollManager = m_scrollManager.get();
+  }
 
   // 8. DetailsPaneManager
   m_detailsPaneManager = std::make_unique<DetailsPaneManager>(nullptr);
+  if (ctx) {
+    ctx->managers.detailsPaneManager = m_detailsPaneManager.get();
+  }
 
   // 9. NavigationManager
   m_navigationManager = std::make_unique<NavigationManager>(nullptr);
+  if (ctx) {
+    ctx->managers.navigationManager = m_navigationManager.get();
+  }
 
   // 10. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(nullptr);
+  if (ctx) {
+    ctx->managers.interactionManager = m_interactionManager.get();
+  }
 
   // 11. DetailPageManager. Standalone — only depends on the
   // overlay widget + DetailsPaneManager + DatabaseManager, all of which are
   // wired in MainWindow::setupManagerConnections via the setup struct.
   m_detailPageManager = std::make_unique<DetailPageManager>(nullptr);
+  if (ctx) {
+    ctx->managers.detailPageManager = m_detailPageManager.get();
+  }
 
   // 12. KartManager. Coordinates Kart import/export. Wired in
   // MainWindow::setupManagerConnections with SettingsManager + collection list
-  // accessors via the setup struct.
+  // accessors via the setup struct. (No ctx->managers slot — not ctx-resolved.)
   m_kartManager = std::make_unique<kart::KartManager>(nullptr);
 }
 
