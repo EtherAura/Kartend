@@ -112,7 +112,7 @@ void MainWindow::setupPreviewVolumeSlider() {
     m_generalSettings.media.previewVideoVolume = value;
     VideoPreviewWidget::setGlobalVolume(value);
     if (m_appManager->getSettingsManager()) {
-      m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+      (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
     }
   });
 }
@@ -132,7 +132,7 @@ void MainWindow::applyTextZoom(int percent) {
   TextZoom::setPercent(clamped);
   m_generalSettings.appearance.uiTextZoomPercent = clamped;
   if (m_appManager->getSettingsManager()) {
-    m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
   }
   // Re-push the global font with the new multiplier baked in.
   applyGlobalUiFont(m_generalSettings);

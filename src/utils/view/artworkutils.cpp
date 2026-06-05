@@ -114,7 +114,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
   int fileCount = 0;
   while (it.hasNext()) {
     QString path = it.next();
-    QString baseName = QFileInfo(path).completeBaseName().toLower();
+    QString baseName = baseMatchKey(QFileInfo(path).completeBaseName());
     // First match wins (preserves priority of extensions in imageFilters)
     if (!dirContents.contains(baseName)) {
       dirContents.insert(baseName, path);
@@ -167,7 +167,7 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
   }
 
   const QHash<QString, QString> &dirContents = m_cache.value(artworkDirectory);
-  QString result = dirContents.value(baseName.toLower());
+  QString result = dirContents.value(baseMatchKey(baseName));
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && timer.elapsed() > 2) {
     qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
@@ -200,7 +200,7 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
     // locks (above + here) are short — the filesystem probe runs
     // unlocked so other lookups aren't serialised behind it.
     QMutexLocker patchLocker(&m_mutex);
-    m_cache[artworkDirectory].insert(baseName.toLower(), candidate);
+    m_cache[artworkDirectory].insert(baseMatchKey(baseName), candidate);
     return candidate;
   }
   return {};

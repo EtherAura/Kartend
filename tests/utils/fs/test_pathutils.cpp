@@ -60,6 +60,8 @@ private slots:
   void testValidatePathSecurity_nullBytes();
   void testValidatePathSecurity_newlines();
   void testValidatePathSecurity_backslash();
+  void testValidatePathSecurity_nfdUnicodeAccepted();
+  void testValidatePathSecurity_nfcUnicodeAccepted();
   void testValidatePathSecurity_traversalSegments_data();
   void testValidatePathSecurity_traversalSegments();
 
@@ -368,7 +370,36 @@ void TestPathUtils::testValidatePathSecurity_newlines() {
 
 void TestPathUtils::testValidatePathSecurity_backslash() {
   auto result = PathUtils::validatePathSecurity("/path/with\\backslash");
-  QVERIFY2(result.isError(), "Path with backslash should fail");
+#ifdef Q_OS_WIN
+  // On Windows the backslash is the native path separator, so it's accepted —
+  // the Windows cross-build's native CLI paths use it.
+  QVERIFY2(result.isOk(), "Path with backslash should be allowed on Windows");
+#else
+  QVERIFY2(result.isError(), "Path with backslash should fail on non-Windows");
+#endif
+}
+
+void TestPathUtils::testValidatePathSecurity_nfdUnicodeAccepted() {
+  // A decomposed (NFD) accented filename — routine from macOS / cross-platform
+  // media — must be accepted, not rejected as "non-canonical". "café" with the
+  // accent as a combining mark: 'e' + U+0301 COMBINING ACUTE ACCENT.
+  const QString nfd =
+      QStringLiteral("/home/user/games/cafe") + QChar(0x0301) + QStringLiteral(".zip");
+  // Guard the premise: this really is non-NFC, so the old code would have
+  // rejected it at the `normalized != path` check.
+  QVERIFY(nfd != nfd.normalized(QString::NormalizationForm_C));
+  auto result = PathUtils::validatePathSecurity(nfd);
+  QVERIFY2(result.isOk(), "NFD (decomposed) accented path should be accepted");
+}
+
+void TestPathUtils::testValidatePathSecurity_nfcUnicodeAccepted() {
+  // The precomposed (NFC) form of the same name stays accepted (regression):
+  // 'é' as the single codepoint U+00E9.
+  const QString nfc =
+      QStringLiteral("/home/user/games/caf") + QChar(0x00E9) + QStringLiteral(".zip");
+  QCOMPARE(nfc, nfc.normalized(QString::NormalizationForm_C));
+  auto result = PathUtils::validatePathSecurity(nfc);
+  QVERIFY2(result.isOk(), "NFC (precomposed) accented path should be accepted");
 }
 
 void TestPathUtils::testValidatePathSecurity_traversalSegments_data() {

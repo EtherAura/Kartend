@@ -36,7 +36,7 @@ void ScrollEventsController::onSortModeChangeRequested(SortMode sortMode) {
   if (auto *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr) {
     settings->view.sortMode = sortMode;
     if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-      sm->saveGeneralSettings(*settings);
+      (void)sm->saveGeneralSettings(*settings);
     }
   }
   const int currentIndex = m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
@@ -108,7 +108,7 @@ void ScrollEventsController::onListColumnWidthChanged(int width) {
   }
   settings->view.listCollectionColumnWidth = width;
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-    sm->saveGeneralSettings(*settings);
+    (void)sm->saveGeneralSettings(*settings);
   }
 }
 
@@ -120,6 +120,6 @@ void ScrollEventsController::onListArtworkColumnWidthChanged(int width) {
   }
   settings->view.listArtworkColumnWidth = width;
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-    sm->saveGeneralSettings(*settings);
+    (void)sm->saveGeneralSettings(*settings);
   }
 }

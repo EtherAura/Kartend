@@ -84,6 +84,7 @@ public:
                            const QString &) override {}
   void recordItemLaunch(const QString &, const QString &) override {}
   void recordItemPlaySession(const QString &, const QString &, qint64) override {}
+  [[nodiscard]] QString databaseFilePath() const override { return {}; }
   [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const override {
     return {};
   }

@@ -2,15 +2,16 @@
 #define ARTWORKMANAGER_H
 
 #include <atomic>
+#include <memory>
 #include <QColor>
 #include <QFutureWatcher>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QPixmap>
 #include <QPointer>
 #include <QSize>
 
-#include "adaptivebatcher.h"
 #include "artworkpathcatalog.h"
 #include "iartworkmanager.h"
 #include "itemwidget.h"
@@ -18,6 +19,7 @@
 
 class ArtworkLoadDispatcher;
 class ArtworkWidgetRegistry;
+class ViewportArtworkScheduler;
 
 class QScrollArea;
 class QStackedWidget;
@@ -32,6 +34,11 @@ class Coordinator;
 
 struct CollectionConfig;
 class QJsonObject;
+
+// Per-module logging category; defined in artworkmanager.cpp. Declared here so
+// the viewport-scheduler translation unit shares the same
+// "kartend.artworkmanager" category instead of inventing its own.
+Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
 
 struct ArtworkInfo {
   QPointer<ItemWidget> mediaItem;
@@ -144,6 +151,11 @@ class ArtworkManager : public QObject, public IArtworkManager {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ArtworkManager)
 
+  // The viewport load pipeline lives in its own class but reaches this
+  // manager's dispatcher / registry / UI refs and suppression / activity /
+  // cache hooks via friendship (the canonical state stays here).
+  friend class ViewportArtworkScheduler;
+
 public:
   // Kartend-davi: constructor no longer takes CacheManager*; the ctx
   // supplied via setupReferences holds the cache pointer authoritatively.
@@ -203,10 +215,6 @@ private:
   const ApplicationContext *m_ctx = nullptr;
   [[nodiscard]] ICacheManager *cacheMgr() const;
 
-  /// Applies processed artwork results to UI widgets on the GUI thread.
-  void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
-  void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
-                                     QList<ArtworkInfo> &uncachedItems);
   /// Dispatcher-completion handler for silent-load precache batches. Runs on
   /// the main thread; marks paths cached, writes pixmaps to the in-memory
   /// cache, and stamps the last-batch completion timestamp.
@@ -250,6 +258,13 @@ private:
   /// Parented to this ArtworkManager — its destructor drains the pool
   /// before this destructor proceeds, so no callback can fire after.
   ArtworkLoadDispatcher *m_dispatcher = nullptr;
+  /// Viewport-driven load pipeline (viewport prioritization → batch dispatch →
+  /// GUI apply) extracted from this manager. Owns the adaptive batch sizer and
+  /// the cache-save cadence counters; reaches the dispatcher / registry / UI
+  /// refs and the suppression / activity hooks back through this manager via
+  /// friendship. unique_ptr + Qt-parented, so it is destroyed before the
+  /// borrowed dispatcher and registry.
+  std::unique_ptr<ViewportArtworkScheduler> m_viewportScheduler;
 
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
@@ -257,22 +272,10 @@ private:
   std::atomic<qint64> m_lastBatchCompletionTime; // For silent load cooldown
   bool m_continuousSilentLoad;
   bool m_persistentSilentLoad;
-  /// Per-instance cache-save cadence counters. Kartend-r2722: were
-  /// function-local statics in maybeTriggerCacheSave, shared across every
-  /// ArtworkManager instance and never reset.
-  int m_cacheUpdateCount = 0;
-  qint64 m_lastCacheSaveSize = 0;
-
-  // Adaptive batching for performance-based batch sizing
-  AdaptiveBatcher m_adaptiveBatcher;
 
   /// Checks if artwork loading should be skipped due to shutdown or invalid
   /// state.
   [[nodiscard]] bool shouldSkipArtworkLoading();
-  /// Periodically schedules a deferred persistent cache save once the cache
-  /// has grown enough. Kartend-r2722: per-instance member (was a free function
-  /// with process-wide static counters shared across all instances).
-  void maybeTriggerCacheSave(ICacheManager *cacheManager);
   void clearArtworkWidgetState();
   [[nodiscard]] bool isArtworkSuppressed() const;
 };

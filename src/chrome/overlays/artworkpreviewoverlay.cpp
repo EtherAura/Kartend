@@ -512,7 +512,7 @@ void ArtworkPreviewOverlay::rebuildGalleryStrip() {
         }
         watcher->deleteLater();
       });
-      watcher->setFuture(QtConcurrent::run([path, decodeEdge]() -> QImage {
+      watcher->setFuture(QtConcurrent::run([path]() -> QImage {
         if (!ExtensionUtils::isDecodableImagePath(path)) {
           return {};
         }

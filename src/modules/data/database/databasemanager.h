@@ -156,6 +156,7 @@ public:
   void recordItemLaunch(const QString &collectionUuid, const QString &path) override;
   void recordItemPlaySession(const QString &collectionUuid, const QString &path,
                              qint64 seconds) override;
+  [[nodiscard]] QString databaseFilePath() const override { return m_db.databaseName(); }
   [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const override;
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const override;
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow>
@@ -192,11 +193,13 @@ public:
 
 signals:
   // Internal signals to trigger worker
-  void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);
+  void requestLoadAllCollections(const QList<CollectionConfig> &allCollections,
+                                 quint64 loadGeneration);
   void requestLoadItems(const CollectionContext &context,
-                        const QList<CollectionConfig> &allCollections);
+                        const QList<CollectionConfig> &allCollections, quint64 loadGeneration);
   void requestLoadItemsWithSubcollections(const CollectionContext &context,
-                                          const QList<CollectionConfig> &allCollections);
+                                          const QList<CollectionConfig> &allCollections,
+                                          quint64 loadGeneration);
   void requestFetchItemCount(const CollectionContext &context,
                              const QList<CollectionConfig> &allCollections, const QString &filter,
                              int requestToken);
@@ -234,7 +237,8 @@ private slots:
   void onWorkerItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                            const QHash<QString, QString> &fileToArtworkDir,
                            const QHash<QString, QString> &fileToMediaDir,
-                           const QHash<QString, int> &fileToCollectionIndex);
+                           const QHash<QString, int> &fileToCollectionIndex,
+                           quint64 loadGeneration);
   void onWorkerItemCountLoaded(int count);
   void onWorkerItemCountLoadedWithToken(int count, int requestToken);
   void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths,
@@ -262,6 +266,11 @@ private:
   QueryManager *m_worker = nullptr;
   QueryManager *m_scanWorker = nullptr;
   QThread *m_workerThread = nullptr;
+  // Monotonic load-request counter (main thread only). Each loadItems* bumps it
+  // and threads the value to the worker; onWorkerItemsLoaded drops a delivery
+  // whose generation has been superseded, so a stale (queued) load from a
+  // previous collection can't paint the wrong items/flags (Kartend-jgj9t).
+  quint64 m_loadGeneration = 0;
   QThread *m_scanThread = nullptr;
 
   QSqlDatabase m_db;

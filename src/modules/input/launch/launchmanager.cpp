@@ -519,11 +519,12 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   bool success = QProcess::startDetached(launcherPath, cmd.arguments, launcherDir);
 
   if (!success) {
-    const QString errorMsg = QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
-                                     "sure the launcher path is correct and the file is executable.")
-                                 .arg(launcherPath)
-                                 .arg(launcherPath)
-                                 .arg(cmd.arguments.join(" "));
+    const QString errorMsg =
+        QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
+                "sure the launcher path is correct and the file is executable.")
+            .arg(launcherPath)
+            .arg(launcherPath)
+            .arg(cmd.arguments.join(" "));
 
     ErrorPresentation::showError(
         nullptr, ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
@@ -544,10 +545,10 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // overlay state stays coherent.
   if (m_trackedChild) {
     ErrorPresentation::showError(
-        nullptr, ErrorContext::info(ErrorCode::OperationCancelled,
-                                    tr("Another tracked item is currently running:\n%1")
-                                        .arg(m_trackedFilePath),
-                                    QStringLiteral("LaunchManager::launchTracked")));
+        nullptr, ErrorContext::info(
+                     ErrorCode::OperationCancelled,
+                     tr("Another tracked item is currently running:\n%1").arg(m_trackedFilePath),
+                     QStringLiteral("LaunchManager::launchTracked")));
     return false;
   }
 
@@ -605,10 +606,10 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     // until the process is actually gone.
     if (error == QProcess::FailedToStart) {
       ErrorPresentation::showError(
-          nullptr, ErrorContext::critical(ErrorCode::UnknownError,
-                                          tr("Failed to start tracked launcher:\n%1")
-                                              .arg(child->errorString()),
-                                          QStringLiteral("LaunchManager::launchTracked")));
+          nullptr, ErrorContext::critical(
+                       ErrorCode::UnknownError,
+                       tr("Failed to start tracked launcher:\n%1").arg(child->errorString()),
+                       QStringLiteral("LaunchManager::launchTracked")));
       cleanup();
     }
   });

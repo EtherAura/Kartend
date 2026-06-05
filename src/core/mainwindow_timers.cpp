@@ -143,7 +143,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
 
     // Save the new collection
     if (m_appManager->getSettingsManager()) {
-      m_appManager->getSettingsManager()->saveCollections(m_collections);
+      (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
     }
 
     // Rebuild hierarchy cache with the new collection

@@ -65,7 +65,7 @@ public:
                               const QStringList &mediaPaths);
   void onServicePickerNeeded(const QString &itemPath, const QString &itemName,
                              const QList<Scraper::ScrapeCandidate> &candidates,
-                             std::shared_ptr<MetadataLookupProvider> provider,
+                             const std::shared_ptr<MetadataLookupProvider> &provider,
                              const QString &artworkDir);
   void onServiceScrapeFinished(const Scraper::ScraperService::Summary &s);
   void onServiceScrapePaused();

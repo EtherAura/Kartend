@@ -638,8 +638,7 @@ void SettingsDialog::resizeEvent(QResizeEvent *event) {
   if (!m_gridWidthLimitsTimer) {
     m_gridWidthLimitsTimer = new QTimer(this);
     m_gridWidthLimitsTimer->setSingleShot(true);
-    connect(m_gridWidthLimitsTimer, &QTimer::timeout, this,
-            &SettingsDialog::updateGridWidthLimits);
+    connect(m_gridWidthLimitsTimer, &QTimer::timeout, this, &SettingsDialog::updateGridWidthLimits);
   }
   m_gridWidthLimitsTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);
 }

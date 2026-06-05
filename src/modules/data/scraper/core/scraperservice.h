@@ -136,6 +136,12 @@ public:
   /// fires with whatever's been accumulated so far. No-op when idle.
   void cancel();
 
+  /// Skip just the item the active auto-runner is currently working on
+  /// (forwarded to BatchScrapeRunner::skipCurrentItem) — aborts its
+  /// in-flight hash/extraction and counts it skipped while the rest of
+  /// the run continues. No-op when no auto-runner is active.
+  void skipCurrentItem();
+
   /// Pause an interactive run. The current picker waits; the next
   /// `applyPick` / `skipPick` / `resumePaused` resumes. Implicit on
   /// dialog-close mid-pick.

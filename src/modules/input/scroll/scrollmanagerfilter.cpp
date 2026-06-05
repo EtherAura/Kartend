@@ -37,7 +37,7 @@ void ScrollManager::applyFilter(const QString &searchText) {
       releaseWidget(widget);
     }
   }
-  m_activeWidgets.clear();
+  clearActiveWidgets();
 
   if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
     m_mediaScrollArea->verticalScrollBar()->setValue(0);
@@ -52,7 +52,7 @@ void ScrollManager::cleanupActiveWidgets() {
       releaseWidget(widget);
     }
   }
-  m_activeWidgets.clear();
+  clearActiveWidgets();
 }
 
 void ScrollManager::savePreSearchState() {
@@ -137,7 +137,7 @@ void ScrollManager::clearFilter() {
         releaseWidget(widget);
       }
     }
-    m_activeWidgets.clear();
+    clearActiveWidgets();
     updateVirtualView();
   }
 }

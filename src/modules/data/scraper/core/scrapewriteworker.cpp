@@ -90,9 +90,9 @@ void ScrapeWriteWorker::closeConnection() {
   QSqlDatabase::removeDatabase(m_connectionName);
 }
 
-void ScrapeWriteWorker::performWrite(quint64 requestId, QString collectionUuid, QString sourcePath,
-                                     Scraper::ScrapedItem scraped,
-                                     Scraper::NonStandardArtworkList nonStandardArtwork) {
+void ScrapeWriteWorker::performWrite(quint64 requestId, const QString &collectionUuid,
+                                     const QString &sourcePath, const Scraper::ScrapedItem &scraped,
+                                     const Scraper::NonStandardArtworkList &nonStandardArtwork) {
   // Lazy open guard — covers the case where the runner posts the first
   // write before the queued openConnection slot has run (the Qt event
   // loop on the worker thread should always run openConnection first

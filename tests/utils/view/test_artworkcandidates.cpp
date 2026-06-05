@@ -4,6 +4,7 @@
 #include <QTest>
 
 #include "artworkcandidates.h"
+#include "artworkutils.h"
 
 class TestArtworkCandidates : public QObject {
   Q_OBJECT
@@ -13,6 +14,7 @@ private slots:
   void rankedByFuzzyScoreDescending();
   void maxResultsHonored();
   void looksLikeImage_caseInsensitive();
+  void baseMatchKey_followsPlatformCaseSensitivity();
 };
 
 void TestArtworkCandidates::emptyInputs_returnEmpty() {
@@ -51,6 +53,21 @@ void TestArtworkCandidates::looksLikeImage_caseInsensitive() {
   QVERIFY(ArtworkCandidates::looksLikeImage("/art/cover.Jpeg"));
   QVERIFY(!ArtworkCandidates::looksLikeImage("/art/cover.txt"));
   QVERIFY(!ArtworkCandidates::looksLikeImage("/art/cover"));
+}
+
+void TestArtworkCandidates::baseMatchKey_followsPlatformCaseSensitivity() {
+  // Artwork basename matching folds case per the platform's default filesystem
+  // (Kartend-58ddn): case-insensitive on Windows / macOS, exact on Linux so
+  // genuinely distinct files (Title vs title) don't collide on one cover.
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+  QCOMPARE(ArtworkUtils::baseMatchKey(QStringLiteral("Title")), QStringLiteral("title"));
+  QCOMPARE(ArtworkUtils::baseMatchKey(QStringLiteral("Title")),
+           ArtworkUtils::baseMatchKey(QStringLiteral("title")));
+#else
+  QCOMPARE(ArtworkUtils::baseMatchKey(QStringLiteral("Title")), QStringLiteral("Title"));
+  QVERIFY(ArtworkUtils::baseMatchKey(QStringLiteral("Title")) !=
+          ArtworkUtils::baseMatchKey(QStringLiteral("title")));
+#endif
 }
 
 QTEST_MAIN(TestArtworkCandidates)

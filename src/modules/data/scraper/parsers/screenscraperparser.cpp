@@ -162,9 +162,8 @@ QJsonDocument parseTolerant(const QByteArray &json, QJsonParseError *outErr) {
       // Observable record of the truncation: how many bytes were valid JSON vs.
       // the total received, so an unexpected jump in trailing garbage is visible
       // without ever logging the (remote-controlled) payload itself.
-      qCWarning(lcScreenScraperParser)
-          << "tolerated trailing garbage: parsed valid JSON prefix of" << err.offset << "of"
-          << json.size() << "received bytes";
+      qCWarning(lcScreenScraperParser) << "tolerated trailing garbage: parsed valid JSON prefix of"
+                                       << err.offset << "of" << json.size() << "received bytes";
       if (outErr) *outErr = retryErr;
       return retry;
     }

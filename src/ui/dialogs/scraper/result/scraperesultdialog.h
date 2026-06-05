@@ -230,7 +230,7 @@ private slots:
                               const QStringList &mediaPaths);
   void onServicePickerNeeded(const QString &itemPath, const QString &itemName,
                              const QList<Scraper::ScrapeCandidate> &candidates,
-                             std::shared_ptr<MetadataLookupProvider> provider,
+                             const std::shared_ptr<MetadataLookupProvider> &provider,
                              const QString &artworkDir);
   void onServiceScrapeFinished(const Scraper::ScraperService::Summary &s);
   void onServiceScrapePaused();
@@ -241,6 +241,11 @@ private:
   enum class UnifiedPhase { Setup, AutoRunning, InteractiveLookingUp, InteractivePicking, Done };
 
   void buildUi();
+  /// Skip the item currently being scraped in the Unified flow —
+  /// dispatches to the active ScraperService (its auto-runner) or, in
+  /// the legacy in-dialog path, the directly-bound BatchScrapeRunner.
+  /// Wired to m_skipItemButton.
+  void skipCurrentScrapeItem();
   /// Fan out the per-asset download dispatches for the assets the user
   /// just confirmed via Apply (Kartend-3fkz step 5). Extracted from
   /// onApply so onApply itself stays a confirmation + routing shell.
@@ -416,6 +421,11 @@ private:
   /// reserve vertical space for it. Driven by ScraperService's
   /// itemStageChanged + BatchScrapeRunner's itemStageChanged.
   QLabel *m_stageLabel = nullptr;
+  /// "Skip this item" shown in lockstep with m_stageLabel so the user
+  /// can abandon the current item during a long hash/extraction without
+  /// cancelling the whole run. Dispatches to the active ScraperService
+  /// (auto-runner) or the directly-bound BatchScrapeRunner.
+  QPushButton *m_skipItemButton = nullptr;
 
   // ── Unified-flow state ──────────────────────────────────────────
   ScraperContext m_scraperCtx;

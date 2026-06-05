@@ -50,7 +50,7 @@ public:
    * @param getItemPositionY Callback to get the Y position of an item.
    */
   void performUpdate(int selectedIndex, int totalItems, int itemsPerRow,
-                     std::function<int(int)> getItemPositionY);
+                     const std::function<int(int)> &getItemPositionY);
 
   /**
    * @brief Checks if arrow key update should be skipped.

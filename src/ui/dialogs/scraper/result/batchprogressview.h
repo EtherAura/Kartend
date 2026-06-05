@@ -17,6 +17,7 @@
 QT_BEGIN_NAMESPACE
 class QLabel;
 class QProgressBar;
+class QPushButton;
 QT_END_NAMESPACE
 
 /// Progress-only view for a BatchScrapeRunner. Shows a header
@@ -62,6 +63,11 @@ private:
   /// (hashing, extracting…). Hidden when empty so it doesn't reserve
   /// vertical space during normal fast-path scrapes (Kartend-ou0a).
   QLabel *m_stageLabel = nullptr;
+  /// "Skip this item" affordance, shown only while a stage is active
+  /// (in lockstep with m_stageLabel) so the user can abandon a single
+  /// stuck/large item without cancelling the whole batch. Wired to
+  /// m_runner->skipCurrentItem().
+  QPushButton *m_skipButton = nullptr;
   QProgressBar *m_progressBar = nullptr;
   QLabel *m_timingLabel = nullptr;
   QLabel *m_countsLabel = nullptr;

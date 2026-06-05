@@ -94,8 +94,9 @@ QString normaliseCategory(const QString &raw) {
   return synonym.isEmpty() ? lower : synonym;
 }
 
-std::vector<std::unique_ptr<MetadataProvider>> builtIn(GeneralSettingsAccessor settingsAccessor,
-                                                       CollectionAccessor collectionAccessor) {
+std::vector<std::unique_ptr<MetadataProvider>>
+builtIn(const GeneralSettingsAccessor &settingsAccessor,
+        const CollectionAccessor &collectionAccessor) {
   std::vector<std::unique_ptr<MetadataProvider>> list;
 
   // ── Games (3) ────────────────────────────────────────────────────

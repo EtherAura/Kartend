@@ -88,6 +88,9 @@ public:
   virtual void forceVirtualViewUpdate() = 0;
   virtual void preCalculateLayout() = 0;
   [[nodiscard]] virtual const QHash<int, ItemWidget *> &getActiveWidgets() const = 0;
+  // O(1) widget -> visual index lookup (reverse of getActiveWidgets); -1 if the
+  // widget isn't currently placed (Kartend-th8z).
+  [[nodiscard]] virtual int indexForWidget(ItemWidget *widget) const = 0;
   virtual void injectCachedItems(int startIndex, const QStringList &filePaths,
                                  const QHash<QString, QString> &fileNames,
                                  const QHash<QString, QString> &artworkPaths = {}) = 0;

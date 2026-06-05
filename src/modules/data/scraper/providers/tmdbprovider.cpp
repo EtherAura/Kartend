@@ -29,30 +29,15 @@ constexpr int TMDB_IMAGE_RATE_LIMIT_MS = 50;
 constexpr const char *TMDB_PROVIDER_ID = "tmdb";
 constexpr const char *TMDB_TOKEN_FIELD = "api_token";
 
-QString userAgent() {
-  return QStringLiteral("Kartend/%1 (https://github.com/EtherAura/Kartend)")
-      .arg(QString::fromLatin1(APP_VERSION));
-}
-
-Scraper::HttpClient::RawHeaders userAgentHeader() {
-  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
-}
-
 // v4 read-access token rides in the Authorization header, never the
 // query string: TMDB's v3 endpoints accept the bearer token this way,
 // and a header keeps the secret out of the logs / Referer / proxy
 // access logs that a `?api_key=` query param would expose (Kartend-0gp7).
 Scraper::HttpClient::RawHeaders authHeaders(const QString &token) {
-  Scraper::HttpClient::RawHeaders headers = userAgentHeader();
+  Scraper::HttpClient::RawHeaders headers = ProviderBase::userAgentHeader();
   headers.append(
       {QByteArrayLiteral("Authorization"), QByteArrayLiteral("Bearer ") + token.toUtf8()});
   return headers;
-}
-
-void registerHostThrottles() {
-  Scraper::HttpClient *client = Scraper::HttpClient::instance();
-  client->setRateLimit(QString::fromLatin1(TMDB_HOST), TMDB_RATE_LIMIT_MS);
-  client->setRateLimit(QString::fromLatin1(TMDB_IMAGE_HOST), TMDB_IMAGE_RATE_LIMIT_MS);
 }
 
 ErrorUtils::ErrorContext notConfiguredError() {
@@ -67,7 +52,7 @@ ErrorUtils::ErrorContext notConfiguredError() {
 
 TmdbProvider::TmdbProvider(GeneralSettingsAccessor settingsAccessor)
     : m_settingsAccessor(std::move(settingsAccessor)) {
-  registerHostThrottles();
+  registerThrottles({{TMDB_HOST, TMDB_RATE_LIMIT_MS}, {TMDB_IMAGE_HOST, TMDB_IMAGE_RATE_LIMIT_MS}});
 }
 
 QString TmdbProvider::currentToken() const {
@@ -108,15 +93,10 @@ void TmdbProvider::lookup(const QString &query, LookupCallback callback) {
   q.addQueryItem(QStringLiteral("include_adult"), QStringLiteral("false"));
   url.setQuery(q);
 
-  Scraper::HttpClient::instance()->get(
-      url, authHeaders(token),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(TmdbParser::parseSearchResponse(response.value()));
-      });
+  getJson<QList<Scraper::ScrapeCandidate>>(
+      authHeaders(token), url,
+      [](const QByteArray &body) { return TmdbParser::parseSearchResponse(body); },
+      std::move(callback));
 }
 
 void TmdbProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) {
@@ -161,24 +141,18 @@ void TmdbProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate, Detail
                                                            : QStringLiteral("content_ratings"));
   url.setQuery(q);
 
-  Scraper::HttpClient::instance()->get(
-      url, authHeaders(token),
-      [callback = std::move(callback), mediaType](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(TmdbParser::parseDetailResponse(response.value(), mediaType));
-      });
+  getJson<Scraper::ScrapedItem>(
+      authHeaders(token), url,
+      [mediaType](const QByteArray &body) {
+        return TmdbParser::parseDetailResponse(body, mediaType);
+      },
+      std::move(callback));
 }
 
 void TmdbProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   if (!callback) return;
-  // Image host doesn't require auth — public CDN. User-Agent kept
-  // for audit-trail consistency. Kartend-9ryx: scope the response to
-  // image/* so a misrouted or hostile CDN response can't reach the
-  // decoder.
-  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
-                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
-                                       QStringLiteral("image/"));
+  // Image host doesn't require auth — public CDN. User-Agent kept for
+  // audit-trail consistency. getImageBytes scopes the response to image/*
+  // so a misrouted or hostile CDN response can't reach the decoder.
+  getImageBytes(userAgentHeader(), url, std::move(callback));
 }

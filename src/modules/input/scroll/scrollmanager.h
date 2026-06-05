@@ -188,6 +188,12 @@ public:
   [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const override {
     return m_activeWidgets;
   }
+  // O(1) reverse of getActiveWidgets() — avoids scanning every active widget to
+  // map a hovered/clicked widget back to its visual index (Kartend-th8z).
+  // Returns -1 when the widget isn't currently placed.
+  [[nodiscard]] int indexForWidget(ItemWidget *widget) const override {
+    return m_widgetToIndex.value(widget, -1);
+  }
   // Injects cached items for instant startup display (bypasses database fetch)
   void injectCachedItems(int startIndex, const QStringList &filePaths,
                          const QHash<QString, QString> &fileNames,
@@ -380,6 +386,31 @@ private:
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QWidget *m_virtualContainer = nullptr;
   QHash<int, ItemWidget *> m_activeWidgets;
+  // Reverse of m_activeWidgets (widget -> visual index), maintained in lockstep
+  // by the helpers below so indexForWidget() is O(1) (Kartend-th8z).
+  QHash<ItemWidget *, int> m_widgetToIndex;
+  // The ONLY sanctioned mutators of m_activeWidgets — they keep m_widgetToIndex
+  // in sync. VirtualScrollEngine (friend) and the scrollmanager*.cpp partials
+  // call these instead of touching m_activeWidgets directly.
+  void insertActiveWidget(int index, ItemWidget *widget) {
+    if (ItemWidget *prev = m_activeWidgets.value(index, nullptr); prev && prev != widget) {
+      m_widgetToIndex.remove(prev);
+    }
+    m_activeWidgets.insert(index, widget);
+    if (widget) {
+      m_widgetToIndex.insert(widget, index);
+    }
+  }
+  void removeActiveWidget(int index) {
+    if (ItemWidget *w = m_activeWidgets.value(index, nullptr)) {
+      m_widgetToIndex.remove(w);
+    }
+    m_activeWidgets.remove(index);
+  }
+  void clearActiveWidgets() {
+    m_activeWidgets.clear();
+    m_widgetToIndex.clear();
+  }
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;

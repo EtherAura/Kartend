@@ -6,8 +6,11 @@
 #include <functional>
 #include <QList>
 #include <QObject>
+#include <QString>
 
 class MarqueeWindow;
+class QImage;
+template <typename T> class QFutureWatcher;
 #include "applicationcontext_fwd.h"
 
 namespace TimerUtils {
@@ -65,6 +68,11 @@ public:
   void requestArtworkRefresh();
 
 private:
+  // Decode the marquee cover off the UI thread and push it when ready;
+  // cancelMarqueeLoad supersedes any in-flight decode (Kartend-cq8yh).
+  void startMarqueeLoad(const QString &path);
+  void cancelMarqueeLoad();
+
   // Borrowed dependencies — never owned, never deleted through these.
   const ApplicationContext *m_ctx = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
@@ -78,6 +86,15 @@ private:
   // Coalesces marquee-artwork refreshes during selection storms. Trailing-edge
   // fire so a single click still feels instant. Owned by this controller.
   TimerUtils::DebouncedTimer *m_marqueeDebouncer = nullptr;
+
+  // Last image path pushed to the window (image modes only). Lets a selection
+  // storm that keeps resolving to the same cover skip redundant decodes;
+  // cleared when we switch to video or tear the window down so a later
+  // re-show of the same path still re-pushes (Kartend-cq8yh).
+  QString m_lastMarqueePath;
+  // In-flight off-thread cover decode, or nullptr. Superseded on each new
+  // request so a fast scroll can't paint a stale cover.
+  QFutureWatcher<QImage> *m_marqueeLoadWatcher = nullptr;
 };
 
 #endif // MARQUEECONTROLLER_H

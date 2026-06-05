@@ -142,6 +142,7 @@ private:
   // completion. See Kartend-g6ft for rationale.
   void requestScaledPixmap(const QString &key, const QPixmap &sourcePm, const QSize &targetSize);
   void cancelPendingScales();
+  void cancelPendingLoads();
   void pruneScaledPixmapCache();
   void prunePixmapCache();
   void updateVideoPreviewGeometry();

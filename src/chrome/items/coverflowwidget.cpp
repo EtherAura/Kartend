@@ -100,15 +100,9 @@ CoverFlowWidget::CoverFlowWidget(QWidget *parent) : QWidget(parent) {
 }
 
 CoverFlowWidget::~CoverFlowWidget() {
-  // Detach pending loads — futures may still be running but their results
-  // are dropped when the watcher is destroyed.
-  for (auto *watcher : m_pendingLoads) {
-    if (watcher) {
-      watcher->disconnect(this);
-      watcher->deleteLater();
-    }
-  }
-  m_pendingLoads.clear();
+  // Detach pending workers — futures may still be running but their results
+  // are dropped when the watchers are destroyed.
+  cancelPendingLoads();
   cancelPendingScales();
 }
 
@@ -125,7 +119,11 @@ void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
   prunePixmapCache();
   // The new collection's artwork paths may not overlap the previous list,
   // and the per-card layout slots will rebind to different sources — drop
-  // every scaled entry rather than carry stale (path,size) hits.
+  // every scaled entry rather than carry stale (path,size) hits, and cancel
+  // the in-flight source decodes too: they were started against the old card
+  // set, so a late result would just churn the cache (and could repopulate a
+  // path the new set no longer shows) (Kartend-ktih).
+  cancelPendingLoads();
   cancelPendingScales();
   m_scaledPixmapCache.clear();
   // Selected card may have moved into a different slot when filters or
@@ -610,10 +608,15 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
 
 void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
-  prunePixmapCache();
   // Card target sizes are derived from widget size, so a resize invalidates
-  // every scaled entry. Cancel in-flight worker scales first so their
-  // late-arriving results don't repopulate stale-size entries.
+  // BOTH caches: the scaled entries (keyed on WxH) and the source pixmaps.
+  // m_pixmapCache holds each source already decoded at the request-time
+  // cardSize via loadAndScale, so after a resize the old smaller source would
+  // be upscaled into larger cards, leaving soft/blurry covers until eviction
+  // (Kartend-k48fl). Cancel in-flight workers first so their late-arriving
+  // results don't repopulate stale-size entries.
+  cancelPendingLoads();
+  m_pixmapCache.clear();
   cancelPendingScales();
   m_scaledPixmapCache.clear();
   updateVideoPreviewGeometry();

@@ -4,13 +4,16 @@
 #include "datcache.h"
 #include "errorutils.h"
 #include "metadatalookupprovider.h"
+#include "providerbase.h"
 #include "romhasher.h"
 #include "screenscrapercatalogmanager.h"
 #include "screenscraperparser.h"
 #include "screenscraperquotamanager.h"
 #include "screenscrapersystems.h"
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 #include <QHash>
@@ -73,7 +76,7 @@ void fetchHealthStatus(const GeneralSettings *settings,
 /// name / type. When autodetect also yields -1, the request is sent
 /// with systemeid=0 (SS treats this as "search all systems" — lower
 /// match quality but doesn't hard-fail).
-class ScreenScraperProvider : public MetadataLookupProvider {
+class ScreenScraperProvider : public ProviderBase {
   // Test seam (Kartend-hsboz): buildJeuInfosUrl and the sibling request
   // builders are private but were extracted specifically so the SS query
   // shape can be regression-tested without the network (see the member
@@ -131,7 +134,8 @@ private:
   /// QtConcurrent worker thread so the main UI thread doesn't block
   /// on `QProcess::waitForFinished` inside the archive extractor.
   /// Continuation hops back to the main thread via QFutureWatcher.
-  void runLookup(const QString &query, const QString &filePath, LookupCallback callback);
+  void runLookup(const QString &query, const QString &filePath,
+                 const std::shared_ptr<std::atomic<bool>> &cancelToken, LookupCallback callback);
   /// Main-thread tail of runLookup, invoked once hashing has finished
   /// (or skipped, when filePath was empty). Reads DAT cache, fires
   /// systems-catalog + jeuInfos requests, threads everything through
@@ -147,7 +151,8 @@ private:
   /// optional KARTEND_SCRAPER_DUMP_JSON diagnostic dump; quota
   /// refresh; and the search/detail parse-and-cache step that feeds
   /// fetchDetail() without a second roundtrip.
-  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, LookupCallback callback,
+  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
+                              const LookupCallback &callback,
                               const QString &filenameRegionOverride);
 
   /// Snapshot the user's current scraper preferences (image cap, JPG

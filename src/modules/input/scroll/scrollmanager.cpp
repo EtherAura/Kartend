@@ -238,7 +238,7 @@ ScrollManager::~ScrollManager() {
       widget->deleteLater();
     }
   }
-  m_activeWidgets.clear();
+  clearActiveWidgets();
 
   // Discard any saved pre-search state (widgets will be cleaned up by manager)
   if (m_preSearchStateManager) {

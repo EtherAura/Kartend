@@ -13,8 +13,8 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
-#include <QThread>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QThread>
 
 namespace {
 

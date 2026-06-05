@@ -168,7 +168,7 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
     }
     cfg.name = uniqueName;
     collections->append(cfg);
-    settings->saveCollections(*collections);
+    (void)settings->saveCollections(*collections);
   }
 
   const QString collectionUuid =

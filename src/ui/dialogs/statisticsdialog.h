@@ -2,6 +2,7 @@
 #define STATISTICSDIALOG_H
 
 #include <QDialog>
+#include <QFutureWatcher>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -62,14 +63,54 @@ private:
   void onClearHistoryClicked();
   void onHistoryDisableToggled(bool checked);
 
-  /// Resolves a collection's display name from its UUID using the in-memory
-  /// CollectionConfig list. Returns the truncated UUID when no config matches
-  /// (rows from deleted collections survive in `items`) so the user still has
-  /// something readable.
+  /// Rebuild the per-refresh collection-UUID caches (uuid->index, index->uuid,
+  /// uuid->label) from m_collections. Called once at the top of refresh() so
+  /// the populate* passes resolve labels and roll up subtrees with hash
+  /// lookups instead of recomputing each collection's UUID — which does an FS
+  /// path-expansion — per row (the O(n^2) + sync-FS hotspot, Kartend-umwix).
+  void rebuildCollectionUuidMaps();
+
+  /// Resolves a collection's display name from its UUID via the m_uuidToLabel
+  /// cache (rebuilt each refresh). Returns the truncated UUID when no config
+  /// matches (rows from deleted collections survive in `items`) so the user
+  /// still has something readable.
   [[nodiscard]] QString labelForCollectionUuid(const QString &uuid) const;
+
+  /// Bundle of every DB-derived figure the dialog renders, produced off the UI
+  /// thread by gatherStats() so refresh() never blocks on SQLite (Kartend-umwix
+  /// part B). `ok` is false when the worker couldn't open the database.
+  struct StatsSnapshot {
+    UsageStatsStore::AggregateStats agg;
+    qint64 played7Days = 0;
+    qint64 totalNever = 0;
+    QList<UsageStatsStore::ItemUsageRow> topPlayed;
+    QList<UsageStatsStore::ItemUsageRow> recentlyPlayed;
+    QList<UsageStatsStore::ItemUsageRow> neverPlayed;
+    QHash<QString, UsageStatsStore::CollectionUsage> byCollection;
+    QList<HistoryStore::HistoryEntry> history;
+    qint64 historyCount = 0;
+    bool ok = false;
+  };
+  /// Worker body (runs on a QThreadPool thread): opens a private read-only
+  /// connection to @p dbPath and runs every stats query, returning the bundle.
+  /// Touches no member or GUI state — only the value args — so it is safe to
+  /// run off the main thread.
+  [[nodiscard]] static StatsSnapshot gatherStats(const QString &dbPath, const QString &cutoffIso);
+  /// Render a gathered snapshot onto the trees/labels (main thread).
+  void applyStatsSnapshot(const StatsSnapshot &snap);
 
   IDatabaseManager *m_databaseManager = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
+  // Per-refresh collection-UUID caches, rebuilt by rebuildCollectionUuidMaps()
+  // at the top of refresh(). Computing a collection's UUID expands its media
+  // path on disk, so the populate* passes share these instead of recomputing
+  // per row (Kartend-umwix). m_indexToUuid is parallel to *m_collections.
+  QHash<QString, int> m_uuidToIndex;
+  QList<QString> m_indexToUuid;
+  QHash<QString, QString> m_uuidToLabel;
+  /// In-flight async stats load, or nullptr. Superseded on each refresh() and
+  /// parented to the dialog so teardown drops a late result (Kartend-umwix).
+  QFutureWatcher<StatsSnapshot> *m_statsWatcher = nullptr;
   bool m_runtimeDetectionEnabled = false;
   /// the dialog drives historyEnabled (live toggle on the
   /// History tab) by writing through these. Both can be null when the

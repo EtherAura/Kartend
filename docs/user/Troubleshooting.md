@@ -58,6 +58,13 @@ Press **Ctrl+F5** (or **File → Rescan Collection**) to drop the
 database state for this collection and rebuild from disk. Use after
 adding/removing files outside Kartend.
 
+Kartend's automatic change-detection between launches compares a bounded
+sample of your media directory's subfolder timestamps. This is fast but
+not exhaustive: a file added or removed deep inside a large subfolder
+tree may occasionally not trigger an automatic rescan on the next launch.
+If a collection's contents ever look stale, a manual rescan (above)
+always picks up every change.
+
 For a less destructive refresh that keeps database state, **F5** does
 a soft reload (re-renders without re-scanning).
 

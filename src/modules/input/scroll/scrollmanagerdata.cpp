@@ -176,7 +176,7 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   for (int visualIndex : updatedIndices) {
     if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
       releaseWidget(widget);
-      m_activeWidgets.remove(visualIndex);
+      removeActiveWidget(visualIndex);
     }
   }
 
@@ -479,7 +479,7 @@ void ScrollManager::cleanup() {
   for (ItemWidget *widget : std::as_const(m_activeWidgets)) {
     delete widget;
   }
-  m_activeWidgets.clear();
+  clearActiveWidgets();
 
   // DO NOT delete pre-search widgets here - they are reparented to
   // m_gridContainer and will be restored when search is cleared. Only delete

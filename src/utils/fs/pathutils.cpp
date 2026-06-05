@@ -116,16 +116,13 @@ Result<void> validatePathSecurity(const QString &path) {
                                "PathUtils::validatePathSecurity");
   }
 
-  // Normalize Unicode to NFC form to prevent homoglyph/normalization attacks
-  // This ensures consistent representation of characters
-  QString normalized = path.normalized(QString::NormalizationForm_C);
-
-  // Reject if normalization changed the path (indicates potential obfuscation)
-  if (normalized != path) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath, "Path contains non-canonical Unicode",
-                               "PathUtils::validatePathSecurity")
-        .withDetails("Path was modified by Unicode normalization");
-  }
+  // Normalize Unicode to NFC for the security checks below so a decomposed
+  // (NFD) form can't slip a different byte sequence past them. We validate the
+  // NFC form but accept the original path: NFD filenames are legitimate (macOS
+  // and cross-platform media), and rejecting them blocked valid accented / CJK
+  // names at this seam. NFC folds only canonical equivalents — this was never a
+  // homoglyph defense.
+  const QString normalized = path.normalized(QString::NormalizationForm_C);
 
   // Reject high-risk shell metacharacters that are rarely valid in configured
   // paths. Ampersands are intentionally allowed: they are common in ROM titles
@@ -152,20 +149,29 @@ Result<void> validatePathSecurity(const QString &path) {
                                "PathUtils::validatePathSecurity");
   }
 
-  // Reject backslash characters (Windows-style paths that could confuse Unix
-  // systems)
+  // Reject backslashes on non-Windows: there a backslash is a literal filename
+  // character that Unix tooling can mishandle, and there is no legitimate path
+  // separator reason for it. On Windows the backslash is the native separator,
+  // so accepting it is required for the Windows cross-build's native CLI paths;
+  // the traversal check below splits on both separators so this stays safe.
+#ifndef Q_OS_WIN
   if (normalized.contains('\\')) {
     return ErrorContext::error(ErrorCode::InvalidFilePath, "Path contains backslash characters",
                                "PathUtils::validatePathSecurity");
   }
+#endif
 
   // Reject any path component equal to `..` — a traversal segment that escapes
   // the intended directory. The CLI seam (expandAndValidateCliPath) relies
   // solely on this validator, and validateCollectionNameForSubstitution already
-  // rejects `..` for the same reason (Kartend-w13c). Backslashes are rejected
-  // above, so splitting on `/` covers every separator; a literal `..` inside a
-  // name (e.g. "my..file") is left alone — only a standalone segment traverses.
-  const QStringList segments = normalized.split(QLatin1Char('/'));
+  // rejects `..` for the same reason (Kartend-w13c). Split on BOTH separators:
+  // non-Windows rejects backslash above so only `/` appears, but Windows accepts
+  // backslash as a separator, and without splitting on it a `..\` segment would
+  // slip through. A literal `..` inside a name (e.g. "my..file") is left alone —
+  // only a standalone segment traverses.
+  QString separatorNormalized = normalized;
+  separatorNormalized.replace(QLatin1Char('\\'), QLatin1Char('/'));
+  const QStringList segments = separatorNormalized.split(QLatin1Char('/'));
   for (const QString &segment : segments) {
     if (segment == QLatin1String("..")) {
       return ErrorContext::error(ErrorCode::InvalidFilePath,

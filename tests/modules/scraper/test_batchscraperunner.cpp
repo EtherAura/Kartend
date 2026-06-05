@@ -152,8 +152,7 @@ public:
 class TimestampedScrapedDb : public KartendTest::MockDatabaseManager {
 public:
   explicit TimestampedScrapedDb(int daysAgo) {
-    m_updatedAt =
-        QDateTime::currentDateTimeUtc().addDays(-daysAgo).toString(Qt::ISODate);
+    m_updatedAt = QDateTime::currentDateTimeUtc().addDays(-daysAgo).toString(Qt::ISODate);
   }
   [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &,
                                                                  const QString &) const override {
@@ -175,8 +174,7 @@ QString writeStubSidecar(const QString &artworkDir, const QString &baseName,
                          qint64 mtimeOffsetSeconds = 0) {
   const QString metadataDir = QDir(artworkDir).filePath(QStringLiteral("metadata"));
   if (!QDir().mkpath(metadataDir)) return {};
-  const QString sidecarPath =
-      QDir(metadataDir).filePath(baseName + QStringLiteral(".json"));
+  const QString sidecarPath = QDir(metadataDir).filePath(baseName + QStringLiteral(".json"));
   QFile f(sidecarPath);
   if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return {};
   f.write("{\"title\":\"stub\"}");
@@ -272,6 +270,7 @@ private slots:
   void fillMissingScrapesItemsMissingAnyTickedField();
   void fillMissingHonoursRefreshWindowSameAsSkip();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
+  void skipCurrentItemSkipsOnlyTheDisplayedItem();
 };
 
 void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
@@ -305,6 +304,33 @@ void TestBatchScrapeRunner::skipsItemsWithNoCandidates() {
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 2);
   QCOMPARE(summary.skipped, 1);
+  QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::skipCurrentItemSkipsOnlyTheDisplayedItem() {
+  // Both items have candidates, so absent a skip both would scrape. Skipping
+  // the first in-flight item (from the progress slot, which fires inside
+  // startItem before that item's lookup callback lands) flips only that item's
+  // per-item token: it's counted as skipped while the batch carries on and
+  // scrapes the second. m_cancelled stays false, so the run is not cancelled.
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  bool skippedFirst = false;
+  QObject::connect(&runner, &Scraper::BatchScrapeRunner::progress, &runner,
+                   [&runner, &skippedFirst](int, int, const QString &) {
+                     if (!skippedFirst) {
+                       skippedFirst = true;
+                       runner.skipCurrentItem();
+                     }
+                   });
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.skipped, 1);
+  QCOMPARE(summary.scraped, 1);
   QCOMPARE(summary.errors, 0);
 }
 
@@ -655,8 +681,8 @@ void TestBatchScrapeRunner::skipModeWindowZeroPreservesLegacyBehaviour() {
   ctx.managers.databaseManager = &db;
   Scraper::BatchScrapeRunner runner(
       &ctx, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin")},
-      QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin")}, QString(),
+      /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
       /*itemConcurrency=*/1, /*skipRecentDays=*/0);
   runner.start();
   const auto summary = waitForFinish(&runner);
@@ -684,8 +710,7 @@ void TestBatchScrapeRunner::fillMissingPreSkipsItemsWithEveryTickedFieldCovered(
   }
   QVERIFY(QDir().mkpath(QDir(tmp.path()).filePath(QStringLiteral("screenshot"))));
   {
-    QFile shot(
-        QDir(tmp.path()).filePath(QStringLiteral("screenshot/Alpha.png")));
+    QFile shot(QDir(tmp.path()).filePath(QStringLiteral("screenshot/Alpha.png")));
     QVERIFY(shot.open(QIODevice::WriteOnly));
     shot.write("png");
   }
@@ -730,11 +755,10 @@ void TestBatchScrapeRunner::fillMissingScrapesItemsMissingAnyTickedField() {
   auto stub = std::make_shared<StubProvider>();
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
-      /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
-      /*itemConcurrency=*/1, /*skipRecentDays=*/0);
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
+                                    /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
+                                    /*itemConcurrency=*/1, /*skipRecentDays=*/0);
   runner.setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot")});
   runner.setWriteMetadata(true);
   runner.start();
@@ -762,11 +786,10 @@ void TestBatchScrapeRunner::fillMissingHonoursRefreshWindowSameAsSkip() {
   auto stub = std::make_shared<StubProvider>();
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
 
-  Scraper::BatchScrapeRunner runner(
-      nullptr, stub, QStringLiteral("uuid"),
-      QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
-      /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
-      /*itemConcurrency=*/1, /*skipRecentDays=*/30);
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, tmp.path(),
+                                    /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing,
+                                    /*itemConcurrency=*/1, /*skipRecentDays=*/30);
   runner.setMediaTypeFilter({QStringLiteral("front")});
   runner.setWriteMetadata(true);
   runner.start();

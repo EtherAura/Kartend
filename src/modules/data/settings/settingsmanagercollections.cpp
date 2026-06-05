@@ -59,7 +59,7 @@ void SettingsManager::finalizeCollections(const QHash<QString, CollectionConfig>
                                           const bool &needsRewrite) {
   CollectionHierarchyBuilder::build(tempCollections, collections);
   if (needsRewrite) {
-    saveCollections(collections);
+    (void)saveCollections(collections);
   }
 }
 

@@ -309,7 +309,7 @@ void VirtualScrollEngine::handleLayoutChange() {
       m_owner->m_widgetPool->release(widget);
     }
   }
-  m_owner->m_activeWidgets.clear();
+  m_owner->clearActiveWidgets();
 
   calculateVirtualMetrics();
 
@@ -507,6 +507,10 @@ VirtualScrollEngine::WidgetVisualConfig VirtualScrollEngine::currentWidgetVisual
     return cfg;
   }
   const bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
+  // m_owner is null-guarded by the early return above, so these reads are safe;
+  // clang's analyzer loses that non-null constraint across the ?: and reports a
+  // false NullDereference here.
+  // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
   const int rawFont = isListMode ? m_owner->m_context.config.listView.listFontSize
                                  : m_owner->m_context.config.gridLayout.fontSize;
   cfg.hideTitles = m_owner->m_context.config.hideTitles;
@@ -603,7 +607,7 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     connect(itemWidget, &ItemWidget::artworkPreviewRequested, m_owner,
             &ScrollManager::onArtworkPreviewRequested, Qt::UniqueConnection);
 
-    m_owner->m_activeWidgets.insert(visualIndex, itemWidget);
+    m_owner->insertActiveWidget(visualIndex, itemWidget);
   }
 }
 

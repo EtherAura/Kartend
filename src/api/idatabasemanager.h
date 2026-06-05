@@ -122,6 +122,12 @@ public:
   virtual void recordItemLaunch(const QString &collectionUuid, const QString &path) = 0;
   virtual void recordItemPlaySession(const QString &collectionUuid, const QString &path,
                                      qint64 seconds) = 0;
+  /// Absolute path to the SQLite database file backing this manager. Exposed so
+  /// read-only consumers (e.g. the Statistics dialog) can open their own
+  /// worker-thread connection to the same file and run heavy aggregate queries
+  /// off the UI thread — WAL mode makes concurrent reads safe (Kartend-umwix).
+  /// Main-thread only; returns empty before the connection is open.
+  [[nodiscard]] virtual QString databaseFilePath() const = 0;
   [[nodiscard]] virtual UsageStatsStore::AggregateStats loadAggregateUsageStats() const = 0;
   [[nodiscard]] virtual QList<UsageStatsStore::ItemUsageRow>
   loadTopPlayedItems(int limit) const = 0;

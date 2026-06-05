@@ -7,7 +7,6 @@
 
 #include <QUrlQuery>
 
-#include "httpclient.h"
 #include "openlibraryparser.h"
 
 namespace {
@@ -20,25 +19,10 @@ constexpr int OL_RATE_LIMIT_MS = 200; // No documented hard cap; be polite.
 constexpr int OL_COVERS_RATE_LIMIT_MS = 100;
 constexpr int SEARCH_LIMIT = 10;
 
-QString userAgent() {
-  return QStringLiteral("Kartend/%1 (https://github.com/EtherAura/Kartend)")
-      .arg(QString::fromLatin1(APP_VERSION));
-}
-
-Scraper::HttpClient::RawHeaders userAgentHeader() {
-  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
-}
-
-void registerHostThrottles() {
-  Scraper::HttpClient *client = Scraper::HttpClient::instance();
-  client->setRateLimit(QString::fromLatin1(OL_HOST), OL_RATE_LIMIT_MS);
-  client->setRateLimit(QString::fromLatin1(OL_COVERS_HOST), OL_COVERS_RATE_LIMIT_MS);
-}
-
 } // namespace
 
 OpenLibraryProvider::OpenLibraryProvider() {
-  registerHostThrottles();
+  registerThrottles({{OL_HOST, OL_RATE_LIMIT_MS}, {OL_COVERS_HOST, OL_COVERS_RATE_LIMIT_MS}});
 }
 
 QUrl OpenLibraryProvider::searchUrl(const QString &query) const {
@@ -74,15 +58,10 @@ void OpenLibraryProvider::lookup(const QString &query, LookupCallback callback) 
   q.addQueryItem(QStringLiteral("limit"), QString::number(SEARCH_LIMIT));
   url.setQuery(q);
 
-  Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(OpenLibraryParser::parseSearchResponse(response.value()));
-      });
+  getJson<QList<Scraper::ScrapeCandidate>>(
+      userAgentHeader(), url,
+      [](const QByteArray &body) { return OpenLibraryParser::parseSearchResponse(body); },
+      std::move(callback));
 }
 
 void OpenLibraryProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
@@ -100,25 +79,20 @@ void OpenLibraryProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
   const QString workKey = candidate.providerSpecificId;
   const QUrl url(QString::fromLatin1(OL_WORKS_BASE) + workKey + QStringLiteral(".json"));
 
-  Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
-      [callback = std::move(callback), workKey](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(OpenLibraryParser::parseDetailResponse(response.value(), workKey));
-      });
+  getJson<Scraper::ScrapedItem>(
+      userAgentHeader(), url,
+      [workKey](const QByteArray &body) {
+        return OpenLibraryParser::parseDetailResponse(body, workKey);
+      },
+      std::move(callback));
 }
 
 void OpenLibraryProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   if (!callback) {
     return;
   }
-  // Kartend-9ryx: media fetches must come back as image/* — a misconfigured
-  // cover URL that 200s with text/html or application/json could otherwise
-  // be fed straight into the image decoder below.
-  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
-                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
-                                       QStringLiteral("image/"));
+  // getImageBytes pins the response to image/* — a misconfigured cover URL
+  // that 200s with text/html or application/json must not be fed straight
+  // into the image decoder.
+  getImageBytes(userAgentHeader(), url, std::move(callback));
 }

@@ -18,6 +18,7 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
+#include <utility>
 
 namespace Scraper {
 
@@ -206,6 +207,12 @@ void ScraperService::cancel() {
   clearStateFile();
   emit scrapeFinished(m_summary);
   m_state = State::Idle;
+}
+
+void ScraperService::skipCurrentItem() {
+  if (m_autoRunner) {
+    m_autoRunner->skipCurrentItem();
+  }
 }
 
 void ScraperService::pauseInteractive() {
@@ -545,7 +552,7 @@ void ScraperService::startInteractiveItem() {
   m_interactiveProvider->lookup(ctx,
                                 [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
                                   if (guard.isNull()) return;
-                                  guard->interactiveLookupComplete(r);
+                                  guard->interactiveLookupComplete(std::move(r));
                                 });
 }
 

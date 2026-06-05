@@ -147,7 +147,7 @@ void ScraperCredentialsPanel::refresh() {
   if (!m_model || !m_model->generalSettings) return;
   m_loading = true;
   for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it) {
-    const QString fullKey = it.key();
+    const QString &fullKey = it.key();
     const int slash = fullKey.indexOf('/');
     if (slash <= 0) continue;
     const QString providerId = fullKey.left(slash);
@@ -161,7 +161,7 @@ void ScraperCredentialsPanel::refresh() {
 void ScraperCredentialsPanel::writeModel() {
   if (!m_model || !m_model->generalSettings) return;
   for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it) {
-    const QString fullKey = it.key();
+    const QString &fullKey = it.key();
     const int slash = fullKey.indexOf('/');
     if (slash <= 0) continue;
     const QString providerId = fullKey.left(slash);

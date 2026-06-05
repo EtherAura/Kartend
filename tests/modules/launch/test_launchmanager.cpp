@@ -109,8 +109,7 @@ private:
   // in a fresh temp dir. Returns the archive path, or an empty string when no
   // archive-creation tool (zip/bsdtar/7z) is available — the QSKIP at the call
   // site keeps the suite green on minimal CI images.
-  QString makeZipFixture(const QString &baseName,
-                         const QList<QPair<QString, QByteArray>> &entries);
+  QString makeZipFixture(const QString &baseName, const QList<QPair<QString, QByteArray>> &entries);
   // True when extractArchiveToTemp will find one of its extractors on PATH.
   static bool extractorAvailable();
   // Absolute path of the per-archive extraction dir extractArchiveToTemp uses
@@ -333,12 +332,18 @@ void TestLaunchManager::testValidatePathSecurity_newlines() {
 
 void TestLaunchManager::testValidatePathSecurity_backslash() {
   auto result = LaunchManager::validatePathSecurity("/path\\to\\file");
-  QVERIFY2(result.isError(), "Path with backslash should fail validation");
+#ifdef Q_OS_WIN
+  // Backslash is the native path separator on Windows, so it's accepted (the
+  // traversal check splits on both separators to stay safe there).
+  QVERIFY2(result.isOk(), "Path with backslash should be allowed on Windows");
+#else
+  QVERIFY2(result.isError(), "Path with backslash should fail validation on non-Windows");
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+#endif
 }
 
 void TestLaunchManager::testValidatePathSecurity_unicodeNormalization() {
-  // Test that paths with decomposed Unicode characters are rejected
+  // Both composed (NFC) and decomposed (NFD) Unicode paths must be accepted.
   // The character 'é' can be represented as U+00E9 (composed) or U+0065 U+0301 (decomposed)
   // NFC normalization converts decomposed to composed form
   QString composedPath = "/path/to/caf\u00E9";    // é as single codepoint
@@ -348,7 +353,7 @@ void TestLaunchManager::testValidatePathSecurity_unicodeNormalization() {
   QVERIFY2(composedResult.isOk(), "Composed Unicode path should pass");
 
   auto decomposedResult = LaunchManager::validatePathSecurity(decomposedPath);
-  QVERIFY2(decomposedResult.isError(), "Decomposed Unicode path should fail (non-canonical)");
+  QVERIFY2(decomposedResult.isOk(), "Decomposed (NFD) Unicode path should now be accepted");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1055,6 +1060,9 @@ void TestLaunchManager::testExtractArchive_rejectsUnsafeArchivePath() {
 }
 
 void TestLaunchManager::testExtractArchive_extractsTargetFile() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+#endif
   if (!extractorAvailable()) {
     QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
   }
@@ -1079,6 +1087,9 @@ void TestLaunchManager::testExtractArchive_extractsTargetFile() {
 }
 
 void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtractionDir() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+#endif
   // The leak-relevant path: when extraction yields no file with the requested
   // extension, extractArchiveToTemp must report an error AND remove the
   // per-archive extraction dir it created (the qScopeGuard), so /tmp doesn't
@@ -1104,6 +1115,9 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
 }
 
 void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
+#endif
 #ifdef Q_OS_WIN
   QSKIP("The shebang-to-nonexistent-interpreter failing-launcher trick is POSIX-specific");
 #else

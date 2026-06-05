@@ -150,8 +150,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
   // would otherwise reach a just-cleared manager (closeEvent clears its
   // selection + blocks its signals); fall through to the base handler then,
   // matching the shutdown short-circuit on the other event paths (Kartend-0j6o).
-  if (!m_isShuttingDown && !QApplication::closingDown() &&
-      m_appManager->getInteractionManager() &&
+  if (!m_isShuttingDown && !QApplication::closingDown() && m_appManager->getInteractionManager() &&
       m_appManager->getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
@@ -275,12 +274,46 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
 
 void MainWindow::dropEvent(QDropEvent *event) {
   if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) return;
-  auto *km = m_appManager->getKartManager();
-  if (!km) return;
+  // Collect the dropped .kart paths and accept the drop immediately. The
+  // destination prompt + import are deferred (processPendingKartImports) so the
+  // modal file dialog and the blocking import don't run inside the DnD handler
+  // — running them here keeps the drag source blocked until we return and lets
+  // a second drop re-enter dropEvent through the modal's nested loop
+  // (Kartend-tubnr).
   for (const QUrl &url : event->mimeData()->urls()) {
     if (!url.isLocalFile()) continue;
     const QString path = url.toLocalFile();
-    if (!path.endsWith(".kart", Qt::CaseInsensitive)) continue;
+    if (path.endsWith(".kart", Qt::CaseInsensitive)) {
+      m_pendingKartImports.append(path);
+    }
+  }
+  event->acceptProposedAction();
+  // Kick off a drain on the next loop turn unless one is already running — a
+  // running drain picks up newly-appended paths before it exits.
+  if (!m_pendingKartImports.isEmpty() && !m_kartImportInProgress) {
+    QTimer::singleShot(0, this, &MainWindow::processPendingKartImports);
+  }
+}
+
+void MainWindow::processPendingKartImports() {
+  if (m_isShuttingDown || QApplication::closingDown()) {
+    m_pendingKartImports.clear();
+    return;
+  }
+  if (m_kartImportInProgress) {
+    return; // a drain is already running (re-entrancy guard)
+  }
+  auto *km = m_appManager ? m_appManager->getKartManager() : nullptr;
+  if (!km) {
+    m_pendingKartImports.clear();
+    return;
+  }
+  m_kartImportInProgress = true;
+  // Drain the queue. Each getExistingDirectory spins a nested event loop, so a
+  // drop arriving mid-prompt appends to m_pendingKartImports and is handled by
+  // this same loop before it exits — no second drain starts (guard above).
+  while (!m_pendingKartImports.isEmpty()) {
+    const QString path = m_pendingKartImports.takeFirst();
     auto peeked = KartReader::peekManifest(path);
     if (peeked.isError()) {
       QMessageBox::warning(this, tr("Import Kart"), peeked.error().message);
@@ -297,7 +330,7 @@ void MainWindow::dropEvent(QDropEvent *event) {
       QMessageBox::warning(this, tr("Import Kart"), res.error().message);
     }
   }
-  event->acceptProposedAction();
+  m_kartImportInProgress = false;
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
@@ -331,8 +364,7 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
   // Don't route filtered events into a tearing-down InteractionManager
   // (Kartend-0j6o) — hand them to the base filter during shutdown.
-  if (m_isShuttingDown || QApplication::closingDown() ||
-      !m_appManager->getInteractionManager()) {
+  if (m_isShuttingDown || QApplication::closingDown() || !m_appManager->getInteractionManager()) {
     return QMainWindow::eventFilter(watched, event);
   }
   return m_appManager->getInteractionManager()->eventFilter(watched, event);

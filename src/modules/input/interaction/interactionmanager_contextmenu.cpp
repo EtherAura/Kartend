@@ -108,7 +108,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       m_currentCollectionIndex) {
     menu.addSeparator();
     QAction *editMetadataAction = menu.addAction(tr("Edit metadata..."));
-    const QString itemName = widget->getItemName();
+    const QString &itemName = widget->getItemName();
     QObject::connect(editMetadataAction, &QAction::triggered, this,
                      [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
     // Preview the launch command without spawning the launcher. Surfaces

@@ -13,6 +13,7 @@
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
+#include <QStringList>
 #include <QTimer>
 
 QT_BEGIN_NAMESPACE
@@ -265,6 +266,11 @@ protected:
   void dropEvent(QDropEvent *event) override;
 
 private:
+  // Drains m_pendingKartImports — runs the per-kart destination prompt + import
+  // off the drop handler (see dropEvent) so modals don't nest inside the DnD
+  // event and a second drop can't re-enter mid-import (Kartend-tubnr).
+  void processPendingKartImports();
+
   bool m_isShuttingDown = false;
   bool m_deferredStartupDone = false;
   // Kartend-3vkjc: first-run startup gate. When the first-run wizard runs, its
@@ -282,6 +288,14 @@ private:
   // Guards connectDatabaseManager() — one-shot wiring whose non-UniqueConnection
   // and lambda edges would double-fire if it ever ran twice (Kartend-x8spn).
   bool m_databaseManagerConnected = false;
+  // Kart drag-drop import queue + re-entrancy guard (Kartend-tubnr). dropEvent
+  // collects .kart paths here and accepts immediately; processPendingKartImports
+  // drains them on the next event-loop turn so the per-file destination prompt
+  // and (blocking) import run outside the DnD handler. The guard stops a second
+  // drop — or one delivered inside a prompt's nested loop — from starting a
+  // concurrent drain.
+  bool m_kartImportInProgress = false;
+  QStringList m_pendingKartImports;
   // Pristine application font, captured per-instance on the first
   // applyGlobalUiFont call so clearing a font override restores Qt's default.
   // Kartend-r2722: was a process-wide static that captured whatever font the
@@ -472,6 +486,16 @@ private:
   /// Opens the layout-profile registry dialog. Loads the on-disk profile
   /// list, mutates it via the dialog buttons, and persists on close.
   void manageLayoutProfilesInteractive();
+  /// Runs @p fn for the active collection: validates the current collection
+  /// index, resolves its uuid, null-guards the database manager, and hands the
+  /// config + uuid + db to @p fn (which loads the item rows and drives its own
+  /// dialog). Shows @p openMessage when no collection is active, and a standard
+  /// identity-resolution warning under @p title on uuid failure. Collapses the
+  /// shared skeleton of the per-collection *Interactive launchers.
+  void withActiveCollectionItems(
+      const QString &title, const QString &openMessage,
+      const std::function<void(const CollectionConfig &cfg, const QString &uuid,
+                               IDatabaseManager *db)> &fn);
   /// Opens the collection-health dashboard for the active collection.
   /// Runs the CollectionHealth analyzer over the current item list +
   /// launcher config and pops a read-only summary dialog.

@@ -1,6 +1,9 @@
 #ifndef ROMHASHER_H
 #define ROMHASHER_H
 
+#include <atomic>
+#include <memory>
+
 #include <QString>
 #include <QStringList>
 
@@ -41,8 +44,12 @@ struct Result {
 /// = -1) on read failure. Reads the file once; both hashes are
 /// computed in the same pass. Chunk size is tuned for typical ROM
 /// sizes — small enough to keep memory low, large enough that the
-/// per-call overhead is amortised.
-[[nodiscard]] ErrorUtils::Result<Result> hashFile(const QString &filePath);
+/// per-call overhead is amortised. When @p cancelToken is set true
+/// mid-stream the hash aborts promptly with ErrorCode::OperationCancelled
+/// (checked once per chunk), so a batch cancel doesn't keep hashing a
+/// multi-GB ISO on a worker thread after the user already bailed.
+[[nodiscard]] ErrorUtils::Result<Result>
+hashFile(const QString &filePath, const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
 /// True when `filePath` ends with one of the recognised archive
 /// extensions (.zip / .7z / .rar / .gz / .tar / .bz2 / .xz). Mirrors
@@ -66,7 +73,12 @@ struct Result {
 /// regular files. The temp directory is auto-cleaned when the call
 /// returns. Symlinks inside the archive are skipped to keep a
 /// malicious archive from making us hash an arbitrary path on disk.
-[[nodiscard]] ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath);
+/// When @p cancelToken is set true mid-extraction, the extractor
+/// QProcess is killed and the call aborts with OperationCancelled —
+/// this is the multi-minute path a batch cancel needs to interrupt.
+[[nodiscard]] ErrorUtils::Result<Result>
+hashArchiveInnerRom(const QString &archivePath,
+                    const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
 } // namespace RomHasher
 

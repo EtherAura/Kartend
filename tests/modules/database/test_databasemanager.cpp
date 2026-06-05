@@ -21,6 +21,7 @@
 #include <QTest>
 
 #include "applicationcontext.h"
+#include "batchsizes.h"
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "databasemanager.h"
@@ -60,6 +61,7 @@ private slots:
   void testMigrateCollectionUuid_movesItemAndCollectionRows();
   void testMigrateCollectionUuid_mergesConflictsAndChildTables();
   void testPurgeOrphanCollectionData_dropsRowsNotInLiveSet();
+  void testPurgeOrphanCollectionData_largeLiveSetUsesTempTable();
 
 private:
   std::unique_ptr<SessionManager> m_session;
@@ -438,6 +440,58 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() 
              QStringLiteral("SELECT COUNT(*) FROM items WHERE collection_uuid='%1'").arg(liveUuid)),
       2);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), 1);
+}
+
+void TestDatabaseManager::testPurgeOrphanCollectionData_largeLiveSetUsesTempTable() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+
+  // More live collections than the inline-NOT-IN threshold, so the purge takes
+  // the temp-table path. With one bind per uuid the old inline form would
+  // approach SQLite's 999-variable cap here and the DELETE would fail, leaving
+  // orphans behind.
+  constexpr int kLiveCount = KartendDb::BatchSizes::UuidListBatch + 100; // 600 > 500
+  QList<CollectionConfig> liveCollections;
+  liveCollections.reserve(kLiveCount);
+  QStringList collRows;
+  QStringList itemRows;
+  for (int i = 0; i < kLiveCount; ++i) {
+    CollectionConfig c;
+    c.name = QStringLiteral("Coll%1").arg(i);
+    c.mediaDirectory = QStringLiteral("/media/coll%1").arg(i);
+    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    liveCollections.append(c);
+    collRows << QStringLiteral("(%1, 'Coll%2', 'x', '%3')").arg(i + 1).arg(i).arg(uuid);
+    itemRows << QStringLiteral("(%1, '/m/%2.bin', 'n%2', 'x', '%3')").arg(i + 1).arg(i).arg(uuid);
+  }
+  // One orphan collection + item that must be purged.
+  collRows << QStringLiteral("(999999, 'Orphan', 'x', 'orphan-uuid')");
+  itemRows << QStringLiteral("(999999, '/m/orphan.bin', 'orphan', 'x', 'orphan-uuid')");
+
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES ") +
+                           collRows.join(QStringLiteral(", "))));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, collection_uuid) VALUES ") +
+                           itemRows.join(QStringLiteral(", "))));
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), kLiveCount + 1);
+
+  db.purgeOrphanCollectionData(liveCollections);
+
+  // Every live collection + item survives; the single orphan pair is purged —
+  // i.e. the temp-table NOT IN (SELECT …) form handled all the uuids without
+  // tripping the bind-variable cap.
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), kLiveCount);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items"), kLiveCount);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='orphan-uuid'"), 0);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='orphan-uuid'"), 0);
 }
 
 QTEST_MAIN(TestDatabaseManager)

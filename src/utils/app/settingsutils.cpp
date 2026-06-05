@@ -86,7 +86,7 @@ bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
   QMap<QString, QVariant> rootKeys;
 
   for (auto it = map.begin(); it != map.end(); ++it) {
-    QString fullKey = it.key();
+    const QString &fullKey = it.key();
     int lastSlash = fullKey.lastIndexOf('/');
     if (lastSlash != -1) {
       QString section = fullKey.left(lastSlash);

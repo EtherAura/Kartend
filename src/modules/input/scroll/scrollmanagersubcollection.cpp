@@ -72,7 +72,7 @@ void ScrollManager::rebuildFilteredView() {
       it.value()->deleteLater();
     }
   }
-  m_activeWidgets.clear();
+  clearActiveWidgets();
 
   if ((m_mediaScrollArea) && (m_mediaScrollArea->verticalScrollBar())) {
     m_mediaScrollArea->verticalScrollBar()->setValue(0);

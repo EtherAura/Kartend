@@ -112,13 +112,9 @@ int EventManager::visualIndexForWidget(ItemWidget *widget) const {
     return -1;
   }
 
-  const auto &active = scrollMgr()->getActiveWidgets();
-  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
-    if (it.value() == widget) {
-      return it.key();
-    }
-  }
-  return -1;
+  // O(1) reverse lookup instead of scanning every active widget on each
+  // hover / mouse-move (Kartend-th8z).
+  return scrollMgr()->indexForWidget(widget);
 }
 
 bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {

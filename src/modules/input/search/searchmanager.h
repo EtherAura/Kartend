@@ -17,6 +17,7 @@ class QAction;
 class QLineEdit;
 class QPushButton;
 class QScrollArea;
+class QTimer;
 class QStackedWidget;
 QT_END_NAMESPACE
 
@@ -105,6 +106,10 @@ signals:
 
 private:
   void scheduleSearchBarRefocusIfNeeded();
+  // Reclaim focus for the search bar, but only from transient/non-input
+  // grabbers — never yank it back from a text field the user deliberately
+  // clicked into (Kartend-8oau).
+  void refocusSearchBarUnlessDeliberate();
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
@@ -146,6 +151,9 @@ private:
 
   TimerUtils::DebouncedTimer *m_searchDebounceTimer = nullptr;
   QMetaObject::Connection m_searchItemsLoadedConn;
+  // Single restartable refocus timer — replaces three uncancellable singleShots
+  // that forced focus regardless of where the user had moved it (Kartend-8oau).
+  QTimer *m_searchBarRefocusTimer = nullptr;
 
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   QString m_currentSearchText;

@@ -19,6 +19,20 @@
  */
 namespace ArtworkUtils {
 
+/// Case-fold an artwork basename for cache keying and lookup. Artwork is matched
+/// by completeBaseName, so two item files sharing a basename (e.g. Title.iso +
+/// Title.cue) intentionally resolve to the same cover. Case handling follows the
+/// platform's default filesystem: case-insensitive on Windows / macOS (so
+/// 'Front.iso' resolves 'front.png'), case-sensitive on Linux (so Title.iso and
+/// title.iso don't collide on one cover) (Kartend-58ddn).
+[[nodiscard]] inline QString baseMatchKey(const QString &completeBaseName) {
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+  return completeBaseName.toLower();
+#else
+  return completeBaseName;
+#endif
+}
+
 /**
  * @brief Directory content cache for fast artwork lookups.
  *

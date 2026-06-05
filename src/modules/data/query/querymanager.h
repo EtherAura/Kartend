@@ -44,10 +44,13 @@ public:
 public slots:
   void initDatabase();
   void ensureItemsFtsReady();
-  void loadAllCollections(const QList<CollectionConfig> &allCollections);
-  void loadItems(const CollectionContext &context, const QList<CollectionConfig> &allCollections);
+  void loadAllCollections(const QList<CollectionConfig> &allCollections,
+                          quint64 loadGeneration = 0);
+  void loadItems(const CollectionContext &context, const QList<CollectionConfig> &allCollections,
+                 quint64 loadGeneration = 0);
   void loadItemsWithSubcollections(const CollectionContext &context,
-                                   const QList<CollectionConfig> &allCollections);
+                                   const QList<CollectionConfig> &allCollections,
+                                   quint64 loadGeneration = 0);
   void updateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void fetchItemCount(const CollectionContext &context,
                       const QList<CollectionConfig> &allCollections, const QString &filter);
@@ -111,7 +114,7 @@ signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                    const QHash<QString, QString> &fileToArtworkDir,
                    const QHash<QString, QString> &fileToMediaDir,
-                   const QHash<QString, int> &fileToCollectionIndex);
+                   const QHash<QString, int> &fileToCollectionIndex, quint64 loadGeneration = 0);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
   /// Result of loadItemDetail (Kartend-4p8o). `requestToken` echoes the call.

@@ -177,7 +177,7 @@ private:
   /// checked state so the caller can flip the corresponding widget's
   /// visibility. Used by setupActionShowMenuBar / ShowToolbar /
   /// FullscreenAction.
-  bool connectVisibilityToggle(QAction *action, std::function<void(bool)> applyVisual,
+  bool connectVisibilityToggle(QAction *action, const std::function<void(bool)> &applyVisual,
                                bool ViewSettings::*field);
 
   // Setup methods for each action group

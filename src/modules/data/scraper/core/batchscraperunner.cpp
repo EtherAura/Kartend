@@ -183,6 +183,14 @@ void BatchScrapeRunner::shutdownWriteWorker() {
 
 void BatchScrapeRunner::cancel() {
   m_cancelled = true;
+  // Signal every in-flight provider hash/extraction worker to abort promptly —
+  // kills the extractor QProcess instead of finishing the multi-minute hash.
+  // Per-item tokens (skipCurrentItem flips one of these for a single item).
+  for (const auto &weak : m_inFlightItems) {
+    if (auto state = weak.lock()) {
+      state->cancelToken->store(true, std::memory_order_relaxed);
+    }
+  }
   // Don't emit finished here — let the in-flight callbacks observe the
   // flag and drain. The last completing callback emits finished()
   // once m_inFlight returns to 0, which avoids a double-emit if any
@@ -190,6 +198,16 @@ void BatchScrapeRunner::cancel() {
   // The write worker is left running so any in-flight writeCompleted
   // signals can still be received and the per-item slots drained
   // cleanly; the destructor handles the eventual thread shutdown.
+}
+
+void BatchScrapeRunner::skipCurrentItem() {
+  // Flip only the displayed item's token, leaving m_cancelled false so the
+  // batch and any other in-flight items keep running. The chain callbacks
+  // observe the token and count this item as skipped. No-op if the item
+  // already finished (weak handle expired) or nothing is in flight.
+  if (auto state = m_currentItem.lock()) {
+    state->cancelToken->store(true, std::memory_order_relaxed);
+  }
 }
 
 void BatchScrapeRunner::filterAlreadyScraped() {
@@ -434,14 +452,19 @@ void BatchScrapeRunner::pump() {
   }
 }
 
-void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
+void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
+  // Track this as the current/displayed item (skipCurrentItem targets it) and
+  // register it so cancel() can flip its per-item token alongside the others.
+  m_currentItem = state;
+  m_inFlightItems.push_back(state);
+
   // Emit progress BEFORE the network call so the UI shows
   // "Scraping <name>" while the request is in flight.
   emit progress(m_summary.scraped + m_summary.skipped + m_summary.errors, totalItemCount(),
                 QFileInfo(state->path).fileName());
 
   const QString query = QFileInfo(state->path).completeBaseName();
-  MetadataLookupProvider::LookupContext ctx{query, state->path};
+  MetadataLookupProvider::LookupContext ctx{query, state->path, state->cancelToken};
   // QPointer guard: each per-item chain can outlive the runner if the
   // caller deletes us after cancel(). The lambda checks the pointer
   // before touching member state.
@@ -450,6 +473,13 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
                            state](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
     if (self.isNull()) return;
     if (self->m_cancelled) {
+      self->itemFinished();
+      return;
+    }
+    if (state->cancelToken->load(std::memory_order_relaxed)) {
+      // User skipped this item (its token flipped, m_cancelled still false):
+      // count it as skipped and free the slot so the batch carries on.
+      ++self->m_summary.skipped;
       self->itemFinished();
       return;
     }
@@ -478,6 +508,11 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
         candidates.first(), [self, state](ErrorUtils::Result<Scraper::ScrapedItem> result) {
           if (self.isNull()) return;
           if (self->m_cancelled) {
+            self->itemFinished();
+            return;
+          }
+          if (state->cancelToken->load(std::memory_order_relaxed)) {
+            ++self->m_summary.skipped;
             self->itemFinished();
             return;
           }
@@ -536,6 +571,16 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
                     }
                     return;
                   }
+                  if (state->cancelToken->load(std::memory_order_relaxed)) {
+                    // Skipped mid media-fetch: drop the in-flight assets and
+                    // count the item as skipped once the last fetch returns
+                    // (it never reaches applyAndFinish, so nothing is written).
+                    if (--agg->pending == 0) {
+                      ++self->m_summary.skipped;
+                      self->itemFinished();
+                    }
+                    return;
+                  }
                   if (r.isOk() && !r.value().isEmpty()) {
                     // Track byte count regardless of write success
                     // — the user's bandwidth was already spent.
@@ -566,7 +611,7 @@ void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
   });
 }
 
-void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
+void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
                                        const Scraper::ScrapedItem &scraped,
                                        const QList<Scraper::PendingMediaWrite> &writes) {
   if (m_cancelled) {

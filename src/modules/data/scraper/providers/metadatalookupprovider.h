@@ -1,7 +1,9 @@
 #ifndef METADATALOOKUPPROVIDER_H
 #define METADATALOOKUPPROVIDER_H
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <type_traits>
 
 #include <QByteArray>
@@ -40,6 +42,15 @@ public:
   struct LookupContext {
     QString query;
     QString filePath;
+    /// Optional cooperative-cancellation flag. When set true mid-lookup
+    /// (by the batch driver's cancel()), hash-based providers abort the
+    /// in-flight ROM hash / archive extraction promptly — killing the
+    /// extractor QProcess — instead of running it to completion on a
+    /// worker thread after the user already cancelled. shared_ptr so the
+    /// flag outlives the driver if the worker is still mid-hash. Defaulted so
+    /// the single-item lookup paths that don't thread cancellation can brace-
+    /// init just {query, filePath} without tripping -Wmissing-field-initializers.
+    std::shared_ptr<std::atomic<bool>> cancelToken{};
   };
 
   /// Search the provider for `query`. Returns up to N candidates;
@@ -87,6 +98,10 @@ public:
     bool refuseScrape = false;
   };
   using HealthCallback = std::function<void(HealthStatus)>;
+  // By-value (not const-ref): ScreenScraperProvider's override std::moves the
+  // callback into its async probe, so const-ref here would force a copy in the
+  // override. The base default below doesn't move, so the check fires only here.
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
   virtual void fetchHealthStatus(HealthCallback callback) {
     if (callback) callback(HealthStatus{});
   }
@@ -111,6 +126,9 @@ public:
   /// progress view doesn't look frozen during the multi-minute PS2
   /// .zip extraction.
   using StageReporter = std::function<void(const QString &stage)>;
+  // By-value (not const-ref): ScreenScraperProvider's override std::moves the
+  // reporter into a member, so const-ref here would force a copy in the override.
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
   virtual void setStageReporter(StageReporter /*reporter*/) {}
 };
 

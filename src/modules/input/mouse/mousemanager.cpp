@@ -344,9 +344,43 @@ std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &
     return {nullptr, -1};
   }
 
-  // Build candidate list preserving widget->index mapping
-  QVector<std::pair<ItemWidget *, int>> candidates;
   const auto &active = scrollManager->getActiveWidgets();
+  if (active.isEmpty()) {
+    return {nullptr, -1};
+  }
+
+  // Widgets live inside a virtual container offset within gridContainer; shift
+  // the click into that space (the coordinate system the grid layout and
+  // indexAtPosition both use). Any active widget's parent gives the offset.
+  ItemWidget *anyWidget = nullptr;
+  for (auto it = active.constBegin(); it != active.constEnd() && !anyWidget; ++it) {
+    anyWidget = it.value();
+  }
+  QPoint virtualContainerOffset(0, 0);
+  QWidget *virtualContainer = anyWidget ? anyWidget->parentWidget() : nullptr;
+  if (virtualContainer && virtualContainer->parentWidget() == gridContainer) {
+    virtualContainerOffset = virtualContainer->pos();
+  }
+  const QPoint posInVC = clickPos - virtualContainerOffset;
+
+  // Fast path (Kartend-th8z): map the cursor straight to a grid index instead of
+  // scanning every active widget. Trust it only when the resolved widget really
+  // contains the point — that defers inter-tile gaps, out-of-grid clicks, and
+  // any index-space skew (filtering / subcollection rows) to the snap-to-nearest
+  // fallback below, so the observable result is unchanged.
+  const int fastIdx = GridLayoutCalculator::indexAtPosition(posInVC, scrollManager->getMetrics(),
+                                                            scrollManager->getTotalItems());
+  if (fastIdx >= 0) {
+    ItemWidget *hit = active.value(fastIdx);
+    if (hit && hit->isVisible() && hit->geometry().contains(posInVC)) {
+      return {hit, fastIdx};
+    }
+  }
+
+  // Fallback (original behavior): build the candidate list, then snap to the
+  // nearest visible widget by center distance, preferring any that contain the
+  // point.
+  QVector<std::pair<ItemWidget *, int>> candidates;
   candidates.reserve(active.size());
   for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
     if (it.value() && it.value()->isVisible()) {
@@ -356,14 +390,6 @@ std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &
   if (candidates.isEmpty()) {
     return {nullptr, -1};
   }
-
-  QPoint virtualContainerOffset(0, 0);
-  QWidget *virtualContainer =
-      candidates.first().first ? candidates.first().first->parentWidget() : nullptr;
-  if (virtualContainer && virtualContainer->parentWidget() == gridContainer) {
-    virtualContainerOffset = virtualContainer->pos();
-  }
-  QPoint posInVC = clickPos - virtualContainerOffset;
 
   // Find widgets directly under click position
   QVector<std::pair<ItemWidget *, int>> under;

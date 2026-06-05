@@ -16,6 +16,8 @@
 #include <QTemporaryDir>
 
 #include <array>
+#include <atomic>
+#include <memory>
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -88,10 +90,20 @@ bool extractionExceedsCeiling(const QString &root, qint64 ceiling) {
 class Crc32 {
 public:
   void addData(const QByteArray &chunk) {
-    for (const char ch : chunk) {
-      const auto byte = static_cast<quint8>(ch);
-      m_crc = (m_crc >> 8) ^ table()[(m_crc ^ byte) & 0xFFu];
+    // Hoist the table reference and the running CRC into locals and walk the
+    // buffer through a raw pointer. For a multi-GB disc image this is the hot
+    // loop running alongside MD5+SHA1, so dropping the per-byte QByteArray
+    // iterator and the per-byte table() function-static guard branch is worth
+    // it. Same table-driven CRC-32 (poly 0xEDB88320), bit-for-bit identical
+    // output to the previous byte-at-a-time form.
+    const std::array<quint32, 256> &t = table();
+    const auto *p = reinterpret_cast<const quint8 *>(chunk.constData());
+    const auto *const end = p + chunk.size();
+    quint32 crc = m_crc;
+    for (; p != end; ++p) {
+      crc = (crc >> 8) ^ t[(crc ^ *p) & 0xFFu];
     }
+    m_crc = crc;
   }
   // 8-digit lowercase hex, the form SS and No-Intro / Redump DATs use.
   [[nodiscard]] QString hex() const {
@@ -118,7 +130,8 @@ private:
 
 } // namespace
 
-ErrorUtils::Result<Result> hashFile(const QString &filePath) {
+ErrorUtils::Result<Result> hashFile(const QString &filePath,
+                                    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
   if (filePath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty file path",
                                "RomHasher::hashFile");
@@ -160,6 +173,11 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath) {
   Crc32 crc;
   qint64 totalRead = 0;
   while (!f.atEnd()) {
+    if (cancelToken && cancelToken->load(std::memory_order_relaxed)) {
+      f.close();
+      return ErrorContext::error(ErrorCode::OperationCancelled, "ROM hashing cancelled",
+                                 "RomHasher::hashFile");
+    }
     const QByteArray chunk = f.read(CHUNK_SIZE);
     if (chunk.isEmpty()) {
       // Premature end / read error mid-file. Treat as failure rather
@@ -213,7 +231,9 @@ QStringList extractorCandidates(const QString &archivePath) {
   return candidates;
 }
 
-ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
+ErrorUtils::Result<Result>
+hashArchiveInnerRom(const QString &archivePath,
+                    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
   if (archivePath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path",
                                "RomHasher::hashArchiveInnerRom");
@@ -298,9 +318,17 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   clock.start();
   bool finished = false;
   bool overSize = false;
+  bool cancelled = false;
   while (clock.elapsed() < ARCHIVE_EXTRACT_TIMEOUT_MS) {
     if (proc.waitForFinished(EXTRACT_POLL_INTERVAL_MS)) {
       finished = true;
+      break;
+    }
+    // Cooperative cancel: the batch driver flips this when the user cancels.
+    // Checked once per poll so we kill the extractor within one poll interval
+    // instead of running the (multi-minute) extraction to completion.
+    if (cancelToken && cancelToken->load(std::memory_order_relaxed)) {
+      cancelled = true;
       break;
     }
     if (extractionExceedsCeiling(tmp.path(), ceiling)) {
@@ -311,6 +339,11 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
   if (!finished) {
     proc.kill();
     proc.waitForFinished(1000);
+    if (cancelled) {
+      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
+                                 "RomHasher::hashArchiveInnerRom")
+          .withDetails(archivePath);
+    }
     if (overSize) {
       return ErrorContext::error(ErrorCode::InvalidArgument,
                                  "Archive extraction exceeded the size limit",
@@ -345,6 +378,7 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
                   QDirIterator::Subdirectories);
   QString largestPath;
   qint64 largestSize = -1;
+  qint64 secondLargestSize = -1;
   int inspected = 0;
   while (it.hasNext()) {
     const QString candidate = it.next();
@@ -359,8 +393,11 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
     }
     const qint64 sz = entryInfo.size();
     if (sz > largestSize) {
+      secondLargestSize = largestSize;
       largestSize = sz;
       largestPath = canon;
+    } else if (sz > secondLargestSize) {
+      secondLargestSize = sz;
     }
   }
   if (largestPath.isEmpty()) {
@@ -369,7 +406,22 @@ ErrorUtils::Result<Result> hashArchiveInnerRom(const QString &archivePath) {
                                "RomHasher::hashArchiveInnerRom")
         .withDetails(archivePath);
   }
-  return hashFile(largestPath);
+  // Ambiguous multi-dump guard: a single ROM dump is one large file plus small
+  // sidecars (.cue / readme / NFO). When a SECOND file is comparably large
+  // (>= half the largest), the archive is almost certainly a multi-disc or
+  // multi-track set, and "largest wins" would hash an arbitrary member —
+  // producing a CRC that matches the wrong scraper record or none. Refuse
+  // rather than guess; the caller falls back to name-based matching
+  // (Kartend-uhcfm).
+  if (secondLargestSize >= 0 && 2 * secondLargestSize >= largestSize) {
+    return ErrorContext::error(
+               ErrorCode::InvalidArgument,
+               "Archive has multiple comparably-large files (multi-disc/track); cannot pick a "
+               "single inner ROM to hash",
+               "RomHasher::hashArchiveInnerRom")
+        .withDetails(archivePath);
+  }
+  return hashFile(largestPath, cancelToken);
 }
 
 } // namespace RomHasher

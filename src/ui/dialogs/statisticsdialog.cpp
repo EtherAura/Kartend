@@ -8,6 +8,7 @@
 #include "uiconstants/color.h"
 
 #include <algorithm>
+#include <atomic>
 
 #include <QCheckBox>
 #include <QDateTime>
@@ -22,7 +23,10 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTabWidget>
+#include <QtConcurrent>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -287,27 +291,16 @@ void StatisticsDialog::refresh() {
     return;
   }
 
-  // Recency cutoff is derived once per refresh so the header counter and any
-  // future tab filters stay consistent. UTC ISO-8601 matches what
-  // recordLaunch() writes, so a string comparison in SQL is cheap and safe.
-  const QString cutoffIso =
-      QDateTime::currentDateTimeUtc().addDays(-RECENT_DAYS_WINDOW).toString(Qt::ISODate);
-  const auto agg = m_databaseManager->loadAggregateUsageStats();
-  const qint64 played7Days = m_databaseManager->countItemsPlayedSince(cutoffIso);
-  const qint64 totalNever = std::max<qint64>(0, agg.totalItems - agg.itemsLaunchedAtLeastOnce);
+  // Resolve every collection's UUID + label once up front so the populate*
+  // passes below resolve via hash lookups instead of recomputing each
+  // collection's UUID (an FS path-expansion) per row (Kartend-umwix).
+  rebuildCollectionUuidMaps();
 
-  populateAggregate(agg, played7Days);
-  populateMostPlayed(m_databaseManager->loadTopPlayedItems(TOP_LIST_LIMIT));
-  populateRecentlyPlayed(m_databaseManager->loadRecentlyPlayedItems(RECENT_LIST_LIMIT));
-  populateNeverPlayed(m_databaseManager->loadNeverPlayedItems(NEVER_LIST_LIMIT), totalNever);
-  populateByCollection(m_databaseManager->loadUsageByCollection());
-  populateHistory(m_databaseManager->loadRecentHistory(HISTORY_LIST_LIMIT),
-                  m_databaseManager->historyEntryCount());
-
+  // Non-DB chrome (runtime note + history toggle) is cheap; update it
+  // synchronously so the dialog never looks half-painted while the queries run.
   if (m_runtimeNote) {
     m_runtimeNote->setVisible(!m_runtimeDetectionEnabled);
   }
-
   // Reflect the live historyEnabled gate in the toggle. Block signals so
   // syncing it doesn't bounce through onHistoryDisableToggled and write
   // back the same value.
@@ -320,6 +313,92 @@ void StatisticsDialog::refresh() {
       m_historyDisabledNote->setVisible(!on);
     }
   }
+
+  // Run every stats query off the UI thread (Kartend-umwix part B). gatherStats
+  // opens its own read-only SQLite connection to the same file; WAL mode lets it
+  // read a consistent snapshot concurrently with the main connection's writes.
+  // Recency cutoff (UTC ISO-8601, matching recordLaunch()'s format) is computed
+  // here so the worker stays a pure value function. Supersede any in-flight load
+  // so a rapid re-refresh can't paint stale data.
+  const QString cutoffIso =
+      QDateTime::currentDateTimeUtc().addDays(-RECENT_DAYS_WINDOW).toString(Qt::ISODate);
+  const QString dbPath = m_databaseManager->databaseFilePath();
+  if (m_statsWatcher) {
+    m_statsWatcher->disconnect(this);
+    m_statsWatcher->deleteLater();
+    m_statsWatcher = nullptr;
+  }
+  auto *watcher = new QFutureWatcher<StatsSnapshot>(this);
+  m_statsWatcher = watcher;
+  connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher]() {
+    if (m_statsWatcher == watcher) {
+      m_statsWatcher = nullptr;
+    }
+    const StatsSnapshot snap = watcher->result();
+    watcher->deleteLater();
+    applyStatsSnapshot(snap);
+  });
+  watcher->setFuture(QtConcurrent::run(&StatisticsDialog::gatherStats, dbPath, cutoffIso));
+}
+
+StatisticsDialog::StatsSnapshot StatisticsDialog::gatherStats(const QString &dbPath,
+                                                              const QString &cutoffIso) {
+  StatsSnapshot s;
+  if (dbPath.isEmpty()) {
+    return s;
+  }
+  // Unique connection name per call so concurrent / sequential gathers never
+  // collide in QSqlDatabase's global registry.
+  static std::atomic<quint64> connSeq{0};
+  const QString conn =
+      QStringLiteral("kartend_stats_%1").arg(connSeq.fetch_add(1, std::memory_order_relaxed));
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    db.setDatabaseName(dbPath);
+    if (db.open()) {
+      // Wait briefly for a concurrent writer rather than failing the read.
+      QSqlQuery(db).exec(QStringLiteral("PRAGMA busy_timeout = 3000"));
+      if (auto r = UsageStatsStore::loadAggregate(db); r.isOk()) {
+        s.agg = r.value();
+      }
+      if (auto r = UsageStatsStore::countPlayedSince(db, cutoffIso); r.isOk()) {
+        s.played7Days = r.value();
+      }
+      if (auto r = UsageStatsStore::loadTopPlayed(db, TOP_LIST_LIMIT); r.isOk()) {
+        s.topPlayed = r.value();
+      }
+      if (auto r = UsageStatsStore::loadRecentlyPlayed(db, RECENT_LIST_LIMIT); r.isOk()) {
+        s.recentlyPlayed = r.value();
+      }
+      if (auto r = UsageStatsStore::loadNeverPlayed(db, NEVER_LIST_LIMIT); r.isOk()) {
+        s.neverPlayed = r.value();
+      }
+      if (auto r = UsageStatsStore::loadCollectionBreakdown(db); r.isOk()) {
+        s.byCollection = r.value();
+      }
+      if (auto r = HistoryStore::loadRecent(db, HISTORY_LIST_LIMIT); r.isOk()) {
+        s.history = r.value();
+      }
+      if (auto r = HistoryStore::count(db); r.isOk()) {
+        s.historyCount = r.value();
+      }
+      s.totalNever = std::max<qint64>(0, s.agg.totalItems - s.agg.itemsLaunchedAtLeastOnce);
+      s.ok = true;
+    }
+  }
+  // db is out of scope (and the store helpers destroyed their queries) before
+  // removeDatabase, so Qt doesn't warn about a connection still in use.
+  QSqlDatabase::removeDatabase(conn);
+  return s;
+}
+
+void StatisticsDialog::applyStatsSnapshot(const StatsSnapshot &snap) {
+  populateAggregate(snap.agg, snap.played7Days);
+  populateMostPlayed(snap.topPlayed);
+  populateRecentlyPlayed(snap.recentlyPlayed);
+  populateNeverPlayed(snap.neverPlayed, snap.totalNever);
+  populateByCollection(snap.byCollection);
+  populateHistory(snap.history, snap.historyCount);
 }
 
 void StatisticsDialog::populateAggregate(const UsageStatsStore::AggregateStats &agg,
@@ -456,6 +535,27 @@ void StatisticsDialog::populateNeverPlayed(const QList<UsageStatsStore::ItemUsag
   }
 }
 
+void StatisticsDialog::rebuildCollectionUuidMaps() {
+  m_uuidToIndex.clear();
+  m_indexToUuid.clear();
+  m_uuidToLabel.clear();
+  if (!m_collections) {
+    return;
+  }
+  const int n = m_collections->size();
+  m_uuidToIndex.reserve(n);
+  m_indexToUuid.reserve(n);
+  m_uuidToLabel.reserve(n);
+  for (int i = 0; i < n; ++i) {
+    const CollectionConfig &c = (*m_collections)[i];
+    const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, expanded);
+    m_uuidToIndex.insert(uuid, i);
+    m_indexToUuid.append(uuid);
+    m_uuidToLabel.insert(uuid, CollectionUtils::hierarchicalNameFor(c, *m_collections));
+  }
+}
+
 void StatisticsDialog::populateByCollection(
     const QHash<QString, UsageStatsStore::CollectionUsage> &byUuid) {
   if (!m_byCollectionTree) {
@@ -468,23 +568,14 @@ void StatisticsDialog::populateByCollection(
   // so the count matches what the title bar shows for that collection (which
   // is always recursive — see refreshTitleCounts() in mainwindow.cpp). Without
   // this, a root parent with subcollections shows 0 items in stats while the
-  // title bar shows the full subtree total. Map uuid → collectionIndex once,
-  // then walk each row's subtree summing every stat field so launches and
-  // play time stay in step with itemCount.
-  QHash<QString, int> uuidToIndex;
-  if (m_collections) {
-    uuidToIndex.reserve(m_collections->size());
-    for (int i = 0; i < m_collections->size(); ++i) {
-      const CollectionConfig &c = (*m_collections)[i];
-      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-      uuidToIndex.insert(CollectionUtils::computeCollectionUuid(c.name, expanded), i);
-    }
-  }
-
+  // title bar shows the full subtree total. The uuid<->index maps were built
+  // once per refresh by rebuildCollectionUuidMaps(); walk each row's subtree
+  // summing every stat field so launches and play time stay in step with
+  // itemCount.
   auto rollUpForUuid = [&](const QString &uuid) -> UsageStatsStore::CollectionUsage {
     UsageStatsStore::CollectionUsage acc;
     acc.collectionUuid = uuid;
-    if (!m_collections || !uuidToIndex.contains(uuid)) {
+    if (!m_collections || !m_uuidToIndex.contains(uuid)) {
       // Stale row (collection deleted) — use the raw stored values so the
       // user can still see and clear it.
       auto it = byUuid.constFind(uuid);
@@ -494,15 +585,15 @@ void StatisticsDialog::populateByCollection(
       return acc;
     }
     QList<int> stack;
-    stack.append(uuidToIndex.value(uuid));
+    stack.append(m_uuidToIndex.value(uuid));
     while (!stack.isEmpty()) {
       const int idx = stack.takeLast();
       if (idx < 0 || idx >= m_collections->size()) {
         continue;
       }
-      const CollectionConfig &c = (*m_collections)[idx];
-      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-      const QString descUuid = CollectionUtils::computeCollectionUuid(c.name, expanded);
+      // index->uuid was resolved once in rebuildCollectionUuidMaps(); reuse it
+      // instead of re-expanding this descendant's media path (Kartend-umwix).
+      const QString &descUuid = m_indexToUuid[idx];
       auto it = byUuid.constFind(descUuid);
       if (it != byUuid.constEnd()) {
         acc.itemCount += it.value().itemCount;
@@ -577,13 +668,11 @@ QString StatisticsDialog::labelForCollectionUuid(const QString &uuid) const {
   if (uuid.isEmpty()) {
     return tr("(unknown)");
   }
-  if (m_collections) {
-    for (const CollectionConfig &c : *m_collections) {
-      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-      if (CollectionUtils::computeCollectionUuid(c.name, expanded) == uuid) {
-        return CollectionUtils::hierarchicalNameFor(c, *m_collections);
-      }
-    }
+  // m_uuidToLabel is rebuilt each refresh (rebuildCollectionUuidMaps), so this
+  // is a hash lookup rather than a per-call linear scan that recomputed every
+  // collection's UUID — the O(n^2) + sync-FS hotspot (Kartend-umwix).
+  if (auto it = m_uuidToLabel.constFind(uuid); it != m_uuidToLabel.constEnd()) {
+    return it.value();
   }
   // Stale rows from deleted collections still need a label — show the
   // truncated uuid so the row stays identifiable across refreshes.

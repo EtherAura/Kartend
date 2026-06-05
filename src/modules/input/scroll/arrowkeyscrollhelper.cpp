@@ -67,7 +67,7 @@ auto ArrowKeyScrollHelper::shouldSkipUpdate() const -> bool {
 }
 
 void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems, int itemsPerRow,
-                                         std::function<int(int)> getItemPositionY) {
+                                         const std::function<int(int)> &getItemPositionY) {
   if (!m_scrollArea || selectedIndex < 0 || selectedIndex >= totalItems) {
     return;
   }

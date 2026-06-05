@@ -51,10 +51,32 @@
 #include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
-#include "videoutils.h"
 
 #include <QPointer>
 #include <QPolygon>
+
+namespace {
+// RAII per-phase timer for setMetadata's KARTEND_PERF_TRACE breakdown.
+// When enabled, starts on construction and writes the elapsed ms into
+// `out` on scope exit; a no-op when tracing is off. Collapses the
+// repeated `QElapsedTimer t; if (trace) t.start(); …; if (trace) out =
+// t.elapsed();` scaffolding each phase carried.
+class PhaseTimer {
+public:
+  PhaseTimer(bool enabled, qint64 &out) : m_out(enabled ? &out : nullptr) {
+    if (m_out) m_timer.start();
+  }
+  ~PhaseTimer() {
+    if (m_out) *m_out = m_timer.elapsed();
+  }
+  PhaseTimer(const PhaseTimer &) = delete;
+  PhaseTimer &operator=(const PhaseTimer &) = delete;
+
+private:
+  QElapsedTimer m_timer;
+  qint64 *m_out;
+};
+} // namespace
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
@@ -253,15 +275,14 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
     return;
   }
 
-  // Per-phase perf timers (Kartend-5ux9 follow-up) — the outer
-  // perfTrace showed setMeta=200-240ms tail even after loadArtwork went
-  // async, so the cost is in some other call inside this function.
-  // Each phase below logs separately; we only emit the breakdown when
+  // Per-phase perf timers (Kartend-5ux9 follow-up) — the outer perfTrace
+  // showed setMeta=200-240ms tail even after loadArtwork went async, so
+  // the cost is in some other call inside this function. Each PhaseTimer
+  // below records its phase; we only emit the breakdown when
   // KARTEND_PERF_TRACE=1.
   const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
   qint64 perfFileInfoMs = 0, perfPreviewSize1Ms = 0, perfLoadArtworkMs = 0;
-  qint64 perfVideo1Ms = 0, perfVideo2Ms = 0, perfArtworkOnlyMs = 0;
-  qint64 perfSchedulePvMs = 0, perfTabVisMs = 0;
+  qint64 perfVideoMs = 0, perfTabVisMs = 0;
 
   m_hasItemDisplayed = true;
   m_currentItemName = itemName;
@@ -275,10 +296,8 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // it unconditionally means a tab switch surfaces the correct data
   // without re-running the manager's selection pipeline.
   {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
+    PhaseTimer pt(perfTrace, perfFileInfoMs);
     updateFileInfo(filePath);
-    if (perfTrace) perfFileInfoMs = t.elapsed();
   }
 
   QFileInfo fileInfo(filePath);
@@ -289,16 +308,13 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   m_artworkSource = QPixmap();
   m_primaryArtworkPath.clear();
   {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
+    PhaseTimer pt(perfTrace, perfPreviewSize1Ms);
     applyPreviewSize();
-    if (perfTrace) perfPreviewSize1Ms = t.elapsed();
   }
 
   // Try collection's artwork directory first if provided
   {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
+    PhaseTimer pt(perfTrace, perfLoadArtworkMs);
     if (!artworkDirectory.isEmpty()) {
       loadArtwork(baseName, artworkDirectory);
     } else {
@@ -307,81 +323,31 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
       const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
       loadArtwork(baseName, siblingArtworkDir);
     }
-    if (perfTrace) perfLoadArtworkMs = t.elapsed();
   }
 
-  // Resolve preview video. Lookup priority:
-  // (1) the collection's `videoDirectory` (power-user override), then
-  // (2) `{artworkDirectory}/video/` — where scraped videos land under the
-  // single-root layout.
-  QString videoPath;
-  if (!videoDirectory.isEmpty()) {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
-    videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
-    if (perfTrace) perfVideo1Ms = t.elapsed();
-  }
-  if (videoPath.isEmpty() && !artworkDirectory.isEmpty()) {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
-    videoPath = VideoUtils::findVideoForFile(filePath, QDir(artworkDirectory).filePath("video"));
-    if (perfTrace) perfVideo2Ms = t.elapsed();
-  }
-  // Static category at warning level so this trace stays silent
-  // during normal navigation (fires on every selection move). Opt in
-  // via `KARTEND_LOG_RULES=kartend.video.debug=true`.
-  static const QLoggingCategory lcVideo("kartend.video", QtWarningMsg);
-  qCDebug(lcVideo) << "preview lookup item=" << filePath << "videoDir=" << videoDirectory
-                   << "artworkDir=" << artworkDirectory << "resolved=" << videoPath;
-
-  // Only churn the video preview when the resolved path actually
-  // changed for THIS item. setMetadata fires multiple times for the
-  // same selection (manager refreshes after artwork load, post-scrape
-  // updates, hover events, etc.); without this guard each invocation
-  // hides the video widget, which triggers VideoPreviewWidget's
-  // hideEvent → m_player->pause(), then the 500ms debounce re-shows +
-  // re-plays — a glitchy ping-pong the user sees as "video stops
-  // playing". When the path is unchanged AND the widget is currently
-  // showing the same video, we leave the playback alone entirely.
-  const QString currentVideoPath =
-      m_videoPlayback.videoPreview ? m_videoPlayback.videoPreview->currentVideoPath() : QString();
-  const bool videoUnchanged = !videoPath.isEmpty() && videoPath == currentVideoPath &&
-                              m_videoPlayback.videoPreview &&
-                              m_videoPlayback.videoPreview->isVisible();
-  if (!videoUnchanged) {
-    {
-      QElapsedTimer t;
-      if (perfTrace) t.start();
-      showArtworkOnly();
-      if (perfTrace) perfArtworkOnlyMs = t.elapsed();
-    }
-    {
-      QElapsedTimer t;
-      if (perfTrace) t.start();
-      schedulePreviewVideo(videoPath);
-      if (perfTrace) perfSchedulePvMs = t.elapsed();
-    }
+  // Resolve + apply the preview video (see detailspanevideo.cpp). A single
+  // phase now; the per-lookup sub-timings were only needed to find the
+  // original setMeta tail.
+  {
+    PhaseTimer pt(perfTrace, perfVideoMs);
+    applyPreviewVideo(filePath, artworkDirectory, videoDirectory);
   }
 
   // Defer all section visibility to applyTabVisibility() so each tab
   // ends up with its own distinct widget set.
   {
-    QElapsedTimer t;
-    if (perfTrace) t.start();
+    PhaseTimer pt(perfTrace, perfTabVisMs);
     applyTabVisibility();
-    if (perfTrace) perfTabVisMs = t.elapsed();
   }
 
   if (perfTrace) {
-    const qint64 phaseSum = perfFileInfoMs + perfPreviewSize1Ms + perfLoadArtworkMs + perfVideo1Ms +
-                            perfVideo2Ms + perfArtworkOnlyMs + perfSchedulePvMs + perfTabVisMs;
+    const qint64 phaseSum =
+        perfFileInfoMs + perfPreviewSize1Ms + perfLoadArtworkMs + perfVideoMs + perfTabVisMs;
     if (phaseSum > 5) {
       qCDebug(lcPerfTrace).nospace()
           << "DetailsPane::setMetadata phases: sum=" << phaseSum << " (fileInfo=" << perfFileInfoMs
           << " previewSize1=" << perfPreviewSize1Ms << " loadArtwork=" << perfLoadArtworkMs
-          << " video1=" << perfVideo1Ms << " video2=" << perfVideo2Ms
-          << " artworkOnly=" << perfArtworkOnlyMs << " schedulePv=" << perfSchedulePvMs
-          << " tabVis=" << perfTabVisMs << ") path=" << filePath;
+          << " video=" << perfVideoMs << " tabVis=" << perfTabVisMs << ") path=" << filePath;
     }
   }
 }
@@ -412,6 +378,11 @@ void DetailsPane::clearMetadata() {
   // summary inside applyTabVisibility().
   ui->itemNameValue->setText(tr("No item selected"));
   m_currentFilePath.clear();
+  // Drop any in-flight stat worker (bump the generation) and clear the cached
+  // result so a switch to the File tab after deselection can't re-apply the
+  // previous item's size/modified (Kartend-kujy5).
+  ++m_fileInfoGen;
+  m_fileStatDisplay = FileStatDisplay{};
   ui->filePathValue->setText("-");
   ui->filePathValue->setToolTip(QString());
   ui->fileSizeValue->setText("-");
@@ -569,6 +540,11 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
   updateFilePathDisplay();
   ui->filePathValue->setToolTip(filePath);
 
+  // New selection: invalidate the cached stat result so a switch to the File
+  // tab before the worker delivers can't re-apply the previous item's data
+  // (Kartend-kujy5).
+  m_fileStatDisplay = FileStatDisplay{};
+
   // Show placeholders for the stat-derived fields until the worker delivers.
   // On slow mounts (network/USB) a single QFileInfo::exists/size/lastModified
   // can take 50-260ms; pre-fix this dominated DetailsPane::setMetadata's
@@ -600,15 +576,23 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
     watcher->deleteLater();
     if (myGen != m_fileInfoGen) return;
     const StatResult res = watcher->result();
-    if (!res.exists) {
-      ui->filePathValue->setText(tr("File not found"));
-      ui->fileSizeValue->setText("-");
-      ui->lastModifiedValue->setText("-");
-      ui->fileExtensionValue->setText("-");
-      return;
+    // Cache the resolved values, then paint them only while the File tab is
+    // showing. Off-tab the cache is enough — applyTabVisibility() re-applies it
+    // when the user switches to the File tab, so the result is never lost and a
+    // not-found verdict never leaks onto a hidden tab to surface stale later
+    // (Kartend-kujy5).
+    m_fileStatDisplay.resolved = true;
+    m_fileStatDisplay.exists = res.exists;
+    if (res.exists) {
+      m_fileStatDisplay.sizeText = formatFileSize(res.size);
+      m_fileStatDisplay.modifiedText = res.lastModified.toString("yyyy-MM-dd hh:mm:ss");
+    } else {
+      m_fileStatDisplay.sizeText = QStringLiteral("-");
+      m_fileStatDisplay.modifiedText = QStringLiteral("-");
     }
-    ui->fileSizeValue->setText(formatFileSize(res.size));
-    ui->lastModifiedValue->setText(res.lastModified.toString("yyyy-MM-dd hh:mm:ss"));
+    if (m_activeTab == DetailsPaneTab::File) {
+      applyFileStatDisplay();
+    }
   });
   watcher->setFuture(QtConcurrent::run([filePath]() {
     QFileInfo fi(filePath);
@@ -620,6 +604,20 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
     }
     return r;
   }));
+}
+
+void DetailsPane::applyFileStatDisplay() {
+  if (!m_fileStatDisplay.resolved) {
+    return; // worker hasn't delivered yet — leave the '…' placeholders
+  }
+  if (!m_fileStatDisplay.exists) {
+    // Not-found is the only async case that also overrides the path/extension
+    // the synchronous prelude set; the exists case leaves those untouched.
+    ui->filePathValue->setText(tr("File not found"));
+    ui->fileExtensionValue->setText(QStringLiteral("-"));
+  }
+  ui->fileSizeValue->setText(m_fileStatDisplay.sizeText);
+  ui->lastModifiedValue->setText(m_fileStatDisplay.modifiedText);
 }
 
 void DetailsPane::setupTabBar() {
@@ -719,6 +717,10 @@ void DetailsPane::applyTabVisibility() {
                                                            : m_currentItemName);
     setArtworkSectionVisible(false);
     setFileInfoRowsVisible(true);
+    // Re-apply the cached async stat result: if the worker resolved while this
+    // tab was hidden, the size/modified labels would otherwise be stuck on the
+    // '…' placeholder until the next selection (Kartend-kujy5).
+    applyFileStatDisplay();
     if (m_galleryView) m_galleryView->hideSection();
     if (m_detailsContainer) m_detailsContainer->hide();
     break;
@@ -818,18 +820,6 @@ void DetailsPane::applyContentAlignment() {
   }
 }
 
-void DetailsPane::pausePreviewVideo() {
-  if (m_artworkController) m_artworkController->pausePreviewVideo();
-}
-
-void DetailsPane::resumePreviewVideo() {
-  if (m_artworkController) m_artworkController->resumePreviewVideo();
-}
-
-bool DetailsPane::togglePreviewVideoPause() {
-  return m_artworkController && m_artworkController->togglePreviewVideoPause();
-}
-
 void DetailsPane::updateFilePathDisplay() {
   if (m_currentFilePath.isEmpty()) {
     return;
@@ -868,10 +858,6 @@ void DetailsPane::loadArtwork(const QString &baseName, const QString &artworkDir
 // Apply horzontal scrolling policy
 void DetailsPane::showArtworkOnly() {
   if (m_artworkController) m_artworkController->showArtworkOnly();
-}
-
-void DetailsPane::schedulePreviewVideo(const QString &videoPath) {
-  if (m_artworkController) m_artworkController->schedulePreviewVideo(videoPath);
 }
 
 void DetailsPane::setScrollIdlePredicate(std::function<bool()> predicate) {

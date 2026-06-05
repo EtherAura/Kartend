@@ -148,7 +148,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarWidth = width;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        sm->saveCollections(*m_collections);
+        (void)sm->saveCollections(*m_collections);
       }
     });
     // height-drag handlers for Top/Bottom dock. Mirror the width
@@ -175,7 +175,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarHeight = height;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        sm->saveCollections(*m_collections);
+        (void)sm->saveCollections(*m_collections);
       }
     });
     // tabs: persist the user's tab choice per collection, then re-push the
@@ -190,7 +190,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarActiveTab = tab;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        sm->saveCollections(*m_collections);
+        (void)sm->saveCollections(*m_collections);
       }
       if (!m_currentItemFilePath.isEmpty()) {
         // Tab switch is a deliberate user action — refresh immediately so
@@ -600,7 +600,7 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
   }
   (*m_collections)[collectionIndex].sidebar.sidebarVisible = visible;
   if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-    sm->saveCollections(*m_collections);
+    (void)sm->saveCollections(*m_collections);
   }
 }
 

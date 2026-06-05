@@ -16,6 +16,7 @@
 #include <QTimer>
 
 #include "applicationcontext.h"
+#include "batchsizes.h"
 #include "cachedcountsservice.h"
 #include "collection/collectioncontext.h"
 #include "collection/hierarchyhelpers.h"
@@ -242,17 +243,17 @@ void DatabaseManager::initDatabase() {
 }
 
 void DatabaseManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
-  emit requestLoadAllCollections(allCollections);
+  emit requestLoadAllCollections(allCollections, ++m_loadGeneration);
 }
 
 void DatabaseManager::loadItemsWithSubcollections(const CollectionContext &context,
                                                   const QList<CollectionConfig> &allCollections) {
-  emit requestLoadItemsWithSubcollections(context, allCollections);
+  emit requestLoadItemsWithSubcollections(context, allCollections, ++m_loadGeneration);
 }
 
 void DatabaseManager::loadItems(const CollectionContext &context,
                                 const QList<CollectionConfig> &allCollections) {
-  emit requestLoadItems(context, allCollections);
+  emit requestLoadItems(context, allCollections, ++m_loadGeneration);
 }
 
 void DatabaseManager::fetchItemCount(const CollectionContext &context,
@@ -315,7 +316,17 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileNames,
                                           const QHash<QString, QString> &fileToArtworkDir,
                                           const QHash<QString, QString> &fileToMediaDir,
-                                          const QHash<QString, int> &fileToCollectionIndex) {
+                                          const QHash<QString, int> &fileToCollectionIndex,
+                                          quint64 loadGeneration) {
+  // Drop a superseded load: a newer loadItems* bumped m_loadGeneration after
+  // this delivery was dispatched, so these items belong to a collection the
+  // user has already navigated away from. Suppressing it here keeps every
+  // downstream consumer (the grid widgets AND the state-flag registry) from
+  // briefly painting the wrong collection (Kartend-jgj9t). gen 0 = an untracked
+  // load path, never dropped. Runs on the main thread, same as the bump.
+  if (loadGeneration != 0 && loadGeneration != m_loadGeneration) {
+    return;
+  }
   // Apply per-collection title-exclusion patterns on the main thread, after
   // the worker has produced the underscore-cleaned base names. Doing it here
   // (rather than inside QueryManager) keeps the worker free of settings-
@@ -652,15 +663,21 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
   if (!m_db.isOpen() || liveUuids.isEmpty()) {
     return;
   }
-  // Build a placeholder list for the NOT IN clause; collection counts
-  // are small, so a bound IN clause is fine (no temp table needed).
-  QStringList placeholders;
-  placeholders.reserve(liveUuids.size());
-  for (int i = 0; i < liveUuids.size(); ++i) {
-    placeholders << QStringLiteral("?");
-  }
-  const QString inClause =
-      QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
+
+  // items keys on `collection_uuid`, collections on `uuid`.
+  const QList<QPair<QString, QString>> targets = {
+      {QStringLiteral("items"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("collections"), QStringLiteral("uuid")}};
+
+  // The inline NOT IN (?, …) form binds one variable per live uuid. With
+  // hundreds of collections (each contributing up to two uuids) that count
+  // approaches SQLite's 999-variable cap (KartendDb::BatchSizes::
+  // SqliteVariableLimit), at which point the DELETE fails with "too many SQL
+  // variables" and orphan rows are never purged. Past a batch's worth of
+  // uuids, switch to the temp-table form: feed query_uuids in bounded batches,
+  // then DELETE … NOT IN (SELECT uuid FROM query_uuids), which carries no
+  // per-uuid binds in the DELETE itself.
+  const bool useTempTable = liveUuids.size() > KartendDb::BatchSizes::UuidListBatch;
 
   if (!m_db.transaction()) {
     ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
@@ -670,19 +687,63 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
     return;
   }
   try {
-    // items keys on `collection_uuid`, collections on `uuid`.
-    const QList<QPair<QString, QString>> targets = {
-        {QStringLiteral("items"), QStringLiteral("collection_uuid")},
-        {QStringLiteral("collections"), QStringLiteral("uuid")}};
-    for (const auto &target : targets) {
-      QSqlQuery del(m_db);
-      del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
-                      .arg(target.first, target.second, inClause));
-      for (const QString &uuid : liveUuids) {
-        del.addBindValue(uuid);
+    if (useTempTable) {
+      QSqlQuery ddl(m_db);
+      if (!ddl.exec(QStringLiteral(
+              "CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY KEY)"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
       }
-      if (!del.exec()) {
-        throw std::runtime_error(del.lastError().text().toStdString());
+      // Clear any rows left from a previous purge on this connection.
+      if (!ddl.exec(QStringLiteral("DELETE FROM query_uuids"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
+      }
+      const QStringList uuidList(liveUuids.cbegin(), liveUuids.cend());
+      constexpr int kBatch = KartendDb::BatchSizes::UuidListBatch;
+      for (qsizetype start = 0; start < uuidList.size(); start += kBatch) {
+        const qsizetype end = qMin(start + kBatch, uuidList.size());
+        QStringList placeholders;
+        placeholders.reserve(end - start);
+        for (qsizetype i = start; i < end; ++i) {
+          placeholders << QStringLiteral("(?)");
+        }
+        QSqlQuery ins(m_db);
+        ins.prepare(QStringLiteral("INSERT OR IGNORE INTO query_uuids (uuid) VALUES ") +
+                    placeholders.join(QStringLiteral(", ")));
+        for (qsizetype i = start; i < end; ++i) {
+          ins.addBindValue(uuidList.at(i));
+        }
+        if (!ins.exec()) {
+          throw std::runtime_error(ins.lastError().text().toStdString());
+        }
+      }
+      for (const auto &target : targets) {
+        QSqlQuery del(m_db);
+        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN (SELECT uuid FROM query_uuids)")
+                        .arg(target.first, target.second));
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
+      }
+    } else {
+      // Small uuid counts stay well under the bind cap — a bound inline IN
+      // clause is fine (no temp-table overhead).
+      QStringList placeholders;
+      placeholders.reserve(liveUuids.size());
+      for (int i = 0; i < liveUuids.size(); ++i) {
+        placeholders << QStringLiteral("?");
+      }
+      const QString inClause =
+          QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
+      for (const auto &target : targets) {
+        QSqlQuery del(m_db);
+        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
+                        .arg(target.first, target.second, inClause));
+        for (const QString &uuid : liveUuids) {
+          del.addBindValue(uuid);
+        }
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
       }
     }
     if (!m_db.commit()) {

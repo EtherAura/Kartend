@@ -270,26 +270,41 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
   if (state() && state()->search().clearedByEscape) {
     return;
   }
-  // Attempt refocus at multiple intervals to handle race conditions where
-  // other widgets briefly steal focus during search result updates.
-  // 0ms: Try immediately after current event processing completes
-  QTimer::singleShot(0, this, [this]() {
-    if (m_searchBar && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
-  // Short delay: Retry after widgets have finished their initial layout
-  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_SHORT_MS, this, [this]() {
-    if (m_searchBar && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
-  // Long delay: Final retry to catch slow focus changes from animations
-  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_LONG_MS, this, [this]() {
-    if (m_searchBar && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
+  // One restartable timer instead of three uncancellable singleShots. The old
+  // trio forced focus regardless of where it had moved, so a click into another
+  // field within the 400ms window had focus yanked back (Kartend-8oau). All
+  // reclaim attempts now route through refocusSearchBarUnlessDeliberate, which
+  // leaves a deliberate text target alone. The immediate attempt runs queued
+  // (after the results-update event that may steal focus settles, like the old
+  // 0ms singleShot); the timer catches slow focus changes from result-list
+  // animations (the old 400ms retry).
+  QMetaObject::invokeMethod(
+      this, [this]() { refocusSearchBarUnlessDeliberate(); }, Qt::QueuedConnection);
+  if (!m_searchBarRefocusTimer) {
+    m_searchBarRefocusTimer = new QTimer(this);
+    m_searchBarRefocusTimer->setSingleShot(true);
+    connect(m_searchBarRefocusTimer, &QTimer::timeout, this,
+            &SearchManager::refocusSearchBarUnlessDeliberate);
+  }
+  m_searchBarRefocusTimer->start(UIConstants::Search::REFOCUS_DELAY_LONG_MS);
+}
+
+void SearchManager::refocusSearchBarUnlessDeliberate() {
+  if (!m_searchBar || !m_searchBar->isVisible()) {
+    return;
+  }
+  QWidget *focused = QApplication::focusWidget();
+  if (focused == m_searchBar) {
+    return; // already where we want it
+  }
+  // A QLineEdit other than the search bar means the user deliberately moved
+  // focus into another field — don't steal it back. Transient grabbers during a
+  // results update (result tiles, etc.) aren't text inputs, so we still reclaim
+  // focus from those (Kartend-8oau).
+  if (qobject_cast<QLineEdit *>(focused)) {
+    return;
+  }
+  m_searchBar->setFocus(Qt::OtherFocusReason);
 }
 
 // Updates debounce interval based on typing speed

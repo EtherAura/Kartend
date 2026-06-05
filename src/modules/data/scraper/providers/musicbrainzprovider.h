@@ -1,7 +1,7 @@
 #ifndef MUSICBRAINZPROVIDER_H
 #define MUSICBRAINZPROVIDER_H
 
-#include "metadatalookupprovider.h"
+#include "providerbase.h"
 
 #include <QString>
 #include <QStringList>
@@ -15,7 +15,7 @@
 /// Supports WebSearch (so the URL-only fallback in
 /// MetadataProviderRegistry is replaced by this when registered) and
 /// the full async API surface (MetadataLookup + MediaFetch).
-class MusicBrainzProvider : public MetadataLookupProvider {
+class MusicBrainzProvider : public ProviderBase {
 public:
   MusicBrainzProvider();
 

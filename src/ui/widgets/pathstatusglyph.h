@@ -30,7 +30,7 @@ using PathChecker = std::function<PathUtils::PathStatus(const QString &)>;
 /// re-evaluates state because install() runs again with the freshly-saved
 /// text, so the badge clears when the user reinstalls a missing binary and
 /// reopens the dialog.
-void install(QLineEdit *edit, PathChecker checker);
+void install(QLineEdit *edit, const PathChecker &checker);
 
 } // namespace PathStatusGlyph
 

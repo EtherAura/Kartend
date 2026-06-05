@@ -218,7 +218,7 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
 
   // 4. Save settings synchronously (fast INI write, typically <1ms)
   if (m_settingsManager) {
-    m_settingsManager->saveCollections(collections);
+    (void)m_settingsManager->saveCollections(collections);
   }
 
   // 5. Release GUI resources from cache (clears pixmaps from memory)

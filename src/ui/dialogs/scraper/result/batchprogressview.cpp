@@ -4,8 +4,10 @@
 
 #include <QDateTime>
 #include <QFont>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 namespace {
@@ -63,6 +65,25 @@ BatchScrapeProgressView::BatchScrapeProgressView(QWidget *parent) : QWidget(pare
   m_stageLabel->setFont(stageFont);
   m_stageLabel->hide();
   layout->addWidget(m_stageLabel);
+
+  // "Skip this item" — shown only while a stage is active (a single
+  // large item is hashing/extracting and can make the modal feel hung).
+  // Skipping abandons just that item; the batch keeps going.
+  m_skipButton = new QPushButton(tr("Skip this item"), this);
+  m_skipButton->setToolTip(
+      tr("Stop scraping the current item and move on. The rest of the batch keeps going."));
+  m_skipButton->hide();
+  connect(m_skipButton, &QPushButton::clicked, this, [this]() {
+    if (m_runner) m_runner->skipCurrentItem();
+    // Disable until the next item's stage starts so a lingering click can't
+    // read as "skip the next one too"; onStageChanged re-enables on show.
+    m_skipButton->setEnabled(false);
+  });
+  auto *skipRow = new QHBoxLayout();
+  skipRow->setContentsMargins(0, 0, 0, 0);
+  skipRow->addWidget(m_skipButton);
+  skipRow->addStretch(1);
+  layout->addLayout(skipRow);
 
   m_progressBar = new QProgressBar(this);
   m_progressBar->setRange(0, 100);
@@ -130,6 +151,7 @@ void BatchScrapeProgressView::onProgress(int done, int total, const QString &cur
   // so a previous item's "Extracting archive…" doesn't linger.
   m_stageLabel->clear();
   m_stageLabel->hide();
+  m_skipButton->hide();
 
   const qint64 elapsedMs = std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
   QString etaStr = QStringLiteral("—");
@@ -145,8 +167,13 @@ void BatchScrapeProgressView::onStageChanged(const QString &stage) {
   if (stage.isEmpty()) {
     m_stageLabel->clear();
     m_stageLabel->hide();
+    m_skipButton->hide();
     return;
   }
   m_stageLabel->setText(stage);
   m_stageLabel->show();
+  // A stage is running (hash/extraction) — offer the per-item skip, and
+  // re-enable it in case a previous skip click left it disabled.
+  m_skipButton->setEnabled(true);
+  m_skipButton->show();
 }

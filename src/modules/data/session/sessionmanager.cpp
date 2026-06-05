@@ -419,7 +419,7 @@ void SessionManager::readCachedViewports(const QJsonObject &root) {
 
     QJsonArray pathsArray = vpObj["filePaths"].toArray();
     vp.filePaths.reserve(pathsArray.size());
-    for (const QJsonValue &val : pathsArray) {
+    for (const auto &val : pathsArray) {
       vp.filePaths.append(val.toString());
     }
 

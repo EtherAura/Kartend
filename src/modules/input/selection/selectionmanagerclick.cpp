@@ -275,14 +275,8 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &cl
   // Visual state is handled by ScrollManager::updateSelectionForIndex
   // which is called from selectItemByIndex during processSingleClickSelection
 
-  int visualIndex = -1;
-  const auto &activeWidgets = scrollMgr()->getActiveWidgets();
-  for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
-    if (it.value() == widget) {
-      visualIndex = it.key();
-      break;
-    }
-  }
+  // O(1) reverse lookup instead of scanning every active widget (Kartend-th8z).
+  const int visualIndex = scrollMgr()->indexForWidget(widget);
   if (visualIndex < 0) {
     return -1;
   }

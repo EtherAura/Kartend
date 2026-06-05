@@ -284,7 +284,7 @@ void ToolbarController::refreshFilterToolbar() {
         }
         m_mainWindow->m_generalSettings.view.collectionTypeFilter = chosen;
         if (settingsMgr()) {
-          settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+          (void)settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
         }
         if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
           navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
@@ -301,7 +301,7 @@ void ToolbarController::refreshFilterToolbar() {
         }
         c.filter.titleExclusionEnabled = checked;
         if (settingsMgr()) {
-          settingsMgr()->saveCollections(m_mainWindow->m_collections);
+          (void)settingsMgr()->saveCollections(m_mainWindow->m_collections);
         }
         if (navMgr()) {
           navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
@@ -362,7 +362,7 @@ void ToolbarController::refreshFilterToolbar() {
       allAction->setChecked(true);
       m_mainWindow->m_generalSettings.view.collectionTypeFilter.clear();
       if (settingsMgr()) {
-        settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+        (void)settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
       }
     }
 
@@ -457,7 +457,7 @@ void ToolbarController::showTitleFilterEditor() {
     c.filter.titleExclusionEnabled = true;
   }
   if (settingsMgr()) {
-    settingsMgr()->saveCollections(m_mainWindow->m_collections);
+    (void)settingsMgr()->saveCollections(m_mainWindow->m_collections);
   }
   refreshFilterToolbar();
   if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {

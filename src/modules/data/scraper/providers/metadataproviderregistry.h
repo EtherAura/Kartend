@@ -45,7 +45,8 @@ using CollectionAccessor = std::function<const CollectionConfig *()>;
 /// tests) can omit them — the affected providers behave as if their
 /// credential blob / collection context is empty.
 [[nodiscard]] std::vector<std::unique_ptr<MetadataProvider>>
-builtIn(GeneralSettingsAccessor settingsAccessor = {}, CollectionAccessor collectionAccessor = {});
+builtIn(const GeneralSettingsAccessor &settingsAccessor = {},
+        const CollectionAccessor &collectionAccessor = {});
 
 /// Filter a list of providers by category. Case-insensitive match
 /// against each provider's `categories()` list, with a small synonym

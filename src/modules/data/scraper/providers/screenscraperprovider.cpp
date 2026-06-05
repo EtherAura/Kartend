@@ -16,7 +16,6 @@
 #include <QFutureWatcher>
 #include <QLocale>
 #include <QLoggingCategory>
-#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
@@ -30,6 +29,7 @@
 #include "httpclient.h"
 #include "romhasher.h"
 #include "screenscraperparser.h"
+#include "screenscraperregion.h"
 #include "screenscrapersystems.h"
 
 namespace {
@@ -45,74 +45,6 @@ Q_LOGGING_CATEGORY(lcScreenScraperProvider, "kartend.scraper.screenscraper")
 // answer the api2/* paths we hit here.
 constexpr const char *SS_HOST = "api.screenscraper.fr";
 
-// Detect a No-Intro-style region tag from a ROM filename or basename
-// (Kartend-ou0a). When hash-based ID can't run (e.g. archive extraction
-// timed out on a multi-GB PS2 .zip), the SS filename-only match often
-// lands on the canonical (US) jeu record even when the filename made
-// the region explicit. Returning the detected SS-shortname here lets
-// the parser put it ahead of SS's matched-ROM region in the preference
-// chain. Returns empty when nothing matches — caller treats that as
-// "no override, trust SS".
-//
-// Recognises (in this order of confidence): parenthesised full names
-// like "(Japan)", "(USA)", "(Europe)"; single-letter shorthand like
-// "(J)", "(U)", "(E)" — common in older releases; and multi-region
-// tags like "(Japan, USA)" (first token wins). Case-insensitive.
-QString detectRegionFromFilename(const QString &filenameOrBasename) {
-  static const QList<QPair<QRegularExpression, QString>> kPatterns = {
-      // Full names (No-Intro convention). Matched as whole-word inside
-      // a parenthesised tag, possibly followed by a comma + more
-      // regions.
-      {QRegularExpression(QStringLiteral("\\(Japan(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("jp")},
-      {QRegularExpression(QStringLiteral("\\bUSA(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("us")},
-      {QRegularExpression(QStringLiteral("\\bEurope(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("eu")},
-      {QRegularExpression(QStringLiteral("\\bWorld(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("wor")},
-      {QRegularExpression(QStringLiteral("\\bKorea(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("kr")},
-      {QRegularExpression(QStringLiteral("\\bFrance(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("fr")},
-      {QRegularExpression(QStringLiteral("\\bGermany(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("de")},
-      {QRegularExpression(QStringLiteral("\\bItaly(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("it")},
-      {QRegularExpression(QStringLiteral("\\bSpain(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("sp")},
-      {QRegularExpression(QStringLiteral("\\bBrazil(?:[,)]|\\s)"),
-                          QRegularExpression::CaseInsensitiveOption),
-       QStringLiteral("br")},
-      // Single-letter shorthand. Anchored to '(L)' exactly to avoid
-      // matching '(J-Pop)' or similar incidental text.
-      {QRegularExpression(QStringLiteral("\\(J\\)")), QStringLiteral("jp")},
-      {QRegularExpression(QStringLiteral("\\(U\\)")), QStringLiteral("us")},
-      {QRegularExpression(QStringLiteral("\\(E\\)")), QStringLiteral("eu")},
-      {QRegularExpression(QStringLiteral("\\(W\\)")), QStringLiteral("wor")},
-      {QRegularExpression(QStringLiteral("\\(K\\)")), QStringLiteral("kr")},
-      {QRegularExpression(QStringLiteral("\\(F\\)")), QStringLiteral("fr")},
-      {QRegularExpression(QStringLiteral("\\(G\\)")), QStringLiteral("de")},
-      {QRegularExpression(QStringLiteral("\\(I\\)")), QStringLiteral("it")},
-      {QRegularExpression(QStringLiteral("\\(S\\)")), QStringLiteral("sp")},
-      {QRegularExpression(QStringLiteral("\\(B\\)")), QStringLiteral("br")},
-  };
-  for (const auto &[re, tag] : kPatterns) {
-    if (re.match(filenameOrBasename).hasMatch()) {
-      return tag;
-    }
-  }
-  return {};
-}
 // SS serves media files from a separate CDN host (`neoclone.screenscraper.fr`).
 // Without an explicit policy this host defaults to maxConcurrent=1 in
 // HttpClient, so every cover/screenshot/fanart download serialized
@@ -139,15 +71,6 @@ constexpr const char *SS_FIELD_DEV_ID = "dev_id";
 constexpr const char *SS_FIELD_DEV_PASSWORD = "dev_password";
 constexpr const char *SS_FIELD_USER_ID = "user_id";
 constexpr const char *SS_FIELD_USER_PASSWORD = "user_password";
-
-QString userAgent() {
-  return QStringLiteral("Kartend/%1 (https://github.com/EtherAura/Kartend)")
-      .arg(QString::fromLatin1(APP_VERSION));
-}
-
-Scraper::HttpClient::RawHeaders userAgentHeader() {
-  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
-}
 
 // Re-applied on every fetchMediaBytes so the user can change the
 // concurrency/throttle settings live. API host stays at compile-time
@@ -322,17 +245,18 @@ QUrl ScreenScraperProvider::searchUrl(const QString &query) const {
 }
 
 void ScreenScraperProvider::lookup(const QString &query, LookupCallback callback) {
-  // Filename-only path: no source file → no hashing.
-  runLookup(query, /*filePath=*/QString(), std::move(callback));
+  // Filename-only path: no source file → no hashing, no cancel token needed.
+  runLookup(query, /*filePath=*/QString(), /*cancelToken=*/{}, std::move(callback));
 }
 
 void ScreenScraperProvider::lookup(const LookupContext &ctx, LookupCallback callback) {
   // Hash-aware path: filePath comes from the context-menu callsite
   // when the right-clicked item resolves to a real on-disk file.
-  runLookup(ctx.query, ctx.filePath, std::move(callback));
+  runLookup(ctx.query, ctx.filePath, ctx.cancelToken, std::move(callback));
 }
 
 void ScreenScraperProvider::runLookup(const QString &query, const QString &filePath,
+                                      const std::shared_ptr<std::atomic<bool>> &cancelToken,
                                       LookupCallback callback) {
   if (!callback) return;
   const QString trimmed = query.trimmed();
@@ -424,26 +348,28 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
                      }
                      runLookupAfterHash(trimmed, hashes, std::move(callback));
                    });
-  watcher->setFuture(QtConcurrent::run([wantInnerHash, filePath]() -> RomHasher::Result {
-    auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
-                 ? RomHasher::hashArchiveInnerRom(filePath)
-                 : RomHasher::hashFile(filePath);
-    if (r.isOk()) {
-      return r.value();
-    }
-    // Kartend-ou0a: surface the failure cause rather than silently
-    // falling back to filename-only matching. Without this log the only
-    // observable symptom was a missing md5/sha1 in the jeuInfos.php URL
-    // — easy to miss, and the next layer's SS response looked superficially
-    // normal (just matched the wrong region's ROM record).
-    qCWarning(lcScreenScraperProvider).nospace()
-        << "ROM hashing failed; jeuInfos.php will fall back to filename-only "
-           "matching. This is what produces wrong-region matches when a "
-           "symlinked ROM resolves cleanly but Qt's QFile open path didn't "
-           "follow it. error='"
-        << r.error().message << "' details='" << r.error().details << "' file='" << filePath << "'";
-    return RomHasher::Result{};
-  }));
+  watcher->setFuture(
+      QtConcurrent::run([wantInnerHash, filePath, cancelToken]() -> RomHasher::Result {
+        auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
+                     ? RomHasher::hashArchiveInnerRom(filePath, cancelToken)
+                     : RomHasher::hashFile(filePath, cancelToken);
+        if (r.isOk()) {
+          return r.value();
+        }
+        // Kartend-ou0a: surface the failure cause rather than silently
+        // falling back to filename-only matching. Without this log the only
+        // observable symptom was a missing md5/sha1 in the jeuInfos.php URL
+        // — easy to miss, and the next layer's SS response looked superficially
+        // normal (just matched the wrong region's ROM record).
+        qCWarning(lcScreenScraperProvider).nospace()
+            << "ROM hashing failed; jeuInfos.php will fall back to filename-only "
+               "matching. This is what produces wrong-region matches when a "
+               "symlinked ROM resolves cleanly but Qt's QFile open path didn't "
+               "follow it. error='"
+            << r.error().message << "' details='" << r.error().details << "' file='" << filePath
+            << "'";
+        return RomHasher::Result{};
+      }));
 }
 
 void ScreenScraperProvider::runLookupAfterHash(const QString &query,
@@ -479,7 +405,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // cache and skip straight to the real query.
   m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
                                   callback = std::move(callback)](
-                                     QList<ScreenScraperSystems::System> systems) mutable {
+                                     const QList<ScreenScraperSystems::System> &systems) mutable {
     const QString romnom =
         !datCanonicalName.isEmpty() ? datCanonicalName : QFileInfo(trimmed).fileName();
     const int systemeid = resolveSystemId(systems);
@@ -528,20 +454,20 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
     QString filenameRegionOverride;
     if (regionSource == ScraperOptions::ScraperRegionSource::FilenameWhenAvailable ||
         (regionSource == ScraperOptions::ScraperRegionSource::TrustScraperFirst && !haveAnyHash)) {
-      filenameRegionOverride = detectRegionFromFilename(trimmed);
+      filenameRegionOverride = ScreenScraperRegion::detectFromFilename(trimmed);
     }
 
     Scraper::HttpClient::instance()->get(
         url, userAgentHeader(),
         [this, callback = std::move(callback),
          filenameRegionOverride](ErrorUtils::Result<QByteArray> response) mutable {
-          handleJeuInfosResponse(std::move(response), std::move(callback), filenameRegionOverride);
+          handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
         });
   });
 }
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
-                                                   LookupCallback callback,
+                                                   const LookupCallback &callback,
                                                    const QString &filenameRegionOverride) {
   if (response.isError()) {
     callback(mapScreenScraperHttpError(response.error()));
@@ -756,7 +682,7 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
   Scraper::HttpClient::instance()->get(
       url, userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+      [callback = std::move(callback)](const ErrorUtils::Result<QByteArray> &response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
           return;
@@ -821,7 +747,7 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
   q.addQueryItem(QStringLiteral("sspassword"), userPassword);
   url.setQuery(q);
   Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
+      url, ProviderBase::userAgentHeader(),
       [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));
@@ -869,7 +795,7 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
   }
   url.setQuery(q);
   Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
+      url, ProviderBase::userAgentHeader(),
       [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
         if (response.isError()) {
           callback(mapScreenScraperHttpError(response.error()));

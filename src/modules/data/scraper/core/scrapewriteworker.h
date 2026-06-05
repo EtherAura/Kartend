@@ -64,9 +64,9 @@ public slots:
   /// opaque token chosen by the runner so it can correlate the reply
   /// back to the right pending item (with itemConcurrency > 1 several
   /// requests are in flight).
-  void performWrite(quint64 requestId, QString collectionUuid, QString sourcePath,
-                    Scraper::ScrapedItem scraped,
-                    Scraper::NonStandardArtworkList nonStandardArtwork);
+  void performWrite(quint64 requestId, const QString &collectionUuid, const QString &sourcePath,
+                    const Scraper::ScrapedItem &scraped,
+                    const Scraper::NonStandardArtworkList &nonStandardArtwork);
 
 signals:
   /// Emitted on the worker thread after `performWrite` finishes. Crosses

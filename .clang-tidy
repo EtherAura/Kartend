@@ -113,13 +113,18 @@ HeaderFilterRegex: '.*/src/.*'
 # bugprone-bool-pointer-implicit-conversion, performance-unnecessary-
 # value-param, performance-unnecessary-copy-initialization, performance-
 # implicit-conversion-in-loop, cert-err33-c, cert-err58-cpp. Everything
-# else in those check families had zero hits. The subset promoted below
-# was chosen from the zero-hit list as "real correctness/safety bugs
-# with very low false-positive rates" — narrow checks with a clear
-# fail-loud pattern. Aggressive checks like bugprone-easily-swappable-
-# parameters, exception-escape, unsafe-functions remain unpromoted to
-# avoid foot-guns.
-WarningsAsErrors: 'bugprone-unchecked-optional-access,bugprone-integer-division,bugprone-assignment-in-if-condition,bugprone-chained-comparison,bugprone-dangling-handle,bugprone-fold-init-type,bugprone-inaccurate-erase,bugprone-multiple-new-in-one-expression,bugprone-shared-ptr-array-mismatch,bugprone-sizeof-container,bugprone-sizeof-expression,bugprone-string-constructor,bugprone-suspicious-memory-comparison,bugprone-suspicious-memset-usage,bugprone-suspicious-semicolon,bugprone-swapped-arguments,bugprone-throw-keyword-missing,bugprone-undefined-memory-manipulation,bugprone-unique-ptr-array-mismatch,bugprone-unused-raii,bugprone-use-after-move,bugprone-virtual-near-miss,performance-move-const-arg,performance-noexcept-destructor,performance-noexcept-move-constructor,clang-analyzer-core.NullDereference,clang-analyzer-core.DivideZero,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.uninitialized.*,clang-analyzer-core.StackAddressEscape,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.SelfAssignment,clang-analyzer-cplusplus.StringChecker,clang-analyzer-deadcode.*,clang-analyzer-security.*,clang-analyzer-unix.*'
+# else in those check families had zero hits. The bugprone/cert subset
+# promoted below was chosen from the zero-hit list as "real correctness/
+# safety bugs with very low false-positive rates" — narrow checks with a
+# clear fail-loud pattern. The three performance-* checks above
+# (unnecessary-value-param, unnecessary-copy-initialization, implicit-
+# conversion-in-loop) had a finite hit set that has since been fixed, so
+# they are now promoted too — the only carve-outs are the two
+# MetadataLookupProvider virtuals whose overrides std::move the callback
+# (const-ref there would pessimize the move), which carry an inline
+# NOLINT. Aggressive checks like bugprone-easily-swappable-parameters,
+# exception-escape, unsafe-functions remain unpromoted to avoid foot-guns.
+WarningsAsErrors: 'bugprone-unchecked-optional-access,bugprone-integer-division,bugprone-assignment-in-if-condition,bugprone-chained-comparison,bugprone-dangling-handle,bugprone-fold-init-type,bugprone-inaccurate-erase,bugprone-multiple-new-in-one-expression,bugprone-shared-ptr-array-mismatch,bugprone-sizeof-container,bugprone-sizeof-expression,bugprone-string-constructor,bugprone-suspicious-memory-comparison,bugprone-suspicious-memset-usage,bugprone-suspicious-semicolon,bugprone-swapped-arguments,bugprone-throw-keyword-missing,bugprone-undefined-memory-manipulation,bugprone-unique-ptr-array-mismatch,bugprone-unused-raii,bugprone-use-after-move,bugprone-virtual-near-miss,performance-move-const-arg,performance-noexcept-destructor,performance-noexcept-move-constructor,performance-unnecessary-value-param,performance-unnecessary-copy-initialization,performance-implicit-conversion-in-loop,clang-analyzer-core.NullDereference,clang-analyzer-core.DivideZero,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.uninitialized.*,clang-analyzer-core.StackAddressEscape,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.SelfAssignment,clang-analyzer-cplusplus.StringChecker,clang-analyzer-deadcode.*,clang-analyzer-security.*,clang-analyzer-unix.*'
 
 # Apply fixes when running with --fix (conservative)
 FormatStyle: 'file'

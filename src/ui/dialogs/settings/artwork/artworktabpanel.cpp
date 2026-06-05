@@ -234,7 +234,7 @@ void ArtworkTabPanel::onExportPlaceholderPngs() {
   // Capture inputs by value — the worker outlives this stack frame and the
   // model's CollectionConfig may change underneath it.
   const CollectionConfig cfgCopy = cfg;
-  const QString artworkDirCopy = liveArtworkDir;
+  const QString &artworkDirCopy = liveArtworkDir;
   const int tileW = cfg.gridLayout.itemWidth;
   const int tileH = cfg.gridLayout.itemHeight;
   const int tileR = cfg.gridLayout.cornerRadius;

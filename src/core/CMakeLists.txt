@@ -12,6 +12,7 @@ target_sources(kartend_core PRIVATE
   mainwindow_wiring.cpp
   marqueecontroller.cpp
   menucontroller.cpp
+  menucontroller_actions.cpp
   menucontroller_dynamicmenus.cpp
   scrapercontroller.cpp
   scrolleventscontroller.cpp

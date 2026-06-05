@@ -16,6 +16,8 @@
 // in scraperesultdialogunified.cpp; the collection-tree + items-list selection
 // state moved to ScrapeResultSelectionModel.
 
+#include <utility>
+
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "scraperesultdialogunified.h"
@@ -195,7 +197,7 @@ void ScrapeResultDialogUnified::onServiceItemCompleted(int done, int total,
 void ScrapeResultDialogUnified::onServicePickerNeeded(
     const QString &itemPath, const QString &itemName,
     const QList<Scraper::ScrapeCandidate> &candidates,
-    std::shared_ptr<MetadataLookupProvider> provider, const QString &artworkDir) {
+    const std::shared_ptr<MetadataLookupProvider> &provider, const QString &artworkDir) {
   Q_UNUSED(artworkDir);
   Q_UNUSED(itemName);
   // Stay on the unified live view (don't flip to the legacy single-item
@@ -700,7 +702,7 @@ void ScrapeResultDialogUnified::interactiveNextItem() {
   m_dlg->m_interactiveProvider->lookup(
       ctx, [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
         if (guard.isNull()) return;
-        guard->m_unified->interactiveOnLookupResult(r);
+        guard->m_unified->interactiveOnLookupResult(std::move(r));
       });
 }
 

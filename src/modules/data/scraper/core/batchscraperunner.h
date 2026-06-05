@@ -1,8 +1,10 @@
 #ifndef BATCHSCRAPERUNNER_H
 #define BATCHSCRAPERUNNER_H
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include <QHash>
 #include <QList>
@@ -175,6 +177,15 @@ public:
   /// separate "cancelled" handler.
   void cancel();
 
+  /// Abort just the item whose stage the modal dialog is currently
+  /// showing — the most recently started in-flight item, which is
+  /// unambiguous at the default itemConcurrency==1. Flips only that
+  /// item's cancel token (leaving m_cancelled false), so its in-flight
+  /// ROM hash / archive extraction stops, it's counted as skipped, and
+  /// the batch plus any other in-flight items keep running. No-op when
+  /// nothing is in flight.
+  void skipCurrentItem();
+
 signals:
   /// Emitted as each item begins. `done` is the number of items
   /// completed so far (success + skip + error); `total` is the full
@@ -218,6 +229,14 @@ private:
   struct ItemState {
     QString path;
     int queueIndex = -1; ///< Position in the original m_paths queue.
+    /// Per-item cooperative-cancellation flag handed to hash-based
+    /// providers via LookupContext. skipCurrentItem() flips only this
+    /// item's flag (m_cancelled stays false) so the displayed item's
+    /// in-flight hash/extraction aborts while the rest of the batch
+    /// keeps running; cancel() flips every in-flight item's flag.
+    /// shared_ptr<atomic> so the worker keeps reading it even if the
+    /// runner is destroyed mid-hash.
+    std::shared_ptr<std::atomic<bool>> cancelToken = std::make_shared<std::atomic<bool>>(false);
   };
 
   /// Pre-filter the queue for the Skip and FillMissing rescrape
@@ -244,11 +263,11 @@ private:
   /// Start the lookup/detail/apply chain for a single item. Each
   /// callback in the chain owns a copy of `state` so per-item data
   /// survives interleaving with other items.
-  void startItem(std::shared_ptr<ItemState> state);
+  void startItem(const std::shared_ptr<ItemState> &state);
   /// Final step shared between the cover-fetched path and the
   /// cover-skipped fallback. Persists via `applyScrapedItem`, marks
   /// the slot as free, and pumps the queue.
-  void applyAndFinish(std::shared_ptr<ItemState> state, const Scraper::ScrapedItem &scraped,
+  void applyAndFinish(const std::shared_ptr<ItemState> &state, const Scraper::ScrapedItem &scraped,
                       const QList<Scraper::PendingMediaWrite> &writes);
   /// Record a per-item failure, mark the slot free, and pump.
   void recordError(const QString &reason);
@@ -324,6 +343,17 @@ private:
   /// separately so `totalItemCount()` can report the pre-filter total.
   int m_preSkippedCount = 0;
   bool m_cancelled = false;
+  /// Weak handle to the most recently started in-flight item — the one
+  /// whose stage the modal dialog is showing. skipCurrentItem() targets
+  /// it. weak_ptr so it silently expires once the item's chain releases
+  /// its shared_ptr; lock() then yields null and the skip is a no-op.
+  std::weak_ptr<ItemState> m_currentItem;
+  /// Every started item, so cancel() can flip each in-flight item's
+  /// per-item token (aborting concurrent hashes the way the old single
+  /// batch-wide token did). Entries for finished items expire to null on
+  /// lock(); the vector is bounded by the batch size and never pruned
+  /// since the runner is transient (one batch per instance).
+  std::vector<std::weak_ptr<ItemState>> m_inFlightItems;
   /// Set when an HTTP 430/431 quota-exhausted error arrived. Distinct
   /// from m_cancelled: this is checked ONLY in pump() to stop NEW
   /// dispatch — in-flight per-item callbacks ignore it and run to

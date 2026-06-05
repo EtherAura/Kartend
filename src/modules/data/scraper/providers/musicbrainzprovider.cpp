@@ -7,7 +7,6 @@
 
 #include <QUrlQuery>
 
-#include "httpclient.h"
 #include "musicbrainzparser.h"
 
 namespace {
@@ -16,37 +15,16 @@ constexpr const char *MB_API_BASE = "https://musicbrainz.org/ws/2/release/";
 constexpr const char *MB_HOST = "musicbrainz.org";
 constexpr const char *COVER_ART_HOST = "coverartarchive.org";
 constexpr int MB_RATE_LIMIT_MS = 1000; // MB asks for 1 req/sec per IP.
+// Cover Art Archive (separate host) has no documented rate limit; pace
+// it modestly so a batch scrape doesn't accidentally hammer it.
+constexpr int COVER_ART_RATE_LIMIT_MS = 250;
 
 constexpr int SEARCH_LIMIT = 10;
-
-QString userAgent() {
-  // MB rejects requests without a meaningful User-Agent that includes
-  // app name, version, and a contact URL. APP_NAME/APP_VERSION are
-  // injected at compile time via target_compile_definitions in the
-  // top-level CMakeLists.txt.
-  return QStringLiteral("Kartend/%1 (https://github.com/EtherAura/Kartend)")
-      .arg(QString::fromLatin1(APP_VERSION));
-}
-
-Scraper::HttpClient::RawHeaders userAgentHeader() {
-  return {{QByteArrayLiteral("User-Agent"), userAgent().toUtf8()}};
-}
-
-void registerHostThrottles() {
-  // Idempotent — HttpClient::setRateLimit just overwrites the entry
-  // each time. MusicBrainz is the strict 1/sec; Cover Art Archive
-  // (different host) has no documented rate limit but we still pace
-  // it modestly so we don't accidentally hammer it during a batch
-  // scrape.
-  Scraper::HttpClient *client = Scraper::HttpClient::instance();
-  client->setRateLimit(QString::fromLatin1(MB_HOST), MB_RATE_LIMIT_MS);
-  client->setRateLimit(QString::fromLatin1(COVER_ART_HOST), 250);
-}
 
 } // namespace
 
 MusicBrainzProvider::MusicBrainzProvider() {
-  registerHostThrottles();
+  registerThrottles({{MB_HOST, MB_RATE_LIMIT_MS}, {COVER_ART_HOST, COVER_ART_RATE_LIMIT_MS}});
 }
 
 QUrl MusicBrainzProvider::searchUrl(const QString &query) const {
@@ -77,15 +55,10 @@ void MusicBrainzProvider::lookup(const QString &query, LookupCallback callback) 
   q.addQueryItem(QStringLiteral("limit"), QString::number(SEARCH_LIMIT));
   url.setQuery(q);
 
-  Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(MusicBrainzParser::parseSearchResponse(response.value()));
-      });
+  getJson<QList<Scraper::ScrapeCandidate>>(
+      userAgentHeader(), url,
+      [](const QByteArray &body) { return MusicBrainzParser::parseSearchResponse(body); },
+      std::move(callback));
 }
 
 void MusicBrainzProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
@@ -109,15 +82,10 @@ void MusicBrainzProvider::fetchDetail(const Scraper::ScrapeCandidate &candidate,
   q.addQueryItem(QStringLiteral("fmt"), QStringLiteral("json"));
   url.setQuery(q);
 
-  Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(response.error());
-          return;
-        }
-        callback(MusicBrainzParser::parseDetailResponse(response.value()));
-      });
+  getJson<Scraper::ScrapedItem>(
+      userAgentHeader(), url,
+      [](const QByteArray &body) { return MusicBrainzParser::parseDetailResponse(body); },
+      std::move(callback));
 }
 
 void MusicBrainzProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
@@ -125,11 +93,8 @@ void MusicBrainzProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
     return;
   }
   // Cover Art Archive doesn't require a User-Agent but accepting one
-  // keeps the audit trail consistent with the MB API requests.
-  // Kartend-9ryx: pin the response to image/* — Cover Art Archive
-  // occasionally returns HTML error pages on 502/503 and we don't want
-  // the decoder seeing them.
-  Scraper::HttpClient::instance()->get(url, userAgentHeader(), std::move(callback),
-                                       Scraper::HttpClient::kDefaultMaxResponseBytes,
-                                       QStringLiteral("image/"));
+  // keeps the audit trail consistent with the MB API requests. The
+  // image/* guard in getImageBytes matters here: CAA occasionally
+  // returns HTML error pages on 502/503.
+  getImageBytes(userAgentHeader(), url, std::move(callback));
 }

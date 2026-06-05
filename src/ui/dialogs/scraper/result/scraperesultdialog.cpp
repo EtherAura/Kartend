@@ -58,6 +58,7 @@
 #include <QTextBrowser>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <utility>
 
 #include "extensionutils.h"
 #include "idatabasemanager.h"
@@ -107,7 +108,7 @@ ScrapeResultDialog::ScrapeResultDialog(MetadataLookupProvider *provider,
   // dialog before the async probe lands.
   if (provider) {
     QPointer<ScrapeResultDialog> guard(this);
-    provider->fetchHealthStatus([guard](MetadataLookupProvider::HealthStatus status) {
+    provider->fetchHealthStatus([guard](const MetadataLookupProvider::HealthStatus &status) {
       if (guard.isNull()) return;
       if (status.humanStatus.isEmpty() && !status.refuseScrape) return;
       guard->m_singleItemView->healthLabel()->setText(status.humanStatus);
@@ -356,7 +357,7 @@ void ScrapeResultDialog::buildUi() {
   m_batchView = new BatchScrapeProgressView(m_modeStack);
   m_modeStack->addWidget(m_batchView);
   connect(m_batchView, &BatchScrapeProgressView::finished, this,
-          [this](Scraper::BatchScrapeRunner::Summary) { accept(); });
+          [this](const Scraper::BatchScrapeRunner::Summary &) { accept(); });
 
   // ── Unified setup page ──────────────────────────────────────────
   m_unified->buildUnifiedPanel();
@@ -377,6 +378,26 @@ void ScrapeResultDialog::buildUi() {
   m_stageLabel->setStyleSheet(QStringLiteral("padding: 4px 8px;"));
   m_stageLabel->hide();
   root->addWidget(m_stageLabel);
+
+  // "Skip this item" shown in lockstep with m_stageLabel (see the
+  // itemStageChanged handler in setScraperService): lets the user
+  // abandon a single stuck/large item mid hash/extraction without
+  // cancelling the whole run.
+  m_skipItemButton = new QPushButton(tr("Skip this item"), this);
+  m_skipItemButton->setToolTip(
+      tr("Stop scraping the current item and move on. The rest of the run keeps going."));
+  m_skipItemButton->hide();
+  connect(m_skipItemButton, &QPushButton::clicked, this, [this]() {
+    skipCurrentScrapeItem();
+    // Disable until the next item's stage starts so a lingering click can't
+    // read as "skip the next one too"; the stage handler re-enables on show.
+    m_skipItemButton->setEnabled(false);
+  });
+  auto *skipRow = new QHBoxLayout();
+  skipRow->setContentsMargins(0, 0, 0, 0);
+  skipRow->addWidget(m_skipItemButton);
+  skipRow->addStretch(1);
+  root->addLayout(skipRow);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
   m_applyButton = buttons->addButton(tr("Apply"), QDialogButtonBox::AcceptRole);
@@ -473,9 +494,16 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
             if (stage.isEmpty()) {
               m_stageLabel->clear();
               m_stageLabel->hide();
+              if (m_skipItemButton) m_skipItemButton->hide();
             } else {
               m_stageLabel->setText(stage);
               m_stageLabel->show();
+              // A stage is running — offer the per-item skip (re-enable in
+              // case a previous skip click left the button disabled).
+              if (m_skipItemButton) {
+                m_skipItemButton->setEnabled(true);
+                m_skipItemButton->show();
+              }
             }
           });
   // Clear the stage label when candidates arrive or the scrape ends —
@@ -487,13 +515,26 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
       m_stageLabel->clear();
       m_stageLabel->hide();
     }
+    if (m_skipItemButton) m_skipItemButton->hide();
   });
   connect(m_service, &Scraper::ScraperService::scrapeFinished, this, [this]() {
     if (m_stageLabel) {
       m_stageLabel->clear();
       m_stageLabel->hide();
     }
+    if (m_skipItemButton) m_skipItemButton->hide();
   });
+}
+
+void ScrapeResultDialog::skipCurrentScrapeItem() {
+  // Unified-auto runs through the long-lived ScraperService; the legacy
+  // in-dialog unified path drives a BatchScrapeRunner directly. Prefer the
+  // service when it's active, else fall back to the bound runner.
+  if (m_service && m_service->isActive()) {
+    m_service->skipCurrentItem();
+  } else if (m_batchRunner) {
+    m_batchRunner->skipCurrentItem();
+  }
 }
 
 void ScrapeResultDialog::onServiceScrapeStarted(int total) {
@@ -511,10 +552,10 @@ void ScrapeResultDialog::onServiceItemCompleted(int done, int total,
   m_unified->onServiceItemCompleted(done, total, scraped, mediaPaths);
 }
 
-void ScrapeResultDialog::onServicePickerNeeded(const QString &itemPath, const QString &itemName,
-                                               const QList<Scraper::ScrapeCandidate> &candidates,
-                                               std::shared_ptr<MetadataLookupProvider> provider,
-                                               const QString &artworkDir) {
+void ScrapeResultDialog::onServicePickerNeeded(
+    const QString &itemPath, const QString &itemName,
+    const QList<Scraper::ScrapeCandidate> &candidates,
+    const std::shared_ptr<MetadataLookupProvider> &provider, const QString &artworkDir) {
   m_unified->onServicePickerNeeded(itemPath, itemName, candidates, provider, artworkDir);
 }
 

@@ -1,7 +1,7 @@
 #ifndef TMDBPROVIDER_H
 #define TMDBPROVIDER_H
 
-#include "metadatalookupprovider.h"
+#include "providerbase.h"
 
 #include <QString>
 #include <QStringList>
@@ -24,7 +24,7 @@ struct GeneralSettings;
 /// pass a getter callback so the provider stays decoupled from the
 /// storage location. When the getter is null or returns nullptr, the
 /// provider behaves as if the token were unset.
-class TmdbProvider : public MetadataLookupProvider {
+class TmdbProvider : public ProviderBase {
 public:
   using GeneralSettingsAccessor = std::function<const GeneralSettings *()>;
 

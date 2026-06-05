@@ -1,7 +1,7 @@
 #ifndef OPENLIBRARYPROVIDER_H
 #define OPENLIBRARYPROVIDER_H
 
-#include "metadatalookupprovider.h"
+#include "providerbase.h"
 
 #include <QString>
 #include <QStringList>
@@ -12,7 +12,7 @@
 /// lookup when the query string contains a recognisable ISBN-10 or
 /// ISBN-13 (typical for filenames like "9780451524935 - 1984.epub")
 /// and falls back to a free-text title search otherwise.
-class OpenLibraryProvider : public MetadataLookupProvider {
+class OpenLibraryProvider : public ProviderBase {
 public:
   OpenLibraryProvider();
 

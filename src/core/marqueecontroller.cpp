@@ -5,6 +5,7 @@
 #include "artworkmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/validationhelpers.h"
+#include "extensionutils.h"
 #include "interactionmanager.h"
 #include "marqueewindow.h"
 #include "pathutils.h"
@@ -13,10 +14,13 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QGuiApplication>
+#include <QImage>
 #include <QPixmap>
 #include <QScreen>
 #include <QString>
+#include <QtConcurrent>
 
 namespace {
 // Trailing-edge debounce window for marquee-artwork refreshes triggered by
@@ -44,6 +48,9 @@ QScreen *resolveMarqueeScreen(const QString &screenName) {
 MarqueeController::MarqueeController(QObject *parent) : QObject(parent) {}
 
 MarqueeController::~MarqueeController() {
+  // Drop any in-flight off-thread decode first so a late result can't touch
+  // the MarqueeWindow we're about to delete.
+  cancelMarqueeLoad();
   // m_marqueeWindow is a parentless top-level widget this controller owns. At
   // teardown the event loop is already winding down, so the deleteLater() used
   // on the live disable/rescreen path would never run — delete it directly to
@@ -88,6 +95,10 @@ void MarqueeController::applyMarqueeSettings() {
       // nothing. Harmless either way; this just avoids the spurious wakeup.
       m_marqueeDebouncer->cancel();
     }
+    // No window to push to once disabled — drop any in-flight decode and the
+    // cached path so a later re-enable re-pushes from scratch.
+    cancelMarqueeLoad();
+    m_lastMarqueePath.clear();
     if (m_marqueeWindow) {
       m_marqueeWindow->close();
       m_marqueeWindow->deleteLater();
@@ -108,6 +119,9 @@ void MarqueeController::applyMarqueeSettings() {
   if (m_marqueeDebouncer) {
     m_marqueeDebouncer->cancel();
   }
+  // Force a re-push: the window may have just been (re)created or re-pinned,
+  // so the previously cached path no longer matches live window content.
+  m_lastMarqueePath.clear();
   updateMarqueeArtwork();
 }
 
@@ -145,6 +159,11 @@ void MarqueeController::updateMarqueeArtwork() {
     if (videoPath.isEmpty()) {
       videoPath = (*m_collections)[collectionIndex].background.backgroundVideo;
     }
+    // Switching to video clears any image we were showing; drop the cached
+    // path + in-flight decode so a later return to image mode re-pushes even
+    // if the selection is unchanged.
+    cancelMarqueeLoad();
+    m_lastMarqueePath.clear();
     m_marqueeWindow->setVideo(videoPath);
     return;
   }
@@ -168,12 +187,21 @@ void MarqueeController::updateMarqueeArtwork() {
   }
 
   if (artworkPath.isEmpty()) {
+    cancelMarqueeLoad();
+    m_lastMarqueePath.clear();
     m_marqueeWindow->setPixmap(
         QPixmap()); // Clear to background; user sees the topper still exists.
     return;
   }
-  QPixmap pix(artworkPath);
-  m_marqueeWindow->setPixmap(pix);
+  // Skip redundant work when the selection storm keeps resolving to the same
+  // path — the marquee is already showing (or already decoding) it. Without
+  // this every wheel tick re-decoded the same cover on the UI thread
+  // (Kartend-cq8yh).
+  if (artworkPath == m_lastMarqueePath) {
+    return;
+  }
+  m_lastMarqueePath = artworkPath;
+  startMarqueeLoad(artworkPath);
 }
 
 void MarqueeController::requestArtworkRefresh() {
@@ -187,5 +215,48 @@ void MarqueeController::requestArtworkRefresh() {
     m_marqueeDebouncer->trigger();
   } else {
     updateMarqueeArtwork();
+  }
+}
+
+void MarqueeController::startMarqueeLoad(const QString &path) {
+  // Decode off the UI thread (the point of the marquee-jank fix): a QImage is
+  // built on a worker, then converted to QPixmap and pushed on the GUI thread
+  // via the watcher's finished signal. A newer request supersedes any in-flight
+  // decode so a fast scroll can't paint a stale cover.
+  cancelMarqueeLoad();
+  auto *watcher = new QFutureWatcher<QImage>(this);
+  m_marqueeLoadWatcher = watcher;
+  connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher]() {
+    if (m_marqueeLoadWatcher == watcher) {
+      m_marqueeLoadWatcher = nullptr;
+    }
+    const QImage img = watcher->result();
+    watcher->deleteLater();
+    // The window may have been torn down (marquee disabled) while the decode
+    // ran — the disable path nulls it and cancels this watcher, but guard
+    // anyway. A null QImage (decode failed / non-image) clears the window,
+    // matching the previous synchronous behaviour.
+    if (m_marqueeWindow) {
+      m_marqueeWindow->setPixmap(QPixmap::fromImage(img));
+    }
+  });
+  watcher->setFuture(QtConcurrent::run([path]() -> QImage {
+    // Extension guard: never hand a non-image (e.g. a misconfigured .pdf icon)
+    // to the decoder — Qt's PDF image plugin abort()s the process.
+    if (!ExtensionUtils::isDecodableImagePath(path)) {
+      return {};
+    }
+    return QImage(path);
+  }));
+}
+
+void MarqueeController::cancelMarqueeLoad() {
+  // Drop any in-flight decode so its late result can't overwrite a newer push
+  // or touch a torn-down window. The QtConcurrent worker can't be cancelled,
+  // but disconnecting + deleting the watcher discards its result.
+  if (m_marqueeLoadWatcher) {
+    m_marqueeLoadWatcher->disconnect(this);
+    m_marqueeLoadWatcher->deleteLater();
+    m_marqueeLoadWatcher = nullptr;
   }
 }

@@ -13,6 +13,9 @@
 
 #include "romhasher.h"
 
+#include <atomic>
+#include <memory>
+
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDir>
@@ -34,10 +37,12 @@ private slots:
   void missingFileReturnsError();
   void recognisesArchiveExtensions();
   void hashesInnerRomLargestFile();
+  void hashInnerRomAmbiguousMultiDumpReturnsError();
   void archiveMissingPathReturnsError();
   void hashesSymlinkTargetSameAsDirect();
   void brokenSymlinkReturnsError();
   void extractorCandidates_unzipOnlyOfferedForZip();
+  void hashFileHonoursCancelToken();
 
 private:
   QTemporaryDir m_dir;
@@ -81,6 +86,32 @@ void TestRomHasher::hashesKnownContent() {
   QCOMPARE(h.sha1,
            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex()));
   QCOMPARE(h.crc, referenceCrc32Hex(bytes));
+}
+
+void TestRomHasher::hashFileHonoursCancelToken() {
+  const QByteArray bytes = QByteArrayLiteral("kartend-rom-hasher-cancel-test");
+  const QString path = m_dir.filePath("cancel.bin");
+  writeFile(path, bytes);
+
+  // A token already flipped true aborts the stream — the loop checks it once
+  // per chunk, so even this small file returns OperationCancelled, not a hash.
+  // (This is the cooperative-cancel path BatchScrapeRunner::cancel() drives so
+  // an in-flight multi-GB hash stops instead of finishing on a worker thread.)
+  auto cancelled = std::make_shared<std::atomic<bool>>(true);
+  auto aborted = RomHasher::hashFile(path, cancelled);
+  QVERIFY(aborted.isError());
+  QCOMPARE(aborted.error().code, ErrorUtils::ErrorCode::OperationCancelled);
+
+  // A null (default) token leaves the normal path unchanged — regression guard.
+  auto normal = RomHasher::hashFile(path);
+  QVERIFY(normal.isOk());
+  QCOMPARE(normal.value().size, static_cast<qint64>(bytes.size()));
+
+  // An un-flipped token behaves exactly like the null token.
+  auto live = std::make_shared<std::atomic<bool>>(false);
+  auto normal2 = RomHasher::hashFile(path, live);
+  QVERIFY(normal2.isOk());
+  QCOMPARE(normal2.value().md5, normal.value().md5);
 }
 
 void TestRomHasher::hashesEmptyFile() {
@@ -211,6 +242,50 @@ void TestRomHasher::hashesInnerRomLargestFile() {
   QCOMPARE(h.sha1, QString::fromLatin1(
                        QCryptographicHash::hash(romBytes, QCryptographicHash::Sha1).toHex()));
   QCOMPARE(h.crc, referenceCrc32Hex(romBytes));
+}
+
+void TestRomHasher::hashInnerRomAmbiguousMultiDumpReturnsError() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
+    QSKIP("zip not available — skipping archive-build half of the test");
+  }
+  if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    QSKIP("no archive extractor on PATH — RomHasher would error out");
+  }
+
+  // Two comparably-large inner files (a multi-disc dump): "largest wins" would
+  // hash an arbitrary one, so hashArchiveInnerRom must refuse instead of
+  // returning a confident-but-arbitrary hash (Kartend-uhcfm).
+  QByteArray disc1;
+  disc1.resize(8 * 1024);
+  for (int i = 0; i < disc1.size(); ++i) {
+    disc1[i] = static_cast<char>((i * 31 + 7) & 0xff);
+  }
+  QByteArray disc2;
+  disc2.resize(7 * 1024); // 7 KiB >= half of 8 KiB -> comparably large -> ambiguous
+  for (int i = 0; i < disc2.size(); ++i) {
+    disc2[i] = static_cast<char>((i * 17 + 3) & 0xff);
+  }
+  const QString workDir = m_dir.filePath("multidump");
+  QVERIFY(QDir().mkpath(workDir));
+  writeFile(workDir + "/disc1.bin", disc1);
+  writeFile(workDir + "/disc2.bin", disc2);
+
+  const QString archivePath = m_dir.filePath("multidump.zip");
+  QProcess zipProc;
+  zipProc.setWorkingDirectory(workDir);
+  zipProc.start(QStringLiteral("zip"), {QStringLiteral("-q"), archivePath,
+                                        QStringLiteral("disc1.bin"), QStringLiteral("disc2.bin")});
+  QVERIFY(zipProc.waitForFinished(5000));
+  QCOMPARE(zipProc.exitCode(), 0);
+
+  auto result = RomHasher::hashArchiveInnerRom(archivePath);
+  QVERIFY2(result.isError(), "an ambiguous multi-dump archive must not produce a hash");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
 }
 
 void TestRomHasher::archiveMissingPathReturnsError() {

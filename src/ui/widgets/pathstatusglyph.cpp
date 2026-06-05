@@ -34,7 +34,7 @@ void apply(QLineEdit *edit, QAction *action, const PathChecker &checker) {
 
 } // namespace
 
-void install(QLineEdit *edit, PathChecker checker) {
+void install(QLineEdit *edit, const PathChecker &checker) {
   if (!edit || !checker) return;
 
   QAction *action = findGlyphAction(edit);

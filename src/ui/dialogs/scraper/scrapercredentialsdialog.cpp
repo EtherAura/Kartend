@@ -119,7 +119,7 @@ void ScraperCredentialsDialog::addField(QFormLayout *form, const QString &provid
 void ScraperCredentialsDialog::onSave() {
   if (m_generalSettings) {
     for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it) {
-      const QString fullKey = it.key();
+      const QString &fullKey = it.key();
       const int slash = fullKey.indexOf('/');
       if (slash <= 0) continue;
       const QString providerId = fullKey.left(slash);

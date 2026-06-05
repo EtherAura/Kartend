@@ -75,7 +75,8 @@ public:
    */
   bool restoreState(QHash<int, ItemWidget *> &activeWidgets, QWidget *virtualContainer,
                     WidgetPoolManager *widgetPool, IArtworkManager *artworkManager,
-                    std::function<QPoint(int)> getPositionFunc, int itemWidth, int itemHeight);
+                    const std::function<QPoint(int)> &getPositionFunc, int itemWidth,
+                    int itemHeight);
 
   /**
    * @brief Discard saved state without restoring.

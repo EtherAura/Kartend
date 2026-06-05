@@ -225,7 +225,7 @@ void MenuController::setupActionDetailsPaneOrientation() {
       (*collections)[idx].sidebar.sidebarPosition = pos;
       if (m_ctx.getSettingsManager) {
         if (auto *sm = m_ctx.getSettingsManager()) {
-          sm->saveCollections(*collections);
+          (void)sm->saveCollections(*collections);
         }
       }
       // applySidebarStateForCollection re-runs applyAppearance + layout swap so

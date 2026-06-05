@@ -185,6 +185,20 @@ void CoverFlowWidget::cancelPendingScales() {
   m_pendingScales.clear();
 }
 
+void CoverFlowWidget::cancelPendingLoads() {
+  // Disconnect each in-flight source-decode watcher so its finished lambda
+  // can't insert a stale (old-cardSize) source into m_pixmapCache after a
+  // resize has cleared it (Kartend-k48fl). The QtConcurrent worker can't be
+  // cancelled, but dropping the watcher discards its result.
+  for (auto it = m_pendingLoads.begin(); it != m_pendingLoads.end(); ++it) {
+    if (auto *w = it.value()) {
+      w->disconnect(this);
+      w->deleteLater();
+    }
+  }
+  m_pendingLoads.clear();
+}
+
 void CoverFlowWidget::prunePixmapCache() {
   // Bound the cache so collections with thousands of items don't keep all
   // their pixmaps resident. Keep at most 4× the visible window worth.

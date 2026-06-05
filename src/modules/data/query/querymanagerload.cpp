@@ -40,11 +40,12 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using QueryManagerInternal::buildFtsPrefixQuery;
 
-void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections,
+                                      quint64 loadGeneration) {
   assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadAllCollections")) {
     // Emit safe default so listeners (UI item count, etc.) don't hang.
-    emit itemsLoaded({}, {}, {}, {}, {});
+    emit itemsLoaded({}, {}, {}, {}, {}, loadGeneration);
     return;
   }
 
@@ -93,15 +94,16 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
   QueryManagerInternal::sortFiles(allFilePaths);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-                   fileToCollectionIndex);
+                   fileToCollectionIndex, loadGeneration);
 }
 
 void QueryManager::loadItems(const CollectionContext &context,
-                             const QList<CollectionConfig> &allCollections) {
+                             const QList<CollectionConfig> &allCollections,
+                             quint64 loadGeneration) {
   assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadItems")) {
     // Emit safe default so listeners don't hang awaiting itemsLoaded.
-    emit itemsLoaded({}, {}, {}, {}, {});
+    emit itemsLoaded({}, {}, {}, {}, {}, loadGeneration);
     return;
   }
 
@@ -121,7 +123,7 @@ void QueryManager::loadItems(const CollectionContext &context,
 
   if (ctx.config.mediaDirectory.trimmed().isEmpty()) {
     emit itemsLoaded(QStringList(), QHash<QString, QString>(), QHash<QString, QString>(),
-                     QHash<QString, QString>(), QHash<QString, int>());
+                     QHash<QString, QString>(), QHash<QString, int>(), loadGeneration);
     return;
   }
 
@@ -172,15 +174,16 @@ void QueryManager::loadItems(const CollectionContext &context,
   QueryManagerInternal::sortFiles(allFilePaths, ctx.sortMode);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-                   fileToCollectionIndex);
+                   fileToCollectionIndex, loadGeneration);
 }
 
 void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
-                                               const QList<CollectionConfig> &allCollections) {
+                                               const QList<CollectionConfig> &allCollections,
+                                               quint64 loadGeneration) {
   assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadItemsWithSubcollections")) {
     // Emit safe default so listeners don't hang awaiting itemsLoaded.
-    emit itemsLoaded({}, {}, {}, {}, {});
+    emit itemsLoaded({}, {}, {}, {}, {}, loadGeneration);
     return;
   }
 
@@ -294,7 +297,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
 
   QueryManagerInternal::sortFiles(allFilePaths, context.sortMode);
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-                   fileToCollectionIndex);
+                   fileToCollectionIndex, loadGeneration);
 }
 
 void QueryManager::updateCachedCounts(quint64 generation, const QStringList &collectionUuids) {

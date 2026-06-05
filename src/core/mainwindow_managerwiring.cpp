@@ -307,7 +307,7 @@ void MainWindow::wireKartManager() {
 
     connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {
       if (auto *sm = m_appManager->getSettingsManager()) {
-        sm->saveCollections(m_collections);
+        (void)sm->saveCollections(m_collections);
       }
     });
 

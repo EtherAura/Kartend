@@ -51,6 +51,13 @@ add_executable(test_scrolldatamanager
 target_link_libraries(test_scrolldatamanager PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScrollDataStore COMMAND test_scrolldatamanager)
 
+# CoverFlowController view-type gating + null-safe no-op contract (Kartend-kv0wa)
+add_executable(test_coverflowcontroller
+  modules/scroll/test_coverflowcontroller.cpp
+)
+target_link_libraries(test_coverflowcontroller PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME CoverFlowController COMMAND test_coverflowcontroller)
+
 # ViewportHelpers tests (small-movement threshold, force-immediate combine)
 add_executable(test_viewporthelpers
   modules/viewport/test_viewporthelpers.cpp
@@ -650,6 +657,13 @@ add_executable(test_providerrequests
 )
 target_link_libraries(test_providerrequests PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ProviderRequests COMMAND test_providerrequests)
+
+# ScreenScraperRegion: No-Intro region heuristic (pure, network-free).
+add_executable(test_screenscraperregion
+  modules/scraper/test_screenscraperregion.cpp
+)
+target_link_libraries(test_screenscraperregion PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScreenScraperRegion COMMAND test_screenscraperregion)
 
 # MetadataProviderRegistry tests
 # Must compile the MusicBrainz provider too because the registry's

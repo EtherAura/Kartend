@@ -2,8 +2,10 @@ target_sources(kartend_data PRIVATE
   metadataproviderregistry.cpp
   musicbrainzprovider.cpp
   openlibraryprovider.cpp
+  providerbase.cpp
   screenscrapercatalogmanager.cpp
   screenscraperprovider.cpp
+  screenscraperregion.cpp
   screenscrapermediatypecache.cpp
   screenscraperquotamanager.cpp
   screenscrapersystemcache.cpp
@@ -15,8 +17,10 @@ target_sources(kartend_data PRIVATE
   metadataproviderregistry.h
   musicbrainzprovider.h
   openlibraryprovider.h
+  providerbase.h
   screenscrapercatalogmanager.h
   screenscraperprovider.h
+  screenscraperregion.h
   screenscrapermediatypecache.h
   screenscraperquotamanager.h
   screenscrapersystemcache.h

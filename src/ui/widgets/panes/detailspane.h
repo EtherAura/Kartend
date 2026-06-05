@@ -279,6 +279,11 @@ protected:
 private:
   void setupUI();
   void updateFileInfo(const QString &filePath);
+  /// Apply the cached async file-stat result (m_fileStatDisplay) to the File
+  /// tab's size/modified (and, when not-found, path/extension) labels. No-op
+  /// until the worker has resolved. Called from the worker (File tab active)
+  /// and when switching to the File tab (Kartend-kujy5).
+  void applyFileStatDisplay();
   void updateFilePathDisplay();
   /// build + install the bubble-bg stylesheet on the content
   /// widget. Empty hex disables the corresponding bubble. Stylesheet
@@ -340,6 +345,14 @@ private:
   void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
   void showArtworkOnly();
+  /// Resolve the preview video for @p filePath — collection `videoDirectory`
+  /// first, then `{artworkDirectory}/video/` — and, when the resolved path
+  /// changed for this item, hand it to the artwork/video controller. The
+  /// unchanged-path guard avoids the hide -> pause -> re-show ping-pong that
+  /// setMetadata's repeated firing for one selection would otherwise cause.
+  /// Defined in detailspanevideo.cpp.
+  void applyPreviewVideo(const QString &filePath, const QString &artworkDirectory,
+                         const QString &videoDirectory);
   void ensureDetailsSection();
   void clearDetailsSection();
   void appendDetailRow(const QString &label, const QString &value, bool wrap = false);
@@ -390,6 +403,20 @@ private:
   /// mounts) where a single QFileInfo::exists/size/lastModified call can
   /// take 50-260ms.
   quint64 m_fileInfoGen = 0;
+  /// Cached result of the async file-stat worker for the current selection.
+  /// The worker writes the size/modified labels only while the File tab is
+  /// active; otherwise it just caches here, and applyTabVisibility() re-applies
+  /// it when the File tab is shown — so a stat that resolves off-tab neither
+  /// strands the '…' placeholder nor leaves a stale "File not found" to surface
+  /// on a later tab switch (Kartend-kujy5). Reset on every new selection
+  /// (updateFileInfo) and on deselect (clearForNoSelection).
+  struct FileStatDisplay {
+    bool resolved = false; ///< worker has delivered for the current selection
+    bool exists = false;
+    QString sizeText;
+    QString modifiedText;
+  };
+  FileStatDisplay m_fileStatDisplay;
   /// bug #4: full file path of the current selection, kept so
   /// resizeEvent can re-elide it width-aware without re-querying the model.
   QString m_currentFilePath;
