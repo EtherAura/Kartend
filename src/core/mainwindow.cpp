@@ -291,6 +291,9 @@ void MainWindow::dropEvent(QDropEvent *event) {
   // Kick off a drain on the next loop turn unless one is already running — a
   // running drain picks up newly-appended paths before it exits.
   if (!m_pendingKartImports.isEmpty() && !m_kartImportInProgress) {
+    // Defer to the next event-loop turn so this drop handler returns first —
+    // releasing the OS drag-and-drop session and the source app's cursor —
+    // before the import drain (which can open modal progress UI) takes over.
     QTimer::singleShot(0, this, &MainWindow::processPendingKartImports);
   }
 }
