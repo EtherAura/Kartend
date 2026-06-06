@@ -112,6 +112,10 @@ private:
 
   Payload m_payload;
   int m_currentArtworkIndex = 0;
+  // Supersedes in-flight async hero decodes: only the latest request (by
+  // generation) may write m_heroLabel, so fast Left/Right cycling can't let a
+  // slow decode clobber a newer one.
+  int m_heroArtworkGeneration = 0;
   bool m_active = false;
   OverlayZOrderRegistry *m_layerManager = nullptr;
 };

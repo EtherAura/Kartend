@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <QColor>
 #include <QFont>
+#include <QFutureWatcher>
+#include <QImage>
 #include <QLabel>
 #include <QPainter>
 #include <QPalette>
@@ -16,6 +18,7 @@
 #include <QSet>
 #include <QSize>
 #include <QStyle>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include "collection/collectionconfig.h"
 #include "detailspane.h"
@@ -88,14 +91,30 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   m_bgPattern = collection.sidebar.sidebarPattern;
   m_patternIntensity = std::clamp(collection.sidebar.sidebarPatternIntensity, 0, 100);
   m_patternColor = QColor(collection.sidebar.sidebarPatternColor);
+  // Decode the sidebar background off the GUI thread so a large wallpaper no
+  // longer blocks the UI on every collection switch. Clear immediately (so the
+  // previous collection's image doesn't linger under the new colour/pattern)
+  // and bump a generation so a rapid switch's slow decode can't overwrite the
+  // current collection's background when it finally lands.
+  m_bgImage = QPixmap();
+  const int bgGen = ++m_bgImageGeneration;
   if (ExtensionUtils::isDecodableImagePath(collection.sidebar.sidebarBackgroundImage)) {
-    const QImage img = ImageDecodeUtils::loadCapped(collection.sidebar.sidebarBackgroundImage);
-    m_bgImage = img.isNull() ? QPixmap() : QPixmap::fromImage(img);
-  } else {
-    // Empty or non-image path — never hand it to QPixmap's autodetect,
-    // which would route a .pdf to the abort()-prone PDF image plugin.
-    m_bgImage = QPixmap();
+    const QString bgPath = collection.sidebar.sidebarBackgroundImage;
+    QPointer<DetailsPane> self = this;
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, bgGen]() {
+      watcher->deleteLater();
+      if (!self || self->m_bgImageGeneration != bgGen) return;
+      const QImage img = watcher->result();
+      self->m_bgImage = img.isNull() ? QPixmap() : QPixmap::fromImage(img);
+      self->update();
+    });
+    watcher->setFuture(
+        QtConcurrent::run([bgPath]() { return ImageDecodeUtils::loadCapped(bgPath); }));
   }
+  // Empty or non-image path leaves m_bgImage cleared — never hand it to
+  // QPixmap's autodetect, which would route a .pdf to the abort()-prone PDF
+  // image plugin.
 
   // Make children transparent so the painted background shows through.
   // The default .ui sets autoFillBackground on each of these so the sidebar

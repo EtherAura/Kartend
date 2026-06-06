@@ -69,6 +69,11 @@ private:
   CandidatesProvider m_candidatesFor;
   PickHandler m_onPick;
   int m_cursor = 0;
+  // Generation guards for async (off-GUI-thread) image decodes: a stale
+  // candidate-thumb or preview decode that lands after the list/selection
+  // moved on is dropped instead of writing a deleted row or the wrong preview.
+  int m_listGeneration = 0;
+  int m_previewGeneration = 0;
 };
 
 #endif // ARTWORKWIZARDDIALOG_H

@@ -1,31 +1,26 @@
 #include "artworkwizarddialog.h"
 
+#include "extensionutils.h"
+#include "imagedecodeutils.h"
 #include "uiconstants/color.h"
 
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
 #include <QListWidget>
 #include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QVBoxLayout>
 
 namespace {
 
 constexpr int kThumbSize = 96;
-
-QPixmap loadThumbnail(const QString &path) {
-  QPixmap pm(path);
-  if (pm.isNull()) {
-    return pm;
-  }
-  // Square thumbnail keeps the candidate list compact regardless of the
-  // source image aspect ratio. KeepAspectRatio so portraits aren't
-  // stretched into squares.
-  return pm.scaled(kThumbSize, kThumbSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-}
 
 } // namespace
 
@@ -125,6 +120,10 @@ void ArtworkWizardDialog::renderCurrent() {
   m_headerLabel->setText(entry.itemName.toHtmlEscaped());
   m_pathLabel->setText(entry.filePath);
   m_candidateList->clear();
+  // Invalidate any candidate-thumb decodes still in flight for the previous
+  // item: their rows were just deleted by clear(), so a late result must not
+  // touch them.
+  const int listGen = ++m_listGeneration;
 
   QList<ArtworkCandidates::Candidate> candidates;
   if (m_candidatesFor) {
@@ -135,8 +134,27 @@ void ArtworkWizardDialog::renderCurrent() {
     const QString display = QFileInfo(candidate.path).fileName();
     row->setText(display);
     row->setData(Qt::UserRole, candidate.path);
-    row->setIcon(QIcon(loadThumbnail(candidate.path)));
     row->setToolTip(candidate.path);
+    // Decode + scale the thumbnail off the GUI thread; the generation guard
+    // drops a result that lands after the list was rebuilt (its row is gone).
+    const QString thumbPath = candidate.path;
+    QPointer<ArtworkWizardDialog> self = this;
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, row, listGen]() {
+      watcher->deleteLater();
+      if (!self || self->m_listGeneration != listGen) return;
+      const QImage img = watcher->result();
+      if (img.isNull()) return;
+      row->setIcon(QIcon(QPixmap::fromImage(img)));
+    });
+    watcher->setFuture(QtConcurrent::run([thumbPath]() -> QImage {
+      if (!ExtensionUtils::isDecodableImagePath(thumbPath)) return {};
+      const QImage img = ImageDecodeUtils::loadCapped(thumbPath);
+      if (img.isNull()) return {};
+      // Square thumbnail keeps the candidate list compact regardless of the
+      // source aspect ratio; KeepAspectRatio so portraits aren't stretched.
+      return img.scaled(kThumbSize, kThumbSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }));
   }
   m_emptyLabel->setVisible(m_candidateList->count() == 0);
   if (m_candidateList->count() > 0) {
@@ -150,6 +168,9 @@ void ArtworkWizardDialog::renderCurrent() {
 }
 
 void ArtworkWizardDialog::onCandidateChanged() {
+  // Any selection change supersedes a pending preview decode so a slow load for
+  // a row the user already navigated away from can't overwrite a newer preview.
+  const int previewGen = ++m_previewGeneration;
   if (m_candidateList->count() == 0) {
     m_previewLabel->clear();
     return;
@@ -160,15 +181,26 @@ void ArtworkWizardDialog::onCandidateChanged() {
     return;
   }
   const QString path = item->data(Qt::UserRole).toString();
-  // Larger preview pixmap — no caching since selection changes are
-  // user-driven and infrequent.
-  QPixmap pm(path);
-  if (!pm.isNull()) {
-    m_previewLabel->setPixmap(
-        pm.scaled(m_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  } else {
+  // Decode the larger preview off the GUI thread. No caching since selection
+  // changes are user-driven and infrequent.
+  if (!ExtensionUtils::isDecodableImagePath(path)) {
     m_previewLabel->setText(tr("(failed to load preview)"));
+    return;
   }
+  QPointer<ArtworkWizardDialog> self = this;
+  auto *watcher = new QFutureWatcher<QImage>(this);
+  connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, previewGen]() {
+    watcher->deleteLater();
+    if (!self || self->m_previewGeneration != previewGen) return;
+    const QImage img = watcher->result();
+    if (img.isNull()) {
+      self->m_previewLabel->setText(ArtworkWizardDialog::tr("(failed to load preview)"));
+      return;
+    }
+    self->m_previewLabel->setPixmap(QPixmap::fromImage(img).scaled(
+        self->m_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+  });
+  watcher->setFuture(QtConcurrent::run([path]() { return ImageDecodeUtils::loadCapped(path); }));
 }
 
 void ArtworkWizardDialog::onPickClicked() {

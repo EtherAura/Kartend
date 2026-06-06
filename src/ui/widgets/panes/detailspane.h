@@ -425,6 +425,9 @@ private:
   DetailsPaneBackgroundType m_bgType = DetailsPaneBackgroundType::Color;
   QColor m_bgColor;
   QPixmap m_bgImage;
+  // Supersedes in-flight async sidebar-background decodes so a rapid
+  // collection switch's slow decode can't overwrite the current one.
+  int m_bgImageGeneration = 0;
   DetailsPanePattern m_bgPattern = DetailsPanePattern::Crosshatch;
   int m_patternIntensity = 50; // 0–100 % alpha multiplier for pattern lines
   QColor m_patternColor;

@@ -40,7 +40,6 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QHideEvent>
-#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -64,9 +63,7 @@
 #include <QUrlQuery>
 #include <QVBoxLayout>
 
-#include "extensionutils.h"
 #include "idatabasemanager.h"
-#include "imagedecodeutils.h"
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
 #include "scrapejobgrouping.h"
@@ -685,27 +682,15 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
     // rows + auto-scroll to the latest match the same shape as the
     // itemCompleted-driven append path.
     m_dlg->m_liveThumbsStrip->clear();
-    QListWidgetItem *restoreLast = nullptr;
+    // Restore the strip off the GUI thread: appendThumbAsync decodes +
+    // scales each thumb on the thread pool and appends one row per
+    // completion (the same path the live itemCompleted append uses), so
+    // re-entering the dialog no longer blocks the UI decoding the whole
+    // recent-media history inline. The PDFium-abort guard, 12-row cap, and
+    // auto-scroll-to-newest all live inside appendThumbAsync.
     for (const QString &p : m_dlg->m_service->recentMediaPaths()) {
       if (p.isEmpty()) continue;
-      // Same PDFium-abort guard as appendThumbAsync — recentMediaPaths
-      // mirrors what itemScraped emits, so it includes the manual
-      // `.pdf` for every game. QPixmap here runs on the MAIN UI
-      // thread; a SIGTRAP here would crash the dialog before the user
-      // could even close it.
-      if (!ExtensionUtils::isDecodableImagePath(p)) continue;
-      const QImage img = ImageDecodeUtils::loadCapped(p);
-      if (img.isNull()) continue;
-      const QPixmap pm = QPixmap::fromImage(img);
-      if (pm.isNull()) continue;
-      auto *row = new QListWidgetItem(
-          QIcon(pm.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation)), QString(),
-          m_dlg->m_liveThumbsStrip);
-      row->setToolTip(QFileInfo(p).fileName());
-      restoreLast = row;
-    }
-    if (restoreLast) {
-      m_dlg->m_liveThumbsStrip->scrollToItem(restoreLast, QAbstractItemView::PositionAtBottom);
+      m_dlg->m_thumbLoader->appendThumbAsync(p);
     }
     // If paused mid-interactive, kick service back into action so the
     // user's resumed UI gets a picker.

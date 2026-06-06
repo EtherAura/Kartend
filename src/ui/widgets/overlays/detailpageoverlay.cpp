@@ -7,18 +7,22 @@
 #include <QEvent>
 #include <QFileInfo>
 #include <QFrame>
+#include <QFutureWatcher>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
+#include <QPointer>
 #include <QPolygon>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QStringList>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QVBoxLayout>
 
 #include "extensionutils.h"
@@ -308,13 +312,36 @@ void DetailPageOverlay::renderHeroArtwork() {
   }
   const auto &entry = m_payload.artwork[m_currentArtworkIndex];
 
-  QPixmap pixmap;
+  // Caption + cycle buttons don't depend on the decoded image, so set them
+  // synchronously — they stay correct even while an image hero decodes off the
+  // GUI thread below.
+  m_heroTypeLabel->setText(
+      QStringLiteral("%1 (%2/%3)").arg(entry.label).arg(m_currentArtworkIndex + 1).arg(total));
+  // Single-entry case: still allow the buttons but they're no-ops; disabling
+  // them communicates "nothing to cycle" without removing the visual symmetry.
+  const bool canCycle = total > 1;
+  m_heroPrevButton->setEnabled(canCycle);
+  m_heroNextButton->setEnabled(canCycle);
+
+  // Restore the styled-frame look every render in case the no-artwork branch
+  // above replaced the stylesheet on a prior call.
+  m_heroLabel->setStyleSheet(QStringLiteral("QLabel { background-color: rgba(0, 0, 0, 80);"
+                                            " border: 1px solid rgba(255, 255, 255, 50);"
+                                            " border-radius: 8px; }"));
+
+  // Supersede any in-flight hero decode: only this (latest) request may write
+  // m_heroLabel, so holding Left/Right can't let a slow decode clobber a newer
+  // selection.
+  const int requestGen = ++m_heroArtworkGeneration;
+
   if (entry.isVideo) {
     // Mirror the sidebar gallery: prefer a cached extracted frame; otherwise
     // show a play-triangle placeholder and request async extraction. Cached
     // *null* records a prior failure — keep the placeholder rather than
-    // re-requesting.
+    // re-requesting. The frame is already in memory (or a cheap placeholder),
+    // so this branch stays synchronous.
     auto *extractor = VideoThumbnailExtractor::instance();
+    QPixmap pixmap;
     if (extractor->hasCacheEntry(entry.path)) {
       pixmap = extractor->cached(entry.path);
     } else {
@@ -334,36 +361,34 @@ void DetailPageOverlay::renderHeroArtwork() {
       painter.drawPolygon(triangle);
       pixmap = placeholder;
     }
+    m_heroLabel->setPixmap(
+        pixmap.scaled(kHeroSize, kHeroSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   } else if (ExtensionUtils::isDecodableImagePath(entry.path)) {
-    const QImage img = ImageDecodeUtils::loadCapped(entry.path);
-    if (!img.isNull()) {
-      pixmap = QPixmap::fromImage(img);
-    }
-  }
-  // A non-image entry.path (e.g. a .pdf manual) leaves `pixmap` null and
-  // falls through to the "Unable to load" branch — never reaching Qt's
-  // PDF image plugin, which abort()s the process on some inputs.
-  if (pixmap.isNull()) {
-    m_heroLabel->setText(tr("Unable to load %1").arg(entry.label));
+    // Decode the hero image off the GUI thread; the latest-generation result
+    // wins. The previous hero stays on screen until the new one lands (no
+    // placeholder flash). The parented watcher is cleaned up on destruction
+    // and won't fire afterward; only value copies are captured.
+    const QString path = entry.path;
+    const QString label = entry.label;
+    QPointer<DetailPageOverlay> self = this;
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, requestGen, label]() {
+      watcher->deleteLater();
+      if (!self || self->m_heroArtworkGeneration != requestGen) return;
+      const QImage img = watcher->result();
+      if (img.isNull()) {
+        self->m_heroLabel->setText(DetailPageOverlay::tr("Unable to load %1").arg(label));
+      } else {
+        self->m_heroLabel->setPixmap(QPixmap::fromImage(img).scaled(
+            kHeroSize, kHeroSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+      }
+    });
+    watcher->setFuture(QtConcurrent::run([path]() { return ImageDecodeUtils::loadCapped(path); }));
   } else {
-    QPixmap scaled =
-        pixmap.scaled(kHeroSize, kHeroSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    m_heroLabel->setPixmap(scaled);
+    // A non-image entry.path (e.g. a .pdf manual) never reaches Qt's PDF image
+    // plugin, which abort()s the process on some inputs.
+    m_heroLabel->setText(tr("Unable to load %1").arg(entry.label));
   }
-  // Restore the styled-frame look every render in case the no-artwork branch
-  // above replaced the stylesheet on a prior call.
-  m_heroLabel->setStyleSheet(QStringLiteral("QLabel { background-color: rgba(0, 0, 0, 80);"
-                                            " border: 1px solid rgba(255, 255, 255, 50);"
-                                            " border-radius: 8px; }"));
-
-  m_heroTypeLabel->setText(
-      QStringLiteral("%1 (%2/%3)").arg(entry.label).arg(m_currentArtworkIndex + 1).arg(total));
-
-  // Single-entry case: still allow the buttons but they're no-ops; disabling
-  // them communicates "nothing to cycle" without removing the visual symmetry.
-  const bool canCycle = total > 1;
-  m_heroPrevButton->setEnabled(canCycle);
-  m_heroNextButton->setEnabled(canCycle);
 }
 
 void DetailPageOverlay::cycleArtwork(int direction) {
