@@ -20,6 +20,7 @@
 #include <QHash>
 #include <QStandardPaths>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTest>
 
 namespace {
@@ -40,9 +41,28 @@ private slots:
   void scheduledMetadataSaveIsFlushedOnDrain();
   void cancelBeforeRunSkipsTheWrite();
   void drainIsSingleShotAndPostDrainScheduleIsNoOp();
+
+private:
+  // Per-process HOME so this test's Qt test-mode QStandardPaths tree — and
+  // thus the artwork_cache.json path it asserts on — is unique to this
+  // process. See initTestCase for why this is load-bearing (Kartend-j1ahs).
+  QTemporaryDir m_homeDir;
 };
 
 void TestCacheDiskStorage::initTestCase() {
+  // Isolate this process's QStandardPaths tree so a sibling test running in
+  // parallel under `ctest -j` can't create or clobber the metadata file this
+  // test asserts the presence/absence of. cacheDirectory() resolves to
+  // GenericCacheLocation + "/kartend", which in Qt test mode is
+  // ~/.qttest/cache/kartend with NO per-binary suffix — so every test process
+  // otherwise shares one artwork_cache.json. An integration test that spins up
+  // CacheManager and flushes the cache on shutdown was racing this test's
+  // file-existence assertions, flaking it ~1-in-N under load (Kartend-j1ahs).
+  // Test mode ignores XDG_CACHE_HOME but honours HOME (re-read per call), so
+  // point HOME at a private per-process temp dir before enabling test mode.
+  QVERIFY(m_homeDir.isValid());
+  qputenv("HOME", m_homeDir.path().toUtf8());
+
   // Redirect the cache dir under QStandardPaths into a throwaway test
   // location so these slots can't read or clobber the developer's real
   // artwork-cache metadata.
