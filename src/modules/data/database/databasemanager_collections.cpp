@@ -1,0 +1,449 @@
+// DatabaseManager: path resolution, collection-level maintenance (clear /
+// migrate / purge orphans / cached-count refresh / last-scanned), and
+// per-collection item-path / item-state enumeration. Split from
+// databasemanager.cpp — see that TU's header comment for the responsibility map.
+#include "databasemanager.h"
+
+#include <stdexcept>
+
+#include <QDateTime>
+#include <QSet>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QString>
+#include <QStringList>
+#include <QVariant>
+
+#include "applicationcontext.h"
+#include "batchsizes.h"
+#include "cachedcountsservice.h"
+#include "collection/collectioncontext.h"
+#include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
+#include "collection/validationhelpers.h"
+#include "errorutils.h"
+#include "isessionmanager.h"
+#include "pathutils.h"
+
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
+
+// ─── Path resolution (delegated to FileMapCache) ──────────────────────────────
+
+int DatabaseManager::getCollectionIndexForFile(const QString &filePath) const {
+  return m_fileMapCache.collectionIndexForFile(filePath);
+}
+
+QString DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const {
+  return m_fileMapCache.artworkDirForFile(filePath);
+}
+
+QString DatabaseManager::resolveFilePath(const QString &rawEntry,
+                                         const CollectionContext &context) const {
+  return m_fileMapCache.resolveFilePath(rawEntry, context);
+}
+
+QString DatabaseManager::resolveRelativeFilePath(const QString &rawFileName,
+                                                 const QHash<QString, QString> &fileNames) const {
+  return m_fileMapCache.resolveRelativeFilePath(rawFileName, fileNames);
+}
+
+// ─── Counts ───────────────────────────────────────────────────────────────────
+
+qint64 DatabaseManager::countCollectionByUuid(const QString &collectionUuid) const {
+  if (!m_db.isOpen()) {
+    return 0;
+  }
+  QSqlQuery countQuery(m_db);
+  countQuery.prepare("SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid=?");
+  countQuery.addBindValue(collectionUuid);
+  if (!countQuery.exec() || !countQuery.next()) {
+    return 0;
+  }
+  return countQuery.value(0).toLongLong();
+}
+
+qint64
+DatabaseManager::countCollectionRecursive(int collectionIndex,
+                                          const QList<CollectionConfig> &allCollections) const {
+  if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
+    return 0;
+  }
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(
+      allCollections[collectionIndex].mediaDirectory, allCollections[collectionIndex].name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(allCollections[collectionIndex].name,
+                                                              expandedMediaDir);
+  qint64 total = countCollectionByUuid(uuid);
+  const QList<int> descendants =
+      CollectionUtils::collectDescendantIndices(collectionIndex, allCollections);
+  for (int descendantIndex : descendants) {
+    const QString descExpandedMediaDir = PathUtils::validateAndExpandPath(
+        allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
+    const QString descendantUuid = CollectionUtils::computeCollectionUuid(
+        allCollections[descendantIndex].name, descExpandedMediaDir);
+    total += countCollectionByUuid(descendantUuid);
+  }
+  return total;
+}
+
+void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
+  if (!m_db.isOpen()) {
+    return;
+  }
+  if (!m_db.transaction()) {
+    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                      "Failed to start database transaction",
+                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
+                   .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    return;
+  }
+  try {
+    QSqlQuery query(m_db);
+    query.prepare("DELETE FROM items WHERE collection_uuid = ?");
+    query.addBindValue(collectionUuid);
+    if (!query.exec()) {
+      throw std::runtime_error(query.lastError().text().toStdString());
+    }
+    QSqlQuery delc(m_db);
+    delc.prepare("DELETE FROM collections WHERE uuid = ?");
+    delc.addBindValue(collectionUuid);
+    if (!delc.exec()) {
+      throw std::runtime_error(delc.lastError().text().toStdString());
+    }
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
+    m_metadataCache.invalidateCollection(collectionUuid);
+  } catch (const std::exception &e) {
+    m_db.rollback();
+    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                      "Failed to clear collection from database",
+                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
+                   .withDetails(ErrorUtils::exceptionMessage(e));
+    ErrorUtils::logError(err);
+  }
+}
+
+void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) {
+  if (!m_db.isOpen() || oldUuid.isEmpty() || newUuid.isEmpty() || oldUuid == newUuid) {
+    return;
+  }
+  if (!m_db.transaction()) {
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to start database transaction",
+                                                "DatabaseManager::migrateCollectionUuid")
+                             .withDetails(m_db.lastError().text()));
+    return;
+  }
+  try {
+    auto run = [&](const QString &sql, const QVariantList &binds) {
+      QSqlQuery q(m_db);
+      q.prepare(sql);
+      for (const QVariant &b : binds) {
+        q.addBindValue(b);
+      }
+      if (!q.exec()) {
+        throw std::runtime_error(q.lastError().text().toStdString());
+      }
+    };
+
+    // The old UPDATE OR REPLACE only re-keyed `items` + `collections`. On a
+    // (new_uuid, path) conflict REPLACE silently deleted the pre-existing target
+    // row — losing its usage columns and orphaning its item_metadata /
+    // item_artwork / launch_history (keyed independently by collection_uuid).
+    // It also never re-keyed the per-item child tables or playlist references at
+    // all, so a rename stranded curation, artwork overrides, play history, and
+    // playlist entries under the old uuid (Kartend-ndyf). Re-key every table
+    // explicitly and resolve conflicts deliberately, all inside the transaction.
+
+    // items: a rescan may have created fresh stubs under newUuid before this
+    // ran. Merge their usage onto the old (real-history) row — MAX so a
+    // post-rename launch on the stub isn't lost — then drop the stub so the
+    // re-key can't hit uniq_items_uuid_path.
+    run("UPDATE items SET "
+        "play_count = MAX(play_count, COALESCE((SELECT n.play_count FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "total_play_seconds = MAX(total_play_seconds, COALESCE((SELECT n.total_play_seconds "
+        "FROM items n WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "last_played = MAX(COALESCE(last_played,''), COALESCE((SELECT n.last_played FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),'')), "
+        "rating = MAX(rating, COALESCE((SELECT n.rating FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path),0)), "
+        "artwork_path = COALESCE(NULLIF(items.artwork_path,''), (SELECT n.artwork_path FROM items "
+        "n "
+        "WHERE n.collection_uuid=? AND n.path=items.path AND n.artwork_path IS NOT NULL "
+        "AND n.artwork_path!='')) "
+        "WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items n "
+        "WHERE n.collection_uuid=? AND n.path=items.path)",
+        {newUuid, newUuid, newUuid, newUuid, newUuid, oldUuid, newUuid});
+    run("DELETE FROM items WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM items o "
+        "WHERE o.collection_uuid=? AND o.path=items.path)",
+        {newUuid, oldUuid});
+    run("UPDATE items SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // item_metadata (UNIQUE collection_uuid,path) + item_artwork (UNIQUE
+    // collection_uuid,path,artwork_type): the old rows hold the user's curation
+    // / artwork overrides; any newUuid rows are post-rename stubs. Drop the
+    // conflicting stubs (old wins), then re-key.
+    run("DELETE FROM item_metadata WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_metadata "
+        "o "
+        "WHERE o.collection_uuid=? AND o.path=item_metadata.path)",
+        {newUuid, oldUuid});
+    run("UPDATE item_metadata SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+    run("DELETE FROM item_artwork WHERE collection_uuid=? AND EXISTS (SELECT 1 FROM item_artwork o "
+        "WHERE o.collection_uuid=? AND o.path=item_artwork.path "
+        "AND o.artwork_type=item_artwork.artwork_type)",
+        {newUuid, oldUuid});
+    run("UPDATE item_artwork SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // launch_history is append-only (no unique key) — just re-label every row.
+    run("UPDATE launch_history SET collection_uuid=? WHERE collection_uuid=?", {newUuid, oldUuid});
+
+    // Playlist references into this collection: nesting parent + per-item source
+    // refs. No unique constraint is at risk, so a plain re-key suffices.
+    run("UPDATE playlists SET parent_collection_uuid=? WHERE parent_collection_uuid=?",
+        {newUuid, oldUuid});
+    run("UPDATE playlist_items SET source_collection_uuid=? WHERE source_collection_uuid=?",
+        {newUuid, oldUuid});
+
+    // collections: drop any stale stub already sitting at newUuid, then re-key
+    // the real row (replacing the old OR REPLACE, which would silently delete).
+    run("DELETE FROM collections WHERE uuid=?", {newUuid});
+    run("UPDATE collections SET uuid=? WHERE uuid=?", {newUuid, oldUuid});
+
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
+    m_metadataCache.invalidateCollection(oldUuid);
+    m_metadataCache.invalidateCollection(newUuid);
+  } catch (const std::exception &e) {
+    m_db.rollback();
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to migrate collection uuid",
+                                                "DatabaseManager::migrateCollectionUuid")
+                             .withDetails(ErrorUtils::exceptionMessage(e)));
+  }
+}
+
+QList<IDatabaseManager::ItemPathRow>
+DatabaseManager::loadAllItemPathsForCollection(const QString &collectionUuid) const {
+  QList<IDatabaseManager::ItemPathRow> out;
+  if (!m_db.isOpen() || collectionUuid.isEmpty()) {
+    return out;
+  }
+  QSqlQuery q(const_cast<QSqlDatabase &>(m_db));
+  if (!q.prepare("SELECT path, artwork_path FROM items WHERE collection_uuid = ? "
+                 "ORDER BY name COLLATE NOCASE ASC")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare item-path enumeration query",
+                                             "DatabaseManager::loadAllItemPathsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to enumerate item paths",
+                                             "DatabaseManager::loadAllItemPathsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    IDatabaseManager::ItemPathRow row;
+    row.path = q.value(0).toString();
+    row.artworkPath = q.value(1).toString();
+    out.append(row);
+  }
+  return out;
+}
+
+QHash<QString, IDatabaseManager::ItemStateFlags>
+DatabaseManager::loadItemStateFlagsForCollection(const QString &collectionUuid) const {
+  QHash<QString, IDatabaseManager::ItemStateFlags> out;
+  if (!m_db.isOpen() || collectionUuid.isEmpty()) {
+    return out;
+  }
+  QSqlQuery q(const_cast<QSqlDatabase &>(m_db));
+  if (!q.prepare("SELECT path, is_pinned, is_hidden, continue_later "
+                 "FROM item_metadata "
+                 "WHERE collection_uuid = ? "
+                 "AND (is_pinned = 1 OR is_hidden = 1 OR continue_later = 1)")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare item-state-flags query",
+                                             "DatabaseManager::loadItemStateFlagsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to enumerate item state flags",
+                                             "DatabaseManager::loadItemStateFlagsForCollection")
+                             .withDetails(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    IDatabaseManager::ItemStateFlags flags;
+    flags.isPinned = q.value(1).toInt() != 0;
+    flags.isHidden = q.value(2).toInt() != 0;
+    flags.continueLater = q.value(3).toInt() != 0;
+    out.insert(q.value(0).toString(), flags);
+  }
+  return out;
+}
+
+void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) {
+  // Derive the uuid set to keep. A collection's uuid is
+  // hash(name, mediaDir); different scan paths feed either the raw or
+  // the path-variable-expanded media dir, so keep BOTH forms — that
+  // way a collection scanned under either is never purged as an
+  // orphan. (For a plain media path the two forms are identical.)
+  QSet<QString> liveUuids;
+  liveUuids.reserve(liveCollections.size() * 2);
+  for (const CollectionConfig &c : liveCollections) {
+    liveUuids.insert(CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory));
+    const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+    if (expanded != c.mediaDirectory) {
+      liveUuids.insert(CollectionUtils::computeCollectionUuid(c.name, expanded));
+    }
+  }
+
+  // An empty live set means "no collections" — but that is also the
+  // transient state during early startup, so refuse to nuke every
+  // row on it. A genuinely empty library has nothing to purge anyway.
+  if (!m_db.isOpen() || liveUuids.isEmpty()) {
+    return;
+  }
+
+  // items keys on `collection_uuid`, collections on `uuid`.
+  const QList<QPair<QString, QString>> targets = {
+      {QStringLiteral("items"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("collections"), QStringLiteral("uuid")}};
+
+  // The inline NOT IN (?, …) form binds one variable per live uuid. With
+  // hundreds of collections (each contributing up to two uuids) that count
+  // approaches SQLite's 999-variable cap (KartendDb::BatchSizes::
+  // SqliteVariableLimit), at which point the DELETE fails with "too many SQL
+  // variables" and orphan rows are never purged. Past a batch's worth of
+  // uuids, switch to the temp-table form: feed query_uuids in bounded batches,
+  // then DELETE … NOT IN (SELECT uuid FROM query_uuids), which carries no
+  // per-uuid binds in the DELETE itself.
+  const bool useTempTable = liveUuids.size() > KartendDb::BatchSizes::UuidListBatch;
+
+  if (!m_db.transaction()) {
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to start database transaction",
+                                                "DatabaseManager::purgeOrphanCollectionData")
+                             .withDetails(m_db.lastError().text()));
+    return;
+  }
+  try {
+    if (useTempTable) {
+      QSqlQuery ddl(m_db);
+      if (!ddl.exec(QStringLiteral(
+              "CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY KEY)"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
+      }
+      // Clear any rows left from a previous purge on this connection.
+      if (!ddl.exec(QStringLiteral("DELETE FROM query_uuids"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
+      }
+      const QStringList uuidList(liveUuids.cbegin(), liveUuids.cend());
+      constexpr int kBatch = KartendDb::BatchSizes::UuidListBatch;
+      for (qsizetype start = 0; start < uuidList.size(); start += kBatch) {
+        const qsizetype end = qMin(start + kBatch, uuidList.size());
+        QStringList placeholders;
+        placeholders.reserve(end - start);
+        for (qsizetype i = start; i < end; ++i) {
+          placeholders << QStringLiteral("(?)");
+        }
+        QSqlQuery ins(m_db);
+        ins.prepare(QStringLiteral("INSERT OR IGNORE INTO query_uuids (uuid) VALUES ") +
+                    placeholders.join(QStringLiteral(", ")));
+        for (qsizetype i = start; i < end; ++i) {
+          ins.addBindValue(uuidList.at(i));
+        }
+        if (!ins.exec()) {
+          throw std::runtime_error(ins.lastError().text().toStdString());
+        }
+      }
+      for (const auto &target : targets) {
+        QSqlQuery del(m_db);
+        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN (SELECT uuid FROM query_uuids)")
+                        .arg(target.first, target.second));
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
+      }
+    } else {
+      // Small uuid counts stay well under the bind cap — a bound inline IN
+      // clause is fine (no temp-table overhead).
+      QStringList placeholders;
+      placeholders.reserve(liveUuids.size());
+      for (int i = 0; i < liveUuids.size(); ++i) {
+        placeholders << QStringLiteral("?");
+      }
+      const QString inClause =
+          QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
+      for (const auto &target : targets) {
+        QSqlQuery del(m_db);
+        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
+                        .arg(target.first, target.second, inClause));
+        for (const QString &uuid : liveUuids) {
+          del.addBindValue(uuid);
+        }
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
+      }
+    }
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
+  } catch (const std::exception &e) {
+    m_db.rollback();
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to purge orphan collection data",
+                                                "DatabaseManager::purgeOrphanCollectionData")
+                             .withDetails(ErrorUtils::exceptionMessage(e)));
+  }
+}
+
+void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
+  ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+  if (!m_db.isOpen() || !session || !m_cachedCounts) {
+    return;
+  }
+  session->clearStaleCollections(allCollections);
+
+  const int collectionCount = allCollections.size();
+  QStringList uuids;
+  uuids.reserve(collectionCount);
+  for (int i = 0; i < collectionCount; ++i) {
+    const QString expandedMediaDir =
+        PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory, allCollections[i].name);
+    const QString uuid =
+        CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDir);
+    uuids.append(uuid);
+    if (expandedMediaDir.trimmed().isEmpty()) {
+      clearCollectionFromDatabaseByUuid(uuid);
+    }
+  }
+  m_cachedCounts->requestUpdate(allCollections, uuids);
+}
+
+// ─── Last-scanned ─────────────────────────────────────────────────────────────
+
+QDateTime DatabaseManager::loadCollectionLastScanned(const QString &collectionUuid) const {
+  if (collectionUuid.isEmpty() || !m_db.isValid() || !m_db.isOpen()) {
+    return {};
+  }
+  QSqlQuery query(m_db);
+  query.prepare(QStringLiteral("SELECT last_scanned FROM collections WHERE uuid = ?"));
+  query.bindValue(0, collectionUuid);
+  if (!query.exec() || !query.next()) {
+    return {};
+  }
+  return QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
+}
