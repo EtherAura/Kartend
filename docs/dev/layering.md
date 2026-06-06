@@ -67,7 +67,8 @@ the header is harmless to include from below.
 
 ## How the lint works
 
-The script enforces three guardrails:
+The script enforces several guardrails; the three most relevant to
+day-to-day work are:
 
 **1. Include layering.** For every `*.cpp` and `*.h` under `src/utils/`
 and `src/chrome/`:
@@ -91,11 +92,36 @@ The documented paths are `mainWindow->applicationManager()->getXxxManager()`
 ui-layer settings dialogs. `getApplicationManager()` itself is the
 canonical hop and is always allowed.
 
+(The script also enforces two further guardrails not detailed here —
+IMainWindow exposing only `applicationManager()`, and the two distinct
+`ctx` accessor styles staying visually apart. See the docstrings in
+[check-layering.py](../../.scripts/check-layering.py).)
+
 The lint runs:
 
 - **Locally** on every `git push` via the
   [pre-push hook](git-hooks.md#pre-push).
 - **In CI** as the `lint` job, before the build job starts.
+
+## ApplicationContext fan-out metric (not a guardrail)
+
+The include DAG is enforced *vertically*, but `ApplicationContext` is a
+*horizontal* back-channel: any manager holding `ctx` can reach ~17
+siblings through `ctx->xxxManager()`, and the guardrails above say
+nothing about it. To keep that hub coupling visible, the lint reports a
+**fan-out metric** — it is a measurement, **not** a pass/fail check, so
+it never fails the build (capping it would only grandfather today's
+state or block unrelated work).
+
+- A normal `check-layering.py` run appends a one-line summary
+  (total sibling reads, manager count, widest consumer).
+- `check-layering.py --fanout` prints the full table: per-manager
+  *incoming* fan-out (how many call sites reach each manager) plus the
+  *widest reachers* (files touching the most distinct managers — the
+  prime candidates for role-scoped dependency structs).
+
+This feeds the longer-term effort to thin `ctx` into per-consumer
+dependency structs rather than passing the whole hub everywhere.
 
 ## Common violations and fixes
 

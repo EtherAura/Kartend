@@ -40,6 +40,18 @@ ${KARTEND_AREA_LIBS})`), so all symbols resolve at the final link regardless.
 STATIC would only risk dropping Qt meta-object TUs the linker sees as unused.
 
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
+
+Usage:
+    check-layering.py            run all guardrails (the lint); appends a
+                                 one-line ApplicationContext fan-out summary.
+    check-layering.py --fanout   print ONLY the per-manager ctx-> fan-out
+                                 table (an informational coupling metric, no
+                                 pass/fail) and exit 0.
+
+The fan-out report (Kartend-5y7zm) is a metric, not a guardrail: it counts how
+many call sites reach each sibling manager through `ctx->xxxManager()` so that
+coupling growth around the ApplicationContext hub is visible in review. It does
+NOT fail the build — there is deliberately no hard cap.
 """
 
 from __future__ import annotations
@@ -60,6 +72,13 @@ SRC = REPO / "src"
 ALLOWLIST: set[str] = set()
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
+
+# A sibling-manager read through the ApplicationContext hub:
+#   ctx->scrollManager()   /   m_ctx->scrollManager()
+# (no-get-prefix, arrow form — that's the ApplicationContext accessor style;
+# controller-ctx thunks use the dotted, get-prefixed `m_ctx.getXxxManager()`
+# form and are intentionally NOT counted here). Captures the accessor name.
+CTX_FANOUT_RE = re.compile(r"\b(?:m_)?ctx\s*->\s*([a-z]\w*Manager)\s*\(\s*\)")
 
 
 def header_area_map() -> dict[str, str]:
@@ -276,6 +295,9 @@ def main() -> int:
         "stay distinct (ApplicationContext no-get-prefix, controller-ctx "
         "get-prefixed)"
     )
+    # Informational coupling metric (Kartend-5y7zm) — never fails the lint.
+    by_manager, _ = compute_ctx_fanout()
+    print(ctx_fanout_summary_line(by_manager))
     return 0
 
 
@@ -548,5 +570,96 @@ def check_ctx_accessor_styles() -> tuple[
     return appctx_findings, controller_findings
 
 
+# ── Sixth concern (metric, not guardrail): ApplicationContext fan-out ────────
+#
+# Kartend-5y7zm. The include-layering DAG is enforced vertically, but the
+# ApplicationContext is a horizontal back-channel: any manager holding `ctx`
+# can reach ~22 siblings via `ctx->xxxManager()`, and the lint above says
+# nothing about it. This report counts those reads per sibling manager so the
+# hub's fan-out is visible in review and its growth is noticeable — WITHOUT a
+# hard cap (capping would either grandfather the current state or block
+# unrelated work). It feeds the larger "thin ctx into role-scoped dep structs"
+# effort (Kartend-7pawj).
+
+
+def compute_ctx_fanout() -> tuple[dict[str, list[tuple[str, int]]], dict[str, set[str]]]:
+    """Scan src/ for `ctx->xxxManager()` sibling reads.
+
+    Comments are blanked first (reusing _blank_comments) so documentation
+    examples and placeholders like `ctx->xxxManager()` don't inflate counts.
+
+    Returns:
+      by_manager  manager-name -> list of (relative_path, line) call sites
+                  (incoming fan-out: how many places reach this manager)
+      by_file     relative_path -> set of distinct managers it reaches
+                  (outgoing fan-out: how wide a single file's ctx reach is)
+    """
+    by_manager: dict[str, list[tuple[str, int]]] = {}
+    by_file: dict[str, set[str]] = {}
+    for path in sorted(SRC.rglob("*")):
+        if path.suffix not in (".cpp", ".h"):
+            continue
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        text = _blank_comments(raw)
+        rel = str(path.relative_to(REPO))
+        for m in CTX_FANOUT_RE.finditer(text):
+            manager = m.group(1)
+            line = raw[: m.start()].count("\n") + 1
+            by_manager.setdefault(manager, []).append((rel, line))
+            by_file.setdefault(rel, set()).add(manager)
+    return by_manager, by_file
+
+
+def ctx_fanout_summary_line(by_manager: dict[str, list[tuple[str, int]]]) -> str:
+    """One-line summary appended to the normal lint run."""
+    total = sum(len(v) for v in by_manager.values())
+    if not by_manager:
+        return "check-layering: ctx fan-out — no ApplicationContext sibling reads found"
+    widest = max(by_manager.items(), key=lambda kv: len(kv[1]))
+    return (
+        f"check-layering: ctx fan-out — {total} sibling reads across "
+        f"{len(by_manager)} managers (widest: {widest[0]} {len(widest[1])}). "
+        "Run check-layering.py --fanout for the full table."
+    )
+
+
+def report_ctx_fanout() -> int:
+    """Print the full per-manager ctx-> fan-out table. Always returns 0 —
+    this is an informational metric, not a pass/fail guardrail."""
+    by_manager, by_file = compute_ctx_fanout()
+    print("check-layering: ApplicationContext ctx-> manager fan-out (metric, no pass/fail)")
+    print("  call sites reaching each sibling manager via ctx->xxxManager() / m_ctx->xxxManager()\n")
+    if not by_manager:
+        print("  (none found)")
+        return 0
+
+    name_w = max(len(n) for n in by_manager)
+    name_w = max(name_w, len("manager"))
+    print(f"  {'manager':<{name_w}}  sites  files")
+    print(f"  {'-' * name_w}  -----  -----")
+    total_sites = 0
+    for manager, sites in sorted(
+        by_manager.items(), key=lambda kv: (-len(kv[1]), kv[0])
+    ):
+        files = len({rel for rel, _ in sites})
+        total_sites += len(sites)
+        print(f"  {manager:<{name_w}}  {len(sites):>5}  {files:>5}")
+    print(f"  {'-' * name_w}  -----  -----")
+    print(f"  {'total':<{name_w}}  {total_sites:>5}  {len(by_file):>5}")
+
+    # Outgoing fan-out: files reaching the most distinct managers are the
+    # prime candidates for role-scoped dependency structs (Kartend-7pawj).
+    widest_files = sorted(by_file.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:10]
+    if widest_files and len(widest_files[0][1]) > 1:
+        print("\n  Widest reachers (files touching the most distinct managers):")
+        for rel, managers in widest_files:
+            if len(managers) < 2:
+                break
+            print(f"    {len(managers):>2} managers  {rel}")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--fanout" in sys.argv[1:]:
+        sys.exit(report_ctx_fanout())
     sys.exit(main())
