@@ -12,10 +12,14 @@ This is useful for testing Kartend's subcollection artwork display when you don'
 
 ```bash
 cd .scripts
-python -m venv .venv
+python -m venv .venv          # canonical path: .scripts/.venv/ (see .gitignore)
 source .venv/bin/activate.fish  # or .venv/bin/activate for bash
-pip install Pillow
+pip install -r requirements.txt  # one venv serves every .scripts/ helper
 ```
+
+> The single canonical virtualenv for all `.scripts/` Python helpers lives at
+> `.scripts/.venv/`. Use it for both this generator and the
+> [seed-data generator](seed-data.md) rather than creating a second env.
 
 ## Usage
 

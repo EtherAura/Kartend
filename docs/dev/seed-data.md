@@ -16,10 +16,14 @@ The seed data generator creates randomly colored images with QR codes containing
 
 ```bash
 cd .scripts
-python -m venv .venv
+python -m venv .venv          # canonical path: .scripts/.venv/ (see .gitignore)
 source .venv/bin/activate.fish  # or .venv/bin/activate for bash
-pip install -r requirements.txt
+pip install -r requirements.txt  # one venv serves every .scripts/ helper
 ```
+
+> `.scripts/.venv/` is the single canonical virtualenv for all `.scripts/`
+> Python helpers — reuse it (don't create a second env such as
+> `.scripts/venv/`).
 
 ## Usage
 
