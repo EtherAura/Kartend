@@ -16,6 +16,7 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 # be more code than the test itself.
 include_directories(
   ${SRC_DIR}/api
+  ${SRC_DIR}/utils
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -438,6 +439,7 @@ set(_kartend_collectionutils_test_sources
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 set(_kartend_collectionutils_test_includes
+  ${SRC_DIR}/utils
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -780,7 +782,7 @@ target_include_directories(test_kdecolorscheme PRIVATE
   ${SRC_DIR}/utils/text
   ${SRC_DIR}/utils/threading
   ${SRC_DIR}/utils/view
-  ${SRC_DIR}/ui/uiconstants
+  ${SRC_DIR}/utils/uiconstants
 )
 target_link_libraries(test_kdecolorscheme
   Qt6::Core

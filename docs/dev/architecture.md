@@ -54,7 +54,7 @@ src/
 │   └── media/           # Artwork pipeline, detail pages
 │       ├── artwork/     # Async artwork loading with QtConcurrent
 │       └── detailpage/  # Detail-page coordinator
-├── ui/                  # UI components and constants
+├── ui/                  # UI components (dialogs, widget panes, controllers)
 │   ├── controllers/     # Controllers that orchestrate UI widgets but stay
 │   │   │                # at the ui/ layer (e.g. DetailsPaneManager, moved
 │   │   │                # out of modules/media/ when relayered as ui/)
@@ -122,7 +122,7 @@ Additional helper managers owned by their parent feature module (not top-level):
 
 | Component | Description |
 |-----------|-------------|
-| `uiconstants/` | Per-area headers (`grid.h`, `dialog.h`, `icons.h`, …) carrying UI timing, spacing, and dimension constants. The old `uiconstants.h` umbrella was deprecated when the 117 callers were migrated to the topical subheaders. |
+| `uiconstants/` | Per-area headers (`grid.h`, `dialog.h`, `icons.h`, …) carrying UI timing, spacing, and dimension constants. **Relocated to `src/utils/uiconstants/`** — they are a pure compile-time foundation namespace, so they now live at the utils layer (dropping the last layering-lint exception); consumers still include them as `uiconstants/<name>.h`. The old `uiconstants.h` umbrella was deprecated when the 117 callers were migrated to the topical subheaders. |
 | `settingsdialog` | Collection configuration dialog with tree-based hierarchy editing and live preview. |
 | `detailspane` | Displays file metadata, artwork gallery, and item details in the side pane. |
 | `itemwidget` | Media item widget displaying artwork, title, and selection state with pulse animation. |

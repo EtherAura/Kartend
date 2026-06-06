@@ -1,11 +1,11 @@
 #ifndef DIALOGCONTROLLER_H
 #define DIALOGCONTROLLER_H
 
-#include "collection/collectionconfig.h"                       // CollectionConfig
-#include "controllers/detailspanemanager/detailspanemanager.h" // ItemArtworkLinksInput typedef
-#include "interactionmanager.h" // SmartPlaylistEdit, EditMetadataDialogRunner typedefs
-#include "isettingsdialog.h"    // ISettingsDialog (factory return type)
-#include "kartmerge.h"          // kart::ConflictResolution, ItemMetadata
+#include "collection/collectionconfig.h" // CollectionConfig
+#include "detailspanemanager.h"          // ItemArtworkLinksInput typedef
+#include "interactionmanager.h"          // SmartPlaylistEdit, EditMetadataDialogRunner typedefs
+#include "isettingsdialog.h"             // ISettingsDialog (factory return type)
+#include "kartmerge.h"                   // kart::ConflictResolution, ItemMetadata
 #include <functional>
 #include <memory>
 #include <optional>

@@ -53,17 +53,21 @@ itself or any layer below it; **never** from a layer above.
 
 ## Allowed exceptions
 
-The lint script has a small allowlist for headers that look like
-upward references but aren't:
+There are currently **none** — the lint's allowlist is empty.
 
-- `src/ui/uiconstants/*.h` — pure compile-time constant namespaces
-  (`grid.h`, `dialog.h`, `icons.h`, …). They live under `src/ui/`
-  for historical reasons but carry no behavior; the long-term plan
-  is to relocate them into `src/utils/`.
+It previously held `src/ui/uiconstants/*.h` (pure compile-time constant
+namespaces — `grid.h`, `dialog.h`, `icons.h`, …) because those headers
+lived under `src/ui/` but were included from lower layers. They have
+since been relocated to `src/utils/uiconstants/`, so they sit at the
+foundation layer and need no exception: `#include "uiconstants/<name>.h"`
+is now a same-or-lower-layer include from anywhere. (The `uiconstants/`
+prefix is kept deliberately — see the `kartend_utils` include-path note
+in [src/CMakeLists.txt](../../src/CMakeLists.txt).)
 
-Don't extend the allowlist casually. New entries need a comment in
-[check-layering.py](../../.scripts/check-layering.py) justifying why
-the header is harmless to include from below.
+Don't add new allowlist entries casually. Any future entry needs a
+comment in [check-layering.py](../../.scripts/check-layering.py)
+justifying why the header is harmless to include from below — prefer
+relocating the header into a lower layer instead.
 
 ## How the lint works
 

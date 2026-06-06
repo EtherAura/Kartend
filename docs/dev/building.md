@@ -116,7 +116,7 @@ does, when to reach for it, and what it leaves behind.
 
 | Flag | Purpose | When to use | Side effects |
 |------|---------|-------------|--------------|
-| `--apply-fixes` | Apply safe clang-tidy auto-fixes in-place. | Cleaning up after a large refactor when the lint report is repetitive. | **Modifies tracked source files**; the auto-fixer has been known to mangle headers under `src/ui/uiconstants/` — inspect `git diff` after. |
+| `--apply-fixes` | Apply safe clang-tidy auto-fixes in-place. | Cleaning up after a large refactor when the lint report is repetitive. | **Modifies tracked source files**; the auto-fixer has been known to mangle headers under `src/utils/uiconstants/` — inspect `git diff` after. |
 | `--format-check` | clang-format dry-run; non-zero exit if anything would change. | CI gate; pre-push verification. | No file writes. |
 | `--format-apply` | clang-format in-place. | Routine pre-push cleanup. | **Modifies tracked source files**. Requires clang-format 19 on PATH (the system v21 drifts). |
 

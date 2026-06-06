@@ -26,10 +26,11 @@ its header actually lives in and fails if a file reaches upward.
 
 The per-area include-scoping already fails an upward basename `#include` at
 compile time. This lint additionally catches what that scoping cannot: a
-subpath-style upward include that resolves through the `src/ui` umbrella
-(e.g. `#include "dialogs/settingsdialog.h"` from a lower layer — `src/ui` is on
-every layer's path for uiconstants/, so the subpath form compiles), and
-basename collisions that would silently mask a real violation. It keeps the
+subpath-style upward include that resolves through a directory placed on a
+lower layer's PUBLIC path (the kind of umbrella that used to exist when
+`src/ui` was on `kartend_utils`'s path for `uiconstants/`; that exception is
+gone — uiconstants now lives under `src/utils/uiconstants/`), and basename
+collisions that would silently mask a real violation. It keeps the
 foundation/chrome (and data/input/media) layers from accreting upward edges.
 
 NOTE: converting these OBJECT libs to STATIC would NOT add link-time layering
@@ -64,11 +65,11 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 SRC = REPO / "src"
 
 # Headers a foundation-layer file is allowed to include even though they
-# live above it. The UIConstants subheaders under src/ui/uiconstants/ are
-# pure compile-time constants namespaces with no behavioural dependency;
-# the seeding loop below adds them all to this set. Relocating them into
-# utils/ is tracked separately. Keep additions to this list short and
-# justified.
+# live above it. This used to hold the UIConstants subheaders (when they
+# lived under src/ui/uiconstants/ but were included from lower layers);
+# they have since been relocated into src/utils/uiconstants/, so they sit
+# at the foundation layer and need no exception. The set is intentionally
+# empty now — keep any future additions short and justified.
 ALLOWLIST: set[str] = set()
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
@@ -122,10 +123,6 @@ def header_area_map() -> dict[str, str]:
             "first's."
         )
         sys.exit(2)
-    # uiconstants sub-headers live under src/ui/uiconstants/; treat the
-    # whole namespace as allowlisted constants.
-    for hdr in (SRC / "ui" / "uiconstants").glob("*.h"):
-        ALLOWLIST.add(hdr.name)
     return area
 
 

@@ -51,29 +51,28 @@ set_target_properties(
 )
 
 # ---------------------------------------------------------------------------
-# kartend_utils (foundation): utils dirs + Qt + the uiconstants umbrella.
+# kartend_utils (foundation): utils dirs + Qt + the uiconstants namespace.
 #
-# src/ui/ is on utils's PUBLIC include path so every layer can resolve
+# src/utils/ is on utils's PUBLIC include path so every layer can resolve
 # `#include "uiconstants/<name>.h"` — uiconstants/ holds pure compile-time
 # constants used from every layer (timing, colors, animation, navigation,
-# etc.) and is conceptually a foundation namespace despite living under
-# ui/. Relocating it into utils/ to fully drop this exception is tracked
-# separately. src/ui/uiconstants/ itself is intentionally NOT on the
-# include path because several of its sub-headers (detailspane.h,
-# gamepad.h, navigation.h, ...) collide by basename with widget / manager
-# headers; consumers must reference them as `uiconstants/<name>.h` from
-# the umbrella for single-source basename resolution.
+# etc.) and is a foundation namespace. It now lives under utils/ (relocated
+# from ui/ — the last layering exception, dropped). uiconstants/ itself is
+# deliberately NOT added to the include path directly; consumers reference
+# its headers as `uiconstants/<name>.h` so the prefix keeps the constant
+# headers visually distinct from same-named widget/manager headers and
+# guards against any future basename collision.
 # ---------------------------------------------------------------------------
 target_include_directories(kartend_utils PUBLIC
   ${CMAKE_BINARY_DIR}
   ${CMAKE_BINARY_DIR}/src/kartend_utils_autogen/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/app
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/db
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/fs
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/text
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/threading
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/view
-  ${CMAKE_CURRENT_SOURCE_DIR}/ui
 )
 target_link_libraries(kartend_utils PUBLIC
   Qt6::Core
