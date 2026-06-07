@@ -35,6 +35,7 @@ void FilterManager::setSourceData(const QStringList &filePaths,
   m_fileNames = &fileNames;
   m_filePathToDisplayName = &filePathToDisplayName;
   m_subcollections = &subcollections;
+  m_displayNameCache.clear(); // source data changed — drop precomputed names
 }
 
 void FilterManager::setContext(const CollectionContext &context) {
@@ -46,6 +47,9 @@ void FilterManager::setContext(const CollectionContext &context) {
   m_hideMissingArtworkDirectory = m_context.artworkDirectory.isEmpty()
                                       ? m_context.config.artworkDirectory
                                       : m_context.artworkDirectory;
+  // showAllSubcollectionItems / mediaDirectory feed the media display name, so
+  // drop the precomputed cache when the context changes.
+  m_displayNameCache.clear();
 }
 
 void FilterManager::setHideMissingArtworkFilter(bool enabled, const QString &artworkDirectory) {
@@ -225,9 +229,19 @@ auto FilterManager::matchesMediaItemFilter(int mediaIndex, const QString &needle
 }
 
 auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const -> QString {
-  return FilterHelpers::displayNameForMediaEntry(
+  // Precompute-once cache: displayNameForMediaEntry builds a QDir +
+  // absoluteFilePath + QFileInfo per call on the non-showAll path, and the
+  // rebuild loop calls this for every media item on every keystroke. Cache by
+  // rawEntry; invalidated in setSourceData/setContext (its only other inputs).
+  const auto it = m_displayNameCache.constFind(rawEntry);
+  if (it != m_displayNameCache.constEnd()) {
+    return it.value();
+  }
+  QString display = FilterHelpers::displayNameForMediaEntry(
       rawEntry, m_context.config.showAllSubcollectionItems, m_context.config.mediaDirectory,
       m_filePathToDisplayName, m_fileNames);
+  m_displayNameCache.insert(rawEntry, display);
+  return display;
 }
 
 auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {

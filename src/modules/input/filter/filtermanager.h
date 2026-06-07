@@ -170,6 +170,12 @@ private:
   // Context for resolution
   CollectionContext m_context;
 
+  // Per-rawEntry media display-name cache. displayNameForMediaEntry does a
+  // QDir/absoluteFilePath/QFileInfo per call on the non-showAll path, and the
+  // rebuild loop calls it for every media item on every keystroke; cache it and
+  // invalidate in setSourceData/setContext (its only inputs besides rawEntry).
+  mutable QHash<QString, QString> m_displayNameCache;
+
   // Filter state
   bool m_isFiltered = false;
   QString m_currentFilter;
