@@ -60,6 +60,24 @@ bool showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context,
   return true;
 }
 
+void reportSaveResult(const ErrorUtils::Result<void> &result, const char *what,
+                      bool userInitiated) {
+  if (!result.isError()) {
+    return;
+  }
+  const ErrorUtils::ErrorContext &error = result.error();
+  qCWarning(lcErrorPresentation).nospace()
+      << "settings save failed (" << what << "): " << error.message << " — source=" << error.source
+      << " — code=" << static_cast<int>(error.code);
+  if (userInitiated) {
+    // The in-memory setting already changed and the UI reflects it, so a silent
+    // write failure on an explicit save looks "applied" until it reverts on the
+    // next launch. Surface it. Parentless is fine; the installed override
+    // (ErrorDialog) presents it top-level.
+    showError(nullptr, error);
+  }
+}
+
 void setShowErrorOverride(ShowErrorFn fn) {
   g_showErrorOverride = std::move(fn);
 }

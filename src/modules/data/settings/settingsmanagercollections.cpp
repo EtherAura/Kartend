@@ -14,6 +14,7 @@
 #include <QStringList>
 
 #include "collectionhierarchybuilder.h"
+#include "errorpresentation.h"
 #include "loggingcategories.h"
 
 #include "collection/archiveoptions_persistence.h"
@@ -59,7 +60,7 @@ void SettingsManager::finalizeCollections(const QHash<QString, CollectionConfig>
                                           const bool &needsRewrite) {
   CollectionHierarchyBuilder::build(tempCollections, collections);
   if (needsRewrite) {
-    (void)saveCollections(collections);
+    ErrorPresentation::reportSaveResult(saveCollections(collections), "collections", false);
   }
 }
 

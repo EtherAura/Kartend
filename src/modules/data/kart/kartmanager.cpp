@@ -11,6 +11,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/launcherpreset.h"
 #include "collection/typehelpers.h"
+#include "errorpresentation.h"
 #include "errorutils.h"
 #include "kartdb.h"
 // Kartend-a3ir: the previous #include of "kartmergedialog.h" was the last
@@ -168,7 +169,8 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
     }
     cfg.name = uniqueName;
     collections->append(cfg);
-    (void)settings->saveCollections(*collections);
+    ErrorPresentation::reportSaveResult(settings->saveCollections(*collections), "collections",
+                                        true);
   }
 
   const QString collectionUuid =

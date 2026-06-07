@@ -15,6 +15,7 @@
 #include "applicationmanager.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "errorpresentation.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
 #include "scrollmanager.h"
@@ -113,7 +114,9 @@ void MainWindow::setupPreviewVolumeSlider() {
     m_generalSettings.media.previewVideoVolume = value;
     VideoPreviewWidget::setGlobalVolume(value);
     if (m_appManager->getSettingsManager()) {
-      (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+      ErrorPresentation::reportSaveResult(
+          m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+          "general settings", true);
     }
   });
 }
@@ -133,7 +136,9 @@ void MainWindow::applyTextZoom(int percent) {
   TextZoom::setPercent(clamped);
   m_generalSettings.appearance.uiTextZoomPercent = clamped;
   if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+        "general settings", true);
   }
   // Re-push the global font with the new multiplier baked in.
   applyGlobalUiFont(m_generalSettings);

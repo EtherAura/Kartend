@@ -5,6 +5,7 @@
 #include "collectiontypes.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
+#include "errorpresentation.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "navigationmanager.h"
@@ -36,7 +37,7 @@ void ScrollEventsController::onSortModeChangeRequested(SortMode sortMode) {
   if (auto *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr) {
     settings->view.sortMode = sortMode;
     if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-      (void)sm->saveGeneralSettings(*settings);
+      ErrorPresentation::reportSaveResult(sm->saveGeneralSettings(*settings), "general settings", false);
     }
   }
   const int currentIndex = m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
@@ -108,7 +109,7 @@ void ScrollEventsController::onListColumnWidthChanged(int width) {
   }
   settings->view.listCollectionColumnWidth = width;
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-    (void)sm->saveGeneralSettings(*settings);
+    ErrorPresentation::reportSaveResult(sm->saveGeneralSettings(*settings), "general settings", false);
   }
 }
 
@@ -120,6 +121,6 @@ void ScrollEventsController::onListArtworkColumnWidthChanged(int width) {
   }
   settings->view.listArtworkColumnWidth = width;
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
-    (void)sm->saveGeneralSettings(*settings);
+    ErrorPresentation::reportSaveResult(sm->saveGeneralSettings(*settings), "general settings", false);
   }
 }

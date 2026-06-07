@@ -11,6 +11,7 @@
 #include "collection/typehelpers.h"
 
 #include "applicationmanager.h"
+#include "errorpresentation.h"
 #include "inavigationmanager.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
@@ -284,7 +285,9 @@ void ToolbarController::refreshFilterToolbar() {
         }
         m_mainWindow->m_generalSettings.view.collectionTypeFilter = chosen;
         if (settingsMgr()) {
-          (void)settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+          ErrorPresentation::reportSaveResult(
+              settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings),
+              "general settings", true);
         }
         if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
           navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
@@ -301,7 +304,8 @@ void ToolbarController::refreshFilterToolbar() {
         }
         c.filter.titleExclusionEnabled = checked;
         if (settingsMgr()) {
-          (void)settingsMgr()->saveCollections(m_mainWindow->m_collections);
+          ErrorPresentation::reportSaveResult(
+              settingsMgr()->saveCollections(m_mainWindow->m_collections), "collections", true);
         }
         if (navMgr()) {
           navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
@@ -362,7 +366,9 @@ void ToolbarController::refreshFilterToolbar() {
       allAction->setChecked(true);
       m_mainWindow->m_generalSettings.view.collectionTypeFilter.clear();
       if (settingsMgr()) {
-        (void)settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings);
+        ErrorPresentation::reportSaveResult(
+            settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings), "general settings",
+            true);
       }
     }
 
@@ -457,7 +463,8 @@ void ToolbarController::showTitleFilterEditor() {
     c.filter.titleExclusionEnabled = true;
   }
   if (settingsMgr()) {
-    (void)settingsMgr()->saveCollections(m_mainWindow->m_collections);
+    ErrorPresentation::reportSaveResult(settingsMgr()->saveCollections(m_mainWindow->m_collections),
+                                        "collections", true);
   }
   refreshFilterToolbar();
   if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {

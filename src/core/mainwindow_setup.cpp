@@ -37,6 +37,7 @@
 #include "detailpagemanager.h"
 #include "detailspane.h"
 #include "dialogcontroller.h"
+#include "errorpresentation.h"
 #include "filtermanager.h"
 #include "gamepadmanager.h"
 #include "gridwidthdebouncer.h"
@@ -161,7 +162,9 @@ void MainWindow::setupUI() {
             return;
           }
           if (m_appManager->getSettingsManager()) {
-            (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+            ErrorPresentation::reportSaveResult(
+                m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
+                false);
           }
         },
         [this]() {
@@ -547,7 +550,8 @@ void MainWindow::adjustGridWidth(int delta) {
   if (m_gridWidthDebouncer) {
     m_gridWidthDebouncer->triggerSave();
   } else if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
   }
 
   // Apply the change to the UI using the same flow as settings dialog
@@ -576,7 +580,8 @@ void MainWindow::setViewType(ViewType viewType) {
 
   // Persist the change immediately
   if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
   }
 
   // Update view-mode button checked state and label.

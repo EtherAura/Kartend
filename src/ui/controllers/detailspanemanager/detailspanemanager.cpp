@@ -6,6 +6,7 @@
 #include "collection/launcherconfig.h"
 #include "collection/typehelpers.h"
 #include "detailspane.h"
+#include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
 #include "interactionstateholder.h"
@@ -148,7 +149,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarWidth = width;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        (void)sm->saveCollections(*m_collections);
+        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
+                                            false);
       }
     });
     // height-drag handlers for Top/Bottom dock. Mirror the width
@@ -175,7 +177,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarHeight = height;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        (void)sm->saveCollections(*m_collections);
+        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
+                                            false);
       }
     });
     // tabs: persist the user's tab choice per collection, then re-push the
@@ -190,7 +193,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarActiveTab = tab;
       if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        (void)sm->saveCollections(*m_collections);
+        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
+                                            false);
       }
       if (!m_currentItemFilePath.isEmpty()) {
         // Tab switch is a deliberate user action — refresh immediately so
@@ -600,7 +604,7 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
   }
   (*m_collections)[collectionIndex].sidebar.sidebarVisible = visible;
   if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-    (void)sm->saveCollections(*m_collections);
+    ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections", false);
   }
 }
 

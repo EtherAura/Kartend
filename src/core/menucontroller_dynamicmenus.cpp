@@ -18,6 +18,7 @@
 
 #include "collection/collectionhierarchycache.h"
 #include "detailspanemanager.h"
+#include "errorpresentation.h"
 #include "historystore.h"
 #include "idatabasemanager.h"
 #include "isettingsmanager.h"
@@ -225,7 +226,8 @@ void MenuController::setupActionDetailsPaneOrientation() {
       (*collections)[idx].sidebar.sidebarPosition = pos;
       if (m_ctx.getSettingsManager) {
         if (auto *sm = m_ctx.getSettingsManager()) {
-          (void)sm->saveCollections(*collections);
+          ErrorPresentation::reportSaveResult(sm->saveCollections(*collections), "collections",
+                                              true);
         }
       }
       // applySidebarStateForCollection re-runs applyAppearance + layout swap so

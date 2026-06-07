@@ -39,6 +39,7 @@
 #include "commandpalettedialog.h"
 #include "detailpagemanager.h"
 #include "dialogcontroller.h"
+#include "errorpresentation.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemartwork.h"
@@ -135,7 +136,8 @@ void MainWindow::showFirstRunWizard() {
     // restart.
     m_collections.append(result.pickedConfig);
     if (m_appManager->getSettingsManager()) {
-      (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+      ErrorPresentation::reportSaveResult(
+          m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
     }
     rebuildHierarchyCache();
     if (m_appManager->getNavigationManager()) {
@@ -149,7 +151,9 @@ void MainWindow::showFirstRunWizard() {
   // be obnoxious. Re-running stays available via Help → Setup Wizard…
   m_generalSettings.startup.firstRunComplete = true;
   if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+        "general settings", true);
   }
 }
 
@@ -195,7 +199,8 @@ void MainWindow::importThemeInteractive() {
   CollectionConfig &mutableTarget = m_collections[currentCollectionIndex];
   ThemePresetIO::applyTo(preset, mutableTarget);
   if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
   }
   // Soft reload so the new appearance values surface immediately without
   // the user having to switch collections.
@@ -261,7 +266,8 @@ void MainWindow::manageLayoutProfilesInteractive() {
     CollectionConfig &target = m_collections[currentCollectionIndex];
     ThemePresetIO::applyTo(preset, target);
     if (m_appManager->getSettingsManager()) {
-      (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+      ErrorPresentation::reportSaveResult(
+          m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
     }
     if (m_appManager->getNavigationManager()) {
       m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
@@ -541,7 +547,9 @@ void MainWindow::openCommandPalette() {
          if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
            m_collections[currentCollectionIndex].viewType = ViewType::Grid;
            if (m_appManager->getSettingsManager()) {
-             (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+             ErrorPresentation::reportSaveResult(
+                 m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
+                 true);
            }
            if (m_appManager->getNavigationManager()) {
              m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
@@ -556,7 +564,9 @@ void MainWindow::openCommandPalette() {
          if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
            m_collections[currentCollectionIndex].viewType = ViewType::List;
            if (m_appManager->getSettingsManager()) {
-             (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+             ErrorPresentation::reportSaveResult(
+                 m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
+                 true);
            }
            if (m_appManager->getNavigationManager()) {
              m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
@@ -747,7 +757,8 @@ void MainWindow::runNewLibraryWizard() {
   // append → save → rebuild hierarchy → navigate.
   m_collections.append(result.pickedConfig);
   if (m_appManager->getSettingsManager()) {
-    (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
   }
   rebuildHierarchyCache();
   if (m_appManager->getNavigationManager()) {
@@ -773,7 +784,9 @@ void MainWindow::managePresentationProfilesInteractive() {
   auto onApply = [this](const PresentationProfile &profile) {
     PresentationProfileIO::applyTo(profile, m_generalSettings);
     if (m_appManager->getSettingsManager()) {
-      (void)m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+      ErrorPresentation::reportSaveResult(
+          m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+          "general settings", true);
     }
     // Marquee window respects the live settings on each (re)apply; we
     // call the same hook the Settings dialog uses so the change is

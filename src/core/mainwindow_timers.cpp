@@ -11,6 +11,7 @@
 #include "detailspane.h"
 #include "detailspanemanager.h"
 #include "dialogcontroller.h"
+#include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idatabasemanager.h"
@@ -143,7 +144,8 @@ void MainWindow::setupInitialTimersEmptyCollections() {
 
     // Save the new collection
     if (m_appManager->getSettingsManager()) {
-      (void)m_appManager->getSettingsManager()->saveCollections(m_collections);
+      ErrorPresentation::reportSaveResult(
+          m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
     }
 
     // Rebuild hierarchy cache with the new collection

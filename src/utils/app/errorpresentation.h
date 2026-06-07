@@ -22,6 +22,16 @@ void showError(QWidget *parent, const ErrorUtils::ErrorContext &context);
 [[nodiscard]] bool showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context,
                                      bool allowContinue = true);
 
+/// Report the outcome of a settings/collection save. On failure it always logs;
+/// when `userInitiated` is true (an explicit action — dialog OK, toolbar
+/// toggle, menu item) it also surfaces the error via showError so the user
+/// learns the change did NOT persist (the in-memory state already changed, so a
+/// silent write failure otherwise looks "applied" until it reverts on relaunch).
+/// Best-effort auto-saves (resize / scroll / layout) pass false and only log.
+/// `what` is a short noun for the log line ("collections", "general settings").
+/// Kartend-sgmmq.
+void reportSaveResult(const ErrorUtils::Result<void> &result, const char *what, bool userInitiated);
+
 /// Test-only override hooks. When set, showError / showCriticalError invoke
 /// the supplied function instead of opening an ErrorDialog modal — so
 /// integration tests that exercise the error-signal slot path

@@ -3,6 +3,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "detailspanemanager.h"
+#include "errorpresentation.h"
 #include "historystore.h"
 #include "idatabasemanager.h"
 #include "isettingsmanager.h"
@@ -99,7 +100,8 @@ bool MenuController::connectVisibilityToggle(QAction *action,
         settings->view.*field = checked;
         if (m_ctx.getSettingsManager) {
           if (auto *mgr = m_ctx.getSettingsManager()) {
-            (void)mgr->saveGeneralSettings(*settings);
+            ErrorPresentation::reportSaveResult(mgr->saveGeneralSettings(*settings),
+                                                "general settings", true);
           }
         }
       }
@@ -280,7 +282,8 @@ void MenuController::setupSortActions() {
           settings->view.sortMode = mode;
           if (m_ctx.getSettingsManager) {
             if (auto *mgr = m_ctx.getSettingsManager()) {
-              (void)mgr->saveGeneralSettings(*settings);
+              ErrorPresentation::reportSaveResult(mgr->saveGeneralSettings(*settings),
+                                                  "general settings", true);
             }
           }
           reloadIfNeeded();
@@ -299,7 +302,8 @@ void MenuController::setupSortActions() {
                   settings->view.excludeSubfoldersFromSort = checked;
                   if (m_ctx.getSettingsManager) {
                     if (auto *mgr = m_ctx.getSettingsManager()) {
-                      (void)mgr->saveGeneralSettings(*settings);
+                      ErrorPresentation::reportSaveResult(mgr->saveGeneralSettings(*settings),
+                                                          "general settings", true);
                     }
                   }
                   reloadIfNeeded();
@@ -368,7 +372,8 @@ void MenuController::setupFullscreenAction() {
         settings->view.fullscreen = entering;
         if (m_ctx.getSettingsManager) {
           if (auto *mgr = m_ctx.getSettingsManager()) {
-            (void)mgr->saveGeneralSettings(*settings);
+            ErrorPresentation::reportSaveResult(mgr->saveGeneralSettings(*settings),
+                                                "general settings", true);
           }
         }
       }

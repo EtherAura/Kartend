@@ -20,6 +20,7 @@
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
 #include "dialogcontroller.h"
+#include "errorpresentation.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "interactionmanager.h"
@@ -307,7 +308,8 @@ void MainWindow::wireKartManager() {
 
     connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {
       if (auto *sm = m_appManager->getSettingsManager()) {
-        (void)sm->saveCollections(m_collections);
+        ErrorPresentation::reportSaveResult(sm->saveCollections(m_collections), "collections",
+                                            false);
       }
     });
 

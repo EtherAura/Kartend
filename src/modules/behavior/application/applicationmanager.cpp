@@ -9,6 +9,7 @@
 #include "databasemanager.h"
 #include "detailpagemanager.h"
 #include "detailspanemanager.h"
+#include "errorpresentation.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
@@ -218,7 +219,8 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
 
   // 4. Save settings synchronously (fast INI write, typically <1ms)
   if (m_settingsManager) {
-    (void)m_settingsManager->saveCollections(collections);
+    ErrorPresentation::reportSaveResult(m_settingsManager->saveCollections(collections),
+                                        "collections", false);
   }
 
   // 5. Release GUI resources from cache (clears pixmaps from memory)
