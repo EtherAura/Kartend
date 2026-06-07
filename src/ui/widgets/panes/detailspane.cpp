@@ -1,5 +1,7 @@
 // Displays file metadata, artwork preview, and item details in the sidebar
 // panel.
+#include "detailsformat.h"
+
 #include <algorithm>
 #include <QApplication>
 #include <QDesktopServices>
@@ -523,10 +525,7 @@ void DetailsPane::renderCollectionSummary() {
 }
 
 QString DetailsPane::formatLastScanned(const QDateTime &lastScanned) {
-  if (!lastScanned.isValid()) {
-    return tr("never");
-  }
-  return lastScanned.toLocalTime().toString(QStringLiteral("yyyy-MM-dd hh:mm"));
+  return DetailsFormat::formatLastScanned(lastScanned);
 }
 
 // Updates file information fields including size, modification date, and file
@@ -847,7 +846,7 @@ void DetailsPane::resizeEvent(QResizeEvent *event) {
 // Human-readable file size (KB/MB/GB). Delegates to the shared StringUtils
 // helper so the logic isn't duplicated with DetailPageOverlay (Kartend-kp7up).
 auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
-  return StringUtils::formatFileSize(bytes);
+  return DetailsFormat::formatFileSize(bytes);
 }
 
 // Load artwork from specified directory
@@ -897,19 +896,7 @@ void DetailsPane::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
 }
 
 QString DetailsPane::formatRuntime(int seconds) {
-  if (seconds < 0) {
-    return {};
-  }
-  const int hours = seconds / 3600;
-  const int minutes = (seconds % 3600) / 60;
-  const int secs = seconds % 60;
-  if (hours > 0) {
-    return QStringLiteral("%1h %2m").arg(hours).arg(minutes, 2, 10, QChar('0'));
-  }
-  if (minutes > 0) {
-    return QStringLiteral("%1m %2s").arg(minutes).arg(secs, 2, 10, QChar('0'));
-  }
-  return QStringLiteral("%1s").arg(secs);
+  return DetailsFormat::formatRuntime(seconds);
 }
 
 // Kartend-cd2u: ensureManualButton / setManualFile / openCurrentManual
@@ -921,46 +908,9 @@ void DetailsPane::setManualFile(const QString &manualPath) {
 }
 
 QString DetailsPane::formatPersonalRating(int rating) {
-  if (rating < 0) {
-    return {};
-  }
-  const int clamped = std::clamp(rating, 0, 10);
-  const int fullStars = clamped / 2;
-  const bool halfStar = (clamped % 2) != 0;
-  const int emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
-
-  QString glyphs;
-  glyphs.reserve(5);
-  for (int i = 0; i < fullStars; ++i) {
-    glyphs.append(QChar(0x2605)); // ★
-  }
-  if (halfStar) {
-    glyphs.append(QChar(0x00BD)); // ½ — placed where the half star would be.
-  }
-  for (int i = 0; i < emptyStars; ++i) {
-    glyphs.append(QChar(0x2606)); // ☆
-  }
-
-  const double stars = clamped / 2.0;
-  const QString fraction =
-      QString::number(stars, 'f', stars == int(stars) ? 0 : 1) + QStringLiteral(" / 5");
-  return QStringLiteral("%1 (%2)").arg(glyphs, fraction);
+  return DetailsFormat::formatPersonalRating(rating);
 }
 
 QString DetailsPane::formatTags(const QString &raw) {
-  // Accept either a JSON array string or a comma-separated list. We do not
-  // pull in QJsonDocument here to keep this widget lightweight; the Details
-  // section just renders whatever the source provides with light cleanup.
-  QString trimmed = raw.trimmed();
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    trimmed.chop(1);
-    trimmed.remove(0, 1);
-    trimmed.replace('"', QString());
-  }
-  QStringList parts = trimmed.split(',', Qt::SkipEmptyParts);
-  for (QString &p : parts) {
-    p = p.trimmed();
-  }
-  parts.removeAll(QString());
-  return parts.join(", ");
+  return DetailsFormat::formatTags(raw);
 }
