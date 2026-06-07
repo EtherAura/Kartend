@@ -8,7 +8,6 @@
 #include "uiconstants/color.h"
 
 #include <algorithm>
-#include <atomic>
 
 #include <QCheckBox>
 #include <QDateTime>
@@ -23,8 +22,6 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QTabWidget>
 #include <QtConcurrent>
 #include <QTreeWidget>
@@ -39,10 +36,9 @@
 #include "uiconstants/dialog.h"
 
 namespace {
-constexpr int TOP_LIST_LIMIT = 50;
-constexpr int RECENT_LIST_LIMIT = 50;
-constexpr int NEVER_LIST_LIMIT = 50;
-constexpr int HISTORY_LIST_LIMIT = 1000;
+// Window (in days) for the header's "Played in last N days" counter. The
+// per-list size caps that StatisticsService applies to the gathered snapshot
+// live in the service alongside the queries they bound.
 constexpr int RECENT_DAYS_WINDOW = 7;
 } // namespace
 
@@ -124,32 +120,63 @@ void StatisticsDialog::setupUI() {
   mainLayout->addWidget(m_runtimeNote);
 
   // Tabbed lists. QTreeWidget gives us cheap sortable columns without
-  // pulling in a model class for what is essentially a static read.
+  // pulling in a model class for what is essentially a static read. The four
+  // analytics tabs and the history tab are built by dedicated helpers so this
+  // method stays a readable top-level outline.
   m_tabs = new QTabWidget(this);
+  buildOverviewTab();
+  buildHistoryTab();
+  mainLayout->addWidget(m_tabs, 1);
 
-  auto buildTree = [this](const QStringList &headers) {
-    auto *tree = new QTreeWidget(this);
-    tree->setHeaderLabels(headers);
-    tree->setRootIsDecorated(false);
-    tree->setUniformRowHeights(true);
-    tree->setAlternatingRowColors(true);
-    tree->setSortingEnabled(true);
-    tree->header()->setSectionResizeMode(QHeaderView::Interactive);
-    tree->header()->setStretchLastSection(true);
-    return tree;
-  };
+  // Buttons: Reset (left, destructive) + Refresh + Close (right).
+  auto *buttonLayout = new QHBoxLayout();
+  buttonLayout->setSpacing(8);
+  auto *resetButton = new QPushButton(tr("Reset usage stats…"), this);
+  resetButton->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete")));
+  resetButton->setToolTip(tr("Clear play count, last played, and time played for every item."));
+  connect(resetButton, &QPushButton::clicked, this, &StatisticsDialog::onResetClicked);
+  buttonLayout->addWidget(resetButton);
 
+  buttonLayout->addStretch();
+
+  auto *refreshButton = new QPushButton(tr("Refresh"), this);
+  refreshButton->setIcon(QIcon::fromTheme(QStringLiteral("view-refresh")));
+  connect(refreshButton, &QPushButton::clicked, this, &StatisticsDialog::refresh);
+  buttonLayout->addWidget(refreshButton);
+
+  auto *closeButton = new QPushButton(tr("Close"), this);
+  closeButton->setIcon(QIcon::fromTheme(QStringLiteral("window-close")));
+  closeButton->setDefault(true);
+  connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
+  buttonLayout->addWidget(closeButton);
+
+  mainLayout->addLayout(buttonLayout);
+}
+
+QTreeWidget *StatisticsDialog::makeTree(const QStringList &headers) {
+  auto *tree = new QTreeWidget(this);
+  tree->setHeaderLabels(headers);
+  tree->setRootIsDecorated(false);
+  tree->setUniformRowHeights(true);
+  tree->setAlternatingRowColors(true);
+  tree->setSortingEnabled(true);
+  tree->header()->setSectionResizeMode(QHeaderView::Interactive);
+  tree->header()->setStretchLastSection(true);
+  return tree;
+}
+
+void StatisticsDialog::buildOverviewTab() {
   m_mostPlayedTree =
-      buildTree({tr("Item"), tr("Collection"), tr("Plays"), tr("Time"), tr("Last played")});
+      makeTree({tr("Item"), tr("Collection"), tr("Plays"), tr("Time"), tr("Last played")});
   m_recentlyPlayedTree =
-      buildTree({tr("Item"), tr("Collection"), tr("Last played"), tr("Plays"), tr("Time")});
-  m_neverPlayedTree = buildTree({tr("Item"), tr("Collection")});
-  m_byCollectionTree = buildTree({tr("Collection"), tr("Items"), tr("Launches"), tr("Time")});
+      makeTree({tr("Item"), tr("Collection"), tr("Last played"), tr("Plays"), tr("Time")});
+  m_neverPlayedTree = makeTree({tr("Item"), tr("Collection")});
+  m_byCollectionTree = makeTree({tr("Collection"), tr("Items"), tr("Launches"), tr("Time")});
 
   // Double-click on a per-item row jumps to that item in the grid. The
   // by-collection tree is intentionally NOT wired — its rows are aggregate
-  // and have no single owning path. The history tree is wired below where
-  // it's constructed (it carries the same per-item path shape).
+  // and have no single owning path. The history tree is wired in
+  // buildHistoryTab() (it carries the same per-item path shape).
   const auto wireRowNavigation = [this](QTreeWidget *tree) {
     if (!tree) return;
     QObject::connect(tree, &QTreeWidget::itemDoubleClicked, this,
@@ -185,7 +212,9 @@ void StatisticsDialog::setupUI() {
   m_tabs->addTab(neverPlayedTab, tr("Never played"));
 
   m_tabs->addTab(m_byCollectionTree, tr("By collection"));
+}
 
+void StatisticsDialog::buildHistoryTab() {
   // history tab. Sits inside a container so the tab can host
   // its own toggle/clear controls without stuffing them into the dialog
   // footer (which already owns the global Reset/Refresh/Close buttons).
@@ -227,7 +256,7 @@ void StatisticsDialog::setupUI() {
          "below but no new launches will be added."));
   historyLayout->addWidget(m_historyDisabledNote);
 
-  m_historyTree = buildTree({tr("Launched at"), tr("Item"), tr("Collection"), tr("Path")});
+  m_historyTree = makeTree({tr("Launched at"), tr("Item"), tr("Collection"), tr("Path")});
   // History rows arrive newest-first from the store; let the user re-sort
   // via the column header but keep that initial order.
   m_historyTree->setSortingEnabled(false);
@@ -258,32 +287,6 @@ void StatisticsDialog::setupUI() {
   historyLayout->addLayout(historyButtonRow);
 
   m_tabs->addTab(historyTab, tr("History"));
-
-  mainLayout->addWidget(m_tabs, 1);
-
-  // Buttons: Reset (left, destructive) + Refresh + Close (right).
-  auto *buttonLayout = new QHBoxLayout();
-  buttonLayout->setSpacing(8);
-  auto *resetButton = new QPushButton(tr("Reset usage stats…"), this);
-  resetButton->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete")));
-  resetButton->setToolTip(tr("Clear play count, last played, and time played for every item."));
-  connect(resetButton, &QPushButton::clicked, this, &StatisticsDialog::onResetClicked);
-  buttonLayout->addWidget(resetButton);
-
-  buttonLayout->addStretch();
-
-  auto *refreshButton = new QPushButton(tr("Refresh"), this);
-  refreshButton->setIcon(QIcon::fromTheme(QStringLiteral("view-refresh")));
-  connect(refreshButton, &QPushButton::clicked, this, &StatisticsDialog::refresh);
-  buttonLayout->addWidget(refreshButton);
-
-  auto *closeButton = new QPushButton(tr("Close"), this);
-  closeButton->setIcon(QIcon::fromTheme(QStringLiteral("window-close")));
-  closeButton->setDefault(true);
-  connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
-  buttonLayout->addWidget(closeButton);
-
-  mainLayout->addLayout(buttonLayout);
 }
 
 void StatisticsDialog::refresh() {
@@ -314,12 +317,13 @@ void StatisticsDialog::refresh() {
     }
   }
 
-  // Run every stats query off the UI thread (Kartend-umwix part B). gatherStats
-  // opens its own read-only SQLite connection to the same file; WAL mode lets it
-  // read a consistent snapshot concurrently with the main connection's writes.
-  // Recency cutoff (UTC ISO-8601, matching recordLaunch()'s format) is computed
-  // here so the worker stays a pure value function. Supersede any in-flight load
-  // so a rapid re-refresh can't paint stale data.
+  // Run every stats query off the UI thread (Kartend-umwix part B).
+  // StatisticsService::gather opens its own read-only SQLite connection to the
+  // same file; WAL mode lets it read a consistent snapshot concurrently with the
+  // main connection's writes. Recency cutoff (UTC ISO-8601, matching
+  // recordLaunch()'s format) is computed here so the worker stays a pure value
+  // function. Supersede any in-flight load so a rapid re-refresh can't paint
+  // stale data.
   const QString cutoffIso =
       QDateTime::currentDateTimeUtc().addDays(-RECENT_DAYS_WINDOW).toString(Qt::ISODate);
   const QString dbPath = m_databaseManager->databaseFilePath();
@@ -338,58 +342,7 @@ void StatisticsDialog::refresh() {
     watcher->deleteLater();
     applyStatsSnapshot(snap);
   });
-  watcher->setFuture(QtConcurrent::run(&StatisticsDialog::gatherStats, dbPath, cutoffIso));
-}
-
-StatisticsDialog::StatsSnapshot StatisticsDialog::gatherStats(const QString &dbPath,
-                                                              const QString &cutoffIso) {
-  StatsSnapshot s;
-  if (dbPath.isEmpty()) {
-    return s;
-  }
-  // Unique connection name per call so concurrent / sequential gathers never
-  // collide in QSqlDatabase's global registry.
-  static std::atomic<quint64> connSeq{0};
-  const QString conn =
-      QStringLiteral("kartend_stats_%1").arg(connSeq.fetch_add(1, std::memory_order_relaxed));
-  {
-    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
-    db.setDatabaseName(dbPath);
-    if (db.open()) {
-      // Wait briefly for a concurrent writer rather than failing the read.
-      QSqlQuery(db).exec(QStringLiteral("PRAGMA busy_timeout = 3000"));
-      if (auto r = UsageStatsStore::loadAggregate(db); r.isOk()) {
-        s.agg = r.value();
-      }
-      if (auto r = UsageStatsStore::countPlayedSince(db, cutoffIso); r.isOk()) {
-        s.played7Days = r.value();
-      }
-      if (auto r = UsageStatsStore::loadTopPlayed(db, TOP_LIST_LIMIT); r.isOk()) {
-        s.topPlayed = r.value();
-      }
-      if (auto r = UsageStatsStore::loadRecentlyPlayed(db, RECENT_LIST_LIMIT); r.isOk()) {
-        s.recentlyPlayed = r.value();
-      }
-      if (auto r = UsageStatsStore::loadNeverPlayed(db, NEVER_LIST_LIMIT); r.isOk()) {
-        s.neverPlayed = r.value();
-      }
-      if (auto r = UsageStatsStore::loadCollectionBreakdown(db); r.isOk()) {
-        s.byCollection = r.value();
-      }
-      if (auto r = HistoryStore::loadRecent(db, HISTORY_LIST_LIMIT); r.isOk()) {
-        s.history = r.value();
-      }
-      if (auto r = HistoryStore::count(db); r.isOk()) {
-        s.historyCount = r.value();
-      }
-      s.totalNever = std::max<qint64>(0, s.agg.totalItems - s.agg.itemsLaunchedAtLeastOnce);
-      s.ok = true;
-    }
-  }
-  // db is out of scope (and the store helpers destroyed their queries) before
-  // removeDatabase, so Qt doesn't warn about a connection still in use.
-  QSqlDatabase::removeDatabase(conn);
-  return s;
+  watcher->setFuture(QtConcurrent::run(&StatisticsService::gather, dbPath, cutoffIso));
 }
 
 void StatisticsDialog::applyStatsSnapshot(const StatsSnapshot &snap) {

@@ -9,6 +9,7 @@ target_sources(kartend_utils PRIVATE
   metadataqueue.cpp
   smartfilter.cpp
   smartplaylistevaluator.cpp
+  statisticsservice.cpp
   usagestatsstore.cpp
   variantgrouping.cpp
   batchsizes.h
@@ -22,6 +23,7 @@ target_sources(kartend_utils PRIVATE
   metadataqueue.h
   smartfilter.h
   smartplaylistevaluator.h
+  statisticsservice.h
   usagestatsstore.h
   variantgrouping.h
 )

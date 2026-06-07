@@ -6,10 +6,12 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "historystore.h"
+#include "statisticsservice.h"
 #include "usagestatsstore.h"
 
 QT_BEGIN_NAMESPACE
@@ -52,6 +54,15 @@ signals:
 
 private:
   void setupUI();
+  /// Creates a configured analytics QTreeWidget (parented to the dialog) with
+  /// the given column headers. Shared by buildOverviewTab() / buildHistoryTab().
+  [[nodiscard]] QTreeWidget *makeTree(const QStringList &headers);
+  /// Builds the four analytics tabs (Most played / Recently played / Never
+  /// played / By collection) and adds them to m_tabs. Called once from setupUI.
+  void buildOverviewTab();
+  /// Builds the History tab (toggle + count + tree + clear button) and adds it
+  /// to m_tabs. Called once from setupUI.
+  void buildHistoryTab();
   void refresh();
   void populateAggregate(const UsageStatsStore::AggregateStats &agg, qint64 playedInLast7Days);
   void populateMostPlayed(const QList<UsageStatsStore::ItemUsageRow> &rows);
@@ -76,26 +87,11 @@ private:
   /// still has something readable.
   [[nodiscard]] QString labelForCollectionUuid(const QString &uuid) const;
 
-  /// Bundle of every DB-derived figure the dialog renders, produced off the UI
-  /// thread by gatherStats() so refresh() never blocks on SQLite (Kartend-umwix
-  /// part B). `ok` is false when the worker couldn't open the database.
-  struct StatsSnapshot {
-    UsageStatsStore::AggregateStats agg;
-    qint64 played7Days = 0;
-    qint64 totalNever = 0;
-    QList<UsageStatsStore::ItemUsageRow> topPlayed;
-    QList<UsageStatsStore::ItemUsageRow> recentlyPlayed;
-    QList<UsageStatsStore::ItemUsageRow> neverPlayed;
-    QHash<QString, UsageStatsStore::CollectionUsage> byCollection;
-    QList<HistoryStore::HistoryEntry> history;
-    qint64 historyCount = 0;
-    bool ok = false;
-  };
-  /// Worker body (runs on a QThreadPool thread): opens a private read-only
-  /// connection to @p dbPath and runs every stats query, returning the bundle.
-  /// Touches no member or GUI state — only the value args — so it is safe to
-  /// run off the main thread.
-  [[nodiscard]] static StatsSnapshot gatherStats(const QString &dbPath, const QString &cutoffIso);
+  /// Bundle of every DB-derived figure the dialog renders, gathered off the UI
+  /// thread by StatisticsService::gather() so refresh() never blocks on SQLite.
+  /// The aggregation now lives in the data layer (StatisticsService); the dialog
+  /// only consumes the result, so this is an alias rather than its own struct.
+  using StatsSnapshot = StatisticsService::StatsSnapshot;
   /// Render a gathered snapshot onto the trees/labels (main thread).
   void applyStatsSnapshot(const StatsSnapshot &snap);
 
