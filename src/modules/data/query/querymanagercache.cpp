@@ -248,6 +248,198 @@ void QueryManager::performDeferredCacheBuild() {
   m_pendingCacheFilter.clear();
 }
 
+QString QueryManager::buildSortedSelectSql(const QStringList &uuids, bool useTempTable,
+                                           bool needsItemsTable, bool needsCollectionJoin,
+                                           bool useFts, bool isRandomSort, const QString &freeText,
+                                           const QString &tokenClausesSql, SortMode sortMode) {
+  QString sql;
+  QString filterClause;
+  if (!freeText.isEmpty() && !useFts) {
+    filterClause =
+        (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
+  }
+
+  // (collection_uuid, path) is the item identity — emit one row per item so
+  // same-named files across subcollections produce distinct cache entries.
+  if (useFts) {
+    // FTS-backed select: filter rowids via items_fts MATCH then resolve to
+    // items rows for collection joining. Mirrors fetchItemsRange's FTS branch
+    // so cache size matches count.
+    if (needsCollectionJoin || needsItemsTable) {
+      if (useTempTable) {
+        sql = "SELECT i.path, i.collection_uuid FROM items i "
+              "JOIN items_fts f ON f.rowid = i.id "
+              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+              "WHERE f MATCH ? AND EXISTS "
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = i.collection_uuid)";
+      } else {
+        sql = "SELECT i.path, i.collection_uuid FROM items i "
+              "JOIN items_fts f ON f.rowid = i.id "
+              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+              "WHERE f MATCH ? AND i.collection_uuid IN " +
+              buildUuidInClause(uuids.size());
+      }
+    } else {
+      if (useTempTable) {
+        sql = "SELECT path, collection_uuid FROM items_fts "
+              "WHERE items_fts MATCH ? AND EXISTS "
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)";
+      } else {
+        sql = "SELECT path, collection_uuid FROM items_fts "
+              "WHERE items_fts MATCH ? AND collection_uuid IN " +
+              buildUuidInClause(uuids.size());
+      }
+    }
+  } else if (needsCollectionJoin || needsItemsTable) {
+    // Join with collections to get collection name for sorting.
+    if (useTempTable) {
+      sql = "SELECT i.path, i.collection_uuid FROM items i "
+            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+            "i.collection_uuid)" +
+            filterClause;
+    } else {
+      sql = "SELECT i.path, i.collection_uuid FROM items i "
+            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+            "WHERE i.collection_uuid IN " +
+            buildUuidInClause(uuids.size()) + filterClause;
+    }
+  } else {
+    if (useTempTable) {
+      sql = "SELECT path, collection_uuid FROM items "
+            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+            "collection_uuid)" +
+            filterClause;
+    } else {
+      sql = "SELECT path, collection_uuid FROM items "
+            "WHERE collection_uuid IN " +
+            buildUuidInClause(uuids.size()) + filterClause;
+    }
+  }
+
+  // Append parsed token clauses (played / tag / missing:artwork / favorite)
+  // before the ORDER BY so the cached result set matches what
+  // fetchItemCount/fetchItemsRange would produce for the same input.
+  sql += tokenClausesSql;
+
+  // Apply sort order based on sortMode. No GROUP BY anymore, so reference
+  // the per-row columns directly instead of MIN/MAX aggregates.
+  //
+  // Name sorts order by the `name` column, not `path`: items.path is absolute,
+  // so a path sort groups items by their owning (sub)collection's directory.
+  // When a shell collection aggregates several subcollections that surfaces as
+  // a collection-then-name order instead of a flat name order. Ordering by
+  // `name` also matches the slow-path QueryHelpers::orderByForSortMode.
+  if (!isRandomSort) {
+    switch (sortMode) {
+    case SortMode::NameDescending:
+      sql += " ORDER BY name COLLATE NOCASE DESC";
+      break;
+    case SortMode::DateDescending:
+      sql += " ORDER BY i.last_modified DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::DateAscending:
+      sql += " ORDER BY i.last_modified ASC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeDescending:
+      sql += " ORDER BY i.file_size DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeAscending:
+      sql += " ORDER BY i.file_size ASC, path COLLATE NOCASE";
+      break;
+    case SortMode::CollectionAscending:
+      sql += " ORDER BY c.name COLLATE NOCASE, path COLLATE NOCASE";
+      break;
+    case SortMode::CollectionDescending:
+      sql += " ORDER BY c.name COLLATE NOCASE DESC, path COLLATE NOCASE";
+      break;
+    default:
+      sql += " ORDER BY name COLLATE NOCASE";
+      break;
+    }
+  }
+  // For random sort, no ORDER BY - we'll shuffle in memory after fetching
+
+  return sql;
+}
+
+bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
+                                    const QVector<SortedRow> &shuffledItems, int &position) {
+  constexpr int INSERT_BATCH_SIZE = KartendDb::BatchSizes::PathInsertBatch;
+  QStringList paths;
+  QStringList pathUuids;
+  paths.reserve(INSERT_BATCH_SIZE);
+  pathUuids.reserve(INSERT_BATCH_SIZE);
+
+  auto flushBatch = [&]() -> bool {
+    if (paths.isEmpty()) return true;
+
+    QString insertSql = "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
+    QStringList placeholders;
+    placeholders.reserve(paths.size());
+    for (int i = 0; i < paths.size(); ++i) {
+      placeholders.append("(?, ?, ?)");
+    }
+    insertSql += placeholders.join(", ");
+
+    QSqlQuery ins(m_db);
+    ins.prepare(insertSql);
+    int startPos = position - paths.size();
+    for (int i = 0; i < paths.size(); ++i) {
+      ins.addBindValue(startPos + i);
+      ins.addBindValue(paths[i]);
+      ins.addBindValue(pathUuids[i]);
+    }
+
+    if (!ins.exec()) {
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to insert sorted items cache batch",
+                                                 "QueryManager::populateSortedItemsCache")
+                               .withDetails(ins.lastError().text()));
+      return false;
+    }
+
+    paths.clear();
+    pathUuids.clear();
+    return true;
+  };
+
+  if (isRandomSort) {
+    // Insert from shuffled vector
+    for (const auto &item : shuffledItems) {
+      paths.append(item.path);
+      pathUuids.append(item.uuid);
+      ++position;
+
+      if (paths.size() >= INSERT_BATCH_SIZE) {
+        if (!flushBatch()) {
+          return false;
+        }
+      }
+    }
+  } else {
+    // Stream from query result (already ordered)
+    while (selectQuery.next()) {
+      paths.append(selectQuery.value(0).toString());
+      pathUuids.append(selectQuery.value(1).toString());
+      ++position;
+
+      if (paths.size() >= INSERT_BATCH_SIZE) {
+        if (!flushBatch()) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // Flush remaining
+  if (!flushBatch()) {
+    return false;
+  }
+
+  return true;
+}
+
 bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QString &filter,
                                             SortMode sortMode) {
   if (!m_db.isOpen() || uuids.isEmpty()) {
@@ -336,114 +528,10 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   const QueryHelpers::SearchTokenClauses tokenClauses =
       QueryHelpers::buildSearchTokenClauses(parsedQuery, tokenItemsAlias);
 
-  QString sql;
-  QString filterClause;
-  if (!freeText.isEmpty() && !useFts) {
-    filterClause =
-        (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
-  }
-
-  // (collection_uuid, path) is the item identity — emit one row per item so
-  // same-named files across subcollections produce distinct cache entries.
-  if (useFts) {
-    // FTS-backed select: filter rowids via items_fts MATCH then resolve to
-    // items rows for collection joining. Mirrors fetchItemsRange's FTS branch
-    // so cache size matches count.
-    if (needsCollectionJoin || needsItemsTable) {
-      if (useTempTable) {
-        sql = "SELECT i.path, i.collection_uuid FROM items i "
-              "JOIN items_fts f ON f.rowid = i.id "
-              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
-              "WHERE f MATCH ? AND EXISTS "
-              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = i.collection_uuid)";
-      } else {
-        sql = "SELECT i.path, i.collection_uuid FROM items i "
-              "JOIN items_fts f ON f.rowid = i.id "
-              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
-              "WHERE f MATCH ? AND i.collection_uuid IN " +
-              buildUuidInClause(uuids.size());
-      }
-    } else {
-      if (useTempTable) {
-        sql = "SELECT path, collection_uuid FROM items_fts "
-              "WHERE items_fts MATCH ? AND EXISTS "
-              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)";
-      } else {
-        sql = "SELECT path, collection_uuid FROM items_fts "
-              "WHERE items_fts MATCH ? AND collection_uuid IN " +
-              buildUuidInClause(uuids.size());
-      }
-    }
-  } else if (needsCollectionJoin || needsItemsTable) {
-    // Join with collections to get collection name for sorting.
-    if (useTempTable) {
-      sql = "SELECT i.path, i.collection_uuid FROM items i "
-            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
-            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
-            "i.collection_uuid)" +
-            filterClause;
-    } else {
-      sql = "SELECT i.path, i.collection_uuid FROM items i "
-            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
-            "WHERE i.collection_uuid IN " +
-            buildUuidInClause(uuids.size()) + filterClause;
-    }
-  } else {
-    if (useTempTable) {
-      sql = "SELECT path, collection_uuid FROM items "
-            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
-            "collection_uuid)" +
-            filterClause;
-    } else {
-      sql = "SELECT path, collection_uuid FROM items "
-            "WHERE collection_uuid IN " +
-            buildUuidInClause(uuids.size()) + filterClause;
-    }
-  }
-
-  // Append parsed token clauses (played / tag / missing:artwork / favorite)
-  // before the ORDER BY so the cached result set matches what
-  // fetchItemCount/fetchItemsRange would produce for the same input.
-  sql += tokenClauses.sql;
-
-  // Apply sort order based on sortMode. No GROUP BY anymore, so reference
-  // the per-row columns directly instead of MIN/MAX aggregates.
-  //
-  // Name sorts order by the `name` column, not `path`: items.path is absolute,
-  // so a path sort groups items by their owning (sub)collection's directory.
-  // When a shell collection aggregates several subcollections that surfaces as
-  // a collection-then-name order instead of a flat name order. Ordering by
-  // `name` also matches the slow-path QueryHelpers::orderByForSortMode.
   const bool isRandomSort = (sortMode == SortMode::Random);
-  if (!isRandomSort) {
-    switch (sortMode) {
-    case SortMode::NameDescending:
-      sql += " ORDER BY name COLLATE NOCASE DESC";
-      break;
-    case SortMode::DateDescending:
-      sql += " ORDER BY i.last_modified DESC, path COLLATE NOCASE";
-      break;
-    case SortMode::DateAscending:
-      sql += " ORDER BY i.last_modified ASC, path COLLATE NOCASE";
-      break;
-    case SortMode::SizeDescending:
-      sql += " ORDER BY i.file_size DESC, path COLLATE NOCASE";
-      break;
-    case SortMode::SizeAscending:
-      sql += " ORDER BY i.file_size ASC, path COLLATE NOCASE";
-      break;
-    case SortMode::CollectionAscending:
-      sql += " ORDER BY c.name COLLATE NOCASE, path COLLATE NOCASE";
-      break;
-    case SortMode::CollectionDescending:
-      sql += " ORDER BY c.name COLLATE NOCASE DESC, path COLLATE NOCASE";
-      break;
-    default:
-      sql += " ORDER BY name COLLATE NOCASE";
-      break;
-    }
-  }
-  // For random sort, no ORDER BY - we'll shuffle in memory after fetching
+  const QString sql =
+      buildSortedSelectSql(uuids, useTempTable, needsItemsTable, needsCollectionJoin, useFts,
+                           isRandomSort, freeText, tokenClauses.sql, sortMode);
 
   QSqlQuery selectQuery(m_db);
   selectQuery.prepare(sql);
@@ -475,12 +563,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
   // For random sort: collect all items, shuffle, then insert
   // For other sorts: stream directly into cache (already ordered by SQL)
-  struct PathUuidPair {
-    QString path;
-    QString uuid;
-  };
-
-  QVector<PathUuidPair> allItems;
+  QVector<SortedRow> allItems;
   if (isRandomSort) {
     // Collect all items for shuffling
     while (selectQuery.next()) {
@@ -505,76 +588,8 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     }
   }
 
-  constexpr int INSERT_BATCH_SIZE = KartendDb::BatchSizes::PathInsertBatch;
-  QStringList paths;
-  QStringList pathUuids;
-  paths.reserve(INSERT_BATCH_SIZE);
-  pathUuids.reserve(INSERT_BATCH_SIZE);
   int position = 0;
-
-  auto flushBatch = [&]() -> bool {
-    if (paths.isEmpty()) return true;
-
-    QString insertSql = "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
-    QStringList placeholders;
-    placeholders.reserve(paths.size());
-    for (int i = 0; i < paths.size(); ++i) {
-      placeholders.append("(?, ?, ?)");
-    }
-    insertSql += placeholders.join(", ");
-
-    QSqlQuery ins(m_db);
-    ins.prepare(insertSql);
-    int startPos = position - paths.size();
-    for (int i = 0; i < paths.size(); ++i) {
-      ins.addBindValue(startPos + i);
-      ins.addBindValue(paths[i]);
-      ins.addBindValue(pathUuids[i]);
-    }
-
-    if (!ins.exec()) {
-      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                                 "Failed to insert sorted items cache batch",
-                                                 "QueryManager::populateSortedItemsCache")
-                               .withDetails(ins.lastError().text()));
-      return false;
-    }
-
-    paths.clear();
-    pathUuids.clear();
-    return true;
-  };
-
-  if (isRandomSort) {
-    // Insert from shuffled vector
-    for (const auto &item : allItems) {
-      paths.append(item.path);
-      pathUuids.append(item.uuid);
-      ++position;
-
-      if (paths.size() >= INSERT_BATCH_SIZE) {
-        if (!flushBatch()) {
-          return false;
-        }
-      }
-    }
-  } else {
-    // Stream from query result (already ordered)
-    while (selectQuery.next()) {
-      paths.append(selectQuery.value(0).toString());
-      pathUuids.append(selectQuery.value(1).toString());
-      ++position;
-
-      if (paths.size() >= INSERT_BATCH_SIZE) {
-        if (!flushBatch()) {
-          return false;
-        }
-      }
-    }
-  }
-
-  // Flush remaining
-  if (!flushBatch()) {
+  if (!insertSortedRows(selectQuery, isRandomSort, allItems, position)) {
     return false;
   }
 

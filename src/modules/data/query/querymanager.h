@@ -14,6 +14,7 @@
 #include <QSqlQuery>
 #include <QStringList>
 #include <QThread>
+#include <QVector>
 
 class ISessionManager;
 
@@ -316,6 +317,32 @@ private:
   [[nodiscard]] bool populateSortedItemsCache(const QStringList &uuids, const QString &filter,
                                               SortMode sortMode);
   [[nodiscard]] bool hasSortedItemsCache() const { return m_sortedItemsCacheValid; }
+
+  // One sorted-cache row (path + owning collection uuid). Used to carry the
+  // result set between the SELECT and the batched insert in
+  // populateSortedItemsCache (e.g. the in-memory buffer for the random shuffle).
+  struct SortedRow {
+    QString path;
+    QString uuid;
+  };
+
+  // Builds the per-sort-mode SELECT used to materialise the sorted cache.
+  // Pure string construction extracted from populateSortedItemsCache: chooses
+  // the FTS vs LIKE vs plain branch, the temp-table vs IN-clause uuid filter,
+  // appends the parsed token clauses, then the ORDER BY (omitted for the random
+  // sort, which shuffles in memory). Binding stays with the caller.
+  [[nodiscard]] QString buildSortedSelectSql(const QStringList &uuids, bool useTempTable,
+                                             bool needsItemsTable, bool needsCollectionJoin,
+                                             bool useFts, bool isRandomSort,
+                                             const QString &freeText,
+                                             const QString &tokenClausesSql, SortMode sortMode);
+
+  // Streams the executed SELECT (or, for random sort, the pre-shuffled buffer)
+  // into sorted_items_cache in position-numbered batches. Extracted from
+  // populateSortedItemsCache; advances `position` and returns false on the first
+  // failed insert so the caller can roll the build's transaction back.
+  [[nodiscard]] bool insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
+                                      const QVector<SortedRow> &shuffledItems, int &position);
 
   // Cache validity tracking
   bool m_sortedItemsCacheValid = false;
