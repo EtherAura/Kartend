@@ -38,6 +38,10 @@ struct ApplyResult {
   int mediaWritten = 0;
   int mediaSkipped = 0;
   bool metadataSaved = false;
+  /// Whether the on-disk JSON sidecar (re-scrape detection + portable metadata)
+  /// was written. False on a QSaveFile open/write/commit failure; independent of
+  /// metadataSaved (the DB save). Kartend-v5788.
+  bool sidecarWritten = false;
   /// First handful of failure descriptions (e.g. "back: write failed")
   /// for the caller's summary message. Capped to keep the summary
   /// readable.

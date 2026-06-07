@@ -554,12 +554,14 @@ ApplyResult applyScrapedItem(IDatabaseManager *databaseManager, const QString &c
   // BatchScrapeRunner uses the underlying primitives directly so the
   // file-I/O phase can run on a worker thread.
   const MediaWriteResult writes = writeMediaFiles(artworkDirectory, baseName, media, rescrapeMode);
-  (void)writeMetadataSidecar(artworkDirectory, baseName, scraped, rescrapeMode);
+  const bool sidecarWritten =
+      writeMetadataSidecar(artworkDirectory, baseName, scraped, rescrapeMode);
   ApplyResult result;
   result.mediaWritten = writes.mediaWritten;
   result.mediaSkipped = writes.mediaSkipped;
   result.writtenPaths = writes.writtenPaths;
   result.firstFailures = writes.firstFailures;
+  result.sidecarWritten = sidecarWritten;
   result.metadataSaved = saveScrapedMetadata(databaseManager, collectionUuid, sourcePath, scraped,
                                              writes.nonStandardArtwork);
   return result;
