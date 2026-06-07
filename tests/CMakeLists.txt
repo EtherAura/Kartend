@@ -404,6 +404,16 @@ add_executable(test_cliargs
 target_link_libraries(test_cliargs PRIVATE kartend_utils Qt6::Test)
 add_test(NAME CliArgs COMMAND test_cliargs)
 
+# Threading utils (Kartend-qsujk): AdaptiveBatcher's timing -> batch-size
+# adaptation, and ThreadPoolUtils::shutdownWithBudget's leak-vs-delete branch
+# (the UAF-avoiding path from Kartend-7vrx). Pure logic + a bounded blocking
+# task; no Qt GUI needed.
+add_executable(test_threadingutils
+  utils/threading/test_threadingutils.cpp
+)
+target_link_libraries(test_threadingutils PRIVATE kartend_utils Qt6::Test)
+add_test(NAME ThreadingUtils COMMAND test_threadingutils)
+
 # CollectionConfig::operator== field coverage (guards against a new field being
 # added to the struct but forgotten in operator==).
 add_executable(test_collectionconfig
