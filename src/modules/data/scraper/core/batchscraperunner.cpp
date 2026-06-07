@@ -188,7 +188,7 @@ void BatchScrapeRunner::cancel() {
   // Per-item tokens (skipCurrentItem flips one of these for a single item).
   for (const auto &weak : m_inFlightItems) {
     if (auto state = weak.lock()) {
-      state->cancelToken->store(true, std::memory_order_relaxed);
+      state->cancelToken->store(true, std::memory_order_release);
     }
   }
   // Don't emit finished here — let the in-flight callbacks observe the
@@ -206,7 +206,7 @@ void BatchScrapeRunner::skipCurrentItem() {
   // observe the token and count this item as skipped. No-op if the item
   // already finished (weak handle expired) or nothing is in flight.
   if (auto state = m_currentItem.lock()) {
-    state->cancelToken->store(true, std::memory_order_relaxed);
+    state->cancelToken->store(true, std::memory_order_release);
   }
 }
 
@@ -476,7 +476,7 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
       self->itemFinished();
       return;
     }
-    if (state->cancelToken->load(std::memory_order_relaxed)) {
+    if (state->cancelToken->load(std::memory_order_acquire)) {
       // User skipped this item (its token flipped, m_cancelled still false):
       // count it as skipped and free the slot so the batch carries on.
       ++self->m_summary.skipped;
@@ -511,7 +511,7 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
             self->itemFinished();
             return;
           }
-          if (state->cancelToken->load(std::memory_order_relaxed)) {
+          if (state->cancelToken->load(std::memory_order_acquire)) {
             ++self->m_summary.skipped;
             self->itemFinished();
             return;
@@ -571,7 +571,7 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
                     }
                     return;
                   }
-                  if (state->cancelToken->load(std::memory_order_relaxed)) {
+                  if (state->cancelToken->load(std::memory_order_acquire)) {
                     // Skipped mid media-fetch: drop the in-flight assets and
                     // count the item as skipped once the last fetch returns
                     // (it never reaches applyAndFinish, so nothing is written).
@@ -823,6 +823,11 @@ void BatchScrapeRunner::itemFinished() {
   // another item from the queue (steady state) or emit `finished` if
   // the queue is drained AND no items are left in flight.
   --m_inFlight;
+  // Drop weak handles whose ItemState was destroyed so m_inFlightItems tracks
+  // only genuinely in-flight items — otherwise it grows by one stale entry per
+  // started item across a long batch and cancel() iterates them all
+  // (Kartend-p0oyj).
+  std::erase_if(m_inFlightItems, [](const std::weak_ptr<ItemState> &w) { return w.expired(); });
   // Surface the provider's latest request quota to observers. Only
   // ScreenScraper reports a valid one (after its first response);
   // other providers return an invalid status and stay silent.
