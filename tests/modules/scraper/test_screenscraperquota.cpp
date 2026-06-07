@@ -52,9 +52,15 @@ void TestScreenScraperQuota::validBlock_populatesSnapshot() {
   QCOMPARE(s.dailyMax, 20000);
   QCOMPARE(s.koUsed, 1);
   QCOMPARE(s.koMax, 50000);
-  // Reset rolls at the next 00:00 UTC, so it must be a valid future instant.
+  // Reset rolls at the next 00:00 UTC: a valid future instant, exactly midnight
+  // UTC, within 24h of now — uniquely the NEXT midnight, without an exact date
+  // compare that would flake if the test crossed midnight mid-run.
+  const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
   QVERIFY(s.resetAtUtc.isValid());
-  QVERIFY(s.resetAtUtc > QDateTime::currentDateTimeUtc());
+  QCOMPARE(s.resetAtUtc.timeSpec(), Qt::UTC);
+  QCOMPARE(s.resetAtUtc.time(), QTime(0, 0));
+  QVERIFY(s.resetAtUtc > nowUtc);
+  QVERIFY(s.resetAtUtc <= nowUtc.addDays(1));
 }
 
 void TestScreenScraperQuota::noSsuserBlock_isNoOpAndStaysInvalid() {

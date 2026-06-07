@@ -639,6 +639,13 @@ add_executable(test_screenscraperquota
 target_link_libraries(test_screenscraperquota PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScreenScraperQuota COMMAND test_screenscraperquota)
 
+# ScreenScraper systems-catalog cache / stale-fallback decision tests
+add_executable(test_screenscrapercatalog
+  modules/scraper/test_screenscrapercatalog.cpp
+)
+target_link_libraries(test_screenscrapercatalog PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScreenScraperCatalog COMMAND test_screenscrapercatalog)
+
 # ScreenScraper media-type catalog cache tests (Kartend-vyz9u): mediasJeuListe
 # parse, case-insensitive lookup, and on-disk round-trip.
 add_executable(test_screenscrapermediatypecache
