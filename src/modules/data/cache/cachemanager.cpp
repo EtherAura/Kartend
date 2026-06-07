@@ -162,6 +162,15 @@ void CacheManager::setArtworkCacheBudgetMB(int megabytes) {
                                             : static_cast<int>(maxBytes));
 }
 
+namespace {
+// Revalidate a memory-cached artwork entry against disk (a stat) at most once
+// per this interval per key, so the exists()+lastModified() probe doesn't fire
+// for every visible tile on every viewport-artwork pass during scroll
+// (Kartend-qszks). The first hit after an insert always revalidates (the map
+// defaults to 0), so a single modify-then-read still detects the change.
+constexpr qint64 kArtworkRevalidateIntervalMs = 5000;
+} // namespace
+
 // Initializes persistent cache metadata from disk
 auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   // QPixmap construction + QGuiApplication::primaryScreen() below are GUI-thread
@@ -181,17 +190,24 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   QMutexLocker locker(&m_mutex);
   QFileInfo fileInfo(artworkPath);
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
-    if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const bool dueForRevalidation =
+        (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
+    if (dueForRevalidation && fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
         fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk
       QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
       QFile::remove(cachePath);
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
+      m_lastRevalidatedMs.remove(artworkPath);
       m_metadataDirty = true;
       ++m_metrics.invalidations;
     } else {
       // Memory cache hit
+      if (dueForRevalidation) {
+        m_lastRevalidatedMs.insert(artworkPath, nowMs);
+      }
       ++m_metrics.memoryHits;
       return *pix;
     }
@@ -250,7 +266,12 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
   QMutexLocker locker(&m_mutex);
 
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
-    if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
+    // Scroll hot path: one call per pending viewport tile per
+    // updateViewportArtwork pass. Throttle the per-hit stat (Kartend-qszks).
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const bool dueForRevalidation =
+        (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
+    if (dueForRevalidation && fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
         fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk.
       // Note: This may touch the filesystem, but avoids large image reads.
@@ -259,9 +280,13 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
       dirtyArtwork.remove(artworkPath);
+      m_lastRevalidatedMs.remove(artworkPath);
       m_metadataDirty = true;
       ++m_metrics.invalidations;
     } else {
+      if (dueForRevalidation) {
+        m_lastRevalidatedMs.insert(artworkPath, nowMs);
+      }
       ++m_metrics.memoryHits;
       return *pix;
     }

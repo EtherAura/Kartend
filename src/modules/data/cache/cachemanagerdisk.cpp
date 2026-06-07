@@ -22,6 +22,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
 void CacheManager::initialize() {
   QMutexLocker locker(&m_mutex);
   fileTimestamps.clear();
+  m_lastRevalidatedMs.clear();
   m_diskStorage->readTimestampsInto(fileTimestamps);
 }
 

@@ -91,6 +91,10 @@ private:
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
+  // Last ms-since-epoch each key's on-disk mtime was revalidated. Bounds the
+  // per-hit stat to one per key per kArtworkRevalidateIntervalMs on the scroll
+  // hot path (Kartend-qszks).
+  QHash<QString, qint64> m_lastRevalidatedMs;
   QSet<QString> dirtyTimestamps; // Paths whose timestamps changed since last save
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
