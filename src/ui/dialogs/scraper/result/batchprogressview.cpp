@@ -1,5 +1,7 @@
 #include "batchprogressview.h"
 
+#include "durationformat.h"
+
 #include <algorithm>
 
 #include <QDateTime>
@@ -9,33 +11,6 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QVBoxLayout>
-
-namespace {
-
-// Local clone of ScrapeResultDialog::formatDuration. Kept inline here
-// during the Kartend-xvci view extraction so the new view stays
-// self-contained — the host dialog still uses its own copy for the
-// single-item + unified progress lines until those modes peel out
-// too, at which point this helper can land in a shared header.
-QString formatDuration(qint64 ms) {
-  if (ms <= 0) return QStringLiteral("—");
-  const qint64 totalSec = ms / 1000;
-  const qint64 h = totalSec / 3600;
-  const qint64 m = (totalSec / 60) % 60;
-  const qint64 s = totalSec % 60;
-  if (h > 0) {
-    return QStringLiteral("%1:%2:%3")
-        .arg(h)
-        .arg(m, 2, 10, QLatin1Char('0'))
-        .arg(s, 2, 10, QLatin1Char('0'));
-  }
-  if (m > 0) {
-    return QStringLiteral("%1:%2").arg(m).arg(s, 2, 10, QLatin1Char('0'));
-  }
-  return BatchScrapeProgressView::tr("%1s").arg(s);
-}
-
-} // namespace
 
 BatchScrapeProgressView::BatchScrapeProgressView(QWidget *parent) : QWidget(parent) {
   auto *layout = new QVBoxLayout(this);
@@ -129,7 +104,8 @@ void BatchScrapeProgressView::setRunner(Scraper::BatchScrapeRunner *runner,
             m_currentLabel->setText(tr("Finished."));
             const qint64 elapsedMs =
                 std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
-            m_timingLabel->setText(tr("Elapsed %1 · ETA —").arg(formatDuration(elapsedMs)));
+            m_timingLabel->setText(
+                tr("Elapsed %1 · ETA —").arg(DurationFormat::formatDurationMs(elapsedMs)));
             m_countsLabel->setText(tr("Scraped %1  ·  Skipped %2  ·  Errors %3")
                                        .arg(s.scraped)
                                        .arg(s.skipped)
@@ -158,9 +134,10 @@ void BatchScrapeProgressView::onProgress(int done, int total, const QString &cur
   if (done > 0 && total > done) {
     const qint64 etaMs =
         static_cast<qint64>((double(elapsedMs) / double(done)) * double(total - done));
-    etaStr = formatDuration(etaMs);
+    etaStr = DurationFormat::formatDurationMs(etaMs);
   }
-  m_timingLabel->setText(tr("Elapsed %1 · ETA %2").arg(formatDuration(elapsedMs), etaStr));
+  m_timingLabel->setText(
+      tr("Elapsed %1 · ETA %2").arg(DurationFormat::formatDurationMs(elapsedMs), etaStr));
 }
 
 void BatchScrapeProgressView::onStageChanged(const QString &stage) {

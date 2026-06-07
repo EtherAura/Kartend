@@ -6,6 +6,7 @@
 
 #include "applicationcontext.h"
 #include "batchprogressview.h"
+#include "durationformat.h"
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
 #include "scraperesultdialogunified.h"
@@ -757,21 +758,9 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
 }
 
 QString ScrapeResultDialog::formatDuration(qint64 ms) {
-  if (ms <= 0) return QStringLiteral("—");
-  const qint64 totalSec = ms / 1000;
-  const qint64 h = totalSec / 3600;
-  const qint64 m = (totalSec / 60) % 60;
-  const qint64 s = totalSec % 60;
-  if (h > 0) {
-    return QStringLiteral("%1:%2:%3")
-        .arg(h)
-        .arg(m, 2, 10, QLatin1Char('0'))
-        .arg(s, 2, 10, QLatin1Char('0'));
-  }
-  if (m > 0) {
-    return QStringLiteral("%1:%2").arg(m).arg(s, 2, 10, QLatin1Char('0'));
-  }
-  return tr("%1s").arg(s);
+  // Delegates to the shared helper; the member is kept so existing call sites
+  // and the moc-visible signature stay unchanged.
+  return DurationFormat::formatDurationMs(ms);
 }
 
 void ScrapeResultDialog::updateSingleItemProgress(int completed) {
