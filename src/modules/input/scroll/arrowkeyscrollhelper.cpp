@@ -101,22 +101,25 @@ void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems, int 
   Q_UNUSED(itemsPerRow)
 }
 
+auto ArrowKeyScrollHelper::centerTargetFor(int itemY, int viewportHeight, int itemHeight,
+                                           int margins, int scrollMax) -> int {
+  const int target = (margins + itemY) + (itemHeight / 2) - (viewportHeight / 2);
+  if (scrollMax < 0) {
+    return qMax(0, target);
+  }
+  return qBound(0, target, scrollMax);
+}
+
 auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY, int viewportHeight) const -> int {
-  int itemHeight = m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
-  int margins = m_margins > 0 ? m_margins : UIConstants::Grid::MARGINS;
-
-  int target = (margins + itemY) + (itemHeight / 2) - (viewportHeight / 2);
-
-  if (!m_scrollArea) {
-    return qMax(0, target);
+  const int itemHeight = m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
+  const int margins = m_margins > 0 ? m_margins : UIConstants::Grid::MARGINS;
+  int scrollMax = -1; // < 0 => no scrollbar bound; centerTargetFor floors at 0 only
+  if (m_scrollArea) {
+    if (QScrollBar *verticalScrollBar = m_scrollArea->verticalScrollBar()) {
+      scrollMax = verticalScrollBar->maximum();
+    }
   }
-
-  QScrollBar *verticalScrollBar = m_scrollArea->verticalScrollBar();
-  if (!verticalScrollBar) {
-    return qMax(0, target);
-  }
-
-  return qBound(0, target, verticalScrollBar->maximum());
+  return centerTargetFor(itemY, viewportHeight, itemHeight, margins, scrollMax);
 }
 
 void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar, int current, int target) {

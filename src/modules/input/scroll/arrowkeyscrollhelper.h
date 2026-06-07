@@ -63,6 +63,14 @@ public:
    */
   void stopAnimation();
 
+  /// Pure centering math behind calculateCenterTarget, exposed as a static for
+  /// testing: the scroll-Y that centers an item at @p itemY within a viewport of
+  /// height @p viewportHeight, given row @p itemHeight and grid @p margins.
+  /// Clamped to [0, scrollMax]; pass scrollMax < 0 for "no scrollbar bound" (the
+  /// result is then floored at 0 only).
+  [[nodiscard]] static int centerTargetFor(int itemY, int viewportHeight, int itemHeight,
+                                           int margins, int scrollMax);
+
 signals:
   /**
    * @brief Emitted when virtual view should be updated after animation.

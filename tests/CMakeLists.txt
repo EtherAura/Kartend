@@ -1038,6 +1038,22 @@ add_executable(test_scrollhelpers
 target_link_libraries(test_scrollhelpers PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 
+# ArrowKeyScrollHelper tests (pure centering math extracted from
+# calculateCenterTarget into the centerTargetFor static)
+add_executable(test_arrowkeyscrollhelper
+  modules/scroll/test_arrowkeyscrollhelper.cpp
+)
+target_link_libraries(test_arrowkeyscrollhelper PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME ArrowKeyScrollHelper COMMAND test_arrowkeyscrollhelper)
+
+# TextZoom tests (process-wide zoom math: setPercent/primeFromSettings clamping,
+# zoomedFontSize identity/scale/floor)
+add_executable(test_textzoom
+  utils/view/test_textzoom.cpp
+)
+target_link_libraries(test_textzoom PRIVATE kartend_utils Qt6::Test)
+add_test(NAME TextZoom COMMAND test_textzoom)
+
 # QueryHelpers tests (pure helpers extracted)
 add_executable(test_queryhelpers
   modules/query/test_queryhelpers.cpp
