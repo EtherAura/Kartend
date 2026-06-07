@@ -246,6 +246,13 @@ public:
 private:
   QStringList m_filePaths;
   QHash<QString, QString> m_fileNames;
+  // O(1) path -> index-into-m_filePaths cache for visualIndexFromFilePath (was a
+  // linear scan). Rebuilt lazily on the dirty flag (set wherever this class
+  // mutates m_filePaths) and, as a self-healing backstop, when a lookup returns
+  // a stale index — e.g. after a write through the non-const filePaths() accessor
+  // that did not flag dirty.
+  mutable QHash<QString, int> m_pathToMediaIndexCache;
+  mutable bool m_pathIndexCacheDirty = true;
   QList<int> m_subcollections;
   QStringList m_virtualFolders;
   QHash<QString, QString> m_filePathToDisplayName;

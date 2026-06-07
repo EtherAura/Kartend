@@ -17,6 +17,7 @@ void ScrollDataStore::initializeStorage(int totalCount) {
   if (totalCount > 0) {
     m_filePaths.resize(totalCount);
   }
+  m_pathIndexCacheDirty = true;
 }
 
 void ScrollDataStore::resizeStorage(int totalCount) {
@@ -45,6 +46,7 @@ void ScrollDataStore::resizeStorage(int totalCount) {
   }
 
   m_filePaths.resize(totalCount);
+  m_pathIndexCacheDirty = true;
 }
 
 void ScrollDataStore::initializeSubcollections(const CollectionContext &context,
@@ -408,6 +410,7 @@ void ScrollDataStore::clear() {
   m_filePathToDisplayName.clear();
   m_unifiedItems.clear();
   m_unifiedSortActive = false;
+  m_pathIndexCacheDirty = true;
 }
 
 QList<int> ScrollDataStore::receiveItemsRange(int offset, const QStringList &paths,
@@ -417,6 +420,7 @@ QList<int> ScrollDataStore::receiveItemsRange(int offset, const QStringList &pat
   if (offset < 0 || offset >= m_filePaths.size()) {
     return updatedVisualIndices;
   }
+  m_pathIndexCacheDirty = true;
 
   int subCount = m_subcollections.size();
   int folderCount = m_virtualFolders.size();
@@ -447,30 +451,49 @@ int ScrollDataStore::visualIndexFromFilePath(const QString &filePath) const {
     return -1; // Path not yet loaded from database
   }
 
-  int subCount = m_subcollections.size();
-  int folderCount = m_virtualFolders.size();
+  // Resolve the media index via the path->index cache. Rebuilt lazily on the
+  // dirty flag; the post-lookup validation self-heals a stale entry left by a
+  // mutation that bypassed the flag (the non-const filePaths() accessor).
+  const auto rebuildCache = [this]() {
+    m_pathToMediaIndexCache.clear();
+    m_pathToMediaIndexCache.reserve(m_filePaths.size());
+    for (int i = 0; i < m_filePaths.size(); ++i) {
+      const QString &p = m_filePaths[i];
+      // Keep the first index for any duplicate path, matching the old scan.
+      if (!p.isEmpty() && !m_pathToMediaIndexCache.contains(p)) {
+        m_pathToMediaIndexCache.insert(p, i);
+      }
+    }
+    m_pathIndexCacheDirty = false;
+  };
+  if (m_pathIndexCacheDirty) {
+    rebuildCache();
+  }
+  int mediaIndex = m_pathToMediaIndexCache.value(filePath, -1);
+  if (mediaIndex >= 0 &&
+      (mediaIndex >= m_filePaths.size() || m_filePaths[mediaIndex] != filePath)) {
+    rebuildCache(); // stale positive entry -> rebuild once and retry
+    mediaIndex = m_pathToMediaIndexCache.value(filePath, -1);
+  }
+  if (mediaIndex < 0) {
+    return -1;
+  }
+
+  const int subCount = m_subcollections.size();
+  const int folderCount = m_virtualFolders.size();
 
   if (m_unifiedSortActive) {
-    // Search unified items for the matching media file
+    // Unified visual index is the item's position in m_unifiedItems; find the
+    // MediaFile entry pointing at this media index (int compare, no per-item
+    // string compare).
     for (int i = 0; i < m_unifiedItems.size(); ++i) {
       const auto &item = m_unifiedItems[i];
-      if (item.type == UnifiedItem::Type::MediaFile) {
-        int mediaIndex = item.originalIndex;
-        if (mediaIndex >= 0 && mediaIndex < m_filePaths.size() &&
-            m_filePaths[mediaIndex] == filePath) {
-          return i;
-        }
+      if (item.type == UnifiedItem::Type::MediaFile && item.originalIndex == mediaIndex) {
+        return i;
       }
     }
     return -1;
   }
 
-  // Linear search through file paths (could be optimized with a hash map if
-  // needed)
-  for (int i = 0; i < m_filePaths.size(); ++i) {
-    if (m_filePaths[i] == filePath) {
-      return subCount + folderCount + i;
-    }
-  }
-  return -1;
+  return subCount + folderCount + mediaIndex;
 }
