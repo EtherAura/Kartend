@@ -1,0 +1,28 @@
+name: Setup dummy pulseaudio
+description: >
+  Start a userspace PulseAudio daemon with a null sink so Qt 6.4's PulseAudio
+  backend takes its happy path on bare CI runners (it SIGILLs in Release builds
+  when pa_context_connect() fails with no audio device), verify the daemon came
+  up, and persist XDG_RUNTIME_DIR for downstream steps in the job. Has no effect
+  on test correctness — every test runs with QT_QPA_PLATFORM=offscreen anyway.
+
+runs:
+  using: composite
+  steps:
+    - name: Start dummy pulseaudio
+      shell: bash
+      run: |
+        export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+        mkdir -p "$XDG_RUNTIME_DIR"
+        chmod 700 "$XDG_RUNTIME_DIR"
+        pulseaudio --start --exit-idle-time=-1 --daemonize \
+          --load='module-null-sink sink_name=NullOutput' \
+          --load='module-null-source source_name=NullInput' || true
+        # Verify the daemon actually came up — `|| true` above hid any failure,
+        # so without this check we'd never know if pulse silently failed and
+        # Qt's PulseAudio backend went back to its SIGILL path.
+        if command -v pactl >/dev/null 2>&1; then
+          pactl info || echo "::warning::pactl info failed; pulse daemon likely not running"
+        fi
+        # Persist runtime dir for downstream steps in the same job.
+        echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
