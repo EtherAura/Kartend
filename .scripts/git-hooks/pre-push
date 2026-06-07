@@ -2,9 +2,10 @@
 #
 # Pre-push hook for Kartend.
 #
-# Runs the four fast Python lint scripts that gate the CI build job.
-# All four are pure-Python, no Docker, no Qt — they finish in well under
-# a second combined, so the cost-per-push is negligible compared to the
+# Runs the four fast Python lint scripts that gate the CI build job, and
+# (when installed locally) also lints .scripts/ with ShellCheck — mirrors CI.
+# The Python checks are pure-Python, no Docker, no Qt — they finish in well
+# under a second combined, so the cost-per-push is negligible compared to the
 # round-trip of letting CI catch them.
 #
 #   1. check-layering.py            — foundation layer (src/utils/, src/chrome/)
@@ -16,6 +17,9 @@
 #   4. check-bd-id-leakage.py       — no Kartend-XXXX issue IDs in
 #                                     user-facing surfaces (readme,
 #                                     docs/user/, AppStream metadata)
+#   5. shellcheck (if installed)    — lint .scripts/*.sh + lib/*.sh; mirrors
+#                                     the script-lint CI job (-x follows
+#                                     `source` into lib/)
 #
 # Install with: .scripts/git-hooks/install.sh
 #
@@ -49,6 +53,17 @@ for check in check-layering.py check-singleshot-comments.py check-test-mapping.p
     fail=1
   fi
 done
+
+# Shellcheck mirrors the script-lint CI job. Skipped when shellcheck isn't
+# installed locally — CI remains the backstop. -x follows the `source`
+# directives in build.sh into .scripts/lib/*.sh.
+if command -v shellcheck >/dev/null 2>&1; then
+  if ! shellcheck -x .scripts/*.sh .scripts/lib/*.sh; then
+    fail=1
+  fi
+else
+  yellow "Skipping shellcheck: not installed (the script-lint CI job still runs it)."
+fi
 
 if [ "$fail" -ne 0 ]; then
   red "Pre-push lint(s) failed. Fix the issue above, or push with --no-verify if you really mean it."

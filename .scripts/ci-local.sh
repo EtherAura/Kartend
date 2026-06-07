@@ -60,7 +60,7 @@ info() { printf '\033[36mci-local:\033[0m %s\n' "$*" >&2; }
 # of writing) doesn't speak the node24 runtime that actions/cache@v5 needs.
 find_act() {
   for candidate in "$HOME/.local/bin/act" "$(command -v act 2>/dev/null || true)"; do
-    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    if [ -z "$candidate" ] || [ ! -x "$candidate" ]; then continue; fi
     local v
     v="$("$candidate" --version 2>/dev/null | awk '{print $NF}')"
     if version_ge "$v" "$ACT_MIN_VERSION"; then
@@ -140,6 +140,8 @@ prune_act_volumes() {
     echo "$containers" | xargs -r docker rm -f >/dev/null
   fi
   info "pruning stale act volumes (pattern=$pattern):"
+  # sed indents each volume name for display; ${var//…} can't anchor per-line.
+  # shellcheck disable=SC2001
   echo "$volumes" | sed 's/^/  /' >&2
   echo "$volumes" | xargs -r docker volume rm >/dev/null
 }

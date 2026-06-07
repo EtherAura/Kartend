@@ -95,9 +95,11 @@ vice versa) regression.
 ## `pre-push`
 
 [.scripts/git-hooks/pre-push](../../.scripts/git-hooks/pre-push). Runs
-on every `git push`. Three Python lint scripts in
-[.scripts/](../../.scripts/), all pure-Python with no Docker / Qt
-dependency. Total runtime well under a second.
+on every `git push`. Four Python lint scripts in
+[.scripts/](../../.scripts/) — all pure-Python with no Docker / Qt
+dependency, total runtime well under a second — plus a shellcheck pass
+over `.scripts/` when shellcheck is installed locally (skipped with a
+notice otherwise; the `script-lint` CI job is the backstop).
 
 ### 1. `check-layering.py`
 
@@ -139,6 +141,21 @@ the tests actually exercise the manager. It just makes sure the
 **directory exists**. Skeleton tests are fine; the gate is "I
 thought about testing this."
 
+### 4. `check-bd-id-leakage.py`
+
+Blocks `Kartend-XXXX` issue IDs from leaking into user-facing surfaces
+(`readme.md`, `docs/user/` wiki content, AppStream metadata). IDs are
+fine in code comments, the CHANGELOG, and dev docs. See CONTRIBUTING.md
+→ "Issue tracking conventions".
+
+### 5. `shellcheck` (when installed)
+
+Lints `.scripts/*.sh` and `.scripts/lib/*.sh` with `shellcheck -x`; the
+`-x` follows `source` directives so `build.sh` is analysed with its
+`lib/` modules inlined. Mirrors the `script-lint` CI job exactly. Skipped
+with a notice when `shellcheck` isn't on `PATH`, so it never blocks a push
+on a machine that lacks it.
+
 ## Adding a new hook
 
 1. Drop a new executable script in `.scripts/git-hooks/` named after
@@ -162,8 +179,10 @@ or CI itself.
 |---------|------|
 | Installer (with beads coexistence) | [.scripts/git-hooks/install.sh](../../.scripts/git-hooks/install.sh) |
 | Pre-commit (clang-format + version) | [.scripts/git-hooks/pre-commit](../../.scripts/git-hooks/pre-commit) |
-| Pre-push (three Python lints) | [.scripts/git-hooks/pre-push](../../.scripts/git-hooks/pre-push) |
+| Pre-push (four Python lints + shellcheck) | [.scripts/git-hooks/pre-push](../../.scripts/git-hooks/pre-push) |
 | Layering lint | [.scripts/check-layering.py](../../.scripts/check-layering.py) |
 | `singleShot` comment lint | [.scripts/check-singleshot-comments.py](../../.scripts/check-singleshot-comments.py) |
 | Test-mapping lint | [.scripts/check-test-mapping.py](../../.scripts/check-test-mapping.py) |
+| bd ID leakage lint | [.scripts/check-bd-id-leakage.py](../../.scripts/check-bd-id-leakage.py) |
+| Shell-script lint (shellcheck) | [.scripts/build.sh](../../.scripts/build.sh) + [lib/](../../.scripts/lib/) |
 | Version bumper | [.scripts/bump-version.sh](../../.scripts/bump-version.sh) |

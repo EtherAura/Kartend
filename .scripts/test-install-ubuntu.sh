@@ -80,8 +80,12 @@ docker run --rm \
   "
 
 # Pick the .deb CPack produced — DEB-DEFAULT names it as
-# <pkg>_<ver>_<arch>.deb (e.g. kartend_0.0.8_amd64.deb).
-DEB_FILE="$(ls -1 "${REPO_ROOT}/${BUILD_DIR}"/*.deb 2>/dev/null | head -1 || true)"
+# <pkg>_<ver>_<arch>.deb (e.g. kartend_0.0.8_amd64.deb). nullglob so a
+# no-match expands to an empty array instead of a literal '*.deb'.
+shopt -s nullglob
+deb_candidates=("${REPO_ROOT}/${BUILD_DIR}"/*.deb)
+shopt -u nullglob
+DEB_FILE="${deb_candidates[0]:-}"
 if [[ -z "${DEB_FILE}" ]]; then
   err "cpack -G DEB produced no .deb under ${BUILD_DIR}/"
   exit 1

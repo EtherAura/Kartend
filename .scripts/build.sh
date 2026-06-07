@@ -1,56 +1,20 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 set -euo pipefail
-
-usage() {
-  cat <<'EOF'
-Usage: .scripts/build.sh [options]
-
-Build modes (mutually exclusive):
-  --debug           Debug build (keeps qDebug/qWarning output)
-  --relwithdebinfo  Release build with debug symbols (for profiling)
-  --sanitize        Sanitizer build (Debug + sanitizers)
-  --maintenance     Release build + static analysis helpers
-  --pgo             Two-pass PGO build (generate + use)
-  --pgo-generate    Configure/build PGO generate pass only
-  --pgo-use         Configure/build PGO use pass only
-
-Build options:
-  --tests           Configure with -DKARTEND_BUILD_TESTS=ON
-  --run-tests       Run ctest after a successful build (requires --tests)
-  --coverage        Configure with -DKARTEND_ENABLE_COVERAGE=ON for gcov
-                    instrumentation (implies --debug + --tests; pair with
-                    --run-tests to populate coverage counters; capture the
-                    report with lcov against the build dir afterwards).
-  --install         Run `cmake --install` after a successful build (honors DESTDIR;
-                    auto-elevates with sudo or doas when the install prefix
-                    isn't writable by the current user)
-  --uninstall       Run the `uninstall` target on the most recent build dir
-                    (reads install_manifest.txt; auto-elevates with sudo/doas
-                    when needed)
-  --prefix=PATH     Set CMAKE_INSTALL_PREFIX (default: CMake/system default,
-                    typically /usr/local)
-  --jobs=N          Override parallelism for the build step (default: nproc)
-  --ninja           Force Ninja generator (if available)
-  --make            Force Unix Makefiles generator
-  --incremental     Reuse existing build directory (don't rm -rf it) (default)
-  --clean           Remove build directory before configuring
-  --archive         Create a source archive (.backups/*.tar.gz)
-  --reports         Assemble source/UI reports into .backups/reports
-  --keep-builds     Don't prune other build directories
-  --no-ccache       Disable ccache launcher even if installed
-  --clang           Force Clang/LLD toolchain for release builds (default:
-                    use the system compiler; maintenance and PGO modes
-                    require Clang and set this implicitly)
-
-Maintenance-only:
-  --apply-fixes      Apply safe clang-tidy fixes (requires --maintenance)
-  --format-check     Run clang-format check (requires --maintenance)
-  --format-apply     Apply clang-format (requires --maintenance)
-
-Other:
-  -h, --help        Show this help
-EOF
-}
+# build.sh is a thin entrypoint: it parses arguments, validates mode
+# combinations, and orchestrates each build mode. The reusable helper
+# functions live in sourced modules under .scripts/lib/.
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=lib/ui.sh
+source "$script_dir/lib/ui.sh"
+# shellcheck source=lib/steps.sh
+source "$script_dir/lib/steps.sh"
+# shellcheck source=lib/builddir.sh
+source "$script_dir/lib/builddir.sh"
+# shellcheck source=lib/quality.sh
+source "$script_dir/lib/quality.sh"
+# shellcheck source=lib/test.sh
+source "$script_dir/lib/test.sh"
 
 # Parse args
 debug_build=false
@@ -174,7 +138,6 @@ if $run_tests && ! $build_tests; then
 fi
 
 # Paths
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 root_dir="$(cd "$script_dir/.." && pwd)"
 cd "$root_dir"
 mkdir -p build
@@ -187,16 +150,6 @@ backups_dir="$parent_dir/.backups"
 mkdir -p "$backups_dir" 2>/dev/null || true
 reports_dir="$backups_dir/reports"
 
-# Colors
-setup_colors() {
-  if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors || echo 0)" -ge 8 ]; then
-    RESET="$(tput sgr0)"
-    RED="$(tput setaf 1)"; GREEN="$(tput setaf 2)"; YELLOW="$(tput setaf 3)"
-    MAGENTA="$(tput setaf 5)"; CYAN="$(tput setaf 6)"
-  else
-    RESET=""; RED=""; GREEN=""; YELLOW=""; MAGENTA=""; CYAN=""
-  fi
-}
 setup_colors
 
 # Optional build accelerators
@@ -255,7 +208,7 @@ if $uninstall_only; then
 
   if $needs_elevation; then
     if command -v sudo >/dev/null 2>&1; then
-      [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+      if [ -w /dev/tty ]; then printf '\r\033[2K' >/dev/tty || true; fi
       # SC2024: sudo's own stdin/stdout/stderr are what we want pointed at the
       # tty so the password prompt is visible. This is the priming step's
       # whole purpose.
@@ -263,7 +216,7 @@ if $uninstall_only; then
       sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
       sudo -E cmake --build "$uninstall_dir" --target uninstall
     elif command -v doas >/dev/null 2>&1; then
-      [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+      if [ -w /dev/tty ]; then printf '\r\033[2K' >/dev/tty || true; fi
       if [ -n "${DESTDIR:-}" ]; then
         doas env "DESTDIR=$DESTDIR" cmake --build "$uninstall_dir" --target uninstall </dev/tty
       else
@@ -306,59 +259,6 @@ COLLECTED_WARNINGS=""
 # Track last-running logfile for improved exit diagnostics
 LAST_RUN_LOG=""
 
-progress_clearline() { printf "\r\033[2K"; }
-# Print step with counts aligned; no extra tab
-step() { progress_clearline; printf "${CYAN}[${MAGENTA}*${CYAN}]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}" "$*" "$PROGRESS_CUR" "$PROGRESS_TOTAL"; }
-step_completed() { progress_clearline; printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "$*" "$PROGRESS_CUR" "$PROGRESS_TOTAL"; }
-step_final() {
-  progress_clearline
-  if [[ "$*" == Build\ completed\ successfully.* ]]; then
-    echo -e "${CYAN}[${GREEN}✓${CYAN}]${RESET} $*"
-  elif [[ "$*" == Archive\ created:* ]]; then
-    echo -e "${CYAN}[${GREEN}✓${CYAN}]${RESET} $*"
-  else
-    echo -e "${CYAN}[${YELLOW}*${CYAN}]${RESET} $*"
-  fi
-}
-warn() { 
-  if [ -n "$COLLECTED_WARNINGS" ]; then
-    COLLECTED_WARNINGS="${COLLECTED_WARNINGS}\n"
-  fi
-  COLLECTED_WARNINGS="${COLLECTED_WARNINGS}${CYAN}[${YELLOW}WARN${CYAN}]${RESET} $*"
-}
-err_msg() { progress_clearline; echo -e "${CYAN}[${RED}ERROR${CYAN}]${RESET} $*" >&2; }
-
-# Failure summary printed at script exit
-on_exit() {
-  local rc=$?
-  if [ $rc -ne 0 ]; then
-    progress_clearline
-    printf "\n" >&2
-    if $FAILED; then
-      printf "%b\n" "${CYAN}[${RED}ERROR${CYAN}]${RESET} Build failed at step $((FAILED_STEP_IDX+1))/${PROGRESS_TOTAL}: ${FAILED_DESC}" >&2
-      if [ -n "$FAILED_LOGFILE" ]; then
-        local rel="${FAILED_LOGFILE#"$root_dir/"}"
-        printf "%b\n" "${RED}Log file:${RESET} ${rel}" >&2
-      fi
-      if [ $((FAILED_STEP_IDX+1)) -lt $PROGRESS_TOTAL ]; then
-        printf "%b\n" "${RED}Remaining steps that weren't performed:${RESET}" >&2
-        local i
-        for (( i=FAILED_STEP_IDX+1; i<PROGRESS_TOTAL; i++ )); do
-          printf " - %s\n" "${ALL_STEPS[$i]}" >&2
-        done
-      fi
-    else
-      printf "%b\n" "${CYAN}[${RED}ERROR${CYAN}]${RESET} Script exited with code ${rc}." >&2
-      if [ -n "$CURRENT_STEP_DESC" ]; then
-        printf "%b\n" "${RED}While running step:${RESET} ${CURRENT_STEP_DESC} (index $((CURRENT_STEP_IDX+1))/${PROGRESS_TOTAL})" >&2
-      fi
-      if [ -n "$LAST_RUN_LOG" ] && [ -f "$LAST_RUN_LOG" ]; then
-        printf "%b\n" "${RED}Recent log (tail):${RESET} ${LAST_RUN_LOG#"$root_dir/"}" >&2
-        tail -n 200 "$LAST_RUN_LOG" >&2 || true
-      fi
-    fi
-  fi
-}
 trap on_exit EXIT
 
 # Timestamp
@@ -385,490 +285,6 @@ else
 fi
 
 build_marker_file=".kartend-build-dir"
-
-generator_tag() {
-  if [ "${#generator_args[@]}" -ge 2 ] && [ "${generator_args[1]}" = "Ninja" ]; then
-    echo "ninja"
-    return
-  fi
-  echo "make"
-}
-
-build_dir_for_mode() {
-  local mode="$1"
-  echo "$root_dir/build/$(generator_tag)-$mode"
-}
-
-# Build-directory pruning (keep only one)
-prune_other_builds() {
-  local build_root="$1" keep_basename="$2"
-  shopt -s nullglob
-  for d in "$build_root"/*; do
-    [ -d "$d" ] || continue
-    [ "$(basename "$d")" = "$keep_basename" ] && continue
-    # Prune dirs created by this script (.kartend-build-dir marker) AND
-    # any dir that looks like a CMake build dir (CMakeCache.txt) so
-    # hand-named legacy build folders don't accumulate (Kartend-bkq3).
-    # Conservative: dirs without either signal are left alone — could be
-    # the user's own scratch space.
-    if [ -f "$d/$build_marker_file" ] || [ -f "$d/CMakeCache.txt" ]; then
-      rm -rf -- "$d"
-    fi
-  done
-  # Sweep stray top-level log files dropped by aborted runs or
-  # out-of-tree CMake invocations. Anything matching *.log here is build
-  # detritus — the active build's log lives under <build_dir>/logs/.
-  for f in "$build_root"/*.log; do
-    [ -f "$f" ] || continue
-    rm -f -- "$f"
-  done
-  shopt -u nullglob
-}
-
-write_build_marker() {
-  local dir="$1" mode="$2"
-  local gen
-  if [ "$(generator_tag)" = "ninja" ]; then
-    gen="Ninja"
-  else
-    gen="Unix Makefiles"
-  fi
-  {
-    echo "mode=${mode}"
-    echo "generator=${gen}"
-    echo "dir_tag=$(generator_tag)"
-    echo "timestamp=${TS_HUMAN}"
-  } >"$dir/$build_marker_file"
-}
-
-maybe_prepare_build_dir() {
-  local dir="$1" logs="$2" mode="$3"
-  if $incremental_build; then
-    mkdir -p "$dir" "$logs"
-    write_build_marker "$dir" "$mode"
-    return 0
-  fi
-  rm -rf "$dir"
-  mkdir -p "$dir" "$logs"
-  write_build_marker "$dir" "$mode"
-}
-
-run_ctest() {
-  local dir="$1"
-  # Refuse to run ctest in the repo root: ctest scans PWD for tests if it
-  # can't locate CTestTestfile.cmake and leaks a `Testing/` scratch dir
-  # alongside the source tree. The build dir always has CTestTestfile.cmake
-  # next to the per-test binaries; that's the only place ctest belongs.
-  local repo_root
-  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  local abs_dir
-  abs_dir="$(cd "$dir" 2>/dev/null && pwd)" || {
-    echo "run_ctest: build dir not found: $dir" >&2
-    return 1
-  }
-  if [[ "$abs_dir" == "$repo_root" ]]; then
-    echo "run_ctest: refusing to run ctest in the repo root ($abs_dir)." >&2
-    echo "ctest must run against a configured build dir (e.g. build/ninja-release)." >&2
-    return 1
-  fi
-  if [[ ! -f "$abs_dir/CTestTestfile.cmake" ]]; then
-    echo "run_ctest: $abs_dir does not look like a build dir (no CTestTestfile.cmake)." >&2
-    echo "Did you mean a sibling under build/?" >&2
-    return 1
-  fi
-  ctest --test-dir "$dir" --output-on-failure
-}
-
-# Step planning
-plan_step() { ALL_STEPS+=("$1"); PROGRESS_TOTAL=${#ALL_STEPS[@]}; }
-mark_next_step() { CURRENT_STEP_DESC="$1"; CURRENT_STEP_IDX="$NEXT_STEP_IDX"; NEXT_STEP_IDX=$((NEXT_STEP_IDX + 1)); }
-
-# Run `cmake --install` and transparently elevate with sudo when the install
-# prefix isn't writable by the current user (e.g. /usr/local). DESTDIR is honored.
-do_cmake_install() {
-  local cmake_exe="$1"; shift
-  local bdir="$1"; shift
-  local prefix
-  prefix="$("$cmake_exe" -L -N "$bdir" 2>/dev/null | awk -F= '/^CMAKE_INSTALL_PREFIX:/{print $2; exit}')"
-  local target="${DESTDIR:-}${prefix:-/usr/local}"
-  # Walk up to the first existing ancestor; that's what we need write access to.
-  local probe="$target"
-  while [ -n "$probe" ] && [ ! -e "$probe" ]; do
-    probe="$(dirname "$probe")"
-  done
-  if [ -n "$probe" ] && [ -w "$probe" ]; then
-    "$cmake_exe" --install "$bdir"
-  elif command -v sudo >/dev/null 2>&1; then
-    # Clear the in-progress step line on the user's TTY so the password prompt
-    # doesn't collide with the progress indicator. Prime sudo so the prompt
-    # appears even when stderr is captured by the run_step harness.
-    [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
-    # shellcheck disable=SC2024
-    sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
-    sudo -E "$cmake_exe" --install "$bdir"
-  elif command -v doas >/dev/null 2>&1; then
-    [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
-    # doas doesn't have a generic env-preserve flag; pass DESTDIR explicitly if set.
-    if [ -n "${DESTDIR:-}" ]; then
-      doas env "DESTDIR=$DESTDIR" "$cmake_exe" --install "$bdir" </dev/tty
-    else
-      doas "$cmake_exe" --install "$bdir" </dev/tty
-    fi
-  else
-    "$cmake_exe" --install "$bdir"
-  fi
-}
-
-# Critical step: fails immediately on error
-run_step() {
-  local desc="$1"; shift
-  local logfile="$1"; shift
-  local -a cmd=( "$@" )
-  mark_next_step "$desc"
-  LAST_RUN_LOG="$logfile"
-  mkdir -p "$(dirname "$logfile")"
-  PROGRESS_CUR=$((PROGRESS_CUR + 1))
-  step "$desc"
-
-  local rc tmp; tmp="$(mktemp)"
-  if ${QUIET:-true}; then
-    (
-      set +e
-      "${cmd[@]}" >"$tmp" 2>&1
-      rc=$?
-      if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-      exit $rc
-    )
-    rc=$?
-  else
-    set +e
-    "${cmd[@]}" 2>&1 | tee "$tmp"
-    rc=${PIPESTATUS[0]}
-    set -e
-    if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-  fi
-  rm -f "$tmp"
-
-  if [ $rc -ne 0 ]; then
-    err_msg "$desc failed. See ${logfile#"$root_dir/"}"
-    FAILED=true
-    FAILED_RC=$rc
-    FAILED_DESC="$desc"
-    FAILED_LOGFILE="$logfile"
-    FAILED_STEP_IDX="$CURRENT_STEP_IDX"
-    exit "$rc"
-  fi
-  step_completed "$desc"
-}
-
-# Quality check: warns on failure but continues (for code analysis tools)
-run_quality_check() {
-  local desc="$1"; shift
-  local logfile="$1"; shift
-  local -a cmd=( "$@" )
-  mark_next_step "$desc"
-  LAST_RUN_LOG="$logfile"
-  mkdir -p "$(dirname "$logfile")"
-  PROGRESS_CUR=$((PROGRESS_CUR + 1))
-  step "$desc"
-
-  local rc tmp; tmp="$(mktemp)"
-  if ${QUIET:-true}; then
-    (
-      set +e
-      "${cmd[@]}" >"$tmp" 2>&1
-      rc=$?
-      if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-      exit $rc
-    )
-    rc=$?
-  else
-    set +e
-    "${cmd[@]}" 2>&1 | tee "$tmp"
-    rc=${PIPESTATUS[0]}
-    set -e
-    if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-  fi
-  rm -f "$tmp"
-
-  if [ $rc -ne 0 ]; then
-    warn "$desc reported issues. See ${logfile#"$root_dir/"}"
-  else
-    step_completed "$desc"
-  fi
-  return $rc
-}
-
-# Optional step: warns on failure, doesn't affect build success
-run_optional() {
-  local desc="$1"; shift
-  local logfile="$1"; shift
-  local -a cmd=( "$@" )
-  mark_next_step "$desc"
-  LAST_RUN_LOG="$logfile"
-  mkdir -p "$(dirname "$logfile")"
-  PROGRESS_CUR=$((PROGRESS_CUR + 1))
-  step "$desc"
-
-  local rc tmp; tmp="$(mktemp)"
-  if ${QUIET:-true}; then
-    (
-      set +e
-      "${cmd[@]}" >"$tmp" 2>&1
-      rc=$?
-      if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-      exit $rc
-    )
-    rc=$?
-  else
-    set +e
-    "${cmd[@]}" 2>&1 | tee "$tmp"
-    rc=${PIPESTATUS[0]}
-    set -e
-    if [ ! -s "$tmp" ]; then echo "(no output)" >"$logfile"; else cat "$tmp" >"$logfile"; fi
-  fi
-  rm -f "$tmp"
-
-  if [ $rc -ne 0 ]; then
-    warn "$desc skipped or failed. See ${logfile#"$root_dir/"}"
-  else
-    step_completed "$desc"
-  fi
-  return $rc
-}
-
-abort_if_failed() {
-  if [ "$FAILED" = true ]; then
-    err_msg "Aborting: previous step $((FAILED_STEP_IDX+1)) failed: ${FAILED_DESC}"
-    if [ -n "$FAILED_LOGFILE" ]; then
-      local rel="${FAILED_LOGFILE#"$root_dir/"}"
-      err_msg "See log: ${rel}"
-    fi
-    exit "${FAILED_RC:-1}"
-  fi
-}
-
-# Assemble cpp/h/ui reports
-assemble_reports() {
-  mkdir -p "$reports_dir"
-  : > "$reports_dir/cpp.txt"
-  : > "$reports_dir/h.txt"
-  : > "$reports_dir/ui.txt"
-  find "$root_dir/src" -type f -name '*.cpp' -print0 | while IFS= read -r -d '' f; do
-    printf "=== %s ===\n" "$f" >> "$reports_dir/cpp.txt"; cat "$f" >> "$reports_dir/cpp.txt"
-  done
-  find "$root_dir/src" -type f -name '*.h' -print0 | while IFS= read -r -d '' f; do
-    printf "=== %s ===\n" "$f" >> "$reports_dir/h.txt"; cat "$f" >> "$reports_dir/h.txt"
-  done
-  find "$root_dir/src" -type f -name '*.ui' -print0 | while IFS= read -r -d '' f; do
-    printf "=== %s ===\n" "$f" >> "$reports_dir/ui.txt"; cat "$f" >> "$reports_dir/ui.txt"
-  done
-}
-
-# Sanitize/translate GCC-only flags in compile_commands.json for Clang-based
-# tools. Requires jq — the previous sed fallback was a fragile pile of regexes
-# that could silently produce malformed JSON on edge cases (escaped quotes,
-# multiline command strings, the `arguments` array form, etc.). Better to fail
-# loudly with a clear remediation than to silently corrupt the compdb.
-sanitize_compdb() {
-  local in="$1" out="$2"
-  mkdir -p "$(dirname "$out")"
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "Error: jq is required to sanitize compile_commands.json for clang-based tools." >&2
-    echo "  Install it (Arch: 'pacman -S jq', Debian/Ubuntu: 'apt install jq', macOS: 'brew install jq')." >&2
-    return 1
-  fi
-  jq '
-    map(
-      if has("arguments") then
-        .arguments = (.arguments
-          | map(
-              if . == "-mno-direct-extern-access" then "-fno-direct-access-external-data"
-              elif . == "-mdirect-extern-access" then "-fdirect-access-external-data"
-              else . end
-            )
-        )
-      else . end
-    )
-    | map(
-      if has("command") then
-        .command = (.command
-          | gsub("(^|[[:space:]])-mno-direct-extern-access([[:space:]]|$)"; " -fno-direct-access-external-data ")
-          | gsub("(^|[[:space:]])-mdirect-extern-access([[:space:]]|$)"; " -fdirect-access-external-data ")
-        )
-      else . end
-    )
-  ' "$in" > "$out.tmp" && mv "$out.tmp" "$out"
-}
-
-# Optional tool runners
-do_clang_tidy() {
-  local compdb="$1" srcdir="$2" checks="$3"
-  if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
-    local tmpdir rc rootdir
-    tmpdir="$(mktemp -d)"
-    rootdir="$(dirname "$srcdir")"
-    sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
-    # Focus on project code only, exclude Qt/system headers
-    # Use .clang-tidy config file if present (checks arg is fallback)
-    local config_arg=""
-    if [ -f "$rootdir/.clang-tidy" ]; then
-      config_arg="--config-file=$rootdir/.clang-tidy"
-    else
-      config_arg="-checks=$checks"
-    fi
-    find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
-      -p="$tmpdir" \
-      $config_arg \
-      --header-filter="$srcdir/.*"
-    rc=$?
-    rm -rf "$tmpdir"
-    return $rc
-  else
-    echo "skipped: clang-tidy not available or compile_commands.json missing"; return 0
-  fi
-}
-do_clang_tidy_apply_fixes() {
-  local compdb="$1" srcdir="$2" checks="$3"
-  if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
-    local tmpdir rc
-    tmpdir="$(mktemp -d)"
-    sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
-    # Apply curated, safe fixes across all .cpp files
-    rc=0
-    if ! find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
-      -p="$tmpdir" \
-      -checks="$checks" \
-      -fix -fix-errors \
-      --header-filter="$srcdir/.*"; then
-      rc=$?
-    fi
-    rm -rf "$tmpdir"
-    return $rc
-  else
-    echo "skipped: clang-tidy not available or compile_commands.json missing"; return 0
-  fi
-}
-do_iwyu() {
-  local compdb="$1" srcdir="$2"
-  if [ -f "$compdb" ]; then
-    local tmpdir rc rootdir mapping_arg
-    tmpdir="$(mktemp -d)"
-    rootdir="$(dirname "$srcdir")"
-    sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
-    
-    # Use mapping file if present (maps Qt internal headers to public headers)
-    mapping_arg=""
-    if [ -f "$rootdir/.iwyu.imp" ]; then
-      mapping_arg="-Xiwyu --mapping_file=$rootdir/.iwyu.imp"
-    fi
-    
-    # Use iwyu_tool wrapper (preferred - handles compile_commands.json properly)
-    # Check various names: iwyu_tool (Arch/common), iwyu-tool (Debian), iwyu_tool.py (pip)
-    if command -v iwyu_tool >/dev/null 2>&1; then
-      iwyu_tool -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
-      rc=$?
-    elif command -v iwyu-tool >/dev/null 2>&1; then
-      iwyu-tool -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
-      rc=$?
-    elif command -v iwyu_tool.py >/dev/null 2>&1; then
-      iwyu_tool.py -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
-      rc=$?
-    else
-      # Direct include-what-you-use invocation requires extracting flags from compile_commands.json
-      # This is complex and error-prone; skip if iwyu-tool is not available
-      echo "skipped: iwyu_tool not available (install iwyu package with iwyu_tool wrapper)"
-      rm -rf "$tmpdir"
-      return 0
-    fi
-    
-    rm -rf "$tmpdir"
-    return $rc
-  else
-    echo "skipped: compile_commands.json missing"; return 0
-  fi
-}
-do_cppcheck() {
-  local srcdir="$1"
-  if command -v cppcheck >/dev/null 2>&1; then
-    # Use C++23 standard, remove excessive suppressions, focus on actionable issues
-    cppcheck \
-      --enable=warning,style,performance,portability \
-      --std=c++23 \
-      --suppress=missingIncludeSystem \
-      --suppress=unusedFunction \
-      --library=qt \
-      --inline-suppr \
-      -I "$srcdir" -I "$srcdir/core" -I "$srcdir/managers" -I "$srcdir/ui" -I "$srcdir/utils" \
-      "$srcdir"
-  else
-    echo "skipped: cppcheck not installed"; return 0
-  fi
-}
-# Resolve a clang-format binary that matches CI's v19 pin. Ubuntu 24.04 ships
-# v18 and current Arch ships v21; both format differently enough from v19 to
-# produce false-positive drift on commits that pass CI. Returns the resolved
-# path/name on stdout, or empty (rc != 0) if no v19 candidate was found. Kept
-# in sync with .scripts/git-hooks/pre-commit's copy of the same resolver.
-resolve_clang_format_19() {
-  if command -v clang-format-19 >/dev/null 2>&1; then
-    printf 'clang-format-19\n'; return 0
-  fi
-  if [ -x /usr/lib/llvm/19/bin/clang-format ]; then
-    printf '/usr/lib/llvm/19/bin/clang-format\n'; return 0
-  fi
-  if [ -x /usr/local/bin/clang-format ]; then
-    printf '/usr/local/bin/clang-format\n'; return 0
-  fi
-  if command -v clang-format >/dev/null 2>&1 \
-     && clang-format --version 2>/dev/null | grep -qE 'version 19\.'; then
-    printf 'clang-format\n'; return 0
-  fi
-  return 1
-}
-do_clang_format() {
-  local srcdir="$1"
-  local cf
-  if cf=$(resolve_clang_format_19); then
-    # Check formatting without applying changes, report issues but don't fail
-    local issues=0
-    while IFS= read -r -d '' file; do
-      if ! "$cf" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
-        echo "Format issue: $file"
-        issues=$((issues + 1))
-      fi
-    done < <(find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0)
-    if [ $issues -gt 0 ]; then
-      echo "Found $issues files with formatting issues (use --format-apply to fix)"
-    else
-      echo "All files properly formatted (using $cf)"
-    fi
-    return 0  # Always return success for quality checks
-  else
-    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
-  fi
-}
-do_clang_format_apply() {
-  local srcdir="$1"
-  local cf
-  if cf=$(resolve_clang_format_19); then
-    # Apply formatting fixes to all source files
-    echo "Applying formatting with $cf"
-    find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0 | \
-      xargs -0 "$cf" --style=file -i
-    return $?
-  else
-    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
-  fi
-}
-do_export_symbols() {
-  local bin="$1" outlist="$2"
-  if [ -x "$bin" ]; then
-    nm -C "$bin" | sort > "$outlist"
-  else
-    echo "skipped: binary not found at $bin"; return 0
-  fi
-}
 
 ########################################
 # Maintenance build (CMake)
@@ -1073,9 +489,6 @@ EOF
     fi
   fi
 
-
-
- 
   if [ "$CPPCHECK_WARNED" = true ]; then
     rel_cppcheck="${logs_dir#"$root_dir/"}/cppcheck.log"
     step_final "Notice: cppcheck reported warnings. See ${rel_cppcheck}"
@@ -1109,7 +522,6 @@ EOF
   fi
   exit 0
 fi
-
 
 ########################################
 # Regular build: release or debug (CMake)
