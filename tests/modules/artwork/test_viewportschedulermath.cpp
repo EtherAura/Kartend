@@ -95,6 +95,30 @@ void TestViewportSchedulerMath::partitionByViewport_skipsNullAndLoadedWidgets() 
 }
 
 void TestViewportSchedulerMath::computeViewports_translatesAndExpandsByOneViewport() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // This is the only slot that shows a real top-level widget. Under the
+  // offscreen QPA platform, QScrollArea::show() makes Qt reserve internal
+  // worker threads via QThreadPool::startOnReservedThread (confirmed by
+  // addr2line'ing the racing libQt6Core frame against the matching system Qt).
+  // Those 'Thread (pooled)' threads do QArrayData COW (memcpy/memmove) and
+  // operator new/delete of Qt-internal objects and are torn down at
+  // QApplication destruction while the main thread frees the same objects — a
+  // QThread-lifecycle false positive whose happens-before edge is hidden by
+  // Ubuntu 24.04's stripped libQt6Core/libQt6Gui frames. There is no Kartend
+  // frame in any racing stack, the widgets are correctly parented, and the
+  // pool-thread-vs-pool-thread memmove variant exposes no Qt symbol TSan can
+  // match (the CI image has no llvm-symbolizer, so Qt frames render <null>) —
+  // so it is un-suppressable without an over-broad race:memmove that would mask
+  // unrelated real races suite-wide. computeViewports() is pure geometry math
+  // (no threading of our own), so its assertions are fully exercised under the
+  // non-TSan build matrix; skipping only this slot under TSan loses no
+  // coverage. Same approach as test_batchscraperunner_integration /
+  // test_httpclient under TSan.
+  QSKIP("QScrollArea::show() spins up Qt-internal reserved pool threads whose "
+        "teardown trips stripped-libQt6Core TSan false positives that can't be "
+        "narrowly suppressed; the geometry assertions are covered by the "
+        "non-TSan matrix");
+#endif
   QScrollArea sa;
   sa.setFrameShape(QFrame::NoFrame);
   sa.resize(400, 300);

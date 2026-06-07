@@ -31,13 +31,14 @@
 #include <memory>
 #include <QCoreApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QMetaObject>
-#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QStandardPaths>
 #include <QString>
 #include <QTest>
 #include <QThread>
+#include <QTimer>
 
 #include "databaseschema.h"
 #include "itemartwork.h"
@@ -77,12 +78,41 @@ void seedSchemaOnDisk() {
 /// return the `ok` flag the worker reported. Posts openConnection +
 /// performWrite as queued invocations (so they run on the worker thread
 /// that owns the connection) and blocks the calling thread on a
-/// QSignalSpy until `writeCompleted` arrives — no fixed sleeps.
+/// QEventLoop until `writeCompleted` arrives — no fixed sleeps.
+///
+/// Why not QSignalSpy: the worker emits `writeCompleted` from the WORKER
+/// thread, and QSignalSpy records each emission by appending to an internal
+/// QList. A directly-connected spy would run that append on the worker
+/// thread while this (main) thread constructed/reads the same QList — a
+/// genuine cross-thread data race on the spy's container (TSan flagged it,
+/// and it can tear reads). Instead we connect our own slot via an explicit
+/// Qt::QueuedConnection to a main-thread context object (`loop`): Qt posts
+/// the (requestId, ok) payload through the event queue and the slot runs on
+/// THIS thread, so the capture below is single-threaded and ordered by Qt's
+/// event loop.
 [[nodiscard]] bool runWrite(Scraper::ScrapeWriteWorker &worker, quint64 requestId,
                             const QString &uuid, const QString &sourcePath,
                             const Scraper::ScrapedItem &scraped,
                             const Scraper::NonStandardArtworkList &artwork) {
-  QSignalSpy spy(&worker, &Scraper::ScrapeWriteWorker::writeCompleted);
+  QEventLoop loop;
+  quint64 gotRequestId = 0;
+  bool gotOk = false;
+  bool fired = false;
+
+  // Receive the worker's reply on the main thread. `&loop` is the context
+  // object (lives on the main thread), and Qt::QueuedConnection forces the
+  // payload across the thread boundary via the event queue, so the lambda —
+  // and the captured-by-reference locals it writes — execute single-threaded
+  // here. quitting the loop hands control back to the wait below.
+  QObject::connect(
+      &worker, &Scraper::ScrapeWriteWorker::writeCompleted, &loop,
+      [&](quint64 id, bool ok) {
+        gotRequestId = id;
+        gotOk = ok;
+        fired = true;
+        loop.quit();
+      },
+      Qt::QueuedConnection);
 
   // Queue openConnection first (idempotent) so the connection is created on
   // the worker thread, then the write. Both are Qt::QueuedConnection because
@@ -93,19 +123,18 @@ void seedSchemaOnDisk() {
                             Q_ARG(QString, sourcePath), Q_ARG(Scraper::ScrapedItem, scraped),
                             Q_ARG(Scraper::NonStandardArtworkList, artwork));
 
-  // Pump until the worker emits writeCompleted. QSignalSpy::wait runs a
-  // local event loop on the calling (main) thread, which is what delivers
-  // the queued reply that crossed the thread boundary.
-  if (spy.isEmpty()) {
-    spy.wait(5000);
-  }
-  if (spy.isEmpty()) {
+  // Bounded wait: a QTimer single-shot quits the loop if the worker never
+  // replies, so a regression can't hang the whole ctest run on an unbounded
+  // event loop. The connection above quits it first on the happy path.
+  QTimer::singleShot(5000, &loop, [&loop] { loop.quit(); });
+  loop.exec();
+
+  if (!fired) {
     return false; // timed out — caller asserts on the result
   }
-  const QList<QVariant> args = spy.takeFirst();
   // Sanity: the reply correlates to the request we posted.
-  Q_ASSERT(args.at(0).toULongLong() == requestId);
-  return args.at(1).toBool();
+  Q_ASSERT(gotRequestId == requestId);
+  return gotOk;
 }
 
 } // namespace
@@ -163,7 +192,7 @@ void TestScrapeWriteWorker::init() {
 // A successful worker write lands the metadata row AND every non-standard
 // artwork row, readable back through a fresh connection to the same on-disk
 // file. The worker is driven on a real QThread via queued invocation; the
-// reply is awaited with QSignalSpy (no fixed sleep).
+// reply is awaited on a main-thread QEventLoop (no fixed sleep).
 void TestScrapeWriteWorker::writePersistsMetadataAndArtworkRowsAtomically() {
   const QString uuid = QStringLiteral("u-write");
   const QString sourcePath = QStringLiteral("/m/song.flac");

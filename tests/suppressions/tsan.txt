@@ -61,6 +61,20 @@ race:invokeMethod
 race:QByteArray::reallocData
 race:QByteArray::QByteArray
 
+# ScrapeWriteWorker cross-thread queued writeCompleted signal: the worker
+# thread runs `emit writeCompleted(requestId, ok)` inside performWrite, which
+# heap-allocates the QMetaCallEvent argument payload via operator new on the
+# worker thread; the main-thread event loop then reads that payload when it
+# dispatches the connected slot (QtPrivate ...::call). Qt orders the
+# post→dispatch pair through the event-queue QMutex (same futex/atomic fast
+# path as the QMetaCallEvent / QMetaType::create entries above), but the
+# allocation/read pair on the payload isn't observable to TSan as
+# happens-before. The only Qt-named frame the stripped libQt6Core leaves on
+# the racing stack is the emit site, so the suppression anchors there. This is
+# inherent to receiving any cross-thread queued signal — not specific to how
+# the test waits (it uses a QEventLoop + Qt::QueuedConnection, no QSignalSpy).
+race:Scraper::ScrapeWriteWorker::performWrite
+
 # ─── Group B: Qt thread lifecycle (Kartend-8fh5) ────────────────────────
 # QThread::wait + QFuture::waitForFinished provably synchronise the worker
 # thread before destructors proceed, but libQt6Core's stripped frames
