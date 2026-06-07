@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QElapsedTimer>
+#include <QFont>
 #include <QFrame>
 #include <QPixmap>
 #include <QPropertyAnimation>
@@ -207,6 +208,16 @@ protected:
 
 private:
   QString itemName;
+  // Paint-path title measurement cache: the full-string horizontalAdvance and
+  // right-elided text are recomputed only when the name, font, or width change,
+  // not on every repaint (selection-pulse + scroll repaint the same tile
+  // continuously). Lazy and self-validating, so no setter has to invalidate it.
+  mutable QString m_textMeasureName;
+  mutable QFont m_textMeasureFont;
+  mutable int m_textMeasureWidth = -1;
+  mutable int m_textMeasureAdvance = 0;
+  mutable QString m_textMeasureElided;
+  void ensureTextMeasure(const QString &name, const QFont &font, int width) const;
   QString filePath;
   QString m_collectionName;   // Parent collection name for list mode display
   QString m_artworkDirectory; // Artwork directory for this item's collection

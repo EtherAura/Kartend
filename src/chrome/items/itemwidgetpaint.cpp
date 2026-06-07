@@ -25,6 +25,22 @@
 
 Q_DECLARE_LOGGING_CATEGORY(lcItemWidget)
 
+// Refreshes the cached title measurement (full-string advance + right-elided
+// text) only when the name, font, or width differs from the last paint, so a
+// continuously-repainting tile (selection pulse, scroll) doesn't re-measure the
+// string every frame.
+void ItemWidget::ensureTextMeasure(const QString &name, const QFont &font, int width) const {
+  if (m_textMeasureWidth == width && m_textMeasureName == name && m_textMeasureFont == font) {
+    return;
+  }
+  const QFontMetrics fm(font);
+  m_textMeasureAdvance = fm.horizontalAdvance(name);
+  m_textMeasureElided = fm.elidedText(name, Qt::ElideRight, width);
+  m_textMeasureName = name;
+  m_textMeasureFont = font;
+  m_textMeasureWidth = width;
+}
+
 // Renders the selection border with pulsing opacity when selected; suppressed
 // during glide animations
 void ItemWidget::paintEvent(QPaintEvent *event) {
@@ -134,12 +150,11 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
         if (hasFolderIcon) {
           textRect.setLeft(textRect.left() + UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH);
         }
-        // List mode: elide text only if it exceeds available width
-        QFontMetrics fm(titleFont);
-        int textWidth = fm.horizontalAdvance(itemName);
-        if (textWidth > textRect.width()) {
-          QString elidedText = fm.elidedText(itemName, Qt::ElideRight, textRect.width());
-          painter.drawText(textRect, nameLabel->alignment(), elidedText);
+        // List mode: elide text only if it exceeds available width. The
+        // measurement is cached and recomputed only when name/font/width change.
+        ensureTextMeasure(itemName, titleFont, textRect.width());
+        if (m_textMeasureAdvance > textRect.width()) {
+          painter.drawText(textRect, nameLabel->alignment(), m_textMeasureElided);
         } else {
           painter.drawText(textRect, nameLabel->alignment(), itemName);
         }
@@ -154,7 +169,8 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
           QPixmap iconPix = m_folderIconLabel->pixmap();
           QFontMetrics fm(painter.font());
           int lineHeight = fm.height();
-          int textWidth = fm.horizontalAdvance(itemName);
+          ensureTextMeasure(itemName, painter.font(), textRect.width());
+          int textWidth = m_textMeasureAdvance;
 
           // Calculate total width of icon+spacing+text to center as a unit
           int totalWidth = gridFolderIconSize + iconSpacing + textWidth;
