@@ -8,6 +8,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 
 class ItemWidget;
@@ -99,6 +100,11 @@ public:
 private:
   mutable QMutex m_mutex;
   QList<QPointer<ItemWidget>> m_loaded;
+  // O(1) membership mirror of m_loaded for isLoaded()/markLoaded(): the QList is
+  // kept (its QPointers allow safe iteration in blockSignalsAndClearAll) and
+  // updated in lockstep. Raw ItemWidget* keys like m_widgetToPath —
+  // removeAllEntriesFor (destroyed handler / pool recycling) keeps both clean.
+  QSet<ItemWidget *> m_loadedSet;
   QHash<ItemWidget *, QString> m_widgetToPath;
   QList<ArtworkInfo> m_pending;
   QHash<QString, QString> m_typeOverrides;

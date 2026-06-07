@@ -35,8 +35,9 @@ void ArtworkWidgetRegistry::markLoaded(ItemWidget *widget, const QString &path) 
   }
   QMutexLocker locker(&m_mutex);
   m_widgetToPath[widget] = path;
-  if (!m_loaded.contains(widget)) {
+  if (!m_loadedSet.contains(widget)) {
     m_loaded.append(widget);
+    m_loadedSet.insert(widget);
   }
 }
 
@@ -45,7 +46,7 @@ bool ArtworkWidgetRegistry::isLoaded(ItemWidget *widget) const {
     return false;
   }
   QMutexLocker locker(&m_mutex);
-  return m_loaded.contains(QPointer<ItemWidget>(widget));
+  return m_loadedSet.contains(widget);
 }
 
 bool ArtworkWidgetRegistry::hasArtworkFor(ItemWidget *widget) const {
@@ -121,6 +122,7 @@ void ArtworkWidgetRegistry::removeAllEntriesFor(ItemWidget *widget) {
   }
   QMutexLocker locker(&m_mutex);
   m_loaded.removeAll(widget);
+  m_loadedSet.remove(widget);
   m_widgetToPath.remove(widget);
   for (int i = m_pending.size() - 1; i >= 0; --i) {
     if (m_pending[i].mediaItem == widget) {
@@ -132,6 +134,7 @@ void ArtworkWidgetRegistry::removeAllEntriesFor(ItemWidget *widget) {
 void ArtworkWidgetRegistry::clearAll() {
   QMutexLocker locker(&m_mutex);
   m_loaded.clear();
+  m_loadedSet.clear();
   m_widgetToPath.clear();
   m_pending.clear();
 }
@@ -147,6 +150,7 @@ void ArtworkWidgetRegistry::blockSignalsAndClearAll() {
     QMutexLocker locker(&m_mutex);
     widgets = m_loaded;
     m_loaded.clear();
+    m_loadedSet.clear();
     m_widgetToPath.clear();
     m_pending.clear();
   }
@@ -160,11 +164,13 @@ void ArtworkWidgetRegistry::blockSignalsAndClearAll() {
 void ArtworkWidgetRegistry::clearLoadedOnly() {
   QMutexLocker locker(&m_mutex);
   m_loaded.clear();
+  m_loadedSet.clear();
 }
 
 void ArtworkWidgetRegistry::clearLoadedAndPending() {
   QMutexLocker locker(&m_mutex);
   m_loaded.clear();
+  m_loadedSet.clear();
   m_pending.clear();
 }
 
