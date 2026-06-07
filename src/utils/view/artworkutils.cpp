@@ -282,11 +282,6 @@ void DirectoryCache::processQueuedDirectories() {
   });
 }
 
-bool DirectoryCache::hasQueuedDirectories() const {
-  QMutexLocker locker(&m_mutex);
-  return !m_queuedDirectories.isEmpty();
-}
-
 bool DirectoryCache::isDirectoryQueued(const QString &directory) const {
   if (directory.isEmpty()) {
     return false;
@@ -301,11 +296,6 @@ void DirectoryCache::clear() {
   m_queuedDirectories.clear();
 }
 
-int DirectoryCache::cachedDirectoryCount() const {
-  QMutexLocker locker(&m_mutex);
-  return m_cache.size();
-}
-
 namespace {
 
 /**
@@ -313,17 +303,7 @@ namespace {
  * @return Path if found, empty string otherwise.
  */
 QString searchWithName(const QDir &artworkDir, const QString &name, const QStringList &extensions) {
-  for (const QString &ext : extensions) {
-    QString path = artworkDir.absoluteFilePath(name + "." + ext);
-    if (QFile::exists(path)) {
-      return path;
-    }
-    path = artworkDir.absoluteFilePath(name + "." + ext.toUpper());
-    if (QFile::exists(path)) {
-      return path;
-    }
-  }
-  return {};
+  return ExtensionUtils::findFileWithExtensions(artworkDir, name, extensions);
 }
 
 } // namespace

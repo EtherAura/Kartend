@@ -10,8 +10,6 @@
 class TestVideoUtils : public QObject {
   Q_OBJECT
 private slots:
-  void videoBaseExtensions_returnsKnownExtensions();
-  void videoFilters_prependsWildcardDot();
   void findVideoForFile_returnsEmpty_whenInputsEmpty();
   void findVideoForFile_returnsEmpty_whenDirectoryMissing();
   void findVideoForFile_findsLowercaseExtension();
@@ -20,23 +18,6 @@ private slots:
   void findVideoForFile_matchesByCompleteBaseName();
   void findVideoForFile_returnsEmptyWhenNoMatch();
 };
-
-void TestVideoUtils::videoBaseExtensions_returnsKnownExtensions() {
-  const QStringList &exts = VideoUtils::videoBaseExtensions();
-  QVERIFY(exts.contains("mp4"));
-  QVERIFY(exts.contains("webm"));
-  QVERIFY(exts.contains("mkv"));
-  QVERIFY(exts.contains("mov"));
-  QVERIFY(exts.contains("avi"));
-}
-
-void TestVideoUtils::videoFilters_prependsWildcardDot() {
-  const QStringList filters = VideoUtils::videoFilters();
-  QCOMPARE(filters.size(), VideoUtils::videoBaseExtensions().size());
-  for (const QString &f : filters) {
-    QVERIFY(f.startsWith("*."));
-  }
-}
 
 void TestVideoUtils::findVideoForFile_returnsEmpty_whenInputsEmpty() {
   QCOMPARE(VideoUtils::findVideoForFile(QString(), "/tmp"), QString());

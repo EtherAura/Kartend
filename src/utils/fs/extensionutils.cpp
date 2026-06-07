@@ -1,6 +1,8 @@
 // Categorizes file extensions by media type (ROM, disc image, archive, etc.).
 #include "extensionutils.h"
 #include <QByteArray>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QSet>
@@ -75,6 +77,28 @@ auto ExtensionUtils::imageFilters() -> QStringList {
     filters.append(QStringLiteral("*.") + ext);
   }
   return filters;
+}
+
+auto ExtensionUtils::videoBaseExtensions() -> const QStringList & {
+  static const QStringList exts = {QStringLiteral("mp4"), QStringLiteral("webm"),
+                                   QStringLiteral("mkv"), QStringLiteral("mov"),
+                                   QStringLiteral("avi")};
+  return exts;
+}
+
+auto ExtensionUtils::findFileWithExtensions(const QDir &dir, const QString &baseName,
+                                            const QStringList &extensions) -> QString {
+  for (const QString &ext : extensions) {
+    QString path = dir.absoluteFilePath(baseName + "." + ext);
+    if (QFile::exists(path)) {
+      return path;
+    }
+    path = dir.absoluteFilePath(baseName + "." + ext.toUpper());
+    if (QFile::exists(path)) {
+      return path;
+    }
+  }
+  return {};
 }
 
 // Extension-only allowlist guard for image-decode call sites. Deliberately

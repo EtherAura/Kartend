@@ -16,6 +16,7 @@ private slots:
   void extensionMatchIsCaseInsensitive();
   void webpIsAlwaysDecodable();
   void avifTracksRuntimePluginSupport();
+  void videoBaseExtensions_returnsKnownExtensions();
 };
 
 void TestExtensionUtils::imagePathsAreDecodable() {
@@ -74,6 +75,15 @@ void TestExtensionUtils::avifTracksRuntimePluginSupport() {
       formats.contains(QByteArrayLiteral("avif")) || formats.contains(QByteArrayLiteral("AVIF"));
   const bool admitted = ExtensionUtils::isDecodableImagePath(QStringLiteral("cover.avif"));
   QCOMPARE(admitted, hasAvif);
+}
+
+void TestExtensionUtils::videoBaseExtensions_returnsKnownExtensions() {
+  const QStringList &exts = ExtensionUtils::videoBaseExtensions();
+  QVERIFY(exts.contains(QStringLiteral("mp4")));
+  QVERIFY(exts.contains(QStringLiteral("webm")));
+  QVERIFY(exts.contains(QStringLiteral("mkv")));
+  QVERIFY(exts.contains(QStringLiteral("mov")));
+  QVERIFY(exts.contains(QStringLiteral("avi")));
 }
 
 QTEST_MAIN(TestExtensionUtils)

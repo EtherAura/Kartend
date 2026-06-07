@@ -76,11 +76,6 @@ public:
   void processQueuedDirectories();
 
   /**
-   * @brief Check if there are directories waiting to be scanned.
-   */
-  [[nodiscard]] bool hasQueuedDirectories() const;
-
-  /**
    * @brief Check whether @p directory is currently pending or being
    * processed by a background prewarm.
    *
@@ -100,11 +95,6 @@ public:
    * Call when collection changes or artwork directories are modified.
    */
   void clear();
-
-  /**
-   * @brief Get cache statistics for diagnostics.
-   */
-  [[nodiscard]] int cachedDirectoryCount() const;
 
 private:
   DirectoryCache() = default;

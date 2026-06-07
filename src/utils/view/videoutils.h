@@ -13,16 +13,6 @@
 namespace VideoUtils {
 
 /**
- * @brief Canonical lowercase video extensions (no dots, no wildcards).
- */
-[[nodiscard]] const QStringList &videoBaseExtensions();
-
-/**
- * @brief "*.ext" filters suitable for QDir name filters.
- */
-[[nodiscard]] QStringList videoFilters();
-
-/**
  * @brief Find a preview video file matching a media filename.
  *
  * Searches @p videoDirectory for a video file whose base name (without
