@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 
+#include <QFutureWatcher>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -93,6 +94,7 @@ public:
 
   ScreenScraperProvider(GeneralSettingsAccessor settingsAccessor,
                         CollectionAccessor collectionAccessor);
+  ~ScreenScraperProvider() override;
 
   void setStageReporter(StageReporter reporter) override { m_stageReporter = std::move(reporter); }
 
@@ -195,6 +197,12 @@ private:
   GeneralSettingsAccessor m_settingsAccessor;
   CollectionAccessor m_collectionAccessor;
   StageReporter m_stageReporter;
+  /// Bounds an in-flight ROM-hash task to this provider's lifetime. The hash
+  /// runs off-thread (QtConcurrent) and its main-thread continuation touches
+  /// `this`; binding the watcher to the provider (not qApp) severs that
+  /// continuation when we're destroyed, and ~ScreenScraperProvider() waits for
+  /// the task so it can't outlive us (Kartend-s1s98).
+  QFutureWatcher<RomHasher::Result> m_hashWatcher;
   /// SS's jeuInfos.php returns the candidate AND the full detail in one
   /// response — there's no separate detail endpoint. We cache the full
   /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so

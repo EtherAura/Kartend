@@ -190,6 +190,15 @@ ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAcc
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
 }
 
+ScreenScraperProvider::~ScreenScraperProvider() {
+  // Kartend-s1s98: a ROM-hash task may still be running off-thread when our
+  // owner (BatchScrapeRunner / ScraperService) drops the last shared_ptr.
+  // Wait for it before our members tear down so the worker — and the
+  // main-thread continuation it would trigger — can't touch freed state.
+  // No-op when no hash is in flight / already finished.
+  m_hashWatcher.waitForFinished();
+}
+
 ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() const {
   Credentials c;
   if (m_settingsAccessor) {
@@ -338,17 +347,22 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
     m_stageReporter(isArchive ? QObject::tr("Extracting archive for hash ID…")
                               : QObject::tr("Hashing ROM…"));
   }
-  auto *watcher = new QFutureWatcher<RomHasher::Result>(qApp);
-  QObject::connect(watcher, &QFutureWatcher<RomHasher::Result>::finished, qApp,
-                   [this, watcher, trimmed, callback = std::move(callback)]() mutable {
-                     const RomHasher::Result hashes = watcher->result();
-                     watcher->deleteLater();
+  // Bind the continuation to the provider via the member watcher (NOT qApp):
+  // if we're destroyed mid-hash the watcher dies with us and severs this
+  // connection, so the slot can't deref a freed `this`. disconnect() drops any
+  // prior lookup's continuation before we re-arm (lookups are sequential).
+  // ~ScreenScraperProvider() waits for the task so it can't outlive us.
+  // (Kartend-s1s98)
+  m_hashWatcher.disconnect();
+  QObject::connect(&m_hashWatcher, &QFutureWatcher<RomHasher::Result>::finished, &m_hashWatcher,
+                   [this, trimmed, callback = std::move(callback)]() mutable {
+                     const RomHasher::Result hashes = m_hashWatcher.result();
                      if (m_stageReporter) {
                        m_stageReporter(QString());
                      }
                      runLookupAfterHash(trimmed, hashes, std::move(callback));
                    });
-  watcher->setFuture(
+  m_hashWatcher.setFuture(
       QtConcurrent::run([wantInnerHash, filePath, cancelToken]() -> RomHasher::Result {
         auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
                      ? RomHasher::hashArchiveInnerRom(filePath, cancelToken)
