@@ -291,6 +291,37 @@ void BatchScrapeRunner::filterAlreadyScraped() {
       dbCheckPossible ? db->loadItemMetadataBatch(m_collectionUuid, m_paths)
                       : QHash<QString, ItemMetadataStore::ItemMetadata>{};
 
+  // Bundle the precomputed read-only context for the per-item skip
+  // predicate. shouldSkipScrapedItem() consumes this once per path.
+  ScrapeSkipContext skipCtx;
+  skipCtx.dbCheckPossible = dbCheckPossible;
+  skipCtx.sidecarCheckPossible = sidecarCheckPossible;
+  skipCtx.wantedTypes = std::move(wantedTypes);
+  skipCtx.metadataByPath = metadataByPath;
+  skipCtx.presentByType = std::move(presentByType);
+  skipCtx.frontFlatBases = std::move(frontFlatBases);
+  skipCtx.hasWindow = hasWindow;
+  skipCtx.cutoff = cutoff;
+
+  QStringList kept;
+  kept.reserve(m_paths.size());
+  for (const QString &path : m_paths) {
+    if (!shouldSkipScrapedItem(path, skipCtx)) {
+      kept.append(path);
+    }
+  }
+  // The dropped items were intentionally skipped (Skip rescrape mode:
+  // they already have metadata). Count them as `skipped` rather than
+  // dropping them silently — otherwise scraped+skipped+errors never
+  // reconciles with the total the caller computed before this filter,
+  // and the items just vanish from the progress accounting.
+  m_preSkippedCount = static_cast<int>(m_paths.size() - kept.size());
+  m_summary.skipped += m_preSkippedCount;
+  m_paths = std::move(kept);
+}
+
+bool BatchScrapeRunner::shouldSkipScrapedItem(const QString &path,
+                                              const ScrapeSkipContext &ctx) const {
   // Helper: decide whether the metadata "slot" is covered for an item.
   // Returns one of three states so the caller can apply the time-window
   // gate consistently for both DB and on-disk evidence.
@@ -299,10 +330,10 @@ void BatchScrapeRunner::filterAlreadyScraped() {
     bool hasTimestamp = false;
     QDateTime timestampUtc;
   };
-  auto metadataPresenceFor = [&](const QString &path, const QString &baseName) -> MetaPresence {
+  auto metadataPresenceFor = [&](const QString &p, const QString &baseName) -> MetaPresence {
     MetaPresence out;
-    if (dbCheckPossible) {
-      const auto md = metadataByPath.value(path);
+    if (ctx.dbCheckPossible) {
+      const auto md = ctx.metadataByPath.value(p);
       if (!md.source.isEmpty()) {
         out.present = true;
         // ItemMetadataStore writes updated_at via
@@ -324,7 +355,7 @@ void BatchScrapeRunner::filterAlreadyScraped() {
         }
       }
     }
-    if (!out.present && sidecarCheckPossible && !baseName.isEmpty()) {
+    if (!out.present && ctx.sidecarCheckPossible && !baseName.isEmpty()) {
       const QString sidecar =
           QDir(m_artworkDir)
               .filePath(QStringLiteral("metadata/") + baseName + QStringLiteral(".json"));
@@ -343,10 +374,10 @@ void BatchScrapeRunner::filterAlreadyScraped() {
 
   // Helper: per-type media-on-disk check using the pre-built indexes.
   auto typeCoveredFor = [&](const QString &baseNameLower, const QString &type) {
-    if (type == QStringLiteral("front") && frontFlatBases.contains(baseNameLower)) {
+    if (type == QStringLiteral("front") && ctx.frontFlatBases.contains(baseNameLower)) {
       return true;
     }
-    return presentByType.value(type).contains(baseNameLower);
+    return ctx.presentByType.value(type).contains(baseNameLower);
   };
 
   // Helper: apply the window to a presence record. "Within window"
@@ -355,69 +386,55 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   // skip) — the user can clear the row or delete the file if they
   // really want a refresh.
   auto withinWindow = [&](const MetaPresence &mp) {
-    if (!hasWindow) return true;
+    if (!ctx.hasWindow) return true;
     if (!mp.hasTimestamp) return true;
-    return mp.timestampUtc >= cutoff;
+    return mp.timestampUtc >= ctx.cutoff;
   };
 
-  QStringList kept;
-  kept.reserve(m_paths.size());
-  for (const QString &path : m_paths) {
-    const QString baseName = QFileInfo(path).completeBaseName();
-    const QString baseNameLower = baseName.toLower();
-    const MetaPresence meta = metadataPresenceFor(path, baseName);
+  const QString baseName = QFileInfo(path).completeBaseName();
+  const QString baseNameLower = baseName.toLower();
+  const MetaPresence meta = metadataPresenceFor(path, baseName);
 
-    bool skipThis = false;
-    if (m_rescrapeMode == Scraper::RescrapeMode::Skip) {
-      // Skip mode: any metadata marker is enough — the user told us
-      // "if scraped, leave it alone." The time window optionally
-      // releases stale items back for refresh.
-      if (meta.present && withinWindow(meta)) {
-        skipThis = true;
-      }
-    } else { // FillMissing
-      // FillMissing only burns a request when there is at least one
-      // missing field for this item. Walk the user's ticked
-      // checkboxes (_metadata implicit via m_writeMetadata, plus the
-      // resolved mediaTypeFilter). If every ticked field is already
-      // covered AND the existing data is within the refresh window,
-      // there is nothing the provider could give us — skip.
-      bool fullyCovered = true;
-      if (m_writeMetadata) {
-        if (!meta.present || !withinWindow(meta)) {
-          fullyCovered = false;
-        }
-      }
-      if (fullyCovered) {
-        for (const QString &type : wantedTypes) {
-          if (!typeCoveredFor(baseNameLower, type)) {
-            fullyCovered = false;
-            break;
-          }
-        }
-      }
-      // Media-only runs (m_writeMetadata == false) still want to
-      // honour the refresh window when *any* timestamp is available
-      // (sidecar or DB row). If the only signal of staleness is the
-      // sidecar mtime, treat that as the run's freshness anchor.
-      if (fullyCovered && !m_writeMetadata && meta.present && !withinWindow(meta)) {
+  bool skipThis = false;
+  if (m_rescrapeMode == Scraper::RescrapeMode::Skip) {
+    // Skip mode: any metadata marker is enough — the user told us
+    // "if scraped, leave it alone." The time window optionally
+    // releases stale items back for refresh.
+    if (meta.present && withinWindow(meta)) {
+      skipThis = true;
+    }
+  } else { // FillMissing
+    // FillMissing only burns a request when there is at least one
+    // missing field for this item. Walk the user's ticked
+    // checkboxes (_metadata implicit via m_writeMetadata, plus the
+    // resolved mediaTypeFilter). If every ticked field is already
+    // covered AND the existing data is within the refresh window,
+    // there is nothing the provider could give us — skip.
+    bool fullyCovered = true;
+    if (m_writeMetadata) {
+      if (!meta.present || !withinWindow(meta)) {
         fullyCovered = false;
       }
-      skipThis = fullyCovered;
     }
-
-    if (!skipThis) {
-      kept.append(path);
+    if (fullyCovered) {
+      for (const QString &type : ctx.wantedTypes) {
+        if (!typeCoveredFor(baseNameLower, type)) {
+          fullyCovered = false;
+          break;
+        }
+      }
     }
+    // Media-only runs (m_writeMetadata == false) still want to
+    // honour the refresh window when *any* timestamp is available
+    // (sidecar or DB row). If the only signal of staleness is the
+    // sidecar mtime, treat that as the run's freshness anchor.
+    if (fullyCovered && !m_writeMetadata && meta.present && !withinWindow(meta)) {
+      fullyCovered = false;
+    }
+    skipThis = fullyCovered;
   }
-  // The dropped items were intentionally skipped (Skip rescrape mode:
-  // they already have metadata). Count them as `skipped` rather than
-  // dropping them silently — otherwise scraped+skipped+errors never
-  // reconciles with the total the caller computed before this filter,
-  // and the items just vanish from the progress accounting.
-  m_preSkippedCount = static_cast<int>(m_paths.size() - kept.size());
-  m_summary.skipped += m_preSkippedCount;
-  m_paths = std::move(kept);
+
+  return skipThis;
 }
 
 void BatchScrapeRunner::pump() {
@@ -450,6 +467,32 @@ void BatchScrapeRunner::pump() {
     m_finishedEmitted = true;
     emit finished(m_summary);
   }
+}
+
+QList<Scraper::MediaAsset>
+BatchScrapeRunner::resolveWantedMediaAssets(const Scraper::ScrapedItem &scraped) const {
+  // Media-fetch resolution. Two modes depending on whether the user
+  // supplied an explicit media-type filter:
+  //   • filter empty → legacy "front cover only" path. Backwards-compat
+  //     for callers that pre-date the per-type checkbox UI.
+  //   • filter non-empty → every asset whose `type` matches one of the
+  //     requested types, fetched in parallel by the caller.
+  // Caller has already confirmed m_fetchPrimaryCover; this only resolves
+  // which assets to fetch.
+  const bool useFilter = !m_mediaTypeFilter.isEmpty();
+  QList<Scraper::MediaAsset> wantedAssets;
+  for (const Scraper::MediaAsset &m : scraped.media) {
+    if (!m.url.isValid()) continue;
+    if (useFilter) {
+      if (m_mediaTypeFilter.contains(m.type.toLower())) {
+        wantedAssets.append(m);
+      }
+    } else if (m.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
+      wantedAssets.append(m);
+      break; // legacy path: at most one cover per item.
+    }
+  }
+  return wantedAssets;
 }
 
 void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
@@ -535,19 +578,7 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
             self->applyAndFinish(state, scraped, {});
             return;
           }
-          const bool useFilter = !self->m_mediaTypeFilter.isEmpty();
-          QList<Scraper::MediaAsset> wantedAssets;
-          for (const Scraper::MediaAsset &m : scraped.media) {
-            if (!m.url.isValid()) continue;
-            if (useFilter) {
-              if (self->m_mediaTypeFilter.contains(m.type.toLower())) {
-                wantedAssets.append(m);
-              }
-            } else if (m.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
-              wantedAssets.append(m);
-              break; // legacy path: at most one cover per item.
-            }
-          }
+          const QList<Scraper::MediaAsset> wantedAssets = self->resolveWantedMediaAssets(scraped);
           if (wantedAssets.isEmpty()) {
             self->applyAndFinish(state, scraped, {});
             return;

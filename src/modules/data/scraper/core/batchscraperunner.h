@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -13,6 +14,7 @@
 #include <QString>
 #include <QStringList>
 
+#include "itemmetadata.h"
 #include "metadatalookupprovider.h"
 #include "scrapepersistence.h"
 
@@ -255,6 +257,33 @@ private:
   /// decide.
   void filterAlreadyScraped();
 
+  /// Precomputed, read-only context for the per-item skip predicate.
+  /// `filterAlreadyScraped` builds this once (the basename indexes,
+  /// the batch-loaded DB metadata, and the refresh window) so the
+  /// per-item check stays O(1) instead of re-scanning the directory /
+  /// re-querying the DB per path.
+  struct ScrapeSkipContext {
+    bool dbCheckPossible = false;
+    bool sidecarCheckPossible = false;
+    /// Effective "wanted" media types under FillMissing (lowercase).
+    QSet<QString> wantedTypes;
+    /// Batch-loaded item metadata keyed by item path.
+    QHash<QString, ItemMetadataStore::ItemMetadata> metadataByPath;
+    /// Per-wanted-type basename index of media files on disk (lowercase).
+    QHash<QString, QSet<QString>> presentByType;
+    /// `front` basenames in the flat artwork dir mirror (lowercase).
+    QSet<QString> frontFlatBases;
+    bool hasWindow = false;
+    QDateTime cutoff;
+  };
+
+  /// Per-item predicate extracted from `filterAlreadyScraped`'s loop.
+  /// Returns true when `path` should be dropped from the queue under
+  /// the active rescrape mode (Skip / FillMissing) given the
+  /// precomputed `ctx`. Pure read-only over `ctx` and the runner's
+  /// rescrape-mode / write-metadata / artwork-dir members.
+  [[nodiscard]] bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) const;
+
   /// Top of the worker loop. Fills empty in-flight slots from the
   /// queue until either the queue is empty or the in-flight count
   /// equals the concurrency cap. Emits `finished` exactly once when
@@ -264,6 +293,14 @@ private:
   /// callback in the chain owns a copy of `state` so per-item data
   /// survives interleaving with other items.
   void startItem(const std::shared_ptr<ItemState> &state);
+  /// Resolve which media assets to fetch for `scraped`, extracted from
+  /// `startItem`'s fetchDetail callback. With a non-empty
+  /// `m_mediaTypeFilter` returns every asset whose type matches;
+  /// otherwise the legacy "first valid front cover only" fallback. The
+  /// caller gates this on `m_fetchPrimaryCover` and dispatches the
+  /// returned assets in parallel.
+  [[nodiscard]] QList<Scraper::MediaAsset>
+  resolveWantedMediaAssets(const Scraper::ScrapedItem &scraped) const;
   /// Final step shared between the cover-fetched path and the
   /// cover-skipped fallback. Persists via `applyScrapedItem`, marks
   /// the slot as free, and pumps the queue.
