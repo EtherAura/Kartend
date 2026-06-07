@@ -587,6 +587,20 @@ add_executable(test_scrapepersistence_direct
 target_link_libraries(test_scrapepersistence_direct PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScrapePersistenceDirect COMMAND test_scrapepersistence_direct)
 
+# ScrapeWriteWorker connection-lifecycle + cross-thread write tests
+# Exercises Scraper::ScrapeWriteWorker (the per-worker QSqlDatabase the
+# BatchScrapeRunner write worker drives on its own QThread) against a REAL
+# on-disk SQLite file under an isolated QStandardPaths sandbox. Covers that
+# a queued performWrite persists the metadata + non-standard artwork rows,
+# that a guard-rejected write leaves no partial metadata row, and that the
+# worker's connection name is removed on closeConnection AND on destruction
+# (no leaked QSqlDatabase handle). No DB mocking (docs/dev/testing.md).
+add_executable(test_scrapewriteworker
+  modules/scraper/test_scrapewriteworker.cpp
+)
+target_link_libraries(test_scrapewriteworker PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScrapeWriteWorker COMMAND test_scrapewriteworker)
+
 # BatchScrapeRunner end-to-end integration with a real DatabaseManager
 # Confirms the gnkb wiring (ScrapeWriteWorker on a separate thread + its
 # own QSqlDatabase + IDatabaseManager::invalidateMetadataCacheItem hop
