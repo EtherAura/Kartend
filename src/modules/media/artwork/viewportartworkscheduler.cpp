@@ -32,15 +32,10 @@
 #include <QString>
 #include <QWidget>
 
-namespace {
 // Computes immediate and extended viewports based on a scroll area's current
-// position
-struct Viewports {
-  QRect immediate;
-  QRect extended;
-};
-
-auto computeViewports(const QScrollArea *scrollArea) -> Viewports {
+// position.
+ViewportArtworkScheduler::Viewports
+ViewportArtworkScheduler::computeViewports(const QScrollArea *scrollArea) {
   const QRect viewport = scrollArea->viewport()->rect();
   const QPoint scrollOffset(scrollArea->horizontalScrollBar()->value(),
                             scrollArea->verticalScrollBar()->value());
@@ -52,10 +47,11 @@ auto computeViewports(const QScrollArea *scrollArea) -> Viewports {
   return vps;
 }
 
-// Partitions pending items into immediate/extended/remaining by viewport
-auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
-                         const Viewports &vps, const std::function<bool(ItemWidget *)> &isLoaded)
-    -> std::tuple<QList<ArtworkInfo>, QList<ArtworkInfo>, QList<ArtworkInfo>> {
+// Partitions pending items into immediate/extended/remaining by viewport.
+std::tuple<QList<ArtworkInfo>, QList<ArtworkInfo>, QList<ArtworkInfo>>
+ViewportArtworkScheduler::partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
+                                              const Viewports &vps,
+                                              const std::function<bool(ItemWidget *)> &isLoaded) {
   QList<ArtworkInfo> immediateItems;
   QList<ArtworkInfo> extendedItems;
   QList<ArtworkInfo> remainingItems;
@@ -81,15 +77,14 @@ auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
 // Picks the per-batch decode size: caller override wins, else the adaptive
 // batcher's current size, halved for low-priority work to leave headroom for
 // fast-arriving foreground requests.
-auto determineBatchSize(bool highPriority, int customBatchSize, const AdaptiveBatcher &batcher)
-    -> int {
+int ViewportArtworkScheduler::determineBatchSize(bool highPriority, int customBatchSize,
+                                                 const AdaptiveBatcher &batcher) {
   if (customBatchSize > 0) {
     return customBatchSize;
   }
   const int adaptive = batcher.currentBatchSize();
   return highPriority ? adaptive : qMax(2, adaptive / 2);
 }
-} // namespace
 
 ViewportArtworkScheduler::ViewportArtworkScheduler(ArtworkManager *owner)
     : QObject(owner), m_owner(owner),

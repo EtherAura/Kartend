@@ -376,6 +376,15 @@ add_executable(test_artworkmanager
 target_link_libraries(test_artworkmanager PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 
+# Viewport scheduler math (Kartend-nzjxm): the prioritization-band statics
+# extracted from viewportartworkscheduler.cpp's anonymous namespace —
+# determineBatchSize, partitionByViewport (geometry banding), computeViewports.
+add_executable(test_viewportschedulermath
+  modules/artwork/test_viewportschedulermath.cpp
+)
+target_link_libraries(test_viewportschedulermath PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Widgets Qt6::Test)
+add_test(NAME ViewportSchedulerMath COMMAND test_viewportschedulermath)
+
 # ArtworkWidgetRegistry tests (enqueuePending coalesce + kMaxPending cap)
 add_executable(test_artworkwidgetregistry
   modules/artwork/test_artworkwidgetregistry.cpp

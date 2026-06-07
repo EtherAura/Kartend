@@ -1,14 +1,23 @@
 #ifndef VIEWPORTARTWORKSCHEDULER_H
 #define VIEWPORTARTWORKSCHEDULER_H
 
+#include <functional>
+#include <tuple>
+
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QRect>
 
 #include "adaptivebatcher.h"
 #include "artworkmanager.h"
 
 class ICacheManager;
+class ItemWidget;
+QT_BEGIN_NAMESPACE
+class QScrollArea;
+class QWidget;
+QT_END_NAMESPACE
 
 /**
  * @brief Viewport-driven artwork loading pipeline extracted from ArtworkManager.
@@ -41,6 +50,26 @@ public:
   /// batches).
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
                            int customBatchSize = 0);
+
+  // Viewport-prioritization math, exposed as pure statics for direct testing
+  // (Kartend-nzjxm). No member state — the scheduler's instance methods call
+  // these too.
+  struct Viewports {
+    QRect immediate; ///< On-screen band (grid coordinates).
+    QRect extended;  ///< immediate + a one-viewport overscan margin on each side.
+  };
+  /// Immediate + extended viewports for a scroll area's current scroll position.
+  [[nodiscard]] static Viewports computeViewports(const QScrollArea *scrollArea);
+  /// Partition @p localPending into {immediate, extended, remaining} by where
+  /// each item's widget falls relative to @p vps; null or already-loaded items
+  /// (per @p isLoaded) are skipped.
+  [[nodiscard]] static std::tuple<QList<ArtworkInfo>, QList<ArtworkInfo>, QList<ArtworkInfo>>
+  partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid, const Viewports &vps,
+                      const std::function<bool(ItemWidget *)> &isLoaded);
+  /// Per-batch decode size: caller override wins, else the adaptive batcher's
+  /// size, halved (min 2) for low-priority work.
+  [[nodiscard]] static int determineBatchSize(bool highPriority, int customBatchSize,
+                                              const AdaptiveBatcher &batcher);
 
 private:
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
