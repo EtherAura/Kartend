@@ -3,6 +3,8 @@
 #include "collection/collectionconfig.h"
 #include "errorutils.h"
 
+#include <atomic>
+
 namespace {
 
 struct CollectionEntry {
@@ -18,6 +20,14 @@ QReadWriteLock &registryLock() {
 QHash<int, CollectionEntry> &registry() {
   static QHash<int, CollectionEntry> map;
   return map;
+}
+
+// Mirrors registry() non-emptiness so apply() can fast-path the common
+// "no collection has any exclusion patterns" case without taking the read lock.
+// Written under the write lock alongside every registry() mutation.
+std::atomic<bool> &registryNonEmpty() {
+  static std::atomic<bool> flag{false};
+  return flag;
 }
 
 } // namespace
@@ -71,10 +81,16 @@ void rebuildFromCollections(const QList<CollectionConfig> &collections) {
   }
   QWriteLocker locker(&registryLock());
   registry() = std::move(next);
+  registryNonEmpty().store(!registry().isEmpty(), std::memory_order_release);
 }
 
 QString apply(int collectionIndex, const QString &displayName) {
   if (collectionIndex < 0 || displayName.isEmpty()) {
+    return displayName;
+  }
+  // Fast path for the common case where no collection has any compiled
+  // exclusion patterns: skip the read lock + hash lookup entirely.
+  if (!registryNonEmpty().load(std::memory_order_acquire)) {
     return displayName;
   }
   // Copy the compiled patterns (QList is copy-on-write, so this is cheap) under
@@ -105,6 +121,7 @@ QString apply(int collectionIndex, const QString &displayName) {
 void clearForTests() {
   QWriteLocker locker(&registryLock());
   registry().clear();
+  registryNonEmpty().store(false, std::memory_order_release);
 }
 
 } // namespace TitleFilter
