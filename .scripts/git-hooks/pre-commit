@@ -96,7 +96,10 @@ if [ -f VERSION ]; then
 
   if ! ls "packaging/kartend-${CANONICAL}.ebuild" >/dev/null 2>&1; then
     red "ebuild filename mismatch: expected packaging/kartend-${CANONICAL}.ebuild, found:"
-    ls packaging/kartend-*.ebuild 2>/dev/null | sed 's/^/  /' || echo "  (none)"
+    shopt -s nullglob
+    _ebuilds=(packaging/kartend-*.ebuild)
+    shopt -u nullglob
+    if [ "${#_ebuilds[@]}" -gt 0 ]; then printf '  %s\n' "${_ebuilds[@]}"; else echo "  (none)"; fi
     fail=1
   fi
 
