@@ -91,6 +91,15 @@ run_quality_check() {
   fi
   rm -f "$tmp"
 
+  # Record ran-vs-skipped for the end-of-run maintenance summary. Lint helpers
+  # print "skipped: <reason>" and still return 0 when their tool is absent, so
+  # rc alone can't distinguish a real pass from a silent no-op.
+  if grep -qi '^skipped:' "$logfile" 2>/dev/null; then
+    MAINT_CHECK_SUMMARY+=("skip|$desc|$(grep -im1 '^skipped:' "$logfile" | sed -E 's/^[Ss]kipped:[[:space:]]*//')")
+  else
+    MAINT_CHECK_SUMMARY+=("ran|$desc|")
+  fi
+
   if [ "$rc" -ne 0 ]; then
     warn "$desc reported issues. See ${logfile#"$root_dir/"}"
   else

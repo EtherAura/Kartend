@@ -53,6 +53,26 @@ sudo apt install clang cmake lld ninja-build ccache \
 
 Optional gamepad backend: `libsdl2-dev`.
 
+### Maintenance / lint tooling (optional)
+
+`.scripts/build.sh --maintenance` (CONTRIBUTING step 4) runs the static-analysis
+gate. Each tool **self-skips if absent** and the run prints a ran-vs-skipped
+summary at the end — so install whatever you want enforced locally. Otherwise
+`--maintenance` returns success while running nothing and drift surfaces only in
+CI.
+
+- **clang-format** — pinned to **v19** to match CI. Install `clang-format-19`
+  (e.g. from [apt.llvm.org](https://apt.llvm.org) on Debian/Ubuntu) or run the
+  check through the `kartend-ci` container (see [ci-local.md](ci-local.md)). The
+  build script no-ops if no v19 binary is found, so a newer system
+  `clang-format` won't reformat against a different style. This is the one check
+  CI fails hard on.
+- **clang-tidy** — ships with the LLVM/Clang tooling (`clang-tools-extra` on
+  Fedora, `clang-tools` on Debian/Ubuntu).
+- **cppcheck** — package `cppcheck` on all distros.
+- **include-what-you-use** — package `include-what-you-use`; provides the
+  `iwyu_tool` wrapper the gate invokes.
+
 ### Gentoo
 
 ```bash

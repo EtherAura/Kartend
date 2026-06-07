@@ -252,6 +252,11 @@ IWYU_SUGGESTED=false
 CPPCHECK_WARNED=false
 CLANG_FORMAT_ISSUES=false
 RAW_QLOG_WARNED=false
+# Ran-vs-skipped record for the lint/static-analysis checks, printed as a summary
+# at the end of --maintenance. The do_* helpers print "skipped: ..." and still
+# return 0 when their tool is absent, so without this the gate looks green while
+# actually running nothing.
+MAINT_CHECK_SUMMARY=()
 
 # Collect warnings to print at the end
 COLLECTED_WARNINGS=""
@@ -504,6 +509,29 @@ EOF
   if [ "${TIDY_PROMOTED_FAILED:-false}" = true ]; then
     rel_clang_tidy="${logs_dir#"$root_dir/"}/clang-tidy.log"
     step_final "Notice: clang-tidy promoted-error checks fired. See ${rel_clang_tidy}"
+  fi
+
+  # Ran-vs-skipped summary so a self-skipped tool (clang-format-19, clang-tidy,
+  # cppcheck, iwyu absent) is visible instead of masquerading as a green gate.
+  if [ "${#MAINT_CHECK_SUMMARY[@]}" -gt 0 ]; then
+    _mc_ran=0
+    _mc_skipped=0
+    for _mc_entry in "${MAINT_CHECK_SUMMARY[@]}"; do
+      if [ "${_mc_entry%%|*}" = "skip" ]; then
+        _mc_skipped=$((_mc_skipped + 1))
+      else
+        _mc_ran=$((_mc_ran + 1))
+      fi
+    done
+    step_final "Quality checks: ${_mc_ran} ran, ${_mc_skipped} skipped (tool absent)."
+    if [ "$_mc_skipped" -gt 0 ]; then
+      for _mc_entry in "${MAINT_CHECK_SUMMARY[@]}"; do
+        [ "${_mc_entry%%|*}" = "skip" ] || continue
+        _mc_rest="${_mc_entry#*|}"
+        step_final "  - skipped: ${_mc_rest%%|*} (${_mc_rest#*|})"
+      done
+      step_final "  Install the missing tooling (see docs/dev/building.md) so the gate runs locally, not only in CI."
+    fi
   fi
 
   # When --format-check was explicitly requested (e.g. CI), fail hard on

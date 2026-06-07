@@ -88,7 +88,8 @@ The release page also carries the source tarball
 ## Quick start (from source)
 
 ```bash
-# Debian / Ubuntu
+# Debian / Ubuntu (build deps only — the --maintenance lint gate needs extra
+# tooling: clang-format-19, clang-tidy, cppcheck, iwyu — see docs/dev/building.md)
 sudo apt install clang cmake lld ninja-build ccache \
   qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
 
