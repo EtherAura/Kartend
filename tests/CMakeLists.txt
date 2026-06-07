@@ -1087,6 +1087,22 @@ target_link_libraries(bench_filterhelpers PRIVATE kartend_input kartend_data kar
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
 set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
 
+# Per-scroll-frame band math benchmark.
+add_executable(bench_virtualscrollmath
+  benchmarks/bench_virtualscrollmath.cpp
+)
+target_link_libraries(bench_virtualscrollmath PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME BenchVirtualScrollMath COMMAND bench_virtualscrollmath)
+set_tests_properties(BenchVirtualScrollMath PROPERTIES LABELS "benchmark")
+
+# Per-keystroke command-palette fuzzy-scoring benchmark.
+add_executable(bench_fuzzymatch
+  benchmarks/bench_fuzzymatch.cpp
+)
+target_link_libraries(bench_fuzzymatch PRIVATE kartend_utils Qt6::Test)
+add_test(NAME BenchFuzzyMatch COMMAND bench_fuzzymatch)
+set_tests_properties(BenchFuzzyMatch PROPERTIES LABELS "benchmark")
+
 # GamepadHelpers tests (pure helpers extracted from GamepadManager)
 add_executable(test_gamepadhelpers
   modules/gamepad/test_gamepadhelpers.cpp
