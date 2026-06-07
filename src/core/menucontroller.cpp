@@ -559,11 +559,12 @@ void MenuController::setupScraperCredentialsAction() {
 void MenuController::setupGridWidthActions() {
   if (!m_ctx.mainWindow) return;
 
-  // grid-width chord moved to Ctrl+Shift+/- to free Ctrl+/-
-  // for text zoom (see MainWindow::setupTextZoomShortcuts). The two
-  // ApplicationShortcuts conflicted, leaving Ctrl+- ambiguous so neither
-  // action fired. Bind both Plus and Equal for the increase action so US/EU
-  // layouts hit the same chord (mirrors the text-zoom binding).
+  // grid-width chord lives on Ctrl+Shift+/- so Ctrl+/- stays free for text
+  // zoom (see MainWindow::setupTextZoomShortcuts). On a US keyboard '+' is
+  // Shift+'=', so "Ctrl++" (zoom-in) and "Ctrl+Shift++" (this action) are the
+  // SAME keypress (Ctrl+Shift+=); to keep it unambiguous, text zoom-in binds
+  // only Ctrl+= (NOT Ctrl+Plus). Bind both Plus and Equal here so US (Shift+=)
+  // and EU (dedicated + key) layouts both reach the increase action.
   m_gridWidthIncreaseAction = new QAction(tr("Increase Grid Width"), this);
   m_gridWidthIncreaseAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Plus),
                                            QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal)});

@@ -25,17 +25,18 @@
 #include "videopreviewwidget.h"
 
 void MainWindow::setupTextZoomShortcuts() {
-  // Three application-context QActions: zoom in (Ctrl++ / Ctrl+=), zoom out
+  // Three application-context QActions: zoom in (Ctrl+=), zoom out
   // (Ctrl+-), reset (Ctrl+0). The lambdas capture `this` so applyTextZoom
   // can dispatch the cascade refresh — the shortcuts stay live regardless
   // of which child widget has focus.
   static constexpr int kStep = 10;
   auto *zoomIn = new QAction(tr("Zoom Text In"), this);
-  // The platform-default Ctrl++ shortcut comes through as Qt::Key_Plus on
-  // some keyboards and Qt::Key_Equal on others; bind both so US/EU layouts
-  // are equally happy.
-  zoomIn->setShortcuts(
-      {QKeySequence(Qt::CTRL | Qt::Key_Plus), QKeySequence(Qt::CTRL | Qt::Key_Equal)});
+  // Bind only Ctrl+= (NOT Ctrl++ / Qt::Key_Plus): on a US keyboard '+' is
+  // Shift+'=', so Ctrl+Plus is the very same physical chord as the grid
+  // add-column shortcut Ctrl+Shift+= (MenuController::setupGridWidthActions).
+  // Binding both made that chord ambiguous, so Qt fired neither and grid
+  // add-column silently broke. Ctrl+= handles zoom-in; Ctrl+Shift+= is grid.
+  zoomIn->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
   zoomIn->setShortcutContext(Qt::ApplicationShortcut);
   addAction(zoomIn);
   connect(zoomIn, &QAction::triggered, this,

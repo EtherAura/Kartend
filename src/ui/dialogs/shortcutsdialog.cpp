@@ -162,7 +162,7 @@ void ShortcutsDialog::populateContent() {
   addShortcut(windowSection, tr("F1"), tr("Show this help dialog"));
 
   auto *viewSection = addSection(m_rightColumnLayout, tr("View"));
-  addShortcut(viewSection, tr("Ctrl++"), tr("Increase text zoom"));
+  addShortcut(viewSection, tr("Ctrl+="), tr("Increase text zoom"));
   addShortcut(viewSection, tr("Ctrl+-"), tr("Decrease text zoom"));
   addShortcut(viewSection, tr("Ctrl+0"), tr("Reset text zoom"));
   addShortcut(viewSection, tr("Ctrl+Shift++"), tr("Increase grid columns (smaller items)"));

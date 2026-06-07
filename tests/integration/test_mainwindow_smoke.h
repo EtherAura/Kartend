@@ -15,6 +15,7 @@ class TestMainWindowSmoke : public QObject {
 private slots:
   void testFixtureBuildsWithoutTouchingRealConfig();
   void testTopLevelManagersAreWired();
+  void testGridWidthAndZoomShortcutsAreDisambiguated();
 };
 
 #endif // KARTEND_TESTS_TEST_MAINWINDOW_SMOKE_H

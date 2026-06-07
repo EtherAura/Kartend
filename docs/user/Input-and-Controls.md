@@ -35,8 +35,8 @@ combinations can be reassigned.
 | `Ctrl+2` | Switch to List view |
 | `Ctrl+3` | Switch to Cover Flow view |
 | `Ctrl+4` | Switch to Horizontal view |
-| `Ctrl++` | Increase grid columns (`gridWidth`) |
-| `Ctrl+-` | Decrease grid columns |
+| `Ctrl+Shift++` | Increase grid columns (`gridWidth`) |
+| `Ctrl+Shift+-` | Decrease grid columns |
 | `F8` | Toggle toolbar (persistent, saved as `showToolbar`) |
 | `F9` | Toggle sidebar / details pane (per-collection `sidebarVisible`) |
 | `F10` | Toggle menu bar (persistent, saved as `showMenuBar`) |
@@ -327,7 +327,7 @@ Search .............. /
 Item details ........ I
 Random item ......... Ctrl+Shift+R
 View modes .......... Ctrl+1..4
-Grid columns ........ Ctrl++ / Ctrl+-
+Grid columns ........ Ctrl+Shift++ / Ctrl+Shift+-
 Toolbar ............. F8
 Sidebar ............. F9
 Menu bar ............ F10
