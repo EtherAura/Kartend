@@ -38,22 +38,44 @@ void TestKartPreflight::classify_emptyPath() {
 }
 
 void TestKartPreflight::classify_missingAbsolutePath() {
-  QCOMPARE(KartPreflight::classifyLauncherPath("/zzz/__definitely_not_here__/vlc"),
-           LauncherCheck::Missing);
+  // A drive-rooted path is absolute on Windows; a "/"-leading one is NOT (Qt
+  // treats it as relative without a drive spec), so it would slip into the
+  // PATH-resolution branch instead of exercising the absolute→Missing path we
+  // mean to cover here. Pick a platform-absolute, guaranteed-missing target.
+#ifdef Q_OS_WIN
+  const QString missing = QStringLiteral("C:/zzz/__definitely_not_here__/vlc.exe");
+#else
+  const QString missing = QStringLiteral("/zzz/__definitely_not_here__/vlc");
+#endif
+  QVERIFY(QFileInfo(missing).isAbsolute()); // premise: really absolute on this OS
+  QCOMPARE(KartPreflight::classifyLauncherPath(missing), LauncherCheck::Missing);
 }
 
 void TestKartPreflight::classify_executableAbsolutePath() {
-  // /bin/sh is reliably present on every POSIX. Skip otherwise.
-  const QString shell = "/bin/sh";
-  if (!QFileInfo(shell).exists()) QSKIP("/bin/sh not present in test env");
+  // A reliably-present, executable, absolute binary per platform. cmd.exe is
+  // always under System32 on Windows; /bin/sh on every POSIX. Skip if absent
+  // rather than assert against a missing host tool.
+#ifdef Q_OS_WIN
+  const QString shell = QStringLiteral("C:/Windows/System32/cmd.exe");
+#else
+  const QString shell = QStringLiteral("/bin/sh");
+#endif
+  if (!QFileInfo(shell).exists()) QSKIP("platform reference executable not present in test env");
   QCOMPARE(KartPreflight::classifyLauncherPath(shell), LauncherCheck::Ok);
 }
 
 void TestKartPreflight::classify_relativePath_pathResolved() {
-  // "sh" is almost certainly on PATH; if it isn't we can't really test
-  // PATH-resolution and just skip.
-  if (QStandardPaths::findExecutable("sh").isEmpty()) QSKIP("sh not found via PATH in test env");
-  QCOMPARE(KartPreflight::classifyLauncherPath("sh"), LauncherCheck::Ok);
+  // A bare command name that PATH-resolution (QStandardPaths::findExecutable)
+  // will find: "cmd" on Windows (via PATHEXT), "sh" on POSIX. If it isn't on
+  // PATH we can't exercise PATH-resolution and just skip.
+#ifdef Q_OS_WIN
+  const QString name = QStringLiteral("cmd");
+#else
+  const QString name = QStringLiteral("sh");
+#endif
+  if (QStandardPaths::findExecutable(name).isEmpty())
+    QSKIP("reference command not found via PATH in test env");
+  QCOMPARE(KartPreflight::classifyLauncherPath(name), LauncherCheck::Ok);
 }
 
 namespace {
@@ -128,10 +150,22 @@ CollectionConfig configWithLauncher(const QString &launcherPath) {
 } // namespace
 
 void TestKartPreflight::suspicious_pathsInsideAllowedRoots_notFlagged() {
+  // The allowlist is {home, /usr/bin, /usr/local/bin, /opt}. The home root is
+  // the only one that resolves the same on both platforms: on Windows a
+  // "/usr/bin/..." string has no drive spec, so QFileInfo::absoluteFilePath
+  // prefixes the current drive ("C:/.../usr/bin/...") and it no longer matches
+  // the literal "/usr/bin" root — it would be wrongly flagged. So derive the
+  // cross-platform "inside" fixtures from home (always absolute, always its own
+  // allowed root) and only check the POSIX-absolute roots on POSIX.
   const QString home = QDir::homePath();
-  const QStringList allowed = {
-      QStringLiteral("/usr/bin/vlc"), QStringLiteral("/usr/local/bin/retroarch"),
-      QStringLiteral("/opt/app/run"), home + QStringLiteral("/games/launch.sh")};
+  QStringList allowed = {
+      QDir::cleanPath(home + QStringLiteral("/games/launch.sh")),
+      QDir::cleanPath(home + QStringLiteral("/.local/bin/run")),
+  };
+#ifndef Q_OS_WIN
+  allowed << QStringLiteral("/usr/bin/vlc") << QStringLiteral("/usr/local/bin/retroarch")
+          << QStringLiteral("/opt/app/run");
+#endif
   for (const QString &p : allowed) {
     QVERIFY2(
         kart::collectSuspiciousKartPaths(configWithLauncher(p), {}).isEmpty(),
@@ -155,8 +189,16 @@ void TestKartPreflight::suspicious_pathsOutsideAllowedRoots_flagged() {
 void TestKartPreflight::suspicious_dotDotTraversalEscapingRoot_flagged() {
   // Security regression guard: a manifest path that prefixes an allowed root
   // then climbs out with .. must still be flagged — otherwise a malicious .kart
-  // could auto-run /etc/... by writing "/usr/bin/../../../etc/evil".
-  const QString escape = QStringLiteral("/usr/bin/../../../etc/evil");
+  // could auto-run a sibling of the allowed tree (e.g. /etc/...) by writing
+  // "<allowed-root>/../../../etc/evil". We escape the home root specifically
+  // because it's the one allowed root that exists+absolutizes identically on
+  // both Linux and Windows; the production isPathAllowed absolutizes (collapsing
+  // "..") before the prefix compare, so the escaped path must NOT match home.
+  const QString home = QDir::homePath();
+  const QString escape = home + QStringLiteral("/../../../../etc/evil");
+  // Premise: after .. collapse this really is outside home (otherwise the test
+  // would be vacuous).
+  QVERIFY(!QFileInfo(escape).absoluteFilePath().startsWith(home + QLatin1Char('/')));
   QVERIFY2(!kart::collectSuspiciousKartPaths(configWithLauncher(escape), {}).isEmpty(),
            "a .. traversal escaping an allowed root must be flagged as suspicious");
 }
@@ -184,7 +226,11 @@ void TestKartPreflight::suspicious_additionalLaunchersAndEmptyPathsHandled() {
   LauncherConfig alt;
   alt.launcherPath = QStringLiteral("/etc/evil");
   cfg.launcher.additionalLaunchers.append(alt);
-  cfg.placeholderArtwork = QStringLiteral("/opt/ok/placeholder.png"); // allowed -> not flagged
+  // An allowed placeholder must NOT add to the flagged count. Use a home-rooted
+  // path: "/opt/..." only counts as inside an allowed root on POSIX (on Windows
+  // it absolutizes to C:/opt/... and would be flagged too, inflating out.size).
+  cfg.placeholderArtwork =
+      QDir::cleanPath(QDir::homePath() + QStringLiteral("/art/placeholder.png"));
   const auto out = kart::collectSuspiciousKartPaths(cfg, {});
   QCOMPARE(out.size(), 1);
   QCOMPARE(out.first().first, QStringLiteral("additionalLaunchers[0].launcherPath"));
