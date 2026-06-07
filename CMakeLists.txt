@@ -505,16 +505,19 @@ endif()
 
 # Hardening (non-Debug) + release perf options applied to every per-area
 # OBJECT lib so the generated .o files participate in LTO and pick up the
-# same security flags as the main exe link.
+# same security flags as the main exe link. RELEASE_PERF (LTO + QT_NO_DEBUG +
+# --gc-sections/--as-needed; no -march, so portable) also applies to
+# RelWithDebInfo so the --relwithdebinfo "for profiling" build measures a binary
+# representative of the shipped Release rather than an un-LTO'd, asserts-on one.
 foreach(_area ${KARTEND_AREA_LIBS})
   target_compile_options(${_area} PRIVATE
     $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
-    $<$<CONFIG:Release>:${RELEASE_PERF_COMPILE_OPTS}>
+    $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:${RELEASE_PERF_COMPILE_OPTS}>
   )
 endforeach()
 target_link_options(kartend PRIVATE
   $<$<NOT:$<CONFIG:Debug>>:${HARDENING_LINK_OPTS}>
-  $<$<CONFIG:Release>:${RELEASE_PERF_LINK_OPTS}>
+  $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:${RELEASE_PERF_LINK_OPTS}>
 )
 
 # LTO objects in the per-area OBJECT libs are unreadable to a non-LTO link
