@@ -309,8 +309,8 @@ ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartP
                         makeFixedChoiceResolver(headlessChoice));
 }
 
-ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex,
-                                                       const QString &outPath) {
+ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex, const QString &outPath,
+                                                       KartWriter::Writer *writer) {
   if (!m_setup.getCollections) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
                                            "KartManager not wired to collections list",
@@ -383,8 +383,11 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex,
     }
   }
 
-  KartWriter::Writer writer;
-  auto wr = writer.writeKart(outPath, params);
+  // Use the caller-supplied writer (runExport's m_activeWriter, whose progress
+  // signal + cancel flag are wired up) when provided; otherwise a local one.
+  KartWriter::Writer localWriter;
+  KartWriter::Writer &activeWriter = (writer != nullptr) ? *writer : localWriter;
+  auto wr = activeWriter.writeKart(outPath, params);
   if (wr.isError()) return wr.error();
   return {};
 }
@@ -530,10 +533,14 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
             emit collectionImported(finalRes.value());
           });
 
-  watcher->setFuture(QtConcurrent::run([kartPath, destDir]() {
-    KartReader::Extractor extractor;
-    return extractor.extractTo(kartPath, destDir);
-  }));
+  // Run the *connected* reader (m_activeReader) on the worker, not a throwaway
+  // local Extractor — otherwise its progress/entryExtracted signals (wired
+  // above) never fire and cancelActiveKartOperation()'s cancel flag can't reach
+  // the Extractor doing the work. Safe: m_activeReader.reset() runs in the
+  // finished slot, after the future resolves.
+  auto *reader = m_activeReader.get();
+  watcher->setFuture(QtConcurrent::run(
+      [reader, kartPath, destDir]() { return reader->extractTo(kartPath, destDir); }));
 }
 
 void KartManager::runExport(int collectionIndex, const QString &outPath) {
@@ -565,8 +572,13 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
             }
           });
 
-  watcher->setFuture(QtConcurrent::run(
-      [this, collectionIndex, outPath]() { return exportCollection(collectionIndex, outPath); }));
+  // Inject the *connected* writer (m_activeWriter) so its progress signal and
+  // cancel flag reach the writer actually serializing the collection. Safe:
+  // m_activeWriter.reset() runs in the finished slot, after the future resolves.
+  auto *writer = m_activeWriter.get();
+  watcher->setFuture(QtConcurrent::run([this, collectionIndex, outPath, writer]() {
+    return exportCollection(collectionIndex, outPath, writer);
+  }));
 }
 
 } // namespace kart

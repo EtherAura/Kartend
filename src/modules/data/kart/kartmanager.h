@@ -146,8 +146,13 @@ public:
                                                                bool registerCollection,
                                                                MergeChoice headlessChoice);
 
+  /// Serialize a collection to a .kart. When `writer` is non-null it runs on
+  /// that (signal-connected, cancellable) writer — runExport() injects
+  /// m_activeWriter so progress/cancel reach the real work. Callers that don't
+  /// need progress (tests, headless) leave it null and a local writer is used.
   [[nodiscard]] ErrorUtils::Result<void> exportCollection(int collectionIndex,
-                                                          const QString &outPath);
+                                                          const QString &outPath,
+                                                          KartWriter::Writer *writer = nullptr);
 
   /// Cancel the in-flight import/export, if any. Owner-facing slot: the
   /// progress dialog's cancelRequested signal is connected here so the data
