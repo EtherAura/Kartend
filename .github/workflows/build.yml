@@ -461,7 +461,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck jq
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
 
       - name: Pin clang-format to v19
         # Ubuntu 24.04's default `clang-format` is v18, which formats slightly

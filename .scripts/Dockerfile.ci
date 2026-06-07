@@ -31,7 +31,7 @@ RUN apt-get update \
       cmake ninja-build lld ccache git python3 pulseaudio \
       qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
       qtkeychain-qt6-dev \
-      clang-tidy clang-format-19 cppcheck jq \
+      clang-tidy clang-format-19 cppcheck iwyu jq \
  && ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format \
  && rm -rf /var/lib/apt/lists/*
 
