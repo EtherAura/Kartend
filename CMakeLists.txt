@@ -288,7 +288,12 @@ if (WIN32)
   )
 endif()
 
-set(KARTEND_TRANSLATION_INSTALL_SUBDIR "${APP_NAME}/translations")
+# Literal "kartend" — NOT ${APP_NAME}, which is only a compile-define string
+# (APP_NAME="kartend" below), never a CMake variable, so ${APP_NAME} expanded to
+# empty and collapsed this to "/translations". Installed builds then dropped .qm
+# files under <datarootdir>//translations and QStandardPaths::locateAll() with a
+# leading-slash subpath could never find them (Kartend-v94u7).
+set(KARTEND_TRANSLATION_INSTALL_SUBDIR "kartend/translations")
 set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
 
 # Re-extract source strings via:
