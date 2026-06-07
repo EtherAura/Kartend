@@ -27,7 +27,7 @@
 # readability-*:
 #   -readability-implicit-bool-conversion     — project rule: implicit-null is preferred
 #   -readability-identifier-length            — single-char loop vars / template params are fine
-#   -readability-magic-numbers                — UIConstants/* covers high-traffic numbers; the rest is noise
+#   -readability-magic-numbers                — src/utils/uiconstants/* covers high-traffic numbers; the rest is noise
 #   -readability-braces-around-statements     — short single-line if/while are idiomatic Qt
 #   -readability-else-after-return            — stylistic
 #   -readability-named-parameter              — overrides with unused params are fine
