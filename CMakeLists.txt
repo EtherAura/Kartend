@@ -121,6 +121,9 @@ if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
     # Upstream switched off the v-prefix between v0.14.0 and 0.15.0.
     # 0.15.0 (ad7344c) is recent enough to have current Qt6 fixes and
     # old enough to be well-shaken-down by downstreams.
+    # Manual-bump pin: FetchContent tags are outside Dependabot's ecosystems
+    # (it watches Actions + pip), and this touches credential storage — review
+    # for a newer tag during the quarterly dependency sweep.
     GIT_TAG 0.15.0
     GIT_SHALLOW TRUE
   )

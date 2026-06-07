@@ -9,3 +9,13 @@ updates:
     labels:
       - "ci"
       - "dependencies"
+  # Python tooling for QR-code / image generation (.scripts/requirements.txt).
+  # Pinned with == so Dependabot can track Pillow's steady CVE stream.
+  - package-ecosystem: "pip"
+    directory: "/.scripts"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
