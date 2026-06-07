@@ -93,6 +93,7 @@ private slots:
   void testExtractArchive_rejectsUnsafeArchivePath();
   void testExtractArchive_extractsTargetFile();
   void testExtractArchive_missingTargetExtensionCleansUpExtractionDir();
+  void testExtractArchive_sameBaseNameDoesNotServeWrongContent();
 
   // launchItem extracted-dir cleanup when the launcher fails to start (Kartend-dyu1k).
   void testLaunchItem_failedStartRemovesExtractedDir();
@@ -173,6 +174,7 @@ void TestLaunchManager::cleanupTestCase() {
   // redirect TempLocation); remove anything the extraction slots left behind.
   QDir(extractionDirFor("kartend_extract_ok")).removeRecursively();
   QDir(extractionDirFor("kartend_extract_miss")).removeRecursively();
+  QDir(extractionDirFor("kartend_collide")).removeRecursively();
   qDeleteAll(m_fixtureDirs);
   m_fixtureDirs.clear();
 }
@@ -1112,6 +1114,50 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
   QVERIFY2(!QDir(extractionDir).exists(),
            "the per-archive extraction dir must be removed when no target file is found");
+}
+
+void TestLaunchManager::testExtractArchive_sameBaseNameDoesNotServeWrongContent() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+#endif
+  // Regression for Kartend-nrykk: two distinct archives sharing a base name
+  // (both "kartend_collide.zip", in different temp dirs) map to the same
+  // per-archive cache dir. A cache hit must NOT serve the first archive's
+  // contents for the second — the source marker forces a re-extract.
+  if (!extractorAvailable()) {
+    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QString base = QStringLiteral("kartend_collide");
+  QDir(extractionDirFor(base)).removeRecursively(); // no stale cache from a prior run
+  const QList<QPair<QString, QByteArray>> entriesA = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("AAA")}};
+  const QList<QPair<QString, QByteArray>> entriesB = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("BBB")}};
+  const QString zipA = makeZipFixture(base, entriesA);
+  const QString zipB = makeZipFixture(base, entriesB);
+  if (zipA.isEmpty() || zipB.isEmpty()) {
+    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  QVERIFY2(zipA != zipB, "fixtures must be distinct archive files that share a base name");
+
+  const auto readAll = [](const QString &path) -> QByteArray {
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+  };
+
+  auto rA = LaunchManager::extractArchiveToTemp(zipA, ".iso");
+  QVERIFY2(rA.isOk(), qPrintable(rA.isError() ? rA.error().message : QString()));
+  QCOMPARE(readAll(rA.value()), QByteArrayLiteral("AAA"));
+
+  // B shares the cache dir; it must re-extract its own content, not serve AAA.
+  auto rB = LaunchManager::extractArchiveToTemp(zipB, ".iso");
+  QVERIFY2(rB.isOk(), qPrintable(rB.isError() ? rB.error().message : QString()));
+  QCOMPARE(readAll(rB.value()), QByteArrayLiteral("BBB"));
+
+  // And A again must re-extract AAA, not keep serving B's BBB.
+  auto rA2 = LaunchManager::extractArchiveToTemp(zipA, ".iso");
+  QVERIFY2(rA2.isOk(), qPrintable(rA2.isError() ? rA2.error().message : QString()));
+  QCOMPARE(readAll(rA2.value()), QByteArrayLiteral("AAA"));
 }
 
 void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {

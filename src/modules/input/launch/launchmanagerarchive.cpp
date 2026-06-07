@@ -4,8 +4,10 @@
 #include "pathutils.h"
 #include "uiconstants/launch.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QScopeGuard>
@@ -61,21 +63,39 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails(extractDir);
   }
 
-  // Create a unique subdirectory for this archive based on its name
+  // Per-archive extraction dir, keyed on completeBaseName(). Two distinct
+  // archives that share a base name (RomsA/game.zip vs RomsB/game.zip, or
+  // game.zip vs game.7z) map to the SAME dir, so a naive cache hit would launch
+  // the wrong extracted media (Kartend-nrykk). Guard the hit with a source
+  // marker: only reuse the cache when it records THIS exact archive (absolute
+  // path + size + mtime); otherwise treat it as a collision/stale and
+  // re-extract. Also catches in-place replacement of the same path.
   QFileInfo archiveInfo(archivePath);
   QString archiveBaseName = archiveInfo.completeBaseName();
   QString uniqueDir = extractDir + "/" + archiveBaseName;
 
+  const QString sourceId = archiveInfo.absoluteFilePath() + QStringLiteral("|") +
+                           QString::number(archiveInfo.size()) + QStringLiteral("|") +
+                           QString::number(archiveInfo.lastModified().toMSecsSinceEpoch());
+  const QString markerPath = uniqueDir + QStringLiteral("/.kartend-source");
+
   QDir targetDir(uniqueDir);
 
-  // If directory exists and has files, check if we already extracted
+  // Reuse the cache only when the marker proves it came from this same archive.
   if (targetDir.exists()) {
+    QString cachedSourceId;
+    QFile marker(markerPath);
+    if (marker.open(QIODevice::ReadOnly)) {
+      cachedSourceId = QString::fromUtf8(marker.readAll());
+      marker.close();
+    }
     QString existingFile = findFileWithExtension(uniqueDir, targetExtension);
-    if (!existingFile.isEmpty()) {
+    if (!existingFile.isEmpty() && cachedSourceId == sourceId) {
       qCDebug(lcLaunchManager) << "Using cached extraction:" << existingFile;
       return existingFile;
     }
-    // Clear stale extraction
+    // Stale, or a different archive sharing this base name — wipe and
+    // re-extract so we never serve another archive's contents.
     targetDir.removeRecursively();
   }
 
@@ -151,6 +171,16 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
                                "Target file not found in extracted archive",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
+  }
+
+  // Record which archive this extraction came from so a later call for a
+  // different archive sharing the base name re-extracts instead of serving
+  // these files (Kartend-nrykk). Best-effort: a missing marker next time just
+  // forces a safe re-extract.
+  QFile marker(markerPath);
+  if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    marker.write(sourceId.toUtf8());
+    marker.close();
   }
 
   cleanupTargetDir.dismiss();
