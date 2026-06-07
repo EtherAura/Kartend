@@ -302,8 +302,18 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
     // Don't fall back to direct lookup - let prewarm handle it
-  } else {
+  } else if (!ArtworkUtils::DirectoryCache::instance().isDirectoryQueued(artworkDir)) {
+    // No prewarm in flight for this dir — do the direct lookup so the tile
+    // paints artwork on the first frame (the common, non-scroll-burst case).
     artworkPath = ArtworkUtils::findArtworkForFile(QFileInfo(fullPath).fileName(), artworkDir);
+  } else {
+    // A background prewarm is queued for this dir (fast scroll over a cold
+    // cache): skip the ~225-stat synchronous findArtworkForFile on the GUI
+    // thread. Serve a cached hit if the prewarm already populated this entry;
+    // misses are filled by the post-prewarm reconfigureArtworkForActiveWidgets()
+    // (forceDirectLookup=true), mirroring the list-mode path (Kartend-bpkkm).
+    artworkPath =
+        ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
   }
 
   qint64 afterArtworkFind =
