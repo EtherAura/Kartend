@@ -217,6 +217,16 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
   return newer.next() && newer.value(0).toInt() > 0;
 }
 
+QStringList ScanService::buildNameFilters(const CollectionConfig &collection) {
+  QStringList nameFilters;
+  if (!collection.extensions.isEmpty()) {
+    for (const QString &ext : collection.extensions) {
+      nameFilters << "*." + ext;
+    }
+  }
+  return nameFilters;
+}
+
 QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
                                             QHash<QString, QDateTime> &timestamps,
                                             QString *dirSignatureOut) {
@@ -231,74 +241,83 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
     *dirSignatureOut = QString();
   }
 
-  QStringList nameFilters;
-  if (!collection.extensions.isEmpty()) {
-    for (const QString &ext : collection.extensions) {
-      nameFilters << "*." + ext;
-    }
-  }
+  const QStringList nameFilters = buildNameFilters(collection);
 
   // For non-recursive scans or small directories, use sequential scanning
   // Parallel scanning has overhead that only pays off with multiple directories
   if (!collection.folderBrowsing.includeContentSubfolders) {
-    if (dirSignatureOut) {
-      *dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
-    }
-
-    // Throttle scan progress emissions to avoid spamming the UI event loop.
-    ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
-                                  [this](int p, int t) { emit scanItemsProgress(p, t); });
-    auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-      throttle.report(processed, total, force);
-    };
-
-    // Sequential scan for flat directories (original behavior). Per-loop
-    // override of the file-static PROGRESS_REPORT_INTERVAL = 50000 — flat
-    // dirs hit each report ~100× more often, so the tighter 500-item cadence
-    // keeps the UI feedback live without flooding the event loop.
-    constexpr int FLAT_PROGRESS_REPORT_INTERVAL = 500;
-    int itemsScanned = 0;
-
-    // QDir::System is required so symlinks whose targets are temporarily
-    // unreachable (e.g. external/btrfs mount not ready at app start) are still
-    // listed — without it Qt classifies them as Unknown and drops them, which
-    // then causes deleteMissingItemsByUuidUsingScannedItems to prune their rows.
-    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
-                          QDirIterator::NoIteratorFlags);
-    while (iterator.hasNext()) {
-      if (isScanCancelled()) {
-        filePaths.clear();
-        timestamps.clear();
-        return filePaths;
-      }
-
-      iterator.next();
-      const QString relativePath = iterator.fileName();
-      const QFileInfo info = iterator.fileInfo();
-      filePaths.append(relativePath);
-      // QFileInfo::lastModified follows symlinks; broken/unreachable targets
-      // return invalid, which round-trips through QDateTime::toString as a
-      // null QString and trips the NOT NULL items.last_modified constraint.
-      // Fall back to epoch so the row persists; the next scan against a
-      // reachable target overwrites this via the upsert clause.
-      QDateTime mtime = info.lastModified();
-      if (!mtime.isValid()) {
-        mtime = QDateTime::fromSecsSinceEpoch(0);
-      }
-      timestamps[relativePath] = mtime;
-
-      ++itemsScanned;
-      if (itemsScanned % FLAT_PROGRESS_REPORT_INTERVAL == 0) {
-        maybeEmitScanProgress(itemsScanned, -1);
-      }
-    }
-
-    if (itemsScanned > 0) {
-      maybeEmitScanProgress(itemsScanned, -1, true);
-    }
+    scanSequential(dir, nameFilters, timestamps, filePaths, dirSignatureOut);
     return filePaths;
   }
 
+  scanParallel(dir, nameFilters, collection, timestamps, filePaths, dirSignatureOut);
+  return filePaths;
+}
+
+void ScanService::scanSequential(const QDir &dir, const QStringList &nameFilters,
+                                 QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
+                                 QString *dirSignatureOut) {
+  if (dirSignatureOut) {
+    *dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
+  }
+
+  // Throttle scan progress emissions to avoid spamming the UI event loop.
+  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                [this](int p, int t) { emit scanItemsProgress(p, t); });
+  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+    throttle.report(processed, total, force);
+  };
+
+  // Sequential scan for flat directories (original behavior). Per-loop
+  // override of the file-static PROGRESS_REPORT_INTERVAL = 50000 — flat
+  // dirs hit each report ~100× more often, so the tighter 500-item cadence
+  // keeps the UI feedback live without flooding the event loop.
+  constexpr int FLAT_PROGRESS_REPORT_INTERVAL = 500;
+  int itemsScanned = 0;
+
+  // QDir::System is required so symlinks whose targets are temporarily
+  // unreachable (e.g. external/btrfs mount not ready at app start) are still
+  // listed — without it Qt classifies them as Unknown and drops them, which
+  // then causes deleteMissingItemsByUuidUsingScannedItems to prune their rows.
+  QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
+                        QDirIterator::NoIteratorFlags);
+  while (iterator.hasNext()) {
+    if (isScanCancelled()) {
+      filePaths.clear();
+      timestamps.clear();
+      return;
+    }
+
+    iterator.next();
+    const QString relativePath = iterator.fileName();
+    const QFileInfo info = iterator.fileInfo();
+    filePaths.append(relativePath);
+    // QFileInfo::lastModified follows symlinks; broken/unreachable targets
+    // return invalid, which round-trips through QDateTime::toString as a
+    // null QString and trips the NOT NULL items.last_modified constraint.
+    // Fall back to epoch so the row persists; the next scan against a
+    // reachable target overwrites this via the upsert clause.
+    QDateTime mtime = info.lastModified();
+    if (!mtime.isValid()) {
+      mtime = QDateTime::fromSecsSinceEpoch(0);
+    }
+    timestamps[relativePath] = mtime;
+
+    ++itemsScanned;
+    if (itemsScanned % FLAT_PROGRESS_REPORT_INTERVAL == 0) {
+      maybeEmitScanProgress(itemsScanned, -1);
+    }
+  }
+
+  if (itemsScanned > 0) {
+    maybeEmitScanProgress(itemsScanned, -1, true);
+  }
+}
+
+void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
+                               const CollectionConfig &collection,
+                               QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
+                               QString *dirSignatureOut) {
   // Parallel scanning for recursive directory structures
   // Scan directories in parallel with bounded in-flight tasks and consume
   // results as they complete to avoid head-of-line blocking.
@@ -309,7 +328,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   const QDir rootDir(rootPath);
   const auto cancelToken = m_scanWork.token();
   if (!cancelToken) {
-    return filePaths;
+    return;
   }
   const std::atomic<bool> &cancelFlag = *cancelToken;
 
@@ -456,7 +475,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   if (isScanCancelled()) {
     filePaths.clear();
     timestamps.clear();
-    return filePaths;
+    return;
   }
 
   if (dirSignatureOut) {
@@ -467,8 +486,18 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   if (totalItemsScanned > 0) {
     maybeEmitScanProgress(totalItemsScanned, -1, true);
   }
+}
 
-  return filePaths;
+bool ScanService::stageScannedFile(QStringList &batchPaths,
+                                   QHash<QString, QDateTime> &batchTimestamps,
+                                   const QString &relativePath, const QDateTime &mtime,
+                                   const std::function<bool()> &flushBatch) {
+  batchPaths.append(relativePath);
+  batchTimestamps[relativePath] = mtime;
+  if (batchPaths.size() >= BATCH_SIZE) {
+    return flushBatch();
+  }
+  return true;
 }
 
 // ============================================================================
@@ -572,24 +601,20 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
       iterator.next();
       const QString relativePath = iterator.fileName();
       const QFileInfo info = iterator.fileInfo();
-      batchPaths.append(relativePath);
       // See scanMediaDirectory above for why broken-symlink mtimes need an
       // epoch fallback (NOT NULL constraint).
       QDateTime mtime = info.lastModified();
       if (!mtime.isValid()) {
         mtime = QDateTime::fromSecsSinceEpoch(0);
       }
-      batchTimestamps[relativePath] = mtime;
 
       ++scanned;
       if (scanned % SCAN_PROGRESS_INTERVAL == 0) {
         maybeEmitScanProgress(scanned, -1);
       }
 
-      if (batchPaths.size() >= BATCH_SIZE) {
-        if (!flushBatch()) {
-          break;
-        }
+      if (!stageScannedFile(batchPaths, batchTimestamps, relativePath, mtime, flushBatch)) {
+        break;
       }
     }
 
@@ -698,12 +723,9 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
 
       if (!result.relativePaths.isEmpty()) {
         for (const QString &p : result.relativePaths) {
-          batchPaths.append(p);
-          batchTimestamps.insert(p, result.timestamps.value(p));
-          if (batchPaths.size() >= BATCH_SIZE) {
-            if (!flushBatch()) {
-              break;
-            }
+          if (!stageScannedFile(batchPaths, batchTimestamps, p, result.timestamps.value(p),
+                                flushBatch)) {
+            break;
           }
         }
 

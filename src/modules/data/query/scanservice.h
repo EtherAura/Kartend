@@ -5,7 +5,9 @@
 #include "errorutils.h"
 #include "scanneditemstable.h"
 #include "scanworkcontroller.h"
+#include <functional>
 #include <QDateTime>
+#include <QDir>
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -111,6 +113,32 @@ public:
                                const QList<CollectionConfig> &allCollections);
 
 private:
+  // Builds the QDir name-filter list ("*.ext") from a collection's extension
+  // set. Empty extensions yield an empty filter list (i.e. match everything),
+  // matching the legacy inline assembly in the scan/stage paths.
+  [[nodiscard]] static QStringList buildNameFilters(const CollectionConfig &collection);
+
+  // scanMediaDirectory's two arms, split out verbatim. scanSequential walks a
+  // flat directory; scanParallel dispatches the recursive directory walk across
+  // the worker pool. Both append discovered relative paths to filePaths and
+  // their mtimes to timestamps, seed *dirSignatureOut, and clear both outputs on
+  // cancellation (caller returns the resulting filePaths unchanged).
+  void scanSequential(const QDir &dir, const QStringList &nameFilters,
+                      QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
+                      QString *dirSignatureOut);
+  void scanParallel(const QDir &dir, const QStringList &nameFilters,
+                    const CollectionConfig &collection, QHash<QString, QDateTime> &timestamps,
+                    QStringList &filePaths, QString *dirSignatureOut);
+
+  // Per-file staging primitive shared by stageFilesystemScan's flat and
+  // recursive arms: appends (relativePath, mtime) to the pending batch and
+  // flushes via flushBatch() once BATCH_SIZE is reached. Returns false only when
+  // flushBatch() fails (so the caller breaks out of its loop).
+  [[nodiscard]] bool stageScannedFile(QStringList &batchPaths,
+                                      QHash<QString, QDateTime> &batchTimestamps,
+                                      const QString &relativePath, const QDateTime &mtime,
+                                      const std::function<bool()> &flushBatch);
+
   [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
                                                 const CollectionConfig &collection,
                                                 int *outItemsScanned = nullptr,

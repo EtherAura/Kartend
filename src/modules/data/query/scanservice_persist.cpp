@@ -340,12 +340,7 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
   } scannedItemsCleanup{this, true};
 
   // Build name filters from extensions.
-  QStringList nameFilters;
-  if (!collection.extensions.isEmpty()) {
-    for (const QString &ext : collection.extensions) {
-      nameFilters << "*." + ext;
-    }
-  }
+  const QStringList nameFilters = buildNameFilters(collection);
 
   // Phase 1: Walk filesystem and stage into temp table.
   int itemsStaged = 0;
