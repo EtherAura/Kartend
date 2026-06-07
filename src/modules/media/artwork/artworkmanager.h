@@ -181,6 +181,23 @@ public:
   void stopSilentLoading() override;
   void processPersistentSilentLoad();
   void processContinuousSilentLoad();
+
+  // Silent-load gating math, exposed as pure statics for direct testing. No
+  // member state — the silent-load instance methods call these too (clock /
+  // idle-state inputs are passed in so callers read them once and the decision
+  // stays a pure function).
+  /// True when the previous batch hasn't had enough idle time since completing,
+  /// so the caller should bail this tick. A non-positive @p lastBatchCompletionTime
+  /// (no batch has completed yet) is never in cooldown.
+  [[nodiscard]] static bool silentLoadInCooldown(qint64 lastBatchCompletionTime, qint64 nowMs);
+  /// Per-tick batch size for the continuous burst loader: the full configured
+  /// size when the user is idle, else that size divided by the throttle divisor
+  /// (floored at 1) to leave foreground CPU headroom.
+  [[nodiscard]] static int continuousSilentBatchSize(bool userIdle, int baseBatchSize);
+  /// Per-tick batch size for the persistent background-drip loader: a larger
+  /// batch when the user is idle, a smaller one while they're active.
+  [[nodiscard]] static int persistentSilentBatchSize(bool userIdle);
+
   void updateUserActivity() override;
   [[nodiscard]] bool isUserIdle() const;
   [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }

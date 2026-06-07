@@ -140,19 +140,29 @@ void ArtworkManager::stopSilentLoading() {
 }
 
 namespace {
+constexpr int kMaxConcurrentSilentBatches = 2;
+} // namespace
+
 // Cooldown gate shared by both silent-loading entry points: returns true when
 // the caller should bail this tick because the previous batch hasn't had
-// enough idle time since completing.
-auto inCooldown(qint64 lastBatchCompletionTime) -> bool {
+// enough idle time since completing. Exposed as a pure static (clock injected)
+// so the gating decision is directly testable.
+auto ArtworkManager::silentLoadInCooldown(qint64 lastBatchCompletionTime, qint64 nowMs) -> bool {
   if (lastBatchCompletionTime <= 0) {
     return false;
   }
-  const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  return (now - lastBatchCompletionTime) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS;
+  return (nowMs - lastBatchCompletionTime) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS;
 }
 
-constexpr int kMaxConcurrentSilentBatches = 2;
-} // namespace
+auto ArtworkManager::continuousSilentBatchSize(bool userIdle, int baseBatchSize) -> int {
+  return userIdle ? baseBatchSize
+                  : qMax(1, baseBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
+}
+
+auto ArtworkManager::persistentSilentBatchSize(bool userIdle) -> int {
+  return userIdle ? UIConstants::Artwork::PERSISTENT_SILENT_BATCH_IDLE
+                  : UIConstants::Artwork::PERSISTENT_SILENT_BATCH_ACTIVE;
+}
 
 void ArtworkManager::onSilentPrecacheBatchComplete(const QStringList &requestedPaths,
                                                    const QList<ArtworkPrecacheResult> &results) {
@@ -190,7 +200,7 @@ void ArtworkManager::processPersistentSilentLoad() {
     return;
   }
 
-  if (inCooldown(m_lastBatchCompletionTime.load())) {
+  if (silentLoadInCooldown(m_lastBatchCompletionTime.load(), QDateTime::currentMSecsSinceEpoch())) {
     return;
   }
   // Throttle: skip this tick if too many batches are already in-flight to
@@ -205,8 +215,7 @@ void ArtworkManager::processPersistentSilentLoad() {
     return;
   }
 
-  const int batchSize = isUserIdle() ? UIConstants::Artwork::PERSISTENT_SILENT_BATCH_IDLE
-                                     : UIConstants::Artwork::PERSISTENT_SILENT_BATCH_ACTIVE;
+  const int batchSize = persistentSilentBatchSize(isUserIdle());
   const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
   QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
   QPointer<ArtworkManager> guard(this);
@@ -237,7 +246,7 @@ void ArtworkManager::processContinuousSilentLoad() {
     return;
   }
 
-  if (inCooldown(m_lastBatchCompletionTime.load())) {
+  if (silentLoadInCooldown(m_lastBatchCompletionTime.load(), QDateTime::currentMSecsSinceEpoch())) {
     return;
   }
   if (m_dispatcher->runningFutureCount() >= kMaxConcurrentSilentBatches) {
@@ -254,10 +263,7 @@ void ArtworkManager::processContinuousSilentLoad() {
     return;
   }
 
-  const int batchSize =
-      isUserIdle()
-          ? m_silentLoadBatchSize
-          : qMax(1, m_silentLoadBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
+  const int batchSize = continuousSilentBatchSize(isUserIdle(), m_silentLoadBatchSize);
   const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
 
   if (!m_continuousSilentLoad) {

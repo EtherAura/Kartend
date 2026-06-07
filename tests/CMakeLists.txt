@@ -399,6 +399,14 @@ add_executable(test_artworkpathcatalog
 target_link_libraries(test_artworkpathcatalog PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ArtworkPathCatalog COMMAND test_artworkpathcatalog)
 
+# Silent-load gating math: the cooldown gate + idle-aware batch-size pickers
+# extracted from artworksilentloading.cpp as pure statics for direct testing.
+add_executable(test_silentloadgating
+  modules/artwork/test_silentloadgating.cpp
+)
+target_link_libraries(test_silentloadgating PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME SilentLoadGating COMMAND test_silentloadgating)
+
 # StringUtils tests (header-only)
 add_executable(test_stringutils utils/text/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
