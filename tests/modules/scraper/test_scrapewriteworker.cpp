@@ -160,9 +160,14 @@ private:
     QVERIFY(thread.isRunning());
   }
 
-  /// Queue closeConnection on the worker thread, then quit + join it.
+  /// Run closeConnection ON the worker thread and BLOCK until it completes,
+  /// then quit + join. BlockingQueuedConnection (not Queued) is deliberate: a
+  /// queued close isn't guaranteed to run before quit() exits the event loop —
+  /// on Windows it didn't, leaving the connection name registered when a case
+  /// asserted it was gone. Blocking makes the removeDatabase deterministic and
+  /// keeps it on the connection's owning thread.
   static void stopWorkerThread(Scraper::ScrapeWriteWorker &worker, QThread &thread) {
-    QMetaObject::invokeMethod(&worker, "closeConnection", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(&worker, "closeConnection", Qt::BlockingQueuedConnection);
     thread.quit();
     QVERIFY(thread.wait(5000));
   }
@@ -323,6 +328,14 @@ void TestScrapeWriteWorker::failedWriteLeavesNoMetadataRow() {
 // thread. The property under test is unchanged — destruction alone, with no
 // queued closeConnection, must still remove the connection name.
 void TestScrapeWriteWorker::connectionRemovedOnWorkerDestruction() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Worker self-deletes on its own thread via QThread::finished -> "
+        "deleteLater; QThread::wait() orders that teardown before this thread "
+        "reads connectionNames(), but TSan can't see the happens-before through "
+        "libQt6Core's stripped frames and flags the deferred-delete free as a "
+        "race (the Qt-thread-lifecycle false-positive class documented in "
+        "tests/suppressions/tsan.txt Group B). Runs fully on every non-TSan build.");
+#endif
   const QString connName = QStringLiteral("test_writeworker_lifecycle");
   QVERIFY2(!QSqlDatabase::connectionNames().contains(connName),
            "connection name leaked from a previous run");
