@@ -37,6 +37,19 @@ import sys
 import tempfile
 from pathlib import Path
 
+# QTest output (and the GitHub `::group::` labels we build from test names)
+# can contain non-Latin-1 characters like `→` / `—`. On Windows, Python's
+# stdout/stderr default to the legacy code page (e.g. cp1252), which raises
+# UnicodeEncodeError on those characters — and since this script's whole job
+# is to surface diagnostics for a failing CI run, that crash would mask EVERY
+# Windows test failure. Force UTF-8 with replacement so a stray glyph can
+# never abort the dump. `reconfigure` exists on the standard TextIOWrapper
+# streams since Python 3.7; guard for redirected/replaced streams that lack it.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        _reconfigure(encoding="utf-8", errors="replace")
+
 
 def find_failed_tests(build_dir: Path) -> list[str]:
     """Return the list of test names that failed in the most recent ctest run.

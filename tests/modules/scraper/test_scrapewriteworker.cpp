@@ -308,15 +308,38 @@ void TestScrapeWriteWorker::failedWriteLeavesNoMetadataRow() {
 // and gone once it is destroyed, so a later worker reusing the name doesn't
 // collide with a leaked handle. ~ScrapeWriteWorker is the best-effort path
 // (no explicit closeConnection here) — destruction alone must clean up.
+//
+// Destruction MUST happen on the worker thread, not the main thread. The
+// worker opened m_db (a QSQLITE connection) on the worker thread, and "a
+// QSqlDatabase instance must only be accessed by the thread it was created
+// in" (Qt SQL docs). ~ScrapeWriteWorker's best-effort branch calls
+// m_db.close() + QSqlDatabase::removeDatabase() — destroying that connection
+// from the main thread after the worker thread has exited is undefined
+// behaviour. Linux tolerates it; Windows takes an access violation (the test
+// crashed there with no QTest output). So we reproduce production's exact
+// teardown (BatchScrapeRunner connects QThread::finished → worker
+// deleteLater): the worker self-deletes on its own thread as the event loop
+// drains, running the destructor's DB cleanup on the connection's owning
+// thread. The property under test is unchanged — destruction alone, with no
+// queued closeConnection, must still remove the connection name.
 void TestScrapeWriteWorker::connectionRemovedOnWorkerDestruction() {
   const QString connName = QStringLiteral("test_writeworker_lifecycle");
   QVERIFY2(!QSqlDatabase::connectionNames().contains(connName),
            "connection name leaked from a previous run");
 
   {
-    auto worker = std::make_unique<Scraper::ScrapeWriteWorker>(connName);
+    // Heap-allocated (not unique_ptr) so it can be destroyed ON the worker
+    // thread via deleteLater rather than on this (main) thread. Ownership is
+    // handed to the QThread::finished → deleteLater connection below.
+    auto *worker = new Scraper::ScrapeWriteWorker(connName);
     QThread thread;
     startWorkerThread(*worker, thread);
+    // Production's destruction path: the worker self-destructs on its own
+    // thread when the thread's event loop winds down, so ~ScrapeWriteWorker
+    // (and its m_db.close()/removeDatabase) run on the connection's owning
+    // thread. No explicit closeConnection is queued — the destructor's
+    // best-effort cleanup is exactly what we're exercising.
+    QObject::connect(&thread, &QThread::finished, worker, &QObject::deleteLater);
 
     Scraper::ScrapedItem scraped;
     scraped.title = QStringLiteral("Lifecycle");
@@ -329,11 +352,12 @@ void TestScrapeWriteWorker::connectionRemovedOnWorkerDestruction() {
     QVERIFY2(QSqlDatabase::connectionNames().contains(connName),
              "worker connection not registered after a successful write");
 
-    // Quit the thread WITHOUT queuing closeConnection — destruction must do
-    // the cleanup on its own (the ~ScrapeWriteWorker best-effort path).
+    // Quit the thread WITHOUT queuing closeConnection. quit() lets the event
+    // loop process the posted deleteLater, so ~ScrapeWriteWorker runs on the
+    // worker thread before finished() returns; wait() then joins the fully
+    // torn-down thread.
     thread.quit();
     QVERIFY(thread.wait(5000));
-    worker.reset(); // ~ScrapeWriteWorker runs here.
   }
 
   // Connection name is gone — no leaked handle for the next worker to clash
