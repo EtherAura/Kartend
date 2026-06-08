@@ -4,6 +4,7 @@
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
 #include "mainwindowfixture.h"
@@ -11,7 +12,6 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 
 #include <QAction>
 #include <QDir>
@@ -29,8 +29,7 @@ void TestMainWindowSmoke::testFixtureBuildsWithoutTouchingRealConfig() {
   // If real config ever leaked through, this path would not contain "qttest".
   const QString configRoot = KartendTest::MainWindowFixture::sandboxConfigPath();
   QVERIFY2(configRoot.contains(QStringLiteral("qttest")),
-           qPrintable(QStringLiteral("ConfigLocation %1 escaped qttest sandbox")
-                          .arg(configRoot)));
+           qPrintable(QStringLiteral("ConfigLocation %1 escaped qttest sandbox").arg(configRoot)));
 }
 
 void TestMainWindowSmoke::testTopLevelManagersAreWired() {

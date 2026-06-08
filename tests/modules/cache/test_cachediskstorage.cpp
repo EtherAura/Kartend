@@ -132,8 +132,7 @@ void TestCacheDiskStorage::cancelBeforeRunSkipsTheWrite() {
   storage.scheduleAsyncSave(/*shouldWriteMetadata=*/true, timestamps, {});
 
   QVERIFY2(storage.drainWithBudget(5000), "a bailed task should drain immediately");
-  QVERIFY2(!QFileInfo::exists(meta),
-           "a cancelled storage must not flush queued metadata to disk");
+  QVERIFY2(!QFileInfo::exists(meta), "a cancelled storage must not flush queued metadata to disk");
 }
 
 void TestCacheDiskStorage::drainIsSingleShotAndPostDrainScheduleIsNoOp() {
