@@ -24,10 +24,10 @@
 #include "test_detailspanemanager.h"
 #include "test_eventmanager_detailspane.h"
 #include "test_filtermanager.h"
+#include "test_interactionmanager.h"
 #include "test_kartmanager.h"
 #include "test_mainwindow_smoke.h"
 #include "test_menucontroller.h"
-#include "test_interactionmanager.h"
 #include "test_navigationmanager.h"
 #include "test_scanservice.h"
 #include "test_scrapedialog_perf.h"
@@ -42,7 +42,9 @@
 #include "test_virtualcontainermanager.h"
 
 #include <QApplication>
+#include <QFile>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QThreadPool>
 #include <QtPlugin>
@@ -206,9 +208,15 @@ const Suite kSuites[] = {
 } // namespace
 
 int main(int argc, char *argv[]) {
-  // setTestModeEnabled BEFORE QApplication so any path lookups during Qt's
-  // own startup are sandboxed too. Each MainWindowFixture re-asserts this
-  // in case a test toggles it off.
+  // Pin the config/data sandbox BEFORE QApplication so any path lookups during
+  // Qt's own startup are sandboxed too. setTestModeEnabled covers Linux
+  // (XDG_*) and Windows (%APPDATA%/qttest); on macOS Qt 6.8 it does NOT reroute
+  // ConfigLocation (Kartend-zfwvr), so also pin Foundation's NSHomeDirectory
+  // via CFFIXED_USER_HOME, putting every ~/Library/* path inside the temp
+  // sandbox. Each MainWindowFixture re-asserts the sandbox in case a test
+  // toggles it off.
+  static QTemporaryDir sandbox;
+  qputenv("CFFIXED_USER_HOME", QFile::encodeName(sandbox.path()));
   QStandardPaths::setTestModeEnabled(true);
 
   // The offscreen platform plugin lets the binary run on headless CI without

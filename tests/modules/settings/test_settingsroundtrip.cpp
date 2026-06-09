@@ -4,10 +4,12 @@
 // same file must not silently drop the unknown key. Coverage protects
 // against a version-skew data-loss class.
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTextStream>
 
@@ -42,8 +44,15 @@ void TestSettingsRoundtrip::cleanupTestCase() {
 
 void TestSettingsRoundtrip::init() {
   const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-  QVERIFY2(configRoot.contains(QStringLiteral("qttest")),
-           "QStandardPaths test mode should reroute ConfigLocation under qttest");
+  // The path must be a test sandbox before we removeRecursively() it: Qt
+  // test-mode's "qttest" marker (Linux/Windows) or, on macOS where Qt 6.8 test
+  // mode doesn't reroute ConfigLocation (Kartend-zfwvr), under the
+  // CFFIXED_USER_HOME home main() pinned.
+  const QByteArray sandboxHome = qgetenv("CFFIXED_USER_HOME");
+  QVERIFY2(
+      configRoot.contains(QStringLiteral("qttest")) ||
+          (!sandboxHome.isEmpty() && configRoot.startsWith(QString::fromLocal8Bit(sandboxHome))),
+      "QStandardPaths config dir is not a test sandbox");
   QDir(configRoot).removeRecursively();
 }
 
@@ -151,5 +160,15 @@ void TestSettingsRoundtrip::legacyBlocklistedKey_droppedNotPreserved() {
           QStringLiteral("Blocklisted manualDirectory leaked on round-trip:\n%1").arg(rewritten)));
 }
 
-QTEST_GUILESS_MAIN(TestSettingsRoundtrip)
+// Custom main (see test_settingsmigration): pin the config sandbox via
+// CFFIXED_USER_HOME before QCoreApplication / any QStandardPaths query, since
+// macOS Qt 6.8 test mode doesn't reroute ConfigLocation (Kartend-zfwvr).
+int main(int argc, char *argv[]) {
+  QTemporaryDir sandbox;
+  qputenv("CFFIXED_USER_HOME", QFile::encodeName(sandbox.path()));
+  QStandardPaths::setTestModeEnabled(true);
+  QCoreApplication app(argc, argv);
+  TestSettingsRoundtrip tc;
+  return QTest::qExec(&tc, argc, argv);
+}
 #include "test_settingsroundtrip.moc"

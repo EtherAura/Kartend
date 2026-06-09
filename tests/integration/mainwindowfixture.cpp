@@ -115,11 +115,18 @@ MainWindowFixture::MainWindowFixture() {
     if (path.isEmpty()) {
       return;
     }
-    // Hard guard: only wipe paths that Qt's test-mode rerouting has marked
-    // with "qttest". If we ever land here without test-mode active (e.g. a
-    // refactor moves construction outside the fixture), abort instead of
-    // recursively deleting the user's real config/cache directories.
-    if (!path.contains(QStringLiteral("qttest"))) {
+    // Hard guard: only wipe a test sandbox. Qt's test-mode rerouting marks the
+    // path with "qttest" on Linux/Windows; on macOS Qt 6.8 it doesn't reroute
+    // ConfigLocation (Kartend-zfwvr), so test_main() also pins
+    // CFFIXED_USER_HOME and the sandbox lives under that home. If neither holds
+    // (e.g. a refactor moves construction outside the fixture, or the macOS
+    // home pin didn't take), abort instead of recursively deleting the user's
+    // real config/cache directories.
+    const QByteArray sandboxHome = qgetenv("CFFIXED_USER_HOME");
+    const bool sandboxed =
+        path.contains(QStringLiteral("qttest")) ||
+        (!sandboxHome.isEmpty() && path.startsWith(QString::fromLocal8Bit(sandboxHome)));
+    if (!sandboxed) {
       qFatal("MainWindowFixture refusing to wipe non-test path: %s", qUtf8Printable(path));
     }
     QDir(path).removeRecursively();
