@@ -317,8 +317,8 @@ ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartP
   // later Launch click would run code the kart fully chose. Refuse those
   // in-tree launcher paths unless the caller explicitly opts in
   // (--allow-untrusted-launcher), and always log the finding either way.
-  const auto inTree =
-      collectInTreeLauncherPaths(extracted.value().manifest.collectionConfig, extracted.value().destDir);
+  const auto inTree = collectInTreeLauncherPaths(extracted.value().manifest.collectionConfig,
+                                                 extracted.value().destDir);
   if (!inTree.isEmpty()) {
     QStringList lines;
     lines.reserve(inTree.size());
@@ -331,11 +331,11 @@ ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartP
                  ErrorUtils::ErrorCode::InvalidFilePath,
                  "Refusing headless import: the .kart bundles its own launcher executable",
                  "KartManager::importKartHeadless")
-          .withDetails(QStringLiteral(
-                           "These launcher paths resolve inside the extracted kart tree (%1), so "
-                           "the kart would run an executable it shipped. Re-run with "
-                           "--allow-untrusted-launcher only if you trust this source.\n  - %2")
-                           .arg(extracted.value().destDir, joined));
+          .withDetails(
+              QStringLiteral("These launcher paths resolve inside the extracted kart tree (%1), so "
+                             "the kart would run an executable it shipped. Re-run with "
+                             "--allow-untrusted-launcher only if you trust this source.\n  - %2")
+                  .arg(extracted.value().destDir, joined));
     }
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(

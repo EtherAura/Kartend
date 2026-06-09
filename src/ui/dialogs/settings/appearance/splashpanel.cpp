@@ -18,8 +18,7 @@ SplashPanel::SplashPanel(QWidget *parent) : QWidget(parent), ui(new Ui::SplashPa
   connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->resumeFocusSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->bootSplashTitleLineEdit, &QLineEdit::editingFinished, this, &SplashPanel::save);
-  connect(ui->bootSplashSubtitleLineEdit, &QLineEdit::editingFinished, this,
-          &SplashPanel::save);
+  connect(ui->bootSplashSubtitleLineEdit, &QLineEdit::editingFinished, this, &SplashPanel::save);
   connect(ui->resumeFocusSplashTitleLineEdit, &QLineEdit::editingFinished, this,
           &SplashPanel::save);
   connect(ui->resumeFocusSplashSubtitleLineEdit, &QLineEdit::editingFinished, this,

@@ -127,9 +127,9 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_unifiedPage = new QWidget(m_dlg->m_modeStack);
   auto *root = new QVBoxLayout(m_dlg->m_unifiedPage);
   root->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   root->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
   // ── Top: collection tree (left) + items list (right) ────────────
@@ -221,9 +221,9 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_marqueeTicker->setLiveMetadataGroup(m_dlg->m_liveMetadataGroup);
   auto *metaOuter = new QVBoxLayout(m_dlg->m_liveMetadataGroup);
   metaOuter->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
-                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
+                                UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                                UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                                UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   metaOuter->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
   // ── Interactive candidate picker row ──────────────────────────────
   // Visible only while the service is waiting on the user to pick a
@@ -487,7 +487,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_thumbLoader->setLiveThumbsStrip(m_dlg->m_liveThumbsStrip);
   m_dlg->m_liveThumbsStrip->setViewMode(QListView::IconMode);
   m_dlg->m_liveThumbsStrip->setIconSize(QSize(UIConstants::ScrapeResultDialog::THUMB_ICON_SIZE,
-                                            UIConstants::ScrapeResultDialog::THUMB_ICON_SIZE));
+                                              UIConstants::ScrapeResultDialog::THUMB_ICON_SIZE));
   m_dlg->m_liveThumbsStrip->setFlow(QListView::LeftToRight);
   m_dlg->m_liveThumbsStrip->setWrapping(false);
   m_dlg->m_liveThumbsStrip->setMovement(QListView::Static);
@@ -498,7 +498,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_liveThumbsStrip->setSpacing(UIConstants::ScrapeResultDialog::THUMBS_STRIP_SPACING);
   // Slightly larger than icon so items fit snugly with minimal gap.
   m_dlg->m_liveThumbsStrip->setGridSize(QSize(UIConstants::ScrapeResultDialog::THUMB_GRID_SIZE,
-                                            UIConstants::ScrapeResultDialog::THUMB_GRID_SIZE));
+                                              UIConstants::ScrapeResultDialog::THUMB_GRID_SIZE));
   m_dlg->m_liveThumbsStrip->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_dlg->m_liveThumbsStrip->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_dlg->m_liveThumbsStrip->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);

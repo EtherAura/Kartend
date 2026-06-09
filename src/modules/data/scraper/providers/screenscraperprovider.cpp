@@ -493,23 +493,23 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
         // failures (auth/quota/404/parse) and successes are handled inline.
         if (response.isError() && attempt < Scraper::RetryPolicy::kDefaultMaxRetries &&
             Scraper::RetryPolicy::isTransient(response.error())) {
-          const int delayMs = Scraper::RetryPolicy::retryDelayMs(
-              attempt, response.error().retryAfterSeconds);
+          const int delayMs =
+              Scraper::RetryPolicy::retryDelayMs(attempt, response.error().retryAfterSeconds);
           qCInfo(lcScreenScraperProvider).nospace()
               << "Transient jeuInfos failure (httpStatus=" << response.error().httpStatus
               << ", code=" << static_cast<int>(response.error().code) << "); retry "
-              << (attempt + 1) << "/" << Scraper::RetryPolicy::kDefaultMaxRetries << " in " << delayMs
-              << "ms";
+              << (attempt + 1) << "/" << Scraper::RetryPolicy::kDefaultMaxRetries << " in "
+              << delayMs << "ms";
           // m_retryTimer is a provider member: destroyed with `this`, so a
           // pending retry can't fire after free. disconnect() drops any prior
           // schedule before re-arming (lookups are sequential).
           m_retryTimer.stop();
           m_retryTimer.disconnect();
           m_retryTimer.setSingleShot(true);
-          m_retryTimer.callOnTimeout(
-              [this, url, filenameRegionOverride, callback = std::move(callback), attempt]() mutable {
-                fetchJeuInfos(url, filenameRegionOverride, std::move(callback), attempt + 1);
-              });
+          m_retryTimer.callOnTimeout([this, url, filenameRegionOverride,
+                                      callback = std::move(callback), attempt]() mutable {
+            fetchJeuInfos(url, filenameRegionOverride, std::move(callback), attempt + 1);
+          });
           m_retryTimer.start(delayMs);
           return;
         }

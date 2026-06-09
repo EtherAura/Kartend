@@ -314,7 +314,8 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
     -> bool {
   hasSub = false;
   hasItems = false;
-  if ((!appNotShuttingDown()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+  if ((!appNotShuttingDown()) || collectionIndex < 0 ||
+      collectionIndex >= (*m_collections).size()) {
     return false;
   }
 

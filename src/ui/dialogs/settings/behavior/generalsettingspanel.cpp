@@ -179,8 +179,7 @@ void GeneralSettingsPanel::connectChangeSignals() {
           [this](const QString &) { save(); });
   connect(ui->homeViewIconLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
-  connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { save(); });
+  connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
   connect(ui->retroarchConfigLineEdit, &QLineEdit::textChanged, this,

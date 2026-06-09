@@ -126,8 +126,8 @@ collectSuspiciousKartPaths(const CollectionConfig &cfg, const QSet<QString> &tru
 /// path gates every suspicious path behind the interactive confirmer;
 /// importKartHeadless uses this to refuse in-tree launchers unless the caller
 /// explicitly opts in.
-[[nodiscard]] QList<SuspiciousKartPath>
-collectInTreeLauncherPaths(const CollectionConfig &cfg, const QString &extractedRoot);
+[[nodiscard]] QList<SuspiciousKartPath> collectInTreeLauncherPaths(const CollectionConfig &cfg,
+                                                                   const QString &extractedRoot);
 
 class KartManager : public QObject {
   Q_OBJECT

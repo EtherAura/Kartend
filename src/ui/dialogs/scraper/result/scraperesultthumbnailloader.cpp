@@ -12,8 +12,8 @@
 #include <QListWidgetItem>
 #include <QPair>
 #include <QPixmap>
-#include <QWidget>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QWidget>
 
 ScrapeResultThumbnailLoader::ScrapeResultThumbnailLoader(QWidget *host)
     : QObject(host), m_host(host) {}
@@ -48,8 +48,8 @@ void ScrapeResultThumbnailLoader::appendThumbAsync(const QString &path) {
     if (!m_host || !m_host->isVisible() || !m_liveThumbsStrip) return;
     const auto pair = watcher->result();
     if (pair.second.isNull()) return;
-    auto *row = new QListWidgetItem(QIcon(QPixmap::fromImage(pair.second)), QString(),
-                                    m_liveThumbsStrip);
+    auto *row =
+        new QListWidgetItem(QIcon(QPixmap::fromImage(pair.second)), QString(), m_liveThumbsStrip);
     row->setToolTip(QFileInfo(pair.first).fileName());
     while (m_liveThumbsStrip->count() > 12) {
       delete m_liveThumbsStrip->takeItem(0);

@@ -93,7 +93,6 @@ public:
   /// returns false (preserves existing behaviour when not wired).
   void setScrollIdlePredicate(std::function<bool()> predicate);
 
-
   void setMetadata(const QString &filePath, const QString &itemName,
                    const QString &artworkDirectory = QString(),
                    const QString &videoDirectory = QString());

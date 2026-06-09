@@ -887,9 +887,10 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
     }
   }
   if (!m_db.commit()) {
-    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to commit playlist import",
-                                   "PlaylistManager::importFromJson")
-                   .withDetails(m_db.lastError().text());
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to commit playlist import",
+                            "PlaylistManager::importFromJson")
+            .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     m_db.rollback();
     (void)deletePlaylist(newId);
@@ -957,11 +958,10 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
     const QString uuid = resolve.value(0).toString();
     if (resolve.next()) {
       ErrorUtils::logError(
-          ErrorContext::warning(
-              ErrorCode::InvalidArgument,
-              "M3U import: path exists in multiple collections; M3U can't "
-              "disambiguate, using the lowest collection uuid",
-              "PlaylistManager::importFromM3U")
+          ErrorContext::warning(ErrorCode::InvalidArgument,
+                                "M3U import: path exists in multiple collections; M3U can't "
+                                "disambiguate, using the lowest collection uuid",
+                                "PlaylistManager::importFromM3U")
               .withDetails(line));
     }
     addItem(newId, uuid, line);

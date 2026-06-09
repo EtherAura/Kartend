@@ -258,7 +258,7 @@ bool isPrivateDirOfCurrentUser(const QString &dirPath) {
   }
 #if defined(Q_OS_UNIX)
   const QByteArray native = QFile::encodeName(dirPath);
-  struct stat st {};
+  struct stat st{};
   // lstat: never follow a final symlink — an attacker could point the cache
   // base at a directory they control via a symlink that itself passes for
   // "ours". A symlink fails the S_ISDIR test below regardless.

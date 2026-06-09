@@ -63,8 +63,9 @@ namespace LauncherUtils {
   // misclassified as libretro. Basename-contains (rather than startsWith) is
   // deliberate — it still matches plain "retroarch", "retroarch.exe", and the
   // flatpak "org.libretro.RetroArch" app-id form.
-  return QFileInfo(launcherPath).fileName().contains(QStringLiteral("retroarch"),
-                                                     Qt::CaseInsensitive);
+  return QFileInfo(launcherPath)
+      .fileName()
+      .contains(QStringLiteral("retroarch"), Qt::CaseInsensitive);
 }
 
 /// Returns a LauncherConfig with fields resolved against the preset list.

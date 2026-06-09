@@ -43,8 +43,9 @@ void TreeManager::attachWidget() {
   // Drag-drop reparenting: the promoted widget delegates cycle validation +
   // item→index resolution to this controller's own state and emits
   // treeRearranged() on success.
-  m_widget->setCycleCheck(
-      [this](int childIndex, int parentIndex) { return wouldCreateCircularReference(childIndex, parentIndex); });
+  m_widget->setCycleCheck([this](int childIndex, int parentIndex) {
+    return wouldCreateCircularReference(childIndex, parentIndex);
+  });
   m_widget->setItemToIndex(
       [this](const QTreeWidgetItem *item) { return indexOf(const_cast<QTreeWidgetItem *>(item)); });
 

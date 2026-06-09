@@ -74,7 +74,6 @@ private slots:
   void onWidgetRearranged();
 
 public:
-
   /// Wipe and re-populate every row from the live collections list. Mirrors
   /// the previous SettingsDialog::updateCollectionTreeWidget — same call
   /// sites should hit this directly.

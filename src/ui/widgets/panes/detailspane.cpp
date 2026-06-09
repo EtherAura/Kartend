@@ -94,8 +94,8 @@ struct SetMetadataPhaseTrace {
     if (sum > 5) {
       qCDebug(lcPerfTrace).nospace()
           << "DetailsPane::setMetadata phases: sum=" << sum << " (fileInfo=" << fileInfo
-          << " previewSize1=" << previewSize1 << " loadArtwork=" << loadArtwork << " video=" << video
-          << " tabVis=" << tabVis << ") path=" << path;
+          << " previewSize1=" << previewSize1 << " loadArtwork=" << loadArtwork
+          << " video=" << video << " tabVis=" << tabVis << ") path=" << path;
     }
   }
   SetMetadataPhaseTrace(const SetMetadataPhaseTrace &) = delete;

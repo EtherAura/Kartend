@@ -225,8 +225,8 @@ private:
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
-  bool m_isListMode = false;         // True when displaying in list view (no artwork)
-  bool m_hasArtwork = false;         // True when artwork exists for this item
+  bool m_isListMode = false; // True when displaying in list view (no artwork)
+  bool m_hasArtwork = false; // True when artwork exists for this item
   // Kartend-4hct5: coalesces the deferred post-applyDimensions artwork refresh
   // so a burst of applyDimensions() calls on one widget (e.g. a view-type /
   // grid-width change recreating every visible widget) queues a single

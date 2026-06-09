@@ -99,9 +99,9 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
         fetchUrl, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
           if (guard.isNull()) return; // dispatcher gone — drop the reply
           if (applyTimer) {
-            qCInfo(lcScrapeTimings) << "DISPATCH complete" << asset.type << asset.label
-                                    << "ok=" << response.isOk()
-                                    << "elapsed_total=" << applyTimer->elapsed() << "ms";
+            qCInfo(lcScrapeTimings)
+                << "DISPATCH complete" << asset.type << asset.label << "ok=" << response.isOk()
+                << "elapsed_total=" << applyTimer->elapsed() << "ms";
           }
           if (response.isOk()) {
             const QByteArray bytes = response.value();

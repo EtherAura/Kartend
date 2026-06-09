@@ -148,9 +148,8 @@ extern "C" auto main(int argc, char *argv[]) -> int {
     QCommandLineOption allowUntrustedLauncherOption(
         QStringLiteral("allow-untrusted-launcher"),
         QApplication::translate(
-            "main",
-            "Permit --import-kart to register a launcher path that points inside the "
-            "extracted kart tree (a self-bundled executable). Off by default."));
+            "main", "Permit --import-kart to register a launcher path that points inside the "
+                    "extracted kart tree (a self-bundled executable). Off by default."));
     parser.addOption(allowUntrustedLauncherOption);
 
     parser.process(app);

@@ -11,7 +11,7 @@ bool isTransient(const ErrorUtils::ErrorContext &err) {
   if (err.httpStatus <= 0) {
     return err.code == ErrorUtils::ErrorCode::OperationCancelled;
   }
-  if (err.httpStatus == 423) return true;          // SS "infrastructure down"
+  if (err.httpStatus == 423) return true;                // SS "infrastructure down"
   return err.httpStatus >= 500 && err.httpStatus <= 599; // server-side 5xx
 }
 

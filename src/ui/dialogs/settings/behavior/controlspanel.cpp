@@ -175,8 +175,7 @@ void ControlsPanel::connectChangeSignals() {
     connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { save(); });
   }
   connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
-  connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { save(); });
+  connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { save(); });
 }

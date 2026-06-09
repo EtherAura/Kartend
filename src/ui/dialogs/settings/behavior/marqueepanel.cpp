@@ -41,8 +41,7 @@ MarqueePanel::MarqueePanel(QWidget *parent) : QWidget(parent), ui(new Ui::Marque
   connect(ui->marqueeEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->marqueeScreenComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { save(); });
-  connect(ui->marqueeModeComboBox, &QComboBox::currentIndexChanged, this,
-          [this](int) { save(); });
+  connect(ui->marqueeModeComboBox, &QComboBox::currentIndexChanged, this, [this](int) { save(); });
 }
 
 MarqueePanel::~MarqueePanel() {
