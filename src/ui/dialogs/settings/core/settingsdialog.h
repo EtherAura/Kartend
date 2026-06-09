@@ -91,7 +91,7 @@ public:
   /// or general-settings tab differs from the original snapshot. Public so
   /// tests can drive widget mutations and observe the dirty state directly;
   /// production code observes this via the Save button enabled-state binding.
-  [[nodiscard]] bool hasUnsavedChanges() const;
+  [[nodiscard]] bool hasUnsavedChanges() const override;
 
   /// low-level mask-aware copy. Public so tests can verify the
   /// per-category subset behaviour directly. Returns the number of target
@@ -132,19 +132,19 @@ private slots:
   // Kartend-mnymg: onTreeItemSelectionChanged / onTreeItemChanged migrated into
   // the TreeManager controller (which now owns the tree gesture handlers).
   void addCollection();
-  void removeCollection();
+  void removeCollection() override;
   /// full-copy duplicate of the current collection. Prompts for
   /// a unique name and a parent collection (sibling/child/root all reachable
   /// via the parent combo). Every CollectionConfig field is copied — paths,
   /// extensions, launcher list, appearance — except runtime-only state
   /// (currentSubfolder) and the playlist markers (which mark virtual
   /// collections that aren't directly duplicable).
-  void duplicateCollection();
+  void duplicateCollection() override;
   /// pull-from-source. Opens ApplySettingsDialog in Pull mode
   /// so the user picks a source collection AND the field categories to
   /// copy onto the currently-edited collection. Marks the dialog dirty so
   /// the user can review in the form before committing with Save.
-  void copySettingsFromOtherCollection();
+  void copySettingsFromOtherCollection() override;
   void browseLauncher();
   void browseCore();
   /// Add/Edit/Remove handlers for the Additional Launchers list.
@@ -206,7 +206,7 @@ private:
   void applyUniformPageWidgetSizing();
   /// Refreshes the context header (icon + title + collection subtitle) for
   /// the currently selected nav row.
-  void updateContextHeader();
+  void updateContextHeader() override;
   /// Indexes every page's visible label / button / group-box text so the
   /// search box can match settings by name. Stored on each category row.
   void buildSettingsSearchIndex();
@@ -268,7 +268,8 @@ private:
   /// Restores the current collection to its last saved state.
   void revertCurrentCollectionEdits();
   /// Resolves unsaved changes prior to executing an action.
-  auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave) -> bool;
+  auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave)
+      -> bool override;
 
   /// Rolls back the live-save panels (base color / fonts / splash) on Cancel.
   /// Those panels persist + apply immediately, bypassing the deferred-save path
