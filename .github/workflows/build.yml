@@ -14,6 +14,11 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  # Manual trigger (Kartend-e0crh): lets us re-run the full matrix on demand and
+  # re-register the workflow with GitHub if a push ever fails to schedule it —
+  # which happened silently after build.yml was last edited, while the other
+  # workflows kept running. `gh workflow run "Build and Test" --ref main`.
+  workflow_dispatch:
 
 permissions:
   contents: read
