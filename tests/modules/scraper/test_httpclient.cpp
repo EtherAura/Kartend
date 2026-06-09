@@ -41,6 +41,19 @@
 
 using ErrorUtils::ErrorCode;
 
+// macOS Qt defaults to the Secure Transport TLS backend, which has no usable
+// server-side support — the in-process QSslServer the cases below stand up
+// never completes a handshake, so every request errors (Kartend-0a5p4). The
+// SSRF / allowlist / redirect / size-cap logic is platform-independent and
+// covered on Linux (Qt 6.4 + 6.8) and Windows; production macOS uses Secure
+// Transport as a client, which works. Skip just the local-TLS-server cases.
+#if defined(Q_OS_MACOS)
+#define SKIP_LOCAL_TLS_SERVER_ON_MACOS()                                                           \
+  QSKIP("local QSslServer has no server-side TLS on macOS Secure Transport (Kartend-0a5p4)")
+#else
+#define SKIP_LOCAL_TLS_SERVER_ON_MACOS() ((void)0)
+#endif
+
 namespace {
 
 // Throwaway self-signed cert + RSA key, used only to secure the in-process
@@ -426,6 +439,7 @@ void TestHttpClient::hostOutsideAllowlist_isRefusedSynchronously() {
 // normally. This also confirms UserVerifiedRedirectPolicy (which the allowlist
 // path switches on) doesn't stall an ordinary, non-redirecting response.
 void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
         "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
@@ -466,6 +480,7 @@ void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
 // followed to the unresolved target, so this assertion proves we blocked rather
 // than merely failed to connect.
 void TestHttpClient::redirectOutsideAllowlist_isRefused() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
         "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
@@ -504,6 +519,7 @@ void TestHttpClient::redirectOutsideAllowlist_isRefused() {
 // to completion — this is what exercises the redirectAllowed() hand-off, so a
 // regression that aborted every redirect would fail here, not silently pass.
 void TestHttpClient::redirectToAllowlistedHost_isFollowed() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
         "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
@@ -540,6 +556,7 @@ void TestHttpClient::redirectToAllowlistedHost_isFollowed() {
 }
 
 void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("HttpClient::get spins up QNetworkAccessManager's internal QThread on first call, "
         "and the QNAM thread start-up window mallocs/frees Qt-internal heap buffers (QByteArray "
@@ -587,6 +604,7 @@ void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
 }
 
 void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as "
         "responseExceedingCap_returnsResponseTooLargeError above — both tests trip the lazy "
@@ -631,6 +649,7 @@ void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
 // in that HttpClient::get applies the RawHeaders list verbatim and keeps
 // the token out of the URL line.
 void TestHttpClient::requestHeaders_rideInHeaderBlockNotUrl() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests above — the lazy "
         "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
@@ -662,10 +681,19 @@ void TestHttpClient::requestHeaders_rideInHeaderBlockNotUrl() {
 
   const QByteArray head = server.requestHead();
   QVERIFY2(!head.isEmpty(), "Server captured no request head");
-  // Both headers must be present, verbatim, in the request head.
-  QVERIFY2(head.contains("Authorization: Bearer secret-token-123"),
-           "Authorization header missing or altered on the wire");
-  QVERIFY2(head.contains("User-Agent: kartend-test"), "User-Agent header missing on the wire");
+  // Both headers must ride in the request head. HTTP field-names are
+  // case-insensitive (RFC 9110) and Qt lowercases them on the wire on some
+  // versions (6.8 emits "authorization:"/"user-agent:"; 6.4/6.10 keep the
+  // sent casing), so match the name case-insensitively — the value is
+  // preserved verbatim. A case-sensitive "Authorization:" check here passed
+  // everywhere except the Qt 6.8 CI job (Kartend-e4urr).
+  const QByteArray headLower = head.toLower();
+  QVERIFY2(headLower.contains("authorization: bearer secret-token-123"),
+           qPrintable(QStringLiteral("Authorization header missing/altered on the wire:\n%1")
+                          .arg(QString::fromLatin1(head))));
+  QVERIFY2(headLower.contains("user-agent: kartend-test"),
+           qPrintable(QStringLiteral("User-Agent header missing on the wire:\n%1")
+                          .arg(QString::fromLatin1(head))));
   // The secret must NOT appear in the request line (GET <target> HTTP/1.1) —
   // i.e. it never regressed back into the query string.
   const QByteArray requestLine = head.left(head.indexOf("\r\n"));
