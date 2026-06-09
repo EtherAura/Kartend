@@ -448,6 +448,10 @@ else()
   set(HARDENING_LINK_OPTS)
   if (NOT WIN32)
     list(APPEND HARDENING_COMPILE_OPTS -D_FORTIFY_SOURCE=2 -fPIE)
+  endif()
+  # GNU-ld hardening flags: Apple's ld rejects -Wl,-z,* options (and applies
+  # its own load-time mitigations), so gate the link-side set out on macOS.
+  if (NOT WIN32 AND NOT APPLE)
     list(APPEND HARDENING_LINK_OPTS -Wl,-z,now -Wl,-z,relro -pie)
   endif()
 
@@ -476,9 +480,16 @@ else()
     set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
   endif()
 
+  # Apple's ld rejects the GNU-ld perf options (-Wl,-O3 / --gc-sections /
+  # --as-needed); keep only the portable LTO flag on macOS.
+  if (APPLE)
+    set(RELEASE_PERF_LINK_OPTS -flto=auto)
+  endif()
+
   # lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
-  # the GNU linker or gold.
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  # the GNU linker or gold. Apple's default ld already handles Clang LTO, and
+  # -fuse-ld=lld is unsupported there, so skip it on macOS.
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
     list(PREPEND RELEASE_PERF_LINK_OPTS -fuse-ld=lld)
   endif()
 endif()
@@ -542,7 +553,7 @@ else()
   set(KARTEND_LTO_LINK_OPTIONS
     $<$<CONFIG:Release>:-flto=auto>
   )
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
     list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
   endif()
 endif()
