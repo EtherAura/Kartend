@@ -24,7 +24,10 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
     // Rename in place: content is correct, only the name is wrong.
     if (settings.rename && r.status == Status::WrongName && !r.filePath.isEmpty() &&
         !r.expectedName.isEmpty()) {
-      const QString dir = QFileInfo(r.filePath).absolutePath();
+      // path() (not absolutePath()): keep the file's own directory string
+      // without resolving against the current drive/CWD, so a rename stays in
+      // place cross-platform (absolutePath() would prepend e.g. "D:" on Windows).
+      const QString dir = QFileInfo(r.filePath).path();
       const QString to = dir + QLatin1Char('/') + r.expectedName;
       if (to != r.filePath) {
         plan.actions.append(FixAction{FixActionKind::Rename, r.filePath, to, r.status});

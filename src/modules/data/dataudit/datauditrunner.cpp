@@ -251,8 +251,6 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
         pending, [cancel](const PendingHash &p) { return hashToScanned(p.path, cancel); });
     for (int i = 0; i < pending.size(); ++i) {
       if (cancelled(cancel)) {
-        fut.cancel();
-        fut.waitForFinished();
         out.cancelled = true;
         break;
       }
@@ -268,6 +266,19 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
       ++done;
       tick(sf.path);
     }
+    // Wind the fan-out down before the future leaves scope. On the cancel path
+    // this is load-bearing: cancel() then waitForFinished() stops pooled
+    // workers from hashing on after the user aborted. On the normal path it's
+    // a deterministic-teardown barrier (all hashing truly done before run()
+    // returns). NB: this drain does not (and can't) silence the Qt-internal
+    // QThreadPool/QtConcurrent teardown races TSan reports for this path — those
+    // are stripped-frame Qt false positives with no Kartend data on the racing
+    // stacks, so test_datauditrunner skips its run()-driving cases under TSan
+    // rather than chase a moving target of suppressions (Kartend-x9mkif.1).
+    if (out.cancelled) {
+      fut.cancel();
+    }
+    fut.waitForFinished();
   }
 
   AuditOutput classified = classify(catalogue, results);
