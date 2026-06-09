@@ -131,6 +131,7 @@ void MenuController::setupMenuBar() {
   // helper is kept (still wired through MenuControllerContext) but
   // unregistered from the menu so the action object isn't shown.
   setupBatchScrapeAction();
+  setupDatAuditAction();
   setupGridWidthActions();
   setupActionOpenRandomItem();
   setupActionImportKart();
@@ -526,6 +527,28 @@ void MenuController::setupBatchScrapeAction() {
       m_ctx.ui->menuFile->insertSeparator(exitAction);
     } else {
       m_ctx.ui->menuFile->addAction(m_batchScrapeAction);
+    }
+  }
+}
+
+void MenuController::setupDatAuditAction() {
+  // File-menu entry that opens the standalone DAT Audit window (scan folders
+  // against DAT catalogues; report have/missing/wrong-name/unknown; export
+  // CSV / fixdat / miss-list). Sits next to Scraper, above Exit.
+  m_datAuditAction = new QAction(tr("DAT Audit…"), this);
+  if (!connectMenuAction(m_datAuditAction, [this]() {
+        if (m_ctx.onRunDatAudit) {
+          m_ctx.onRunDatAudit();
+        }
+      })) {
+    return;
+  }
+  if (m_ctx.ui && m_ctx.ui->menuFile) {
+    QAction *exitAction = m_ctx.ui->actionExit;
+    if (exitAction) {
+      m_ctx.ui->menuFile->insertAction(exitAction, m_datAuditAction);
+    } else {
+      m_ctx.ui->menuFile->addAction(m_datAuditAction);
     }
   }
 }

@@ -11,6 +11,7 @@ target_sources(kartend_core PRIVATE
   mainwindow_toolbar.cpp
   mainwindow_wiring.cpp
   marqueecontroller.cpp
+  datauditcontroller.cpp
   menucontroller.cpp
   menucontroller_actions.cpp
   menucontroller_dynamicmenus.cpp
@@ -18,6 +19,7 @@ target_sources(kartend_core PRIVATE
   scrolleventscontroller.cpp
   titlecountshelpers.cpp
   toolbarcontroller.cpp
+  datauditcontroller.h
   dbeventscontroller.h
   dialogcontroller.h
   gridwidthdebouncer.h

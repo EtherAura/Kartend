@@ -75,6 +75,7 @@ struct MenuControllerContext {
   std::function<void()> onShowFirstRunWizard;
   std::function<void()> onShowScraperCredentials;
   std::function<void()> onRunBatchScrape;
+  std::function<void()> onRunDatAudit;
 };
 
 /// Handles menu bar setup and action connections.
@@ -128,6 +129,7 @@ private:
   QAction *m_scraperCredentialsAction = nullptr;
   QAction *m_scraperProvidersAction = nullptr;
   QAction *m_batchScrapeAction = nullptr;
+  QAction *m_datAuditAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
   QAction *m_importKartAction = nullptr;
@@ -197,6 +199,7 @@ private:
   void setupScraperCredentialsAction();
   void setupActionScraperProviders();
   void setupBatchScrapeAction();
+  void setupDatAuditAction();
   void setupGridWidthActions();
   void setupHamburgerMenu();
   void setupActionOpenRandomItem();

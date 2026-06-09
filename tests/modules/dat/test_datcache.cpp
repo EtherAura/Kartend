@@ -15,6 +15,8 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
+#include <QList>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -91,6 +93,8 @@ private slots:
   void clearAllWipesEverything();
   void invalidSourceHandleSkipsLookup();
   void multipleSourcesCoexistInOneCache();
+  void forEachRecordStreamsAllRecords();
+  void forEachRecordInvalidSourceReturnsFalse();
 
 private:
   QString cachePath() const { return m_dir.filePath("datcache.sqlite"); }
@@ -137,8 +141,7 @@ void TestDatCache::ingestsMameDatWithDescription() {
   QCOMPARE(source.value().recordCount, 1);
 
   auto rec = store.lookup(source.value(), QString(),
-                          QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181"),
-                          QString());
+                          QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181"), QString());
   QVERIFY(rec.has_value());
   QCOMPARE(rec->gameName, QStringLiteral("Pac-Man (Midway)"));
   QCOMPARE(rec->romName, QStringLiteral("pacman.6e"));
@@ -152,24 +155,22 @@ void TestDatCache::lookupTriesSha1ThenMd5ThenCrc() {
 
   // Point each hash at a different record. sha1 is the most reliable
   // and should win — verified by checking which record came back.
-  auto rec = store.lookup(
-      source.value(),
-      QStringLiteral("11111111111111111111111111111111"),  // md5 of Alpha
-      QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),  // sha1 of Beta
-      QStringLiteral("deadbeef"));  // crc of Alpha
+  auto rec =
+      store.lookup(source.value(),
+                   QStringLiteral("11111111111111111111111111111111"),         // md5 of Alpha
+                   QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), // sha1 of Beta
+                   QStringLiteral("deadbeef"));                                // crc of Alpha
   QVERIFY(rec.has_value());
   QCOMPARE(rec->gameName, QStringLiteral("Game Beta (Japan)"));
 
   // md5 alone resolves correctly when sha1 is empty.
-  auto byMd5 = store.lookup(source.value(),
-                            QStringLiteral("11111111111111111111111111111111"),
+  auto byMd5 = store.lookup(source.value(), QStringLiteral("11111111111111111111111111111111"),
                             QString(), QString());
   QVERIFY(byMd5.has_value());
   QCOMPARE(byMd5->gameName, QStringLiteral("Game Alpha (USA)"));
 
   // crc alone (the legacy DAT case) still finds the record.
-  auto byCrc = store.lookup(source.value(), QString(), QString(),
-                            QStringLiteral("cafebabe"));
+  auto byCrc = store.lookup(source.value(), QString(), QString(), QStringLiteral("cafebabe"));
   QVERIFY(byCrc.has_value());
   QCOMPARE(byCrc->gameName, QStringLiteral("Game Beta (Japan)"));
 }
@@ -181,8 +182,7 @@ void TestDatCache::lookupMissReturnsNullopt() {
   QVERIFY(source.isOk());
 
   // Hash not present in the DAT.
-  auto miss = store.lookup(source.value(),
-                           QStringLiteral("ffffffffffffffffffffffffffffffff"),
+  auto miss = store.lookup(source.value(), QStringLiteral("ffffffffffffffffffffffffffffffff"),
                            QStringLiteral("ffffffffffffffffffffffffffffffffffffffff"),
                            QStringLiteral("ffffffff"));
   QVERIFY(!miss.has_value());
@@ -221,8 +221,7 @@ void TestDatCache::editedDatIsReIngestedOnMtimeChange() {
 
   // The new hash should be findable.
   auto rec = store.lookup(reingest.value(), QString(),
-                          QStringLiteral("cccccccccccccccccccccccccccccccccccccccc"),
-                          QString());
+                          QStringLiteral("cccccccccccccccccccccccccccccccccccccccc"), QString());
   QVERIFY(rec.has_value());
   QCOMPARE(rec->gameName, QStringLiteral("Game Alpha (USA) Rev 1"));
 
@@ -230,8 +229,7 @@ void TestDatCache::editedDatIsReIngestedOnMtimeChange() {
   // stale-eviction actually deleted the cascading record rows.
   auto staleRec =
       store.lookup(reingest.value(), QString(),
-                   QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                   QString());
+                   QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString());
   QVERIFY(!staleRec.has_value());
 }
 
@@ -282,8 +280,7 @@ void TestDatCache::cacheSurvivesStoreReopen() {
 
   // Records should still be queryable.
   auto rec = reopened.lookup(source.value(), QString(),
-                             QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                             QString());
+                             QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString());
   QVERIFY(rec.has_value());
   QCOMPARE(rec->gameName, QStringLiteral("Game Alpha (USA)"));
 }
@@ -298,8 +295,7 @@ void TestDatCache::clearAllWipesEverything() {
 
   // After clearAll the old handle is dangling — a lookup must miss.
   auto miss = store.lookup(source.value(), QString(),
-                           QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                           QString());
+                           QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString());
   QVERIFY(!miss.has_value());
 
   // Re-ingesting should work (fresh source id, fresh records).
@@ -347,9 +343,54 @@ void TestDatCache::invalidSourceHandleSkipsLookup() {
   DatCache::Store store(cachePath());
   DatCache::CachedSource invalid;
   auto rec = store.lookup(invalid, QString(),
-                          QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                          QString());
+                          QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString());
   QVERIFY(!rec.has_value());
+}
+
+void TestDatCache::forEachRecordStreamsAllRecords() {
+  // forEachRecord backs the auditor's "what's in the catalogue" pass —
+  // unlike lookup() it must surface every record, not just hash hits.
+  writeDat(datPath(), kLogiqxDat);
+  DatCache::Store store(cachePath());
+  auto source = store.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+
+  QList<DatLookup::DatRecord> collected;
+  const bool ok = store.forEachRecord(source.value(),
+                                      [&](const DatLookup::DatRecord &r) { collected.append(r); });
+  QVERIFY(ok);
+  QCOMPARE(collected.size(), 2);
+
+  QStringList names;
+  for (const DatLookup::DatRecord &r : collected) {
+    names << r.gameName;
+  }
+  QVERIFY(names.contains(QStringLiteral("Game Alpha (USA)")));
+  QVERIFY(names.contains(QStringLiteral("Game Beta (Japan)")));
+
+  // Fields carry through intact (name/size/crc) so the audit can compare
+  // and rename against them.
+  bool sawAlpha = false;
+  for (const DatLookup::DatRecord &r : collected) {
+    if (r.gameName == QStringLiteral("Game Alpha (USA)")) {
+      sawAlpha = true;
+      QCOMPARE(r.romName, QStringLiteral("Game Alpha (USA).bin"));
+      QCOMPARE(r.crc, QStringLiteral("deadbeef"));
+      QCOMPARE(r.size, qint64(32768));
+    }
+  }
+  QVERIFY(sawAlpha);
+}
+
+void TestDatCache::forEachRecordInvalidSourceReturnsFalse() {
+  // A default-constructed (invalid) source must not run the callback or
+  // spew SQL errors — mirrors the lookup() defensive path.
+  DatCache::Store store(cachePath());
+  DatCache::CachedSource invalid;
+  int calls = 0;
+  const bool ok = store.forEachRecord(invalid, [&](const DatLookup::DatRecord &) { ++calls; });
+  QVERIFY(!ok);
+  QCOMPARE(calls, 0);
 }
 
 QTEST_MAIN(TestDatCache)

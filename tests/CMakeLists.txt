@@ -546,6 +546,20 @@ add_executable(test_dbmigrations
 target_link_libraries(test_dbmigrations PRIVATE kartend_utils Qt6::Test)
 add_test(NAME DbMigrations COMMAND test_dbmigrations)
 
+# FileHashCache tests (schema v16, in-memory sqlite)
+add_executable(test_filehashcache
+  utils/db/test_filehashcache.cpp
+)
+target_link_libraries(test_filehashcache PRIVATE kartend_utils Qt6::Test)
+add_test(NAME FileHashCache COMMAND test_filehashcache)
+
+# DatAuditProfile CRUD tests (schema v17, in-memory sqlite)
+add_executable(test_datauditprofile
+  utils/db/test_datauditprofile.cpp
+)
+target_link_libraries(test_datauditprofile PRIVATE kartend_utils Qt6::Test)
+add_test(NAME DatAuditProfile COMMAND test_datauditprofile)
+
 # ItemMetadata storage round-trip tests
 add_executable(test_itemmetadata
   utils/db/test_itemmetadata.cpp
@@ -798,6 +812,34 @@ add_executable(test_datcache
 )
 target_link_libraries(test_datcache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME DatCache COMMAND test_datcache)
+
+# DatAudit engine tests (Catalogue + classify + run + buildCatalogue)
+add_executable(test_datauditrunner
+  modules/dataudit/test_datauditrunner.cpp
+)
+target_link_libraries(test_datauditrunner PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME DatAuditRunner COMMAND test_datauditrunner)
+
+# DatAudit export tests (CSV + fixdat + miss-list)
+add_executable(test_datauditexport
+  modules/dataudit/test_datauditexport.cpp
+)
+target_link_libraries(test_datauditexport PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME DatAuditExport COMMAND test_datauditexport)
+
+# DatAudit fix engine tests (plan + apply + undo over real temp files)
+add_executable(test_datauditfix
+  modules/dataudit/test_datauditfix.cpp
+)
+target_link_libraries(test_datauditfix PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME DatAuditFix COMMAND test_datauditfix)
+
+# DatAudit results table model (rows / columns / status filter)
+add_executable(test_datauditmodel
+  modules/dataudit/test_datauditmodel.cpp
+)
+target_link_libraries(test_datauditmodel PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME DatAuditModel COMMAND test_datauditmodel)
 
 # BatchScrapeRunner tests (async batch scrape state machine)
 # Compiles scrapepersistence + its db-store dependencies so the runner

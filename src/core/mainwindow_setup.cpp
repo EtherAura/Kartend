@@ -510,6 +510,7 @@ void MainWindow::createMenuBar() {
                                                     m_appManager->getSettingsManager());
   };
   ctx.onRunBatchScrape = [this]() { openScraperDialog(); };
+  ctx.onRunDatAudit = [this]() { openDatAuditDialog(); };
 
   m_menuController->setContext(ctx);
   m_menuController->setupMenuBar();

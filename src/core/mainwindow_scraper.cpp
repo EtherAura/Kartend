@@ -12,6 +12,7 @@
 // other entry points in this file's surface area.
 
 #include "applicationmanager.h"
+#include "datauditcontroller.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "scrapercontroller.h"
@@ -31,6 +32,12 @@ void MainWindow::updateMarqueeArtwork() {
 void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
   if (m_scraperController) {
     m_scraperController->openScraperDialog(preCollectionIndex, preItemPath);
+  }
+}
+
+void MainWindow::openDatAuditDialog() {
+  if (m_datAuditController) {
+    m_datAuditController->openDialog();
   }
 }
 

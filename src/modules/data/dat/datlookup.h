@@ -134,6 +134,14 @@ public:
   [[nodiscard]] bool isEmpty() const { return m_records.isEmpty(); }
   [[nodiscard]] Dialect detectedDialect() const { return m_dialect; }
 
+  /// All records in the store, in original DAT order. Exposed so an
+  /// audit can enumerate the full catalogue to compute the "missing"
+  /// set — `lookup()` only answers "do I hold this hash?", which can't
+  /// surface entries the collection lacks entirely. Records with no
+  /// hashes were dropped at construction, so this is the findable
+  /// subset (the same set the indexes cover).
+  [[nodiscard]] const QList<DatRecord> &records() const { return m_records; }
+
 private:
   QList<DatRecord> m_records;
   QHash<QString, int> m_bySha1; // hash → index into m_records

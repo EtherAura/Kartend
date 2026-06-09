@@ -1,6 +1,7 @@
 #ifndef DATCACHE_H
 #define DATCACHE_H
 
+#include <functional>
 #include <optional>
 #include <QSqlDatabase>
 #include <QString>
@@ -88,6 +89,17 @@ public:
   [[nodiscard]] std::optional<DatLookup::DatRecord> lookup(const CachedSource &source,
                                                            const QString &md5, const QString &sha1,
                                                            const QString &crc) const;
+
+  /// Stream every record belonging to `source` to `callback`, in
+  /// insertion (DAT) order. Exposed for auditing: computing the
+  /// "missing" set means walking the whole catalogue, which the
+  /// hash-keyed `lookup()` can't do. Streams row-by-row off the
+  /// sqlite forward cursor so a 250k-entry MAME source never
+  /// materialises as one giant QList. Returns false on an invalid
+  /// source or a query failure (callback simply isn't invoked for the
+  /// missing rows); true otherwise, including the empty-source case.
+  bool forEachRecord(const CachedSource &source,
+                     const std::function<void(const DatLookup::DatRecord &)> &callback) const;
 
   /// Drop every cached source + record. Used by the "clear caches"
   /// UI and by tests between runs.

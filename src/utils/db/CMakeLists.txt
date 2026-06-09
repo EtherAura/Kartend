@@ -1,7 +1,9 @@
 target_sources(kartend_utils PRIVATE
   bulkedit.cpp
   collectionhealth.cpp
+  datauditprofile.cpp
   dbmigrations.cpp
+  filehashcache.cpp
   historystore.cpp
   itemartwork.cpp
   itemmetadata.cpp
@@ -15,7 +17,9 @@ target_sources(kartend_utils PRIVATE
   batchsizes.h
   bulkedit.h
   collectionhealth.h
+  datauditprofile.h
   dbmigrations.h
+  filehashcache.h
   historystore.h
   itemartwork.h
   itemmetadata.h

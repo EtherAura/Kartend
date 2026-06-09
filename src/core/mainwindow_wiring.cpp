@@ -152,6 +152,7 @@
 #include "collection/enumstringhelpers.h"
 #include "collection/typehelpers.h"
 #include "databasemanager.h"
+#include "datauditcontroller.h"
 #include "dbeventscontroller.h"
 #include "detailspanemanager.h"
 #include "errorpresentation.h"
@@ -406,6 +407,12 @@ void MainWindow::connectDatabaseManager() {
     sc.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
     sc.getScrollManager = [this]() { return m_appManager->getScrollManager(); };
     m_scraperController->setContext(sc);
+  }
+
+  if (m_datAuditController) {
+    DatAuditControllerContext dc;
+    dc.getParentWindow = [this]() -> QWidget * { return this; };
+    m_datAuditController->setContext(dc);
   }
 }
 

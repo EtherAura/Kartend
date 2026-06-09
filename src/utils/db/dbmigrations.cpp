@@ -192,7 +192,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 15;
+  constexpr int CURRENT_SCHEMA_VERSION = 17;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -237,9 +237,9 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     // v2: Add query performance indexes used by the virtual scroll + filtering
     // paths.
     if (!runBlock(db, 2, origin, [&]() -> bool {
-          return ensureIndex(
-                     db, "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)",
-                     origin, "idx_collections_uuid") &&
+          return ensureIndex(db,
+                             "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)",
+                             origin, "idx_collections_uuid") &&
                  ensureIndex(db,
                              "CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON "
                              "items(collection_uuid)",
@@ -622,8 +622,9 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     // there, not here, because the relative→absolute rewrite needs each
     // collection's media directory, which lives in kartend.cfg rather
     // than the database. A meta flag (items_paths_absolutized) gates it.
-    if (!runBlock(db, 13, origin,
-                  [&]() -> bool { return ensureColumn(db, "items", "rel_path", "TEXT", origin); })) {
+    if (!runBlock(db, 13, origin, [&]() -> bool {
+          return ensureColumn(db, "items", "rel_path", "TEXT", origin);
+        })) {
       return;
     }
     mutableVersion = 13;
@@ -667,6 +668,101 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
       return;
     }
     mutableVersion = 15;
+  }
+
+  if (mutableVersion < 16) {
+    // v16: file_hash_cache — content hashes (crc32/md5/sha1) keyed by
+    // absolute path, validated against (file_size, mtime_unix_ms). Lets the
+    // DAT auditor (and the scraper's hash-based ROM identification) skip
+    // re-hashing a multi-GB ISO when neither the size nor the mtime changed
+    // since the last pass. Regenerable data — a wipe just forces a re-hash —
+    // but it lives in the main DB rather than a throwaway cache file so the
+    // scraper's write worker and the audit worker share one store through
+    // their own connections. Hash columns are nullable only as a sentinel;
+    // RomHasher fills all three on success.
+    if (!runBlock(db, 16, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS file_hash_cache ("
+                             "path TEXT PRIMARY KEY, "
+                             "file_size INTEGER NOT NULL, "
+                             "mtime_unix_ms INTEGER NOT NULL, "
+                             "crc TEXT, "
+                             "md5 TEXT, "
+                             "sha1 TEXT, "
+                             "computed_at_unix_ms INTEGER NOT NULL DEFAULT 0"
+                             ")",
+                             origin, "file_hash_cache");
+        })) {
+      return;
+    }
+    mutableVersion = 16;
+  }
+
+  if (mutableVersion < 17) {
+    // v17: DAT-audit profiles. A profile is a first-class, persisted binding
+    // of one-or-more DAT catalogues to one-or-more scan roots, plus the
+    // audit/fix settings. Independent of collections — collection_uuid is an
+    // optional link ('' = none), so a profile can audit an arbitrary folder.
+    // List-valued fields (scan_roots, region_prefs, ignore_rules) are stored
+    // as compact JSON arrays in TEXT columns; the per-DAT rows live in the
+    // dat_audit_profile_dat child table (ordered by position). dat_audit_result
+    // is the cached per-entry status snapshot that backs the "last audited N
+    // ago" view without forcing a rescan. Children cascade on profile delete;
+    // the store also deletes them explicitly so correctness does not hinge on
+    // the foreign_keys pragma being on.
+    if (!runBlock(db, 17, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS dat_audit_profile ("
+                             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                             "name TEXT NOT NULL, "
+                             "collection_uuid TEXT NOT NULL DEFAULT '', "
+                             "scan_roots TEXT NOT NULL DEFAULT '', "
+                             "merge_mode TEXT NOT NULL DEFAULT 'split', "
+                             "region_prefs TEXT NOT NULL DEFAULT '', "
+                             "one_per_game INTEGER NOT NULL DEFAULT 0, "
+                             "ignore_rules TEXT NOT NULL DEFAULT '', "
+                             "fix_mode TEXT NOT NULL DEFAULT 'in_place', "
+                             "managed_output_root TEXT NOT NULL DEFAULT '', "
+                             "last_scan_at_unix_ms INTEGER NOT NULL DEFAULT 0, "
+                             "created_at_unix_ms INTEGER NOT NULL DEFAULT 0, "
+                             "updated_at_unix_ms INTEGER NOT NULL DEFAULT 0"
+                             ")",
+                             origin, "dat_audit_profile") &&
+                 ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS dat_audit_profile_dat ("
+                             "profile_id INTEGER NOT NULL, "
+                             "position INTEGER NOT NULL, "
+                             "dat_path TEXT NOT NULL, "
+                             "dat_mtime_unix_ms INTEGER NOT NULL DEFAULT 0, "
+                             "dialect INTEGER NOT NULL DEFAULT 0, "
+                             "record_count INTEGER NOT NULL DEFAULT 0, "
+                             "PRIMARY KEY (profile_id, position), "
+                             "FOREIGN KEY (profile_id) REFERENCES dat_audit_profile(id) "
+                             "  ON DELETE CASCADE"
+                             ")",
+                             origin, "dat_audit_profile_dat") &&
+                 ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS dat_audit_result ("
+                             "profile_id INTEGER NOT NULL, "
+                             "entry_key TEXT NOT NULL, "
+                             "status INTEGER NOT NULL, "
+                             "file_path TEXT, "
+                             "detail TEXT, "
+                             "PRIMARY KEY (profile_id, entry_key), "
+                             "FOREIGN KEY (profile_id) REFERENCES dat_audit_profile(id) "
+                             "  ON DELETE CASCADE"
+                             ")",
+                             origin, "dat_audit_result") &&
+                 ensureIndex(db,
+                             "CREATE INDEX IF NOT EXISTS idx_dat_audit_result_profile "
+                             "ON dat_audit_result(profile_id, status)",
+                             origin, "idx_dat_audit_result_profile");
+        })) {
+      return;
+    }
+    // Final block: stamping the in-memory tracker is a dead store (no later
+    // block reads it) — kept so adding a v18 block stays a pure copy-paste.
+    mutableVersion = 17; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

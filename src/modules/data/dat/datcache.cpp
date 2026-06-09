@@ -330,6 +330,37 @@ std::optional<DatLookup::DatRecord> Store::lookup(const CachedSource &source, co
   return std::nullopt;
 }
 
+bool Store::forEachRecord(const CachedSource &source,
+                          const std::function<void(const DatLookup::DatRecord &)> &callback) const {
+  if (!isOpen() || !source.isValid() || !callback) return false;
+  // Read-only despite the non-const QSqlDatabase QSqlQuery demands —
+  // same const_cast shape as lookup().
+  QSqlDatabase &db = const_cast<Store *>(this)->m_db;
+  QSqlQuery q(db);
+  // forwardOnly keeps QSQLITE from buffering the whole 250k-row result
+  // set in memory — we stream one row at a time into the callback.
+  q.setForwardOnly(true);
+  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1 "
+                           "FROM dat_records WHERE source_id = ?"));
+  q.addBindValue(source.id);
+  if (!q.exec()) {
+    qWarning("DatCache: forEachRecord query failed for source %lld: %s", source.id,
+             qPrintable(q.lastError().text()));
+    return false;
+  }
+  while (q.next()) {
+    DatLookup::DatRecord r;
+    r.gameName = q.value(0).toString();
+    r.romName = q.value(1).toString();
+    r.size = q.value(2).toLongLong();
+    r.crc = q.value(3).toString();
+    r.md5 = q.value(4).toString();
+    r.sha1 = q.value(5).toString();
+    callback(r);
+  }
+  return true;
+}
+
 void Store::clearAll() {
   if (!isOpen()) return;
   execSimple(m_db, QStringLiteral("DELETE FROM dat_records"));

@@ -1,6 +1,7 @@
 add_subdirectory(cache)
 add_subdirectory(database)
 add_subdirectory(dat)
+add_subdirectory(dataudit)
 add_subdirectory(kart)
 add_subdirectory(playlist)
 add_subdirectory(query)

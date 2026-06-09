@@ -40,6 +40,7 @@
 #include "kartreader.h"
 #include "titlecountshelpers.h"
 
+#include "datauditcontroller.h"
 #include "dbeventscontroller.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
@@ -84,8 +85,7 @@ Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(std::make_unique<Ui::MainWindow>()), stackedWidget(nullptr),
-      itemsPage(nullptr),
-      gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
+      itemsPage(nullptr), gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
       m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
       currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   // unique_ptr is the sole owner; QObject parent stays null (Kartend-d70s,
@@ -99,6 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_scrollEventsController = std::make_unique<ScrollEventsController>(nullptr);
   m_dbEventsController = std::make_unique<DbEventsController>(nullptr);
   m_scraperController = std::make_unique<ScraperController>(nullptr);
+  m_datAuditController = std::make_unique<DatAuditController>(nullptr);
   m_dialogController = std::make_unique<DialogController>(this);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register

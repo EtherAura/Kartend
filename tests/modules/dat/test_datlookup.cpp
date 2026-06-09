@@ -27,6 +27,7 @@ private slots:
   void storeLooksUpBySha1MD5Crc();
   void storeLookupSkipsEmptyHashes();
   void storeLookupReturnsNullOnMiss();
+  void storeRecordsExposesFullCatalogue();
   void loadStoreFromFileReadsParsesAndIndexes();
   void loadStoreFromFileReportsMissingFile();
   void loadStoreFromFileReportsEmptyPath();
@@ -75,8 +76,7 @@ void TestDatLookup::parsesMinimalNoIntroSnippet() {
   QCOMPARE(records[0].romName, QStringLiteral("Game Alpha (USA).bin"));
   QCOMPARE(records[0].size, qint64{32768});
   QCOMPARE(records[0].crc, QStringLiteral("deadbeef"));
-  QCOMPARE(records[0].sha1,
-           QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+  QCOMPARE(records[0].sha1, QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
   QCOMPARE(records[1].gameName, QStringLiteral("Game Beta (Japan)"));
 }
 
@@ -96,8 +96,7 @@ void TestDatLookup::skipsEntriesWithoutHashes() {
   // A `<rom>` with no hash attributes can't be matched against
   // anything — it's deliberately dropped during parse rather than
   // being kept as dead weight.
-  const QByteArray xml =
-      QByteArrayLiteral(R"xml(<?xml version="1.0"?>
+  const QByteArray xml = QByteArrayLiteral(R"xml(<?xml version="1.0"?>
 <datafile>
   <game name="With Hash">
     <rom name="x" sha1="cccccccccccccccccccccccccccccccccccccccc"/>
@@ -131,18 +130,17 @@ void TestDatLookup::storeLooksUpBySha1MD5Crc() {
   QCOMPARE(store.recordCount(), 2);
 
   // Direct per-kind lookups
-  QVERIFY(store.lookupBySha1(
-              QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) != nullptr);
+  QVERIFY(store.lookupBySha1(QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) !=
+          nullptr);
   QVERIFY(store.lookupByMd5(QStringLiteral("22222222222222222222222222222222")) != nullptr);
   QVERIFY(store.lookupByCrc(QStringLiteral("deadbeef")) != nullptr);
 
   // Combined lookup picks sha1 over md5 over crc — verified by
   // pointing each kind at a different record's hash and confirming
   // the sha1 wins.
-  const auto *picked =
-      store.lookup(QStringLiteral("11111111111111111111111111111111"),
-                   QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-                   QStringLiteral("deadbeef"));
+  const auto *picked = store.lookup(QStringLiteral("11111111111111111111111111111111"),
+                                    QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                                    QStringLiteral("deadbeef"));
   QVERIFY(picked != nullptr);
   QCOMPARE(picked->gameName, QStringLiteral("Game Beta (Japan)"));
 }
@@ -152,8 +150,8 @@ void TestDatLookup::storeLookupSkipsEmptyHashes() {
   QVERIFY(parsed.isOk());
   DatLookup::Store store(parsed.value());
   // Only md5 supplied — should still find the right record.
-  const auto *r = store.lookup(QStringLiteral("11111111111111111111111111111111"),
-                               QString(), QString());
+  const auto *r =
+      store.lookup(QStringLiteral("11111111111111111111111111111111"), QString(), QString());
   QVERIFY(r != nullptr);
   QCOMPARE(r->gameName, QStringLiteral("Game Alpha (USA)"));
 }
@@ -168,6 +166,20 @@ void TestDatLookup::storeLookupReturnsNullOnMiss() {
   QVERIFY(store.lookup(QString(), QString(), QString()) == nullptr);
 }
 
+void TestDatLookup::storeRecordsExposesFullCatalogue() {
+  // records() backs the auditor's "missing" computation — it must return
+  // every parsed record in DAT order, not just the ones a lookup hits.
+  auto parsed = DatLookup::parseNoIntroDat(QByteArray(kSampleDat));
+  QVERIFY(parsed.isOk());
+  DatLookup::Store store(parsed.value());
+
+  const QList<DatLookup::DatRecord> &all = store.records();
+  QCOMPARE(all.size(), 2);
+  QCOMPARE(all.size(), store.recordCount());
+  QCOMPARE(all.at(0).gameName, QStringLiteral("Game Alpha (USA)"));
+  QCOMPARE(all.at(1).gameName, QStringLiteral("Game Beta (Japan)"));
+}
+
 void TestDatLookup::loadStoreFromFileReadsParsesAndIndexes() {
   const QString path = m_dir.filePath("sample.dat");
   QFile f(path);
@@ -178,8 +190,8 @@ void TestDatLookup::loadStoreFromFileReadsParsesAndIndexes() {
   auto store = DatLookup::loadStoreFromFile(path);
   QVERIFY(store.isOk());
   QCOMPARE(store.value().recordCount(), 2);
-  QVERIFY(store.value().lookupBySha1(
-              QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")) != nullptr);
+  QVERIFY(store.value().lookupBySha1(QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")) !=
+          nullptr);
 }
 
 void TestDatLookup::loadStoreFromFileReportsMissingFile() {
@@ -229,19 +241,16 @@ constexpr const char *kMameSample = R"xml(<?xml version="1.0"?>
 } // namespace
 
 void TestDatLookup::detectsLogiqxAndMameRoots() {
-  QCOMPARE(DatLookup::detectDialect(QByteArray(kSampleDat)),
-           DatLookup::Dialect::Logiqx);
-  QCOMPARE(DatLookup::detectDialect(QByteArray(kTosecWithRelease)),
-           DatLookup::Dialect::Logiqx);
-  QCOMPARE(DatLookup::detectDialect(QByteArray(kMameSample)),
-           DatLookup::Dialect::Mame);
+  QCOMPARE(DatLookup::detectDialect(QByteArray(kSampleDat)), DatLookup::Dialect::Logiqx);
+  QCOMPARE(DatLookup::detectDialect(QByteArray(kTosecWithRelease)), DatLookup::Dialect::Logiqx);
+  QCOMPARE(DatLookup::detectDialect(QByteArray(kMameSample)), DatLookup::Dialect::Mame);
 }
 
 void TestDatLookup::detectsUnknownRoot() {
   // A non-DAT XML file should not be mistaken for either dialect —
   // the dispatcher uses this to surface a clear error message.
-  const QByteArray xml = QByteArrayLiteral(
-      R"xml(<?xml version="1.0"?><something-else><x/></something-else>)xml");
+  const QByteArray xml =
+      QByteArrayLiteral(R"xml(<?xml version="1.0"?><something-else><x/></something-else>)xml");
   QCOMPARE(DatLookup::detectDialect(xml), DatLookup::Dialect::Unknown);
   // Empty input also reports Unknown rather than crashing or being
   // ambiguous with a valid root.
@@ -257,8 +266,7 @@ void TestDatLookup::tosecReleaseChildIsIgnored() {
   const auto records = result.value();
   QCOMPARE(records.size(), 1);
   QCOMPARE(records[0].gameName, QStringLiteral("Game Title (1992)(Acme)"));
-  QCOMPARE(records[0].sha1,
-           QStringLiteral("cccccccccccccccccccccccccccccccccccccccc"));
+  QCOMPARE(records[0].sha1, QStringLiteral("cccccccccccccccccccccccccccccccccccccccc"));
   QCOMPARE(records[0].size, qint64{8192});
 }
 
@@ -297,10 +305,9 @@ void TestDatLookup::parseMameFallsBackToSetIdWhenNoDescription() {
   auto result = DatLookup::parseMameListXml(QByteArray(kMameSample));
   QVERIFY(result.isOk());
   const auto records = result.value();
-  const auto it = std::find_if(records.begin(), records.end(),
-                               [](const DatLookup::DatRecord &r) {
-                                 return r.romName == QStringLiteral("x.rom");
-                               });
+  const auto it = std::find_if(records.begin(), records.end(), [](const DatLookup::DatRecord &r) {
+    return r.romName == QStringLiteral("x.rom");
+  });
   QVERIFY(it != records.end());
   QCOMPARE(it->gameName, QStringLiteral("setidonly"));
 }
@@ -322,8 +329,7 @@ void TestDatLookup::parseDatErrorsOnUnknownRoot() {
   // Pointing the dispatcher at something that isn't a recognised
   // DAT file should surface a clear InvalidArgument error rather
   // than silently returning an empty record list.
-  const QByteArray xml = QByteArrayLiteral(
-      R"xml(<?xml version="1.0"?><not-a-dat/>)xml");
+  const QByteArray xml = QByteArrayLiteral(R"xml(<?xml version="1.0"?><not-a-dat/>)xml");
   auto result = DatLookup::parseDat(xml);
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
@@ -352,8 +358,8 @@ void TestDatLookup::loadStoreFromFileTagsDialect() {
   auto mame = DatLookup::loadStoreFromFile(mamePath);
   QVERIFY(mame.isOk());
   QCOMPARE(mame.value().detectedDialect(), DatLookup::Dialect::Mame);
-  QVERIFY(mame.value().lookupBySha1(
-              QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181")) != nullptr);
+  QVERIFY(mame.value().lookupBySha1(QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181")) !=
+          nullptr);
 }
 
 QTEST_MAIN(TestDatLookup)

@@ -60,6 +60,7 @@ class DbEventsController;
 class DialogController;
 struct SettingsDialogContext;
 class ScraperController;
+class DatAuditController;
 class ScrollEventsController;
 class TextZoomHud;
 class OverlayZOrderRegistry;
@@ -173,6 +174,10 @@ public:
   /// orchestration.
   void openScraperDialog(int preCollectionIndex = -1,
                          const QString &preItemPath = QString()) override;
+
+  /// Open the standalone DAT Audit window (File → DAT Audit…). Forwards to
+  /// the DatAuditController, which owns the cached dialog.
+  void openDatAuditDialog();
 
   /// Open the settings dialog with the standard MainWindow-rooted context
   /// (collections list, current index, manager handles, dialog factory).
@@ -344,6 +349,7 @@ private:
   std::unique_ptr<ScrollEventsController> m_scrollEventsController;
   std::unique_ptr<DbEventsController> m_dbEventsController;
   std::unique_ptr<ScraperController> m_scraperController;
+  std::unique_ptr<DatAuditController> m_datAuditController;
   /// Owns dialog construction so MainWindow doesn't need to #include every
   /// dialog header. See dialogcontroller.{h,cpp}.
   std::unique_ptr<DialogController> m_dialogController;

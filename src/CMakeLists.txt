@@ -116,6 +116,7 @@ target_include_directories(kartend_data PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/cache
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/database
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/dat
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/dataudit
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/kart
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/playlist
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/query
@@ -184,6 +185,7 @@ target_include_directories(kartend_ui PUBLIC
   ${CMAKE_BINARY_DIR}/src/kartend_ui_autogen/include
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/detailspanemanager
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/dataudit
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/collection
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/item
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/kart
