@@ -48,7 +48,9 @@ private slots:
   void exportToJson_writesAllItemsAndRoundTrips();
   void exportToM3U_writesExtendedFormatWithBasenameTitles();
   void importFromM3U_skipsUnresolvableEntries();
+  void importFromM3U_resolvesMultiCollectionPathDeterministically();
   void importFromJson_rejectsMissingVersion();
+  void importFromJson_isAtomicAndDedupsDuplicates();
   void createSmartPlaylist_persistsFlagAndFilter();
   void updateSmartFilter_changesPersistedJson();
   void loadSmartFilter_rejectsStaticPlaylist();
@@ -460,6 +462,31 @@ void TestPlaylistManager::importFromM3U_skipsUnresolvableEntries() {
   QCOMPARE(items[1].sourceCollectionUuid, QString("uuid-y"));
 }
 
+void TestPlaylistManager::importFromM3U_resolvesMultiCollectionPathDeterministically() {
+  // Kartend-o84pt: a path present in more than one collection is ambiguous in
+  // M3U (the format carries no collection identity). Import must resolve it
+  // deterministically (lowest collection uuid via ORDER BY), not by SQLite row
+  // order. Insert the higher uuid first so a naive LIMIT-1-by-rowid would pick
+  // the wrong one.
+  QSqlDatabase db = openSharedConnection();
+  seedItemsTable(db);
+  insertItem(db, "uuid-zeta", "/games/shared.rom");
+  insertItem(db, "uuid-alpha", "/games/shared.rom");
+
+  QTemporaryDir tmp;
+  const QString m3uPath = tmp.filePath("dup.m3u");
+  QFile f(m3uPath);
+  QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+  f.write("#EXTM3U\n/games/shared.rom\n");
+  f.close();
+
+  auto created = m_pm->importFromM3U(m3uPath, "Imported");
+  QVERIFY(created.isOk());
+  const auto items = m_pm->loadItems(created.value());
+  QCOMPARE(items.size(), 1);
+  QCOMPARE(items[0].sourceCollectionUuid, QString("uuid-alpha")); // lowest uuid wins, deterministic
+}
+
 void TestPlaylistManager::importFromJson_rejectsMissingVersion() {
   QTemporaryDir tmp;
   const QString jsonPath = tmp.filePath("bad.json");
@@ -474,6 +501,38 @@ void TestPlaylistManager::importFromJson_rejectsMissingVersion() {
   auto result = m_pm->importFromJson(jsonPath);
   QVERIFY(result.isError());
   QCOMPARE(m_pm->loadAll().size(), 0);
+}
+
+void TestPlaylistManager::importFromJson_isAtomicAndDedupsDuplicates() {
+  // Kartend-fd7xl: items now import inside a single transaction; duplicate
+  // (uuid,path) entries collapse to one (matching addItem's idempotent skip)
+  // and empty-path entries are dropped, with insertion order preserved.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString jsonPath = tmp.filePath("dup.json");
+  QFile f(jsonPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write(R"({
+    "kartend_playlist_version": 1,
+    "name": "Dups",
+    "items": [
+      {"source_collection_uuid": "uuid-a", "source_path": "/games/a.rom"},
+      {"source_collection_uuid": "uuid-b", "source_path": "/movies/b.mkv"},
+      {"source_collection_uuid": "uuid-a", "source_path": "/games/a.rom"},
+      {"source_collection_uuid": "", "source_path": ""}
+    ]
+  })");
+  f.close();
+
+  auto result = m_pm->importFromJson(jsonPath, "Dups Copy");
+  QVERIFY(result.isOk());
+
+  const auto items = m_pm->loadItems(result.value());
+  QCOMPARE(items.size(), 2); // duplicate and empty-path entries dropped
+  QCOMPARE(items[0].sourceCollectionUuid, QString("uuid-a"));
+  QCOMPARE(items[0].sourcePath, QString("/games/a.rom"));
+  QCOMPARE(items[1].sourceCollectionUuid, QString("uuid-b"));
+  QCOMPARE(items[1].sourcePath, QString("/movies/b.mkv"));
 }
 
 void TestPlaylistManager::createSmartPlaylist_persistsFlagAndFilter() {

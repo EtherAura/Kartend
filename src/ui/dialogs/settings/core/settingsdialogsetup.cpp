@@ -258,33 +258,21 @@ void SettingsDialog::handleSpacingChanged() {
 }
 
 void SettingsDialog::setupTreeWidgetConnections() {
-  if (!collectionTreeWidget) {
+  if (!collectionTreeWidget || !m_treeManager) {
     return;
   }
-  connect(collectionTreeWidget, &QTreeWidget::itemSelectionChanged, this,
-          &SettingsDialog::onTreeItemSelectionChanged);
-  connect(collectionTreeWidget, &QTreeWidget::itemChanged, this,
-          &SettingsDialog::onTreeItemChanged);
-  collectionTreeWidget->setEditTriggers(QAbstractItemView::EditKeyPressed |
-                                        QAbstractItemView::DoubleClicked);
-
-  // right-click context menu surfaces Rename/Duplicate/Delete
-  // and expand/collapse helpers where the user's pointer already is.
-  collectionTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-  connect(collectionTreeWidget, &QWidget::customContextMenuRequested, this,
-          &SettingsDialog::onTreeContextMenuRequested);
-
-  // drag-drop reparenting. The promoted CollectionTreeWidget
-  // delegates cycle validation to wouldCreateCircularReference() and emits
-  // treeRearranged() on success so we can resync parentCollectionIndex.
-  collectionTreeWidget->setCycleCheck([this](int childIndex, int parentIndex) {
-    return wouldCreateCircularReference(childIndex, parentIndex);
-  });
-  collectionTreeWidget->setItemToIndex([this](const QTreeWidgetItem *item) {
-    return m_treeManager ? m_treeManager->indexOf(const_cast<QTreeWidgetItem *>(item)) : -1;
-  });
-  connect(collectionTreeWidget, &CollectionTreeWidget::treeRearranged, this,
-          &SettingsDialog::onTreeRearranged);
+  // Kartend-ook62/mnymg: the TreeManager controller owns the widget's wiring
+  // AND the gesture handlers (selection switch, rename, context-menu, drag-drop
+  // reparent). It borrows this dialog's selection-state members by pointer and
+  // routes dialog-side effects through the SettingsTreeHost interface (this).
+  m_treeManager->setSelectionState(&currentCollectionIndex, &currentTreeItem, &originalCollection,
+                                   &m_collectionSaved);
+  m_treeManager->setHost(this);
+  m_treeManager->attachWidget();
+  // The controller persists a drag-drop reparent immediately; relay it to the
+  // dialog's collectionSaved signal (survives a Cancel of the outer dialog).
+  connect(m_treeManager.get(), &TreeManager::collectionsReordered, this,
+          [this]() { emit collectionSaved(collections); });
 }
 
 void SettingsDialog::setupUIConstraints() {

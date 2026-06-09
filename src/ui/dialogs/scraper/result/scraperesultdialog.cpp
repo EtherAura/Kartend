@@ -9,6 +9,7 @@
 #include "durationformat.h"
 #include "flowlayout.h"
 #include "mediatypecheckboxbuilder.h"
+#include "scrapedownloaddispatcher.h"
 #include "scraperesultdialogunified.h"
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
@@ -19,14 +20,10 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
-#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDir>
 #include <QElapsedTimer>
-#include <QFile>
-#include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
@@ -53,7 +50,6 @@
 #include <QtConcurrent/QtConcurrentRun>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <QUrlQuery>
 
 #include <QStackedWidget>
 #include <QTextBrowser>
@@ -193,136 +189,6 @@ void ScrapeResultDialog::setRescrapeContext(const QString &artworkDir, const QSt
   m_rescrapeBaseName = baseName;
   m_rescrapeMode = rescrapeMode;
 }
-
-namespace {
-// Compute the on-disk filename a group/company-scoped asset would
-// occupy under an artwork directory. Mirrors the layout used by
-// scrapepersistence.cpp (`_shared/<type>/<scope>_<id>.<ext>`). We
-// can't easily share the extension-inference helper because it lives
-// in an anonymous namespace there; for the dedup probe we accept any
-// of the common image extensions, since the actual stored ext
-// depends on which URL the *first* scrape used.
-QStringList sharedAssetProbePaths(const Scraper::MediaAsset &asset, const QString &artworkDir) {
-  if (asset.scope == Scraper::MediaScope::Game || asset.scopeKey.isEmpty() ||
-      artworkDir.isEmpty()) {
-    return {};
-  }
-  const QString scopePrefix = asset.scope == Scraper::MediaScope::Group
-                                  ? QStringLiteral("group_")
-                                  : QStringLiteral("company_");
-  const QString dir = QDir(artworkDir).filePath(QStringLiteral("_shared/") + asset.type);
-  // Probe png first (default), then common fallbacks. extensionForAsset
-  // in scrapepersistence defaults to png for images; if a previous
-  // scrape used outputformat=jpg or SS served webp, we'd still find
-  // it here.
-  QStringList out;
-  for (const char *ext : {"png", "jpg", "jpeg", "webp"}) {
-    out.append(
-        QDir(dir).filePath(scopePrefix + asset.scopeKey + QLatin1Char('.') + QLatin1String(ext)));
-  }
-  return out;
-}
-
-QString findExistingSharedAsset(const Scraper::MediaAsset &asset, const QStringList &searchPaths) {
-  for (const QString &artDir : searchPaths) {
-    for (const QString &candidate : sharedAssetProbePaths(asset, artDir)) {
-      if (QFileInfo::exists(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return QString();
-}
-
-/// Compute the on-disk path scrapepersistence.cpp would use for a
-/// per-game (Game-scoped) image asset, given the active collection's
-/// artwork directory + basename. Mirrors the layout
-/// `{artworkDir}/<type>/{baseName}.<ext>`. Probes a small extension
-/// whitelist because the actual stored extension depends on whichever
-/// URL the *prior* scrape used (default png, possibly jpg/webp).
-/// Returns the first existing candidate, or empty when none match.
-QString findExistingPerGameAsset(const Scraper::MediaAsset &asset, const QString &artworkDir,
-                                 const QString &baseName) {
-  if (asset.scope != Scraper::MediaScope::Game || artworkDir.isEmpty() || baseName.isEmpty() ||
-      asset.type.isEmpty()) {
-    return {};
-  }
-  // Skip videos / manuals / non-image kinds — the CRC short-circuit
-  // is documented for SS's mediaJeu.php image endpoints. Videos
-  // (`mediaVideoJeu.php`) and manuals (`mediaManuelJeu.php`) don't
-  // accept the hash params per SS docs.
-  static const QStringList kSkipTypes = {QStringLiteral("video"), QStringLiteral("manual")};
-  if (kSkipTypes.contains(asset.type.toLower())) return {};
-  const QString dir = QDir(artworkDir).filePath(asset.type);
-  for (const char *ext : {"png", "jpg", "jpeg", "webp"}) {
-    const QString candidate = QDir(dir).filePath(baseName + QLatin1Char('.') + QLatin1String(ext));
-    if (QFileInfo::exists(candidate)) {
-      return candidate;
-    }
-  }
-  return {};
-}
-
-struct LocalHashes {
-  QString crc32Hex; // SS expects the CRC32 as a hex string
-  QString md5Hex;
-  QString sha1Hex;
-};
-
-/// Hash an existing on-disk asset for the SS short-circuit. Streams
-/// the file once through both MD5 and SHA1 (cheap relative to the
-/// download we're trying to skip); CRC32 left empty because Qt
-/// doesn't ship one and the MD5 path is sufficient. Empty result
-/// when the file can't be read — caller falls back to unconditional
-/// fetch.
-LocalHashes hashLocalFile(const QString &path) {
-  LocalHashes out;
-  QFile f(path);
-  if (!f.open(QIODevice::ReadOnly)) return out;
-  QCryptographicHash md5(QCryptographicHash::Md5);
-  QCryptographicHash sha1(QCryptographicHash::Sha1);
-  while (!f.atEnd()) {
-    const QByteArray chunk = f.read(64 * 1024);
-    md5.addData(chunk);
-    sha1.addData(chunk);
-  }
-  out.md5Hex = QString::fromLatin1(md5.result().toHex());
-  out.sha1Hex = QString::fromLatin1(sha1.result().toHex());
-  return out;
-}
-
-/// Append SS's hash query params to a media URL so its server can
-/// short-circuit the response when our local file matches. SS docs:
-/// when the supplied hash matches, the server replies with a tiny
-/// "MD5OK" / "SHA1OK" / "CRCOK" body instead of the full bytes.
-QUrl withHashHints(const QUrl &original, const LocalHashes &hashes) {
-  if (hashes.md5Hex.isEmpty() && hashes.sha1Hex.isEmpty() && hashes.crc32Hex.isEmpty()) {
-    return original;
-  }
-  QUrl out(original);
-  QUrlQuery q(out);
-  if (!hashes.md5Hex.isEmpty() && !q.hasQueryItem(QStringLiteral("md5"))) {
-    q.addQueryItem(QStringLiteral("md5"), hashes.md5Hex);
-  }
-  if (!hashes.sha1Hex.isEmpty() && !q.hasQueryItem(QStringLiteral("sha1"))) {
-    q.addQueryItem(QStringLiteral("sha1"), hashes.sha1Hex);
-  }
-  if (!hashes.crc32Hex.isEmpty() && !q.hasQueryItem(QStringLiteral("crc"))) {
-    q.addQueryItem(QStringLiteral("crc"), hashes.crc32Hex);
-  }
-  out.setQuery(q);
-  return out;
-}
-
-/// True when SS's short-circuit reply landed (small body that starts
-/// with one of the documented sentinels). The trailing newline /
-/// whitespace is sometimes present; trim before comparing.
-bool isHashShortCircuit(const QByteArray &body) {
-  if (body.size() > 32) return false;
-  const QByteArray trimmed = body.trimmed();
-  return trimmed == "MD5OK" || trimmed == "SHA1OK" || trimmed == "CRCOK";
-}
-} // namespace
 
 void ScrapeResultDialog::buildUi() {
   auto *root = new QVBoxLayout(this);
@@ -612,7 +478,6 @@ void ScrapeResultDialog::onApply() {
   m_applyButton->setEnabled(false);
   m_singleItemView->candidateList()->setEnabled(false);
   m_downloadsTotal = selected.size();
-  m_downloadsPending = selected.size();
   m_downloadedBytes = 0;
   m_downloadStartMs = QDateTime::currentMSecsSinceEpoch();
   m_singleItemView->statusLabel()->setText(tr("Downloading %1 media items…").arg(m_downloadsTotal));
@@ -636,125 +501,43 @@ void ScrapeResultDialog::onApply() {
 
 void ScrapeResultDialog::dispatchSelectedDownloads(
     const QList<Scraper::MediaAsset> &selected, const std::shared_ptr<QElapsedTimer> &applyTimer) {
-  // Fire every selected asset at once. Scraper::HttpClient enforces
-  // the per-host concurrency cap + inter-start throttle, so dispatching
-  // in parallel just fills the available slots instead of waiting for
-  // each download to finish before queueing the next. Big interactive
-  // scrapes (20+ media types) used to spend the whole queue serialized
-  // behind one in-flight reply at a time; with the throttle policy
-  // already gating downstream this serialization was pure dead time.
+  // Kartend-dpehr: the download orchestration — cross-collection shared-asset
+  // dedup, per-game CRC short-circuit, the parallel throttled async fetch, and
+  // the Kartend-5g0g2 use-after-free guard — now lives in the non-UI
+  // Scraper::ScrapeDownloadDispatcher (unit-tested without a QDialog). The
+  // dialog only configures it, forwards progress to its UI, and on completion
+  // records the payloads + finishes the apply.
   //
-  // QPointer guard: each fetch's completion callback can fire long
-  // after the dialog has been accept()'d and destroyed by the caller
-  // (cancel mid-download → caller exits exec() → caller's scope ends
-  // → dialog dtor). The QPointer goes null when the dialog is
-  // destroyed; the callback checks it before touching `this`.
-  QPointer<ScrapeResultDialog> guard(this);
-  // CRC short-circuit context lookup. Active only when the user has
-  // configured FillMissing or UpdateChanged for the active scrape.
-  // Overwrite mode wants the bytes regardless; Skip never reaches
-  // this dialog (batch-level signal, gate'd in batchscraperunner).
-  const bool crcEligible = !m_rescrapeArtworkDir.isEmpty() && !m_rescrapeBaseName.isEmpty() &&
-                           (m_rescrapeMode == Scraper::RescrapeMode::FillMissing ||
-                            m_rescrapeMode == Scraper::RescrapeMode::UpdateChanged);
-  for (const auto &asset : selected) {
-    // Cross-collection dedup for group/company-scoped assets. If the
-    // file already lives in the current collection's `_shared/` (or
-    // any sibling collection's), read its bytes from disk and route
-    // them through the same MediaDownload pipeline used by the
-    // network path — applyScrapedItem then writes them into the
-    // *active* collection's `_shared/` directory, so a new collection
-    // is self-contained on first scrape without re-paying bandwidth.
-    const QString existing = findExistingSharedAsset(asset, m_sharedSearchPaths);
-    if (!existing.isEmpty()) {
-      qCInfo(lcScrapeTimings) << "DIALOG dedup hit" << asset.type << asset.label << "<-"
-                              << existing;
-      QFile f(existing);
-      QByteArray bytes;
-      if (f.open(QIODevice::ReadOnly)) {
-        bytes = f.readAll();
-      }
-      if (!bytes.isEmpty()) {
-        MediaDownload dl;
-        dl.asset = asset;
-        dl.bytes = bytes;
-        m_downloadedBytes += bytes.size();
-        m_result.downloads.append(dl);
-      }
-      // Don't finish the apply from inside the loop: finishCurrentApply() can
-      // accept()/destroy the dialog on the legacy/test path, and the next loop
-      // iteration would then dereference a freed `this` (Kartend-5g0g2). Just
-      // tally the dedup hit here; the post-loop check finishes exactly once
-      // after every asset has been dispatched.
-      --m_downloadsPending;
-      continue;
-    }
-    // Per-game CRC short-circuit: append md5/sha1 hash hints to the
-    // URL when the destination file already exists. SS replies with
-    // a tiny "*OK" body when the local file matches, and we treat
-    // that as a benign skip — no bytes added to the download list,
-    // existing file stays untouched. The persistence layer's
-    // re-scrape gate then never sees this asset and does the right
-    // thing by default (FillMissing keeps existing; UpdateChanged
-    // can't compare bytes because we never downloaded them, but
-    // since SS confirmed equality the existing file is the right
-    // copy anyway).
-    QUrl fetchUrl = asset.url;
-    if (crcEligible) {
-      const QString existingPerGame =
-          findExistingPerGameAsset(asset, m_rescrapeArtworkDir, m_rescrapeBaseName);
-      if (!existingPerGame.isEmpty()) {
-        const LocalHashes hashes = hashLocalFile(existingPerGame);
-        fetchUrl = withHashHints(asset.url, hashes);
-        qCInfo(lcScrapeTimings) << "DIALOG hash-hint" << asset.type << "from" << existingPerGame;
-      }
-    }
-    m_singleItemView->provider()->fetchMediaBytes(
-        fetchUrl, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
-          if (guard.isNull()) return; // dialog gone — drop the reply
-          qCInfo(lcScrapeTimings) << "DIALOG complete" << asset.type << asset.label
-                                  << "ok=" << response.isOk()
-                                  << "elapsed_total=" << applyTimer->elapsed() << "ms";
-          if (response.isOk()) {
-            const QByteArray bytes = response.value();
-            // Hash short-circuit hit — SS confirmed the local file
-            // matches, so don't add to the download list. Persistence
-            // never sees the asset and the existing file stays put.
-            if (isHashShortCircuit(bytes)) {
-              qCInfo(lcScrapeTimings)
-                  << "DIALOG hash-hit (skip)" << asset.type << "body=" << bytes.trimmed();
-            } else {
-              MediaDownload dl;
-              dl.asset = asset;
-              dl.bytes = bytes;
-              guard->m_downloadedBytes += dl.bytes.size();
-              guard->m_result.downloads.append(dl);
-            }
-          }
-          // On error we silently skip — partial success is better than
-          // failing the whole scrape because one asset 404'd.
-          --guard->m_downloadsPending;
-          const int completed = guard->m_downloadsTotal - guard->m_downloadsPending;
-          guard->updateSingleItemProgress(completed);
-          if (guard->m_downloadsPending <= 0) {
-            qCInfo(lcScrapeTimings) << "DIALOG all done in" << applyTimer->elapsed() << "ms";
-            guard->m_unified->finishCurrentApply();
-          }
-        });
+  // The dispatcher is parented to the dialog: if the dialog is destroyed
+  // mid-download, the dispatcher dies with it and its QPointer-guarded fetch
+  // callbacks no-op — the same lifetime guarantee the inline version had.
+  if (!m_downloadDispatcher) {
+    m_downloadDispatcher = new Scraper::ScrapeDownloadDispatcher(this);
+    connect(m_downloadDispatcher, &Scraper::ScrapeDownloadDispatcher::progressed, this,
+            [this](int completed, int /*total*/, qint64 bytesSoFar) {
+              m_downloadedBytes = bytesSoFar;
+              updateSingleItemProgress(completed);
+            });
+    connect(m_downloadDispatcher, &Scraper::ScrapeDownloadDispatcher::finished, this,
+            [this](const QList<Scraper::PendingMediaWrite> &downloads, qint64 totalBytes) {
+              m_downloadedBytes = totalBytes;
+              // m_result.downloads was cleared in onApply() before dispatch.
+              for (const auto &d : downloads) {
+                m_result.downloads.append(MediaDownload{d.asset, d.bytes});
+              }
+              // finishCurrentApply() may accept()/delete the dialog — last touch.
+              m_unified->finishCurrentApply();
+            });
   }
-  qCInfo(lcScrapeTimings) << "DIALOG dispatch loop returned in" << applyTimer->elapsed() << "ms"
-                          << "(should be near zero — all calls are async)";
 
-  // Every dedup hit above resolved synchronously without an async completion
-  // callback. If they accounted for all selected assets, m_downloadsPending is
-  // already drained and nothing else will finish the apply — so do it once,
-  // here, outside the loop (Kartend-5g0g2). Mixed/network selections keep
-  // m_downloadsPending > 0 and finish via their guarded per-download callbacks.
-  // finishCurrentApply() may delete the dialog, so `this` must not be touched
-  // after this point.
-  if (m_downloadsPending <= 0) {
-    m_unified->finishCurrentApply();
-  }
+  Scraper::ScrapeDownloadDispatcher::Config cfg;
+  cfg.provider = m_singleItemView->provider();
+  cfg.sharedSearchPaths = m_sharedSearchPaths;
+  cfg.rescrapeArtworkDir = m_rescrapeArtworkDir;
+  cfg.rescrapeBaseName = m_rescrapeBaseName;
+  cfg.rescrapeMode = m_rescrapeMode;
+  m_downloadDispatcher->setConfig(cfg);
+  m_downloadDispatcher->dispatch(selected, applyTimer);
 }
 
 QString ScrapeResultDialog::formatDuration(qint64 ms) {

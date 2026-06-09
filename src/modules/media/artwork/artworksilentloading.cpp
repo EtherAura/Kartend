@@ -22,7 +22,6 @@
 #include <QPointer>
 #include <QStackedWidget>
 #include <QStringList>
-#include <QThreadPool>
 #include <QTimer>
 
 // Starts early dentry prewarm for a collection BEFORE items are loaded.
@@ -43,12 +42,9 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
     return;
   }
 
-  QThreadPool::globalInstance()->start([dirList]() {
-    auto &cache = ArtworkUtils::DirectoryCache::instance();
-    cache.prewarmDirectories(dirList);
-    cache.processQueuedDirectories();
-    qCDebug(lcPerfTrace) << "Early dentry prewarm complete: dirs=" << dirList.size();
-  });
+  // Kartend-uzs42: capped at one in-flight prewarm so a burst of early-load
+  // calls / collection switches doesn't pile up redundant global-pool walks.
+  ArtworkUtils::DirectoryCache::instance().schedulePrewarm(dirList);
 
   qCDebug(lcPerfTrace) << "Started early dentry prewarm: dirs=" << dirList.size();
 }

@@ -2,6 +2,7 @@
 #define APPEARANCEEFFECTSPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -14,7 +15,7 @@ struct SettingsModel;
 
 /// Per-collection "Effects" appearance sub-sub-tab. Owns the wallpaper-
 /// parallax + toolbar-backdrop-blur enable + strength/radius controls.
-class AppearanceEffectsPanel : public QWidget {
+class AppearanceEffectsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceEffectsPanel)
 public:
@@ -22,9 +23,9 @@ public:
   ~AppearanceEffectsPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
 signals:

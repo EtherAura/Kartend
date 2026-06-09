@@ -112,7 +112,7 @@ void CoverFlowWidget::startArtworkLoad(const QString &path) {
   watcher->setFuture(QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
 }
 
-void CoverFlowWidget::requestScaledPixmap(const QString &key, const QPixmap &sourcePm,
+void CoverFlowWidget::requestScaledPixmap(const CoverFlowScaledKey &key, const QPixmap &sourcePm,
                                           const QSize &targetSize) {
   if (sourcePm.isNull() || targetSize.isEmpty() || m_pendingScales.contains(key)) {
     return;
@@ -157,13 +157,8 @@ void CoverFlowWidget::pruneScaledPixmapCache() {
     keepPaths.insert(m_cards[i].artworkPath);
   }
   for (auto it = m_scaledPixmapCache.begin(); it != m_scaledPixmapCache.end();) {
-    // Cache key shape is "<path>|<W>x<H>"; the leading section up to '|'
-    // is the artwork path. Strip it once per entry to compare against
-    // the keep-set.
-    const QString &k = it.key();
-    const int sep = k.indexOf(QLatin1Char('|'));
-    const QString entryPath = sep > 0 ? k.left(sep) : k;
-    if (!keepPaths.contains(entryPath)) {
+    // Kartend-el0fr: the key now carries the path directly (no string parse).
+    if (!keepPaths.contains(it.key().path)) {
       it = m_scaledPixmapCache.erase(it);
     } else {
       ++it;

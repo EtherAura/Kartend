@@ -98,36 +98,19 @@ void ScrollManager::setupScrollSuppression() {
       QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS;
   state->arrow().suppressArrowCenterUntilMs = until;
 
-  InteractionStateHolder *statePtr = state;
-  // Clear arrow center suppression after the suppression window expires -
-  // checks timestamp to avoid clearing if another suppress was scheduled
-  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this, [statePtr]() {
-    if (!statePtr) {
-      return;
-    }
-    qint64 suppressUntilMs = statePtr->arrow().suppressArrowCenterUntilMs;
-    if (suppressUntilMs > 0 && QDateTime::currentMSecsSinceEpoch() < suppressUntilMs) {
-      return;
-    }
-    statePtr->arrow().suppressArrowCenter = false;
-  });
+  // Kartend-43ngf: restart the reusable single-shot timer instead of allocating
+  // a fresh QTimer::singleShot per scroll event. It clears the suppression after
+  // the window expires (timestamp-checked in its timeout handler).
+  m_arrowCenterClearTimer.start();
 }
 
 void ScrollManager::finalizeScrollChanges() {
-  // Delay clearing UserScrollActive to allow any pending scroll events
-  // to be processed with the flag still set. After clearing, trigger
-  // artwork update since it was deferred during scrolling.
-  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
-    if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
-      state->scroll().userScrollActive = false;
-    }
-    // Trigger artwork update now that user scroll is
-    // complete - artwork loading was deferred while
-    // userScrollActive was true
-    if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
-      art->updateViewportArtwork();
-    }
-  });
+  // Delay clearing UserScrollActive to allow any pending scroll events to be
+  // processed with the flag still set. After clearing, the deferred artwork
+  // refresh fires. Kartend-43ngf: restart the reusable single-shot timer
+  // instead of allocating a fresh QTimer::singleShot per scroll event (its
+  // handler clears userScrollActive and runs the debounced artwork refresh).
+  m_scrollSettleTimer.start();
 
   notifyUserActivity();
   if (!m_scrollTimer.isActive()) {
@@ -136,6 +119,20 @@ void ScrollManager::finalizeScrollChanges() {
 }
 
 void ScrollManager::onThrottledUpdate() {
+  // Kartend-73ql5: while a vertical scroll animation is running, its
+  // QPropertyAnimation::valueChanged already drives updateVirtualView() once
+  // per frame (AnimationManager → requestVirtualViewUpdate). The throttle
+  // timer was started from handleProgrammaticScroll() for the same scrollbar
+  // movement, so firing it here would dispatch a second, redundant full
+  // updateVirtualView per ~100ms window on top of the per-frame ones. Skip it
+  // while the animation owns the frame — the animation's final frame leaves the
+  // view current. A non-animated programmatic jump (verticalAnimActive ==
+  // false, no per-frame driver) still refreshes the view here.
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    if (state->verticalAnimActive()) {
+      return;
+    }
+  }
   updateVirtualView();
 }
 

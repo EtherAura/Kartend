@@ -30,6 +30,14 @@ private slots:
   void suspicious_trustedLauncherPathExempted();
   void suspicious_trustExemptsOnlyLauncherFields();
   void suspicious_additionalLaunchersAndEmptyPathsHandled();
+
+  // collectInTreeLauncherPaths (Kartend-u8wf0) — the headless-import gate that
+  // catches a .kart bundling its own launcher executable.
+  void inTree_launcherInsideExtractedRoot_flagged();
+  void inTree_launcherOutsideExtractedRoot_notFlagged();
+  void inTree_additionalLauncherInside_flagged();
+  void inTree_dotDotEscapingRoot_notFlagged();
+  void inTree_emptyRootOrPath_notFlagged();
 };
 
 void TestKartPreflight::classify_emptyPath() {
@@ -235,6 +243,73 @@ void TestKartPreflight::suspicious_additionalLaunchersAndEmptyPathsHandled() {
   QCOMPARE(out.size(), 1);
   QCOMPARE(out.first().first, QStringLiteral("additionalLaunchers[0].launcherPath"));
   QCOMPARE(out.first().second, QStringLiteral("/etc/evil"));
+}
+
+void TestKartPreflight::inTree_launcherInsideExtractedRoot_flagged() {
+  // A manifest launcherPath that resolves inside the extracted kart tree is the
+  // dangerous self-bundled-executable case. collectSuspiciousKartPaths can't
+  // catch it (the root usually sits under an allowlisted prefix), so the
+  // headless-import gate relies on this. The bundled file need not exist yet —
+  // detection happens before launch — so derive the path from the canonical
+  // root to keep the prefix compare exact across symlinked temp roots.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString canonRoot = QFileInfo(root.path()).canonicalFilePath();
+  const QString inside = canonRoot + QStringLiteral("/payload/runner.sh");
+  const auto out = kart::collectInTreeLauncherPaths(configWithLauncher(inside), root.path());
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().first, QStringLiteral("launcher.launcherPath"));
+  QCOMPARE(out.first().second, inside);
+}
+
+void TestKartPreflight::inTree_launcherOutsideExtractedRoot_notFlagged() {
+  // A launcher elsewhere on the host (the normal case — an installed emulator)
+  // is none of this gate's business; only in-tree paths are blocked.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString outside =
+      QDir::cleanPath(QDir::homePath() + QStringLiteral("/.local/bin/installed-runner"));
+  QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(outside), root.path()).isEmpty());
+}
+
+void TestKartPreflight::inTree_additionalLauncherInside_flagged() {
+  // The check covers every launcher field, not just the primary, so a kart
+  // can't smuggle its bundled executable in via an additional launcher.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString canonRoot = QFileInfo(root.path()).canonicalFilePath();
+  CollectionConfig cfg; // empty primary -> skipped
+  LauncherConfig alt;
+  alt.launcherPath = canonRoot + QStringLiteral("/bin/alt-runner");
+  cfg.launcher.additionalLaunchers.append(alt);
+  const auto out = kart::collectInTreeLauncherPaths(cfg, root.path());
+  QCOMPARE(out.size(), 1);
+  QCOMPARE(out.first().first, QStringLiteral("additionalLaunchers[0].launcherPath"));
+}
+
+void TestKartPreflight::inTree_dotDotEscapingRoot_notFlagged() {
+  // A path that prefixes the root then climbs out with .. resolves OUTSIDE the
+  // tree, so it's not an in-tree launcher — the cleanPath/canonicalize step
+  // must collapse the traversal before the prefix compare (mirror of the
+  // suspicious-path traversal guard).
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString canonRoot = QFileInfo(root.path()).canonicalFilePath();
+  const QString escape = canonRoot + QStringLiteral("/../escapee/runner");
+  // Premise: after .. collapse this really is outside the root.
+  QVERIFY(!QDir::cleanPath(escape).startsWith(canonRoot + QLatin1Char('/')));
+  QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(escape), root.path()).isEmpty());
+}
+
+void TestKartPreflight::inTree_emptyRootOrPath_notFlagged() {
+  // Defensive guards: an empty extraction root (shouldn't happen post-extract)
+  // or an empty launcher path must never report a false positive.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(QStringLiteral("/anything")),
+                                           QString())
+              .isEmpty());
+  QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(QString()), root.path()).isEmpty());
 }
 
 QTEST_MAIN(TestKartPreflight)

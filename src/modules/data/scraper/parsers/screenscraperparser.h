@@ -80,6 +80,14 @@ parseSearchResponse(const QByteArray &json);
 [[nodiscard]] ErrorUtils::Result<Scraper::ScrapedItem>
 parseDetailResponse(const QByteArray &json, const ParseOptions &options = {});
 
+/// Project an already-parsed ScrapedItem onto the lightweight
+/// ScrapeCandidate the dialog shows (display name, dev/publisher/year
+/// subtitle, front-cover thumbnail). Kartend-399wm: the provider parses
+/// jeuInfos once via parseDetailResponse and derives the candidate from the
+/// same item rather than re-parsing the whole payload through
+/// parseSearchResponse.
+[[nodiscard]] Scraper::ScrapeCandidate candidateFromItem(const Scraper::ScrapedItem &item);
+
 /// Snapshot of the authenticated user's account state returned by
 /// SS's `ssuserInfos.php` endpoint. Surfaced under the Scrapers
 /// settings panel so the user can see (a) which tier SS thinks

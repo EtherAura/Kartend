@@ -105,7 +105,7 @@ void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
 
   // Kartend-d70s (re-attempted after Kartend-3v92 replaced
   // NavigationManager's parent()-based lifetime guards with the
-  // isAlive() helper): sub-managers are owned solely by their
+  // appNotShuttingDown() helper): sub-managers are owned solely by their
   // std::unique_ptr members. QObject parent stays null so Qt's children
   // sweep can never double-delete a manager that's also held in a
   // unique_ptr, and so a future reparent doesn't change destruction

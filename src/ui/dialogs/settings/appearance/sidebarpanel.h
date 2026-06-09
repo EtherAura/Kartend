@@ -2,6 +2,7 @@
 #define SIDEBARPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -19,7 +20,7 @@ struct SettingsModel;
 /// layout / background / typography / bubbles, plus the scrollbar checkboxes
 /// physically grouped with the layout fields. Internalizes the color/font/file
 /// picker dialogs and the position-driven width-vs-height visibility toggle.
-class SidebarPanel : public QWidget {
+class SidebarPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(SidebarPanel)
 public:
@@ -30,15 +31,15 @@ public:
 
   /// Hydrate every field from the model's current working collection and
   /// refresh the active-collection label.
-  void load();
+  void load() override;
 
   /// Reset to defaults and clear the active-collection label. Used when no
   /// collection is selected.
-  void clear();
+  void clear() override;
 
   /// Persist user-edited values back into the model's current working
   /// collection.
-  void save() const;
+  void save() override;
 
   /// True when any field on the live UI differs from the corresponding field
   /// on the model's original-collection snapshot.

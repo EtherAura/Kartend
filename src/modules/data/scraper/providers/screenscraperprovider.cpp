@@ -28,6 +28,7 @@
 #include "datlookup.h"
 #include "httpclient.h"
 #include "romhasher.h"
+#include "scraperretrypolicy.h"
 #include "screenscraperparser.h"
 #include "screenscraperregion.h"
 #include "screenscrapersystems.h"
@@ -420,6 +421,12 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
                                   callback = std::move(callback)](
                                      const QList<ScreenScraperSystems::System> &systems) mutable {
+    // Kartend-5l9ow: datCanonicalName is hash-derived — findDatCanonicalName
+    // looks the DAT up by this ROM's md5/sha1/crc, so the canonical name
+    // belongs to a record whose hash matches the ROM. It is therefore already
+    // consistent with the hash sent in the jeuInfos URL below, and SS treats the
+    // hash as authoritative regardless, so preferring it over the raw filename
+    // cannot steer a hash-confident lookup to a different game.
     const QString romnom =
         !datCanonicalName.isEmpty() ? datCanonicalName : QFileInfo(trimmed).fileName();
     const int systemeid = resolveSystemId(systems);
@@ -471,13 +478,43 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
       filenameRegionOverride = ScreenScraperRegion::detectFromFilename(trimmed);
     }
 
-    Scraper::HttpClient::instance()->get(
-        url, userAgentHeader(),
-        [this, callback = std::move(callback),
-         filenameRegionOverride](ErrorUtils::Result<QByteArray> response) mutable {
-          handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
-        });
+    fetchJeuInfos(url, filenameRegionOverride, std::move(callback), /*attempt=*/0);
   });
+}
+
+void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
+                                          LookupCallback callback, int attempt) {
+  Scraper::HttpClient::instance()->get(
+      url, userAgentHeader(),
+      [this, url, filenameRegionOverride, callback = std::move(callback),
+       attempt](ErrorUtils::Result<QByteArray> response) mutable {
+        // Kartend-1rtrt: bounded retry for transient transport/server faults.
+        // The GET is idempotent, so re-issuing the same URL is safe. Permanent
+        // failures (auth/quota/404/parse) and successes are handled inline.
+        if (response.isError() && attempt < Scraper::RetryPolicy::kDefaultMaxRetries &&
+            Scraper::RetryPolicy::isTransient(response.error())) {
+          const int delayMs = Scraper::RetryPolicy::retryDelayMs(
+              attempt, response.error().retryAfterSeconds);
+          qCInfo(lcScreenScraperProvider).nospace()
+              << "Transient jeuInfos failure (httpStatus=" << response.error().httpStatus
+              << ", code=" << static_cast<int>(response.error().code) << "); retry "
+              << (attempt + 1) << "/" << Scraper::RetryPolicy::kDefaultMaxRetries << " in " << delayMs
+              << "ms";
+          // m_retryTimer is a provider member: destroyed with `this`, so a
+          // pending retry can't fire after free. disconnect() drops any prior
+          // schedule before re-arming (lookups are sequential).
+          m_retryTimer.stop();
+          m_retryTimer.disconnect();
+          m_retryTimer.setSingleShot(true);
+          m_retryTimer.callOnTimeout(
+              [this, url, filenameRegionOverride, callback = std::move(callback), attempt]() mutable {
+                fetchJeuInfos(url, filenameRegionOverride, std::move(callback), attempt + 1);
+              });
+          m_retryTimer.start(delayMs);
+          return;
+        }
+        handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
+      });
 }
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
@@ -541,27 +578,36 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   // reports the counters there), so the dialog's live readout stays
   // current even for a collection full of unmatched items.
   m_quota.updateFromResponse(bytes);
-  // Parse twice: once for the candidate list (what the dialog shows)
-  // and once for the full ScrapedItem (cached so fetchDetail() can
-  // return it without a second roundtrip).
+  // Kartend-399wm: parse the jeuInfos payload exactly once. The full
+  // ScrapedItem is the source of truth (cached so fetchDetail() can return
+  // it without a second roundtrip); the lightweight candidate the dialog
+  // shows is projected from that same item rather than re-parsing the whole
+  // document through parseSearchResponse.
   auto parseOpts = buildParseOptions();
   parseOpts.filenameRegionOverride = filenameRegionOverride;
-  auto cands = ScreenScraperParser::parseSearchResponse(bytes);
-  if (cands.isOk() && !cands.value().isEmpty()) {
-    auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
-    if (detail.isOk()) {
-      const QString id = cands.value().first().providerSpecificId;
-      if (!id.isEmpty()) {
-        m_detailCacheOrder.removeAll(id); // refresh position if re-looked-up
-        m_detailCache.insert(id, detail.value());
-        m_detailCacheOrder.append(id);
-        while (m_detailCacheOrder.size() > kMaxDetailCacheEntries) {
-          m_detailCache.remove(m_detailCacheOrder.takeFirst());
-        }
-      }
+  auto detail = ScreenScraperParser::parseDetailResponse(bytes, parseOpts);
+  if (detail.isError()) {
+    // "No match" parses to FileNotFound inside the parser; mirror
+    // parseSearchResponse's benign-empty contract so the dialog shows "No
+    // matches" instead of an error popup, and surface real errors otherwise.
+    if (detail.error().code == ErrorUtils::ErrorCode::FileNotFound) {
+      callback(QList<Scraper::ScrapeCandidate>{});
+    } else {
+      callback(detail.error());
+    }
+    return;
+  }
+  const Scraper::ScrapeCandidate cand = ScreenScraperParser::candidateFromItem(detail.value());
+  const QString id = cand.providerSpecificId;
+  if (!id.isEmpty()) {
+    m_detailCacheOrder.removeAll(id); // refresh position if re-looked-up
+    m_detailCache.insert(id, detail.value());
+    m_detailCacheOrder.append(id);
+    while (m_detailCacheOrder.size() > kMaxDetailCacheEntries) {
+      m_detailCache.remove(m_detailCacheOrder.takeFirst());
     }
   }
-  callback(cands);
+  callback(QList<Scraper::ScrapeCandidate>{cand});
 }
 
 QString ScreenScraperProvider::findDatCanonicalName(const RomHasher::Result &hashes) {

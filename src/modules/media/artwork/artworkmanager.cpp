@@ -137,12 +137,15 @@ void ArtworkManager::clearLoadedArtworkState() {
   m_pathCatalog.clearAll();
 }
 
-// Initializes persistent cache from disk
-void ArtworkManager::initializeCache() {
-  if (auto *cache = cacheMgr()) {
-    cache->initialize();
-  }
-}
+// Kartend-7s2mv: the persistent-cache disk load is owned by ApplicationManager,
+// which kicks CacheManager::initialize() onto a background QtConcurrent thread
+// during initialize() so startup never blocks on the 50MB+ timestamps parse.
+// This method used to also call cache->initialize() synchronously on the main
+// thread, which duplicated the parse and raced the background future. It is now
+// intentionally a no-op kept as an explicit hook (and to preserve the
+// setupReferences-before-this ordering in setupArtworkManager); CacheManager's
+// own run-once guard makes any stray call here harmless.
+void ArtworkManager::initializeCache() {}
 
 // Delegates to ArtworkUtils::findArtworkForFile for artwork path resolution
 auto ArtworkManager::findArtworkForFile(const QString &fileName, const QString &artworkDirectory)

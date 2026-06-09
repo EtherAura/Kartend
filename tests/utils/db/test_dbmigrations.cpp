@@ -109,6 +109,8 @@ private slots:
   void v14AddsCurationColumns();
   void v15AddsStateFlagColumns();
   void preservesExistingDataAcrossUpgrade();
+  void failedBlockRollsBackAndKeepsVersion();
+  void newerSchemaVersionIsLeftUntouched();
 };
 
 void TestDbMigrations::noopOnClosedDb() {
@@ -650,6 +652,57 @@ void TestDbMigrations::preservesExistingDataAcrossUpgrade() {
   QVERIFY(q.next());
   QCOMPARE(q.value(0).toString(), QStringLiteral("m1"));
   QCOMPARE(q.value(1).toString(), QStringLiteral("/m/1"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::failedBlockRollsBackAndKeepsVersion() {
+  // Kartend-l28zj / Kartend-o58ur: each migration block runs in a transaction
+  // and only stamps user_version on success. Omit the `collections` table so
+  // v1's first `ALTER TABLE collections ADD COLUMN` fails; the whole v1 block
+  // must roll back (no items columns added) and user_version must stay 0 so the
+  // migration retries on the next launch instead of permanently skewing the
+  // schema past the version marker.
+  const QString conn = "test_failed_block";
+  auto db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+
+  QSqlQuery q(db);
+  QVERIFY(q.exec("CREATE TABLE items ("
+                 "id INTEGER PRIMARY KEY, "
+                 "name TEXT NOT NULL, "
+                 "path TEXT NOT NULL, "
+                 "last_modified TEXT"
+                 ")"));
+  // Deliberately no `collections` table.
+
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  // Version not advanced; v1's partial work (items columns) rolled back.
+  QCOMPARE(getUserVersion(db), 0);
+  QVERIFY(!tableHasColumn(db, "items", "collection_uuid"));
+  QVERIFY(!tableHasColumn(db, "items", "play_count"));
+  QVERIFY(!indexExists(db, "uniq_items_uuid_path"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::newerSchemaVersionIsLeftUntouched() {
+  // Kartend-vmvzq: a database written by a newer build (user_version greater
+  // than CURRENT_SCHEMA_VERSION) must be left alone — no migrations run and the
+  // version is preserved, so an older build can't corrupt a newer schema.
+  const QString conn = "test_future_version";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+
+  QSqlQuery q(db);
+  QVERIFY(q.exec("PRAGMA user_version = 999"));
+
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 999);
+  // No migration block ran against the future-versioned DB.
+  QVERIFY(!tableHasColumn(db, "items", "collection_uuid"));
 
   closeAndRemove(db, conn);
 }

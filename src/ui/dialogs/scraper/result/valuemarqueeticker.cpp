@@ -1,12 +1,15 @@
 #include "valuemarqueeticker.h"
 
-#include "scraperesultdialog.h"
-
 #include <QFontMetrics>
 #include <QGroupBox>
 #include <QLineEdit>
+#include <QWidget>
 
-ValueMarqueeTicker::ValueMarqueeTicker(ScrapeResultDialog *dlg) : QObject(dlg), m_dlg(dlg) {}
+ValueMarqueeTicker::ValueMarqueeTicker(QWidget *host) : QObject(host), m_host(host) {}
+
+void ValueMarqueeTicker::setLiveMetadataGroup(QGroupBox *group) {
+  m_liveMetadataGroup = group;
+}
 
 void ValueMarqueeTicker::start() {
   if (!m_inited) {
@@ -38,13 +41,13 @@ void ValueMarqueeTicker::resetCells() {
 }
 
 void ValueMarqueeTicker::tick() {
-  if (!m_dlg->m_liveMetadataGroup) return;
+  if (!m_liveMetadataGroup) return;
   // Defensive check — the dialog's hideEvent calls pause() which stops
   // m_timer, but if a late-fired tick lands before that the visibility
   // gate keeps us from doing the findChildren-tree-walk on an invisible
   // dialog.
-  if (!m_dlg->isVisible()) return;
-  const auto edits = m_dlg->m_liveMetadataGroup->findChildren<QLineEdit *>();
+  if (!m_host || !m_host->isVisible()) return;
+  const auto edits = m_liveMetadataGroup->findChildren<QLineEdit *>();
   for (auto *edit : edits) {
     if (!edit) continue;
     const QString text = edit->text();

@@ -37,6 +37,22 @@ struct CoverFlowCardData {
   QString videoPath;   ///< Absolute path to preview video. Empty -> no video.
 };
 
+/// Kartend-el0fr: key for the scaled-pixmap cache. Replaces the per-paint-frame
+/// "<path>|<W>x<H>" string concatenation (one temporary QString + two number
+/// conversions per visible card per frame during the glide) with a lightweight
+/// struct, so paintEvent does a hash lookup with no allocation.
+struct CoverFlowScaledKey {
+  QString path;
+  int width = 0;
+  int height = 0;
+  bool operator==(const CoverFlowScaledKey &o) const {
+    return width == o.width && height == o.height && path == o.path;
+  }
+};
+inline size_t qHash(const CoverFlowScaledKey &k, size_t seed = 0) {
+  return qHashMulti(seed, k.path, k.width, k.height);
+}
+
 /// one entry in the per-item gallery toolbar shown beneath
 /// the carousel when in cover flow. Mirrors DetailsPane::GalleryEntry
 /// so the same resolver pattern works for both views.
@@ -140,7 +156,8 @@ private:
   // and insert the result into m_scaledPixmapCache under @p key. No-op if
   // a scale for @p key is already in flight. Triggers update() on
   // completion. See Kartend-g6ft for rationale.
-  void requestScaledPixmap(const QString &key, const QPixmap &sourcePm, const QSize &targetSize);
+  void requestScaledPixmap(const CoverFlowScaledKey &key, const QPixmap &sourcePm,
+                           const QSize &targetSize);
   void cancelPendingScales();
   void cancelPendingLoads();
   void pruneScaledPixmapCache();
@@ -169,8 +186,8 @@ private:
   // requestScaledPixmap so a cache miss never blocks paint. Invalidated on
   // resize, setCards, and setTileColor — between those events every paint
   // hits, and the steady-state paint cost drops to ~8-11ms.
-  QHash<QString, QPixmap> m_scaledPixmapCache;
-  QHash<QString, QFutureWatcher<QPixmap> *> m_pendingScales;
+  QHash<CoverFlowScaledKey, QPixmap> m_scaledPixmapCache;
+  QHash<CoverFlowScaledKey, QFutureWatcher<QPixmap> *> m_pendingScales;
 
   // Per-instance placeholder cache (was function-local static — multiple
   // CoverFlowWidget instances with different tile colors would thrash a

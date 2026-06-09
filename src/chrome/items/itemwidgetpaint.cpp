@@ -465,12 +465,22 @@ void ItemWidget::applyDimensions() {
   if (!currentPixmap.isNull()) {
     setArtworkPixmap(currentPixmap);
   }
-  QPointer<ItemWidget> ptr = this;
   // Defer artwork update until after all recycle property changes settle -
-  // ensures the widget displays correctly after being reused from the pool
-  QTimer::singleShot(0, this, [ptr]() {
-    if (ptr) {
-      ptr->onArtworkChanged();
-    }
-  });
+  // ensures the widget displays correctly after being reused from the pool.
+  // Kartend-4hct5: coalesce — if a refresh is already queued for this widget
+  // (e.g. several applyDimensions() calls in the same event-loop turn during a
+  // layout change), don't queue another; one onArtworkChanged() after settling
+  // is enough.
+  if (!m_artworkRefreshPending) {
+    m_artworkRefreshPending = true;
+    QPointer<ItemWidget> ptr = this;
+    // 0ms defer: run onArtworkChanged() after the current event-loop turn so
+    // all the recycle/dimension property changes above have settled first.
+    QTimer::singleShot(0, this, [ptr]() {
+      if (ptr) {
+        ptr->m_artworkRefreshPending = false;
+        ptr->onArtworkChanged();
+      }
+    });
+  }
 }

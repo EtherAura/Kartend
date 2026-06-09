@@ -1,6 +1,7 @@
 #ifndef SCRAPERSETTINGSPANEL_H
 #define SCRAPERSETTINGSPANEL_H
 
+#include "isettingspanel.h"
 #include <QWidget>
 
 class QCheckBox;
@@ -17,7 +18,7 @@ struct SettingsModel;
 /// unlocks them for manual editing. Mirrors the deferred-save shape
 /// of `GeneralSettingsPanel` — emit `changed()` and the host dialog
 /// persists.
-class ScraperSettingsPanel : public QWidget {
+class ScraperSettingsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScraperSettingsPanel)
 public:
@@ -25,7 +26,12 @@ public:
   ~ScraperSettingsPanel() override;
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() flushes via
+  // the existing private writeModel() (the panel's live-edit flush); clear()
+  // is a no-op — this global panel is always backed by the single live model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
 signals:
   void changed();

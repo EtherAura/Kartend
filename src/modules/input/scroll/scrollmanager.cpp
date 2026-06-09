@@ -179,6 +179,39 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
   m_arrowKeyViewUpdateTimer.setInterval(UIConstants::Keyboard::VIEW_UPDATE_INTERVAL_MS);
   connect(&m_arrowKeyViewUpdateTimer, &QTimer::timeout, this, &ScrollManager::onArrowKeyViewUpdate);
 
+  // Kartend-43ngf: reusable single-shot timers driven by setupScrollSuppression
+  // / finalizeScrollChanges. start() restarts a running single-shot timer, so a
+  // burst of scroll valueChanged events coalesces into one fire after settling
+  // instead of allocating a fresh QTimer::singleShot per event. The lambdas read
+  // state through m_ctx at fire time (no stale captures).
+  m_arrowCenterClearTimer.setSingleShot(true);
+  m_arrowCenterClearTimer.setInterval(UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS);
+  connect(&m_arrowCenterClearTimer, &QTimer::timeout, this, [this]() {
+    auto *state = m_ctx ? m_ctx->interactionState() : nullptr;
+    if (!state) {
+      return;
+    }
+    // Don't clear if a newer suppression window is still open.
+    qint64 suppressUntilMs = state->arrow().suppressArrowCenterUntilMs;
+    if (suppressUntilMs > 0 && QDateTime::currentMSecsSinceEpoch() < suppressUntilMs) {
+      return;
+    }
+    state->arrow().suppressArrowCenter = false;
+  });
+
+  m_scrollSettleTimer.setSingleShot(true);
+  m_scrollSettleTimer.setInterval(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS);
+  connect(&m_scrollSettleTimer, &QTimer::timeout, this, [this]() {
+    if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+      state->scroll().userScrollActive = false;
+    }
+    // Kartend-43ngf: route the deferred post-scroll artwork refresh through the
+    // debounced scheduler (was a direct updateViewportArtwork()) so it coalesces.
+    if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+      art->scheduleViewportUpdate();
+    }
+  });
+
   // Debounce timer - restarts on each trigger, fires after inactivity
   m_userScrollIdleTimer =
       new TimerUtils::DebouncedTimer(UIConstants::Mouse::USER_SCROLL_IDLE_TIMER_MS, this);
@@ -266,7 +299,7 @@ ItemWidget *ScrollManager::acquireWidget() {
   return m_widgetPool->acquire();
 }
 
-void ScrollManager::releaseWidget(ItemWidget *widget) {
+void ScrollManager::releaseWidget(ItemWidget *widget, int visibleRows) {
   if (!widget) {
     return;
   }
@@ -275,11 +308,14 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
   if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
     art->clearPendingArtworkForWidget(widget);
   }
+  // Kartend-16al4: compute the visible-row count once (callers in the per-frame
+  // eviction loop pass it in pre-computed; everyone else passes -1 → compute).
+  if (visibleRows < 0) {
+    visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+  }
   if (m_widgetFactory) {
-    int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
     m_widgetFactory->releaseWidget(widget, visibleRows, m_metrics.itemsPerRow);
   } else if (m_widgetPool) {
-    int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
     m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
     m_widgetPool->release(widget);
   } else {

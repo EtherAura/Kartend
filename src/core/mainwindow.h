@@ -82,7 +82,16 @@ public:
 
   GeneralSettings m_generalSettings;
 
-  Ui_MainWindow *ui;
+  // Kartend-nbfgs: owns the generated Ui struct via unique_ptr instead of a raw
+  // pointer + explicit `delete ui` in ~MainWindow. The old `delete ui` ran in
+  // the destructor BODY — before any member (manager/controller) destruction —
+  // freeing the Ui struct (and dangling ctx.ui) while managers that may read
+  // ctx.ui during teardown were still alive. As a member declared above the
+  // managers, this unique_ptr destructs AFTER them (reverse declaration order),
+  // so the Ui struct outlives its users; the parented widgets themselves are
+  // freed later still by ~QObject. Destroyed out-of-line in mainwindow.cpp where
+  // Ui_MainWindow is complete.
+  std::unique_ptr<Ui_MainWindow> ui;
   QStackedWidget *stackedWidget;
   QWidget *itemsPage;
   QWidget *gridContainer;

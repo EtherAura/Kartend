@@ -126,7 +126,10 @@ QList<Scraper::MediaAsset> ScrapeResultDialogUnified::selectInteractiveMediaForA
 void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_unifiedPage = new QWidget(m_dlg->m_modeStack);
   auto *root = new QVBoxLayout(m_dlg->m_unifiedPage);
-  root->setContentsMargins(8, 8, 8, 8);
+  root->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   root->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
   // ── Top: collection tree (left) + items list (right) ────────────
@@ -213,8 +216,14 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   // (Description) span all value cols. Custom fields container
   // also spans the row.
   m_dlg->m_liveMetadataGroup = new QGroupBox(tr("Currently scraping"), m_dlg->m_unifiedPage);
+  // Kartend-kggn8: hand the ticker the group it animates instead of it reaching
+  // back through a friend pointer.
+  m_dlg->m_marqueeTicker->setLiveMetadataGroup(m_dlg->m_liveMetadataGroup);
   auto *metaOuter = new QVBoxLayout(m_dlg->m_liveMetadataGroup);
-  metaOuter->setContentsMargins(8, 8, 8, 8);
+  metaOuter->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                     UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   metaOuter->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
   // ── Interactive candidate picker row ──────────────────────────────
   // Visible only while the service is waiting on the user to pick a
@@ -293,7 +302,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   {
     auto *row = new QHBoxLayout();
     row->setContentsMargins(0, 0, 0, 0);
-    row->setSpacing(6);
+    row->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
     row->addWidget(sizedLabel(tr("Title:")));
     row->addWidget(m_dlg->m_liveMetadataTitle, /*stretch=*/1);
     metaCol->addLayout(row);
@@ -310,7 +319,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   {
     auto *row = new QHBoxLayout();
     row->setContentsMargins(0, 0, 0, 0);
-    row->setSpacing(6);
+    row->setSpacing(UIConstants::ScrapeResultDialog::SECTION_LAYOUT_SPACING);
     auto *lbl = sizedLabel(tr("Description:"));
     lbl->setAlignment(Qt::AlignRight | Qt::AlignTop);
     row->addWidget(lbl);
@@ -333,8 +342,11 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
                                               "}"));
   postDescFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   auto *postOuter = new QVBoxLayout(postDescFrame);
-  postOuter->setContentsMargins(12, 14, 12, 14);
-  postOuter->setSpacing(8);
+  postOuter->setContentsMargins(UIConstants::ScrapeResultDialog::POST_SECTION_H_MARGIN,
+                                UIConstants::ScrapeResultDialog::POST_SECTION_V_MARGIN,
+                                UIConstants::ScrapeResultDialog::POST_SECTION_H_MARGIN,
+                                UIConstants::ScrapeResultDialog::POST_SECTION_V_MARGIN);
+  postOuter->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
   // Helper that builds a fixed-size "chip" container holding a
   // right-aligned label and a read-only QLineEdit. Returns the
@@ -465,10 +477,17 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   // across the dialog width.
   m_dlg->m_liveThumbsGroup = new QGroupBox(tr("Recent media"), m_dlg->m_unifiedPage);
   auto *thumbsLayout = new QVBoxLayout(m_dlg->m_liveThumbsGroup);
-  thumbsLayout->setContentsMargins(4, 4, 4, 4);
+  thumbsLayout->setContentsMargins(UIConstants::ScrapeResultDialog::THUMBS_STRIP_MARGIN,
+                                   UIConstants::ScrapeResultDialog::THUMBS_STRIP_MARGIN,
+                                   UIConstants::ScrapeResultDialog::THUMBS_STRIP_MARGIN,
+                                   UIConstants::ScrapeResultDialog::THUMBS_STRIP_MARGIN);
   m_dlg->m_liveThumbsStrip = new QListWidget(m_dlg->m_liveThumbsGroup);
+  // Kartend-kggn8: hand the loader the filmstrip it appends to instead of it
+  // reaching back through a friend pointer.
+  m_dlg->m_thumbLoader->setLiveThumbsStrip(m_dlg->m_liveThumbsStrip);
   m_dlg->m_liveThumbsStrip->setViewMode(QListView::IconMode);
-  m_dlg->m_liveThumbsStrip->setIconSize(QSize(96, 96));
+  m_dlg->m_liveThumbsStrip->setIconSize(QSize(UIConstants::ScrapeResultDialog::THUMB_ICON_SIZE,
+                                            UIConstants::ScrapeResultDialog::THUMB_ICON_SIZE));
   m_dlg->m_liveThumbsStrip->setFlow(QListView::LeftToRight);
   m_dlg->m_liveThumbsStrip->setWrapping(false);
   m_dlg->m_liveThumbsStrip->setMovement(QListView::Static);
@@ -478,7 +497,8 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_liveThumbsStrip->setUniformItemSizes(true);
   m_dlg->m_liveThumbsStrip->setSpacing(UIConstants::ScrapeResultDialog::THUMBS_STRIP_SPACING);
   // Slightly larger than icon so items fit snugly with minimal gap.
-  m_dlg->m_liveThumbsStrip->setGridSize(QSize(100, 100));
+  m_dlg->m_liveThumbsStrip->setGridSize(QSize(UIConstants::ScrapeResultDialog::THUMB_GRID_SIZE,
+                                            UIConstants::ScrapeResultDialog::THUMB_GRID_SIZE));
   m_dlg->m_liveThumbsStrip->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_dlg->m_liveThumbsStrip->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_dlg->m_liveThumbsStrip->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);

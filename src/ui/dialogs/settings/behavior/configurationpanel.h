@@ -2,6 +2,7 @@
 #define CONFIGURATIONPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include "screenscrapersystems.h"
 
 #include <QList>
@@ -29,7 +30,7 @@ struct SettingsModel;
 /// circular-reference checks, m_workingAdditionalParentNames, the recursive-
 /// import workflow), so the panel exposes accessors and the host dialog
 /// continues to own those slots/connections.
-class ConfigurationPanel : public QWidget {
+class ConfigurationPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ConfigurationPanel)
 public:
@@ -37,12 +38,12 @@ public:
   ~ConfigurationPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
+  void load() override;
+  void clear() override;
   /// Saves the simple data fields (type, mediaDirectory, extensions,
   /// expandMode, showAllSubcollectionItems). Parent-collection index is
   /// resolved separately by the host using the dropdown→collection mapping.
-  void save() const;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
   /// Populate the type combo with @p knownTypes and select / set

@@ -27,6 +27,7 @@
 #include "test_kartmanager.h"
 #include "test_mainwindow_smoke.h"
 #include "test_menucontroller.h"
+#include "test_interactionmanager.h"
 #include "test_navigationmanager.h"
 #include "test_scanservice.h"
 #include "test_scrapedialog_perf.h"
@@ -104,6 +105,11 @@ const Suite kSuites[] = {
     {"TestNavigationManager",
      [](int c, char **v) {
        TestNavigationManager t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestInteractionManager",
+     [](int c, char **v) {
+       TestInteractionManager t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestDbEventsController",

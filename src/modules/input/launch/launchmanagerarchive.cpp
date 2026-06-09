@@ -15,6 +15,8 @@
 #include <QString>
 #include <QTemporaryDir>
 
+#include <optional>
+
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcLaunchManager)
 #define debugLog(msg)                                                                              \
@@ -56,11 +58,58 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
   QString extractDir = tempBasePath + "/kartend_extract";
 
+  // Kartend-qubev: the persistent cache base sits under a world-writable temp
+  // root, so on a shared host a co-resident user could pre-create
+  // kartend_extract/ (and a crafted per-archive subdir) and have the cache-hit
+  // branch serve their payload. Guard it: create the base owner-only (0700)
+  // when it's ours to make, and refuse to trust a pre-existing base that isn't
+  // private to us. A hijacked base falls back to an unguessable per-run
+  // QTemporaryDir — we still launch, just without cross-run caching, and never
+  // serve another user's content.
+  constexpr QFileDevice::Permissions kOwnerOnly =
+      QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+
   QDir baseDir(extractDir);
-  if (!baseDir.exists() && !baseDir.mkpath(".")) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to create extraction directory",
-                               "LaunchManager::extractArchiveToTemp")
-        .withDetails(extractDir);
+  bool persistentCacheUsable = true;
+  if (baseDir.exists()) {
+    if (!PathUtils::isPrivateDirOfCurrentUser(extractDir)) {
+      // Pre-existing base that isn't owner-only. If we own it (e.g. an older
+      // Kartend left it 0755, or umask widened it), chmod succeeds and recovers
+      // the cache. If it's owned by another local user, chmod fails and the
+      // re-check still reports non-private → fall back to a per-run dir.
+      QFile::setPermissions(extractDir, kOwnerOnly);
+      if (!PathUtils::isPrivateDirOfCurrentUser(extractDir)) {
+        qCWarning(lcLaunchManager) << "Extraction cache base is not private to this user; "
+                                      "using a per-run temp dir instead:"
+                                   << extractDir;
+        persistentCacheUsable = false;
+      }
+    }
+  } else {
+    if (!baseDir.mkpath(".")) {
+      return ErrorContext::error(ErrorCode::FileWriteError, "Failed to create extraction directory",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(extractDir);
+    }
+    // Owner-only so no other local user can create subdirs under it later.
+    QFile::setPermissions(extractDir, kOwnerOnly);
+  }
+
+  // Hijacked/unsafe base: extract into a fresh, unguessable, 0700 per-run root
+  // (QTemporaryDir) and skip the persistent cache entirely for this launch.
+  std::optional<QTemporaryDir> perRunRoot;
+  if (!persistentCacheUsable) {
+    perRunRoot.emplace(tempBasePath + QStringLiteral("/kartend_extract_XXXXXX"));
+    if (!perRunRoot->isValid()) {
+      return ErrorContext::error(ErrorCode::FileWriteError,
+                                 "Failed to create per-run extraction directory",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(perRunRoot->errorString());
+    }
+    // Persist past this scope: the launcher opens the extracted file after we
+    // return. The OS reclaims the temp root at reboot.
+    perRunRoot->setAutoRemove(false);
+    extractDir = perRunRoot->path();
   }
 
   // Per-archive extraction dir, keyed on completeBaseName(). Two distinct

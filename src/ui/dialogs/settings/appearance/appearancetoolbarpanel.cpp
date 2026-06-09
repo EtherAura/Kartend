@@ -46,7 +46,7 @@ void AppearanceToolbarPanel::clear() {
   ui->headerLogoPositionComboBox->setCurrentIndex(1);
 }
 
-void AppearanceToolbarPanel::save() const {
+void AppearanceToolbarPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

@@ -36,10 +36,10 @@ GeneralSettingsPanel::~GeneralSettingsPanel() {
 
 void GeneralSettingsPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void GeneralSettingsPanel::refresh() {
+void GeneralSettingsPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -126,7 +126,7 @@ void GeneralSettingsPanel::onBrowseRetroarchConfig() {
   }
 }
 
-void GeneralSettingsPanel::writeBack() {
+void GeneralSettingsPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -173,23 +173,23 @@ void GeneralSettingsPanel::connectChangeSignals() {
   const auto onDoubleSpin = QOverload<double>::of(&QDoubleSpinBox::valueChanged);
 
   // Startup
-  connect(ui->startupCollectionComboBox, onCombo, this, [this](int) { writeBack(); });
-  connect(ui->useHomeViewCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
+  connect(ui->startupCollectionComboBox, onCombo, this, [this](int) { save(); });
+  connect(ui->useHomeViewCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->homeViewLabelLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) { writeBack(); });
+          [this](const QString &) { save(); });
   connect(ui->homeViewIconLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) { writeBack(); });
+          [this](const QString &) { save(); });
   connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { writeBack(); });
+          [this](bool) { save(); });
   connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) { writeBack(); });
+          [this](const QString &) { save(); });
   connect(ui->retroarchConfigLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) { writeBack(); });
+          [this](const QString &) { save(); });
 
   // Selection & Display
   for (auto *box : {ui->rememberSelectionCheckBox, ui->wrapNavigationCheckBox,
                     ui->selectItemOnHoverCheckBox, ui->showTitleInPlaceholderCheckBox}) {
-    connect(box, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
+    connect(box, &QCheckBox::toggled, this, [this](bool) { save(); });
   }
 
   // Input & Scroll Timing — every QSpinBox plus the lone QDoubleSpinBox.
@@ -197,14 +197,14 @@ void GeneralSettingsPanel::connectChangeSignals() {
        {ui->mouseWheelSpeedSpinBox, ui->scrollAnimationSpeedSpinBox, ui->clickHoldDelaySpinBox,
         ui->clickHoldRepeatIntervalSpinBox, ui->listClickHoldRepeatSpinBox,
         ui->keyboardSpeedSpinBox, ui->keyboardRepeatDelaySpinBox, ui->listKeyboardRepeatSpinBox}) {
-    connect(spin, onSpin, this, [this](int) { writeBack(); });
+    connect(spin, onSpin, this, [this](int) { save(); });
   }
-  connect(ui->scrollVelocityMultiplierSpinBox, onDoubleSpin, this, [this](double) { writeBack(); });
+  connect(ui->scrollVelocityMultiplierSpinBox, onDoubleSpin, this, [this](double) { save(); });
 
   // Performance & History
-  connect(ui->pixmapCacheSpinBox, onSpin, this, [this](int) { writeBack(); });
-  connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->historyEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->historyMaxEntriesSpinBox, onSpin, this, [this](int) { writeBack(); });
-  connect(ui->videoThumbnailTimeoutSpinBox, onSpin, this, [this](int) { writeBack(); });
+  connect(ui->pixmapCacheSpinBox, onSpin, this, [this](int) { save(); });
+  connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->historyEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->historyMaxEntriesSpinBox, onSpin, this, [this](int) { save(); });
+  connect(ui->videoThumbnailTimeoutSpinBox, onSpin, this, [this](int) { save(); });
 }

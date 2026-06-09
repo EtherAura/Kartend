@@ -1,6 +1,7 @@
 #ifndef CONTROLSPANEL_H
 #define CONTROLSPANEL_H
 
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -28,7 +29,7 @@ class GamepadCaptureController;
 /// sibling checkboxes via accessors so the controller can refresh their UI
 /// during a capture pass without the panel and controller coupling
 /// directly.
-class ControlsPanel : public QWidget {
+class ControlsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ControlsPanel)
 public:
@@ -36,7 +37,12 @@ public:
   ~ControlsPanel() override;
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() was the
+  // private writeBack(); clear() is a no-op — this global panel is always
+  // backed by the single live GeneralSettings model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
   /// Wire detect-button clicks to @p controller's start() with the
   /// corresponding Target. Idempotent if installed multiple times — only
@@ -58,7 +64,6 @@ signals:
   void changed();
 
 private:
-  void writeBack();
   void connectChangeSignals();
   void populateArtworkCycleModifierCombo();
 

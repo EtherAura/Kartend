@@ -15,6 +15,7 @@ private slots:
   void parseSearchResponse_returnsSingleCandidate();
   void parseSearchResponse_emptyJeuYieldsEmptyList();
   void parseSearchResponse_malformedJsonReturnsError();
+  void candidateFromItem_matchesParseSearchResponseProjection();
   void parseDetailResponse_extractsTypedFields();
   void parseDetailResponse_picksUSRegionAndEnglishLanguage();
   void parseDetailResponse_collapsesMediaToOnePerType();
@@ -174,6 +175,29 @@ void TestScreenScraperParser::parseSearchResponse_emptyJeuYieldsEmptyList() {
 void TestScreenScraperParser::parseSearchResponse_malformedJsonReturnsError() {
   auto result = ScreenScraperParser::parseSearchResponse(QByteArray("{not json"));
   QVERIFY(result.isError());
+}
+
+void TestScreenScraperParser::candidateFromItem_matchesParseSearchResponseProjection() {
+  // Kartend-399wm: the provider now parses jeuInfos exactly once (via
+  // parseDetailResponse) and projects the candidate from that single item
+  // through candidateFromItem, instead of re-parsing the whole payload with
+  // parseSearchResponse. Lock the equivalence: the candidate derived from the
+  // single parse must be byte-for-byte what the old two-parse path produced,
+  // so the dialog still sees an identical candidate.
+  auto detail = ScreenScraperParser::parseDetailResponse(FIXTURE);
+  QVERIFY(detail.isOk());
+  const Scraper::ScrapeCandidate fromItem = ScreenScraperParser::candidateFromItem(detail.value());
+
+  auto search = ScreenScraperParser::parseSearchResponse(FIXTURE);
+  QVERIFY(search.isOk());
+  QCOMPARE(search.value().size(), 1);
+  const Scraper::ScrapeCandidate fromSearch = search.value().first();
+
+  QCOMPARE(fromItem.displayName, fromSearch.displayName);
+  QCOMPARE(fromItem.providerSpecificId, fromSearch.providerSpecificId);
+  QCOMPARE(fromItem.subtitle, fromSearch.subtitle);
+  QCOMPARE(fromItem.thumbnailUrl, fromSearch.thumbnailUrl);
+  QCOMPARE(fromItem.matchScore, fromSearch.matchScore);
 }
 
 void TestScreenScraperParser::parseDetailResponse_extractsTypedFields() {

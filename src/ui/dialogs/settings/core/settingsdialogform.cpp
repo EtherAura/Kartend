@@ -364,14 +364,14 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   // Splash / Fonts / Attract / general "General" sub-tab fields are all
   // owned by their respective panels — refresh them from the working copy.
-  ui->splashPanel->refresh();
-  ui->fontsPanel->refresh();
-  ui->attractPanel->refresh();
-  ui->marqueePanel->refresh();
-  ui->generalSettingsPanel->refresh();
-  ui->scraperSettingsPanel->refresh();
-  ui->screenScraperCredentialsPanel->refresh();
-  ui->tmdbCredentialsPanel->refresh();
+  ui->splashPanel->load();
+  ui->fontsPanel->load();
+  ui->attractPanel->load();
+  ui->marqueePanel->load();
+  ui->generalSettingsPanel->load();
+  ui->scraperSettingsPanel->load();
+  ui->screenScraperCredentialsPanel->load();
+  ui->tmdbCredentialsPanel->load();
   // Title-tint fields physically live in the per-collection appearance tab
   // even though they edit GeneralSettings; owned by AppearanceColorsPanel
   // which observes &m_generalSettings.
@@ -391,9 +391,9 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
   // Keyboard / Gamepad / Mouse fields owned by ControlsPanel.
-  ui->controlsPanel->refresh();
+  ui->controlsPanel->load();
   // Toolbar customization fields owned by ToolbarPanel.
-  ui->toolbarPanel->refresh();
+  ui->toolbarPanel->load();
 
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
@@ -401,7 +401,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // hydrate the launcher-presets list from the loaded general
   // settings. Done after m_originalGeneralSettings is captured so the change
   // detector can compare the live presets against the saved baseline.
-  ui->launcherPresetsPanel->refresh();
+  ui->launcherPresetsPanel->load();
 
   if (m_gamepadCapture) {
     m_gamepadCapture->refreshUi();

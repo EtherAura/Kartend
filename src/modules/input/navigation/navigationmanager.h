@@ -103,14 +103,17 @@ public:
   explicit NavigationManager(QObject *parent = nullptr);
   ~NavigationManager() override;
   [[nodiscard]] bool isNavigationInProgress() const;
-  /// True when this NavigationManager is alive and not currently in
-  /// teardown — the runtime equivalent of the legacy `parent() != nullptr`
-  /// check that used to gate every navigation entry point. Returns true
-  /// pre-setup (m_isShuttingDown predicate not yet installed) so
-  /// construction-time wiring still routes. Use this instead of
-  /// `parent()` so the manager's lifetime no longer couples to the
-  /// QObject parent-child tree (Kartend-3v92 / Kartend-d70s).
-  [[nodiscard]] bool isAlive() const { return !m_isShuttingDown || !m_isShuttingDown(); }
+  /// True when the application is not in teardown. Kartend-us3b8: this only
+  /// consults the app shutdown predicate — it does NOT verify that `this`
+  /// NavigationManager is still alive (the old name `isAlive()` wrongly implied
+  /// it did). Object liveness for deferred work comes from binding the callback
+  /// to `this` as the QObject context (QTimer::singleShot(delay, this, ...) /
+  /// queued connections), which Qt auto-disconnects when `this` dies. A
+  /// callback NOT bound to a QObject context must capture a QPointer for a real
+  /// liveness check. Returns true pre-setup (predicate not yet installed) so
+  /// construction-time wiring still routes. Replaced the legacy `parent()`
+  /// lifetime guard (Kartend-3v92 / Kartend-d70s).
+  [[nodiscard]] bool appNotShuttingDown() const { return !m_isShuttingDown || !m_isShuttingDown(); }
 
   // Persist current viewport/selection state before shutdown.
   // Call this before blocking signals or clearing collection index.

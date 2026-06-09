@@ -2,6 +2,7 @@
 #define LAUNCHERTABPANEL_H
 
 #include "collection/generalsettings.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -31,7 +32,7 @@ struct SettingsModel;
 /// repopulation through accessor methods, since both touch dialog state
 /// (the working launcher list + the launcher-presets list on
 /// GeneralSettings).
-class LauncherTabPanel : public QWidget {
+class LauncherTabPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(LauncherTabPanel)
 public:
@@ -44,12 +45,12 @@ public:
   /// extracted extension from the model's current working collection. The
   /// additional-launchers list + default combo are populated separately by
   /// the host dialog.
-  void load();
-  void clear();
+  void load() override;
+  void clear() override;
   /// Persist launcher path / core / parameters / name + extract flag +
   /// extracted extension into the model's current working collection.
   /// Additional launchers + default index are written by the host dialog.
-  void save() const;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
   /// Toggles visibility of the launch-extension field (only meaningful

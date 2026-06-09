@@ -7,6 +7,7 @@
 
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
+#include "detailspaneartwork.h" // Kartend-4wxmp: isScrollIdle() now via m_artworkController
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
 #include "ui_detailspane.h"
@@ -373,7 +374,10 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
       auto fire = std::make_shared<std::function<void()>>();
       *fire = [selfGuard, videoPath, host, fire]() {
         if (!selfGuard) return;
-        if (host && !host->isScrollIdle()) {
+        // Kartend-4wxmp: the DetailsPane::isScrollIdle forwarder was removed;
+        // reach the artwork controller directly (friend access). Mirrors the
+        // forwarder's "idle when no controller" default.
+        if (host && host->m_artworkController && !host->m_artworkController->isScrollIdle()) {
           // Re-arm the recursive retry chain in 50ms while a scroll is
           // mid-glide — see the block comment above for the full rationale.
           QTimer::singleShot(UIConstants::Timing::UI_SETTLE_RETRY_MS, selfGuard.data(), *fire);

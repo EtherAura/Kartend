@@ -5,12 +5,20 @@
 // have non-tree side effects.
 #include "treemanager.h"
 #include "collection/collectionconfig.h"
+#include "collection/hierarchyhelpers.h" // CollectionUtils::wouldCreateCircularReference
 #include "collection/validationhelpers.h"
+#include "settingstreehost.h"
 
 #include "collectiontreewidget.h"
 
+#include <functional>
+
+#include <QAbstractItemView>
+#include <QAction>
 #include <QFont>
+#include <QMenu>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -19,8 +27,52 @@ const QList<QTreeWidgetItem *> kEmptyLinkedItems;
 } // namespace
 
 TreeManager::TreeManager(CollectionTreeWidget *widget, QList<CollectionConfig> *collections,
-                         QList<CollectionConfig> *workingCollections)
-    : m_widget(widget), m_collections(collections), m_workingCollections(workingCollections) {}
+                         QList<CollectionConfig> *workingCollections, QObject *parent)
+    : QObject(parent), m_widget(widget), m_collections(collections),
+      m_workingCollections(workingCollections) {}
+
+void TreeManager::attachWidget() {
+  if (!m_widget) {
+    return;
+  }
+  m_widget->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::DoubleClicked);
+  // right-click context menu surfaces Rename/Duplicate/Delete + expand/collapse
+  // helpers where the pointer already is.
+  m_widget->setContextMenuPolicy(Qt::CustomContextMenu);
+
+  // Drag-drop reparenting: the promoted widget delegates cycle validation +
+  // item→index resolution to this controller's own state and emits
+  // treeRearranged() on success.
+  m_widget->setCycleCheck(
+      [this](int childIndex, int parentIndex) { return wouldCreateCircularReference(childIndex, parentIndex); });
+  m_widget->setItemToIndex(
+      [this](const QTreeWidgetItem *item) { return indexOf(const_cast<QTreeWidgetItem *>(item)); });
+
+  // Kartend-mnymg: the controller now owns the gesture handlers, so connect the
+  // widget's raw signals straight to its own slots.
+  connect(m_widget, &QTreeWidget::itemSelectionChanged, this,
+          &TreeManager::onWidgetSelectionChanged);
+  connect(m_widget, &QTreeWidget::itemChanged, this, &TreeManager::onWidgetItemChanged);
+  connect(m_widget, &QWidget::customContextMenuRequested, this,
+          &TreeManager::onWidgetContextMenuRequested);
+  connect(m_widget, &CollectionTreeWidget::treeRearranged, this, &TreeManager::onWidgetRearranged);
+}
+
+void TreeManager::setSelectionState(int *currentCollectionIndex, QTreeWidgetItem **currentTreeItem,
+                                    CollectionConfig *originalCollection, bool *collectionSaved) {
+  m_currentCollectionIndex = currentCollectionIndex;
+  m_currentTreeItem = currentTreeItem;
+  m_originalCollection = originalCollection;
+  m_collectionSaved = collectionSaved;
+}
+
+bool TreeManager::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const {
+  if (!m_collections) {
+    return false;
+  }
+  return CollectionUtils::wouldCreateCircularReference(childIndex, potentialParentIndex,
+                                                       *m_collections);
+}
 
 void TreeManager::rebuild() {
   if (!m_widget) {
@@ -233,4 +285,229 @@ void TreeManager::populateLinkedAppearances() {
       alreadyMirrored.insert(parentIdx);
     }
   }
+}
+
+// ── Tree gesture handlers (Kartend-mnymg: migrated from SettingsDialog) ───────
+// Bodies are the former SettingsDialog::onTree* slots, transformed to operate on
+// the borrowed selection state (m_currentCollectionIndex / m_currentTreeItem /
+// m_originalCollection / m_collectionSaved) + collection lists, routing
+// dialog-side effects through m_host. Behavior is preserved verbatim.
+
+void TreeManager::onWidgetSelectionChanged() {
+  if (!m_widget || !m_host || !m_currentCollectionIndex || !m_currentTreeItem ||
+      !m_originalCollection || !m_collectionSaved || !m_workingCollections) {
+    return;
+  }
+  QList<QTreeWidgetItem *> selectedItems = m_widget->selectedItems();
+  if (selectedItems.isEmpty()) {
+    *m_currentTreeItem = nullptr;
+    *m_currentCollectionIndex = -1;
+    m_host->updateDeleteButtonState();
+    m_host->updateContextHeader();
+    return;
+  }
+
+  QTreeWidgetItem *item = selectedItems.first();
+  if (!contains(item)) {
+    return;
+  }
+
+  int newIndex = indexOf(item);
+  if (newIndex == *m_currentCollectionIndex) {
+    return;
+  }
+
+  const int previousIndex = *m_currentCollectionIndex;
+  if (previousIndex >= 0 && previousIndex < m_workingCollections->size() &&
+      !m_host->resolveUnsavedChanges(tr("switching collections"), true)) {
+    if (auto *previousItem = itemAt(previousIndex)) {
+      QSignalBlocker blocker(m_widget);
+      m_widget->setCurrentItem(previousItem);
+      previousItem->setSelected(true);
+    }
+    return;
+  }
+
+  if (auto *primary = itemAt(newIndex)) {
+    item = primary;
+  }
+
+  if (m_widget && item) {
+    QSignalBlocker blocker(m_widget);
+    m_widget->setCurrentItem(item);
+    item->setSelected(true);
+  }
+
+  *m_currentCollectionIndex = newIndex;
+  *m_currentTreeItem = item;
+  if (newIndex >= 0 && newIndex < m_workingCollections->size()) {
+    *m_originalCollection = (*m_workingCollections)[newIndex];
+  } else {
+    *m_originalCollection = CollectionConfig();
+  }
+  m_host->loadCollectionToUI(newIndex);
+  *m_collectionSaved = true;
+  m_host->updateSaveButtonStyle();
+  m_host->updateDeleteButtonState();
+}
+
+void TreeManager::onWidgetItemChanged(QTreeWidgetItem *item, int column) {
+  if (column != 0 || !contains(item) || !m_collections || !m_workingCollections || !m_host ||
+      !m_currentCollectionIndex || !m_originalCollection || !m_collectionSaved) {
+    return;
+  }
+  // rename only fires for the canonical row. Linked mirrors are flagged
+  // read-only via ItemIsEditable, but defensively skip if a signal sneaks in.
+  if (item->data(0, Qt::UserRole).toBool()) {
+    return;
+  }
+  int collectionIndex = indexOf(item);
+  if (!CollectionUtils::isValidIndex(collectionIndex, m_collections) ||
+      !CollectionUtils::isValidIndex(collectionIndex, m_workingCollections)) {
+    return;
+  }
+
+  QString newName = item->text(0);
+  const QString oldName = (*m_collections)[collectionIndex].name;
+
+  // Reject a blank / whitespace-only rename; revert the tree text with signals
+  // blocked so this handler doesn't re-enter.
+  if (newName.trimmed().isEmpty()) {
+    QSignalBlocker blocker(item->treeWidget());
+    item->setText(0, oldName);
+    return;
+  }
+
+  if (newName != oldName) {
+    (*m_collections)[collectionIndex].name = newName;
+    (*m_workingCollections)[collectionIndex].name = newName;
+
+    for (QTreeWidgetItem *linked : linkedItemsFor(collectionIndex)) {
+      if (linked) {
+        linked->setText(0, newName);
+      }
+    }
+    propagateNameChange(oldName, newName);
+
+    bool revertedToOriginal =
+        (collectionIndex == *m_currentCollectionIndex && newName == m_originalCollection->name);
+    *m_collectionSaved = revertedToOriginal && !m_host->hasUnsavedChanges();
+    if (!revertedToOriginal) {
+      *m_collectionSaved = false;
+    }
+
+    m_host->updateSaveButtonStyle();
+  }
+}
+
+void TreeManager::onWidgetContextMenuRequested(const QPoint &pos) {
+  if (!m_widget || !m_host || !m_currentTreeItem) {
+    return;
+  }
+  QTreeWidgetItem *target = m_widget->itemAt(pos);
+
+  QMenu menu(m_widget);
+  const bool isLinked = target && target->data(0, Qt::UserRole).toBool();
+  if (target && !isLinked) {
+    QAction *renameAction = menu.addAction(tr("Rename"));
+    QAction *duplicateAction = menu.addAction(tr("Duplicate..."));
+    QAction *deleteAction = menu.addAction(tr("Delete"));
+    menu.addSeparator();
+    QAction *copyFromAction = menu.addAction(tr("Copy Settings From..."));
+    menu.addSeparator();
+    QAction *expandSubAction = menu.addAction(tr("Expand subtree"));
+    QAction *collapseSubAction = menu.addAction(tr("Collapse subtree"));
+    const bool hasChildren = target->childCount() > 0;
+    expandSubAction->setEnabled(hasChildren);
+    collapseSubAction->setEnabled(hasChildren);
+    menu.addSeparator();
+    QAction *expandAllAction = menu.addAction(tr("Expand all"));
+    QAction *collapseAllAction = menu.addAction(tr("Collapse all"));
+
+    // Select the row first so the form/save state matches the action; if the
+    // user cancels the resulting unsaved-changes prompt the selection reverts
+    // and we abort so we never operate on the wrong collection.
+    auto switchToTarget = [this, target]() -> bool {
+      if (*m_currentTreeItem == target) {
+        return true;
+      }
+      m_widget->setCurrentItem(target);
+      return *m_currentTreeItem == target;
+    };
+    connect(renameAction, &QAction::triggered, this, [this, target, switchToTarget]() {
+      if (!switchToTarget()) {
+        return;
+      }
+      m_widget->editItem(target, 0);
+    });
+    connect(duplicateAction, &QAction::triggered, this, [this, switchToTarget]() {
+      if (!switchToTarget()) {
+        return;
+      }
+      m_host->duplicateCollection();
+    });
+    connect(deleteAction, &QAction::triggered, this, [this, switchToTarget]() {
+      if (!switchToTarget()) {
+        return;
+      }
+      m_host->removeCollection();
+    });
+    connect(copyFromAction, &QAction::triggered, this, [this, switchToTarget]() {
+      if (!switchToTarget()) {
+        return;
+      }
+      m_host->copySettingsFromOtherCollection();
+    });
+    connect(expandSubAction, &QAction::triggered, this,
+            [this, target]() { setSubtreeExpanded(target, true); });
+    connect(collapseSubAction, &QAction::triggered, this,
+            [this, target]() { setSubtreeExpanded(target, false); });
+    connect(expandAllAction, &QAction::triggered, m_widget, &QTreeWidget::expandAll);
+    connect(collapseAllAction, &QAction::triggered, m_widget, &QTreeWidget::collapseAll);
+  } else {
+    QAction *expandAllAction = menu.addAction(tr("Expand all"));
+    QAction *collapseAllAction = menu.addAction(tr("Collapse all"));
+    connect(expandAllAction, &QAction::triggered, m_widget, &QTreeWidget::expandAll);
+    connect(collapseAllAction, &QAction::triggered, m_widget, &QTreeWidget::collapseAll);
+  }
+
+  menu.exec(m_widget->viewport()->mapToGlobal(pos));
+}
+
+void TreeManager::onWidgetRearranged() {
+  if (!m_widget || !m_collections || !m_workingCollections || !m_collectionSaved || !m_host) {
+    return;
+  }
+  // Walk the post-drop tree and resync parentCollectionIndex / isSubcollection
+  // on every collection. Linked mirrors aren't draggable but can shuffle along
+  // with their primary parent, so skip them when resolving the canonical parent
+  // and recurse through them so their children are still visited.
+  std::function<void(QTreeWidgetItem *, int)> walk = [&](QTreeWidgetItem *item, int parentIdx) {
+    if (!item) {
+      return;
+    }
+    const bool isLinked = item->data(0, Qt::UserRole).toBool();
+    int idx = indexOf(item);
+    if (!isLinked && CollectionUtils::isValidIndex(idx, m_collections)) {
+      (*m_collections)[idx].parentCollectionIndex = parentIdx;
+      (*m_collections)[idx].isSubcollection = (parentIdx >= 0);
+      if (idx < m_workingCollections->size()) {
+        (*m_workingCollections)[idx].parentCollectionIndex = parentIdx;
+        (*m_workingCollections)[idx].isSubcollection = (parentIdx >= 0);
+      }
+    }
+    const int childParentIdx = isLinked ? parentIdx : idx;
+    for (int i = 0; i < item->childCount(); ++i) {
+      walk(item->child(i), childParentIdx);
+    }
+  };
+  for (int i = 0; i < m_widget->topLevelItemCount(); ++i) {
+    walk(m_widget->topLevelItem(i), -1);
+  }
+
+  // Persist immediately so the rearranged tree survives a Cancel of the outer
+  // dialog; the host re-emits SettingsDialog::collectionSaved.
+  emit collectionsReordered();
+  *m_collectionSaved = true;
+  m_host->updateSaveButtonStyle();
 }

@@ -37,7 +37,7 @@ void AppearanceListPanel::clear() {
   ui->listRowHeightSpinBox->setValue(32);
 }
 
-void AppearanceListPanel::save() const {
+void AppearanceListPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

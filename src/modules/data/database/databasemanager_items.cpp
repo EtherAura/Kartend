@@ -2,6 +2,24 @@
 // and launch history — plus the queued worker-write primitive they share.
 // Split from databasemanager.cpp — see that TU's header comment for the
 // responsibility map.
+//
+// Kartend-vin5o — threading boundary (deliberate, documented):
+// The load*() facades below run their QSqlQuery SYNCHRONOUSLY on the GUI-thread
+// m_db connection (const_cast<QSqlDatabase&>(m_db)), while the corresponding
+// writes are dispatched to the worker thread via queueWorkerWrite. This is
+// intentional and safe, not an oversight:
+//   - These are small, LRU-cache-fronted point reads (single (uuid,path) row),
+//     so the GUI-thread cost is negligible on a cache miss and zero on a hit.
+//   - SQLite runs in WAL mode, where a reader never blocks on a concurrent
+//     writer (a background scan on the worker connection), so the GUI thread
+//     does not stall on scan write-locks.
+//   - Each thread uses its OWN QSqlDatabase connection (per-instance connection
+//     names), so there is no cross-thread QSqlDatabase sharing / data race.
+// The only consequence is read-after-write staleness for a just-queued write,
+// which the code explicitly accepts (see the queueWorkerWrite note below).
+// If GUI stalls ever surface here, the heavier AGGREGATE reads
+// (loadAggregateUsageStats / loadTopPlayedItems) are the ones to move onto the
+// worker behind a queued request/result signal like the existing fetch paths.
 #include "databasemanager.h"
 
 #include <functional>

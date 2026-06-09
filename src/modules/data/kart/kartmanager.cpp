@@ -304,9 +304,47 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
 ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartPath,
                                                             const QString &destDir,
                                                             bool registerCollection,
-                                                            MergeChoice headlessChoice) {
+                                                            MergeChoice headlessChoice,
+                                                            bool allowUntrustedLauncher) {
   auto extracted = extractKart(kartPath, destDir);
   if (extracted.isError()) return extracted.error();
+  // Kartend-u8wf0: headless import has no interactive confirmer, so the
+  // suspicious-path gate the synchronous/GUI paths run (importKart and the
+  // async dialog flow) is bypassed by design. The dangerous case the GUI
+  // gate would catch is a manifest that bundles its OWN executable and points
+  // launcherPath at it: collectSuspiciousKartPaths can't flag that because the
+  // extraction root usually sits under $HOME (an allowlisted prefix), yet a
+  // later Launch click would run code the kart fully chose. Refuse those
+  // in-tree launcher paths unless the caller explicitly opts in
+  // (--allow-untrusted-launcher), and always log the finding either way.
+  const auto inTree =
+      collectInTreeLauncherPaths(extracted.value().manifest.collectionConfig, extracted.value().destDir);
+  if (!inTree.isEmpty()) {
+    QStringList lines;
+    lines.reserve(inTree.size());
+    for (const auto &[field, path] : inTree) {
+      lines.append(QStringLiteral("%1: %2").arg(field, path));
+    }
+    const QString joined = lines.join(QStringLiteral("\n  - "));
+    if (!allowUntrustedLauncher) {
+      return ErrorUtils::ErrorContext::error(
+                 ErrorUtils::ErrorCode::InvalidFilePath,
+                 "Refusing headless import: the .kart bundles its own launcher executable",
+                 "KartManager::importKartHeadless")
+          .withDetails(QStringLiteral(
+                           "These launcher paths resolve inside the extracted kart tree (%1), so "
+                           "the kart would run an executable it shipped. Re-run with "
+                           "--allow-untrusted-launcher only if you trust this source.\n  - %2")
+                           .arg(extracted.value().destDir, joined));
+    }
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::InvalidFilePath,
+            "Headless import accepted a self-bundled launcher via --allow-untrusted-launcher",
+            "KartManager::importKartHeadless")
+            .withDetails(QStringLiteral("Source: %1, In-tree launcher paths:\n  - %2")
+                             .arg(kartPath, joined)));
+  }
   return finalizeImport(extracted.value(), registerCollection,
                         makeFixedChoiceResolver(headlessChoice));
 }

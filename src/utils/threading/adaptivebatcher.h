@@ -12,7 +12,10 @@
  * to maintain a target processing time. Uses exponential moving average
  * to smooth out timing variations.
  *
- * Thread-safe: All methods can be called from any thread.
+ * Thread-safe: all methods are mutex-guarded. In practice it is driven from the
+ * GUI thread (the viewport dispatcher) and worker completion handlers; the
+ * locking lets those callers share it without each re-synchronising
+ * (Kartend-ll86n).
  */
 class AdaptiveBatcher {
 public:

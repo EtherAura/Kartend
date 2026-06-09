@@ -15,15 +15,13 @@ AttractPanel::AttractPanel(QWidget *parent) : QWidget(parent), ui(new Ui::Attrac
   const auto onSpin = QOverload<int>::of(&QSpinBox::valueChanged);
   const auto onDoubleSpin = QOverload<double>::of(&QDoubleSpinBox::valueChanged);
 
-  connect(ui->attractModeCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->attractIdleTimeoutSpinBox, onSpin, this, [this](int) { writeBack(); });
-  connect(ui->attractAutoScrollCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->attractScrollSpeedSpinBox, onDoubleSpin, this, [this](double) { writeBack(); });
-  connect(ui->attractAdvanceSelectionCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { writeBack(); });
-  connect(ui->attractAdvanceIntervalSpinBox, onSpin, this, [this](int) { writeBack(); });
-  connect(ui->attractAdvanceRandomCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { writeBack(); });
+  connect(ui->attractModeCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->attractIdleTimeoutSpinBox, onSpin, this, [this](int) { save(); });
+  connect(ui->attractAutoScrollCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->attractScrollSpeedSpinBox, onDoubleSpin, this, [this](double) { save(); });
+  connect(ui->attractAdvanceSelectionCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->attractAdvanceIntervalSpinBox, onSpin, this, [this](int) { save(); });
+  connect(ui->attractAdvanceRandomCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
 }
 
 AttractPanel::~AttractPanel() {
@@ -32,10 +30,10 @@ AttractPanel::~AttractPanel() {
 
 void AttractPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void AttractPanel::refresh() {
+void AttractPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -61,7 +59,7 @@ void AttractPanel::refresh() {
       m_model->generalSettings->attract.attractModeAdvanceSelectionRandom);
 }
 
-void AttractPanel::writeBack() {
+void AttractPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

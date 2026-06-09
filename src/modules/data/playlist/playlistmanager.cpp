@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -833,7 +834,25 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   }
   const QString &newId = created.value();
 
+  // Kartend-fd7xl: insert all items in a SINGLE transaction so a mid-loop
+  // failure or crash can't leave a half-populated playlist the user sees as
+  // "imported". On any failure we roll the items back AND drop the freshly
+  // created (now-empty) playlist so the import fails cleanly rather than
+  // leaving an orphan. (addItem opens its own per-item transaction, so we
+  // insert directly here instead of looping it — positions are a dense 0-based
+  // sequence for the fresh playlist, and an in-memory set reproduces addItem's
+  // idempotent (uuid,path) de-duplication.)
+  if (!m_db.transaction()) {
+    (void)deletePlaylist(newId);
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to begin playlist import transaction",
+                               "PlaylistManager::importFromJson")
+        .withDetails(m_db.lastError().text());
+  }
   const QJsonArray itemsArray = root.value("items").toArray();
+  const QString addedAt = isoNow();
+  QSet<QString> seen;
+  int position = 0;
   for (const auto &val : itemsArray) {
     const QJsonObject obj = val.toObject();
     const QString uuid = obj.value("source_collection_uuid").toString();
@@ -841,8 +860,42 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
     if (path.isEmpty()) {
       continue;
     }
-    addItem(newId, uuid, path);
+    const QString dedupKey = uuid + QLatin1Char('\x1f') + path;
+    if (seen.contains(dedupKey)) {
+      continue;
+    }
+    seen.insert(dedupKey);
+
+    QSqlQuery insert(m_db);
+    insert.prepare(
+        QStringLiteral("INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
+                       "source_path, added_at) VALUES (?, ?, ?, ?, ?)"));
+    insert.addBindValue(newId);
+    insert.addBindValue(position++);
+    insert.addBindValue(uuid);
+    insert.addBindValue(path);
+    insert.addBindValue(addedAt);
+    if (!insert.exec()) {
+      auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to insert imported playlist item",
+                                     "PlaylistManager::importFromJson")
+                     .withDetails(insert.lastError().text());
+      ErrorUtils::logError(err);
+      m_db.rollback();
+      (void)deletePlaylist(newId);
+      return err;
+    }
   }
+  if (!m_db.commit()) {
+    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to commit playlist import",
+                                   "PlaylistManager::importFromJson")
+                   .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    m_db.rollback();
+    (void)deletePlaylist(newId);
+    return err;
+  }
+  emit playlistsChanged();
   return newId;
 }
 
@@ -879,8 +932,15 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
   // doesn't recognise are skipped (counted in *outSkipped) rather than
   // stored as broken refs; the user can re-import once collections have
   // been rescanned and the paths become resolvable.
+  //
+  // Kartend-o84pt: M3U carries no collection identity (unlike the lossless JSON
+  // format, which stores source_collection_uuid), so a path that exists in more
+  // than one collection is genuinely ambiguous on import. ORDER BY makes the
+  // pick DETERMINISTIC (lowest uuid) instead of letting SQLite's row order
+  // decide, and we log the ambiguity so the round-trip's lossiness is visible
+  // rather than silent.
   QSqlQuery resolve(m_db);
-  resolve.prepare("SELECT collection_uuid FROM items WHERE path = ? LIMIT 1");
+  resolve.prepare("SELECT collection_uuid FROM items WHERE path = ? ORDER BY collection_uuid");
 
   QTextStream in(&file);
   int skipped = 0;
@@ -895,6 +955,15 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
       continue;
     }
     const QString uuid = resolve.value(0).toString();
+    if (resolve.next()) {
+      ErrorUtils::logError(
+          ErrorContext::warning(
+              ErrorCode::InvalidArgument,
+              "M3U import: path exists in multiple collections; M3U can't "
+              "disambiguate, using the lowest collection uuid",
+              "PlaylistManager::importFromM3U")
+              .withDetails(line));
+    }
     addItem(newId, uuid, line);
   }
   file.close();

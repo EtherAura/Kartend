@@ -25,6 +25,16 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+// Kartend-68wbk: missing archive tool → graceful QSKIP locally, hard QFAIL in CI
+// (KARTEND_REQUIRE_ARCHIVE_TOOLS=1, where Kartend-03lcs installs the tools) so
+// silent skips can't hide lost coverage. Drop-in for a bare QSKIP.
+#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                              \
+  do {                                                                                              \
+    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                              \
+      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                       \
+    QSKIP(msg);                                                                                     \
+  } while (false)
+
 class TestRomHasher : public QObject {
   Q_OBJECT
 
@@ -204,12 +214,12 @@ void TestRomHasher::hashesInnerRomLargestFile() {
   // exercised by archiveMissingPathReturnsError, so coverage isn't
   // lost.
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
-    QSKIP("zip not available — skipping archive-build half of the test");
+    KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
-    QSKIP("no archive extractor on PATH — RomHasher would error out");
+    KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
 
   // Build a .zip with two files so the largest-file selection has
@@ -249,12 +259,12 @@ void TestRomHasher::hashInnerRomAmbiguousMultiDumpReturnsError() {
   QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
 #endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
-    QSKIP("zip not available — skipping archive-build half of the test");
+    KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
-    QSKIP("no archive extractor on PATH — RomHasher would error out");
+    KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
 
   // Two comparably-large inner files (a multi-disc dump): "largest wins" would

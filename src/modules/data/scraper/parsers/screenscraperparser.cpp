@@ -589,7 +589,17 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
     }
     return inner.error();
   }
-  const Scraper::ScrapedItem &item = inner.value();
+  QList<Scraper::ScrapeCandidate> out;
+  out.append(candidateFromItem(inner.value()));
+  return out;
+}
+
+ErrorUtils::Result<Scraper::ScrapedItem> parseDetailResponse(const QByteArray &json,
+                                                             const ParseOptions &options) {
+  return parseInner(json, options);
+}
+
+Scraper::ScrapeCandidate candidateFromItem(const Scraper::ScrapedItem &item) {
   Scraper::ScrapeCandidate cand;
   cand.displayName = item.title;
   cand.providerSpecificId = item.customFields.value(QStringLiteral("screenscraper_id"));
@@ -607,14 +617,7 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
       break;
     }
   }
-  QList<Scraper::ScrapeCandidate> out;
-  out.append(cand);
-  return out;
-}
-
-ErrorUtils::Result<Scraper::ScrapedItem> parseDetailResponse(const QByteArray &json,
-                                                             const ParseOptions &options) {
-  return parseInner(json, options);
+  return cand;
 }
 
 ErrorUtils::Result<ScreenScraperUserInfo> parseUserInfoResponse(const QByteArray &json) {

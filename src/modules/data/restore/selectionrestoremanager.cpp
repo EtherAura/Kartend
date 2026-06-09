@@ -106,7 +106,11 @@ auto SelectionRestoreCoordinator::getSelectionRestoreIndex(int collectionIndex) 
 }
 
 auto SelectionRestoreCoordinator::validateSelectionRestoreContext() const -> bool {
-  if (!parent() || QApplication::closingDown()) {
+  // Kartend-je2wy: the former `!parent()` check was dead — this coordinator is a
+  // unique_ptr member constructed with its NavigationManager as parent, so
+  // parent() is non-null for the coordinator's whole lifetime. The real
+  // teardown guards are the app-closing / shutting-down flags.
+  if (QApplication::closingDown()) {
     return false;
   }
   if (m_isShuttingDown && m_isShuttingDown()) {

@@ -2,6 +2,7 @@
 #define ARTWORKTABPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QStringList>
 #include <QWidget>
 
@@ -17,7 +18,7 @@ struct SettingsModel;
 /// SettingsDialog. Owns the artwork / video / manual / placeholder asset
 /// directories plus the custom-artwork-types comma list. Per-collection
 /// load/save shape; internal browse pickers.
-class ArtworkTabPanel : public QWidget {
+class ArtworkTabPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ArtworkTabPanel)
 public:
@@ -25,9 +26,9 @@ public:
   ~ArtworkTabPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
 signals:

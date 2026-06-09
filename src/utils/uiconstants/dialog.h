@@ -49,6 +49,16 @@ inline constexpr int CANDIDATE_LABEL_MIN_WIDTH = 78;
 /// Thumbnail strip maximum height + tile spacing.
 inline constexpr int THUMBS_STRIP_MAX_HEIGHT = 108;
 inline constexpr int THUMBS_STRIP_SPACING = 2;
+/// Kartend-hg07v: promoted from bare literals in scraperesultdialogunified.cpp.
+/// Uniform content margin for the root + metadata section containers.
+inline constexpr int CONTENT_MARGIN = 8;
+/// Post-scrape section container margins (horizontal / vertical).
+inline constexpr int POST_SECTION_H_MARGIN = 12;
+inline constexpr int POST_SECTION_V_MARGIN = 14;
+/// Live-thumbnail strip inner margin + per-tile icon / grid cell sizes.
+inline constexpr int THUMBS_STRIP_MARGIN = 4;
+inline constexpr int THUMB_ICON_SIZE = 96;
+inline constexpr int THUMB_GRID_SIZE = 100;
 } // namespace ScrapeResultDialog
 
 // =============================================================================

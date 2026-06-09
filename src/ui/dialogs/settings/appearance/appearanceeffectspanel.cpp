@@ -48,7 +48,7 @@ void AppearanceEffectsPanel::clear() {
   ui->backdropBlurRadiusSpinBox->setValue(12);
 }
 
-void AppearanceEffectsPanel::save() const {
+void AppearanceEffectsPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

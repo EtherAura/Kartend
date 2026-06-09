@@ -70,6 +70,11 @@ private slots:
   void testSyncDirectory_emptyPath();
   void testSyncDirectory_nonExistentDir();
 
+  // isPrivateDirOfCurrentUser tests (Kartend-qubev)
+  void testIsPrivateDir_ownerOnlyDirIsPrivate();
+  void testIsPrivateDir_groupOrOtherAccessibleIsNotPrivate();
+  void testIsPrivateDir_emptyMissingOrFileIsNotPrivate();
+
   // PathStatus tests (Kartend-qc1c)
   void testCheckLauncherPath_empty();
   void testCheckLauncherPath_missing();
@@ -459,6 +464,49 @@ void TestPathUtils::testSyncDirectory_nonExistentDir() {
   QVERIFY2(PathUtils::syncDirectory("/nonexistent/path/abcxyz"),
            "Non-existent path is a no-op on non-POSIX");
 #endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isPrivateDirOfCurrentUser tests (Kartend-qubev)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testIsPrivateDir_ownerOnlyDirIsPrivate() {
+  // A fresh dir we create and chmod 0700 is owned by us with no group/other
+  // bits — the "safe to trust the cache" state.
+  const QString dir = QDir(m_tempDir.path()).filePath(QStringLiteral("private0700"));
+  QVERIFY(QDir().mkpath(dir));
+  QVERIFY(QFile::setPermissions(
+      dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+  QVERIFY(PathUtils::isPrivateDirOfCurrentUser(dir));
+}
+
+void TestPathUtils::testIsPrivateDir_groupOrOtherAccessibleIsNotPrivate() {
+#if defined(Q_OS_UNIX)
+  // World-accessible (0755) is exactly the shared-host hazard the cache guard
+  // rejects: another local user could traverse / pre-populate it.
+  const QString dir = QDir(m_tempDir.path()).filePath(QStringLiteral("world0755"));
+  QVERIFY(QDir().mkpath(dir));
+  QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                         QFileDevice::ExeOwner | QFileDevice::ReadGroup |
+                                         QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                                         QFileDevice::ExeOther));
+  QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(dir));
+#else
+  QSKIP("POSIX permission semantics; non-POSIX temp dirs are per-user");
+#endif
+}
+
+void TestPathUtils::testIsPrivateDir_emptyMissingOrFileIsNotPrivate() {
+  QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(QString()));
+  QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(
+      QDir(m_tempDir.path()).filePath(QStringLiteral("nope-does-not-exist"))));
+  // A regular file is not a directory → not private-dir.
+  const QString filePath = QDir(m_tempDir.path()).filePath(QStringLiteral("afile"));
+  QFile f(filePath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+  QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(filePath));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

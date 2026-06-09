@@ -438,12 +438,13 @@ bool BatchScrapeRunner::shouldSkipScrapedItem(const QString &path,
 }
 
 void BatchScrapeRunner::pump() {
-  // m_cancelled and m_quotaStopped both stop NEW dispatch here; the
-  // difference is purely in the per-item callbacks (m_cancelled makes
-  // in-flight items abandon their work, m_quotaStopped lets them run
-  // to completion — m_quotaStopped is never checked there). Either
-  // way the drain below emits finished() once the in-flight count
-  // returns to 0.
+  // m_cancelled and m_quotaStopped both stop NEW dispatch here. In the per-item
+  // callbacks m_cancelled makes in-flight items abandon all remaining work;
+  // m_quotaStopped (Kartend-fv3yr) is gentler — an item past lookup skips its
+  // detail request, and an item past detail keeps its already-fetched metadata
+  // but skips the media downloads, so in-flight items don't fire fresh requests
+  // into an exhausted quota. Either way the drain below emits finished() once
+  // the in-flight count returns to 0.
   if (m_cancelled || m_quotaStopped) {
     if (m_inFlight == 0 && !m_finishedEmitted) {
       m_finishedEmitted = true;
@@ -536,6 +537,15 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
       self->itemFinished();
       return;
     }
+    if (self->m_quotaStopped) {
+      // Kartend-fv3yr: a sibling item hit SS quota exhaustion (430/431) while
+      // this item's lookup was in flight. Don't fire the detail request — it
+      // would just burn another request against the exhausted quota (deepening a
+      // 431 ban). Skip it; pump()'s drain still finishes the batch.
+      ++self->m_summary.skipped;
+      self->itemFinished();
+      return;
+    }
     // Auto-pick the first candidate. The provider ranks candidates
     // by relevance, so the first one is what an interactive scrape
     // would default to.
@@ -564,6 +574,14 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
             return;
           }
           const auto scraped = result.value();
+          if (self->m_quotaStopped) {
+            // Kartend-fv3yr: quota was exhausted by a sibling between this
+            // item's detail fetch and now. Keep the metadata we already have
+            // (free) but skip the media downloads, which would burn more
+            // requests against the exhausted quota.
+            self->applyAndFinish(state, scraped, {});
+            return;
+          }
           // Media-fetch pass. Two modes depending on whether the
           // user supplied an explicit media-type filter:
           //   • filter empty → legacy "front cover only" path

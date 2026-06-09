@@ -118,7 +118,7 @@ void NavigationManager::prepareForShutdown() {
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
-  if (!isAlive()) {
+  if (!appNotShuttingDown()) {
     return;
   }
 
@@ -169,7 +169,7 @@ auto NavigationManager::initializeNavigationState() -> void {
     }
   }
 
-  if (isAlive() && interactionMgr()) {
+  if (appNotShuttingDown() && interactionMgr()) {
     interactionMgr()->stopRepeat();
     if (!isStartupNavigation) {
       interactionMgr()->setNavigationInProgress(true);
@@ -217,7 +217,7 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
     m_isInitialStartupLoad = false;
   }
 
-  if (isAlive() && interactionMgr()) {
+  if (appNotShuttingDown() && interactionMgr()) {
     interactionMgr()->stopRepeat();
     // Only cancel pending restore when navigating FROM an existing collection
     // On initial startup (*m_currentCollectionIndex < 0), allow restore to
@@ -314,7 +314,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
     -> bool {
   hasSub = false;
   hasItems = false;
-  if ((!isAlive()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+  if ((!appNotShuttingDown()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
 

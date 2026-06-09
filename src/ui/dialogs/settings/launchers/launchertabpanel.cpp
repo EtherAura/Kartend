@@ -91,7 +91,7 @@ void LauncherTabPanel::clear() {
   updateExtractedExtensionVisibility();
 }
 
-void LauncherTabPanel::save() const {
+void LauncherTabPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

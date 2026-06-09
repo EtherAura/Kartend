@@ -1,6 +1,7 @@
 #ifndef SPLASHPANEL_H
 #define SPLASHPANEL_H
 
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -16,7 +17,7 @@ struct SettingsModel;
 /// observing a SettingsModel* installed by the host dialog so changes write
 /// straight through to the live settings struct. Live-save semantics — host
 /// is expected to mirror to mainWindow + saveGeneralSettings on changed().
-class SplashPanel : public QWidget {
+class SplashPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(SplashPanel)
 public:
@@ -24,14 +25,17 @@ public:
   ~SplashPanel() override;
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() was the
+  // private writeBack(); clear() is a no-op — this global panel is always
+  // backed by the single live GeneralSettings model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
 signals:
   void changed();
 
 private:
-  void writeBack();
-
   Ui::SplashPanel *ui;
   SettingsModel *m_model = nullptr;
 };

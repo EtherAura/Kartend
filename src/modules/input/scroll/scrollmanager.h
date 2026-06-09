@@ -305,7 +305,11 @@ private:
   // Widget pool manager for recycling ItemWidgets
   std::unique_ptr<WidgetPoolManager> m_widgetPool;
   ItemWidget *acquireWidget();
-  void releaseWidget(ItemWidget *widget);
+  // Kartend-16al4: visibleRows defaults to -1 (compute from the current visible
+  // row range). The hot eviction loop (removeUnneededWidgets) computes it once
+  // per pass and passes it in, avoiding a getVisibleRowRange recompute per
+  // evicted widget.
+  void releaseWidget(ItemWidget *widget, int visibleRows = -1);
 
   // Data source manager: owns FilterManager + ScrollDataStore +
   // PreSearchStateCache + SearchLoadingOverlay (extracted from
@@ -416,6 +420,12 @@ private:
   VirtualMetrics m_metrics;
   QTimer m_scrollTimer; // Throttle timer (Kartend-a911.5: value member)
   QTimer m_arrowKeyViewUpdateTimer;
+  // Kartend-43ngf: reusable single-shot timers (restart-on-trigger) replacing
+  // the per-scroll-event QTimer::singleShot allocations in setupScrollSuppression
+  // / finalizeScrollChanges, which churned ~120 short-lived timers/sec during a
+  // wheel storm. At most one of each fires after scrolling settles.
+  QTimer m_arrowCenterClearTimer;
+  QTimer m_scrollSettleTimer;
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;

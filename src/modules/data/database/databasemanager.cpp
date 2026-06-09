@@ -60,6 +60,16 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
 
   initDatabase();
 
+  // Kartend-bbubn: bring-up-order guard. ApplicationManager registers
+  // SessionManager into ctx BEFORE it constructs DatabaseManager, so if a ctx is
+  // supplied its sessionManager() must be non-null here. A null sibling means a
+  // manager was reordered or added above its dependency in
+  // ApplicationManager::initialize() — that used to be a silent null store; now
+  // it fails loudly in debug builds. Null ctx is still tolerated (headless /
+  // test construction). Debug-only: Q_ASSERT_X compiles out in release.
+  Q_ASSERT_X(!m_ctx || m_ctx->sessionManager(), "DatabaseManager::DatabaseManager",
+             "ctx supplied but SessionManager not yet registered — check manager "
+             "construction order in ApplicationManager::initialize()");
   ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
 
   // NOTE: QThreads are intentionally NOT parented to DatabaseManager. If they
@@ -162,6 +172,19 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
 
 DatabaseManager::~DatabaseManager() {
   // Cancel any in-flight scans so the workers can return promptly.
+  //
+  // Kartend-mkm4u: this is the ONE place that calls requestCancelScan() DIRECTLY
+  // across threads instead of via the queued cancelScanRequested signal, and it
+  // must stay that way. requestCancelScan() flips a mutex-guarded cancel flag
+  // (ScanWorkController), which is safe to set from this (GUI) thread. The
+  // queued signal would be posted behind the worker's currently-running scan
+  // slot and could not run until that slot yields — but the slot only returns
+  // because it polls this very flag, so a queued cancel during an active scan
+  // would never flip it, the scan would not stop, and the bounded wait() below
+  // would time out and leak the thread. The synchronous flag flip is what lets
+  // teardown interrupt a busy scan. INVARIANT: any cancellation state added to
+  // QueryManager/ScanService must stay thread-safe (mutex/atomic) so this
+  // cross-thread call remains race-free.
   if (m_worker) {
     m_worker->requestCancelScan();
   }

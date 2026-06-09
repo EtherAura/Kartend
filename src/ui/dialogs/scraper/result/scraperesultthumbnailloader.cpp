@@ -1,7 +1,5 @@
 #include "scraperesultthumbnailloader.h"
 
-#include "scraperesultdialog.h"
-
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
 
@@ -14,10 +12,15 @@
 #include <QListWidgetItem>
 #include <QPair>
 #include <QPixmap>
+#include <QWidget>
 #include <QtConcurrent/QtConcurrentRun>
 
-ScrapeResultThumbnailLoader::ScrapeResultThumbnailLoader(ScrapeResultDialog *dlg)
-    : QObject(dlg), m_dlg(dlg) {}
+ScrapeResultThumbnailLoader::ScrapeResultThumbnailLoader(QWidget *host)
+    : QObject(host), m_host(host) {}
+
+void ScrapeResultThumbnailLoader::setLiveThumbsStrip(QListWidget *strip) {
+  m_liveThumbsStrip = strip;
+}
 
 void ScrapeResultThumbnailLoader::appendThumbAsync(const QString &path) {
   // QImage decode + smooth-scale run on the global QThreadPool;
@@ -42,16 +45,16 @@ void ScrapeResultThumbnailLoader::appendThumbAsync(const QString &path) {
   auto *watcher = new QFutureWatcher<QPair<QString, QImage>>(this);
   connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher]() {
     watcher->deleteLater();
-    if (!m_dlg->isVisible()) return;
+    if (!m_host || !m_host->isVisible() || !m_liveThumbsStrip) return;
     const auto pair = watcher->result();
     if (pair.second.isNull()) return;
     auto *row = new QListWidgetItem(QIcon(QPixmap::fromImage(pair.second)), QString(),
-                                    m_dlg->m_liveThumbsStrip);
+                                    m_liveThumbsStrip);
     row->setToolTip(QFileInfo(pair.first).fileName());
-    while (m_dlg->m_liveThumbsStrip->count() > 12) {
-      delete m_dlg->m_liveThumbsStrip->takeItem(0);
+    while (m_liveThumbsStrip->count() > 12) {
+      delete m_liveThumbsStrip->takeItem(0);
     }
-    m_dlg->m_liveThumbsStrip->scrollToItem(row, QAbstractItemView::PositionAtBottom);
+    m_liveThumbsStrip->scrollToItem(row, QAbstractItemView::PositionAtBottom);
   });
   watcher->setFuture(QtConcurrent::run([path]() {
     QImage img = ImageDecodeUtils::loadCapped(path);

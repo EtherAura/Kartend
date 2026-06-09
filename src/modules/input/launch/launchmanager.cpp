@@ -126,7 +126,6 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
 
   const QString expandedLauncherPath = expandOnly(launcher.launcherPath);
   const QString expandedCorePath = expandOnly(launcher.corePath);
-  const QString expandedLaunchParameters = expandOnly(launcher.launchParameters);
 
   if (expandedLauncherPath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "No launcher configured",
@@ -168,12 +167,23 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
   }
 
   // Plain launcher: parse optional launch parameters string.
-  if (!expandedLaunchParameters.isEmpty()) {
-    auto parseResult = parseParameters(expandedLaunchParameters);
+  // Kartend-nv9iw: tokenize the RAW template, THEN substitute %collection%
+  // inside each already-split argument. Expanding before tokenizing let a
+  // collection name containing spaces or a leading dash (which can arrive from
+  // an imported .kart manifest) split into extra argv entries — injecting
+  // attacker-chosen flags into the launcher. Per-token substitution can never
+  // introduce a new argument boundary.
+  const QString rawLaunchParameters = launcher.launchParameters.trimmed();
+  if (!rawLaunchParameters.isEmpty()) {
+    auto parseResult = parseParameters(rawLaunchParameters);
     if (parseResult.isError()) {
       return parseResult.error();
     }
-    cmd.arguments.append(parseResult.value());
+    QStringList expandedArgs = parseResult.value();
+    for (QString &arg : expandedArgs) {
+      arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
+    }
+    cmd.arguments.append(expandedArgs);
   }
   cmd.arguments << filePath;
   return cmd;

@@ -595,6 +595,35 @@ add_executable(test_scrapepersistence_direct
 target_link_libraries(test_scrapepersistence_direct PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ScrapePersistenceDirect COMMAND test_scrapepersistence_direct)
 
+# ScrapeAssetDedup — pure dedup / CRC-short-circuit helpers extracted from
+# ScrapeResultDialog (Kartend-dpehr). Exercises the shared/per-game asset
+# probes, local-file hashing, SS hash-hint URL building, and the short-circuit
+# sentinel check with no QDialog.
+add_executable(test_scrapeassetdedup
+  modules/scraper/test_scrapeassetdedup.cpp
+)
+target_link_libraries(test_scrapeassetdedup PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScrapeAssetDedup COMMAND test_scrapeassetdedup)
+
+# ScraperRetryPolicy — pure transient-classification + backoff math for the
+# bounded jeuInfos retry (Kartend-1rtrt). No network: the provider's
+# timer-driven re-dispatch consumes these decisions.
+add_executable(test_scraperretrypolicy
+  modules/scraper/test_scraperretrypolicy.cpp
+)
+target_link_libraries(test_scraperretrypolicy PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScraperRetryPolicy COMMAND test_scraperretrypolicy)
+
+# ScrapeDownloadDispatcher — non-UI dedup/CRC/async-fetch orchestration
+# extracted from ScrapeResultDialog (Kartend-dpehr). Driven by a fake provider,
+# no QDialog: covers tally / partial-success skip / hash short-circuit /
+# progress cadence / no-provider.
+add_executable(test_scrapedownloaddispatcher
+  modules/scraper/test_scrapedownloaddispatcher.cpp
+)
+target_link_libraries(test_scrapedownloaddispatcher PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScrapeDownloadDispatcher COMMAND test_scrapedownloaddispatcher)
+
 # ScrapeWriteWorker connection-lifecycle + cross-thread write tests
 # Exercises Scraper::ScrapeWriteWorker (the per-worker QSqlDatabase the
 # BatchScrapeRunner write worker drives on its own QThread) against a REAL
@@ -953,6 +982,15 @@ add_executable(test_settingshelpers
 target_link_libraries(test_settingshelpers PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME SettingsHelpers COMMAND test_settingshelpers)
 
+# CollectionHierarchyBuilder — pure parent-linking algorithm from the INI
+# section hash (Kartend-93vuk). No SettingsManager: roots-first ordering,
+# parent/grandchild path resolution, orphan drop.
+add_executable(test_collectionhierarchybuilder
+  modules/settings/test_collectionhierarchybuilder.cpp
+)
+target_link_libraries(test_collectionhierarchybuilder PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME CollectionHierarchyBuilder COMMAND test_collectionhierarchybuilder)
+
 # CollectionConfig::operator== field-coverage test (Kartend-bztw8). Pure value
 # type lives in kartend_utils; guards against a future field being added to the
 # struct but forgotten in operator== (breaks settings-dialog dirty-tracking).
@@ -1075,6 +1113,15 @@ add_executable(test_arrowkeyscrollhelper
 target_link_libraries(test_arrowkeyscrollhelper PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ArrowKeyScrollHelper COMMAND test_arrowkeyscrollhelper)
 
+# SelectionCoordinator — scroll-module selection state + movement analysis
+# (Kartend-93vuk). Widget-free: pure analyzeMovement, setSelectedIndex
+# emit/direction, callback-injected rectForIndex, reset.
+add_executable(test_selectioncoordinator
+  modules/scroll/test_selectioncoordinator.cpp
+)
+target_link_libraries(test_selectioncoordinator PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME SelectionCoordinator COMMAND test_selectioncoordinator)
+
 # TextZoom tests (process-wide zoom math: setPercent/primeFromSettings clamping,
 # zoomedFontSize identity/scale/floor)
 add_executable(test_textzoom
@@ -1159,6 +1206,35 @@ add_executable(test_detailpagehelpers
 )
 target_link_libraries(test_detailpagehelpers PRIVATE kartend_media kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME DetailPageHelpers COMMAND test_detailpagehelpers)
+
+# GridWidthDebouncer — three-stage debounced grid-width pipeline (Kartend-tu2hq,
+# first standalone src/core unit test). The class is self-contained (only
+# TimerUtils from kartend_utils), so its .cpp is compiled directly rather than
+# linking kartend_core, which would drag in the whole MainWindow closure.
+add_executable(test_gridwidthdebouncer
+  core/test_gridwidthdebouncer.cpp
+  ${SRC_DIR}/core/gridwidthdebouncer.cpp
+)
+target_include_directories(test_gridwidthdebouncer PRIVATE ${SRC_DIR}/core)
+target_link_libraries(test_gridwidthdebouncer PRIVATE kartend_utils Qt6::Test)
+add_test(NAME GridWidthDebouncer COMMAND test_gridwidthdebouncer)
+
+# TitleCountsHelpers — window-title renderer extracted from MainWindow
+# (Kartend-tu2hq). Compiles titlecountshelpers.cpp directly (avoids the
+# kartend_core/MainWindow closure) and links the area libs its deps need
+# (LoadingOverlay from kartend_input, CollectionUtils/StringUtils from
+# kartend_utils). Uses the inline MockDatabaseManager from integration/mocks.
+add_executable(test_titlecountshelpers
+  core/test_titlecountshelpers.cpp
+  ${SRC_DIR}/core/titlecountshelpers.cpp
+  integration/mocks/mockdatabasemanager.h
+)
+target_include_directories(test_titlecountshelpers PRIVATE
+  ${SRC_DIR}/core
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+target_link_libraries(test_titlecountshelpers PRIVATE kartend_input kartend_data kartend_chrome
+                      kartend_api kartend_utils Qt6::Test Qt6::Widgets)
+add_test(NAME TitleCountsHelpers COMMAND test_titlecountshelpers)
 
 # Integration test harness for UI-coordinator managers.
 # Only built when the per-area OBJECT libs are available (i.e. when

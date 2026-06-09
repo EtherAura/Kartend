@@ -308,6 +308,13 @@ void SessionManager::setLastSelected(const QString &collectionName, int index,
   }
 }
 
+// Returns the raw persisted index for the collection, or -1. Kartend-6in98:
+// this value is NOT bounds-checked against the collection's current item count
+// (which can shrink between sessions) — this getter has no access to it. Every
+// caller that turns this into an actual selection MUST clamp against the live
+// item count: SelectionRestoreCoordinator via SelectionRestoreHelpers::
+// clampRestoreIndex, and NavigationManager via NavigationHelpers (which clamps
+// to [0, totalItems-1] / -1). Do not apply this index to a widget directly.
 int SessionManager::getLastSelectedIndex(const QString &collectionName) const {
   QMutexLocker locker(&m_mutex);
   if (lastSelectedByName.contains(collectionName)) {

@@ -497,8 +497,8 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     // entry before the next paint (Kartend-g6ft).
     const QString &cardPath = m_cards[c.index].artworkPath;
     const QSize cardSize = c.rect.size();
-    const QString scaledKey = cardPath + QLatin1Char('|') + QString::number(cardSize.width()) +
-                              QLatin1Char('x') + QString::number(cardSize.height());
+    // Kartend-el0fr: struct key — no per-frame string concatenation per card.
+    const CoverFlowScaledKey scaledKey{cardPath, cardSize.width(), cardSize.height()};
     QPixmap scaled;
     QSize scaledDrawSize;
     bool useFastTransform = false;

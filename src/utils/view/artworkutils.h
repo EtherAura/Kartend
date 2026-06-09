@@ -3,6 +3,7 @@
 
 #include "errorutils.h"
 
+#include <QAtomicInteger>
 #include <QColor>
 #include <QHash>
 #include <QImage>
@@ -69,6 +70,19 @@ public:
   void prewarmDirectories(const QStringList &directories);
 
   /**
+   * @brief Schedule a background dentry prewarm of @p directories on the global
+   * thread pool, capped at one in-flight prewarm at a time (Kartend-uzs42).
+   *
+   * Rapid collection switching would otherwise enqueue a fresh, untracked walk
+   * per switch, piling up redundant disk I/O on the shared global pool for
+   * collections the user has already left. Best-effort: if a prewarm is already
+   * running this call is dropped (the in-flight walk still warms its dirs, and
+   * the newly-selected collection's own enumeration warms the rest). No-op for
+   * an empty list. Safe to call from the GUI thread.
+   */
+  void schedulePrewarm(const QStringList &directories);
+
+  /**
    * @brief Process queued directories in background.
    * Called by the background thread to scan directories that were
    * requested but not yet cached.
@@ -105,6 +119,10 @@ private:
   QHash<QString, QHash<QString, QString>> m_cache;
   // Directories requested but not yet scanned
   QSet<QString> m_queuedDirectories;
+  // Kartend-uzs42: 1 while a schedulePrewarm() walk is in flight; caps the
+  // background prewarm to one concurrent global-pool task so rapid collection
+  // switches don't pile up redundant directory walks.
+  QAtomicInteger<int> m_prewarmInFlight = 0;
 };
 
 /**

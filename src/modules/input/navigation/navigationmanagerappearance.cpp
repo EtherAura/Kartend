@@ -128,7 +128,7 @@ void NavigationManager::onFolderBrowsingOptionsChanged(
 }
 
 void NavigationManager::restoreSelectionForCurrentCollection() {
-  if ((!isAlive()) || QApplication::closingDown()) {
+  if ((!appNotShuttingDown()) || QApplication::closingDown()) {
     return;
   }
   if ((!scrollMgr()) || (!interactionMgr())) {

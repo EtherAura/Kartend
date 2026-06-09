@@ -385,3 +385,73 @@ void TestKartManager::testImportSkipsReporterWhenAllLauncherPathsResolve() {
   QVERIFY(importRes.isOk());
   QCOMPARE(reporterCalls, 0);
 }
+
+namespace {
+// Build a .kart whose primary launcherPath resolves inside `extractRoot` (the
+// directory the import will extract into), simulating a malicious kart that
+// bundles its own executable and points the launcher at it. The bundled file
+// need not exist — the gate fires pre-launch. Returns the on-disk .kart path
+// (under `kartHome`).
+QString buildKartWithInTreeLauncher(const QString &extractRoot, QTemporaryDir &kartHome) {
+  auto src = buildSyntheticCollection(QStringLiteral("Bundled Launcher"),
+                                      QStringLiteral("clip.bin"), QByteArray("bytes"));
+  // Derive from the canonical root so the in-tree prefix compare is exact even
+  // when the temp dir lives under a symlinked path.
+  const QString canonRoot = QFileInfo(extractRoot).canonicalFilePath();
+  src->cfg.launcher.launcherPath = canonRoot + QStringLiteral("/payload/bundled-runner");
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("bundled-uuid"), {});
+  if (prep.isError()) return QString();
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("bundled.kart"));
+  KartWriter::Writer writer;
+  if (writer.writeKart(kartPath, prep.value()).isError()) return QString();
+  return kartPath;
+}
+} // namespace
+
+void TestKartManager::testHeadlessImportRefusesInTreeLauncherByDefault() {
+  QTemporaryDir destRoot;
+  QVERIFY(destRoot.isValid());
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = buildKartWithInTreeLauncher(destRoot.path(), kartHome);
+  QVERIFY(!kartPath.isEmpty());
+
+  ApplicationManager appManager;
+  ApplicationContext appCtx;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  // Default (allowUntrustedLauncher omitted == false) → refused.
+  auto res = kartMgr->importKartHeadless(kartPath, destRoot.path(),
+                                         /*registerCollection=*/false,
+                                         /*headlessChoice=*/kart::MergeChoice::Skip);
+  QVERIFY2(res.isError(), "in-tree launcher import must be refused without opt-in");
+  // The error must point the operator at the opt-in flag.
+  QVERIFY(res.error().details.contains(QStringLiteral("--allow-untrusted-launcher")));
+}
+
+void TestKartManager::testHeadlessImportAcceptsInTreeLauncherWhenOptedIn() {
+  QTemporaryDir destRoot;
+  QVERIFY(destRoot.isValid());
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = buildKartWithInTreeLauncher(destRoot.path(), kartHome);
+  QVERIFY(!kartPath.isEmpty());
+
+  ApplicationManager appManager;
+  ApplicationContext appCtx;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  // Explicit opt-in → import proceeds (the warning is logged, not blocking).
+  auto res = kartMgr->importKartHeadless(kartPath, destRoot.path(),
+                                         /*registerCollection=*/false,
+                                         /*headlessChoice=*/kart::MergeChoice::Skip,
+                                         /*allowUntrustedLauncher=*/true);
+  QVERIFY2(res.isOk(), qPrintable(res.isError() ? res.error().message : QString()));
+}

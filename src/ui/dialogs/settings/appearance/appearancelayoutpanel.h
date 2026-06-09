@@ -2,6 +2,7 @@
 #define APPEARANCELAYOUTPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -22,7 +23,7 @@ struct SettingsModel;
 /// host dialog; horizontal/vertical spacing values are shown in user units
 /// but stored offset by SPACING_MIN, so spacingUiToInternal /
 /// spacingInternalToUi conversions stay paired with the host's helpers.
-class AppearanceLayoutPanel : public QWidget {
+class AppearanceLayoutPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceLayoutPanel)
 public:
@@ -30,9 +31,9 @@ public:
   ~AppearanceLayoutPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
   // Cross-cutting accessors:

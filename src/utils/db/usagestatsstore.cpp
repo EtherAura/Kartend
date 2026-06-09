@@ -9,6 +9,8 @@
 // caller logs and continues so usage tracking never blocks a launch.
 #include "usagestatsstore.h"
 
+#include "detailsformat.h"
+
 #include <algorithm>
 
 #include <QDateTime>
@@ -313,19 +315,15 @@ ErrorUtils::Result<bool> resetAll(QSqlDatabase &db) {
 }
 
 QString formatDuration(qint64 seconds) {
+  // Kartend-vbu6y: delegate to the canonical h/m/s formatter so the format
+  // lives in one place. Keep the <= 0 guard — formatDuration intentionally
+  // hides a zero/negative duration, whereas DetailsFormat::formatRuntime would
+  // render "0s". (A play-time total exceeding INT_MAX seconds is ~68 years, so
+  // the narrowing cast is safe.)
   if (seconds <= 0) {
     return {};
   }
-  const qint64 hours = seconds / 3600;
-  const qint64 minutes = (seconds % 3600) / 60;
-  const qint64 secs = seconds % 60;
-  if (hours > 0) {
-    return QStringLiteral("%1h %2m").arg(hours).arg(minutes, 2, 10, QChar('0'));
-  }
-  if (minutes > 0) {
-    return QStringLiteral("%1m %2s").arg(minutes).arg(secs, 2, 10, QChar('0'));
-  }
-  return QStringLiteral("%1s").arg(secs);
+  return DetailsFormat::formatRuntime(static_cast<int>(seconds));
 }
 
 QString formatTimestamp(const QString &isoUtc) {

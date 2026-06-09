@@ -8,6 +8,7 @@
 #include "errorutils.h"
 #include "isettingsdialog.h"
 #include "settingsmodel.h"
+#include "settingstreehost.h"
 #include <memory>
 #include <QDialog>
 #include <QHash>
@@ -40,7 +41,10 @@ class NavigationManager;
 class SidebarPanel;
 class TreeManager;
 
-class SettingsDialog : public QDialog, public CollectionRemoverHost, public ISettingsDialog {
+class SettingsDialog : public QDialog,
+                       public CollectionRemoverHost,
+                       public ISettingsDialog,
+                       public SettingsTreeHost {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(SettingsDialog)
 
@@ -125,8 +129,8 @@ protected:
   void resizeEvent(QResizeEvent *event) override;
 
 private slots:
-  void onTreeItemSelectionChanged();
-  void onTreeItemChanged(QTreeWidgetItem *item, int column);
+  // Kartend-mnymg: onTreeItemSelectionChanged / onTreeItemChanged migrated into
+  // the TreeManager controller (which now owns the tree gesture handlers).
   void addCollection();
   void removeCollection();
   /// full-copy duplicate of the current collection. Prompts for
@@ -157,12 +161,9 @@ private slots:
   void onRecursiveImportContent();
   /// react to user changes in the Settings Mode combo box.
   void onSettingsScopeChanged(int comboIndex);
-  /// builds the tree's right-click context menu (Rename /
-  /// Duplicate / Delete / expand-collapse helpers) at the requested point.
-  void onTreeContextMenuRequested(const QPoint &pos);
-  /// drag-drop reparenting completed. Walk the tree post-drop
-  /// and resync parentCollectionIndex / isSubcollection on every collection.
-  void onTreeRearranged();
+  // Kartend-mnymg: onTreeContextMenuRequested / onTreeRearranged migrated into
+  // the TreeManager controller (it owns the tree's context menu + drag-drop
+  // reparent handling now).
   /// open the multi-select picker pre-checked with the
   /// current collection's additionalParentNames so the user can manage
   /// alias parents. Excludes self + descendants from the picker (cycles
@@ -222,7 +223,8 @@ private:
   /// Populates and selects the parent collection combo box for the active
   /// collection.
   void updateParentCollectionComboBox(int currentIndex);
-  [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
+  // Kartend-ook62: wouldCreateCircularReference moved to the TreeManager
+  // controller (m_treeManager->wouldCreateCircularReference).
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();

@@ -276,9 +276,17 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   }
 
   settings.beginGroup(keys::kGroupGeneral);
-  settings.setValue(keys::kRememberSelection, m_generalSettings.input.rememberSelection);
-  settings.setValue(keys::kWrapNavigation, m_generalSettings.input.wrapNavigation);
-  settings.setValue(keys::kSelectItemOnHover, m_generalSettings.input.selectItemOnHover);
+  // Kartend-4r340: the input keys (rememberSelection / wrapNavigation /
+  // selectItemOnHover) are owned solely by saveGeneralSettings ->
+  // InputSettingsPersistence::save. saveCollections used to ALSO write them —
+  // two writers for the same keys, risking default/value drift. QSettings
+  // preserves [General] keys this path doesn't touch (it never removes the
+  // reserved [General] group), so they survive a collections-only save.
+  // Kartend-w319x: still stamp the file-wide schema sentinel here, since
+  // saveCollections can write a complete kartend.cfg before any
+  // saveGeneralSettings call (first-run collection add / kart import) — without
+  // it the [General] schema marker would read back as 0/legacy and re-migrate.
+  settings.setValue(keys::kSchemaVersion, kSettingsSchemaVersion);
   settings.endGroup();
 
   for (const QString &sectionName : sectionNames) {

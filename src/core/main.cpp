@@ -142,6 +142,17 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         QApplication::translate("main", "policy"), QStringLiteral("skip"));
     parser.addOption(onConflictOption);
 
+    // Kartend-u8wf0: opt-in to importing a .kart that bundles its own launcher
+    // executable. Headless import refuses self-bundled launchers by default
+    // because there is no interactive confirmer to warn the user.
+    QCommandLineOption allowUntrustedLauncherOption(
+        QStringLiteral("allow-untrusted-launcher"),
+        QApplication::translate(
+            "main",
+            "Permit --import-kart to register a launcher path that points inside the "
+            "extracted kart tree (a self-bundled executable). Off by default."));
+    parser.addOption(allowUntrustedLauncherOption);
+
     parser.process(app);
     if (parser.isSet(collectionOption)) {
       cliCollectionOverride = parser.value(collectionOption).trimmed();
@@ -183,7 +194,8 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         }
       }
       kart::KartManager km;
-      auto res = km.importKartHeadless(src, dest, false, headlessChoice);
+      auto res = km.importKartHeadless(src, dest, false, headlessChoice,
+                                       parser.isSet(allowUntrustedLauncherOption));
       if (res.isError()) {
         fprintf(stderr, "kart import failed: %s\n", qPrintable(res.error().message));
         if (!res.error().details.isEmpty()) {
@@ -201,7 +213,19 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         fprintf(stderr, "kart export requires --export-out <path>\n");
         return 2;
       }
-      const QString outPath = parser.value(exportOutOption);
+      // Kartend-928mu: route --export-out through the same expand/validate seam
+      // as --import-kart / --to (it was previously consumed raw, so a ~ wasn't
+      // expanded and no metachar/NUL check ran before QSaveFile saw it).
+      auto outResult = PathUtils::expandAndValidateCliPath(parser.value(exportOutOption),
+                                                           QStringLiteral("export-out"));
+      if (outResult.isError()) {
+        fprintf(stderr, "kart export: %s\n", qPrintable(outResult.error().message));
+        if (!outResult.error().details.isEmpty()) {
+          fprintf(stderr, "  details: %s\n", qPrintable(outResult.error().details));
+        }
+        return 2;
+      }
+      const QString outPath = outResult.value();
       SettingsManager headlessSettings(nullptr, nullptr);
       QList<CollectionConfig> collections;
       headlessSettings.loadCollections(collections);

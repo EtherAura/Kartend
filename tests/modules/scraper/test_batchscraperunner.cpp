@@ -270,6 +270,7 @@ private slots:
   void fillMissingScrapesItemsMissingAnyTickedField();
   void fillMissingHonoursRefreshWindowSameAsSkip();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
+  void quotaExhaustedAbortsInFlightItemsAtConcurrency();
   void skipCurrentItemSkipsOnlyTheDisplayedItem();
 };
 
@@ -835,6 +836,40 @@ void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {
   QVERIFY(processed < 10);
   QCOMPARE(summary.errors, processed); // every processed item was the error
   QCOMPARE(summary.scraped, 0);        // nothing after the wall scraped
+}
+
+void TestBatchScrapeRunner::quotaExhaustedAbortsInFlightItemsAtConcurrency() {
+  // Kartend-fv3yr: with itemConcurrency > 1, several items are dispatched and
+  // in flight (the stub's lookups are async) before the first 430 lands. Those
+  // in-flight siblings must NOT fire their follow-up detail/media requests into
+  // the now-exhausted quota — they must skip. Pre-fix, ~7 of them scraped
+  // (m_quotaStopped was only checked at NEW dispatch, never in the per-item
+  // callbacks); post-fix the lookup callback skips them.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned quotaHit;
+  quotaHit.lookupError = QStringLiteral("daily request quota exhausted");
+  quotaHit.lookupErrorHttpStatus = 430;
+  stub->byQuery[QStringLiteral("Item0")] = quotaHit;
+  for (int i = 1; i < 8; ++i) {
+    const QString name = QStringLiteral("Item%1").arg(i);
+    stub->byQuery[name] = makeMatch(QString::number(i), name);
+  }
+  QStringList paths;
+  for (int i = 0; i < 8; ++i) {
+    paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
+  }
+  // Concurrency == item count, so all eight lookups are in flight before any
+  // completes — exactly the race the fix addresses.
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString(),
+                                    /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+                                    /*itemConcurrency=*/8);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+
+  QVERIFY(summary.quotaExhausted);
+  // The crux: not one in-flight sibling scraped despite all eight being
+  // dispatched before the 430 landed (pre-fix this was ~7).
+  QCOMPARE(summary.scraped, 0);
 }
 
 QTEST_MAIN(TestBatchScrapeRunner)

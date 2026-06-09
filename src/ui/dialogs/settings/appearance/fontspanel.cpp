@@ -15,9 +15,9 @@ FontsPanel::FontsPanel(QWidget *parent) : QWidget(parent), ui(new Ui::FontsPanel
   ui->setupUi(this);
 
   connect(ui->browseGlobalUiFontButton, &QPushButton::clicked, this, &FontsPanel::onPick);
-  connect(ui->globalUiFontFamilyEdit, &QLineEdit::editingFinished, this, &FontsPanel::writeBack);
+  connect(ui->globalUiFontFamilyEdit, &QLineEdit::editingFinished, this, &FontsPanel::save);
   connect(ui->globalUiFontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          [this](int) { writeBack(); });
+          [this](int) { save(); });
 }
 
 FontsPanel::~FontsPanel() {
@@ -26,10 +26,10 @@ FontsPanel::~FontsPanel() {
 
 void FontsPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void FontsPanel::refresh() {
+void FontsPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -63,10 +63,10 @@ void FontsPanel::onPick() {
   // Both setters above re-emit the field-change signals which would each
   // trigger writeBack; do it explicitly here to guarantee a single coherent
   // changed() emission with the new family+size pair atomically applied.
-  writeBack();
+  save();
 }
 
-void FontsPanel::writeBack() {
+void FontsPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

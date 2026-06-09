@@ -2,6 +2,7 @@
 #define APPEARANCECOLORSPANEL_H
 
 #include "collection/generalsettings.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -20,7 +21,7 @@ struct SettingsModel;
 /// GeneralSettings — titleBaseColor uses live-save semantics (host applies
 /// ItemWidget::setTitleBaseColor on baseColorChanged()); the two tint spin
 /// boxes are deferred-save like the rest of the dialog's per-collection state.
-class AppearanceColorsPanel : public QWidget {
+class AppearanceColorsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceColorsPanel)
 public:
@@ -31,10 +32,12 @@ public:
   // collection) plus global title-tint state via the model's general
   // settings. The pointer must outlive the panel.
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
+  // Not part of ISettingsPanel: loads the three global title-tint fields. The
+  // host calls this separately (alongside load()) — keep it as-is.
   void refresh();
 
 signals:

@@ -91,9 +91,6 @@ public:
   /// so the input module needs no UI-chrome include.
   void setModalScrapeDialogVisiblePredicate(std::function<bool()> predicate);
 
-  // Event filter installation
-  void installEventFilters();
-
   // Main event filter entry point
   [[nodiscard]] bool filterEvent(QObject *obj, QEvent *event);
 

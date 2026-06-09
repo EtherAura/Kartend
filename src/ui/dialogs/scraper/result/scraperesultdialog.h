@@ -38,6 +38,9 @@ QT_END_NAMESPACE
 
 class BatchScrapeProgressView;
 class IDatabaseManager;
+namespace Scraper {
+class ScrapeDownloadDispatcher;
+}
 #include "applicationcontext_fwd.h"
 class MetadataLookupProvider;
 class ScrapeResultDialogUnified;
@@ -78,8 +81,10 @@ class ScrapeResultDialog : public QDialog {
   // friend declarations.
   friend class ScrapeResultDialogUnified;
   friend class ScrapeResultSelectionModel;
-  friend class ScrapeResultThumbnailLoader;
-  friend class ValueMarqueeTicker;
+  // Kartend-kggn8: ValueMarqueeTicker and ScrapeResultThumbnailLoader no longer
+  // need friendship — each is handed the specific widget it drives (the
+  // live-metadata group / the recent-media filmstrip) plus a visibility host at
+  // construction/setup, instead of reaching through a back-pointer.
 
 public:
   /// Outcome of a successful Apply. The `media` list mirrors the
@@ -246,12 +251,10 @@ private:
   /// the legacy in-dialog path, the directly-bound BatchScrapeRunner.
   /// Wired to m_skipItemButton.
   void skipCurrentScrapeItem();
-  /// Fan out the per-asset download dispatches for the assets the user
-  /// just confirmed via Apply (Kartend-3fkz step 5). Extracted from
-  /// onApply so onApply itself stays a confirmation + routing shell.
-  /// Each callback updates m_downloadsPending / m_result.downloads via
-  /// a QPointer guard so a dialog destroyed mid-flight doesn't
-  /// dereference a stale `this`.
+  /// Configure + start the non-UI Scraper::ScrapeDownloadDispatcher for the
+  /// assets the user just confirmed via Apply (Kartend-3fkz step 5,
+  /// Kartend-dpehr). The dispatcher owns the dedup/CRC/async-fetch logic; this
+  /// only forwards its progressed()/finished() signals to the UI + m_result.
   void dispatchSelectedDownloads(const QList<Scraper::MediaAsset> &selected,
                                  const std::shared_ptr<QElapsedTimer> &applyTimer);
   /// Format the elapsed/ETA strings shared by both modes. `etaMs` is
@@ -388,11 +391,6 @@ private:
   // cycle, used to display "downloaded N of M" progress without
   // recomputing it on every completion.
   int m_downloadsTotal = 0;
-  // Outstanding downloads in flight. The dialog fires every selected
-  // asset at once and lets HttpClient pace them according to the
-  // host's throttle + concurrency policy; we just count completions
-  // and accept() when the last one lands.
-  int m_downloadsPending = 0;
   // Running totals for the download-rate readout in the status label.
   // m_downloadedBytes accumulates the size of every completed reply
   // (errors counted as zero bytes); m_downloadStartMs is the wallclock
@@ -415,6 +413,11 @@ private:
   /// the dialog's exec() because the caller wires deletion to the
   /// runner's `finished` signal after the dialog handles it.
   Scraper::BatchScrapeRunner *m_batchRunner = nullptr;
+  /// Kartend-dpehr: owns the download orchestration (dedup/CRC/async fetch).
+  /// Parented to the dialog (created lazily in dispatchSelectedDownloads), so a
+  /// dialog destroyed mid-download takes the dispatcher and its QPointer-guarded
+  /// fetch callbacks with it.
+  Scraper::ScrapeDownloadDispatcher *m_downloadDispatcher = nullptr;
   /// In-dialog stage label (Kartend-ou0a). Shows "Hashing ROM…",
   /// "Extracting archive for hash ID…", "Looking up…" while the
   /// provider is working. Hidden when empty so fast scrapes don't

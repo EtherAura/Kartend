@@ -27,10 +27,10 @@ ControlsPanel::~ControlsPanel() {
 
 void ControlsPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void ControlsPanel::refresh() {
+void ControlsPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -105,7 +105,7 @@ QCheckBox *ControlsPanel::useLeftStickCheckBox() const {
   return ui->gamepadUseLeftStickCheckBox;
 }
 
-void ControlsPanel::writeBack() {
+void ControlsPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -168,17 +168,17 @@ void ControlsPanel::connectChangeSignals() {
   for (auto *edit : {ui->keyNavUpEdit, ui->keyNavDownEdit, ui->keyNavLeftEdit, ui->keyNavRightEdit,
                      ui->keyConfirmEdit, ui->keyBackEdit, ui->keySearchEdit, ui->keyHomeViewEdit}) {
     connect(edit, &QKeySequenceEdit::keySequenceChanged, this,
-            [this](const QKeySequence &) { writeBack(); });
+            [this](const QKeySequence &) { save(); });
   }
   for (auto *edit : {ui->gamepadConfirmButtonLineEdit, ui->gamepadBackButtonLineEdit,
                      ui->gamepadToggleSidebarButtonLineEdit}) {
-    connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { writeBack(); });
+    connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { save(); });
   }
-  connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
+  connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { writeBack(); });
+          [this](bool) { save(); });
   connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this,
-          [this](int) { writeBack(); });
+          [this](int) { save(); });
 }
 
 void ControlsPanel::populateArtworkCycleModifierCombo() {

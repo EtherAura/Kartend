@@ -200,11 +200,18 @@ auto VirtualScrollEngine::calculateNeededIndices() const -> NeededRange {
 }
 
 void VirtualScrollEngine::removeUnneededWidgets(const NeededRange &needed) {
+  // Kartend-16al4: the visible-row range is constant across this pass, so
+  // compute it once (lazily, only if something is actually evicted) and hand it
+  // to releaseWidget instead of having each call recompute getVisibleRowRange.
+  int visibleRows = -1;
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end();
        /* advance inside */) {
     if (!needed.contains(it.key())) {
       if (ItemWidget *widget = it.value()) {
-        m_owner->releaseWidget(widget);
+        if (visibleRows < 0) {
+          visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
+        }
+        m_owner->releaseWidget(widget, visibleRows);
       }
       it = m_owner->m_activeWidgets.erase(it);
     } else {
@@ -602,8 +609,12 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
       itemWidget->setSelected(true);
     }
 
-    // Connect artwork preview signal for list mode (use UniqueConnection to
-    // avoid duplicates on widget reuse)
+    // Connect artwork preview signal for list mode. Kartend-5o9bb: this is
+    // intentionally NOT cleared in WidgetPoolManager::disconnectAll — unlike the
+    // double-click signals, it's a persistent connection that relies on
+    // Qt::UniqueConnection + the stable m_owner (ScrollManager) receiver to stay
+    // exactly-once across widget reuse. If the receiver ever becomes per-acquire,
+    // move this into disconnectAll for symmetry.
     connect(itemWidget, &ItemWidget::artworkPreviewRequested, m_owner,
             &ScrollManager::onArtworkPreviewRequested, Qt::UniqueConnection);
 

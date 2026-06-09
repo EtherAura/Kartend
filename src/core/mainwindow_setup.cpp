@@ -455,7 +455,7 @@ void MainWindow::createMenuBar() {
 
   MenuControllerContext ctx;
   ctx.mainWindow = this;
-  ctx.ui = ui;
+  ctx.ui = ui.get(); // Kartend-nbfgs: ui is now a unique_ptr; ctx holds the raw ptr
   ctx.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
   ctx.getSettingsManager = [this]() { return m_appManager->getSettingsManager(); };
   ctx.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };

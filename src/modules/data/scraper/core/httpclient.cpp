@@ -9,6 +9,7 @@
 #include <QNetworkRequest>
 #include <QSslConfiguration>
 #include <QSslSocket>
+#include <QThread>
 #include <QTimer>
 #include <QUrlQuery>
 
@@ -116,6 +117,10 @@ HttpClient::HttpClient(QObject *parent) : QObject(parent) {
 HttpClient::~HttpClient() = default;
 
 void HttpClient::setRateLimit(const QString &host, int intervalMs, int maxConcurrent) {
+  // Kartend-s3hvv: see HttpClient::get — main-thread-only invariant for the
+  // unguarded rate-limit map.
+  Q_ASSERT_X(thread() == QThread::currentThread(), "HttpClient::setRateLimit",
+             "HttpClient must be driven from its own (main) thread");
   if (intervalMs <= 0 && maxConcurrent <= 0) {
     m_rateLimits.remove(host);
     return;
@@ -162,6 +167,12 @@ void logSslConfigOnce() {
 void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallback callback,
                      qint64 maxResponseBytes, const QString &expectedContentTypePrefix,
                      const QStringList &allowedHostSuffixes) {
+  // Kartend-s3hvv: the per-host queue/in-flight maps are unguarded by design —
+  // every caller runs on HttpClient's (main) thread. Lock that invariant in
+  // with a debug assert, mirroring QueryManager::assertOwnerThread, so a future
+  // worker-thread caller fails loudly instead of silently corrupting the maps.
+  Q_ASSERT_X(thread() == QThread::currentThread(), "HttpClient::get",
+             "HttpClient must be driven from its own (main) thread");
   logSslConfigOnce();
   if (!url.isValid()) {
     if (callback) {

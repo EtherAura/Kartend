@@ -22,6 +22,7 @@ private slots:
   void expandsTildeInLibretroDirectory();
   void resolvesRelativeLibretroDirectoryAgainstConfigDir();
   void configDefaultSentinelReturnsEmpty();
+  void configWithUnsafeLibretroDirectoryReturnsEmpty();
   void configWithoutKeyReturnsEmpty();
   void resolveCoreDirectory_dirOverrideUsedAsIs();
   void resolveCoreDirectory_cfgOverrideIsParsed();
@@ -75,6 +76,15 @@ void TestRetroArchUtils::configDefaultSentinelReturnsEmpty() {
   // that is not a real path.
   const QString cfg = m_dir.filePath(QStringLiteral("default.cfg"));
   writeFile(cfg, QByteArrayLiteral("libretro_directory = \"default\"\n"));
+  QVERIFY(RetroArchUtils::coreDirectoryFromConfig(cfg).isEmpty());
+}
+
+void TestRetroArchUtils::configWithUnsafeLibretroDirectoryReturnsEmpty() {
+  // Kartend-b2hi9: a libretro_directory carrying shell metachars (e.g. from a
+  // third-party retroarch.cfg) is rejected by validatePathSecurity and treated
+  // as unset, so it never drives core discovery / the -L launch argument.
+  const QString cfg = m_dir.filePath(QStringLiteral("unsafe.cfg"));
+  writeFile(cfg, QByteArrayLiteral("libretro_directory = \"/cores; rm -rf /\"\n"));
   QVERIFY(RetroArchUtils::coreDirectoryFromConfig(cfg).isEmpty());
 }
 

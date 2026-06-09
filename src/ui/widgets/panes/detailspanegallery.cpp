@@ -5,6 +5,7 @@
 // DetailsPane plus the click-to-preview overlay.
 
 #include "detailspane.h"
+#include "detailspaneartwork.h" // Kartend-4wxmp: loadArtwork/showArtworkOnly via m_artworkController
 #include "detailspanegalleryview.h"
 #include "videopreviewwidget.h"
 
@@ -97,9 +98,12 @@ void DetailsPane::showMainPreviewForEntry(const GalleryEntry &entry) {
   // the extension-cycle here.
   schedulePreviewVideo(QString()); // cancels any pending video start
   if (m_videoPlayback.videoPreview) m_videoPlayback.videoPreview->stop();
-  showArtworkOnly();
-  const QFileInfo info(entry.path);
-  loadArtwork(info.completeBaseName(), info.absolutePath());
+  // Kartend-4wxmp: forwarders removed — drive the artwork controller directly.
+  if (m_artworkController) {
+    m_artworkController->showArtworkOnly();
+    const QFileInfo info(entry.path);
+    m_artworkController->loadArtwork(info.completeBaseName(), info.absolutePath());
+  }
 }
 
 void DetailsPane::cycleMainPreview(int direction) {

@@ -109,25 +109,6 @@ void EventManager::setModalScrapeDialogVisiblePredicate(std::function<bool()> pr
   m_isModalScrapeDialogVisible = std::move(predicate);
 }
 
-void EventManager::installEventFilters() {
-  if (qApp) {
-    qApp->installEventFilter(parent());
-  }
-  if (m_itemsPage) {
-    m_itemsPage->installEventFilter(parent());
-  }
-  if (m_itemScrollArea) {
-    m_itemScrollArea->installEventFilter(parent());
-    QWidget *viewport = m_itemScrollArea->viewport();
-    if (viewport) {
-      viewport->installEventFilter(parent());
-    }
-  }
-  if (m_gridContainer) {
-    m_gridContainer->installEventFilter(parent());
-  }
-}
-
 bool EventManager::filterEvent(QObject *obj, QEvent *event) {
   if (QApplication::closingDown() || !event) {
     return false;

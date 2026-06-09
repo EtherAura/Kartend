@@ -65,7 +65,8 @@ void DetailsPane::applyPreviewVideo(const QString &filePath, const QString &artw
                               m_videoPlayback.videoPreview &&
                               m_videoPlayback.videoPreview->isVisible();
   if (!videoUnchanged) {
-    showArtworkOnly();
+    // Kartend-4wxmp: forwarder removed — call the artwork controller directly.
+    if (m_artworkController) m_artworkController->showArtworkOnly();
     schedulePreviewVideo(videoPath);
   }
 }

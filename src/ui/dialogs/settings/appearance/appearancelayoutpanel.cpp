@@ -76,7 +76,7 @@ void AppearanceLayoutPanel::clear() {
   ui->cornerRadiusSpinBox->setValue(0);
 }
 
-void AppearanceLayoutPanel::save() const {
+void AppearanceLayoutPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

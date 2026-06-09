@@ -8,7 +8,6 @@
 #include <QDir>
 #include <QMutexLocker>
 #include <QtConcurrent>
-#include <QThreadPool>
 
 QStringList ArtworkPathCatalog::collectArtworkDirs(const QList<CollectionConfig> *collections,
                                                    int collectionIndex, bool includeDescendants) {
@@ -62,13 +61,10 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
   const QStringList allDirs = collectArtworkDirs(collections, currentIndex, includeDescendants);
 
   // Warm the dentry cache for these dirs in the background so the enumeration
-  // below (and later per-file stats) hit warm caches. Unchanged from before.
-  QThreadPool::globalInstance()->start([allDirs]() {
-    auto &cache = ArtworkUtils::DirectoryCache::instance();
-    cache.prewarmDirectories(allDirs);
-    cache.processQueuedDirectories();
-    qCDebug(lcPerfTrace) << "Background dentry warmup complete: dirs=" << allDirs.size();
-  });
+  // below (and later per-file stats) hit warm caches. Kartend-uzs42: routed
+  // through schedulePrewarm so rapid collection switches don't pile up a
+  // redundant global-pool walk per switch (it caps at one in-flight prewarm).
+  ArtworkUtils::DirectoryCache::instance().schedulePrewarm(allDirs);
 
   // Kartend-cl86n: enumerate the artwork dirs on a worker (was a GUI-thread
   // QtConcurrent::blockingMap, so a collection switch stalled the UI on a

@@ -2,6 +2,7 @@
 #define APPEARANCELISTPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -14,7 +15,7 @@ struct SettingsModel;
 
 /// Standalone panel widget for the per-collection "List Mode" appearance
 /// sub-sub-tab. Owns the list-view font size and row height spin boxes.
-class AppearanceListPanel : public QWidget {
+class AppearanceListPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceListPanel)
 public:
@@ -22,9 +23,9 @@ public:
   ~AppearanceListPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
 signals:

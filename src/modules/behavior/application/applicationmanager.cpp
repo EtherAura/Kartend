@@ -66,7 +66,7 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   // member order and Qt's children sweep can never double-delete one if
   // a future refactor reparents a manager elsewhere (Kartend-d70s,
   // re-attempted after Kartend-3v92 replaced NavigationManager's
-  // parent()-based lifetime guards with the isAlive() helper).
+  // parent()-based lifetime guards with the appNotShuttingDown() helper).
 
   // 1. Create CacheManager and SessionManager instances (fast, no I/O)
   m_cacheManager = std::make_unique<CacheManager>();

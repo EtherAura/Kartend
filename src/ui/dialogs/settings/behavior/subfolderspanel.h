@@ -2,6 +2,7 @@
 #define SUBFOLDERSPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -19,7 +20,7 @@ struct SettingsModel;
 /// internal subfolderOptionsWidget visibility tracks the include-content
 /// toggle so the dependent options collapse when content-subfolders are
 /// off.
-class SubfoldersPanel : public QWidget {
+class SubfoldersPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(SubfoldersPanel)
 public:
@@ -27,9 +28,9 @@ public:
   ~SubfoldersPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
   /// Public accessor used by the host dialog's pre-save rescan-detection

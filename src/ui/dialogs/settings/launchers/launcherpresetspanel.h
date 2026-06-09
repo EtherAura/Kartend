@@ -2,6 +2,7 @@
 #define LAUNCHERPRESETSPANEL_H
 
 #include "collection/launcherpreset.h"
+#include "isettingspanel.h"
 #include <QList>
 #include <QWidget>
 
@@ -15,7 +16,7 @@ QT_END_NAMESPACE
 /// SettingsDialog. Observes a QList<LauncherPreset>* installed by the host
 /// dialog so per-collection launcher controls can keep reading from the same
 /// list without going through this panel.
-class LauncherPresetsPanel : public QWidget {
+class LauncherPresetsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(LauncherPresetsPanel)
 public:
@@ -31,9 +32,15 @@ public:
   /// can list installed cores. Empty auto-detects the standard path.
   void setRetroarchConfigOverride(const QString &configOverride);
 
-  /// Re-hydrate the list view from the pointed-to presets. Safe to call
-  /// repeatedly; preserves the current selection row when possible.
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh() — re-hydrate the
+  // list view from the pointed-to presets, preserving the selection row when
+  // possible. save() is a no-op: this panel mutates the live preset list in
+  // place on each add/edit/remove and emits presetsChanged(), so there is no
+  // deferred flush. clear() is a no-op — the panel is backed by the single
+  // live preset list.
+  void load() override;
+  void save() override {}
+  void clear() override {}
 
 signals:
   /// Emitted after any user-driven mutation (add / edit / remove). The

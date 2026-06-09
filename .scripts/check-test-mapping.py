@@ -49,6 +49,8 @@ SRC_MODULES = REPO / "src" / "modules"
 TESTS_MODULES = REPO / "tests" / "modules"
 SRC_UTILS = REPO / "src" / "utils"
 TESTS_UTILS = REPO / "tests" / "utils"
+SRC_CORE = REPO / "src" / "core"
+SRC_CHROME = REPO / "src" / "chrome"
 TESTS = REPO / "tests"
 
 # Features whose coverage lives in tests/integration/ (UI-coordinator
@@ -195,6 +197,39 @@ def check_test_registration() -> bool:
     return True
 
 
+def report_core_chrome_coverage() -> None:
+    """Non-fatal visibility report for src/core and src/chrome (Kartend-tu2hq).
+
+    Unlike src/modules (per-feature test folders) and tests/utils (cluster
+    mirror), src/core controllers and src/chrome widgets have no structural
+    test-mapping rule, so missing coverage there is invisible. This report
+    lists each .cpp with no matching tests/**/test_<stem>.cpp (a unit OR an
+    integration test file named after it) so the gap is at least tracked.
+
+    Intentionally advisory: it prints but never changes the exit status. Many
+    of these are genuinely hard to unit-test (UI-coordinator code exercised via
+    tests/integration/), so failing CI on the whole set would be all noise.
+    Raising real coverage here is incremental work, not a gate.
+    """
+    test_stems = {p.stem for p in TESTS.rglob("test_*.cpp")}  # e.g. "test_foo"
+
+    def covered(cpp: pathlib.Path) -> bool:
+        return f"test_{cpp.stem}" in test_stems
+
+    for area, label in ((SRC_CORE, "src/core"), (SRC_CHROME, "src/chrome")):
+        if not area.is_dir():
+            continue
+        cpps = sorted(area.rglob("*.cpp"))
+        untested = [p for p in cpps if not covered(p)]
+        covered_n = len(cpps) - len(untested)
+        print(
+            f"\ncheck-test-mapping: {label} coverage report (advisory) — "
+            f"{covered_n}/{len(cpps)} .cpp have a matching test_<name>.cpp"
+        )
+        for p in untested:
+            print(f"  {p.relative_to(REPO)}  ->  no test_{p.stem}.cpp")
+
+
 def main() -> int:
     for path in (SRC_MODULES, TESTS_MODULES, SRC_UTILS, TESTS_UTILS):
         if not path.is_dir():
@@ -206,6 +241,8 @@ def main() -> int:
     modules_ok = check_modules()
     utils_ok = check_utils()
     registration_ok = check_test_registration()
+    # Advisory only — never affects exit status (see function docstring).
+    report_core_chrome_coverage()
     return 0 if (modules_ok and utils_ok and registration_ok) else 1
 
 

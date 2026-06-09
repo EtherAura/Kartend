@@ -1,6 +1,7 @@
 #ifndef FONTSPANEL_H
 #define FONTSPANEL_H
 
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -17,7 +18,7 @@ struct SettingsModel;
 /// emitting changed() so the host can persist + apply (saveGeneralSettings +
 /// applyGlobalUiFont) in lockstep — preserving the dialog's existing
 /// "live save" semantics for these controls.
-class FontsPanel : public QWidget {
+class FontsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(FontsPanel)
 public:
@@ -29,9 +30,12 @@ public:
   /// pointed-to values immediately.
   void setModel(SettingsModel *model);
 
-  /// Re-hydrate the form fields from the pointed-to settings. Safe to call
-  /// repeatedly. Suppresses the change signal during the rehydrate.
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() was the
+  // private writeBack(); clear() is a no-op — this global panel is always
+  // backed by the single live GeneralSettings model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
 signals:
   /// Emitted after any user-driven mutation (font family edit, size spin, or
@@ -43,8 +47,6 @@ private slots:
   void onPick();
 
 private:
-  void writeBack();
-
   Ui::FontsPanel *ui;
   SettingsModel *m_model = nullptr;
 };

@@ -4,26 +4,76 @@
 #include "collection/collectionconfig.h"
 #include <QHash>
 #include <QList>
+#include <QObject>
+#include <QPoint>
 #include <QString>
 
 class CollectionTreeWidget;
 class QTreeWidgetItem;
+class SettingsTreeHost;
 
-/// Owns the SettingsDialog's tree-population state — the three index maps
-/// (item→collection, collection→primary item, collection→linked-mirror
-/// items) plus the pure-domain operations that build, refresh, and walk
-/// them. Slots that wire user gestures back into the dialog stay on
-/// SettingsDialog because they have non-tree side effects (e.g.
-/// loadCollectionToUI, dirty-flag updates); those slots read this manager
-/// for tree state.
+/// Kartend-ook62: the SettingsDialog tree controller. Owns the
+/// CollectionTreeWidget's wiring (edit triggers, context-menu policy,
+/// drag-drop cycle-check + item→index resolution) and the tree-population
+/// state (the three index maps + the build/refresh/walk operations). It
+/// subscribes to the widget's raw signals and re-emits them as the four
+/// higher-level gesture signals below.
 ///
-/// Lifetime: owned by SettingsDialog (std::unique_ptr). The widget and
-/// collection lists are non-owning references — TreeManager assumes they
-/// outlive it. Not a QObject; no signals/slots needed.
-class TreeManager {
+/// The reactions to those gestures (selection switch, rename commit,
+/// context-menu actions, drag-drop reparent) stay as SettingsDialog slots
+/// connected to these signals — by design, because each carries irreducible
+/// dialog-state side effects (resolveUnsavedChanges, loadCollectionToUI,
+/// dirty-flag/Save-button updates, collection add/duplicate/copy). Moving
+/// those into the controller would re-couple it to ~15 dialog members, so the
+/// boundary is "controller owns the widget + signalling; dialog owns the
+/// stateful reactions".
+///
+/// Lifetime: owned by SettingsDialog (std::unique_ptr); constructed with no
+/// QObject parent so the unique_ptr is the sole owner. The widget and
+/// collection lists are non-owning references — assumed to outlive it.
+class TreeManager : public QObject {
+  Q_OBJECT
+  Q_DISABLE_COPY_MOVE(TreeManager)
 public:
   TreeManager(CollectionTreeWidget *widget, QList<CollectionConfig> *collections,
-              QList<CollectionConfig> *workingCollections);
+              QList<CollectionConfig> *workingCollections, QObject *parent = nullptr);
+
+  /// Kartend-mnymg: borrow the host dialog's selection-state members by
+  /// pointer (mirrors how the collection lists are borrowed) so the migrated
+  /// gesture handlers read/write the same state the dialog's ~70 other call
+  /// sites use, without relocating storage. @p host receives the dialog-side
+  /// side effects (load/save/dirty/mutation).
+  void setSelectionState(int *currentCollectionIndex, QTreeWidgetItem **currentTreeItem,
+                         CollectionConfig *originalCollection, bool *collectionSaved);
+  void setHost(SettingsTreeHost *host) { m_host = host; }
+
+  /// Install the widget's edit/context-menu policy, the drag-drop cycle-check
+  /// + item→index callbacks (resolved from this controller's own state), and
+  /// connect its raw signals to this controller's own gesture-handler slots.
+  /// Call once after the widget + selection-state + host are set.
+  void attachWidget();
+
+  /// True when making @p potentialParentIndex the parent of @p childIndex would
+  /// form a cycle in the collection hierarchy. Used by the drag-drop cycle
+  /// guard and the parent-combo populator.
+  [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
+
+signals:
+  /// Emitted after a drag-drop reparent has resynced parent linkage; the host
+  /// connects this to re-emit SettingsDialog::collectionSaved so the change
+  /// survives a Cancel of the outer dialog.
+  void collectionsReordered();
+
+private slots:
+  // Kartend-mnymg: the tree gesture handlers, migrated off SettingsDialog. They
+  // operate on the borrowed selection state + collection lists and route
+  // dialog-side effects through m_host.
+  void onWidgetSelectionChanged();
+  void onWidgetItemChanged(QTreeWidgetItem *item, int column);
+  void onWidgetContextMenuRequested(const QPoint &pos);
+  void onWidgetRearranged();
+
+public:
 
   /// Wipe and re-populate every row from the live collections list. Mirrors
   /// the previous SettingsDialog::updateCollectionTreeWidget — same call
@@ -72,6 +122,15 @@ private:
   CollectionTreeWidget *m_widget;
   QList<CollectionConfig> *m_collections;
   QList<CollectionConfig> *m_workingCollections;
+
+  // Kartend-mnymg: borrowed (non-owning) selection state + the host callback
+  // surface. Null until setSelectionState/setHost run; the gesture handlers
+  // guard on them.
+  SettingsTreeHost *m_host = nullptr;
+  int *m_currentCollectionIndex = nullptr;
+  QTreeWidgetItem **m_currentTreeItem = nullptr;
+  CollectionConfig *m_originalCollection = nullptr;
+  bool *m_collectionSaved = nullptr;
 
   QHash<QTreeWidgetItem *, int> m_itemToIndex;
   QHash<int, QTreeWidgetItem *> m_indexToItem;

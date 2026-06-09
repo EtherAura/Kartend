@@ -3,10 +3,16 @@ target_sources(kartend_data PRIVATE
   scraperservice.cpp
   scrapewriteworker.cpp
   scrapepersistence.cpp
+  scrapeassetdedup.cpp
   scrapelogging.cpp
   bundledcredentials.cpp
   httpclient.cpp
+  scraperretrypolicy.cpp
+  scrapedownloaddispatcher.cpp
   batchscraperunner.h
+  scraperretrypolicy.h
+  scrapedownloaddispatcher.h
+  scrapeassetdedup.h
   scraperservice.h
   scrapewriteworker.h
   scrapepersistence.h

@@ -2,18 +2,14 @@
 // interface.
 #include "settingsmanager.h"
 #include "applicationcontext.h"
-#include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
-#include "collection/hierarchyhelpers.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "extensionutils.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idetailspanemanager.h"
-#include "imainwindow.h"
 #include "inavigationmanager.h"
-#include "isessionmanager.h"
 #include "pathutils.h"
 #include "scrapelogger.h"
 #include "settingshelpers.h"
@@ -283,44 +279,14 @@ void SettingsManager::setLastSelectedItem(int collectionIndex, int itemIndex) {
 }
 
 auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
-  // dynamic_cast (not qobject_cast): IMainWindow is a plain abstract base, so
-  // it carries no Qt meta-object. parent() is only a MainWindow when one owns
-  // this SettingsManager; otherwise this branch is skipped, exactly as the
-  // previous qobject_cast<MainWindow*> behaved.
-  auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
-  ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
-  if ((mainWindow) && collectionIndex >= 0 && collectionIndex < mainWindow->collections().size()) {
-    const QList<CollectionConfig> &mwCollections = mainWindow->collections();
-    const CollectionConfig &cfg = mwCollections[collectionIndex];
-    const bool subfolderActive = !cfg.folderBrowsing.currentSubfolder.trimmed().isEmpty();
-    QString hierarchicalName = CollectionUtils::hierarchicalNameFor(cfg, mwCollections);
-    int persistentIndex = -1;
-    if (session) {
-      if (subfolderActive) {
-        const QString sessionKey = CollectionUtils::selectionSessionKeyFor(cfg, mwCollections);
-        persistentIndex = session->getLastSelectedIndex(sessionKey);
-      } else {
-        persistentIndex = session->getLastSelectedIndex(hierarchicalName);
-      }
-    }
-    if (persistentIndex >= 0) {
-      return persistentIndex;
-    }
-
-    if (!subfolderActive) {
-      QString collectionName = cfg.name;
-      if (session) {
-        persistentIndex = session->getLastSelectedIndex(collectionName);
-      }
-      if (persistentIndex >= 0) {
-        return persistentIndex;
-      }
-    }
-  }
-
-  if (m_generalSettings.lastSelectedItems.contains(collectionIndex)) {
-    return m_generalSettings.lastSelectedItems.value(collectionIndex, -1);
-  }
-
-  return -1;
+  // Kartend-dwnis: selection memory is held in the in-process
+  // m_generalSettings.lastSelectedItems map, populated by setLastSelectedItem
+  // during the session. A SessionManager-backed restore that keyed off
+  // dynamic_cast<IMainWindow*>(parent()) used to live here, but SettingsManager
+  // is constructed with a null QObject parent and is never reparented to a
+  // MainWindow, so that branch was unreachable dead code. Cross-session
+  // selection restore is owned by NavigationManager / SelectionRestore
+  // Coordinator, which read SessionManager directly during navigation — this
+  // accessor intentionally does not duplicate that path.
+  return m_generalSettings.lastSelectedItems.value(collectionIndex, -1);
 }

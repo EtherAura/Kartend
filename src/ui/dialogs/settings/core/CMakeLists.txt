@@ -11,7 +11,6 @@ target_sources(kartend_ui PRIVATE
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
-  settingsdialogtreedragdrop.cpp
   settingsdialogtreemutation.cpp
   settingsdialogtreesync.cpp
   treemanager.cpp

@@ -38,7 +38,7 @@ void ScraperCredentialsPanel::setProvider(const QString &providerId) {
   if (m_providerFilter == providerId) return;
   m_providerFilter = providerId;
   rebuildLayout();
-  if (m_model) refresh();
+  if (m_model) load();
 }
 
 void ScraperCredentialsPanel::rebuildLayout() {
@@ -140,10 +140,16 @@ void ScraperCredentialsPanel::addField(QFormLayout *form, const QString &provide
 
 void ScraperCredentialsPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void ScraperCredentialsPanel::refresh() {
+void ScraperCredentialsPanel::save() {
+  // Flush via the existing live-edit writer. Live edits already write through
+  // textEdited handlers; this gives the host a single explicit flush.
+  writeModel();
+}
+
+void ScraperCredentialsPanel::load() {
   if (!m_model || !m_model->generalSettings) return;
   m_loading = true;
   for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it) {

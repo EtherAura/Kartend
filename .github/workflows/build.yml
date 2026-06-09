@@ -1,9 +1,13 @@
 name: Build and Test
 
-# Runner: pinned to ubuntu-24.04 in every job below. GitHub Actions does not
-# support sharing `runs-on:` across jobs without a reusable workflow or
-# repo-level `vars`, so the literal is repeated. When bumping, update all
-# four jobs together.
+# Runner: the Linux jobs are pinned to ubuntu-24.04 (its apt qt6-base-dev is
+# the Qt 6.4.2 minimum-version floor). GitHub Actions does not support sharing
+# `runs-on:` across jobs without a reusable workflow or repo-level `vars`, so
+# the literal is repeated; when bumping, update all the Linux jobs together.
+# Kartend-elluw: coverage spans Qt 6.4.2 (apt) + Qt 6.8 (linux-qt-newer) on
+# Linux, Qt 6.7 on Windows (windows-build-test), and Qt 6.8 on macOS
+# (macos-build-test) so a version- or platform-specific regression is caught
+# before release.
 
 on:
   push:
@@ -71,7 +75,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -123,6 +127,10 @@ jobs:
       - name: Run Tests
         env:
           QT_QPA_PLATFORM: offscreen
+          # Kartend-68wbk: tools are installed above (Kartend-03lcs), so a
+          # missing archive extractor here is a real regression — fail loudly
+          # instead of letting the archive tests silently QSKIP.
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: |
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           ctest --output-on-failure -LE benchmark
@@ -179,7 +187,7 @@ jobs:
         # transitive dep of some other package.
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -242,7 +250,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -334,7 +342,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -626,3 +634,160 @@ jobs:
           path: ${{ env.ZIP_NAME }}
           retention-days: 14
           if-no-files-found: error
+
+  # Kartend-elluw: second Linux Qt version. The build / build-no-zstd /
+  # sanitizers / tsan jobs above all use Ubuntu 24.04's apt qt6-base-dev
+  # (Qt 6.4.2 — the project's minimum floor). This job pulls a newer Qt via
+  # install-qt-action so a regression that only shows up on 6.4 *or* only on a
+  # modern Qt is caught before release. Qt6Keychain and SDL2 are optional
+  # (find_package(... QUIET) in CMakeLists), so the smoke build doesn't need
+  # them; credentials fall back to the plaintext-index path and the gamepad
+  # backend is simply absent.
+  linux-qt-newer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install build tools + Qt runtime libs
+        # No apt qt6-* packages here — they would collide with the
+        # install-qt-action Qt below. These are the toolchain + the system
+        # libraries Qt's official binaries dlopen at runtime (xcb platform
+        # plugin, GL, pulse) plus the archive tools the launch/rom tests need.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build ccache libzstd-dev \
+            libgl1-mesa-dev libpulse-dev libxkbcommon-dev \
+            libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            unzip p7zip-full
+
+      - name: Install Qt 6.8
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: 'qtmultimedia qtimageformats'
+          cache: true
+
+      - name: Start dummy pulseaudio
+        uses: ./.github/actions/setup-pulseaudio
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-qt68-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-qt68-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build/qt68
+          cd build/qt68
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_PORTABLE_RELEASE=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/qt68
+          cmake --build . --parallel $(nproc)
+
+      - name: Run Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
+        run: |
+          cd build/qt68
+          ctest --output-on-failure -LE benchmark
+
+      - name: Dump failed-test diagnostics
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 .scripts/print-failed-tests.py --build-dir build/qt68
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+  # Kartend-elluw: macOS smoke build. Mirrors the Windows job's
+  # install-qt-action → build → offscreen-ctest shape, adapted to Homebrew +
+  # clang. zstd comes from brew; Qt6Keychain and SDL2 are optional
+  # (find_package QUIET) so they're omitted. This is the first macOS coverage —
+  # it surfaces Q_OS_UNIX-vs-Q_OS_MACOS portability gaps (bundle paths, the
+  # macOS keychain backend, case-sensitivity) that the Linux/Windows jobs miss.
+  macos-build-test:
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install build deps
+        run: brew install ninja ccache zstd
+
+      - name: Install Qt 6.8
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: mac
+          target: desktop
+          # Universal (arm64 + x86_64) clang build; runs natively on the
+          # Apple-Silicon macos-14 runner.
+          arch: clang_64
+          modules: 'qtmultimedia qtimageformats'
+          cache: true
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_PORTABLE_RELEASE=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure -LE benchmark
+
+      - name: Dump failed-test diagnostics
+        if: ${{ failure() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 .scripts/print-failed-tests.py --build-dir build
+
+      - name: ccache stats
+        run: ccache --show-stats

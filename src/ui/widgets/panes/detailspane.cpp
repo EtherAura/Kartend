@@ -78,6 +78,33 @@ private:
   QElapsedTimer m_timer;
   qint64 *m_out;
 };
+
+// Kartend-4wxmp: the per-phase accumulators + the KARTEND_PERF_TRACE breakdown
+// emit that setMetadata used to declare inline (one bool, five qint64s, and a
+// ten-line reporting block). Folding it into one RAII object lets setMetadata
+// read as orchestration: `SetMetadataPhaseTrace trace{filePath};` up top, each
+// PhaseTimer writes into a `trace.*` field, and the breakdown prints from the
+// destructor on scope exit.
+struct SetMetadataPhaseTrace {
+  explicit SetMetadataPhaseTrace(QString tracePath)
+      : path(std::move(tracePath)), enabled(qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {}
+  ~SetMetadataPhaseTrace() {
+    if (!enabled) return;
+    const qint64 sum = fileInfo + previewSize1 + loadArtwork + video + tabVis;
+    if (sum > 5) {
+      qCDebug(lcPerfTrace).nospace()
+          << "DetailsPane::setMetadata phases: sum=" << sum << " (fileInfo=" << fileInfo
+          << " previewSize1=" << previewSize1 << " loadArtwork=" << loadArtwork << " video=" << video
+          << " tabVis=" << tabVis << ") path=" << path;
+    }
+  }
+  SetMetadataPhaseTrace(const SetMetadataPhaseTrace &) = delete;
+  SetMetadataPhaseTrace &operator=(const SetMetadataPhaseTrace &) = delete;
+
+  QString path;
+  bool enabled;
+  qint64 fileInfo = 0, previewSize1 = 0, loadArtwork = 0, video = 0, tabVis = 0;
+};
 } // namespace
 
 // Creates metadata sidebar with scrollable layout for displaying item
@@ -280,11 +307,9 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // Per-phase perf timers (Kartend-5ux9 follow-up) — the outer perfTrace
   // showed setMeta=200-240ms tail even after loadArtwork went async, so
   // the cost is in some other call inside this function. Each PhaseTimer
-  // below records its phase; we only emit the breakdown when
-  // KARTEND_PERF_TRACE=1.
-  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
-  qint64 perfFileInfoMs = 0, perfPreviewSize1Ms = 0, perfLoadArtworkMs = 0;
-  qint64 perfVideoMs = 0, perfTabVisMs = 0;
+  // below records its phase into `trace`; the breakdown prints from
+  // `trace`'s destructor when KARTEND_PERF_TRACE=1 (Kartend-4wxmp).
+  SetMetadataPhaseTrace trace(filePath);
 
   m_hasItemDisplayed = true;
   m_currentItemName = itemName;
@@ -298,7 +323,7 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // it unconditionally means a tab switch surfaces the correct data
   // without re-running the manager's selection pipeline.
   {
-    PhaseTimer pt(perfTrace, perfFileInfoMs);
+    PhaseTimer pt(trace.enabled, trace.fileInfo);
     updateFileInfo(filePath);
   }
 
@@ -310,20 +335,24 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   m_artworkSource = QPixmap();
   m_primaryArtworkPath.clear();
   {
-    PhaseTimer pt(perfTrace, perfPreviewSize1Ms);
+    PhaseTimer pt(trace.enabled, trace.previewSize1);
     applyPreviewSize();
   }
 
   // Try collection's artwork directory first if provided
   {
-    PhaseTimer pt(perfTrace, perfLoadArtworkMs);
-    if (!artworkDirectory.isEmpty()) {
-      loadArtwork(baseName, artworkDirectory);
-    } else {
-      // Fallback to sibling "artwork" directory
-      const QDir fileDir = fileInfo.dir();
-      const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
-      loadArtwork(baseName, siblingArtworkDir);
+    PhaseTimer pt(trace.enabled, trace.loadArtwork);
+    // Kartend-4wxmp: talk to the artwork controller directly (the pass-through
+    // DetailsPane::loadArtwork forwarder was removed).
+    if (m_artworkController) {
+      if (!artworkDirectory.isEmpty()) {
+        m_artworkController->loadArtwork(baseName, artworkDirectory);
+      } else {
+        // Fallback to sibling "artwork" directory
+        const QDir fileDir = fileInfo.dir();
+        const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
+        m_artworkController->loadArtwork(baseName, siblingArtworkDir);
+      }
     }
   }
 
@@ -331,27 +360,17 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // phase now; the per-lookup sub-timings were only needed to find the
   // original setMeta tail.
   {
-    PhaseTimer pt(perfTrace, perfVideoMs);
+    PhaseTimer pt(trace.enabled, trace.video);
     applyPreviewVideo(filePath, artworkDirectory, videoDirectory);
   }
 
   // Defer all section visibility to applyTabVisibility() so each tab
   // ends up with its own distinct widget set.
   {
-    PhaseTimer pt(perfTrace, perfTabVisMs);
+    PhaseTimer pt(trace.enabled, trace.tabVis);
     applyTabVisibility();
   }
-
-  if (perfTrace) {
-    const qint64 phaseSum =
-        perfFileInfoMs + perfPreviewSize1Ms + perfLoadArtworkMs + perfVideoMs + perfTabVisMs;
-    if (phaseSum > 5) {
-      qCDebug(lcPerfTrace).nospace()
-          << "DetailsPane::setMetadata phases: sum=" << phaseSum << " (fileInfo=" << perfFileInfoMs
-          << " previewSize1=" << perfPreviewSize1Ms << " loadArtwork=" << perfLoadArtworkMs
-          << " video=" << perfVideoMs << " tabVis=" << perfTabVisMs << ") path=" << filePath;
-    }
-  }
+  // `trace`'s destructor emits the KARTEND_PERF_TRACE phase breakdown.
 }
 
 // Clears per-item state and re-asserts visibility. Each tab now owns its
@@ -366,10 +385,12 @@ void DetailsPane::clearMetadata() {
   // Tear down item-only chrome (artwork preview, video, gallery, details
   // rows, manual button) regardless of which mode we land in.
   schedulePreviewVideo(QString());
-  showArtworkOnly();
+  // Kartend-4wxmp: removed pass-through forwarders — drive the sub-controllers
+  // directly.
+  if (m_artworkController) m_artworkController->showArtworkOnly();
   setManualFile(QString());
   if (m_detailsContainer) {
-    clearDetailsSection();
+    if (m_metadataView) m_metadataView->clearDetailsSection();
     m_detailsContainer->hide();
   }
   setArtworkEditEnabled(false);
@@ -460,35 +481,40 @@ void DetailsPane::renderCollectionSummary() {
   ui->titleLabel->setText(tr("Collection Information"));
   ui->itemNameValue->setText(m_collectionSummary.name);
 
-  ensureDetailsSection();
+  // Kartend-4wxmp: drive the metadata view directly (the pass-through
+  // ensureDetailsSection/clearDetailsSection/appendDetailRow forwarders were
+  // removed). ensureDetailsSection() is what creates m_detailsContainer, so a
+  // non-null container past the guard implies m_metadataView is non-null.
+  if (m_metadataView) m_metadataView->ensureDetailsSection();
   if (!m_detailsContainer) {
     return;
   }
-  clearDetailsSection();
+  DetailsPaneMetadataView *mv = m_metadataView;
+  mv->clearDetailsSection();
 
   if (!m_collectionSummary.type.trimmed().isEmpty()) {
-    appendDetailRow(tr("Type"), m_collectionSummary.type);
+    mv->appendDetailRow(tr("Type"), m_collectionSummary.type);
   }
   if (m_collectionSummary.itemCount >= 0) {
-    appendDetailRow(tr("Items"), QString::number(m_collectionSummary.itemCount));
+    mv->appendDetailRow(tr("Items"), QString::number(m_collectionSummary.itemCount));
   }
-  appendDetailRow(tr("Last scanned"), formatLastScanned(m_collectionSummary.lastScanned));
+  mv->appendDetailRow(tr("Last scanned"), formatLastScanned(m_collectionSummary.lastScanned));
   if (!m_collectionSummary.parentName.trimmed().isEmpty()) {
-    appendDetailRow(tr("Parent"), m_collectionSummary.parentName);
+    mv->appendDetailRow(tr("Parent"), m_collectionSummary.parentName);
   }
-  appendDetailRow(tr("Media"), m_collectionSummary.mediaDirectory, /*wrap=*/true);
-  appendDetailRow(tr("Artwork"), m_collectionSummary.artworkDirectory, /*wrap=*/true);
-  appendDetailRow(tr("Video"), m_collectionSummary.videoDirectory, /*wrap=*/true);
-  appendDetailRow(tr("Manuals"), m_collectionSummary.manualDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Media"), m_collectionSummary.mediaDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Artwork"), m_collectionSummary.artworkDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Video"), m_collectionSummary.videoDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Manuals"), m_collectionSummary.manualDirectory, /*wrap=*/true);
   if (!m_collectionSummary.extensions.isEmpty()) {
-    appendDetailRow(tr("Extensions"), m_collectionSummary.extensions.join(QStringLiteral(", ")),
-                    /*wrap=*/true);
+    mv->appendDetailRow(tr("Extensions"), m_collectionSummary.extensions.join(QStringLiteral(", ")),
+                        /*wrap=*/true);
   }
   // Kartend-ecky: persistent warning surface for launcher paths that
   // don't resolve on this host. One row per offending launcher so a
   // multi-launcher collection makes it clear which entry needs fixing.
   for (const QString &issue : m_collectionSummary.launcherPathIssues) {
-    appendDetailRow(tr("⚠ Launcher path"), issue, /*wrap=*/true);
+    mv->appendDetailRow(tr("⚠ Launcher path"), issue, /*wrap=*/true);
   }
 
   // pull the just-built summary rows under the active sidebar-
@@ -849,42 +875,15 @@ auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
   return DetailsFormat::formatFileSize(bytes);
 }
 
-// Load artwork from specified directory
-void DetailsPane::loadArtwork(const QString &baseName, const QString &artworkDirectory) {
-  if (m_artworkController) m_artworkController->loadArtwork(baseName, artworkDirectory);
-}
-
-// Apply horzontal scrolling policy
-void DetailsPane::showArtworkOnly() {
-  if (m_artworkController) m_artworkController->showArtworkOnly();
-}
-
+// Kartend-4wxmp: removed 7 pass-through forwarders that had no callers or only
+// internal DetailsPane callers — loadArtwork / showArtworkOnly / isScrollIdle
+// (→ m_artworkController), ensureDetailsSection / clearDetailsSection /
+// appendDetailRow / appendScrollingDescription (→ m_metadataView). Their few
+// internal callers now talk to the sub-controller directly. setScrollIdlePredicate,
+// setExtendedMetadata, setUsageStats and setManualFile stay as delegations
+// because DetailsPaneManager (not a friend) still calls them.
 void DetailsPane::setScrollIdlePredicate(std::function<bool()> predicate) {
   if (m_artworkController) m_artworkController->setScrollIdlePredicate(std::move(predicate));
-}
-
-bool DetailsPane::isScrollIdle() const {
-  return !m_artworkController || m_artworkController->isScrollIdle();
-}
-
-// Lazily construct the Details section. Appended once to the bottom of the
-// content layout; subsequent calls reuse the existing widgets so we do not
-// churn the layout on every selection change.
-void DetailsPane::ensureDetailsSection() {
-  if (m_metadataView) m_metadataView->ensureDetailsSection();
-}
-
-void DetailsPane::clearDetailsSection() {
-  if (m_metadataView) m_metadataView->clearDetailsSection();
-}
-
-void DetailsPane::appendDetailRow(const QString &label, const QString &value, bool wrap) {
-  if (m_metadataView) m_metadataView->appendDetailRow(label, value, wrap);
-}
-
-void DetailsPane::appendScrollingDescription(const QString &label, const QString &value,
-                                             int maxLines) {
-  if (m_metadataView) m_metadataView->appendScrollingDescription(label, value, maxLines);
 }
 
 void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {

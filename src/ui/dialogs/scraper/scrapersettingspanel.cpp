@@ -606,10 +606,17 @@ void ScraperSettingsPanel::applyPresetToFields() {
 
 void ScraperSettingsPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void ScraperSettingsPanel::refresh() {
+void ScraperSettingsPanel::save() {
+  // Flush via the existing live-edit writer. writeModel() mirrors every
+  // widget back into the model. (Live edits already write through their
+  // own change handlers; this gives the host a single explicit flush.)
+  writeModel();
+}
+
+void ScraperSettingsPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

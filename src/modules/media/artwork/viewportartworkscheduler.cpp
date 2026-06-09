@@ -257,6 +257,22 @@ void ViewportArtworkScheduler::applyResultsToUi(const QList<ArtworkInfo::Result>
     }
     return;
   }
+  // Kartend-nhnlw: stage the incoming batch into the member apply-queue and
+  // drain a bounded slice now. The unprocessed tail stays in m_pendingApply
+  // (drained from its front next tick) instead of being copied into a fresh
+  // QList and re-posted every tick during a scroll storm.
+  for (const auto &result : batchResults) {
+    m_pendingApply.push_back(result);
+  }
+  drainPendingApply();
+}
+
+void ViewportArtworkScheduler::drainPendingApply() {
+  if (QApplication::closingDown()) {
+    m_pendingApply.clear();
+    return;
+  }
+
   QElapsedTimer perfTimer;
   const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
   if (perfTrace) perfTimer.start();
@@ -266,18 +282,17 @@ void ViewportArtworkScheduler::applyResultsToUi(const QList<ArtworkInfo::Result>
   // + setArtworkPixmap + widget->update() in one tick, and multiple
   // batches landing in quick succession compounded into a visible hitch
   // during scroll. Process up to kMaxPerTick items synchronously and
-  // re-queue the rest via QMetaObject::invokeMethod (QueuedConnection)
-  // so the next tick can paint between the two halves. The cap counts
-  // total iterations (applied + skipped) so a batch full of stale
-  // widgets still progresses without a giant 30-item sweep.
+  // re-schedule a single drain via QMetaObject::invokeMethod (QueuedConnection)
+  // so the next tick can paint between the slices. The cap counts total
+  // iterations (applied + skipped) so a queue full of stale widgets still
+  // progresses without a giant sweep.
   constexpr int kMaxPerTick = UIConstants::Artwork::MAX_DECODE_PER_TICK;
   int applied = 0;
   int skipped = 0;
   int processed = 0;
-  for (const auto &result : batchResults) {
-    if (processed >= kMaxPerTick) {
-      break;
-    }
+  while (processed < kMaxPerTick && !m_pendingApply.empty()) {
+    const ArtworkInfo::Result result = std::move(m_pendingApply.front());
+    m_pendingApply.pop_front();
     ++processed;
     if (result.widget.isNull() || result.image.isNull()) {
       ++skipped;
@@ -364,29 +379,33 @@ void ViewportArtworkScheduler::applyResultsToUi(const QList<ArtworkInfo::Result>
     }
   }
 
-  if (processed < batchResults.size()) {
-    // Re-queue the unprocessed tail; the next event-loop tick picks it
-    // up. mid() copies the tail into a new QList so the original batch
-    // can be released as soon as this call returns.
-    QList<ArtworkInfo::Result> remainder = batchResults.mid(processed);
-    // Capture a QPointer (mirroring loadArtworkParallel's `self`) so the queued
-    // re-dispatch becomes a no-op if this scheduler is destroyed before the next
-    // tick, instead of dereferencing a dangling `this` (Kartend-zl1g).
-    QPointer<ViewportArtworkScheduler> self(this);
-    QMetaObject::invokeMethod(
-        this,
-        [self, remainder]() {
-          if (self) {
-            self->applyResultsToUi(remainder);
-          }
-        },
-        Qt::QueuedConnection);
+  if (!m_pendingApply.empty()) {
+    // Tail remains in the member queue — schedule a single queued drain so the
+    // GUI can paint between slices. No QList copy: the results stay put in
+    // m_pendingApply and the next drain pops from its front. QPointer guard
+    // (mirroring loadArtworkParallel's `self`) makes the queued call a no-op if
+    // this scheduler is destroyed first (Kartend-zl1g); m_applyDrainScheduled
+    // keeps at most one queued drain in flight (Kartend-nhnlw).
+    if (!m_applyDrainScheduled) {
+      m_applyDrainScheduled = true;
+      QPointer<ViewportArtworkScheduler> self(this);
+      QMetaObject::invokeMethod(
+          this,
+          [self]() {
+            if (self) {
+              self->m_applyDrainScheduled = false;
+              self->drainPendingApply();
+            }
+          },
+          Qt::QueuedConnection);
+    }
   }
 
   if (perfTrace) {
     qCDebug(lcPerfTrace).nospace()
-        << "applyResultsToUi: totalMs=" << perfTimer.elapsed() << " applied=" << applied
-        << " skipped=" << skipped << " processed=" << processed << " size=" << batchResults.size();
+        << "drainPendingApply: totalMs=" << perfTimer.elapsed() << " applied=" << applied
+        << " skipped=" << skipped << " processed=" << processed
+        << " queued=" << m_pendingApply.size();
   }
 }
 

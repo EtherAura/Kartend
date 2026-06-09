@@ -93,12 +93,6 @@ public:
   /// returns false (preserves existing behaviour when not wired).
   void setScrollIdlePredicate(std::function<bool()> predicate);
 
-  /// True when no scroll/animation is currently active. Returns true when
-  /// no predicate is installed (preserves pre-fix behaviour). Used by
-  /// DetailsPaneGalleryView to defer VideoThumbnailExtractor frame
-  /// requests during scroll (Kartend-9q8d round 8) — same blocking
-  /// GUI-thread cost as the main sidebar video preview.
-  [[nodiscard]] bool isScrollIdle() const;
 
   void setMetadata(const QString &filePath, const QString &itemName,
                    const QString &artworkDirectory = QString(),
@@ -342,9 +336,7 @@ private:
   /// `m_galleryEntries`, filtering out video entries (the live preview tile
   /// already plays the video). Runs on every gallery / orientation change.
   void rebuildHorizontalGallery();
-  void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
-  void showArtworkOnly();
   /// Resolve the preview video for @p filePath — collection `videoDirectory`
   /// first, then `{artworkDirectory}/video/` — and, when the resolved path
   /// changed for this item, hand it to the artwork/video controller. The
@@ -353,15 +345,10 @@ private:
   /// Defined in detailspanevideo.cpp.
   void applyPreviewVideo(const QString &filePath, const QString &artworkDirectory,
                          const QString &videoDirectory);
-  void ensureDetailsSection();
-  void clearDetailsSection();
-  void appendDetailRow(const QString &label, const QString &value, bool wrap = false);
-  /// Like `appendDetailRow` but renders the value inside a fixed-height
-  /// scroll area that auto-scrolls vertically when the text overflows.
-  /// Used for the description field so long synopses don't push the
-  /// rest of the metadata below the scroll fold. Caps the visible
-  /// region to ~`maxLines` of wrapped text at the current font.
-  void appendScrollingDescription(const QString &label, const QString &value, int maxLines);
+  // Kartend-4wxmp: loadArtwork / showArtworkOnly / isScrollIdle /
+  // ensureDetailsSection / clearDetailsSection / appendDetailRow /
+  // appendScrollingDescription pass-through forwarders removed — callers use
+  // m_artworkController / m_metadataView directly.
   /// Per-item media gallery row (vertical-dock) with section construction,
   /// thumb building, and the click-to-preview overlay. Owned, not borrowed.
   DetailsPaneGalleryView *m_galleryView = nullptr;

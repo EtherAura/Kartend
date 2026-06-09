@@ -1,6 +1,7 @@
 #ifndef GENERALSETTINGSPANEL_H
 #define GENERALSETTINGSPANEL_H
 
+#include "isettingspanel.h"
 #include <QStringList>
 #include <QWidget>
 
@@ -24,7 +25,7 @@ struct SettingsModel;
 /// Note: startupCollection was previously live-saved; now follows the same
 /// deferred-save semantics as the rest of the general fields (must click
 /// Save). This unifies behavior with the rest of the general tab.
-class GeneralSettingsPanel : public QWidget {
+class GeneralSettingsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(GeneralSettingsPanel)
 public:
@@ -32,7 +33,12 @@ public:
   ~GeneralSettingsPanel() override;
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() was the
+  // private writeBack(); clear() is a no-op — this global panel is always
+  // backed by the single live GeneralSettings model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
   /// Populate the Startup Collection combo with @p names and select the
   /// entry whose data matches @p currentValue. The combo always has a
@@ -48,7 +54,6 @@ private slots:
   void onBrowseRetroarchConfig();
 
 private:
-  void writeBack();
   void connectChangeSignals();
 
   Ui::GeneralSettingsPanel *ui;

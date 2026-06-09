@@ -489,8 +489,19 @@ void InteractionManager::exportPlaylistToFile(const QString &playlistId, const Q
     QMessageBox::warning(QApplication::activeWindow(), tr("Export Failed"), result.error().message);
     return;
   }
-  QMessageBox::information(QApplication::activeWindow(), tr("Export Complete"),
-                           tr("Wrote %1 item(s) to %2").arg(result.value()).arg(outPath));
+  // Kartend-o84pt: M3U is an interop format that carries no collection identity
+  // or per-item titles, so a Kartend->M3U->Kartend round-trip is lossy (a path
+  // in more than one collection can re-home on import). Point the user at the
+  // JSON format for a lossless round-trip; the .json export preserves
+  // source_collection_uuid.
+  QString message = tr("Wrote %1 item(s) to %2").arg(result.value()).arg(outPath);
+  if (!asJson) {
+    message += QChar('\n');
+    message += tr("Note: M3U is an interop format — collection identity and "
+                  "titles aren't preserved. Export as Kartend Playlist (.json) "
+                  "for a lossless round-trip.");
+  }
+  QMessageBox::information(QApplication::activeWindow(), tr("Export Complete"), message);
 }
 
 void InteractionManager::importPlaylistFromFile() {

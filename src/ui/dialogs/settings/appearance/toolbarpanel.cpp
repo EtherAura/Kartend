@@ -17,12 +17,12 @@ ToolbarPanel::ToolbarPanel(QWidget *parent) : QWidget(parent), ui(new Ui::Toolba
         ui->toolbarHideSubcollectionsVisibleCheckBox, ui->toolbarTypeFilterVisibleCheckBox,
         ui->toolbarTitleFilterVisibleCheckBox, ui->toolbarSearchModeVisibleCheckBox,
         ui->toolbarSearchBarVisibleCheckBox}) {
-    connect(box, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
+    connect(box, &QCheckBox::toggled, this, [this](bool) { save(); });
   }
   for (auto *edit : {ui->toolbarGridViewTextEdit, ui->toolbarListViewTextEdit,
                      ui->toolbarCoverFlowViewTextEdit, ui->toolbarHorizontalViewTextEdit,
                      ui->toolbarHideSubcollectionsTextEdit, ui->toolbarTitleFilterTextEdit}) {
-    connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { writeBack(); });
+    connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { save(); });
   }
 }
 
@@ -32,10 +32,10 @@ ToolbarPanel::~ToolbarPanel() {
 
 void ToolbarPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void ToolbarPanel::refresh() {
+void ToolbarPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -69,7 +69,7 @@ void ToolbarPanel::refresh() {
   SettingsFormBinding::loadInto(ui->toolbarTitleFilterTextEdit, s->toolbar.toolbarTitleFilterText);
 }
 
-void ToolbarPanel::writeBack() {
+void ToolbarPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

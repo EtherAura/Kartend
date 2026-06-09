@@ -117,6 +117,18 @@ struct KartManagerSetup {
 [[nodiscard]] QList<SuspiciousKartPath>
 collectSuspiciousKartPaths(const CollectionConfig &cfg, const QSet<QString> &trustedLauncherPaths);
 
+/// Kartend-u8wf0: return the launcher path fields whose value resolves to a
+/// location INSIDE the extracted kart tree (@p extractedRoot). These are the
+/// most dangerous headless case: a .kart that bundles its own executable and
+/// points launcherPath at it, so importing-then-launching runs code the kart
+/// fully chose. collectSuspiciousKartPaths can't catch this because the
+/// extraction root is usually under $HOME (an allowlisted prefix). The GUI
+/// path gates every suspicious path behind the interactive confirmer;
+/// importKartHeadless uses this to refuse in-tree launchers unless the caller
+/// explicitly opts in.
+[[nodiscard]] QList<SuspiciousKartPath>
+collectInTreeLauncherPaths(const CollectionConfig &cfg, const QString &extractedRoot);
+
 class KartManager : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(KartManager)
@@ -141,10 +153,15 @@ public:
   [[nodiscard]] ErrorUtils::Result<QString>
   importKart(const QString &kartPath, const QString &destDir, bool registerCollection);
 
-  [[nodiscard]] ErrorUtils::Result<QString> importKartHeadless(const QString &kartPath,
-                                                               const QString &destDir,
-                                                               bool registerCollection,
-                                                               MergeChoice headlessChoice);
+  /// Headless (no-confirmer) import. Because there is no interactive
+  /// suspicious-path gate, a manifest whose launcherPath resolves INSIDE the
+  /// extracted tree (a self-bundled executable) is refused unless
+  /// @p allowUntrustedLauncher is true — the CLI exposes this as
+  /// --allow-untrusted-launcher (Kartend-u8wf0). Out-of-allowlist paths that
+  /// point elsewhere are still logged but not blocked (finalizeImport's audit).
+  [[nodiscard]] ErrorUtils::Result<QString>
+  importKartHeadless(const QString &kartPath, const QString &destDir, bool registerCollection,
+                     MergeChoice headlessChoice, bool allowUntrustedLauncher = false);
 
   /// Serialize a collection to a .kart. When `writer` is non-null it runs on
   /// that (signal-connected, cancellable) writer — runExport() injects

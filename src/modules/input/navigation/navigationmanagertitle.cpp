@@ -36,7 +36,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
 
 // Re-define diagnostic logging macro (file-local in main TU).
 auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
-  if ((!isAlive()) || (!m_itemsPage)) {
+  if ((!appNotShuttingDown()) || (!m_itemsPage)) {
     return;
   }
   auto *titleLabel = m_itemsPage->findChild<QLabel *>("itemsTitleLabel");

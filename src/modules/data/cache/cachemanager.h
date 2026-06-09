@@ -114,6 +114,11 @@ private:
   // scheduleSaveToDisk() calls during initial cache fill produces at most one
   // outstanding QueuedConnection invokeMethod task.
   QAtomicInteger<int> m_savePostInFlight = 0;
+  // Kartend-7s2mv: run-once guard so the disk-timestamp parse happens exactly
+  // once even if initialize() is reached from more than one path. The load is
+  // owned by ApplicationManager's background QtConcurrent future; this prevents
+  // a second caller from re-parsing the (50MB+) timestamps file.
+  QAtomicInteger<int> m_initStarted = 0;
   bool m_metadataDirty = false;
   qint64 m_firstDirtyAtMs = 0;
 

@@ -90,7 +90,10 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
     options.exportCollectionName = parser.value(exportKartOption);
   }
   if (parser.isSet(exportOutOption)) {
-    options.exportOutPath = parser.value(exportOutOption);
+    // Kartend-928mu: sanitize like the other CLI filesystem args so all share
+    // one seam (was stored verbatim — no tilde expansion / metachar check).
+    options.exportOutPath =
+        sanitizeCliPath(parser.value(exportOutOption), QStringLiteral("export-out"));
   }
   if (parser.isSet(onConflictOption)) {
     const QString v = parser.value(onConflictOption).toLower();

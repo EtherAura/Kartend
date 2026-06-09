@@ -47,6 +47,14 @@ private slots:
   // Otherwise users would see a spurious dialog after every benign
   // import.
   void testImportSkipsReporterWhenAllLauncherPathsResolve();
+
+  // Kartend-u8wf0: a headless import whose launcher path resolves inside
+  // the extracted kart tree (a self-bundled executable) is refused by
+  // default, with an error that names the opt-in flag.
+  void testHeadlessImportRefusesInTreeLauncherByDefault();
+  // Kartend-u8wf0: the same import succeeds when the caller opts in via
+  // allowUntrustedLauncher=true (the CLI's --allow-untrusted-launcher).
+  void testHeadlessImportAcceptsInTreeLauncherWhenOptedIn();
 };
 
 #endif

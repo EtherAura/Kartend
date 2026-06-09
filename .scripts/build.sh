@@ -261,6 +261,29 @@ MAINT_CHECK_SUMMARY=()
 # Collect warnings to print at the end
 COLLECTED_WARNINGS=""
 
+# Kartend-ufjcq: nudge (non-fatally) when the project git hooks aren't installed.
+# The hooks (clang-format + version-consistency) are opt-in, so a contributor who
+# hasn't run .scripts/git-hooks/install.sh only learns about format/version drift
+# from the slow maintenance-check CI job. Resolve the active hooks dir the same
+# way install.sh does (honoring core.hooksPath, e.g. beads' .beads/hooks) and
+# look for the project hook marker install.sh writes. Printed directly to stderr
+# (not via warn(), whose COLLECTED_WARNINGS buffer is currently never flushed).
+if command -v git >/dev/null 2>&1 && git -C "$root_dir" rev-parse --git-dir >/dev/null 2>&1; then
+  _hooks_cfg="$(git -C "$root_dir" config --get core.hooksPath 2>/dev/null || true)"
+  if [ -n "$_hooks_cfg" ]; then
+    case "$_hooks_cfg" in
+      /*) _hooks_dst="$_hooks_cfg" ;;
+      *) _hooks_dst="$root_dir/$_hooks_cfg" ;;
+    esac
+  else
+    _hooks_dst="$root_dir/.git/hooks"
+  fi
+  if ! grep -qs "KARTEND PROJECT HOOK" "$_hooks_dst/pre-commit" 2>/dev/null; then
+    printf "%b\n" "${CYAN}[${YELLOW}WARN${CYAN}]${RESET} git hooks not installed — run .scripts/git-hooks/install.sh to catch clang-format / version issues before CI" >&2
+  fi
+  unset _hooks_cfg _hooks_dst
+fi
+
 # Track last-running logfile for improved exit diagnostics
 LAST_RUN_LOG=""
 

@@ -1,6 +1,7 @@
 #ifndef SCRAPERCREDENTIALSPANEL_H
 #define SCRAPERCREDENTIALSPANEL_H
 
+#include "isettingspanel.h"
 #include <QHash>
 #include <QString>
 #include <QWidget>
@@ -15,7 +16,7 @@ struct SettingsModel;
 /// `setProvider(providerId)` to render exactly that provider's fields.
 /// Uses the deferred-save shape (panel mutates the model on edit + emits
 /// `changed()`; the dialog persists on Apply).
-class ScraperCredentialsPanel : public QWidget {
+class ScraperCredentialsPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScraperCredentialsPanel)
 public:
@@ -28,7 +29,12 @@ public:
   void setProvider(const QString &providerId);
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() flushes via
+  // the existing private writeModel() (the panel's live-edit flush); clear()
+  // is a no-op — this global panel is always backed by the single live model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
 signals:
   void changed();

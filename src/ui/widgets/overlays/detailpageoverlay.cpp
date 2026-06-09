@@ -25,6 +25,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 #include <QVBoxLayout>
 
+#include "detailsformat.h"
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
 #include "itemmetadata.h"
@@ -482,37 +483,15 @@ QString DetailPageOverlay::formatFileSize(qint64 bytes) {
   return StringUtils::formatFileSize(bytes);
 }
 
+// Kartend-vbu6y: both of these were hand-copied duplicates of the shared
+// DetailsFormat helpers (formatTags even said "Mirrors DetailsPane::formatTags").
+// Delegate so the runtime/tags formatting lives in exactly one place.
 QString DetailPageOverlay::formatRuntime(int seconds) {
-  if (seconds < 0) {
-    return {};
-  }
-  const int hours = seconds / 3600;
-  const int minutes = (seconds % 3600) / 60;
-  const int secs = seconds % 60;
-  if (hours > 0) {
-    return QStringLiteral("%1h %2m").arg(hours).arg(minutes, 2, 10, QChar('0'));
-  }
-  if (minutes > 0) {
-    return QStringLiteral("%1m %2s").arg(minutes).arg(secs, 2, 10, QChar('0'));
-  }
-  return QStringLiteral("%1s").arg(secs);
+  return DetailsFormat::formatRuntime(seconds);
 }
 
 QString DetailPageOverlay::formatTags(const QString &raw) {
-  // Mirrors DetailsPane::formatTags so the detail page renders the same
-  // values: tolerate either a JSON array or a comma-separated string.
-  QString trimmed = raw.trimmed();
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    trimmed.chop(1);
-    trimmed.remove(0, 1);
-    trimmed.replace('"', QString());
-  }
-  QStringList parts = trimmed.split(',', Qt::SkipEmptyParts);
-  for (QString &p : parts) {
-    p = p.trimmed();
-  }
-  parts.removeAll(QString());
-  return parts.join(QStringLiteral(", "));
+  return DetailsFormat::formatTags(raw);
 }
 
 void DetailPageOverlay::paintEvent(QPaintEvent *event) {

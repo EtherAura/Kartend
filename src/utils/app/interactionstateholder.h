@@ -95,6 +95,16 @@ public:
   [[nodiscard]] bool horizAnimActive() const { return m_horizAnimActive; }
   void setHorizAnimActive(bool active) { m_horizAnimActive = active; }
 
+  // Kartend-73ql5: true while the vertical scroll QPropertyAnimation is
+  // running. AnimationManager keeps it in sync with the animation's own
+  // stateChanged signal (single source of truth, robust to every start/stop/
+  // finish path). ScrollManager::onThrottledUpdate() reads it to skip the
+  // throttle-driven updateVirtualView() while the animation already drives one
+  // per frame — otherwise each animated scrollbar step dispatches the full
+  // updateVirtualView twice.
+  [[nodiscard]] bool verticalAnimActive() const { return m_verticalAnimActive; }
+  void setVerticalAnimActive(bool active) { m_verticalAnimActive = active; }
+
   [[nodiscard]] int horizAnimGen() const { return m_horizAnimGen; }
   void setHorizAnimGen(int gen) { m_horizAnimGen = gen; }
   int nextHorizAnimGen() { return ++m_horizAnimGen; }
@@ -262,6 +272,7 @@ private:
   // Additional state
   bool m_glideAnimating = false;
   bool m_horizAnimActive = false;
+  bool m_verticalAnimActive = false; // Kartend-73ql5
   int m_horizAnimGen = 0;
   qint64 m_clickSeriesLastMs = 0;
   qint64 m_lastUiActivityMs = 0;

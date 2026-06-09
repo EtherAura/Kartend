@@ -57,14 +57,14 @@ LauncherPresetsPanel::~LauncherPresetsPanel() {
 
 void LauncherPresetsPanel::setPresets(QList<LauncherPreset> *presets) {
   m_presets = presets;
-  refresh();
+  load();
 }
 
 void LauncherPresetsPanel::setRetroarchConfigOverride(const QString &configOverride) {
   m_retroarchOverride = configOverride;
 }
 
-void LauncherPresetsPanel::refresh() {
+void LauncherPresetsPanel::load() {
   const int previousRow = ui->launcherPresetsList->currentRow();
   QSignalBlocker blocker(ui->launcherPresetsList);
   ui->launcherPresetsList->clear();
@@ -107,7 +107,7 @@ void LauncherPresetsPanel::onAdd() {
   preset.corePath = edited.corePath;
   preset.launchParameters = edited.launchParameters;
   m_presets->append(preset);
-  refresh();
+  load();
   ui->launcherPresetsList->setCurrentRow(m_presets->size() - 1);
   emit presetsChanged();
 }
@@ -139,7 +139,7 @@ void LauncherPresetsPanel::onEdit() {
   (*m_presets)[row].launcherPath = edited.launcherPath;
   (*m_presets)[row].corePath = edited.corePath;
   (*m_presets)[row].launchParameters = edited.launchParameters;
-  refresh();
+  load();
   ui->launcherPresetsList->setCurrentRow(row);
   emit presetsChanged();
 }
@@ -156,7 +156,7 @@ void LauncherPresetsPanel::onRemove() {
   // LauncherUtils::resolvePreset already falls back to the inline fields
   // when no matching preset is found.
   m_presets->removeAt(row);
-  refresh();
+  load();
   if (!m_presets->isEmpty()) {
     const int lastRow = static_cast<int>(m_presets->size()) - 1;
     ui->launcherPresetsList->setCurrentRow(std::min(row, lastRow));
@@ -274,7 +274,7 @@ void LauncherPresetsPanel::onDetect() {
   }
 
   if (added > 0) {
-    refresh();
+    load();
     ui->launcherPresetsList->setCurrentRow(m_presets->size() - 1);
     emit presetsChanged();
   }

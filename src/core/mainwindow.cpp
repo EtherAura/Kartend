@@ -83,13 +83,14 @@
 Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow), stackedWidget(nullptr), itemsPage(nullptr),
+    : QMainWindow(parent), ui(std::make_unique<Ui::MainWindow>()), stackedWidget(nullptr),
+      itemsPage(nullptr),
       gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
       m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
       currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   // unique_ptr is the sole owner; QObject parent stays null (Kartend-d70s,
   // re-attempted after Kartend-3v92 replaced NavigationManager's parent()
-  // lifetime guards with the isAlive() helper). Destruction is driven
+  // lifetime guards with the appNotShuttingDown() helper). Destruction is driven
   // purely by member order.
   m_appManager = std::make_unique<ApplicationManager>(nullptr);
   m_appManager->initialize(&m_appContext);
@@ -110,7 +111,11 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 MainWindow::~MainWindow() {
-  delete ui;
+  // Kartend-nbfgs: no explicit `delete ui` — `ui` is a unique_ptr member that
+  // destructs AFTER the manager/controller members (it is declared above them,
+  // so it tears down later in reverse-declaration order), keeping the Ui struct
+  // and ctx.ui valid while those teardown paths run. Defined out-of-line here so
+  // the unique_ptr<Ui_MainWindow> destructor sees the complete type.
 }
 
 bool MainWindow::event(QEvent *event) {

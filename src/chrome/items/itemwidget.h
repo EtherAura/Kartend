@@ -227,6 +227,11 @@ private:
   bool m_isVirtualFolder = false;
   bool m_isListMode = false;         // True when displaying in list view (no artwork)
   bool m_hasArtwork = false;         // True when artwork exists for this item
+  // Kartend-4hct5: coalesces the deferred post-applyDimensions artwork refresh
+  // so a burst of applyDimensions() calls on one widget (e.g. a view-type /
+  // grid-width change recreating every visible widget) queues a single
+  // onArtworkChanged() instead of one singleShot(0) per call.
+  bool m_artworkRefreshPending = false;
   int m_rowIndex = -1;               // Row index for alternating background colors in list mode
   int m_collectionColumnWidth = 150; // Collection column width for list mode (resizable)
   int m_artworkColumnWidth = 32;     // Artwork column width for list mode (resizable)

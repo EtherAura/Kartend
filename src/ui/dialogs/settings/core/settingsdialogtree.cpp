@@ -46,7 +46,8 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
     if (i == currentIndex) {
       continue;
     }
-    if (wouldCreateCircularReference(currentIndex, i)) {
+    // Kartend-ook62: cycle check now lives on the TreeManager controller.
+    if (m_treeManager && m_treeManager->wouldCreateCircularReference(currentIndex, i)) {
       continue;
     }
     ui->configurationPanel->parentCollectionComboBox()->addItem(collections[i].name);
@@ -63,8 +64,5 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
   ui->configurationPanel->parentCollectionComboBox()->setCurrentIndex(targetDropdownIndex);
 }
 
-auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const
-    -> bool {
-  return CollectionUtils::wouldCreateCircularReference(childIndex, potentialParentIndex,
-                                                       collections);
-}
+// Kartend-ook62: wouldCreateCircularReference moved to the TreeManager
+// controller (it owns the drag-drop cycle guard + parent-combo cycle filter).

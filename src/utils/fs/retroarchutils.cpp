@@ -3,6 +3,8 @@
 // small line scanner — retroarch.cfg is a flat `key = "value"` file.
 #include "retroarchutils.h"
 
+#include "pathutils.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -102,7 +104,17 @@ QString coreDirectoryFromConfig(const QString &configPath) {
     if (QDir::isRelativePath(value)) {
       value = QDir(QFileInfo(configPath).absolutePath()).absoluteFilePath(value);
     }
-    return QDir::cleanPath(value);
+    const QString cleaned = QDir::cleanPath(value);
+    // Kartend-b2hi9: keep the launch surface's "every path is validated"
+    // invariant. libretro_directory comes from a config file that is normally
+    // the user's own, but can be third-party (synced dotfiles, a shipped image,
+    // a kart bundling a retroarch.cfg path override) — reject a value carrying
+    // shell metachars / NUL before it drives core discovery + the -L argument.
+    // A bad value is treated as unset so discovery falls through to the probe.
+    if (PathUtils::validatePathSecurity(cleaned).isError()) {
+      return {};
+    }
+    return cleaned;
   }
   return {};
 }

@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QtConcurrent>
+#include <QThreadPool>
 
 namespace ArtworkUtils {
 
@@ -254,6 +255,25 @@ void DirectoryCache::prewarmDirectories(const QStringList &directories) {
       QMutexLocker locker(&m_mutex);
       m_queuedDirectories.remove(dir);
     }
+  });
+}
+
+void DirectoryCache::schedulePrewarm(const QStringList &directories) {
+  if (directories.isEmpty()) {
+    return;
+  }
+  // Kartend-uzs42: cap at one in-flight prewarm. If a walk is already running,
+  // drop this request (best-effort — the running walk warms its dirs and the
+  // newly-selected collection's own enumeration warms the rest). This stops a
+  // burst of collection switches from piling up redundant global-pool walks.
+  if (!m_prewarmInFlight.testAndSetOrdered(0, 1)) {
+    return;
+  }
+  QThreadPool::globalInstance()->start([this, directories]() {
+    prewarmDirectories(directories);
+    processQueuedDirectories();
+    m_prewarmInFlight.storeRelaxed(0);
+    qCDebug(lcPerfTrace) << "Background dentry prewarm complete: dirs=" << directories.size();
   });
 }
 

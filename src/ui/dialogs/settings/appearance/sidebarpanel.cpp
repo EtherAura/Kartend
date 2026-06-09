@@ -123,7 +123,7 @@ void SidebarPanel::clear() {
   ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
 }
 
-void SidebarPanel::save() const {
+void SidebarPanel::save() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;

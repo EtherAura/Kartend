@@ -15,6 +15,19 @@
 #include <QTemporaryFile>
 #include <QTest>
 
+// Kartend-68wbk: a missing archive tool is a graceful QSKIP locally, but a hard
+// QFAIL in CI (KARTEND_REQUIRE_ARCHIVE_TOOLS=1). CI installs the tools
+// (Kartend-03lcs); this macro turns a silent ctest "pass" back into a failure if
+// that ever regresses, so the archive-extraction coverage can't evaporate
+// unnoticed. Both QFAIL and QSKIP return from the test, so this is drop-in for a
+// bare QSKIP.
+#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                              \
+  do {                                                                                              \
+    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                              \
+      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                       \
+    QSKIP(msg);                                                                                     \
+  } while (false)
+
 class TestLaunchManager : public QObject {
   Q_OBJECT
 
@@ -54,6 +67,7 @@ private slots:
 
   // buildLaunchCommand tests
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
+  void testBuildLaunchCommand_collectionSubstitutionDoesNotInjectArgs();
   void testBuildLaunchCommand_retroArch_usesCorePath();
   void testBuildLaunchCommand_allowsAmpersandMediaPath();
   void testBuildLaunchCommand_rejectsCollectionPathTraversal_data();
@@ -608,6 +622,24 @@ void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters
   QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", "--scale", "2", filePath}));
 }
 
+void TestLaunchManager::testBuildLaunchCommand_collectionSubstitutionDoesNotInjectArgs() {
+  // Kartend-nv9iw: a %collection% value containing spaces / a leading-dash
+  // token (a collection name can arrive from an imported .kart manifest) must
+  // land as exactly ONE argument, not split into extra argv entries that would
+  // inject attacker-chosen flags into the launcher. The name has no /, \, ..,
+  // or . so it passes validateCollectionNameForSubstitution and actually
+  // reaches the parameter expansion.
+  LauncherConfig launcher;
+  launcher.launcherPath = "mpv";
+  launcher.launchParameters = "--title %collection%";
+
+  const QString hostileName = "Live --fullscreen Sets";
+  auto result = LaunchManager::buildLaunchCommand(launcher, hostileName, "/tmp/media/file.bin");
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"--title", "Live --fullscreen Sets", "/tmp/media/file.bin"}));
+}
+
 void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   CollectionConfig config;
   config.name = "TestCollection";
@@ -1066,7 +1098,7 @@ void TestLaunchManager::testExtractArchive_extractsTargetFile() {
   QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
 #endif
   if (!extractorAvailable()) {
-    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
   }
   const QString base = QStringLiteral("kartend_extract_ok");
   QDir(extractionDirFor(base)).removeRecursively(); // no stale cache from a prior run
@@ -1075,7 +1107,7 @@ void TestLaunchManager::testExtractArchive_extractsTargetFile() {
       {QStringLiteral("manual.txt"), QByteArrayLiteral("x")}};
   const QString zip = makeZipFixture(base, entries);
   if (zip.isEmpty()) {
-    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
   }
 
   auto result = LaunchManager::extractArchiveToTemp(zip, ".iso");
@@ -1097,7 +1129,7 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
   // per-archive extraction dir it created (the qScopeGuard), so /tmp doesn't
   // accumulate orphaned archive contents.
   if (!extractorAvailable()) {
-    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
   }
   const QString base = QStringLiteral("kartend_extract_miss");
   const QString extractionDir = extractionDirFor(base);
@@ -1106,7 +1138,7 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
       {QStringLiteral("readme.txt"), QByteArrayLiteral("no disc image here")}};
   const QString zip = makeZipFixture(base, entries);
   if (zip.isEmpty()) {
-    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
   }
 
   auto result = LaunchManager::extractArchiveToTemp(zip, ".iso");
@@ -1125,7 +1157,7 @@ void TestLaunchManager::testExtractArchive_sameBaseNameDoesNotServeWrongContent(
   // per-archive cache dir. A cache hit must NOT serve the first archive's
   // contents for the second — the source marker forces a re-extract.
   if (!extractorAvailable()) {
-    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
   }
   const QString base = QStringLiteral("kartend_collide");
   QDir(extractionDirFor(base)).removeRecursively(); // no stale cache from a prior run
@@ -1136,7 +1168,7 @@ void TestLaunchManager::testExtractArchive_sameBaseNameDoesNotServeWrongContent(
   const QString zipA = makeZipFixture(base, entriesA);
   const QString zipB = makeZipFixture(base, entriesB);
   if (zipA.isEmpty() || zipB.isEmpty()) {
-    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
   }
   QVERIFY2(zipA != zipB, "fixtures must be distinct archive files that share a base name");
 
@@ -1174,7 +1206,7 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
   // through ErrorPresentation (Kartend-dyu1k); with no override installed its
   // default just logs, so this headless run doesn't hang on a modal.
   if (!extractorAvailable()) {
-    QSKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
   }
   const QString launcher = makeFailingLauncher();
   QVERIFY2(!launcher.isEmpty(), "could not create the failing-launcher fixture");
@@ -1188,7 +1220,7 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
       {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
   const QString zip = makeZipFixture(base, entries);
   if (zip.isEmpty()) {
-    QSKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
   }
 
   QList<CollectionConfig> collections;

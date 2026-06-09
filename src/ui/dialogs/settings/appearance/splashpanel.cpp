@@ -15,15 +15,15 @@ SplashPanel::SplashPanel(QWidget *parent) : QWidget(parent), ui(new Ui::SplashPa
   // editing-finished (focus-out / Enter) so partial typing doesn't hammer
   // the config file mid-keystroke. Same cadence the standalone live-save
   // wiring used before this panel existed.
-  connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->resumeFocusSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
-  connect(ui->bootSplashTitleLineEdit, &QLineEdit::editingFinished, this, &SplashPanel::writeBack);
+  connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->resumeFocusSplashCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->bootSplashTitleLineEdit, &QLineEdit::editingFinished, this, &SplashPanel::save);
   connect(ui->bootSplashSubtitleLineEdit, &QLineEdit::editingFinished, this,
-          &SplashPanel::writeBack);
+          &SplashPanel::save);
   connect(ui->resumeFocusSplashTitleLineEdit, &QLineEdit::editingFinished, this,
-          &SplashPanel::writeBack);
+          &SplashPanel::save);
   connect(ui->resumeFocusSplashSubtitleLineEdit, &QLineEdit::editingFinished, this,
-          &SplashPanel::writeBack);
+          &SplashPanel::save);
 }
 
 SplashPanel::~SplashPanel() {
@@ -32,10 +32,10 @@ SplashPanel::~SplashPanel() {
 
 void SplashPanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
-void SplashPanel::refresh() {
+void SplashPanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -53,7 +53,7 @@ void SplashPanel::refresh() {
                                 m_model->generalSettings->splash.resumeFocusSplashSubtitle);
 }
 
-void SplashPanel::writeBack() {
+void SplashPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

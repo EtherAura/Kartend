@@ -56,9 +56,22 @@ void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback call
   // alone is not enough — it only acts as a per-account rate-limit
   // boost on TOP of dev creds). Without dev creds, fall back to
   // whatever the disk had (possibly empty).
+  // Kartend-dmkzk: serve a stale-but-present on-disk catalog IMMEDIATELY so the
+  // scrape isn't blocked on a systemesListe.php round-trip; the fetch below then
+  // runs only to refresh the disk cache (the refreshed catalog applies on the
+  // next scrape) and must NOT invoke the callback again. Only when there's no
+  // on-disk copy at all do we block on the network. Mirrors
+  // ensureMediaTypeCatalog's stale-then-refresh.
+  const bool servedStale = !staleFallback.isEmpty();
+  if (servedStale) {
+    callback(staleFallback);
+  }
+
   const Credentials creds = m_credentialsResolver ? m_credentialsResolver() : Credentials{};
   if (creds.devId.isEmpty() || creds.devPassword.isEmpty()) {
-    callback(staleFallback);
+    if (!servedStale) {
+      callback(staleFallback);
+    }
     return;
   }
   const bool hasUser = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
@@ -78,27 +91,37 @@ void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback call
   url.setQuery(q);
 
   if (!m_httpClient) {
-    callback(staleFallback);
+    if (!servedStale) {
+      callback(staleFallback);
+    }
     return;
   }
   m_httpClient->get(url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
-                    [callback = std::move(callback), cachePath, staleFallback,
+                    [callback = std::move(callback), cachePath, staleFallback, servedStale,
                      errorMapper = m_errorMapper](ErrorUtils::Result<QByteArray> response) {
+                      // When we already served a stale copy (servedStale), this fetch is
+                      // a pure background disk-cache refresh — never invoke the callback a
+                      // second time. The !servedStale guards below preserve the original
+                      // blocking behavior only for the no-on-disk-copy case.
                       if (response.isError()) {
                         // Surface a structured warning when the systems-catalog fetch
-                        // fails — the catch-all `callback(staleFallback)` lets the
-                        // scrape proceed with whatever the disk cache had, but the
-                        // log line tells the user *why* the live refresh fell back.
+                        // fails; the scrape already proceeded (stale) or falls back to
+                        // whatever the disk cache had, but the log tells the user *why*
+                        // the live refresh fell back.
                         ErrorUtils::ErrorContext remapped =
                             errorMapper ? errorMapper(response.error()) : response.error();
                         ErrorUtils::logError(remapped);
-                        callback(staleFallback);
+                        if (!servedStale) {
+                          callback(staleFallback);
+                        }
                         return;
                       }
                       auto parsed =
                           ScreenScraperSystemCache::parseSystemsResponse(response.value());
                       if (parsed.isError() || parsed.value().isEmpty()) {
-                        callback(staleFallback);
+                        if (!servedStale) {
+                          callback(staleFallback);
+                        }
                         return;
                       }
                       if (!cachePath.isEmpty()) {
@@ -106,7 +129,9 @@ void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback call
                         // and falls back to in-memory-only — the lookup still proceeds.
                         (void)ScreenScraperSystemCache::saveSystems(cachePath, parsed.value());
                       }
-                      callback(parsed.value());
+                      if (!servedStale) {
+                        callback(parsed.value());
+                      }
                     });
 }
 

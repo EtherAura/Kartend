@@ -22,6 +22,8 @@ private slots:
   void importKart_rejectsTraversal();
   void to_rejectsShellMetachars();
   void exportKart_capturesNameAndOut();
+  void exportOut_rejectsShellMetachars();
+  void exportOut_expandsTilde();
   void onConflict_overwriteRecognized();
   void onConflict_mergeRecognized();
   void onConflict_unknownDefaultsToSkip();
@@ -149,6 +151,28 @@ void TestCliArgs::exportKart_capturesNameAndOut() {
        QStringLiteral("--export-out"), QStringLiteral("/tmp/genesis.kart")});
   QCOMPARE(opts.exportCollectionName, QStringLiteral("Genesis"));
   QCOMPARE(opts.exportOutPath, QStringLiteral("/tmp/genesis.kart"));
+}
+
+void TestCliArgs::exportOut_rejectsShellMetachars() {
+  // Kartend-928mu: --export-out now goes through the same sanitizer as the
+  // import paths, so a shell-metachar payload is rejected at the CLI seam
+  // instead of reaching QSaveFile raw.
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--export-kart"), QStringLiteral("Genesis"),
+       QStringLiteral("--export-out"), QStringLiteral("/tmp/out.kart; rm -rf /")});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestCliArgs::exportOut_expandsTilde() {
+  // Kartend-928mu: a ~-prefixed export path now expands to an absolute path at
+  // the seam (it used to be stored verbatim, creating a literal '~' directory).
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--export-kart"), QStringLiteral("Genesis"),
+       QStringLiteral("--export-out"), QStringLiteral("~/exports/genesis.kart")});
+  QVERIFY(!opts.pathValidationError.isError());
+  QVERIFY(!opts.exportOutPath.startsWith('~'));
+  QVERIFY(QFileInfo(opts.exportOutPath).isAbsolute());
 }
 
 void TestCliArgs::onConflict_overwriteRecognized() {

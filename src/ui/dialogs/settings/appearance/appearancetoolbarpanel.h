@@ -2,6 +2,7 @@
 #define APPEARANCETOOLBARPANEL_H
 
 #include "collectiontypes.h"
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -14,7 +15,7 @@ struct SettingsModel;
 
 /// Per-collection "Header Logo" appearance sub-sub-tab. Owns the header
 /// logo path + position combo + browse picker.
-class AppearanceToolbarPanel : public QWidget {
+class AppearanceToolbarPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceToolbarPanel)
 public:
@@ -22,9 +23,9 @@ public:
   ~AppearanceToolbarPanel() override;
 
   void setModel(SettingsModel *model);
-  void load();
-  void clear();
-  void save() const;
+  void load() override;
+  void clear() override;
+  void save() override;
   [[nodiscard]] bool hasChanges() const;
 
 signals:

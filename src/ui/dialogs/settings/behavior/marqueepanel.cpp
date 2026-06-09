@@ -38,11 +38,11 @@ MarqueePanel::MarqueePanel(QWidget *parent) : QWidget(parent), ui(new Ui::Marque
 
   populateScreens();
 
-  connect(ui->marqueeEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { writeBack(); });
+  connect(ui->marqueeEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->marqueeScreenComboBox, &QComboBox::currentIndexChanged, this,
-          [this](int) { writeBack(); });
+          [this](int) { save(); });
   connect(ui->marqueeModeComboBox, &QComboBox::currentIndexChanged, this,
-          [this](int) { writeBack(); });
+          [this](int) { save(); });
 }
 
 MarqueePanel::~MarqueePanel() {
@@ -51,7 +51,7 @@ MarqueePanel::~MarqueePanel() {
 
 void MarqueePanel::setModel(SettingsModel *model) {
   m_model = model;
-  refresh();
+  load();
 }
 
 void MarqueePanel::populateScreens() {
@@ -66,7 +66,7 @@ void MarqueePanel::populateScreens() {
   }
 }
 
-void MarqueePanel::refresh() {
+void MarqueePanel::load() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
@@ -95,7 +95,7 @@ void MarqueePanel::refresh() {
   }
 }
 
-void MarqueePanel::writeBack() {
+void MarqueePanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }

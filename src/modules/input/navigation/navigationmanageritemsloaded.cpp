@@ -54,7 +54,7 @@ void NavigationManager::onCollectionSelected(int collectionIndex) {
 
 // Validates basic context for items loaded operations
 auto NavigationManager::validateItemsLoadedContext() const -> bool {
-  return isAlive() && !QApplication::closingDown() && !m_isShuttingDown();
+  return appNotShuttingDown() && !QApplication::closingDown() && !m_isShuttingDown();
 }
 
 // Cleans up existing no-items widgets from previous loads
@@ -139,7 +139,7 @@ auto NavigationManager::handleEmptyContent() -> void {
     resumeItemsPageRendering();
     if (m_refreshTitleCounts) m_refreshTitleCounts();
   }
-  if (isAlive() && interactionMgr()) {
+  if (appNotShuttingDown() && interactionMgr()) {
     interactionMgr()->setNavigationInProgress(false);
   }
 }
@@ -235,7 +235,7 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   // Clear navigation progress flag after viewport settles -
   // allows user input to be processed again after load completes
   QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-    if (isAlive() && interactionMgr()) {
+    if (appNotShuttingDown() && interactionMgr()) {
       interactionMgr()->setNavigationInProgress(false);
     }
   });

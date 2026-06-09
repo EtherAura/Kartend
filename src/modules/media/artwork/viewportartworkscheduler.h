@@ -1,6 +1,7 @@
 #ifndef VIEWPORTARTWORKSCHEDULER_H
 #define VIEWPORTARTWORKSCHEDULER_H
 
+#include <deque>
 #include <functional>
 #include <tuple>
 
@@ -74,8 +75,14 @@ public:
 private:
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
                                      QList<ArtworkInfo> &uncachedItems);
-  /// Applies processed artwork results to UI widgets on the GUI thread.
+  /// Stages incoming artwork results into m_pendingApply and kicks the drain.
   void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
+  /// Kartend-nhnlw: applies up to kMaxPerTick results from the front of
+  /// m_pendingApply on the GUI thread, then re-schedules itself (once) via a
+  /// queued call if the queue still has work. Replaces the old per-tick
+  /// re-post that copied a fresh QList<Result> tail (decoded QImages included)
+  /// every tick during a scroll storm.
+  void drainPendingApply();
   /// Periodically schedules a deferred persistent cache save once the cache has
   /// grown enough. Per-instance counters (were function-local statics shared
   /// across every ArtworkManager instance and never reset).
@@ -95,6 +102,15 @@ private:
   // never reset).
   int m_cacheUpdateCount = 0;
   qint64 m_lastCacheSaveSize = 0;
+
+  // Kartend-nhnlw: GUI-thread apply queue. Incoming dispatcher batches are
+  // appended here and drained kMaxPerTick-at-a-time from the front, so the
+  // unprocessed tail lives in this member deque instead of being re-copied
+  // into a fresh QList and re-posted every tick. m_applyDrainScheduled keeps
+  // at most one queued drain in flight so synchronous + queued kicks don't
+  // stack.
+  std::deque<ArtworkInfo::Result> m_pendingApply;
+  bool m_applyDrainScheduled = false;
 };
 
 #endif // VIEWPORTARTWORKSCHEDULER_H

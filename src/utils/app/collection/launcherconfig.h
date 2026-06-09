@@ -14,6 +14,7 @@
 // CollectionConfig + UIConstants. resolvePreset's implementation lives in
 // collection/launcherconfig.cpp (Kartend-7uia).
 
+#include <QFileInfo>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -56,7 +57,14 @@ namespace LauncherUtils {
 /// the entire path so "/usr/bin/retroarch", "retroarch.exe", and bare
 /// "retroarch" in $PATH all qualify.
 [[nodiscard]] inline bool usesLibretroCore(const QString &launcherPath) {
-  return launcherPath.contains(QStringLiteral("retroarch"), Qt::CaseInsensitive);
+  // Kartend-r7att: match the executable BASENAME, not the whole path, so a
+  // launcher merely living under a directory whose name contains "retroarch"
+  // (e.g. /opt/retroarch-tools/wrapper, .../retroarch_videos/player) isn't
+  // misclassified as libretro. Basename-contains (rather than startsWith) is
+  // deliberate — it still matches plain "retroarch", "retroarch.exe", and the
+  // flatpak "org.libretro.RetroArch" app-id form.
+  return QFileInfo(launcherPath).fileName().contains(QStringLiteral("retroarch"),
+                                                     Qt::CaseInsensitive);
 }
 
 /// Returns a LauncherConfig with fields resolved against the preset list.

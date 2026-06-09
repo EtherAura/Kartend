@@ -47,6 +47,18 @@ void AnimationManager::setupReferences(const AnimationManagerSetup &setup) {
 void AnimationManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
   if (!m_vScrollAnim) {
     m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
+    // Kartend-73ql5: mirror the animation's run state into the shared
+    // interaction state as the single source of truth, so ScrollManager's
+    // throttle can tell "a vertical animation is driving updateVirtualView per
+    // frame" from "an instant programmatic jump that still needs one throttled
+    // refresh". Tracking stateChanged (rather than each start/stop/finish call
+    // site) means no path can leave the flag stuck.
+    connect(m_vScrollAnim, &QPropertyAnimation::stateChanged, this,
+            [this](QAbstractAnimation::State newState, QAbstractAnimation::State) {
+              if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+                state->setVerticalAnimActive(newState == QAbstractAnimation::Running);
+              }
+            });
   }
 }
 

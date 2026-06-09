@@ -66,6 +66,16 @@ validateCollectionNameForSubstitution(const QString &collectionName);
 // Returns true if the sync succeeded or the platform has nothing to do.
 bool syncDirectory(const QString &dirPath);
 
+// Kartend-qubev: true when @p dirPath is a directory owned by the current
+// effective user with no group/other access bits set (POSIX mode & 0077 == 0).
+// This is the "safe to trust on a shared host" test used before reusing a
+// persistent cache directory under a world-writable temp root: a co-resident
+// attacker who pre-created the directory would own it (different uid) or leave
+// it group/other-accessible, and either fails the check. Returns false if the
+// path doesn't exist or isn't a directory. On non-POSIX platforms (where the
+// system temp dir is already per-user) it returns true.
+[[nodiscard]] bool isPrivateDirOfCurrentUser(const QString &dirPath);
+
 // Existence + kind + permission status for a stored path (Kartend-qc1c). The
 // loader uses these helpers to surface "the binary you configured isn't on
 // this host anymore" / "the artwork dir got unmounted" at startup instead of

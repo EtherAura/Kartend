@@ -41,11 +41,11 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex) -> boo
   bool hasSub = false;
   bool hasItems = false;
   if (!getHasSubAndItems(collectionIndex, hasSub, hasItems)) {
-    if (isAlive() && interactionMgr()) {
+    if (appNotShuttingDown() && interactionMgr()) {
       // Clear navigation progress flag early when validation fails -
       // prevents navigation from being blocked indefinitely
       QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
-        if (isAlive() && interactionMgr()) {
+        if (appNotShuttingDown() && interactionMgr()) {
           interactionMgr()->setNavigationInProgress(false);
         }
       });
@@ -97,7 +97,7 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
   QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this, [this]() {
-    if (isAlive() && interactionMgr()) {
+    if (appNotShuttingDown() && interactionMgr()) {
       interactionMgr()->setNavigationInProgress(false);
     }
   });
@@ -112,7 +112,7 @@ auto NavigationManager::scheduleSelectionRestore(int desiredIndex, int finalEnsu
 
 // Validates collection index for showCollectionItems operation
 auto NavigationManager::validateCollectionIndex(int collectionIndex) const -> bool {
-  if (!isAlive() || !m_collections) {
+  if (!appNotShuttingDown() || !m_collections) {
     return false;
   }
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {

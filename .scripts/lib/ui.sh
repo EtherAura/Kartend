@@ -106,6 +106,15 @@ err_msg() { progress_clearline; echo -e "${CYAN}[${RED}ERROR${CYAN}]${RESET} $*"
 # Failure summary printed at script exit
 on_exit() {
   local rc=$?
+  # Kartend-12vqq: flush soft/non-fatal notices collected via warn(). They
+  # accumulate in COLLECTED_WARNINGS (commented "print at the end") but nothing
+  # ever printed them, so every warn() was silently swallowed. Print on BOTH
+  # success and failure exits, before the failure diagnostics below. %b renders
+  # the embedded color codes + "\n" separators warn() inserts.
+  if [ -n "${COLLECTED_WARNINGS:-}" ]; then
+    progress_clearline
+    printf "%b\n" "$COLLECTED_WARNINGS" >&2
+  fi
   if [ "$rc" -ne 0 ]; then
     progress_clearline
     printf "\n" >&2

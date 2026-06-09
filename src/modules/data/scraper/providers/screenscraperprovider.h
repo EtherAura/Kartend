@@ -21,6 +21,7 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QUrl>
 
 struct CollectionConfig;
@@ -145,6 +146,15 @@ private:
   void runLookupAfterHash(const QString &query, const RomHasher::Result &hashes,
                           LookupCallback callback);
 
+  /// Issue the jeuInfos.php GET and route the response. Kartend-1rtrt:
+  /// on a transient failure (timeout / 5xx / 423) it schedules a bounded,
+  /// backoff-paced retry of the same idempotent URL via m_retryTimer
+  /// (honouring Retry-After) instead of surfacing the error on the first
+  /// attempt; permanent errors and successes fall straight through to
+  /// handleJeuInfosResponse. @p attempt is 0 on the initial call.
+  void fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
+                     LookupCallback callback, int attempt);
+
   /// HTTP-response tail of runLookupAfterHash. Lifted out of the
   /// deeply-nested HttpClient::get lambda so the lookup chain stops
   /// being a 200-line single function. Handles: transport-level
@@ -203,6 +213,11 @@ private:
   /// continuation when we're destroyed, and ~ScreenScraperProvider() waits for
   /// the task so it can't outlive us (Kartend-s1s98).
   QFutureWatcher<RomHasher::Result> m_hashWatcher;
+  /// Single-shot timer driving Kartend-1rtrt's transient-failure retry.
+  /// A value member so it's destroyed with the provider, severing any
+  /// pending retry (the lambda captures `this` raw) — no fire-after-free.
+  /// Lookups are sequential, so one timer suffices; each schedule resets it.
+  QTimer m_retryTimer;
   /// SS's jeuInfos.php returns the candidate AND the full detail in one
   /// response — there's no separate detail endpoint. We cache the full
   /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so

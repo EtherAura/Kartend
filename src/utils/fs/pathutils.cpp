@@ -12,6 +12,7 @@
 #if defined(Q_OS_UNIX)
 #include <cerrno>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -248,6 +249,35 @@ bool syncDirectory(const QString &dirPath) {
 #else
   Q_UNUSED(dirPath);
   return true;
+#endif
+}
+
+bool isPrivateDirOfCurrentUser(const QString &dirPath) {
+  if (dirPath.isEmpty()) {
+    return false;
+  }
+#if defined(Q_OS_UNIX)
+  const QByteArray native = QFile::encodeName(dirPath);
+  struct stat st {};
+  // lstat: never follow a final symlink — an attacker could point the cache
+  // base at a directory they control via a symlink that itself passes for
+  // "ours". A symlink fails the S_ISDIR test below regardless.
+  if (::lstat(native.constData(), &st) != 0) {
+    return false;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    return false;
+  }
+  if (st.st_uid != ::geteuid()) {
+    return false;
+  }
+  // No group or other permission bits — only the owner may traverse/write.
+  return (st.st_mode & (S_IRWXG | S_IRWXO)) == 0;
+#else
+  // Windows/other: the per-user temp dir isn't shared across local users, so
+  // the cross-user pre-population attack this guards doesn't apply.
+  const QFileInfo info(dirPath);
+  return info.exists() && info.isDir();
 #endif
 }
 

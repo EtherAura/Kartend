@@ -27,6 +27,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Kartend-5qmjp: full history so diff-cover can compare a PR's changed
+          # lines against the merge base (a shallow clone has no common ancestor).
+          fetch-depth: 0
 
       - name: Install dependencies
         uses: ./.github/actions/install-deps
@@ -101,6 +105,35 @@ jobs:
         run: |
           lcov --list build/coverage/coverage.filtered.info \
                --ignore-errors inconsistent | tee build/coverage/coverage-summary.txt
+
+      # Kartend-5qmjp: the floor check below is whole-repo only, so a PR adding a
+      # large untested file barely moves the percentage and slips through.
+      # diff-cover reports coverage of just the lines this PR changed, catching
+      # new untested code regardless of repo-wide %. Report-only for now
+      # (continue-on-error + `|| true` throughout, so it can never fail the job);
+      # a hard patch-coverage gate can be layered on later once the report has
+      # been observed to be reliable on real PRs.
+      - name: Patch coverage of changed lines (report-only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          python3 -m pip install --quiet --user diff-cover || pip install --quiet diff-cover || true
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}" 2>/dev/null || true
+          # diff-cover reads the lcov .info directly (recent versions); compare
+          # the working tree against the PR's base branch.
+          diff-cover build/coverage/coverage.filtered.info \
+            --compare-branch "$base" \
+            --markdown-report build/coverage/patch-coverage.md || true
+          if [ -f build/coverage/patch-coverage.md ]; then
+            {
+              echo "## Patch coverage (changed lines)"
+              echo ""
+              cat build/coverage/patch-coverage.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "patch-coverage report not produced (diff-cover unavailable or no diff)"
+          fi
 
       - name: Surface coverage in step summary + enforce floor
         env:

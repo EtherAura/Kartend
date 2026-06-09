@@ -1,6 +1,7 @@
 #ifndef MARQUEEPANEL_H
 #define MARQUEEPANEL_H
 
+#include "isettingspanel.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -18,7 +19,7 @@ struct SettingsModel;
 /// edits; persistence happens on Save like the rest of the per-collection
 /// deferred fields. The screen list is populated from
 /// QGuiApplication::screens() at panel-construction time.
-class MarqueePanel : public QWidget {
+class MarqueePanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(MarqueePanel)
 public:
@@ -26,15 +27,19 @@ public:
   ~MarqueePanel() override;
 
   void setModel(SettingsModel *model);
-  void refresh();
+  // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() was the
+  // private writeBack(); clear() is a no-op — this global panel is always
+  // backed by the single live GeneralSettings model.
+  void load() override;
+  void save() override;
+  void clear() override {}
 
 signals:
   void changed();
 
 private:
-  void writeBack();
   /// Rebuild the screen combo from QGuiApplication::screens(). Called
-  /// at construction and at refresh() time so unplugged screens
+  /// at construction and at load() time so unplugged screens
   /// disappear from the list and newly-plugged ones appear.
   void populateScreens();
 

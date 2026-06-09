@@ -20,6 +20,13 @@
 Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
 
 void CacheManager::initialize() {
+  // Kartend-7s2mv: parse the timestamps file exactly once. ApplicationManager
+  // kicks this off on a background QtConcurrent thread; this guard makes any
+  // additional caller (now or in future) a cheap no-op instead of re-reading
+  // and re-clearing the 50MB+ file, which previously ran twice at startup.
+  if (!m_initStarted.testAndSetOrdered(0, 1)) {
+    return;
+  }
   QMutexLocker locker(&m_mutex);
   fileTimestamps.clear();
   m_lastRevalidatedMs.clear();
