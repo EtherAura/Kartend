@@ -47,6 +47,14 @@ public:
   // Call before shutdown to ensure clean state for final save.
   void cancelPendingIo() override;
 
+  // Synchronous observability for the cancel contract (Kartend-yjklc): after
+  // cancelPendingIo(), isPendingIoCancelled() is true (scheduleSaveToDisk and
+  // the queued timer-start both early-return in this state) and the debounced
+  // save timer stays inactive. Lets tests assert the "cancelled timer must
+  // not fire" negative directly instead of racing the clock with a long wait.
+  [[nodiscard]] bool isPendingIoCancelled() const;
+  [[nodiscard]] bool isSaveTimerActive() const;
+
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath) override;
   // Memory-only lookup: never performs disk I/O or creates files.
   [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath) override;

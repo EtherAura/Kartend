@@ -139,6 +139,14 @@ void CacheManager::cancelPendingIo() {
   m_diskStorage->clearQueue();
 }
 
+bool CacheManager::isPendingIoCancelled() const {
+  return m_diskStorage->isCancelled();
+}
+
+bool CacheManager::isSaveTimerActive() const {
+  return m_debouncedSaveTimer && m_debouncedSaveTimer->isActive();
+}
+
 // Releases GUI resources and resets in-memory accounting totals
 void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);

@@ -76,6 +76,14 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
       m_timerContext,
       [this, effectiveDelay]() {
         m_savePostInFlight.storeRelease(0);
+        // Re-check cancellation: this post may have been queued BEFORE
+        // cancelPendingIo() stopped the timer, and starting it here would
+        // resurrect a cancelled timer (Kartend-yjklc). The fire was benign —
+        // saveToDisk() re-checks isCancelled() — but the timer must stay
+        // inactive after cancel so the contract is directly observable.
+        if (m_diskStorage->isCancelled()) {
+          return;
+        }
         if (m_debouncedSaveTimer) {
           m_debouncedSaveTimer->start(effectiveDelay);
         }

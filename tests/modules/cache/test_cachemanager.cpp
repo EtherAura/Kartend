@@ -376,11 +376,13 @@ void TestCacheManager::testDestruct_withPendingDebouncedSave_doesNotCrash() {
 }
 
 void TestCacheManager::testCancelPendingIo_isIdempotentAndStopsTimer() {
-  // Schedule a save and arm the timer.
+  // Schedule a save and arm the timer (drain the queued timer-start post so
+  // the pre-cancel schedule is fully applied before cancelling).
   QPixmap pixmap(300, 300);
   pixmap.fill(Qt::red);
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   QCoreApplication::processEvents();
+  QVERIFY(m_cacheManager->isSaveTimerActive());
 
   // First call: signals cancel + stops timer.
   m_cacheManager->cancelPendingIo();
@@ -389,18 +391,21 @@ void TestCacheManager::testCancelPendingIo_isIdempotentAndStopsTimer() {
   m_cacheManager->cancelPendingIo();
   m_cacheManager->cancelPendingIo();
 
-  // After cancellation, scheduleSaveToDisk early-returns at the m_cancelIo
-  // check, so re-scheduling cannot resurrect a fire-after-cancel path. The
-  // condition is a *negative* (timer must NOT fire), so the only thing this
-  // test can do is drive the event loop long enough that a non-cancelled
-  // timer WOULD have fired. Kartend-2s1m: bumped from 150ms (flaky under CI
-  // load) to 500ms (10× the scheduled delay, which is the safe margin).
-  m_cacheManager->scheduleSaveToDisk(50);
-  QTest::qWait(500);
+  // Kartend-yjklc: assert the guard state synchronously instead of racing the
+  // clock (the old form waited 500ms for a timer NOT to fire — a negative
+  // that waiting can only make less flaky, and the slowest single test).
+  // cancelPendingIo() latches the cancellation flag and stops the timer...
+  QVERIFY(m_cacheManager->isPendingIoCancelled());
+  QVERIFY(!m_cacheManager->isSaveTimerActive());
 
-  // The cancel + reschedule + wait sequence must not crash, hang, or
-  // resurrect a timer. Reaching here is the assertion.
-  QVERIFY(true);
+  // ...and re-scheduling cannot resurrect it: scheduleSaveToDisk()
+  // early-returns at the cancellation guard before posting a timer start, and
+  // the queued timer-start lambda re-checks cancellation for posts that were
+  // already in flight. Drive the event loop once to flush any such post.
+  m_cacheManager->scheduleSaveToDisk(50);
+  QCoreApplication::processEvents();
+  QVERIFY(m_cacheManager->isPendingIoCancelled());
+  QVERIFY(!m_cacheManager->isSaveTimerActive());
 }
 
 void TestCacheManager::testDestruct_withScheduledSavesUnderLoad_doesNotCrash() {
