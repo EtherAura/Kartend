@@ -40,6 +40,56 @@ namespace StringUtils {
   return QCoreApplication::translate("StringUtils", "%1 bytes").arg(QString::number(bytes));
 }
 
+/// Formats a past timestamp (Unix ms) as a coarse "N ago" string relative to
+/// @p nowMs — "just now", "5 minutes ago", "3 days ago", "2 years ago".
+/// @p pastMs <= 0 yields "never"; a future stamp (clock skew) clamps to "just
+/// now". @p nowMs is passed in rather than read from the clock so callers stay
+/// deterministic + testable; production passes
+/// QDateTime::currentMSecsSinceEpoch(). Singular/plural are spelled out
+/// explicitly (not %n) so the untranslated English source reads cleanly — "1
+/// minute ago", not "1 minute(s) ago" — while staying localizable.
+[[nodiscard]] inline auto relativePastTime(qint64 pastMs, qint64 nowMs) -> QString {
+  if (pastMs <= 0) {
+    return QCoreApplication::translate("StringUtils", "never");
+  }
+  qint64 deltaMs = nowMs - pastMs;
+  if (deltaMs < 0) {
+    deltaMs = 0; // future stamp / clock skew — clamp to "just now"
+  }
+  const qint64 sec = deltaMs / 1000;
+  if (sec < 60) {
+    return QCoreApplication::translate("StringUtils", "just now");
+  }
+  const qint64 minutes = sec / 60;
+  if (minutes < 60) {
+    return minutes == 1 ? QCoreApplication::translate("StringUtils", "1 minute ago")
+                        : QCoreApplication::translate("StringUtils", "%1 minutes ago").arg(minutes);
+  }
+  const qint64 hours = minutes / 60;
+  if (hours < 24) {
+    return hours == 1 ? QCoreApplication::translate("StringUtils", "1 hour ago")
+                      : QCoreApplication::translate("StringUtils", "%1 hours ago").arg(hours);
+  }
+  const qint64 days = hours / 24;
+  if (days < 7) {
+    return days == 1 ? QCoreApplication::translate("StringUtils", "1 day ago")
+                     : QCoreApplication::translate("StringUtils", "%1 days ago").arg(days);
+  }
+  if (days < 30) {
+    const qint64 weeks = days / 7;
+    return weeks == 1 ? QCoreApplication::translate("StringUtils", "1 week ago")
+                      : QCoreApplication::translate("StringUtils", "%1 weeks ago").arg(weeks);
+  }
+  if (days < 365) {
+    const qint64 months = days / 30;
+    return months == 1 ? QCoreApplication::translate("StringUtils", "1 month ago")
+                       : QCoreApplication::translate("StringUtils", "%1 months ago").arg(months);
+  }
+  const qint64 years = days / 365;
+  return years == 1 ? QCoreApplication::translate("StringUtils", "1 year ago")
+                    : QCoreApplication::translate("StringUtils", "%1 years ago").arg(years);
+}
+
 } // namespace StringUtils
 
 #endif // STRINGUTILS_H

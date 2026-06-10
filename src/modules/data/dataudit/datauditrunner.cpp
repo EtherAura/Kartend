@@ -1,11 +1,15 @@
 #include "datauditrunner.h"
 
+#include <algorithm>
+
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
 #include <QSet>
 #include <QtConcurrent/QtConcurrentMap>
 
+#include "datauditregion.h"
 #include "datcache.h"
 #include "errorutils.h"
 #include "filehashcache.h"
@@ -130,7 +134,8 @@ Catalogue buildCatalogue(DatCache::Store &cache, const QStringList &datPaths,
   return cat;
 }
 
-AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files) {
+AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files,
+                     const QStringList &regionPrefs, bool onePerGame) {
   AuditOutput out;
   QSet<int> satisfied;
   out.rows.reserve(files.size() + catalogue.size());
@@ -177,11 +182,8 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     out.rows.append(row);
   }
 
-  // Every catalogue entry no file satisfied (by content) is Missing.
-  for (int i = 0; i < catalogue.size(); ++i) {
-    if (satisfied.contains(i)) {
-      continue;
-    }
+  // Emit a Missing row for catalogue entry `i`.
+  const auto emitMissing = [&](int i) {
     const DatLookup::DatRecord &rec = catalogue.record(i);
     AuditRow row;
     row.status = Status::Missing;
@@ -192,6 +194,55 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     row.md5 = rec.md5;
     row.sha1 = rec.sha1;
     out.rows.append(row);
+  };
+
+  if (onePerGame) {
+    // 1G1R completeness: group catalogue entries by base game name. A game is
+    // covered when ANY of its region variants is present, so only a wholly
+    // absent game is Missing — reported once, for the most-preferred region the
+    // DAT offers (regionPrefs order; an untagged/unlisted variant ranks last).
+    QHash<QString, QList<int>> games;
+    QStringList order; // first-seen order, for deterministic output
+    for (int i = 0; i < catalogue.size(); ++i) {
+      QString key = Region::groupKey(catalogue.record(i).gameName);
+      if (key.isEmpty()) {
+        key = QChar(0x1F) + QString::number(i); // ungroupable: keep it distinct
+      }
+      auto it = games.find(key);
+      if (it == games.end()) {
+        order.append(key);
+        games.insert(key, {i});
+      } else {
+        it.value().append(i);
+      }
+    }
+    for (const QString &key : order) {
+      const QList<int> &idxs = games.value(key);
+      const bool anyPresent =
+          std::any_of(idxs.cbegin(), idxs.cend(), [&](int i) { return satisfied.contains(i); });
+      if (anyPresent) {
+        continue; // some variant's content is present — game covered under 1G1R
+      }
+      int wanted = idxs.first();
+      int bestRank =
+          Region::regionRank(Region::detectRegion(catalogue.record(wanted).gameName), regionPrefs);
+      for (int i : idxs) {
+        const int rank =
+            Region::regionRank(Region::detectRegion(catalogue.record(i).gameName), regionPrefs);
+        if (rank < bestRank) {
+          bestRank = rank;
+          wanted = i;
+        }
+      }
+      emitMissing(wanted);
+    }
+  } else {
+    // Every catalogue entry no file satisfied (by content) is Missing.
+    for (int i = 0; i < catalogue.size(); ++i) {
+      if (!satisfied.contains(i)) {
+        emitMissing(i);
+      }
+    }
   }
 
   out.summary = summarize(out.rows);
@@ -281,7 +332,7 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     fut.waitForFinished();
   }
 
-  AuditOutput classified = classify(catalogue, results);
+  AuditOutput classified = classify(catalogue, results, opts.regionPrefs, opts.onePerGame);
   out.rows = std::move(classified.rows);
   out.summary = classified.summary;
   // A cancelled run scanned only some files, so totalFiles reflects what was

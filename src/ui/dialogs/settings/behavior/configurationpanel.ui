@@ -104,6 +104,22 @@
        </layout>
       </item>
       <item>
+       <widget class="QLabel" name="screenscraperSystemHintLabel">
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="text"><string>The ScreenScraper system list will appear here after your first ScreenScraper scrape (configure credentials under Settings → Scrapers → ScreenScraper first, then right-click an item → Scrape with ScreenScraper.fr…). Until then only Auto-detect is available.</string></property>
+        <property name="styleSheet"><string>color: palette(placeholder-text);</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="configDatFilesGroupBox">
+     <property name="title"><string>DAT files</string></property>
+     <property name="toolTip"><string>DAT catalogues for this collection. Used both to identify scraped items (offline hash lookup) and to audit the collection against a known set.</string></property>
+     <layout class="QVBoxLayout" name="configDatFilesOuterLayout">
+      <property name="spacing"><number>6</number></property>
+      <item>
        <layout class="QFormLayout" name="configScrapersDatFormLayout">
         <property name="horizontalSpacing"><number>16</number></property>
         <property name="verticalSpacing"><number>6</number></property>
@@ -132,11 +148,12 @@
        </layout>
       </item>
       <item>
-       <widget class="QLabel" name="screenscraperSystemHintLabel">
-        <property name="wordWrap"><bool>true</bool></property>
-        <property name="text"><string>The ScreenScraper system list will appear here after your first ScreenScraper scrape (configure credentials under Settings → Scrapers → ScreenScraper first, then right-click an item → Scrape with ScreenScraper.fr…). Until then only Auto-detect is available.</string></property>
-        <property name="styleSheet"><string>color: palette(placeholder-text);</string></property>
-       </widget>
+       <layout class="QHBoxLayout" name="datAuditRow">
+        <item><widget class="QPushButton" name="openDatAuditButton"><property name="text"><string>Open DAT Audit…</string></property><property name="toolTip"><string>Open the DAT Audit window aimed at this collection — selects the linked audit profile, or seeds a new one from this collection's DAT files and media folder.</string></property></widget></item>
+        <item><widget class="QLabel" name="lastAuditedCaptionLabel"><property name="text"><string>Last audited:</string></property></widget></item>
+        <item><widget class="QLabel" name="lastAuditedValueLabel"><property name="styleSheet"><string>color: palette(placeholder-text);</string></property><property name="text"><string>never</string></property></widget></item>
+        <item><spacer name="datAuditRowSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+       </layout>
       </item>
      </layout>
     </widget>

@@ -24,6 +24,11 @@ private slots:
   void formatCountNumber_negativeThousands();
   void formatCountNumber_largeQint64();
   void formatCountNumber_respectsLocale();
+  void relativePastTime_neverAndJustNow();
+  void relativePastTime_minutesHoursDays();
+  void relativePastTime_weeksMonthsYears();
+  void relativePastTime_singularVsPlural();
+  void relativePastTime_futureClamps();
 
 private:
   QLocale m_originalLocale;
@@ -101,6 +106,52 @@ void TestStringUtils::formatCountNumber_respectsLocale() {
   QCOMPARE(StringUtils::formatCountNumber(1234567), QStringLiteral("1.234.567"));
   QLocale::setDefault(previous);
   QCOMPARE(StringUtils::formatCountNumber(1234567), QStringLiteral("1,234,567"));
+}
+
+namespace {
+constexpr qint64 kNow = 1700000000000LL; // fixed "now" (2023-11) so cases stay deterministic
+constexpr qint64 kSec = 1000LL;
+constexpr qint64 kMin = 60 * kSec;
+constexpr qint64 kHour = 60 * kMin;
+constexpr qint64 kDay = 24 * kHour;
+} // namespace
+
+void TestStringUtils::relativePastTime_neverAndJustNow() {
+  // 0 / negative stamp = "never"; anything under a minute = "just now".
+  QCOMPARE(StringUtils::relativePastTime(0, kNow), QStringLiteral("never"));
+  QCOMPARE(StringUtils::relativePastTime(-5, kNow), QStringLiteral("never"));
+  QCOMPARE(StringUtils::relativePastTime(kNow, kNow), QStringLiteral("just now"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 59 * kSec, kNow), QStringLiteral("just now"));
+}
+
+void TestStringUtils::relativePastTime_minutesHoursDays() {
+  QCOMPARE(StringUtils::relativePastTime(kNow - 5 * kMin, kNow), QStringLiteral("5 minutes ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 59 * kMin, kNow), QStringLiteral("59 minutes ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 3 * kHour, kNow), QStringLiteral("3 hours ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 23 * kHour, kNow), QStringLiteral("23 hours ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 6 * kDay, kNow), QStringLiteral("6 days ago"));
+}
+
+void TestStringUtils::relativePastTime_weeksMonthsYears() {
+  QCOMPARE(StringUtils::relativePastTime(kNow - 14 * kDay, kNow), QStringLiteral("2 weeks ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 60 * kDay, kNow), QStringLiteral("2 months ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 800 * kDay, kNow), QStringLiteral("2 years ago"));
+}
+
+void TestStringUtils::relativePastTime_singularVsPlural() {
+  // Exact boundaries land on the singular form (not "1 minute(s) ago").
+  QCOMPARE(StringUtils::relativePastTime(kNow - kMin, kNow), QStringLiteral("1 minute ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - kHour, kNow), QStringLiteral("1 hour ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - kDay, kNow), QStringLiteral("1 day ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 7 * kDay, kNow), QStringLiteral("1 week ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 30 * kDay, kNow), QStringLiteral("1 month ago"));
+  QCOMPARE(StringUtils::relativePastTime(kNow - 365 * kDay, kNow), QStringLiteral("1 year ago"));
+}
+
+void TestStringUtils::relativePastTime_futureClamps() {
+  // A stamp ahead of "now" (clock skew) clamps to "just now" rather than going
+  // negative.
+  QCOMPARE(StringUtils::relativePastTime(kNow + 5 * kMin, kNow), QStringLiteral("just now"));
 }
 
 QTEST_APPLESS_MAIN(TestStringUtils)

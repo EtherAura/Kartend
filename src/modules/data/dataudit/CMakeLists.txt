@@ -7,6 +7,8 @@ target_sources(kartend_data PRIVATE
   datauditfix.h
   datauditmodel.cpp
   datauditmodel.h
+  datauditregion.cpp
+  datauditregion.h
   datauditrunner.cpp
   datauditrunner.h
   dataudittypes.cpp

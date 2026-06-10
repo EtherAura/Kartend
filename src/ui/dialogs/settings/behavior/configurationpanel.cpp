@@ -1,15 +1,19 @@
 #include "configurationpanel.h"
 
+#include "collection/typehelpers.h"
 #include "extensionutils.h"
 #include "metadataproviderregistry.h"
+#include "pathutils.h"
 #include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
+#include "stringutils.h"
 #include "ui_configurationpanel.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
@@ -109,6 +113,31 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
     }
     std::sort(rows.begin(), rows.end(), std::greater<int>());
     for (int row : rows) delete ui->datFilesListWidget->takeItem(row);
+  });
+  // Launch the DAT Audit window aimed at the edited collection (Kartend-4mqkof).
+  // m_model->openDatAudit is wired by the host (null in tests / standalone). We
+  // hand over the working collection with this panel's CURRENT (possibly
+  // unsaved) media-dir + DAT-list edits overlaid, so the audit reflects what is
+  // on screen rather than the last-Applied state (Kartend-6wn0p).
+  connect(ui->openDatAuditButton, &QPushButton::clicked, this, [this]() {
+    if (!m_model || !m_model->openDatAudit || !m_model->workingCollections ||
+        !m_model->currentIndex) {
+      return;
+    }
+    const int idx = *m_model->currentIndex;
+    if (idx < 0 || idx >= m_model->workingCollections->size()) {
+      return;
+    }
+    CollectionConfig collection = (*m_model->workingCollections)[idx];
+    collection.mediaDirectory = ui->mediaDirLineEdit->text();
+    collection.scraperOverrides.datFilePaths.clear();
+    for (int i = 0; i < ui->datFilesListWidget->count(); ++i) {
+      const QString path = ui->datFilesListWidget->item(i)->text();
+      if (!path.isEmpty()) {
+        collection.scraperOverrides.datFilePaths.append(path);
+      }
+    }
+    m_model->openDatAudit(collection);
   });
 }
 
@@ -219,6 +248,20 @@ void ConfigurationPanel::load() {
                                 config.scraperOverrides.screenscraperHashArchive);
   ui->datFilesListWidget->clear();
   ui->datFilesListWidget->addItems(config.scraperOverrides.datFilePaths);
+
+  // Last-audited hint: ask the host for the linked profile's last-scan time
+  // (null callback in tests → 0 → "never"). The collection UUID is computed the
+  // same way the audit profile editor's "Linked collection" picker does so the
+  // lookup matches.
+  qint64 lastAuditMs = 0;
+  if (m_model->lastDatAuditMs) {
+    const QString expandedMediaDir =
+        PathUtils::validateAndExpandPath(config.mediaDirectory, config.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(config.name, expandedMediaDir);
+    lastAuditMs = m_model->lastDatAuditMs(uuid);
+  }
+  ui->lastAuditedValueLabel->setText(
+      StringUtils::relativePastTime(lastAuditMs, QDateTime::currentMSecsSinceEpoch()));
 }
 
 void ConfigurationPanel::autodetectScreenscraperSystem() {
@@ -261,6 +304,7 @@ void ConfigurationPanel::clear() {
   }
   ui->screenscraperHashArchiveCheckBox->setChecked(true);
   ui->datFilesListWidget->clear();
+  ui->lastAuditedValueLabel->setText(tr("never"));
 }
 
 void ConfigurationPanel::save() {

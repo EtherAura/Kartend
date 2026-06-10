@@ -43,6 +43,20 @@ public:
   virtual void openScraperDialog(int preCollectionIndex = -1,
                                  const QString &preItemPath = QString()) = 0;
 
+  /// Open the DAT Audit window aimed at @p collection: selects the linked audit
+  /// profile, or seeds an unsaved one from it. The caller passes the collection
+  /// by value so the collection-settings panel can hand over its *working* copy
+  /// (unsaved media-dir / DAT-list edits included), not a saved-list lookup
+  /// (Kartend-4mqkof / Kartend-6wn0p). Goes through IMainWindow so the ui/ panel
+  /// need not #include the concrete MainWindow.
+  virtual void openDatAuditForCollection(const CollectionConfig &collection) = 0;
+
+  /// Unix-ms timestamp of the most recent completed audit for the profile
+  /// linked to @p collectionUuid, or 0 when none is linked / it never ran. Lets
+  /// the collection-settings panel show a "last audited N ago" hint without DB
+  /// access of its own (Kartend-4mqkof).
+  [[nodiscard]] virtual qint64 lastDatAuditMsForCollection(const QString &collectionUuid) = 0;
+
   /// Mutable / const access to the main window's live GeneralSettings.
   /// SettingsDialog panels mirror their working copy onto the main window
   /// through these accessors; ShortcutsDialog reads them to render the

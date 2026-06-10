@@ -100,6 +100,19 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   m_model.collectionSaved = &m_collectionSaved;
   m_model.currentIndex = &currentCollectionIndex;
 
+  // Bridge the DAT-audit hooks to MainWindow (our IMainWindow parent) so the
+  // configuration panel can launch an audit for the edited collection and show
+  // its last-audited time. A null parent (tests / standalone construction)
+  // leaves the hooks unset; the panel guards on them (Kartend-4mqkof).
+  if (auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent())) {
+    m_model.openDatAudit = [mainWindow](const CollectionConfig &collection) {
+      mainWindow->openDatAuditForCollection(collection);
+    };
+    m_model.lastDatAuditMs = [mainWindow](const QString &collectionUuid) {
+      return mainWindow->lastDatAuditMsForCollection(collectionUuid);
+    };
+  }
+
   // Multi-step collection-removal pipeline. Constructed before the
   // tree's Remove button is wired up so removeCollection() can dispatch.
   m_collectionRemover = new CollectionRemover(&m_model, this, this);

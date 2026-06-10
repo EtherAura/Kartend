@@ -3,7 +3,9 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include <functional>
 #include <QList>
+#include <QString>
 
 /// Aggregates the per-dialog data state SettingsDialog edits during its
 /// lifetime. Step 1 of the SettingsDialog "thin shell" goal — currently a
@@ -27,6 +29,15 @@ struct SettingsModel {
   /// Index of the row in workingCollections the user is currently editing.
   /// Negative when no row is selected — panels guard their accessors.
   int *currentIndex = nullptr;
+
+  /// Optional bridges to the DAT-audit feature, wired by SettingsDialog from its
+  /// IMainWindow parent (null in tests / when there is no main window). The
+  /// configuration panel uses them to launch an audit for the current
+  /// collection and to show a "last audited N ago" hint (Kartend-4mqkof). The
+  /// launch takes a CollectionConfig (not an index) so the panel can pass its
+  /// working copy with unsaved edits applied (Kartend-6wn0p).
+  std::function<void(const CollectionConfig &collection)> openDatAudit;
+  std::function<qint64(const QString &collectionUuid)> lastDatAuditMs;
 };
 
 #endif // SETTINGSMODEL_H

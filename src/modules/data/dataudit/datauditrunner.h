@@ -26,6 +26,13 @@ struct AuditOptions {
   QStringList scanRoots;   ///< Folders walked recursively.
   QStringList ignoreGlobs; ///< Wildcards matched on basename; matches are skipped.
   QStringList datPaths;    ///< The DAT files, so a DAT sitting inside a scan root isn't audited.
+  /// 1G1R completeness collapse (No-Intro region variants). When onePerGame is
+  /// true the catalogue entries are grouped by base game name and only one
+  /// entry per game counts toward completeness: the highest-priority region
+  /// present on disk, else the highest-priority region the DAT offers.
+  /// regionPrefs is that priority order (e.g. {"USA", "Europe", "Japan"}).
+  QStringList regionPrefs;
+  bool onePerGame = false;
 };
 
 /// Progress tick delivered on the calling thread during a run.
@@ -40,6 +47,11 @@ struct AuditOutput {
   QList<AuditRow> rows;
   AuditSummary summary;
   bool cancelled = false;
+  /// DAT files that failed to load/ingest during buildCatalogue (missing,
+  /// malformed, or unparseable). The audit still runs against whatever loaded,
+  /// so these must be surfaced or the result silently reflects a partial
+  /// catalogue (Kartend-2zcrz).
+  QStringList failedDats;
 };
 
 /// One scanned file paired with its hashes — the pure input to classify().
@@ -67,7 +79,8 @@ using CancelToken = std::shared_ptr<std::atomic<bool>>;
 /// (Have / WrongName / WrongHash / Duplicate / Unknown / Corrupt) plus one
 /// Missing row per catalogue entry no file satisfied, and fills
 /// totalCatalogue / totalFiles on the summary.
-[[nodiscard]] AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files);
+[[nodiscard]] AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files,
+                                   const QStringList &regionPrefs = {}, bool onePerGame = false);
 
 /// Full scan: enumerate `opts.scanRoots`, hash each file (through FileHashCache
 /// when `cacheDb` is non-null, else RomHasher directly; the hashing is fanned

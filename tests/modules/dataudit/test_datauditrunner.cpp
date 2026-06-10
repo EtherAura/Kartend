@@ -11,6 +11,7 @@
 #include <QTest>
 
 #include "datauditcatalogue.h"
+#include "datauditregion.h"
 #include "datauditrunner.h"
 #include "dataudittypes.h"
 #include "datcache.h"
@@ -116,6 +117,15 @@ private slots:
   void classifyCorrupt();
   void classifyMissing();
   void classifySummaryCounts();
+
+  // 1G1R / region collapse (Kartend-bmj1ko)
+  void region_baseNameRegionAndRank();
+  void classify1G1R_collapsesAbsentGameToPreferredRegion();
+  void classify1G1R_gamePresentInAnyRegionIsNotMissing();
+
+  // disc-aware 1G1R (Kartend-x9mkif.2)
+  void region_discQualifierAndGroupKey();
+  void classify1G1R_keepsMultiDiscSeparate();
 
   // run()
   void runEndToEndOverTempFiles();
@@ -388,6 +398,121 @@ void TestDatAuditRunner::buildCatalogueIngestsDat() {
       DatAudit::buildCatalogue(cache, {dir.filePath(QStringLiteral("nope.dat"))}, &failed2);
   QCOMPARE(empty.size(), 0);
   QCOMPARE(failed2.size(), 1);
+}
+
+void TestDatAuditRunner::region_baseNameRegionAndRank() {
+  using namespace DatAudit::Region;
+  QCOMPARE(baseGameName(QStringLiteral("Sonic the Hedgehog (USA) (Rev 1)")),
+           QStringLiteral("Sonic the Hedgehog"));
+  QCOMPARE(baseGameName(QStringLiteral("Plain Title")), QStringLiteral("Plain Title"));
+  QCOMPARE(baseGameName(QStringLiteral("Tetris [b1]")), QStringLiteral("Tetris"));
+
+  QCOMPARE(detectRegion(QStringLiteral("Zelda (Europe)")), QStringLiteral("Europe"));
+  QCOMPARE(detectRegion(QStringLiteral("Zelda (J)")), QStringLiteral("Japan"));
+  QCOMPARE(detectRegion(QStringLiteral("Zelda (Japan, USA)")), QStringLiteral("Japan"));
+  QCOMPARE(detectRegion(QStringLiteral("Zelda (En,Fr,De)")), QString()); // languages, not regions
+  QCOMPARE(detectRegion(QStringLiteral("Zelda")), QString());
+
+  const QStringList prefs{QStringLiteral("USA"), QStringLiteral("Europe")};
+  QCOMPARE(regionRank(QStringLiteral("USA"), prefs), 0);
+  QCOMPARE(regionRank(QStringLiteral("europe"), prefs), 1); // case-insensitive
+  QCOMPARE(regionRank(QStringLiteral("Japan"), prefs), 2);  // tagged but unlisted
+  QCOMPARE(regionRank(QString(), prefs), 3);                // untagged ranks last
+}
+
+void TestDatAuditRunner::classify1G1R_collapsesAbsentGameToPreferredRegion() {
+  // One game in three regions + a second game; nothing on disk.
+  Catalogue c;
+  c.addRecord(makeRecord(QStringLiteral("Zelda (Japan)"), QStringLiteral("Zelda (Japan).bin"),
+                         QStringLiteral("11111111"), QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("Zelda (USA)"), QStringLiteral("Zelda (USA).bin"),
+                         QStringLiteral("22222222"), QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("Zelda (Europe)"), QStringLiteral("Zelda (Europe).bin"),
+                         QStringLiteral("33333333"), QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("Mario (USA)"), QStringLiteral("Mario (USA).bin"),
+                         QStringLiteral("44444444"), QString(), QString(), 4));
+
+  const QStringList prefs{QStringLiteral("USA"), QStringLiteral("Europe")};
+  const AuditOutput out = DatAudit::classify(c, {}, prefs, /*onePerGame=*/true);
+
+  // One Missing per game (Zelda + Mario), not one per region variant.
+  QCOMPARE(out.summary.missing, 2);
+  int zeldaMissing = 0;
+  QString zeldaName;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing && r.gameName.startsWith(QStringLiteral("Zelda"))) {
+      ++zeldaMissing;
+      zeldaName = r.gameName;
+    }
+  }
+  QCOMPARE(zeldaMissing, 1);
+  QCOMPARE(zeldaName, QStringLiteral("Zelda (USA)")); // most-preferred region in the DAT
+}
+
+void TestDatAuditRunner::classify1G1R_gamePresentInAnyRegionIsNotMissing() {
+  Catalogue c;
+  c.addRecord(makeRecord(QStringLiteral("Zelda (USA)"), QStringLiteral("Zelda (USA).bin"),
+                         QStringLiteral("22222222"), QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("Zelda (Japan)"), QStringLiteral("Zelda (Japan).bin"),
+                         QStringLiteral("11111111"), QString(), QString(), 4));
+
+  // The Japan variant is on disk (crc match) while the preferred USA is absent.
+  const QList<ScannedFile> files{makeFile(QStringLiteral("/roms/Zelda (Japan).bin"),
+                                          QStringLiteral("11111111"), QString(), QString(), 4)};
+  const QStringList prefs{QStringLiteral("USA")};
+  const AuditOutput out = DatAudit::classify(c, files, prefs, /*onePerGame=*/true);
+
+  // Covered by the present Japan variant — not Missing despite USA being absent.
+  QCOMPARE(out.summary.missing, 0);
+  QCOMPARE(out.summary.have, 1);
+}
+
+void TestDatAuditRunner::region_discQualifierAndGroupKey() {
+  using namespace DatAudit::Region;
+  QCOMPARE(discQualifier(QStringLiteral("FF7 (USA) (Disc 1)")), QStringLiteral("disc 1"));
+  QCOMPARE(discQualifier(QStringLiteral("FF7 (Europe) (Disk 2)")), QStringLiteral("disc 2"));
+  QCOMPARE(discQualifier(QStringLiteral("Sonic (USA)")), QString());
+
+  // Region variants of one disc share a key; different discs do not.
+  QCOMPARE(groupKey(QStringLiteral("FF7 (USA) (Disc 1)")),
+           groupKey(QStringLiteral("FF7 (Europe) (Disc 1)")));
+  QVERIFY(groupKey(QStringLiteral("FF7 (USA) (Disc 1)")) !=
+          groupKey(QStringLiteral("FF7 (USA) (Disc 2)")));
+  // A non-disc title still groups by base name across regions.
+  QCOMPARE(groupKey(QStringLiteral("Sonic (USA)")), groupKey(QStringLiteral("Sonic (Europe)")));
+}
+
+void TestDatAuditRunner::classify1G1R_keepsMultiDiscSeparate() {
+  // A two-disc game, each disc in USA + Europe.
+  Catalogue c;
+  c.addRecord(makeRecord(QStringLiteral("FF7 (USA) (Disc 1)"),
+                         QStringLiteral("FF7 (USA) (Disc 1).bin"), QStringLiteral("d1usa000"),
+                         QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("FF7 (Europe) (Disc 1)"),
+                         QStringLiteral("FF7 (Europe) (Disc 1).bin"), QStringLiteral("d1eur000"),
+                         QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("FF7 (USA) (Disc 2)"),
+                         QStringLiteral("FF7 (USA) (Disc 2).bin"), QStringLiteral("d2usa000"),
+                         QString(), QString(), 4));
+  c.addRecord(makeRecord(QStringLiteral("FF7 (Europe) (Disc 2)"),
+                         QStringLiteral("FF7 (Europe) (Disc 2).bin"), QStringLiteral("d2eur000"),
+                         QString(), QString(), 4));
+
+  // Only Disc 1 (USA) is on disk; Disc 2 is entirely absent.
+  const QList<ScannedFile> files{makeFile(QStringLiteral("/roms/FF7 (USA) (Disc 1).bin"),
+                                          QStringLiteral("d1usa000"), QString(), QString(), 4)};
+  const QStringList prefs{QStringLiteral("USA")};
+  const AuditOutput out = DatAudit::classify(c, files, prefs, /*onePerGame=*/true);
+
+  // Disc 1 is covered; Disc 2 is still Missing (one row, preferred USA). The
+  // discs must not collapse into a single "game".
+  QCOMPARE(out.summary.have, 1);
+  QCOMPARE(out.summary.missing, 1);
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing) {
+      QCOMPARE(r.gameName, QStringLiteral("FF7 (USA) (Disc 2)"));
+    }
+  }
 }
 
 QTEST_MAIN(TestDatAuditRunner)

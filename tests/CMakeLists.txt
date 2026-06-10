@@ -231,6 +231,25 @@ add_executable(test_pathstatusglyph
 target_link_libraries(test_pathstatusglyph PRIVATE kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME PathStatusGlyph COMMAND test_pathstatusglyph)
 
+# Kartend-x9mkif.3: DatAuditProfileDialog "Linked collection" picker value
+# semantics (preselect / none-default / orphan-preserve / pick / clear).
+# Constructed headlessly and queried via profile(); never shown or exec()'d.
+add_executable(test_datauditprofiledialog
+  ui/dialogs/test_datauditprofiledialog.cpp
+)
+target_link_libraries(test_datauditprofiledialog PRIVATE kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME DatAuditProfileDialog COMMAND test_datauditprofiledialog)
+
+# Kartend-4mqkof: ConfigurationPanel DAT-audit wiring — the "last audited" label
+# computes the canonical collection UUID + renders relative time, and the "Open
+# DAT Audit…" button routes through the SettingsModel hook with the current
+# index. Driven headlessly with stub hooks; the panel is never shown.
+add_executable(test_configurationpanel
+  ui/dialogs/test_configurationpanel.cpp
+)
+target_link_libraries(test_configurationpanel PRIVATE kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME ConfigurationPanel COMMAND test_configurationpanel)
+
 # GridUtils tests
 add_executable(test_gridutils utils/view/test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)

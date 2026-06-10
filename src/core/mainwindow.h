@@ -175,9 +175,20 @@ public:
   void openScraperDialog(int preCollectionIndex = -1,
                          const QString &preItemPath = QString()) override;
 
-  /// Open the standalone DAT Audit window (File → DAT Audit…). Forwards to
-  /// the DatAuditController, which owns the cached dialog.
+  /// Open the standalone DAT Audit window (File → DAT Audit…, generic). Forwards
+  /// to the DatAuditController, which owns the cached dialog.
   void openDatAuditDialog();
+
+  /// Open the DAT Audit window aimed at @p collection (Kartend-4mqkof): selects
+  /// the linked profile or seeds an unsaved one. Takes the collection by value
+  /// so the settings panel's working copy (unsaved edits) drives it
+  /// (Kartend-6wn0p).
+  void openDatAuditForCollection(const CollectionConfig &collection) override;
+
+  /// Unix-ms of the most recent completed audit for the profile linked to
+  /// @p collectionUuid, or 0 when none / never (Kartend-4mqkof). Reads the
+  /// dat_audit_profile store on a short-lived connection.
+  [[nodiscard]] qint64 lastDatAuditMsForCollection(const QString &collectionUuid) override;
 
   /// Open the settings dialog with the standard MainWindow-rooted context
   /// (collections list, current index, manager handles, dialog factory).

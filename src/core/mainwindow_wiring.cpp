@@ -412,6 +412,7 @@ void MainWindow::connectDatabaseManager() {
   if (m_datAuditController) {
     DatAuditControllerContext dc;
     dc.getParentWindow = [this]() -> QWidget * { return this; };
+    dc.getCollections = [this]() { return &m_collections; };
     m_datAuditController->setContext(dc);
   }
 }

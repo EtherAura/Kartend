@@ -3,4 +3,6 @@ target_sources(kartend_ui PRIVATE
   datauditdialog.h
   datauditfixdialog.cpp
   datauditfixdialog.h
+  datauditprofiledialog.cpp
+  datauditprofiledialog.h
 )

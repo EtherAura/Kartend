@@ -26,6 +26,7 @@
 #include "datauditfixdialog.h"
 #include "datauditmodel.h"
 #include "datauditprofile.h"
+#include "datauditprofiledialog.h"
 #include "datcache.h"
 
 using DatAudit::AuditOutput;
@@ -112,10 +113,16 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   auto *profileRow = new QHBoxLayout();
   profileRow->addWidget(new QLabel(tr("Profile:"), this));
   m_profileCombo = new QComboBox(this);
-  m_saveProfileButton = new QPushButton(tr("Save as…"), this);
+  m_newProfileButton = new QPushButton(tr("New…"), this);
+  m_editProfileButton = new QPushButton(tr("Edit…"), this);
+  m_duplicateProfileButton = new QPushButton(tr("Duplicate"), this);
+  m_renameProfileButton = new QPushButton(tr("Rename"), this);
   m_deleteProfileButton = new QPushButton(tr("Delete"), this);
   profileRow->addWidget(m_profileCombo, 1);
-  profileRow->addWidget(m_saveProfileButton);
+  profileRow->addWidget(m_newProfileButton);
+  profileRow->addWidget(m_editProfileButton);
+  profileRow->addWidget(m_duplicateProfileButton);
+  profileRow->addWidget(m_renameProfileButton);
   profileRow->addWidget(m_deleteProfileButton);
   root->addLayout(profileRow);
 
@@ -190,7 +197,11 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
           &DatAuditDialog::onAuditFinished);
   connect(m_profileCombo, &QComboBox::currentIndexChanged, this,
           &DatAuditDialog::onProfileSelected);
-  connect(m_saveProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onSaveProfile);
+  connect(m_newProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onNewProfile);
+  connect(m_editProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onEditProfile);
+  connect(m_duplicateProfileButton, &QPushButton::clicked, this,
+          &DatAuditDialog::onDuplicateProfile);
+  connect(m_renameProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onRenameProfile);
   connect(m_deleteProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onDeleteProfile);
 
   setBusy(false);
@@ -217,51 +228,140 @@ void DatAuditDialog::onProfileSelected(int index) {
   }
   const qint64 id = m_profileCombo->itemData(index).toLongLong();
   if (id < 0) {
-    return; // the "(unsaved)" entry — keep the current ad-hoc selections
+    m_currentProfile = DatAuditProfile::Profile{}; // "(unsaved)" — keep the ad-hoc lists
+    return;
   }
   withProfileDb([this, id](QSqlDatabase &db) {
     auto loaded = DatAuditProfile::load(db, id);
     if (loaded.isOk() && loaded.value().has_value()) {
-      const DatAuditProfile::Profile &p = *loaded.value();
-      m_datList->clear();
-      for (const DatAuditProfile::DatRef &d : p.dats) {
-        m_datList->addItem(d.path);
-      }
-      m_rootList->clear();
-      for (const QString &r : p.scanRoots) {
-        m_rootList->addItem(r);
-      }
+      m_currentProfile = *loaded.value();
+      syncUiFromProfile();
     }
   });
 }
 
-void DatAuditDialog::onSaveProfile() {
-  bool ok = false;
-  const QString name = QInputDialog::getText(this, tr("Save profile"), tr("Profile name:"),
-                                             QLineEdit::Normal, QString(), &ok);
-  if (!ok || name.trimmed().isEmpty()) {
-    return;
+void DatAuditDialog::syncUiFromProfile() {
+  const QSignalBlocker bd(m_datList);
+  const QSignalBlocker br(m_rootList);
+  m_datList->clear();
+  for (const DatAuditProfile::DatRef &d : m_currentProfile.dats) {
+    m_datList->addItem(d.path);
   }
-  DatAuditProfile::Profile p;
-  p.name = name.trimmed();
-  p.scanRoots = scanRoots();
+  m_rootList->clear();
+  m_rootList->addItems(m_currentProfile.scanRoots);
+}
+
+DatAuditProfile::Profile DatAuditDialog::uiProfile() const {
+  // m_currentProfile holds the settings (region/1G1R/merge/fix/ignore/name);
+  // the DAT + folder lists are the live edit surface for paths, so read them
+  // back here so a run/save/edit always reflects what's on screen.
+  DatAuditProfile::Profile p = m_currentProfile;
+  p.dats.clear();
   for (const QString &d : datPaths()) {
     DatAuditProfile::DatRef ref;
     ref.path = d;
     p.dats.append(ref);
   }
-  withProfileDb([this, &p](QSqlDatabase &db) {
-    auto res = DatAuditProfile::insert(db, p);
-    if (res.isError()) {
-      QMessageBox::warning(this, tr("DAT Audit"),
-                           tr("Could not save profile: %1").arg(res.error().message));
+  p.scanRoots = scanRoots();
+  return p;
+}
+
+bool DatAuditDialog::persistProfile(DatAuditProfile::Profile &p) {
+  bool ok = false;
+  withProfileDb([this, &p, &ok](QSqlDatabase &db) {
+    if (p.id < 0) {
+      auto res = DatAuditProfile::insert(db, p);
+      if (res.isOk()) {
+        p.id = res.value();
+        ok = true;
+      } else {
+        QMessageBox::warning(this, tr("DAT Audit"),
+                             tr("Could not save profile: %1").arg(res.error().message));
+      }
+    } else {
+      auto res = DatAuditProfile::update(db, p);
+      if (res.isOk()) {
+        ok = true;
+      } else {
+        QMessageBox::warning(this, tr("DAT Audit"),
+                             tr("Could not update profile: %1").arg(res.error().message));
+      }
     }
   });
-  loadProfiles();
-  const int idx = m_profileCombo->findText(p.name);
-  if (idx >= 0) {
-    m_profileCombo->setCurrentIndex(idx);
+  return ok;
+}
+
+void DatAuditDialog::selectProfileById(qint64 id) {
+  for (int i = 0; i < m_profileCombo->count(); ++i) {
+    if (m_profileCombo->itemData(i).toLongLong() == id) {
+      m_profileCombo->setCurrentIndex(i);
+      return;
+    }
   }
+}
+
+void DatAuditDialog::onNewProfile() {
+  DatAuditProfileDialog dlg(DatAuditProfile::Profile{}, m_collections, this);
+  if (dlg.exec() != QDialog::Accepted) {
+    return;
+  }
+  DatAuditProfile::Profile p = dlg.profile();
+  if (!persistProfile(p)) {
+    return;
+  }
+  m_currentProfile = p;
+  loadProfiles();
+  selectProfileById(p.id);
+  syncUiFromProfile();
+}
+
+void DatAuditDialog::onEditProfile() {
+  DatAuditProfileDialog dlg(uiProfile(), m_collections, this);
+  if (dlg.exec() != QDialog::Accepted) {
+    return;
+  }
+  m_currentProfile = dlg.profile();
+  syncUiFromProfile();
+  if (m_currentProfile.id >= 0) {
+    persistProfile(m_currentProfile);
+    loadProfiles();
+    selectProfileById(m_currentProfile.id);
+  }
+}
+
+void DatAuditDialog::onDuplicateProfile() {
+  DatAuditProfile::Profile seed = uiProfile();
+  seed.id = -1;
+  seed.name = seed.name.isEmpty() ? tr("New profile") : tr("%1 (copy)").arg(seed.name);
+  DatAuditProfileDialog dlg(seed, m_collections, this);
+  if (dlg.exec() != QDialog::Accepted) {
+    return;
+  }
+  DatAuditProfile::Profile p = dlg.profile();
+  if (!persistProfile(p)) {
+    return;
+  }
+  m_currentProfile = p;
+  loadProfiles();
+  selectProfileById(p.id);
+  syncUiFromProfile();
+}
+
+void DatAuditDialog::onRenameProfile() {
+  if (m_currentProfile.id < 0) {
+    QMessageBox::information(this, tr("DAT Audit"), tr("Select a saved profile to rename."));
+    return;
+  }
+  bool ok = false;
+  const QString name = QInputDialog::getText(this, tr("Rename profile"), tr("New name:"),
+                                             QLineEdit::Normal, m_currentProfile.name, &ok);
+  if (!ok || name.trimmed().isEmpty()) {
+    return;
+  }
+  m_currentProfile.name = name.trimmed();
+  persistProfile(m_currentProfile);
+  loadProfiles();
+  selectProfileById(m_currentProfile.id);
 }
 
 void DatAuditDialog::onDeleteProfile() {
@@ -269,10 +369,16 @@ void DatAuditDialog::onDeleteProfile() {
   if (id < 0) {
     return;
   }
+  if (QMessageBox::question(this, tr("Delete profile"),
+                            tr("Delete profile \"%1\"?").arg(m_profileCombo->currentText())) !=
+      QMessageBox::Yes) {
+    return;
+  }
   withProfileDb([id](QSqlDatabase &db) {
     auto res = DatAuditProfile::remove(db, id);
     Q_UNUSED(res);
   });
+  m_currentProfile = DatAuditProfile::Profile{};
   loadProfiles();
 }
 
@@ -285,6 +391,59 @@ DatAuditDialog::~DatAuditDialog() {
   if (m_watcher.isRunning()) {
     m_watcher.waitForFinished();
   }
+}
+
+void DatAuditDialog::setCollections(QList<CollectionConfig> *collections) {
+  m_collections = collections;
+}
+
+void DatAuditDialog::openForCollection(const QString &collectionUuid, const QString &collectionName,
+                                       const QString &mediaDir, const QStringList &datPaths) {
+  loadProfiles(); // refresh the combo so a newly-linked profile is selectable
+
+  qint64 linkedId = -1;
+  if (!collectionUuid.isEmpty()) {
+    withProfileDb([&linkedId, &collectionUuid](QSqlDatabase &db) {
+      auto all = DatAuditProfile::listAll(db);
+      if (all.isOk()) {
+        for (const DatAuditProfile::Profile &p : all.value()) {
+          if (p.collectionUuid == collectionUuid) {
+            linkedId = p.id;
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  if (linkedId >= 0) {
+    selectProfileById(linkedId); // → onProfileSelected loads it and syncs the UI
+    return;
+  }
+
+  // No linked profile yet: seed an unsaved working profile aimed at the
+  // collection so the audit is pre-populated. Select the "(unsaved)" row with
+  // the combo signal blocked first — onProfileSelected would otherwise clear
+  // m_currentProfile back to an empty profile and discard the seed.
+  DatAuditProfile::Profile seed;
+  seed.name = collectionName;
+  seed.collectionUuid = collectionUuid;
+  if (!mediaDir.isEmpty()) {
+    seed.scanRoots = QStringList{mediaDir};
+  }
+  for (const QString &d : datPaths) {
+    if (!d.isEmpty()) {
+      DatAuditProfile::DatRef ref;
+      ref.path = d;
+      seed.dats.append(ref);
+    }
+  }
+  {
+    const QSignalBlocker block(m_profileCombo);
+    selectProfileById(-1); // the "(unsaved)" row
+  }
+  m_currentProfile = seed;
+  syncUiFromProfile(); // reflect the seeded DAT + scan-root lists on screen
 }
 
 QStringList DatAuditDialog::datPaths() const {
@@ -348,42 +507,57 @@ void DatAuditDialog::onRun() {
     return;
   }
 
+  // 1G1R / ignore settings come from the selected profile (Kartend-bmj1ko); the
+  // DAT + folder paths come from the live lists above.
+  const DatAuditProfile::Profile p = uiProfile();
+  const QStringList regionPrefs = p.regionPrefs;
+  const QStringList ignore = p.ignoreRules;
+  const bool onePerGame = p.onePerGame;
+
   m_cancel = std::make_shared<std::atomic<bool>>(false);
   setBusy(true);
 
   auto cancel = m_cancel;
-  auto future = QtConcurrent::run([dats, roots, cancel]() -> AuditOutput {
-    // Both DB connections below are created, used, and removed on THIS worker
-    // thread, satisfying QSqlDatabase's thread affinity.
-    DatCache::Store cache(DatCache::defaultPath());
-    QStringList failed;
-    DatAudit::Catalogue cat = DatAudit::buildCatalogue(cache, dats, &failed);
-    DatAudit::AuditOptions opts;
-    opts.scanRoots = roots;
-    opts.datPaths = dats;
+  auto future =
+      QtConcurrent::run([dats, roots, cancel, regionPrefs, ignore, onePerGame]() -> AuditOutput {
+        // Both DB connections below are created, used, and removed on THIS worker
+        // thread, satisfying QSqlDatabase's thread affinity.
+        DatCache::Store cache(DatCache::defaultPath());
+        QStringList failed;
+        DatAudit::Catalogue cat = DatAudit::buildCatalogue(cache, dats, &failed);
+        DatAudit::AuditOptions opts;
+        opts.scanRoots = roots;
+        opts.datPaths = dats;
+        opts.ignoreGlobs = ignore;
+        opts.regionPrefs = regionPrefs;
+        opts.onePerGame = onePerGame;
 
-    // Open a main-DB connection for the file-hash cache so re-audits skip
-    // re-hashing unchanged files (the v17 file_hash_cache table already exists;
-    // the app applied migrations at startup). WAL lets this coexist with the
-    // DatabaseManager's own connection.
-    static QAtomicInteger<quint64> hashConnCounter{0};
-    const QString conn =
-        QStringLiteral("dataudit_hashcache_%1").arg(hashConnCounter.fetchAndAddRelaxed(1));
-    AuditOutput out;
-    {
-      QSqlDatabase hashDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
-      QSqlDatabase *cacheDb = nullptr;
-      if (DatabaseSchema::openConnection(
-              hashDb, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))) {
-        DatabaseSchema::applyConnectionPragmas(hashDb);
-        cacheDb = &hashDb;
-      }
-      out = DatAudit::run(cat, opts, cacheDb, cancel, nullptr);
-      hashDb.close();
-    }
-    QSqlDatabase::removeDatabase(conn);
-    return out;
-  });
+        // Open a main-DB connection for the file-hash cache so re-audits skip
+        // re-hashing unchanged files (the v17 file_hash_cache table already exists;
+        // the app applied migrations at startup). WAL lets this coexist with the
+        // DatabaseManager's own connection.
+        static QAtomicInteger<quint64> hashConnCounter{0};
+        const QString conn =
+            QStringLiteral("dataudit_hashcache_%1").arg(hashConnCounter.fetchAndAddRelaxed(1));
+        AuditOutput out;
+        {
+          QSqlDatabase hashDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+          QSqlDatabase *cacheDb = nullptr;
+          if (DatabaseSchema::openConnection(
+                  hashDb, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))) {
+            DatabaseSchema::applyConnectionPragmas(hashDb);
+            cacheDb = &hashDb;
+          }
+          out = DatAudit::run(cat, opts, cacheDb, cancel, nullptr);
+          // Carry the failed-DAT list back to the GUI thread so it isn't
+          // silently dropped — the audit ran against a partial catalogue
+          // otherwise (Kartend-2zcrz).
+          out.failedDats = failed;
+          hashDb.close();
+        }
+        QSqlDatabase::removeDatabase(conn);
+        return out;
+      });
   m_watcher.setFuture(future);
 }
 
@@ -400,6 +574,17 @@ void DatAuditDialog::onAuditFinished() {
   updateSummary(out.summary);
   if (out.cancelled) {
     m_summaryLabel->setText(m_summaryLabel->text() + tr("  (cancelled)"));
+  }
+  // Surface DATs that failed to load so the user knows the audit ran against a
+  // partial catalogue (Kartend-2zcrz) — otherwise real games show as Missing /
+  // files as Unknown with no explanation. Full list in the tooltip.
+  if (!out.failedDats.isEmpty()) {
+    m_summaryLabel->setText(
+        m_summaryLabel->text() +
+        tr("   [!] %n DAT file(s) failed to load — results may be incomplete", nullptr,
+           static_cast<int>(out.failedDats.size())));
+    m_summaryLabel->setToolTip(
+        tr("DAT files that failed to load:\n%1").arg(out.failedDats.join(QLatin1Char('\n'))));
   }
   m_running = false;
   setBusy(false);
