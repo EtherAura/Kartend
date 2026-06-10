@@ -157,11 +157,16 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
     result.addWarning(prefix +
                       "gridHeightSidebarHidden negative, will be clamped to 0 (no override)");
   }
-  if (gl.horizontalSpacing < 0) {
-    result.addWarning(prefix + "horizontalSpacing negative, will be clamped to 0");
+  // Spacing may be negative (overlap effects); clampValues() bounds it to
+  // [-100, 200], so warn only when outside that range — not on every
+  // negative value, which is legitimately allowed.
+  if (gl.horizontalSpacing < -100 || gl.horizontalSpacing > 200) {
+    result.addWarning(prefix + "horizontalSpacing " + QString::number(gl.horizontalSpacing) +
+                      " outside -100..200, will be clamped");
   }
-  if (gl.verticalSpacing < 0) {
-    result.addWarning(prefix + "verticalSpacing negative, will be clamped to 0");
+  if (gl.verticalSpacing < -100 || gl.verticalSpacing > 200) {
+    result.addWarning(prefix + "verticalSpacing " + QString::number(gl.verticalSpacing) +
+                      " outside -100..200, will be clamped");
   }
   if (gl.fontSize <= 0) {
     result.addWarning(prefix + "gridLayout.fontSize must be > 0, will be clamped to default");
@@ -189,8 +194,11 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
     result.addWarning(prefix + "parallaxStrength " + QString::number(bg.parallaxStrength) +
                       " outside 0-100, will be clamped");
   }
-  if (bg.backdropBlurRadius < 0) {
-    result.addWarning(prefix + "backdropBlurRadius negative, will be clamped to 0");
+  // clampValues() bounds the radius to [4, 32]; warn on any out-of-range
+  // value (e.g. a hand-edited 1-3 silently bumped to 4), not just negatives.
+  if (bg.backdropBlurRadius < 4 || bg.backdropBlurRadius > 32) {
+    result.addWarning(prefix + "backdropBlurRadius " + QString::number(bg.backdropBlurRadius) +
+                      " outside 4..32, will be clamped");
   }
 
   // SidebarAppearance — opacities + intensity + dimensions.
@@ -273,7 +281,7 @@ ValidationResult validateAllCollections(const QList<CollectionConfig> &collectio
   // Cross-reference validation: check parent indices
   for (int i = 0; i < collections.size(); ++i) {
     int parentIndex = collections[i].parentCollectionIndex;
-    if (parentIndex >= 0 && parentIndex >= collections.size()) {
+    if (parentIndex >= collections.size()) {
       result.addError(QString("Collection '%1' (index %2) has invalid parent index %3")
                           .arg(collections[i].name)
                           .arg(i)
