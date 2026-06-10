@@ -1,5 +1,6 @@
 #include "scanworkcontroller.h"
 
+#include "errorutils.h"
 #include "threadpoolutils.h"
 #include "uiconstants/concurrency.h"
 
@@ -36,7 +37,15 @@ ScanWorkController::~ScanWorkController() {
   // fails safe on the `if (m_pool)` guards (Kartend-ppl9r).
   constexpr int kScanPoolDrainMs = 2000;
   requestCancel();
-  ThreadPoolUtils::shutdownWithBudget(m_pool, kScanPoolDrainMs);
+  // [[nodiscard]]: the helper already logs the generic leak warning; add a
+  // pool-specific one (matches ArtworkLoadDispatcher's teardown) so the leak is
+  // attributable to the scan pool. false == budget expired and the pool was
+  // intentionally leaked (never a use-after-free).
+  if (!ThreadPoolUtils::shutdownWithBudget(m_pool, kScanPoolDrainMs)) {
+    qCWarning(ErrorUtils::lcErrors())
+        << "ScanWorkController: scan thread pool did not drain in" << kScanPoolDrainMs
+        << "ms during destruction; abandoned it to avoid blocking teardown";
+  }
 }
 
 void ScanWorkController::start(QRunnable *runnable) {
