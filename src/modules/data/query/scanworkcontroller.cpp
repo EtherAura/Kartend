@@ -1,5 +1,6 @@
 #include "scanworkcontroller.h"
 
+#include "threadpoolutils.h"
 #include "uiconstants/concurrency.h"
 
 #include <algorithm>
@@ -18,14 +19,24 @@ ScanWorkController::ScanWorkController() : m_token(std::make_shared<std::atomic_
 }
 
 ScanWorkController::~ScanWorkController() {
-  // Abandon the thread pool without waiting — process is exiting anyway.
-  // ~QThreadPool() blocks; let the OS clean up. requestCancel() may still
-  // be called from another thread (DatabaseManager teardown does this from
-  // the main thread while QueryManager's worker is still draining), so the
-  // pool pointer stays alive — just orphaned.
-  if (m_pool) {
-    m_pool->clear();
-  }
+  // The owning DatabaseManager teardown flips our cancel flag via a synchronous
+  // cross-thread requestCancelScan() that RETURNS before it quit()s/wait()s the
+  // scan thread (databasemanager.cpp:188, Kartend-mkm4u). So by the time this
+  // dtor runs on the worker thread the token is already set, in-flight tasks are
+  // exiting, and — because that requestCancelScan() completed before the
+  // quit()/wait() which triggers this destruction — no requestCancel() runs
+  // concurrently with the drain below. We can therefore reclaim the pool with a
+  // bounded wait instead of leaking it on every destruction (the old behaviour):
+  // that matters for the test harness, which builds/destroys thousands of
+  // DatabaseManagers per QApplication (two ScanWorkControllers each) and would
+  // otherwise accumulate leaked idle pools. The requestCancel() here is
+  // idempotent and also covers any direct-construction path with no external
+  // cancel. shutdownWithBudget never use-after-frees (it leaks the pool, with a
+  // warning, and nulls m_pool on the rare timeout) so a late m_pool access still
+  // fails safe on the `if (m_pool)` guards (Kartend-ppl9r).
+  constexpr int kScanPoolDrainMs = 2000;
+  requestCancel();
+  ThreadPoolUtils::shutdownWithBudget(m_pool, kScanPoolDrainMs);
 }
 
 void ScanWorkController::start(QRunnable *runnable) {
