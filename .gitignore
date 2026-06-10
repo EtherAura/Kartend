@@ -95,7 +95,7 @@ venv/
 
 # Beads — local-only issue tracker; the whole dir is untracked (bd still
 # uses it on disk, it's just not shared via git).
-.beads/
+# .beads internals are excluded by .beads/.gitignore; issues.jsonl/config/metadata ARE tracked (g6p)
 .dolt/
 *.db
 .beads-credential-key
