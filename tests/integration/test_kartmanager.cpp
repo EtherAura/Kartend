@@ -82,21 +82,6 @@ std::unique_ptr<SyntheticCollection> buildSyntheticCollection(const QString &nam
 
 } // namespace
 
-void TestKartManager::initTestCase() {
-#if defined(Q_OS_MACOS)
-  // macOS Qt 6.8 doesn't reroute ConfigLocation/AppDataLocation under
-  // QStandardPaths test mode (Kartend-zfwvr), so this suite's wipeSandbox()
-  // guard (contains("qttest")) no-ops and ApplicationManager::initialize()
-  // would write settings/session/database into the real ~/Library config.
-  // Skip the whole suite on macOS, consistent with the fixture-backed suites
-  // (KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS); the kart import/export logic is
-  // platform-independent and covered on Linux (Qt 6.4 + 6.8) and Windows.
-  // (Kartend-4k68i — drop this once Kartend-0ceoe lands a portable
-  // explicit-temp-dir config sandbox so the suite can actually run here.)
-  QSKIP("QStandardPaths config sandbox unavailable on macOS Qt 6.8 (Kartend-zfwvr)");
-#endif
-}
-
 void TestKartManager::init() {
   QStandardPaths::setTestModeEnabled(true);
   wipeSandbox();

@@ -41,6 +41,8 @@
 #include "test_settingsdialog_scope.h"
 #include "test_virtualcontainermanager.h"
 
+#include "../support/machomesandbox.h"
+
 #include <QApplication>
 #include <QStandardPaths>
 #include <QTest>
@@ -206,6 +208,11 @@ const Suite kSuites[] = {
 } // namespace
 
 int main(int argc, char *argv[]) {
+  // macOS: point HOME at a fresh per-process temp dir FIRST so Foundation and
+  // QDir::homePath() agree and the test-mode .qttest reroute below actually
+  // fires for every QStandardPaths location (Kartend-0ceoe). No-op elsewhere.
+  KartendTest::installMacHomeSandbox();
+
   // setTestModeEnabled BEFORE QApplication so any path lookups during Qt's
   // own startup are sandboxed too. Each MainWindowFixture re-asserts this
   // in case a test toggles it off.

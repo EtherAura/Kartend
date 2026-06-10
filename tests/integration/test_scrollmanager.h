@@ -11,7 +11,6 @@
 class TestScrollManager : public QObject {
   Q_OBJECT
 private slots:
-  void initTestCase();
   void getTotalItems_isZeroOnFreshFixture();
   void getCurrentGridWidth_returnsPositive();
   void sidebarShrinkingActive_roundTripsThroughSetter();

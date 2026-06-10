@@ -34,13 +34,6 @@ CollectionConfig makeCollectionStub(const QString &name, int parentIndex = -1) {
 
 } // namespace
 
-void TestNavigationManager::initTestCase() {
-  // Fixture-backed suite: macOS Qt 6.8 can't establish the QStandardPaths
-  // config sandbox the fixture needs (Kartend-zfwvr). Skip the whole suite on
-  // macOS; the behaviour is covered on Linux (Qt 6.4 + 6.8) and Windows.
-  KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS();
-}
-
 void TestNavigationManager::testOnCollectionSelectedClearsNavigationStack() {
   KartendTest::MainWindowFixture fixture;
   MainWindow *win = fixture.window();

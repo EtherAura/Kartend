@@ -13,13 +13,6 @@ InteractionManager *interaction(KartendTest::MainWindowFixture &fixture) {
 }
 } // namespace
 
-void TestInteractionManager::initTestCase() {
-  // Fixture-backed suite: macOS Qt 6.8 can't establish the QStandardPaths
-  // config sandbox the fixture needs (Kartend-zfwvr). Skip the whole suite on
-  // macOS; the behaviour is covered on Linux (Qt 6.4 + 6.8) and Windows.
-  KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS();
-}
-
 void TestInteractionManager::testSubManagersAreWired() {
   // The construction contract: ApplicationManager builds InteractionManager and
   // every sub-manager it coordinates. A null here means a wiring regression

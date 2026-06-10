@@ -40,13 +40,6 @@ CollectionConfig makeChild(const QString &name, int parentIndex) {
 
 } // namespace
 
-void TestSearchManager::initTestCase() {
-  // Fixture-backed suite: macOS Qt 6.8 can't establish the QStandardPaths
-  // config sandbox the fixture needs (Kartend-zfwvr). Skip the whole suite on
-  // macOS; the behaviour is covered on Linux (Qt 6.4 + 6.8) and Windows.
-  KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS();
-}
-
 void TestSearchManager::testInitialStateDefaults() {
   SearchManager mgr;
   // The default mode is the per-collection scope so opening the app on a

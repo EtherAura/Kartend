@@ -10,13 +10,6 @@
 #include <QSignalSpy>
 #include <QTest>
 
-void TestAttractManager::initTestCase() {
-  // Fixture-backed suite: macOS Qt 6.8 can't establish the QStandardPaths
-  // config sandbox the fixture needs (Kartend-zfwvr). Skip the whole suite on
-  // macOS; the behaviour is covered on Linux (Qt 6.4 + 6.8) and Windows.
-  KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS();
-}
-
 void TestAttractManager::testConstructionInitialDefaults() {
   AttractManager mgr;
   // Attract mode starts disengaged on every construction. m_attractActive

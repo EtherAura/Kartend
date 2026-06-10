@@ -26,7 +26,6 @@ class TestDetailsPaneManager : public QObject {
   Q_OBJECT
 
 private slots:
-  void initTestCase();
   void testConstructionInitialDefaults();
   void testToggleSidebarIsNoOpWithoutDetailsPane();
   void testSetExternallyHiddenTogglesAndEmits();

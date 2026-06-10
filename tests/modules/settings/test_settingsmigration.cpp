@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <QTest>
 
+#include "../../support/machomesandbox.h"
 #include "collection/generalsettings.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
@@ -39,12 +40,6 @@ private:
 };
 
 void TestSettingsMigration::initTestCase() {
-#if defined(Q_OS_MACOS)
-  // macOS Qt 6.8 doesn't reroute ConfigLocation under QStandardPaths test mode
-  // (Kartend-zfwvr), so this suite would read/wipe the developer's real config.
-  // The migration logic is platform-independent and covered on Linux + Windows.
-  QSKIP("QStandardPaths config sandbox unavailable on macOS Qt 6.8 (Kartend-zfwvr)");
-#endif
   QStandardPaths::setTestModeEnabled(true);
 }
 
@@ -206,5 +201,15 @@ void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallbac
   QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
 }
 
-QTEST_GUILESS_MAIN(TestSettingsMigration)
+// Expanded QTEST_GUILESS_MAIN so the macOS HOME sandbox is installed before
+// QCoreApplication — Foundation and QDir::homePath() must agree before any
+// QStandardPaths lookup for the .qttest reroute to fire (Kartend-0ceoe).
+int main(int argc, char *argv[]) {
+  KartendTest::installMacHomeSandbox();
+  QCoreApplication app(argc, argv);
+  app.setAttribute(Qt::AA_Use96Dpi, true);
+  TestSettingsMigration tc;
+  QTEST_SET_MAIN_SOURCE_PATH
+  return QTest::qExec(&tc, argc, argv);
+}
 #include "test_settingsmigration.moc"

@@ -2,20 +2,12 @@
 
 #include "applicationmanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
 #include "mocks/mockdatabasemanager.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 
 #include <QStringList>
 #include <QTest>
-
-void TestScrollManager::initTestCase() {
-  // Fixture-backed suite (via MockedMainWindowFixture): macOS Qt 6.8 can't
-  // establish the QStandardPaths config sandbox the fixture needs
-  // (Kartend-zfwvr). Skip the whole suite on macOS; covered on Linux + Windows.
-  KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS();
-}
 
 void TestScrollManager::getTotalItems_isZeroOnFreshFixture() {
   KartendTest::MockedMainWindowFixture fixture;
