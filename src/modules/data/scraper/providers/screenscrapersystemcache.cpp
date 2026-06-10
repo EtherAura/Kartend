@@ -4,6 +4,8 @@
 // a network or a QApplication.
 #include "screenscrapersystemcache.h"
 
+#include "screenscraperjsoncache.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -25,7 +27,6 @@ namespace ScreenScraperSystemCache {
 
 namespace {
 
-constexpr const char *CACHE_DIR_NAME = "kartend";
 constexpr const char *CACHE_FILE_NAME = "screenscraper-systems.json";
 
 /// Walk every string-valued field under the `noms` object and
@@ -122,14 +123,7 @@ QStringList readExtensions(const QJsonValue &v) {
 
 } // namespace
 
-QString defaultCachePath() {
-  const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-  if (base.isEmpty()) {
-    return {};
-  }
-  return base + QLatin1Char('/') + QString::fromLatin1(CACHE_DIR_NAME) + QLatin1Char('/') +
-         QString::fromLatin1(CACHE_FILE_NAME);
-}
+QString defaultCachePath() { return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME); }
 
 ErrorUtils::Result<QList<ScreenScraperSystems::System>>
 parseSystemsResponse(const QByteArray &json) {
@@ -145,12 +139,7 @@ parseSystemsResponse(const QByteArray &json) {
   // the wrapped shape (live API) and the raw-array shape (some test
   // payloads or future SS variants).
   const QJsonObject root = doc.object();
-  QJsonArray systemes;
-  if (root.contains(QStringLiteral("response"))) {
-    systemes = root.value("response").toObject().value("systemes").toArray();
-  } else if (root.contains(QStringLiteral("systemes"))) {
-    systemes = root.value("systemes").toArray();
-  }
+  const QJsonArray systemes = ScreenScraperJsonCache::unwrapArray(root, "systemes");
 
   QList<ScreenScraperSystems::System> out;
   out.reserve(systemes.size());
@@ -195,15 +184,6 @@ ErrorUtils::Result<QList<ScreenScraperSystems::System>> loadCachedSystems(const 
 }
 
 bool saveSystems(const QString &filePath, const QList<ScreenScraperSystems::System> &systems) {
-  if (filePath.isEmpty()) return false;
-  const QString dir = QFileInfo(filePath).absolutePath();
-  if (!QDir().mkpath(dir)) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::FileWriteError,
-                                               "Failed to create ScreenScraper cache directory",
-                                               "ScreenScraperSystemCache::saveSystems")
-                             .withDetails(dir));
-    return false;
-  }
   // Write as the same `systemes[]` shape our parser reads — round-
   // trippable so a power user inspecting the file can edit it
   // without learning a separate schema.
@@ -222,27 +202,13 @@ bool saveSystems(const QString &filePath, const QList<ScreenScraperSystems::Syst
   }
   QJsonObject root;
   root["systemes"] = systemes;
-
-  QFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::FileWriteError,
-                                               "Failed to write ScreenScraper cache",
-                                               "ScreenScraperSystemCache::saveSystems")
-                             .withDetails(f.errorString()));
-    return false;
-  }
-  f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-  f.close();
-  return true;
+  return ScreenScraperJsonCache::writeJsonCompact(
+      filePath, root, "ScreenScraperSystemCache::saveSystems",
+      "Failed to create ScreenScraper cache directory", "Failed to write ScreenScraper cache");
 }
 
 bool isCacheStale(const QString &filePath) {
-  if (filePath.isEmpty() || !QFileInfo::exists(filePath)) return true;
-  const QFileInfo info(filePath);
-  const QDateTime modified = info.lastModified();
-  if (!modified.isValid()) return true;
-  return modified.secsTo(QDateTime::currentDateTime()) >
-         static_cast<qint64>(CACHE_TTL_DAYS) * 86400;
+  return ScreenScraperJsonCache::isStale(filePath, CACHE_TTL_DAYS);
 }
 
 } // namespace ScreenScraperSystemCache

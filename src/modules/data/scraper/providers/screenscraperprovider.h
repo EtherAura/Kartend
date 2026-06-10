@@ -116,6 +116,19 @@ public:
   void lookup(const LookupContext &ctx, LookupCallback callback) override;
   void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) override;
   void fetchMediaBytes(const QUrl &url, MediaCallback callback) override;
+
+  /// Hash a regular (non-archive) file through FileHashCache so an unchanged
+  /// file (same size+mtime) is not re-hashed on every scrape. Opens its own
+  /// thread-affine connection to the main DB (media.db under @p mainDbDir, where
+  /// file_hash_cache lives) and tears it down before returning, so it is safe to
+  /// call from the QtConcurrent hashing pool. Degrades to a direct
+  /// RomHasher::hashFile when the cache DB cannot be opened, so a missing/locked
+  /// cache never breaks scraping. Static + `this`-free for that pool-thread
+  /// safety (and so it is unit-testable against a temporary DB dir).
+  [[nodiscard]] static ErrorUtils::Result<RomHasher::Result>
+  hashRegularFileCached(const QString &mainDbDir, const QString &filePath,
+                        const std::shared_ptr<std::atomic<bool>> &cancelToken);
+
   /// Most recent per-account quota snapshot, parsed from the `ssuser`
   /// block every jeuInfos.php lookup response carries. Stays invalid
   /// (`valid == false`) until the first lookup completes — the batch
@@ -213,6 +226,14 @@ private:
   /// continuation when we're destroyed, and ~ScreenScraperProvider() waits for
   /// the task so it can't outlive us (Kartend-s1s98).
   QFutureWatcher<RomHasher::Result> m_hashWatcher;
+  /// The cooperative cancel token of the in-flight ROM-hash task (set just
+  /// before it is launched). ~ScreenScraperProvider() flips it before
+  /// m_hashWatcher.waitForFinished() so closing the app mid-hash cancels the
+  /// (potentially multi-minute) hash/extract instead of blocking the main
+  /// thread for its full duration (Kartend-37ei3). Only touched on the owner
+  /// (GUI) thread — lookups are sequential — while the worker reads the
+  /// pointed-to atomic. Null when no hash is in flight.
+  std::shared_ptr<std::atomic<bool>> m_activeHashCancelToken;
   /// Single-shot timer driving Kartend-1rtrt's transient-failure retry.
   /// A value member so it's destroyed with the provider, severing any
   /// pending retry (the lambda captures `this` raw) — no fire-after-free.

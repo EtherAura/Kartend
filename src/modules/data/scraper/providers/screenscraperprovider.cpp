@@ -6,6 +6,7 @@
 #include "screenscraperprovider.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 #include <QCoreApplication>
@@ -16,6 +17,7 @@
 #include <QFutureWatcher>
 #include <QLocale>
 #include <QLoggingCategory>
+#include <QSqlDatabase>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
@@ -24,8 +26,10 @@
 #include "bundledcredentials.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "databaseschema.h"
 #include "datcache.h"
 #include "datlookup.h"
+#include "filehashcache.h"
 #include "httpclient.h"
 #include "romhasher.h"
 #include "scraperretrypolicy.h"
@@ -197,6 +201,14 @@ ScreenScraperProvider::~ScreenScraperProvider() {
   // Wait for it before our members tear down so the worker — and the
   // main-thread continuation it would trigger — can't touch freed state.
   // No-op when no hash is in flight / already finished.
+  //
+  // Kartend-37ei3: flip the in-flight task's cooperative cancel token first.
+  // RomHasher / the archive extractor poll it, so this turns a close-mid-hash
+  // from a multi-second (multi-GB ROM) / multi-minute (archive extract) main-
+  // thread block into a prompt teardown. No-op when no hash is in flight.
+  if (m_activeHashCancelToken) {
+    m_activeHashCancelToken->store(true, std::memory_order_release);
+  }
   m_hashWatcher.waitForFinished();
 }
 
@@ -363,11 +375,20 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
                      }
                      runLookupAfterHash(trimmed, hashes, std::move(callback));
                    });
+  // Remember this task's cancel token so ~ScreenScraperProvider() can flip it
+  // before waiting, turning a close-mid-hash into a prompt cancel rather than
+  // a multi-minute main-thread block (Kartend-37ei3).
+  m_activeHashCancelToken = cancelToken;
   m_hashWatcher.setFuture(
       QtConcurrent::run([wantInnerHash, filePath, cancelToken]() -> RomHasher::Result {
         auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
                      ? RomHasher::hashArchiveInnerRom(filePath, cancelToken)
-                     : RomHasher::hashFile(filePath, cancelToken);
+                     // FileHashCache (Kartend-3p42r): skip re-hashing an unchanged
+                     // file. Archives stay direct — their inner-ROM hash doesn't
+                     // fit the cache's (path,size,mtime)->hash key.
+                     : ScreenScraperProvider::hashRegularFileCached(
+                           QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),
+                           filePath, cancelToken);
         if (r.isOk()) {
           return r.value();
         }
@@ -385,6 +406,39 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
             << "'";
         return RomHasher::Result{};
       }));
+}
+
+ErrorUtils::Result<RomHasher::Result> ScreenScraperProvider::hashRegularFileCached(
+    const QString &mainDbDir, const QString &filePath,
+    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+  // Unique connection name per call: the QtConcurrent pool reuses threads and a
+  // QSqlDatabase connection is single-thread-affine, so each hash opens (and
+  // tears down) its own connection — mirroring ScrapeWriteWorker::openConnection.
+  static std::atomic<quint64> seq{0};
+  const QString connName = QStringLiteral("kartend_scrape_hashcache_%1")
+                               .arg(seq.fetch_add(1, std::memory_order_relaxed));
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+    if (DatabaseSchema::openConnection(db, mainDbDir)) {
+      // Match the main connection's pragmas (WAL etc.) so this short-lived
+      // reader/writer doesn't fight its locking model. The schema itself is
+      // owned by DatabaseManager (run at startup), same contract as
+      // ScrapeWriteWorker — we never migrate here.
+      DatabaseSchema::applyConnectionPragmas(db);
+      const ErrorUtils::Result<RomHasher::Result> cached =
+          FileHashCache::hashFileCached(db, filePath, cancelToken);
+      db.close();
+      db = QSqlDatabase();
+      QSqlDatabase::removeDatabase(connName);
+      return cached;
+    }
+    db.close();
+    db = QSqlDatabase();
+  }
+  QSqlDatabase::removeDatabase(connName);
+  // Cache DB unavailable: degrade to a direct hash so a missing/locked cache
+  // never breaks scraping (the FileHashCache acceleration is best-effort).
+  return RomHasher::hashFile(filePath, cancelToken);
 }
 
 void ScreenScraperProvider::runLookupAfterHash(const QString &query,
@@ -547,12 +601,20 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
     const QString dumpDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                                 .filePath(QStringLiteral("scraper-dump"));
     if (QDir().mkpath(dumpDir)) {
+      // Restrict the dump dir to the owner (0700): the payloads embed the
+      // ssuser account block, and the default umask would otherwise leave them
+      // group/world-readable on a multi-user host (Kartend-jigkr).
+      QFile::setPermissions(dumpDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                         QFileDevice::ExeOwner);
       const QString dumpPath = QDir(dumpDir).filePath(
           QStringLiteral("jeuInfos-%1.json").arg(QDateTime::currentMSecsSinceEpoch()));
       QFile dumpFile(dumpPath);
       if (dumpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         dumpFile.write(bytes);
         dumpFile.close();
+        // Lock the dump to owner-only (0600), mirroring scrapelogger.cpp — it
+        // embeds the ssuser account block (Kartend-jigkr).
+        dumpFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         qWarning("[scraper-dump] wrote raw jeuInfos response to %s", qUtf8Printable(dumpPath));
       }
       // Prune oldest dumps beyond the retention cap. The ms-epoch filename is a

@@ -15,11 +15,19 @@
 // query delimiters cannot inject or override other params.
 #include <memory>
 
+#include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "dbmigrations.h"
+#include "filehashcache.h"
 #include "romhasher.h"
 #include "screenscrapercatalogmanager.h"
 #include "screenscraperprovider.h"
@@ -41,6 +49,10 @@ private slots:
   void hashes_appearOnlyWhenSet();
   void endpointIsHttpsApiHost_andCredentialsStayInQueryNotPath();
   void credentialWithReservedChars_doesNotInjectExtraParams();
+
+  // Kartend-3p42r: the FileHashCache hash-reuse path.
+  void hashRegularFileCached_cacheHit_returnsCachedNotRehashed();
+  void hashRegularFileCached_cacheMiss_hashesAndStores();
 
 private:
   std::unique_ptr<ScreenScraperProvider> m_provider;
@@ -160,6 +172,104 @@ void TestScreenScraperProvider::credentialWithReservedChars_doesNotInjectExtraPa
   const QUrlQuery q = build(creds, QStringLiteral("rom"), 42, hashes, false);
   QCOMPARE(q.queryItemValue(QStringLiteral("systemeid")), QStringLiteral("42"));
   QCOMPARE(q.queryItemValue(QStringLiteral("devpassword")), QStringLiteral("p&systemeid=999"));
+}
+
+// Kartend-3p42r: a cache HIT must return the stored hashes without re-hashing.
+// We plant a DELIBERATELY WRONG hash for an unchanged file, then assert the
+// helper hands it back — only possible if it consulted FileHashCache instead
+// of running RomHasher (whose real digest would differ).
+void TestScreenScraperProvider::hashRegularFileCached_cacheHit_returnsCachedNotRehashed() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+
+  const QString romPath = dir.filePath(QStringLiteral("game.rom"));
+  {
+    QFile f(romPath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QByteArrayLiteral("real-rom-bytes"));
+    f.close();
+  }
+  const QFileInfo fi(romPath);
+
+  // Real main DB at "<dir>/media.db" with the real file_hash_cache schema — no
+  // mocking. DatabaseSchema::openConnection (used by the code under test) opens
+  // that exact file, so seed it here.
+  const QString seedConn = QStringLiteral("test_sshashcache_hit_seed");
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), seedConn);
+    db.setDatabaseName(dir.filePath(QStringLiteral("media.db")));
+    QVERIFY(db.open());
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT)")));
+    QVERIFY(q.exec(QStringLiteral(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, path TEXT, last_modified TEXT)")));
+    DbMigrations::applySchemaMigrations(db, seedConn);
+    // hashFileCached canonicalises the lookup path, so store under the
+    // canonical spelling and the file's real (size, mtime) so it validates.
+    const auto stored = FileHashCache::store(
+        db, fi.canonicalFilePath(), fi.size(), fi.lastModified().toMSecsSinceEpoch(),
+        QStringLiteral("deadbeef"), QStringLiteral("11111111111111111111111111111111"),
+        QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    QVERIFY(stored.isOk());
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(seedConn);
+
+  const auto r = ScreenScraperProvider::hashRegularFileCached(dir.path(), romPath, {});
+  QVERIFY2(r.isOk(), "cached hash lookup should succeed");
+  QCOMPARE(r.value().crc, QStringLiteral("deadbeef"));
+  QCOMPARE(r.value().md5, QStringLiteral("11111111111111111111111111111111"));
+}
+
+// Kartend-3p42r: a cache MISS must hash the file for real and persist the
+// result so the next pass is a hit.
+void TestScreenScraperProvider::hashRegularFileCached_cacheMiss_hashesAndStores() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+
+  const QString seedConn = QStringLiteral("test_sshashcache_miss_seed");
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), seedConn);
+    db.setDatabaseName(dir.filePath(QStringLiteral("media.db")));
+    QVERIFY(db.open());
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT)")));
+    QVERIFY(q.exec(QStringLiteral(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, path TEXT, last_modified TEXT)")));
+    DbMigrations::applySchemaMigrations(db, seedConn);
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(seedConn);
+
+  const QString romPath = dir.filePath(QStringLiteral("fresh.rom"));
+  {
+    QFile f(romPath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QByteArrayLiteral("fresh-rom-bytes"));
+    f.close();
+  }
+  const auto expected = RomHasher::hashFile(romPath);
+  QVERIFY(expected.isOk());
+
+  const auto r = ScreenScraperProvider::hashRegularFileCached(dir.path(), romPath, {});
+  QVERIFY2(r.isOk(), "miss should hash the file directly");
+  QCOMPARE(r.value().crc, expected.value().crc);
+  QCOMPARE(r.value().sha1, expected.value().sha1);
+
+  // The miss must have written the result back for next time.
+  const QString verifyConn = QStringLiteral("test_sshashcache_verify");
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), verifyConn);
+    db.setDatabaseName(dir.filePath(QStringLiteral("media.db")));
+    QVERIFY(db.open());
+    const QFileInfo fi(romPath);
+    const auto hit = FileHashCache::lookup(db, fi.canonicalFilePath(), fi.size(),
+                                           fi.lastModified().toMSecsSinceEpoch());
+    QVERIFY2(hit.has_value(), "miss path should have stored the hash");
+    QCOMPARE(hit->crc, expected.value().crc);
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(verifyConn);
 }
 
 QTEST_MAIN(TestScreenScraperProvider)

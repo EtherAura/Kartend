@@ -4,6 +4,8 @@
 // it stays testable without a network or a QApplication.
 #include "screenscrapermediatypecache.h"
 
+#include "screenscraperjsoncache.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -22,7 +24,6 @@ namespace ScreenScraperMediaTypeCache {
 
 namespace {
 
-constexpr const char *CACHE_DIR_NAME = "kartend";
 constexpr const char *CACHE_FILE_NAME = "screenscraper-mediatypes.json";
 
 /// Pick the best display name from SS's per-locale `nom` array. SS
@@ -68,12 +69,7 @@ bool readBool(const QJsonValue &v) {
 
 } // namespace
 
-QString defaultCachePath() {
-  const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-  if (base.isEmpty()) return {};
-  return base + QLatin1Char('/') + QString::fromLatin1(CACHE_DIR_NAME) + QLatin1Char('/') +
-         QString::fromLatin1(CACHE_FILE_NAME);
-}
+QString defaultCachePath() { return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME); }
 
 ErrorUtils::Result<QList<MediaType>> parseMediaTypesResponse(const QByteArray &json) {
   QJsonParseError err;
@@ -87,12 +83,7 @@ ErrorUtils::Result<QList<MediaType>> parseMediaTypesResponse(const QByteArray &j
   // SS wraps the list under response.medias; tolerate the raw shape
   // for round-tripped cache files.
   const QJsonObject root = doc.object();
-  QJsonArray medias;
-  if (root.contains(QStringLiteral("response"))) {
-    medias = root.value("response").toObject().value("medias").toArray();
-  } else if (root.contains(QStringLiteral("medias"))) {
-    medias = root.value("medias").toArray();
-  }
+  const QJsonArray medias = ScreenScraperJsonCache::unwrapArray(root, "medias");
 
   QList<MediaType> out;
   out.reserve(medias.size());
@@ -134,16 +125,6 @@ ErrorUtils::Result<QList<MediaType>> loadCachedMediaTypes(const QString &filePat
 }
 
 bool saveMediaTypes(const QString &filePath, const QList<MediaType> &mediaTypes) {
-  if (filePath.isEmpty()) return false;
-  const QString dir = QFileInfo(filePath).absolutePath();
-  if (!QDir().mkpath(dir)) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::FileWriteError,
-                              "Failed to create ScreenScraper media-type cache directory",
-                              "ScreenScraperMediaTypeCache::saveMediaTypes")
-            .withDetails(dir));
-    return false;
-  }
   // Write as the same `medias[]` shape our parser reads — round-
   // trippable so a power user inspecting the file can edit it without
   // learning a separate schema.
@@ -165,26 +146,14 @@ bool saveMediaTypes(const QString &filePath, const QList<MediaType> &mediaTypes)
   }
   QJsonObject root;
   root["medias"] = medias;
-  QFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::FileWriteError,
-                                               "Failed to write ScreenScraper media-type cache",
-                                               "ScreenScraperMediaTypeCache::saveMediaTypes")
-                             .withDetails(f.errorString()));
-    return false;
-  }
-  f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-  f.close();
-  return true;
+  return ScreenScraperJsonCache::writeJsonCompact(
+      filePath, root, "ScreenScraperMediaTypeCache::saveMediaTypes",
+      "Failed to create ScreenScraper media-type cache directory",
+      "Failed to write ScreenScraper media-type cache");
 }
 
 bool isCacheStale(const QString &filePath) {
-  if (filePath.isEmpty() || !QFileInfo::exists(filePath)) return true;
-  const QFileInfo info(filePath);
-  const QDateTime modified = info.lastModified();
-  if (!modified.isValid()) return true;
-  return modified.secsTo(QDateTime::currentDateTime()) >
-         static_cast<qint64>(CACHE_TTL_DAYS) * 86400;
+  return ScreenScraperJsonCache::isStale(filePath, CACHE_TTL_DAYS);
 }
 
 const MediaType *find(const QList<MediaType> &mediaTypes, const QString &type) {
