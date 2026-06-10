@@ -217,6 +217,14 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       m_originalGeneralSettings.launchers.launcherPresets) {
     return true;
   }
+  // GeneralSettingsPanel writes the RetroArch config path live into
+  // m_generalSettings.launchers on every keystroke; without this comparison a
+  // config-path-only edit never dirties the dialog (Save button stays dark)
+  // and the edit can be lost on a collection switch (Kartend-hvdow).
+  if (m_generalSettings.launchers.retroarchConfigPath.trimmed() !=
+      m_originalGeneralSettings.launchers.retroarchConfigPath.trimmed()) {
+    return true;
+  }
   // GeneralSettingsPanel-owned fields (Selection & Display) — struct compare.
   if (m_generalSettings.input.rememberSelection !=
           m_originalGeneralSettings.input.rememberSelection ||

@@ -48,6 +48,7 @@
 #include "generalsettingspanel.h"
 #include "imainwindow.h"
 #include "isettingsmanager.h"
+#include "iscrollmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
 #include "launchertabpanel.h"
@@ -193,6 +194,15 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
             mainWindow->generalSettings().appearance.titleBaseColor = c;
             auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
+            // Repaint visible items so the new base color shows immediately
+            // rather than only on the next incidental repaint (Kartend-f3ivg) —
+            // mirrors saveGeneralSettingsFromUI's applyTitleTint sweep.
+            if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+              const auto &active = scroll->getActiveWidgets();
+              for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
+                if (auto *w = it.value()) w->applyTitleTint();
+              }
+            }
             m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
             if (result.isError()) {
               ErrorDialog::showError(this, result.error());
@@ -464,6 +474,14 @@ void SettingsDialog::restoreLiveAppliedSettings() {
   mainWindow->generalSettings() = m_originalGeneralSettings;
   const auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
   ItemWidget::setTitleBaseColor(m_originalGeneralSettings.appearance.titleBaseColor);
+  // Repaint visible items so the reverted base color is reflected immediately
+  // (Kartend-f3ivg) — mirrors the live-apply path above.
+  if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+    const auto &active = scroll->getActiveWidgets();
+    for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
+      if (auto *w = it.value()) w->applyTitleTint();
+    }
+  }
   mainWindow->applyGlobalUiFontFromSettings();
   if (result.isError()) {
     ErrorDialog::showError(this, result.error());
