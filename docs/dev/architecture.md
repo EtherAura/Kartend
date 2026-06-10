@@ -118,6 +118,27 @@ src/
 
 Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`, `CollectionBackgroundController`.
 
+## Class-name suffix conventions
+
+Service-like classes carry one of several suffixes. The distinction is a
+**descriptive convention** (not lint-enforced) — `Manager` is the historical
+default and dominates the tree, so the suffix is a hint to a class's role,
+not a guarantee. Prefer these meanings for new classes:
+
+| Suffix | Role |
+|--------|------|
+| `Manager` | Owns lifecycle and/or mutable state for a feature; long-lived; coordinates sub-helpers. The default for a feature module's top-level object. |
+| `Service` | Performs an operation (often DB- or IO-backed) with little long-lived UI state of its own (e.g. `ScanService`, `ScraperService`). |
+| `Controller` | Orchestrates UI widgets / dialogs at the `ui/` or `core/` layer (e.g. `MenuController`, `DetailsPaneManager`'s controller role). |
+| `Coordinator` | Cross-manager glue that sequences work across siblings without owning their state (e.g. `SelectionRestoreCoordinator`). |
+| `Runner` | Drives a bounded, often-cancellable batch job (e.g. `BatchScrapeRunner`, `DatAuditRunner`). |
+| `Provider` / `Parser` | Pluggable scraper backends and their response parsers under `modules/data/scraper/`. |
+| `Cache` / `Store` | Bounded in-memory cache, or a thin typed accessor over one DB table. |
+| `Handler` / `Engine` | A focused sub-unit owned by a Manager (input `Handler`s; the virtual-scroll `Engine`). |
+
+Don't mass-rename existing classes to fit this table — it documents intent
+for new code and explains why similar classes carry different suffixes.
+
 ## UI (`src/ui/`)
 
 | Component | Description |

@@ -40,6 +40,24 @@ bundled fallback. The QtKeychain integration (built when `KARTEND_HAVE_QTKEYCHAI
 is defined) stores per-user credentials in the platform keyring rather than on
 disk in plaintext.
 
+Because user-supplied credentials always override the bundled fallback, the
+embedded provider account can be **rotated or revoked** without breaking
+existing installs — a leaked bundled key is a quota/abuse concern for that one
+shared account, not a user-data exposure.
+
+## Launcher Path TOCTOU — Accepted Residual Risk
+
+`LaunchManager` canonicalizes and re-validates the launcher executable path
+immediately before `QProcess::start` (sensitive-directory blocklist, symlink
+canonicalization, character-level checks). POSIX offers no atomic
+open-and-exec, so a sufficiently privileged local attacker could in principle
+swap a symlink in the window between that final check and `start()`. This is an
+**accepted residual risk**, not a defect: exploiting it requires write access
+to the user's own config directory / launcher path, which is itself
+user-controlled configuration — an attacker with that access can already edit
+the launcher command outright. The re-validation is defense-in-depth that
+narrows, but cannot fully close, the window.
+
 ## Supported Versions
 
 | Version | Supported |

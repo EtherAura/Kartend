@@ -23,13 +23,26 @@ cmake --build build/ninja-release --parallel $(nproc)
 # Run all tests via CTest
 ctest --test-dir build/ninja-release --output-on-failure
 
-# Run individual test (CMake places every test binary directly under
-# build/<config>/tests/ regardless of where the source lives)
+# Run a single test by its CTest NAME — note the name is the CamelCase
+# label from add_test(NAME ...), NOT the binary name (see "Adding New
+# Tests"): e.g. binary test_gridlayoutcalculator registers as
+# GridLayoutCalculator. -R takes a regex, so a prefix matches too.
+ctest --test-dir build/ninja-release -R GridLayoutCalculator --output-on-failure
+
+# Run individual test binary directly (CMake places every test binary
+# directly under build/<config>/tests/ regardless of where the source lives)
 cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_sessionmanager
 ./tests/test_artworkmanager
 ./tests/test_integration       # single binary for all tests/integration/*
+
+# Run one suite (class) inside the integration binary via its leading
+# class-name selector (these are the per-class ctest entries too):
+./tests/test_integration TestNavigationManager
+# ...and narrow to a single QTest slot by appending the function name
+# (the selector is stripped; the rest passes through to QTest::qExec):
+./tests/test_integration TestNavigationManager testCollectionSelected
 ```
 
 ## Sanitizers (optional)
@@ -114,6 +127,16 @@ need a comment pointing to the integration test that covers them.
 
 ## Adding New Tests
 
+> **Single-file vs header convention.** Standalone unit tests (under
+> `tests/modules/`, `tests/utils/`, `tests/ui/`) declare the `TestXxx` class
+> **inline** in the `.cpp` with `QTEST_MAIN(...)` + `#include "test_x.moc"` — no
+> separate header. **Integration** tests (`tests/integration/`) are the
+> exception: their `Q_OBJECT` class lives in a `.h` so AUTOMOC picks it up when
+> the class is linked into the shared `test_integration` binary (a `QTEST_MAIN`
+> per class can't work there — see the Integration Test Harness section). So a
+> separate `test_*.h` signals "integration suite," not a style choice; prefer
+> the inline form everywhere else.
+
 1. Create the test file mirroring the source location. A test for a
    `src/modules/` file goes in `tests/modules/<feature>/` — the
    `behavior/data/input/media` group level is dropped (e.g. a test for
@@ -142,12 +165,23 @@ QTEST_MAIN(TestClassName)
 #include "test_classname.moc"
 ```
 
-2. Add to `tests/CMakeLists.txt`:
+2. Add to `tests/CMakeLists.txt`. Link the per-area `OBJECT` lib(s) the
+   source compiles into (plus their downward deps) — there is **no**
+   `${SOURCES}` variable. A `src/utils/` test usually needs only
+   `kartend_utils`; a `src/modules/` test links its area-lib closure
+   (e.g. `kartend_input kartend_data kartend_chrome kartend_api
+   kartend_utils`). The source path is relative to `tests/`, and the
+   `add_test` NAME is CamelCase and independent of the binary name:
 
 ```cmake
-add_executable(test_classname test_classname.cpp ${SOURCES})
-target_link_libraries(test_classname PRIVATE Qt6::Test Qt6::Widgets ...)
-add_test(NAME test_classname COMMAND test_classname)
+# Utility test — links only kartend_utils:
+add_executable(test_classname utils/text/test_classname.cpp)
+target_link_libraries(test_classname PRIVATE kartend_utils Qt6::Test)
+add_test(NAME ClassName COMMAND test_classname)
+
+# Module test — links the area-lib closure (see existing entries for the
+# exact set per area), e.g. a src/modules/input/ test:
+# target_link_libraries(test_foo PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 ```
 
 ## Integration Test Harness (UI-Coordinator Managers)

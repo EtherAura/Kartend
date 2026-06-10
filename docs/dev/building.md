@@ -38,7 +38,7 @@ or `sdl2`.
 ```bash
 sudo dnf install cmake ninja-build clang lld ccache \
   qt6-qtbase-devel qt6-qtmultimedia-devel qt6-qttools-devel \
-  qt6-qtsvg-devel qt5-qt5compat-devel qtkeychain-qt6-devel
+  qt6-qtsvg-devel qtkeychain-qt6-devel
 ```
 
 Optional gamepad backend: `SDL2-devel`.
@@ -48,7 +48,7 @@ Optional gamepad backend: `SDL2-devel`.
 ```bash
 sudo apt install clang cmake lld ninja-build ccache \
   qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite \
-  qt6-tools-dev qt6-l10n-tools qt6keychain-dev
+  qt6-tools-dev qt6-l10n-tools qtkeychain-qt6-dev
 ```
 
 Optional gamepad backend: `libsdl2-dev`.
@@ -222,6 +222,12 @@ Modes include: `release`, `debug`, `sanitize`, `maintenance`, `release-pgo`.
 ## Manual Build
 
 For manual CMake builds without the script:
+
+> **Heads-up:** a hand-configured dir under `build/` (e.g. `build/ninja-release`)
+> contains a `CMakeCache.txt`, so a later `.scripts/build.sh` run **without**
+> `--keep-builds` will prune it as a stray build dir (see the prune note above).
+> If you mix manual builds with the script, either pass `--keep-builds`, or keep
+> your manual build dir outside `build/` (e.g. `build-manual/`).
 
 ```bash
 # Configure (recommended: Ninja)
