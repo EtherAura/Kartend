@@ -39,7 +39,11 @@ run_ctest() {
     echo "Did you mean a sibling under build/?" >&2
     return 1
   fi
-  ctest --test-dir "$dir" --output-on-failure
+  # Exclude benchmarks (LABELS "benchmark") to match every CI ctest invocation
+  # and the "skipped by default" contract in docs/dev/testing.md — a CMake
+  # LABELS property does NOT exclude a test from a bare run, so it must be done
+  # here. Run benchmarks explicitly with `ctest -L benchmark` in the build dir.
+  ctest --test-dir "$dir" --output-on-failure -LE benchmark
 }
 
 # Run `cmake --install` and transparently elevate with sudo when the install

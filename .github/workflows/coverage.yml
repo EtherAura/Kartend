@@ -5,10 +5,16 @@ name: Coverage
 # filter). Triggers mirror build.yml.
 
 on:
+  # paths-ignore (Kartend-q9gmq): coverage can't change from a docs-only diff;
+  # skip it for pure markdown/doc changes (GitHub runs anyway if any non-doc
+  # file is also touched). `main` has no required checks, so a skipped run
+  # can't block a merge.
   push:
     branches: [ main, develop ]
+    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', '.gitignore' ]
   pull_request:
     branches: [ main ]
+    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', '.gitignore' ]
 
 permissions:
   contents: read
@@ -38,14 +44,7 @@ jobs:
           packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev lcov pulseaudio
 
       - name: Start dummy pulseaudio
-        run: |
-          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
-          mkdir -p "$XDG_RUNTIME_DIR"
-          chmod 700 "$XDG_RUNTIME_DIR"
-          pulseaudio --start --exit-idle-time=-1 --daemonize \
-            --load='module-null-sink sink_name=NullOutput' \
-            --load='module-null-source source_name=NullInput' || true
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+        uses: ./.github/actions/setup-pulseaudio
 
       - name: Cache ccache
         uses: actions/cache@v5

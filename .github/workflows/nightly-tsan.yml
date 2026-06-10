@@ -38,20 +38,7 @@ jobs:
           packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
 
       - name: Start dummy pulseaudio
-        # Same null-sink trick as build.yml's thread-sanitizer job — Qt 6.4
-        # PulseAudio backend SIGILLs in release when pa_context_connect fails
-        # on bare runners with no audio device.
-        run: |
-          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
-          mkdir -p "$XDG_RUNTIME_DIR"
-          chmod 700 "$XDG_RUNTIME_DIR"
-          pulseaudio --start --exit-idle-time=-1 --daemonize \
-            --load='module-null-sink sink_name=NullOutput' \
-            --load='module-null-source source_name=NullInput' || true
-          if command -v pactl >/dev/null 2>&1; then
-            pactl info || echo "::warning::pactl info failed; pulse daemon likely not running"
-          fi
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+        uses: ./.github/actions/setup-pulseaudio
 
       - name: Cache ccache
         # Restore-keys deliberately includes the per-PR tsan key so the cold
