@@ -9,6 +9,7 @@
 class TestEventManagerDetailsPane : public QObject {
   Q_OBJECT
 private slots:
+  void initTestCase();
   // EventManager wiring: lives on InteractionManager and survives MainWindow
   // construction in offscreen mode.
   void eventManager_isWiredOnInteractionManager();

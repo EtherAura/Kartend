@@ -29,6 +29,7 @@ class TestSelectionDisplayManager : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testConstructionInitialDefaults();
   void testApplyGeneralSettingsUpdatesPositiveWidths();
   void testApplyGeneralSettingsIgnoresZeroOrNegativeWidths();

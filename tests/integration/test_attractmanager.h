@@ -27,6 +27,7 @@ class TestAttractManager : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testConstructionInitialDefaults();
   void testIsEnabledFollowsSettings();
   void testReloadSettingsWithoutSettingsIsSafe();

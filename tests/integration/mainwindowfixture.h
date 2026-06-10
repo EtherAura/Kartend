@@ -15,6 +15,22 @@
 #include <QHash>
 #include <QString>
 
+// macOS Qt 6.8 does not honour QStandardPaths test mode for ConfigLocation
+// (Kartend-zfwvr), so the sandbox MainWindowFixture relies on can't be
+// established and its constructor would qFatal. Fixture-backed integration
+// suites therefore can't run on macOS; their behaviour is platform-independent
+// and covered on Linux (Qt 6.4 + 6.8) and Windows. Call this first in such a
+// suite's initTestCase() to skip the whole suite on macOS. It's a macro (not a
+// fixture method) because QSKIP must return from the test slot, not from the
+// fixture ctor; the QSKIP token resolves at the call site, which includes
+// <QTest>.
+#if defined(Q_OS_MACOS)
+#define KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS()                                                      \
+  QSKIP("MainWindowFixture QStandardPaths sandbox unavailable on macOS Qt 6.8 (Kartend-zfwvr)")
+#else
+#define KARTEND_SKIP_FIXTURE_SUITE_ON_MACOS() ((void)0)
+#endif
+
 class MainWindow;
 
 namespace KartendTest {

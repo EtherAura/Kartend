@@ -29,6 +29,7 @@ class TestSearchManager : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testInitialStateDefaults();
   void testSetCurrentModeRoundtrip();
   void testSetSearchActiveRoundtrip();

@@ -13,6 +13,7 @@ class TestMainWindowSmoke : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testFixtureBuildsWithoutTouchingRealConfig();
   void testTopLevelManagersAreWired();
   void testGridWidthAndZoomShortcutsAreDisambiguated();

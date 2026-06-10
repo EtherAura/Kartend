@@ -6,12 +6,9 @@
 // so a noisy regression (every Save firing every signal) gets caught.
 
 #include <algorithm>
-#include <QCoreApplication>
 #include <QDir>
-#include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTest>
 
 #include "collection/collectionconfig.h"
@@ -49,6 +46,13 @@ private slots:
 };
 
 void TestPerDomainSignals::initTestCase() {
+#if defined(Q_OS_MACOS)
+  // macOS Qt 6.8 doesn't reroute ConfigLocation under QStandardPaths test mode
+  // (Kartend-zfwvr), so this suite would read/wipe the developer's real config.
+  // The per-domain-signal logic is platform-independent and covered on Linux +
+  // Windows.
+  QSKIP("QStandardPaths config sandbox unavailable on macOS Qt 6.8 (Kartend-zfwvr)");
+#endif
   QStandardPaths::setTestModeEnabled(true);
 }
 
@@ -58,15 +62,8 @@ void TestPerDomainSignals::cleanupTestCase() {
 
 void TestPerDomainSignals::init() {
   const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-  // The path must be a test sandbox before we removeRecursively() it: Qt
-  // test-mode's "qttest" marker (Linux/Windows) or, on macOS where Qt 6.8 test
-  // mode doesn't reroute ConfigLocation (Kartend-zfwvr), under the
-  // CFFIXED_USER_HOME home main() pinned.
-  const QByteArray sandboxHome = qgetenv("CFFIXED_USER_HOME");
-  QVERIFY2(
-      configRoot.contains(QStringLiteral("qttest")) ||
-          (!sandboxHome.isEmpty() && configRoot.startsWith(QString::fromLocal8Bit(sandboxHome))),
-      "QStandardPaths config dir is not a test sandbox");
+  QVERIFY2(configRoot.contains(QStringLiteral("qttest")),
+           "QStandardPaths test mode should reroute ConfigLocation under qttest");
   QDir(configRoot).removeRecursively();
 }
 
@@ -319,15 +316,5 @@ void TestPerDomainSignals::reentrantSaveFromDiffSlot_doesNotRecurseUnbounded() {
   QCOMPARE(emitCount, 1);
 }
 
-// Custom main (see test_settingsmigration): pin the config sandbox via
-// CFFIXED_USER_HOME before QCoreApplication / any QStandardPaths query, since
-// macOS Qt 6.8 test mode doesn't reroute ConfigLocation (Kartend-zfwvr).
-int main(int argc, char *argv[]) {
-  QTemporaryDir sandbox;
-  qputenv("CFFIXED_USER_HOME", QFile::encodeName(sandbox.path()));
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication app(argc, argv);
-  TestPerDomainSignals tc;
-  return QTest::qExec(&tc, argc, argv);
-}
+QTEST_GUILESS_MAIN(TestPerDomainSignals)
 #include "test_perdomainsignals.moc"

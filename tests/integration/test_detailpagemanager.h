@@ -26,6 +26,7 @@ class TestDetailPageManager : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testConstructionInitialDefaults();
   void testHideOverlayWithoutOverlayIsNoOp();
   void testShowForCurrentSelectionWithoutOverlayIsNoOp();

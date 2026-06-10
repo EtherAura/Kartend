@@ -20,6 +20,7 @@ class TestNavigationManager : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
   void testOnCollectionSelectedClearsNavigationStack();
   void testOnSubcollectionEnteredIgnoresOutOfRangeIndex();
   void testOnSubcollectionEnteredUnwindsPushOnNavigationFailure();

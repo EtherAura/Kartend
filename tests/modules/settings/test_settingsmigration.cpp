@@ -6,11 +6,9 @@
 // future-versioned INI emits exactly one schemaVersion warning while still
 // loading every known key.
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTest>
 
 #include "collection/generalsettings.h"
@@ -41,6 +39,12 @@ private:
 };
 
 void TestSettingsMigration::initTestCase() {
+#if defined(Q_OS_MACOS)
+  // macOS Qt 6.8 doesn't reroute ConfigLocation under QStandardPaths test mode
+  // (Kartend-zfwvr), so this suite would read/wipe the developer's real config.
+  // The migration logic is platform-independent and covered on Linux + Windows.
+  QSKIP("QStandardPaths config sandbox unavailable on macOS Qt 6.8 (Kartend-zfwvr)");
+#endif
   QStandardPaths::setTestModeEnabled(true);
 }
 
@@ -52,15 +56,10 @@ void TestSettingsMigration::init() {
   // Each test gets a wiped config dir so the previous fixture can't bleed
   // into the next load.
   const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-  // Defence against recursing into the user's real config: the path must be a
-  // test sandbox — Qt test-mode's "qttest" marker (Linux/Windows) or, on macOS
-  // where Qt 6.8 test mode doesn't reroute ConfigLocation (Kartend-zfwvr),
-  // under the CFFIXED_USER_HOME home main() pinned.
-  const QByteArray sandboxHome = qgetenv("CFFIXED_USER_HOME");
-  QVERIFY2(
-      configRoot.contains(QStringLiteral("qttest")) ||
-          (!sandboxHome.isEmpty() && configRoot.startsWith(QString::fromLocal8Bit(sandboxHome))),
-      "QStandardPaths config dir is not a test sandbox");
+  // Defence: test-mode config locations carry "qttest" in the path so
+  // a misconfigured test can't recurse into the user's real config.
+  QVERIFY2(configRoot.contains(QStringLiteral("qttest")),
+           "QStandardPaths test mode should reroute ConfigLocation under qttest");
   QDir(configRoot).removeRecursively();
 }
 
@@ -207,16 +206,5 @@ void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallbac
   QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
 }
 
-// Custom main (not QTEST_GUILESS_MAIN) so the config sandbox is pinned before
-// QCoreApplication and any QStandardPaths query. macOS Qt 6.8 test mode leaves
-// ConfigLocation at ~/Library/Preferences (Kartend-zfwvr); CFFIXED_USER_HOME
-// pins Foundation's NSHomeDirectory so ~/Library/* lands in a temp sandbox.
-int main(int argc, char *argv[]) {
-  QTemporaryDir sandbox;
-  qputenv("CFFIXED_USER_HOME", QFile::encodeName(sandbox.path()));
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication app(argc, argv);
-  TestSettingsMigration tc;
-  return QTest::qExec(&tc, argc, argv);
-}
+QTEST_GUILESS_MAIN(TestSettingsMigration)
 #include "test_settingsmigration.moc"
