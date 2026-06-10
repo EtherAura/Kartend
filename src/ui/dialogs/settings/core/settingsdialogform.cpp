@@ -348,14 +348,9 @@ void SettingsDialog::updateGridWidthLimits() {
   ui->appearanceLayoutPanel->gridWidthSpinBox()->setValue(preservedValue);
 }
 
-void SettingsDialog::onGridWidthChanged(int value) {
-  Q_UNUSED(value)
-  checkForChanges();
-  if (!m_isLoading && currentCollectionIndex == originalCurrentCollectionIndex &&
-      originalCurrentCollectionIndex >= 0 && originalCurrentCollectionIndex < collections.size()) {
-    emit gridWidthChanged(currentCollectionIndex, value);
-  }
-}
+// Kartend-vy1xs: onGridWidthChanged() removed — its only extra duty over
+// checkForChanges() was emitting the dead gridWidthChanged live-preview
+// signal; the spin box now connects straight to checkForChanges().
 
 void SettingsDialog::loadGeneralSettingsToUI() {
   auto *mainWindow = dynamic_cast<IMainWindow *>(parent());

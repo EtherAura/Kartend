@@ -19,8 +19,8 @@ struct SettingsModel;
 /// Sizing / Item Dimensions field groups (12 fields total).
 ///
 /// Cross-cutting widgets exposed via accessors: gridWidth* spinboxes feed
-/// updateGridWidthLimits() and the per-edit gridWidthChanged signal on the
-/// host dialog; horizontal/vertical spacing values are shown in user units
+/// updateGridWidthLimits() and the host dialog's dirty-check;
+/// horizontal/vertical spacing values are shown in user units
 /// but stored offset by SPACING_MIN, so spacingUiToInternal /
 /// spacingInternalToUi conversions stay paired with the host's helpers.
 class AppearanceLayoutPanel : public QWidget, public ISettingsPanel {

@@ -72,8 +72,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     : QDialog(parent), ui(new Ui::SettingsDialog), collectionTreeWidget(nullptr),
       currentTreeItem(nullptr), collections(initialCollections),
       originalCurrentCollectionIndex(initialIndex), currentCollectionIndex(initialIndex),
-      m_workingCollections(initialCollections), m_gridWidthChangedForActiveCollection(false),
-      m_newGridWidthForActiveCollection(0), m_collectionSaved(true), m_isLoading(false),
+      m_workingCollections(initialCollections), m_collectionSaved(true), m_isLoading(false),
       m_ctx(ctx) {
   ui->setupUi(this);
   setWindowTitle(tr("Settings"));
@@ -534,7 +533,6 @@ void SettingsDialog::setupConnections() {
   setupButtonConnections();
   setupBasicUIConnections();
   setupFormFieldConnections();
-  setupSpacingConnections();
   setupTreeWidgetConnections();
   setupUIConstraints();
   setupGeneralSettingsConnections();
@@ -622,14 +620,6 @@ auto SettingsDialog::promptUnsavedChanges(const QString &actionDescription)
   messageBox.setStandardButtons(QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
   messageBox.setDefaultButton(QMessageBox::Save);
   return static_cast<QMessageBox::StandardButton>(messageBox.exec());
-}
-
-void SettingsDialog::emitGridWidthChanged() {
-  if (m_gridWidthChangedForActiveCollection && originalCurrentCollectionIndex >= 0 &&
-      originalCurrentCollectionIndex < collections.size()) {
-    emit gridWidthChanged(originalCurrentCollectionIndex, m_newGridWidthForActiveCollection);
-    m_gridWidthChangedForActiveCollection = false;
-  }
 }
 
 namespace {

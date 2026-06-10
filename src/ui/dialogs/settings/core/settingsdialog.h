@@ -115,8 +115,9 @@ public:
 
 signals:
   void collectionSaved(const QList<CollectionConfig> &collections);
-  void gridWidthChanged(int collectionIndex, int newGridWidth);
-  void spacingChanged(int collectionIndex, int horizontalSpacing, int verticalSpacing);
+  // Kartend-vy1xs: the per-edit gridWidthChanged / spacingChanged live-preview
+  // signals were removed — nothing ever connected to them; grid width and
+  // spacing take effect via the collectionSaved diff path on Save.
   /// Emitted when changes requiring a database rescan have been saved
   void rescanRequired(int collectionIndex);
   /// emitted when the user changes the Settings Mode scope so
@@ -157,7 +158,6 @@ private slots:
   void browseMediaDir();
   void checkForChanges();
   void onContentDirectoryChanged();
-  void onGridWidthChanged(int value);
   void onRecursiveImportContent();
   /// react to user changes in the Settings Mode combo box.
   void onSettingsScopeChanged(int comboIndex);
@@ -188,8 +188,6 @@ private:
   /// Saves the specified collection and optionally refreshes the tree widget.
   void handleSaveCollection(int editedIndex, bool refreshTree = true);
   void setupFormFieldConnections();
-  void setupSpacingConnections();
-  void handleSpacingChanged();
   void setupTreeWidgetConnections();
   void setupUIConstraints();
   [[nodiscard]] static auto spacingInternalToUi(int spacing) -> int;
@@ -225,7 +223,6 @@ private:
   void updateParentCollectionComboBox(int currentIndex);
   // Kartend-ook62: wouldCreateCircularReference moved to the TreeManager
   // controller (m_treeManager->wouldCreateCircularReference).
-  void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
   void onExtractArchivesToggled(bool checked);
@@ -312,8 +309,6 @@ private:
   CollectionConfig originalCollection;
   int currentCollectionIndex;
   QList<CollectionConfig> m_workingCollections;
-  bool m_gridWidthChangedForActiveCollection;
-  int m_newGridWidthForActiveCollection;
   bool m_collectionSaved;
   QList<int> m_parentCollectionMapping;
   bool m_isLoading;

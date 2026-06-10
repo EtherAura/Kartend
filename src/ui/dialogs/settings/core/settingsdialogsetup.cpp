@@ -74,16 +74,6 @@ void SettingsDialog::setupBasicUIConnections() {
 }
 
 void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
-  int newGridWidth = ui->appearanceLayoutPanel->gridWidthSpinBox()->value();
-  bool isActive =
-      (editedIndex == originalCurrentCollectionIndex && originalCurrentCollectionIndex >= 0 &&
-       originalCurrentCollectionIndex < collections.size());
-  bool gridWidthChangedFlag = (newGridWidth != originalCollection.gridLayout.gridWidth);
-  if (isActive && gridWidthChangedFlag) {
-    m_gridWidthChangedForActiveCollection = true;
-    m_newGridWidthForActiveCollection = newGridWidth;
-  }
-
   // Check if database-affecting fields changed before saving
   // These fields affect the UUID or database content and require a rescan
   QString newName = originalCollection.name;
@@ -144,9 +134,6 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   m_collectionSaved = true;
   updateSaveButtonStyle();
   emit collectionSaved(collections);
-  if (isActive && gridWidthChangedFlag) {
-    emitGridWidthChanged();
-  }
 
   if (!refreshTree) {
     return;
@@ -203,12 +190,12 @@ void SettingsDialog::setupFormFieldConnections() {
   // launcher-type heuristic — wire that here against the panel's accessor.
   connect(ui->configurationPanel->mediaDirLineEdit(), &QLineEdit::textChanged, this,
           &SettingsDialog::onContentDirectoryChanged);
-  // gridWidthSpinBox needs the special onGridWidthChanged handler that emits
-  // the per-edit gridWidthChanged signal — wire that against the panel's
-  // accessor. Other layout fields' change connections live on
-  // AppearanceLayoutPanel.
+  // gridWidthSpinBox dirty-checks through the dialog (its live-preview
+  // handler was removed with the dead gridWidthChanged signal,
+  // Kartend-vy1xs) — wire that against the panel's accessor. Other layout
+  // fields' change connections live on AppearanceLayoutPanel.
   connect(ui->appearanceLayoutPanel->gridWidthSpinBox(),
-          QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::onGridWidthChanged);
+          QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::checkForChanges);
   // showAllSubcollectionItemsCheckBox connection lives on ConfigurationPanel.
   if (ui->configurationPanel->parentCollectionComboBox()) {
     connect(ui->configurationPanel->parentCollectionComboBox(),
@@ -229,33 +216,9 @@ void SettingsDialog::setupFormFieldConnections() {
   // Parallax + backdrop blur connections live on AppearanceEffectsPanel.
 }
 
-void SettingsDialog::setupSpacingConnections() {
-  // Spacing field changed() emission lives on AppearanceLayoutPanel; only the
-  // spacing-changed signal emission that drives the live preview stays here.
-  connect(ui->appearanceLayoutPanel->horizontalSpacingSpinBox(),
-          QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { handleSpacingChanged(); });
-  connect(ui->appearanceLayoutPanel->verticalSpacingSpinBox(),
-          QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { handleSpacingChanged(); });
-}
-
-void SettingsDialog::handleSpacingChanged() {
-  if (!ui->appearanceLayoutPanel->horizontalSpacingSpinBox() ||
-      !ui->appearanceLayoutPanel->verticalSpacingSpinBox()) {
-    return;
-  }
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-    return;
-  }
-  if (originalCurrentCollectionIndex < 0 || originalCurrentCollectionIndex >= collections.size()) {
-    return;
-  }
-  if (currentCollectionIndex == originalCurrentCollectionIndex) {
-    emit spacingChanged(
-        currentCollectionIndex,
-        spacingUiToInternal(ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->value()),
-        spacingUiToInternal(ui->appearanceLayoutPanel->verticalSpacingSpinBox()->value()));
-  }
-}
+// Kartend-vy1xs: setupSpacingConnections()/handleSpacingChanged() removed —
+// they only fed the dead spacingChanged live-preview signal. Spacing dirty-
+// checking lives on AppearanceLayoutPanel's changed() emission.
 
 void SettingsDialog::setupTreeWidgetConnections() {
   if (!collectionTreeWidget || !m_treeManager) {
