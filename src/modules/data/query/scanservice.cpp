@@ -503,6 +503,216 @@ bool ScanService::stageScannedFile(QStringList &batchPaths,
 // ============================================================================
 // Phase 1 – stageFilesystemScan
 // ============================================================================
+
+bool ScanService::failStagingTransaction(const QString &message, bool rollbackOpenTransaction) {
+  // Capture lastError() BEFORE rolling back so the details carry the failure's
+  // real cause rather than the rollback's outcome.
+  auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed, message,
+                                    "ScanService::stageFilesystemScan")
+                 .withDetails(m_db.lastError().text());
+  ErrorUtils::logError(err);
+  emit errorOccurred(err);
+  if (rollbackOpenTransaction) {
+    m_db.rollback();
+  }
+  return false;
+}
+
+// ── Non-recursive arm: stream files directly off a flat QDirIterator ───────
+bool ScanService::stageFlatScan(const QDir &dir, const QStringList &nameFilters,
+                                QStringList &batchPaths, QHash<QString, QDateTime> &batchTimestamps,
+                                const std::function<bool()> &flushBatch,
+                                const std::function<void(int, int)> &reportProgress,
+                                QString &dirSignatureOut) {
+  dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
+
+  constexpr int SCAN_PROGRESS_INTERVAL = 500;
+  int scanned = 0;
+
+  // QDir::System keeps symlinks visible when their targets are temporarily
+  // unreachable; see scanMediaDirectory above for context.
+  QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
+                        QDirIterator::NoIteratorFlags);
+  while (iterator.hasNext()) {
+    if (isScanCancelled()) {
+      break;
+    }
+
+    iterator.next();
+    const QString relativePath = iterator.fileName();
+    const QFileInfo info = iterator.fileInfo();
+    // See scanMediaDirectory above for why broken-symlink mtimes need an
+    // epoch fallback (NOT NULL constraint).
+    QDateTime mtime = info.lastModified();
+    if (!mtime.isValid()) {
+      mtime = QDateTime::fromSecsSinceEpoch(0);
+    }
+
+    ++scanned;
+    if (scanned % SCAN_PROGRESS_INTERVAL == 0) {
+      reportProgress(scanned, -1);
+    }
+
+    if (!stageScannedFile(batchPaths, batchTimestamps, relativePath, mtime, flushBatch)) {
+      break;
+    }
+  }
+
+  (void)flushBatch();
+  return true;
+}
+
+// ── Recursive arm: parallel directory walk over the scan-work pool ─────────
+bool ScanService::stageRecursiveScan(const QDir &dir, const QStringList &nameFilters,
+                                     QStringList &batchPaths,
+                                     QHash<QString, QDateTime> &batchTimestamps,
+                                     const std::function<bool()> &flushBatch,
+                                     const std::function<void(int, int)> &reportProgress,
+                                     QString &dirSignatureOut) {
+  QElapsedTimer scanTimer;
+  scanTimer.start();
+
+  const QString rootPath = dir.absolutePath();
+  const auto cancelToken = m_scanWork.token();
+  if (!cancelToken) {
+    return false;
+  }
+  const std::atomic<bool> &cancelFlag = *cancelToken;
+
+  const int maxThreads = m_scanWork.maxThreadCount();
+  const int maxInFlight = std::max(1, maxThreads * 2);
+
+  ScanCompletionQueue queue;
+
+  QVector<DirSignatureSample> signatureSamples;
+  signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+  {
+    QFileInfo rootInfo(rootPath);
+    addDirSignatureSample(signatureSamples,
+                          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
+                          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+  }
+
+  auto enqueue = [&](const QString &dirPath) {
+    if (cancelFlag.load(std::memory_order_acquire)) {
+      return;
+    }
+    {
+      QMutexLocker locker(&queue.mutex);
+      ++queue.inFlight;
+    }
+    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+  };
+
+  // Always scan the root directory.
+  enqueue(rootPath);
+
+  QDirIterator dirIterator(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
+                           QDirIterator::Subdirectories);
+
+  int totalItemsScanned = 0;
+  int lastReportedCount = 0;
+  int directoriesEnqueued = 1; // root
+  int directoryResultsConsumed = 0;
+
+  while (!cancelFlag.load(std::memory_order_acquire)) {
+    // Keep the number of outstanding tasks bounded.
+    while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
+      int inFlight = 0;
+      {
+        QMutexLocker locker(&queue.mutex);
+        inFlight = queue.inFlight;
+      }
+      if (inFlight >= maxInFlight) {
+        break;
+      }
+      dirIterator.next();
+      const QString dirPath = dirIterator.filePath();
+      enqueue(dirPath);
+      {
+        const QString relPath = QDir(rootPath).relativeFilePath(dirPath);
+        const qint64 mtimeSec = QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
+        addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
+                              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+      }
+      ++directoriesEnqueued;
+    }
+
+    DirectoryScanResult result;
+    bool gotResult = false;
+    bool done = false;
+
+    {
+      QMutexLocker locker(&queue.mutex);
+      while (queue.ready.isEmpty() && queue.inFlight > 0 &&
+             !cancelFlag.load(std::memory_order_acquire)) {
+        queue.hasResult.wait(&queue.mutex, 50);
+      }
+
+      if (!queue.ready.isEmpty()) {
+        result = std::move(queue.ready.back());
+        queue.ready.removeLast();
+        queue.hasSpace.wakeOne();
+        gotResult = true;
+      } else if (queue.inFlight == 0 && !dirIterator.hasNext()) {
+        done = true;
+      }
+    }
+
+    if (done) {
+      break;
+    }
+    if (!gotResult) {
+      continue;
+    }
+
+    ++directoryResultsConsumed;
+
+    if (!result.relativePaths.isEmpty()) {
+      for (const QString &p : result.relativePaths) {
+        if (!stageScannedFile(batchPaths, batchTimestamps, p, result.timestamps.value(p),
+                              flushBatch)) {
+          break;
+        }
+      }
+
+      totalItemsScanned += result.relativePaths.size();
+      if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
+        lastReportedCount = totalItemsScanned;
+        reportProgress(totalItemsScanned, -1);
+      }
+    }
+  }
+
+  // Ensure all worker tasks have finished before destroying the queue.
+  // This is critical on cancellation, where we may exit early.
+  {
+    QMutexLocker locker(&queue.mutex);
+    while (queue.inFlight > 0) {
+      queue.hasResult.wait(&queue.mutex, 50);
+    }
+    queue.ready.clear();
+  }
+
+  if (lcQueryManager().isDebugEnabled()) {
+    qCDebug(lcQueryManager) << "Recursive scan+stream done"
+                            << "cancelled="
+                            << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
+                            << "dirsEnqueued=" << directoriesEnqueued
+                            << "dirResults=" << directoryResultsConsumed
+                            << "filesFound=" << totalItemsScanned
+                            << "elapsedMs=" << scanTimer.elapsed();
+  }
+
+  dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
+
+  (void)flushBatch();
+  return true;
+}
+
+// Orchestrator: owns the batch + transaction state shared by both arms and
+// the final-commit epilogue. The arms above only walk the filesystem and feed
+// stageScannedFile/flushBatch.
 bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
                                       const QStringList &nameFilters, int &itemsStaged,
                                       QString &dirSignatureOut) {
@@ -514,8 +724,8 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   // Throttle scan progress emissions to avoid spamming the UI event loop.
   ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
                                 [this](int p, int t) { emit scanItemsProgress(p, t); });
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-    throttle.report(processed, total, force);
+  const std::function<void(int, int)> reportProgress = [&](int processed, int total) {
+    throttle.report(processed, total, /*force=*/false);
   };
 
   bool inTransaction = false;
@@ -526,7 +736,7 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   QHash<QString, QDateTime> batchTimestamps;
   batchTimestamps.reserve(BATCH_SIZE * 2);
 
-  auto flushBatch = [&]() -> bool {
+  const std::function<bool()> flushBatch = [&]() -> bool {
     if (batchPaths.isEmpty()) {
       return true;
     }
@@ -542,13 +752,8 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
 
     if (!inTransaction) {
       if (!m_db.transaction()) {
-        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                          "Failed to start transaction for streaming insert",
-                                          "ScanService::stageFilesystemScan")
-                       .withDetails(m_db.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
-        return false;
+        return failStagingTransaction("Failed to start transaction for streaming insert",
+                                      /*rollbackOpenTransaction=*/false);
       }
       inTransaction = true;
       batchesSinceCommit = 0;
@@ -563,221 +768,41 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
 
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
       if (!m_db.commit()) {
-        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                          "Failed to commit streaming insert transaction",
-                                          "ScanService::stageFilesystemScan")
-                       .withDetails(m_db.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
-        m_db.rollback();
-        return false;
+        return failStagingTransaction("Failed to commit streaming insert transaction",
+                                      /*rollbackOpenTransaction=*/true);
       }
       inTransaction = false;
-      maybeEmitScanProgress(itemsStaged, -1);
+      reportProgress(itemsStaged, -1);
     }
     if (itemsStaged % PROGRESS_REPORT_INTERVAL == 0) {
-      maybeEmitScanProgress(itemsStaged, -1);
+      reportProgress(itemsStaged, -1);
     }
 
     return true;
   };
 
-  // ── Non-recursive scan: stream files directly ──────────────────────────
   if (!collection.folderBrowsing.includeContentSubfolders) {
-    dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
-
-    constexpr int SCAN_PROGRESS_INTERVAL = 500;
-    int scanned = 0;
-
-    // QDir::System keeps symlinks visible when their targets are temporarily
-    // unreachable; see scanMediaDirectory above for context.
-    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
-                          QDirIterator::NoIteratorFlags);
-    while (iterator.hasNext()) {
-      if (isScanCancelled()) {
-        break;
-      }
-
-      iterator.next();
-      const QString relativePath = iterator.fileName();
-      const QFileInfo info = iterator.fileInfo();
-      // See scanMediaDirectory above for why broken-symlink mtimes need an
-      // epoch fallback (NOT NULL constraint).
-      QDateTime mtime = info.lastModified();
-      if (!mtime.isValid()) {
-        mtime = QDateTime::fromSecsSinceEpoch(0);
-      }
-
-      ++scanned;
-      if (scanned % SCAN_PROGRESS_INTERVAL == 0) {
-        maybeEmitScanProgress(scanned, -1);
-      }
-
-      if (!stageScannedFile(batchPaths, batchTimestamps, relativePath, mtime, flushBatch)) {
-        break;
-      }
-    }
-
-    (void)flushBatch();
-  } else {
-    // ── Recursive scan: parallel directory scanning ────────────────────
-    QElapsedTimer scanTimer;
-    scanTimer.start();
-
-    const QString rootPath = dir.absolutePath();
-    const auto cancelToken = m_scanWork.token();
-    if (!cancelToken) {
+    if (!stageFlatScan(dir, nameFilters, batchPaths, batchTimestamps, flushBatch, reportProgress,
+                       dirSignatureOut)) {
       return false;
     }
-    const std::atomic<bool> &cancelFlag = *cancelToken;
-
-    const int maxThreads = m_scanWork.maxThreadCount();
-    const int maxInFlight = std::max(1, maxThreads * 2);
-
-    ScanCompletionQueue queue;
-
-    QVector<DirSignatureSample> signatureSamples;
-    signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
-    {
-      QFileInfo rootInfo(rootPath);
-      addDirSignatureSample(
-          signatureSamples,
-          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+  } else {
+    if (!stageRecursiveScan(dir, nameFilters, batchPaths, batchTimestamps, flushBatch,
+                            reportProgress, dirSignatureOut)) {
+      return false;
     }
-
-    auto enqueue = [&](const QString &dirPath) {
-      if (cancelFlag.load(std::memory_order_acquire)) {
-        return;
-      }
-      {
-        QMutexLocker locker(&queue.mutex);
-        ++queue.inFlight;
-      }
-      m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
-    };
-
-    // Always scan the root directory.
-    enqueue(rootPath);
-
-    QDirIterator dirIterator(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
-                             QDirIterator::Subdirectories);
-
-    int totalItemsScanned = 0;
-    int lastReportedCount = 0;
-    int directoriesEnqueued = 1; // root
-    int directoryResultsConsumed = 0;
-
-    while (!cancelFlag.load(std::memory_order_acquire)) {
-      // Keep the number of outstanding tasks bounded.
-      while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
-        int inFlight = 0;
-        {
-          QMutexLocker locker(&queue.mutex);
-          inFlight = queue.inFlight;
-        }
-        if (inFlight >= maxInFlight) {
-          break;
-        }
-        dirIterator.next();
-        const QString dirPath = dirIterator.filePath();
-        enqueue(dirPath);
-        {
-          const QString relPath = QDir(rootPath).relativeFilePath(dirPath);
-          const qint64 mtimeSec = QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
-          addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
-                                UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
-        }
-        ++directoriesEnqueued;
-      }
-
-      DirectoryScanResult result;
-      bool gotResult = false;
-      bool done = false;
-
-      {
-        QMutexLocker locker(&queue.mutex);
-        while (queue.ready.isEmpty() && queue.inFlight > 0 &&
-               !cancelFlag.load(std::memory_order_acquire)) {
-          queue.hasResult.wait(&queue.mutex, 50);
-        }
-
-        if (!queue.ready.isEmpty()) {
-          result = std::move(queue.ready.back());
-          queue.ready.removeLast();
-          queue.hasSpace.wakeOne();
-          gotResult = true;
-        } else if (queue.inFlight == 0 && !dirIterator.hasNext()) {
-          done = true;
-        }
-      }
-
-      if (done) {
-        break;
-      }
-      if (!gotResult) {
-        continue;
-      }
-
-      ++directoryResultsConsumed;
-
-      if (!result.relativePaths.isEmpty()) {
-        for (const QString &p : result.relativePaths) {
-          if (!stageScannedFile(batchPaths, batchTimestamps, p, result.timestamps.value(p),
-                                flushBatch)) {
-            break;
-          }
-        }
-
-        totalItemsScanned += result.relativePaths.size();
-        if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
-          lastReportedCount = totalItemsScanned;
-          maybeEmitScanProgress(totalItemsScanned, -1);
-        }
-      }
-    }
-
-    // Ensure all worker tasks have finished before destroying the queue.
-    // This is critical on cancellation, where we may exit early.
-    {
-      QMutexLocker locker(&queue.mutex);
-      while (queue.inFlight > 0) {
-        queue.hasResult.wait(&queue.mutex, 50);
-      }
-      queue.ready.clear();
-    }
-
-    if (lcQueryManager().isDebugEnabled()) {
-      qCDebug(lcQueryManager) << "Recursive scan+stream done"
-                              << "cancelled="
-                              << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-                              << "dirsEnqueued=" << directoriesEnqueued
-                              << "dirResults=" << directoryResultsConsumed
-                              << "filesFound=" << totalItemsScanned
-                              << "elapsedMs=" << scanTimer.elapsed();
-    }
-
-    dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
-
-    (void)flushBatch();
   }
 
   // Final commit for any remaining items in an open staging transaction.
   if (inTransaction) {
     if (!m_db.commit()) {
-      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                        "Failed to commit final streaming insert transaction",
-                                        "ScanService::stageFilesystemScan")
-                     .withDetails(m_db.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      m_db.rollback();
-      return false;
+      return failStagingTransaction("Failed to commit final streaming insert transaction",
+                                    /*rollbackOpenTransaction=*/true);
     }
   }
 
   if (itemsStaged > 0 && !isScanCancelled()) {
-    maybeEmitScanProgress(itemsStaged, -1, true);
+    throttle.report(itemsStaged, -1, /*force=*/true);
   }
 
   return true;

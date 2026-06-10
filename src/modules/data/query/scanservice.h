@@ -144,6 +144,31 @@ private:
                                                 int *outItemsScanned = nullptr,
                                                 int *outItemsApplied = nullptr);
 
+  // stageFilesystemScan's three identical DatabaseTransactionFailed exits,
+  // collapsed into one helper: build + log + emit the critical error (details
+  // from m_db.lastError() BEFORE any rollback so the real cause is captured),
+  // optionally roll back the open staging transaction, and return false so
+  // callers can tail-return it.
+  bool failStagingTransaction(const QString &message, bool rollbackOpenTransaction);
+
+  // stageFilesystemScan's two arms, split out verbatim (mirroring the
+  // scanSequential/scanParallel split above). Both stream discovered files
+  // into the pending batch via stageScannedFile()/flushBatch and seed
+  // dirSignatureOut. stageRecursiveScan returns false only when the scan-work
+  // cancel token is unavailable (controller torn down); stageFlatScan always
+  // returns true — cancellation just stops the walk early and the caller's
+  // final-commit logic handles the partial batch.
+  [[nodiscard]] bool
+  stageFlatScan(const QDir &dir, const QStringList &nameFilters, QStringList &batchPaths,
+                QHash<QString, QDateTime> &batchTimestamps, const std::function<bool()> &flushBatch,
+                const std::function<void(int, int)> &reportProgress, QString &dirSignatureOut);
+  [[nodiscard]] bool stageRecursiveScan(const QDir &dir, const QStringList &nameFilters,
+                                        QStringList &batchPaths,
+                                        QHash<QString, QDateTime> &batchTimestamps,
+                                        const std::function<bool()> &flushBatch,
+                                        const std::function<void(int, int)> &reportProgress,
+                                        QString &dirSignatureOut);
+
   // Phase 1: Walk the filesystem (flat or recursive) and stream discovered
   // files into the scanned_items temp table. Returns the number of files
   // staged and the computed directory signature. On cancellation the temp
