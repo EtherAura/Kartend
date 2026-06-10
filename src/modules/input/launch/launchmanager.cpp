@@ -140,6 +140,19 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
     return fileValidation.error();
   }
 
+  // The media path is appended as the final argument (both the libretro and
+  // plain-launcher branches below). A path whose passed form starts with '-'
+  // would be parsed by the launcher as an option, not a file operand
+  // (argv-flag injection — no shell is involved, but launcher flags could be
+  // flipped by an oddly/maliciously named file). Reject it, mirroring the
+  // corePath leading-dash guard below. Absolute paths (the normal case) start
+  // with '/', so this never triggers for them.
+  if (filePath.startsWith('-')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath, "Media path cannot start with a dash",
+                               "LaunchManager::buildLaunchCommand")
+        .withDetails(QString("File path '%1' would be parsed as a launcher option").arg(filePath));
+  }
+
   LaunchCommand cmd;
   cmd.program = expandedLauncherPath;
 
@@ -193,7 +206,11 @@ auto LaunchManager::previewLaunchCommand(const CollectionConfig &collection,
                                          const LauncherConfig &launcher, const QString &filePath)
     -> LaunchPreview {
   LaunchPreview out;
-  out.program = launcher.launcherPath;
+  // Expand %collection% so the build-error early-return below reports the
+  // resolved program rather than the raw template (the success path overwrites
+  // this with cmd.value().program, which is the same expanded value).
+  out.program = QString(launcher.launcherPath).replace("%collection%", collection.name,
+                                                       Qt::CaseInsensitive);
 
   auto cmd = buildLaunchCommand(launcher, collection.name, filePath);
   if (cmd.isError()) {

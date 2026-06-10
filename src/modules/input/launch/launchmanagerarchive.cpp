@@ -184,6 +184,19 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails("Install 7z or bsdtar to extract archives (unzip handles only .zip)");
   }
 
+  // The archive path is a positional operand for 7z/unzip; a leading '-'
+  // would be misparsed as an option (argv-flag injection — no shell involved).
+  // Extraction already requires an absolute path (the child CWD is the temp
+  // dir), so this never fires for real inputs; it is defense-in-depth. We use
+  // a leading-dash guard rather than a `--` separator because bsdtar passes
+  // the path as -f's argument (consumed literally, already safe), so injecting
+  // `--` would break the bsdtar branch.
+  if (archivePath.startsWith('-')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath, "Archive path cannot start with a dash",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(archivePath);
+  }
+
   QProcess process;
   process.setWorkingDirectory(uniqueDir);
 

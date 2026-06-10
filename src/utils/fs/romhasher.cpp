@@ -259,6 +259,10 @@ hashArchiveInnerRom(const QString &archivePath,
                                "RomHasher::hashArchiveInnerRom")
         .withDetails(archivePath);
   }
+  // absoluteFilePath() guarantees a leading '/', so when this is appended as a
+  // positional operand to 7z/unzip below it can never be misparsed as an
+  // option (no argv-flag injection); bsdtar passes it as -f's argument, also
+  // safe. Hence no `--` separator is needed (and `--` would break bsdtar).
   const QString resolvedArchivePath = info.absoluteFilePath();
 
   // Pick the first format-capable extractor the user has on PATH. The candidate
