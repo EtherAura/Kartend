@@ -12,6 +12,9 @@ struct GamepadSettings {
   QString gamepadConfirmButton = "A";
   QString gamepadBackButton = "B";
   QString gamepadToggleSidebarButton = "Y";
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const GamepadSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_GAMEPAD_SETTINGS_H

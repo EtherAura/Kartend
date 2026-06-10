@@ -24,6 +24,9 @@ struct ToolbarSettings {
   QString toolbarHorizontalViewButtonText;
   QString toolbarHideSubcollectionsButtonText;
   QString toolbarTitleFilterText;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const ToolbarSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_TOOLBAR_SETTINGS_H

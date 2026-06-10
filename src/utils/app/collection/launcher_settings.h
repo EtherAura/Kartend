@@ -18,6 +18,9 @@ struct LauncherSettings {
   // core directory) so the core picker can list installed libretro cores.
   // Empty means probe the standard per-OS retroarch.cfg locations.
   QString retroarchConfigPath;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const LauncherSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_LAUNCHER_SETTINGS_H

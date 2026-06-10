@@ -465,6 +465,14 @@ add_executable(test_settingsutils
 target_link_libraries(test_settingsutils PRIVATE kartend_utils Qt6::Test)
 add_test(NAME SettingsUtils COMMAND test_settingsutils)
 
+# GeneralSettings equality + save-time normalization — the contract the
+# settings dialog's whole-struct dirty-check depends on (Kartend-6oqat).
+add_executable(test_generalsettingsequality
+  utils/app/test_generalsettingsequality.cpp
+)
+target_link_libraries(test_generalsettingsequality PRIVATE kartend_utils Qt6::Test)
+add_test(NAME GeneralSettingsEquality COMMAND test_generalsettingsequality)
+
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
   utils/text/test_titlefilter.cpp

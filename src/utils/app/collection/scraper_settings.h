@@ -158,6 +158,10 @@ struct ScraperSettings {
   // value-equality operator because it drives the scraperOptionsChanged
   // hot-reload signal.
   ScraperOptions options;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat). Uses
+  // ScraperOptions's own operator== for the options member.
+  bool operator==(const ScraperSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_SCRAPER_SETTINGS_H

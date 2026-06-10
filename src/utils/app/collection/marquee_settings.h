@@ -13,6 +13,9 @@ struct MarqueeSettings {
   bool marqueeEnabled = false;
   QString marqueeScreenName; // QScreen::name() (e.g. "HDMI-A-1"); empty = primary screen
   int marqueeMode = 0;       // 0 = selected item's artwork; 1 = current collection's icon
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const MarqueeSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_MARQUEE_SETTINGS_H

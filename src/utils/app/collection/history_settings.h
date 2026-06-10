@@ -9,6 +9,9 @@
 struct HistorySettings {
   bool historyEnabled = true;
   int historyMaxEntries = 500;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const HistorySettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_HISTORY_SETTINGS_H

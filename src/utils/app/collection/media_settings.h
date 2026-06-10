@@ -13,6 +13,9 @@ struct MediaSettings {
   // Global volume for sidebar / overlay preview audio, 0-100. Applied to all
   // VideoPreviewWidget instances via the static setGlobalVolume() hook.
   int previewVideoVolume = 100;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const MediaSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_MEDIA_SETTINGS_H

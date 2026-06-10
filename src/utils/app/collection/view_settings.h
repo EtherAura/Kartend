@@ -29,6 +29,9 @@ struct ViewSettings {
   bool showMenuBar = true;
   bool showToolbar = true;
   bool fullscreen = false;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const ViewSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_VIEW_SETTINGS_H

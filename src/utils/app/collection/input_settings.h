@@ -35,6 +35,9 @@ struct InputSettings {
   // coerces unrecognized values back to Shift so a hand-edit can't disable
   // the gesture entirely.
   int artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const InputSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_INPUT_SETTINGS_H

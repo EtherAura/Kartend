@@ -26,6 +26,9 @@ struct KeybindingSettings {
   // 0 = unbound so an upgrading install picks up no surprise shortcut; only
   // honored when useHomeView is enabled.
   int keyHomeView = 0;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const KeybindingSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_KEYBINDING_SETTINGS_H

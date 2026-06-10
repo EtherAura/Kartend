@@ -54,6 +54,46 @@ struct GeneralSettings {
   QHash<int, int> lastSelectedItems;
 
   GeneralSettings() = default;
+
+  // Equality over the *settings* only. Every member below is a settings
+  // sub-struct with its own defaulted operator==, so adding a field to any of
+  // them — or a whole new sub-struct here — is folded into the comparison
+  // automatically. This is the single source of truth the settings dialog's
+  // dirty-check relies on, replacing the old ~210-line hand-enumerated field
+  // compare that silently went stale whenever a new deferred field was added
+  // (Kartend-6oqat, e.g. the retroarchConfigPath miss Kartend-hvdow).
+  //
+  // lastSelectedItems is deliberately EXCLUDED: it's runtime selection state
+  // (no INI key, resolved/cleared at runtime), so folding it in would let a
+  // selection change make the settings dialog look dirty.
+  friend bool operator==(const GeneralSettings &a, const GeneralSettings &b) {
+    return a.input == b.input && a.keybindings == b.keybindings && a.gamepad == b.gamepad &&
+           a.scraper == b.scraper && a.attract == b.attract && a.marquee == b.marquee &&
+           a.splash == b.splash && a.runtimeDetection == b.runtimeDetection &&
+           a.toolbar == b.toolbar && a.view == b.view && a.appearance == b.appearance &&
+           a.startup == b.startup && a.media == b.media && a.history == b.history &&
+           a.launchers == b.launchers;
+  }
+  friend bool operator!=(const GeneralSettings &a, const GeneralSettings &b) { return !(a == b); }
+
+  // Returns a copy with the free-text path / title / label fields trimmed. The
+  // settings dialog persists and dirty-compares the *normalized* form so a
+  // whitespace-only edit to one of these fields neither marks the dialog dirty
+  // nor round-trips spurious surrounding spaces — preserving the long-standing
+  // whitespace-insensitivity these specific fields had under the old per-field
+  // check, now that the dirty-check is a whole-struct compare (Kartend-6oqat).
+  [[nodiscard]] GeneralSettings normalizedForSave() const {
+    GeneralSettings copy = *this;
+    copy.launchers.retroarchConfigPath = copy.launchers.retroarchConfigPath.trimmed();
+    copy.splash.bootSplashTitle = copy.splash.bootSplashTitle.trimmed();
+    copy.splash.bootSplashSubtitle = copy.splash.bootSplashSubtitle.trimmed();
+    copy.splash.resumeFocusSplashTitle = copy.splash.resumeFocusSplashTitle.trimmed();
+    copy.splash.resumeFocusSplashSubtitle = copy.splash.resumeFocusSplashSubtitle.trimmed();
+    copy.startup.startupVideoPath = copy.startup.startupVideoPath.trimmed();
+    copy.startup.homeViewLabel = copy.startup.homeViewLabel.trimmed();
+    copy.startup.homeViewIcon = copy.startup.homeViewIcon.trimmed();
+    return copy;
+  }
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_GENERALSETTINGS_H

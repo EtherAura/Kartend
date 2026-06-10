@@ -422,6 +422,12 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     // This matches the whole-struct assign the Apply/OK paths already use in
     // settingsdialog.cpp. The live-apply side effects below still fire so the
     // change is visible while the dialog stays open.
+    //
+    // Canonicalize first (trim the free-text path/title fields) so the value we
+    // persist — and the baseline we reset below — carry no stray surrounding
+    // whitespace, keeping those fields whitespace-insensitive now that the
+    // dirty-check is a whole-struct compare (Kartend-6oqat).
+    m_generalSettings = m_generalSettings.normalizedForSave();
     mwSettings = m_generalSettings;
 
     // applyPixmapCacheBudget propagates the new size to QPixmapCache and the

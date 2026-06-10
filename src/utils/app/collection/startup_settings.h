@@ -28,6 +28,9 @@ struct StartupSettings {
   // path so a configured path survives being toggled off.
   bool startupVideoEnabled = false;
   QString startupVideoPath;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const StartupSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_STARTUP_SETTINGS_H

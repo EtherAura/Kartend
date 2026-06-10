@@ -20,6 +20,9 @@ struct AppearanceSettings {
   // (100 = unscaled). Clamped at load/save so a hand-edited value can't
   // render text at 0pt or blow it past 3x.
   int uiTextZoomPercent = 100;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const AppearanceSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_APPEARANCE_SETTINGS_H

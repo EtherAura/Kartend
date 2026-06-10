@@ -13,6 +13,9 @@ struct AttractSettings {
   bool attractModeAdvanceSelectionEnabled = false;
   int attractModeAdvanceSelectionIntervalSec = 5; // Seconds between selection advances
   bool attractModeAdvanceSelectionRandom = false; // Pick random vs. sequential next
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const AttractSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_ATTRACT_SETTINGS_H

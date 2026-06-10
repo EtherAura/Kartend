@@ -8,6 +8,9 @@
 
 struct RuntimeDetectionSettings {
   bool runtimeDetectionEnabled = false;
+  // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
+  // settings dirty-check field-complete automatically (Kartend-6oqat).
+  bool operator==(const RuntimeDetectionSettings &) const = default;
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_RUNTIME_DETECTION_SETTINGS_H
