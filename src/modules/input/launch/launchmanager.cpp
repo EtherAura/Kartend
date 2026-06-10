@@ -209,8 +209,8 @@ auto LaunchManager::previewLaunchCommand(const CollectionConfig &collection,
   // Expand %collection% so the build-error early-return below reports the
   // resolved program rather than the raw template (the success path overwrites
   // this with cmd.value().program, which is the same expanded value).
-  out.program = QString(launcher.launcherPath).replace("%collection%", collection.name,
-                                                       Qt::CaseInsensitive);
+  out.program =
+      QString(launcher.launcherPath).replace("%collection%", collection.name, Qt::CaseInsensitive);
 
   auto cmd = buildLaunchCommand(launcher, collection.name, filePath);
   if (cmd.isError()) {

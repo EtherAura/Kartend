@@ -434,8 +434,7 @@ void ViewportArtworkScheduler::loadArtworkParallel(const QList<ArtworkInfo> &ite
     return;
   }
 
-  const qint64 afterCollect =
-      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
+  const qint64 afterCollect = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
   int batchCount = 0;
 
   QPointer<ViewportArtworkScheduler> self(this);

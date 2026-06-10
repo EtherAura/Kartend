@@ -123,7 +123,9 @@ QStringList readExtensions(const QJsonValue &v) {
 
 } // namespace
 
-QString defaultCachePath() { return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME); }
+QString defaultCachePath() {
+  return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME);
+}
 
 ErrorUtils::Result<QList<ScreenScraperSystems::System>>
 parseSystemsResponse(const QByteArray &json) {

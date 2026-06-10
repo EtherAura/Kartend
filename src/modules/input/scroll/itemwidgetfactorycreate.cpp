@@ -230,8 +230,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     }
   }
 
-  qint64 afterCacheCheck =
-      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
+  qint64 afterCacheCheck = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
   QString artworkDir = m_context.config.artworkDirectory;
 
@@ -316,8 +315,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
   }
 
-  qint64 afterArtworkFind =
-      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
+  qint64 afterArtworkFind = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
   if (lcPerfTrace().isDebugEnabled() && afterArtworkFind > 5) {
     qCDebug(lcPerfTrace) << "configureArtworkForWidget: totalMs=" << afterArtworkFind

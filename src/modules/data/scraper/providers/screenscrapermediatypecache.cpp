@@ -69,7 +69,9 @@ bool readBool(const QJsonValue &v) {
 
 } // namespace
 
-QString defaultCachePath() { return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME); }
+QString defaultCachePath() {
+  return ScreenScraperJsonCache::cachePath(CACHE_FILE_NAME);
+}
 
 ErrorUtils::Result<QList<MediaType>> parseMediaTypesResponse(const QByteArray &json) {
   QJsonParseError err;

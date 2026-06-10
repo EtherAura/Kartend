@@ -71,18 +71,16 @@ inline bool writeJsonCompact(const QString &filePath, const QJsonObject &root, c
   }
   const QString dir = QFileInfo(filePath).absolutePath();
   if (!QDir().mkpath(dir)) {
-    ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError, mkdirErrMsg,
-                                          context)
-            .withDetails(dir));
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                           mkdirErrMsg, context)
+                             .withDetails(dir));
     return false;
   }
   QFile f(filePath);
   if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError, writeErrMsg,
-                                          context)
-            .withDetails(f.errorString()));
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                           writeErrMsg, context)
+                             .withDetails(f.errorString()));
     return false;
   }
   f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));

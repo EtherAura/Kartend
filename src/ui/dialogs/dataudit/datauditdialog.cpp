@@ -579,10 +579,9 @@ void DatAuditDialog::onAuditFinished() {
   // partial catalogue (Kartend-2zcrz) — otherwise real games show as Missing /
   // files as Unknown with no explanation. Full list in the tooltip.
   if (!out.failedDats.isEmpty()) {
-    m_summaryLabel->setText(
-        m_summaryLabel->text() +
-        tr("   [!] %n DAT file(s) failed to load — results may be incomplete", nullptr,
-           static_cast<int>(out.failedDats.size())));
+    m_summaryLabel->setText(m_summaryLabel->text() +
+                            tr("   [!] %n DAT file(s) failed to load — results may be incomplete",
+                               nullptr, static_cast<int>(out.failedDats.size())));
     m_summaryLabel->setToolTip(
         tr("DAT files that failed to load:\n%1").arg(out.failedDats.join(QLatin1Char('\n'))));
   }
