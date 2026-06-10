@@ -122,7 +122,7 @@ void ViewportArtworkScheduler::maybeTriggerCacheSave(ICacheManager *cacheManager
 // Updates visible widgets' artwork based on viewport and suppression policy
 void ViewportArtworkScheduler::updateViewportArtwork() {
   QElapsedTimer perfTimer;
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+  if (lcPerfTrace().isDebugEnabled()) {
     perfTimer.start();
   }
 
@@ -160,7 +160,7 @@ void ViewportArtworkScheduler::updateViewportArtwork() {
   const int droppedOutOfWindow = remainingItems.size();
   Q_UNUSED(droppedOutOfWindow)
 
-  qint64 afterPartition = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  qint64 afterPartition = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
   if (!immediateItems.isEmpty()) {
     loadArtworkParallel(immediateItems, true);
@@ -274,7 +274,7 @@ void ViewportArtworkScheduler::drainPendingApply() {
   }
 
   QElapsedTimer perfTimer;
-  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  const bool perfTrace = lcPerfTrace().isDebugEnabled();
   if (perfTrace) perfTimer.start();
 
   // Cap the synchronous work per event-loop tick (Kartend-d3qo). A
@@ -422,7 +422,7 @@ void ViewportArtworkScheduler::loadArtworkParallel(const QList<ArtworkInfo> &ite
   }
 
   QElapsedTimer perfTimer;
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+  if (lcPerfTrace().isDebugEnabled()) {
     perfTimer.start();
   }
 
@@ -435,7 +435,7 @@ void ViewportArtworkScheduler::loadArtworkParallel(const QList<ArtworkInfo> &ite
   }
 
   const qint64 afterCollect =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
   int batchCount = 0;
 
   QPointer<ViewportArtworkScheduler> self(this);
@@ -473,7 +473,7 @@ void ViewportArtworkScheduler::loadArtworkParallel(const QList<ArtworkInfo> &ite
     ++batchCount;
   }
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 5) {
+  if (lcPerfTrace().isDebugEnabled() && perfTimer.elapsed() > 5) {
     qCDebug(lcPerfTrace) << "loadArtworkParallel: totalMs=" << perfTimer.elapsed()
                          << "collectMs=" << afterCollect << "items=" << items.size()
                          << "uncached=" << uncachedItems.size() << "batches=" << batchCount;

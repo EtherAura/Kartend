@@ -79,7 +79,7 @@ void VirtualScrollEngine::updateVirtualView() {
   // during smooth scroll (~60fps), so cumulative cost matters here even
   // when each call is cheap. Drives the diagnosis for vertical-grid
   // animation jerkiness reported during Kartend-jxp5 follow-up.
-  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  const bool perfTrace = lcPerfTrace().isDebugEnabled();
   QElapsedTimer perfWall;
   qint64 perfCalcMs = 0, perfEnsureMs = 0, perfRemoveMs = 0, perfArtMs = 0;
   if (perfTrace) {

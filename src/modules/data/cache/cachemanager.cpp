@@ -188,26 +188,32 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   }
 
   QMutexLocker locker(&m_mutex);
-  QFileInfo fileInfo(artworkPath);
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool dueForRevalidation =
         (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
-    if (dueForRevalidation && fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-        fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
-      // Cache invalidation - file changed on disk
-      QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
-      QFile::remove(cachePath);
-      artworkCache.remove(artworkPath);
-      fileTimestamps.remove(artworkPath);
-      m_lastRevalidatedMs.remove(artworkPath);
-      m_metadataDirty = true;
-      ++m_metrics.invalidations;
-    } else {
-      // Memory cache hit
-      if (dueForRevalidation) {
+    // Only construct QFileInfo / stat the file once the throttle window has
+    // elapsed — a fresh memory hit skips the QFileInfo allocation (Kartend-5agy1).
+    bool invalidated = false;
+    if (dueForRevalidation) {
+      const QFileInfo fileInfo(artworkPath);
+      if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
+          fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
+        // Cache invalidation - file changed on disk
+        QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
+        QFile::remove(cachePath);
+        artworkCache.remove(artworkPath);
+        fileTimestamps.remove(artworkPath);
+        m_lastRevalidatedMs.remove(artworkPath);
+        m_metadataDirty = true;
+        ++m_metrics.invalidations;
+        invalidated = true;
+      } else {
         m_lastRevalidatedMs.insert(artworkPath, nowMs);
       }
+    }
+    if (!invalidated) {
+      // Memory cache hit
       ++m_metrics.memoryHits;
       return *pix;
     }
@@ -235,8 +241,12 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
 
       artworkCache.insert(artworkPath, new QPixmap(cachedPixmap),
                           clampToCacheCostBytes(cachedPixmap));
-      if (fileInfo.exists()) {
-        fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
+      // Disk-load path (memory miss, not the hot path): stat here with a local
+      // QFileInfo so the memory-hit fast path above stays allocation-free
+      // (Kartend-5agy1).
+      const QFileInfo diskFileInfo(artworkPath);
+      if (diskFileInfo.exists()) {
+        fileTimestamps[artworkPath] = diskFileInfo.lastModified().toMSecsSinceEpoch();
       }
       return cachedPixmap;
     }
@@ -262,7 +272,6 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
     return {};
   }
 
-  QFileInfo fileInfo(artworkPath);
   QMutexLocker locker(&m_mutex);
 
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
@@ -271,25 +280,30 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool dueForRevalidation =
         (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
-    if (dueForRevalidation && fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-        fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
-      // Cache invalidation - file changed on disk.
-      // Note: This may touch the filesystem, but avoids large image reads.
-      const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
-      QFile::remove(cachePath);
-      artworkCache.remove(artworkPath);
-      fileTimestamps.remove(artworkPath);
-      dirtyArtwork.remove(artworkPath);
-      m_lastRevalidatedMs.remove(artworkPath);
-      m_metadataDirty = true;
-      ++m_metrics.invalidations;
-    } else {
-      if (dueForRevalidation) {
-        m_lastRevalidatedMs.insert(artworkPath, nowMs);
+    // Only construct QFileInfo / stat the file once the throttle window has
+    // elapsed — a fresh hit (the common case while scrolling) skips the
+    // QFileInfo allocation entirely (Kartend-5agy1).
+    if (dueForRevalidation) {
+      const QFileInfo fileInfo(artworkPath);
+      if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
+          fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
+        // Cache invalidation - file changed on disk.
+        // Note: This may touch the filesystem, but avoids large image reads.
+        const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
+        QFile::remove(cachePath);
+        artworkCache.remove(artworkPath);
+        fileTimestamps.remove(artworkPath);
+        dirtyArtwork.remove(artworkPath);
+        m_lastRevalidatedMs.remove(artworkPath);
+        m_metadataDirty = true;
+        ++m_metrics.invalidations;
+        ++m_metrics.misses;
+        return {};
       }
-      ++m_metrics.memoryHits;
-      return *pix;
+      m_lastRevalidatedMs.insert(artworkPath, nowMs);
     }
+    ++m_metrics.memoryHits;
+    return *pix;
   }
 
   ++m_metrics.misses;

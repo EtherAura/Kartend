@@ -212,7 +212,7 @@ void ItemWidgetFactory::applyPlaceholderArtwork(ItemWidget *widget,
 void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
                                                   bool forceDirectLookup) {
   QElapsedTimer perfTimer;
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+  if (lcPerfTrace().isDebugEnabled()) {
     perfTimer.start();
   }
 
@@ -231,7 +231,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   }
 
   qint64 afterCacheCheck =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
   QString artworkDir = m_context.config.artworkDirectory;
 
@@ -242,7 +242,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     }
   }
 
-  qint64 afterDirLookup = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  qint64 afterDirLookup = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
   // Mirror the subfolder structure from media directory to artwork directory
   // when:
@@ -317,9 +317,9 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   }
 
   qint64 afterArtworkFind =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+      lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && afterArtworkFind > 5) {
+  if (lcPerfTrace().isDebugEnabled() && afterArtworkFind > 5) {
     qCDebug(lcPerfTrace) << "configureArtworkForWidget: totalMs=" << afterArtworkFind
                          << "cacheCheck=" << afterCacheCheck
                          << "dirLookup=" << (afterDirLookup - afterCacheCheck)
@@ -340,7 +340,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
 
   if (auto *art = artworkMgr(); art && !artworkPath.isEmpty()) {
     art->addPendingArtwork(widget, artworkPath);
-  } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && artworkPath.isEmpty()) {
+  } else if (lcPerfTrace().isDebugEnabled() && artworkPath.isEmpty()) {
     static int emptyCount = 0;
     if (++emptyCount <= 5) { // Only log first 5 to avoid spam
       qCDebug(lcPerfTrace) << "configureArtworkForWidget: NO ARTWORK artworkDir=" << artworkDir
