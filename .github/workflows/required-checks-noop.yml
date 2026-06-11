@@ -1,0 +1,43 @@
+name: Build and Test
+
+# Kartend-gy0o4: companion to build.yml for branch protection.
+#
+# build.yml skips entirely on doc-only changes via paths-ignore
+# (Kartend-q9gmq). With `script-lint` and `build (Release, gcc)` now
+# REQUIRED status checks on main, a skipped workflow would leave those
+# checks eternally "expected" and block doc-only PRs. This workflow runs
+# on exactly the INVERSE path set and reports same-named, instantly-green
+# jobs — GitHub's documented "handling skipped but required checks"
+# pattern.
+#
+# Mixed docs+code PRs trigger BOTH workflows (paths-ignore skips only when
+# EVERY changed file matches; paths triggers when ANY file matches): the
+# no-op passes immediately and the real jobs still gate the merge, because
+# all check runs with a required name must pass.
+#
+# Keep the job names and the path lists below in EXACT lockstep with
+# build.yml's paths-ignore and required-check job names.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ '**.md', 'docs/**', 'LICENSE', '.gitignore' ]
+
+permissions:
+  contents: read
+
+jobs:
+  script-lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: No-op (docs-only change)
+        run: echo "docs-only change — real script-lint skipped by build.yml paths-ignore (Kartend-gy0o4)"
+
+  build-release-gcc:
+    name: build (Release, gcc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: No-op (docs-only change)
+        run: echo "docs-only change — real build matrix skipped by build.yml paths-ignore (Kartend-gy0o4)"

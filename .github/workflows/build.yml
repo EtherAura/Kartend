@@ -13,9 +13,11 @@ on:
   # paths-ignore (Kartend-q9gmq): a doc/markdown-only change can't affect the
   # build, tests, layering, or test-mapping, so skip the full matrix +
   # ~52-min maintenance job for it. GitHub only skips the workflow when EVERY
-  # changed file matches, so a mixed docs+code PR still runs. Safe to skip
-  # entirely because `main` has no required status checks (a skipped run
-  # therefore can't leave a check pending and block a merge).
+  # changed file matches, so a mixed docs+code PR still runs.
+  # Kartend-gy0o4: `script-lint` and `build (Release, gcc)` are REQUIRED
+  # checks on main now — doc-only PRs get same-named instant-green checks
+  # from required-checks-noop.yml (keep its paths list in lockstep with the
+  # paths-ignore lists below).
   push:
     branches: [ main, develop ]
     paths-ignore: [ '**.md', 'docs/**', 'LICENSE', '.gitignore' ]
