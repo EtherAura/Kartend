@@ -290,6 +290,21 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->tmdbCredentialsPanel->setModel(&m_model);
   connect(ui->tmdbCredentialsPanel, &ScraperCredentialsPanel::changed, this,
           &SettingsDialog::checkForChanges);
+  // Kartend-ztc64: non-modal "credentials stored unencrypted" banner. Seed
+  // from the persisted demotion flag so the warning survives a restart, and
+  // track live changes so the banner appears when an Apply demotes the
+  // credentials and clears the moment a later save re-promotes them. The
+  // demotion is provider-agnostic (any failed keychain write sets it), so
+  // both credential panels mirror the same state.
+  if (auto *settingsManager = m_ctx ? m_ctx->settingsManager() : nullptr) {
+    const auto applyDemotionNotice = [this](const QString &reason) {
+      ui->screenScraperCredentialsPanel->setStorageDemotionNotice(reason);
+      ui->tmdbCredentialsPanel->setStorageDemotionNotice(reason);
+    };
+    applyDemotionNotice(settingsManager->credentialDemotionReason());
+    connect(settingsManager, &ISettingsManager::credentialStorageDemotionChanged, this,
+            applyDemotionNotice);
+  }
 
   // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
   // controller's widget pointers to the panel's own gamepad widgets so the

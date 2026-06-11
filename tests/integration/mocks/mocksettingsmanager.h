@@ -36,6 +36,9 @@ public:
     return m_lastSelected.value(collectionIndex, -1);
   }
 
+  // No keychain in the in-memory double — credentials are never demoted.
+  [[nodiscard]] QString credentialDemotionReason() const override { return {}; }
+
   void handleReloadRequired(const QList<CollectionConfig> &, const QList<CollectionConfig> &,
                             const QList<CollectionConfig> &, int, IDetailsPaneManager *,
                             IScrollManager *, INavigationManager *, IArtworkManager *,

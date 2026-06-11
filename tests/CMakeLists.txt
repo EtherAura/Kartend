@@ -258,6 +258,16 @@ add_executable(test_configurationpanel
 target_link_libraries(test_configurationpanel PRIVATE kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME ConfigurationPanel COMMAND test_configurationpanel)
 
+# Kartend-ztc64: ScraperCredentialsPanel's non-modal "credentials stored
+# unencrypted" banner — hidden by default, shown/cleared via
+# setStorageDemotionNotice, and state carries across setProvider rebuilds.
+# Driven headlessly; the panel is never shown.
+add_executable(test_scrapercredentialspanel
+  ui/dialogs/test_scrapercredentialspanel.cpp
+)
+target_link_libraries(test_scrapercredentialspanel PRIVATE kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScraperCredentialsPanel COMMAND test_scrapercredentialspanel)
+
 # GridUtils tests
 add_executable(test_gridutils utils/view/test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
@@ -1255,6 +1265,29 @@ target_include_directories(test_perdomainsignals PRIVATE
   ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
 )
 add_test(NAME PerDomainSignals COMMAND test_perdomainsignals)
+
+# Kartend-ztc64: credential-storage demotion flag — INI round trip of the
+# [Scrapers]/credentialDemotionReason marker, the credential-walk skip for
+# slash-less meta keys, the plaintext (demoted/legacy) load path, and the
+# clear-on-clean-save + credentialStorageDemotionChanged emission contract.
+add_executable(test_credentialdemotion
+  modules/settings/test_credentialdemotion.cpp
+)
+target_link_libraries(test_credentialdemotion
+  PRIVATE
+    ${KARTEND_AREA_LIBS}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
+    Qt6::Test
+)
+target_include_directories(test_credentialdemotion PRIVATE
+  ${CMAKE_BINARY_DIR}/kartend_chrome_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_core_autogen/include
+  ${CMAKE_BINARY_DIR}/kartend_ui_autogen/include
+)
+add_test(NAME CredentialDemotion COMMAND test_credentialdemotion)
 
 # KeyboardHelpers tests (pure helpers extracted from KeyboardManager)
 add_executable(test_keyboardhelpers

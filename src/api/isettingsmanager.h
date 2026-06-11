@@ -83,6 +83,17 @@ public:
   virtual void setLastSelectedItem(int collectionIndex, int itemIndex) = 0;
   [[nodiscard]] virtual int getLastSelectedItem(int collectionIndex) const = 0;
 
+  /// Non-empty while at least one scraper credential sits in the INI as
+  /// plaintext because a platform-keychain write failed (Kartend-ztc64).
+  /// The value is the human-readable failure reason (QKeychain error string
+  /// or a timeout note). Persisted across restarts via a meta key in
+  /// [Scrapers] and cleared by the next save whose keychain writes all
+  /// succeed — the retried write re-promotes the plaintext value and the
+  /// INI copy is replaced by the @keychain sentinel. The settings dialog
+  /// seeds its non-modal warning banner from this getter and tracks live
+  /// changes via credentialStorageDemotionChanged().
+  [[nodiscard]] virtual QString credentialDemotionReason() const = 0;
+
   virtual void handleReloadRequired(
       const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
       const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
@@ -102,6 +113,15 @@ public:
 
 signals:
   void collectionsModified();
+
+  /// Emitted from saveGeneralSettings() after a clean disk write whenever the
+  /// credential-storage demotion state changed (Kartend-ztc64). A non-empty
+  /// @p reason means a keychain write just failed and the affected
+  /// credential(s) were written to the INI as plaintext; an empty @p reason
+  /// means a subsequent save's keychain writes all succeeded and the
+  /// plaintext copies were re-promoted (or removed). The settings dialog
+  /// uses this to show/hide the inline warning banner without reopening.
+  void credentialStorageDemotionChanged(const QString &reason);
 
   /// Emitted from saveGeneralSettings() when ScraperOptions actually
   /// changed between the previously-loaded value and the new one. Background

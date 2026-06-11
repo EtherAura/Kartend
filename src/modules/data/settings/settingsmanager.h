@@ -34,6 +34,9 @@ public:
   ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &settings) override;
   void setLastSelectedItem(int collectionIndex, int itemIndex) override;
   [[nodiscard]] int getLastSelectedItem(int collectionIndex) const override;
+  [[nodiscard]] QString credentialDemotionReason() const override {
+    return m_credentialDemotionReason;
+  }
 
   void handleReloadRequired(const QList<CollectionConfig> &collections,
                             const QList<CollectionConfig> &newCollections,
@@ -65,6 +68,15 @@ private:
   // ArtworkManager, CacheManager).
   const ApplicationContext *m_ctx = nullptr;
   GeneralSettings m_generalSettings;
+
+  // Kartend-ztc64: mirror of the [Scrapers]/credentialDemotionReason meta key.
+  // Non-empty while a failed keychain write left plaintext credential(s) in
+  // the INI. Loaded in loadScraperSection, recomputed on every
+  // saveScraperSection (each save retries the keychain writes, so a healthy
+  // keychain self-heals the demotion and clears this). The change signal is
+  // emitted from saveGeneralSettings after a clean sync, matching the
+  // per-domain hot-reload pattern.
+  QString m_credentialDemotionReason;
 
   // UUIDs of collections the user just added through the settings
   // dialog that are still waiting for their first scan-summary signal. Value is
