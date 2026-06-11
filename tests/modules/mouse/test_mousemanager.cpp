@@ -213,7 +213,7 @@ void TestMouseManager::init() {
   m_scrollArea = std::make_unique<QScrollArea>();
   m_scrollArea->resize(400, 300);
 
-  m_appCtx.managers.scrollManager = &m_scroll;
+  m_appCtx.managers.seedScrollRoles(&m_scroll);
   m_appCtx.managers.interactionState = &m_state;
 
   m_mgr = std::make_unique<MouseManager>();
@@ -396,7 +396,7 @@ void TestMouseManager::vertical_invalidArgsRefuse() {
 }
 
 void TestMouseManager::vertical_missingScrollManagerRefuses() {
-  m_appCtx.managers.scrollManager = nullptr;
+  m_appCtx.managers.seedScrollRoles(nullptr);
   QSignalSpy started(m_mgr.get(), &MouseManager::holdScrollingStarted);
 
   m_mgr->startMouseHoldScrolling(QPoint(10, 10), 500, 10, 1000);

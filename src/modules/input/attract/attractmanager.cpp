@@ -8,7 +8,8 @@
 #include "attracthelpers.h"
 #include "collection/generalsettings.h"
 #include "gridlayoutcalculator.h"
-#include "iscrollmanager.h"
+#include "igridlayoutscroll.h"
+#include "iscrolldatasource.h"
 #include "iselectionmanager.h"
 #include "uiconstants/attract.h"
 
@@ -208,7 +209,7 @@ void AttractManager::startAttract() {
 
   // In Horizontal view the long axis is X, so attract drives the horizontal
   // scrollbar; otherwise the vertical one.
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IGridLayoutScroll *scroll = m_ctx ? m_ctx->scrollGrid() : nullptr;
   const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
@@ -277,7 +278,7 @@ void AttractManager::onScrollTick() {
   }
 
   // Pick the bar that runs along the long axis of the current view.
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IGridLayoutScroll *scroll = m_ctx ? m_ctx->scrollGrid() : nullptr;
   const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
@@ -340,7 +341,7 @@ void AttractManager::onAdvanceSelectionTick() {
     m_advanceSelectionTimer.stop();
     return;
   }
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollDataSource *scroll = m_ctx ? m_ctx->scrollData() : nullptr;
   ISelectionManager *selection = m_ctx ? m_ctx->selectionManager() : nullptr;
   if (!scroll || !selection) {
     return;

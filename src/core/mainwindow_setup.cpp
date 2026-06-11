@@ -44,6 +44,7 @@
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemartwork.h"
+#include "itemmetadataactioncontroller.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
@@ -412,7 +413,9 @@ void MainWindow::initializeAppContext() {
 
   // Top-level managers — registered eagerly so ctx is fully populated before
   // any manager's setupReferences() runs.
-  m_appContext.managers.scrollManager = m_appManager->getScrollManager();
+  // Seeds the scroll facade plus its six role views in lockstep
+  // (Kartend-h1l8f).
+  m_appContext.managers.seedScrollRoles(m_appManager->getScrollManager());
   if (auto *sm = m_appManager->getScrollManager()) {
     // ScrollManager's ctor already wired m_filterManager off DataSourceCoordinator,
     // so this alias is non-null the moment ScrollManager exists (Kartend-yeik).
@@ -619,8 +622,9 @@ void MainWindow::setupSidebar() {
     // through InteractionManager so the dialog, persistence, and sidebar
     // refresh all match the right-click "Edit metadata…" entry exactly.
     setup.runEditMetadataForItem = [this](const QString &filePath, const QString &itemName) {
-      if (auto *im = m_appManager ? m_appManager->getInteractionManager() : nullptr) {
-        im->editItemMetadata(filePath, itemName);
+      auto *im = m_appManager ? m_appManager->getInteractionManager() : nullptr;
+      if (im && im->itemMetadataActions()) {
+        im->itemMetadataActions()->editItemMetadata(filePath, itemName);
       }
     };
 

@@ -20,7 +20,8 @@ class ArtworkManager;
 class IDetailsPaneManager;
 class InteractionStateHolder;
 class ItemWidget;
-class IScrollManager;
+class IScrollDataSource;
+class ISelectionOverlayScroll;
 class ISelectionManager;
 class IViewportManager;
 
@@ -74,8 +75,15 @@ private:
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-h1l8f: HoverScrollHandler only reads the active-widget map and
+  // drives the selection overlay, so it takes the two narrow scroll roles
+  // instead of the IScrollManager facade. Both alias the same ScrollManager
+  // and are null together.
+  [[nodiscard]] IScrollDataSource *scrollData() const {
+    return m_ctx ? m_ctx->scrollData() : nullptr;
+  }
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const {
+    return m_ctx ? m_ctx->scrollOverlay() : nullptr;
   }
   [[nodiscard]] ISelectionManager *selectionMgr() const {
     return m_ctx ? m_ctx->selectionManager() : nullptr;

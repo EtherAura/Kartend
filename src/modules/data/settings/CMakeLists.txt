@@ -1,6 +1,5 @@
 target_sources(kartend_data PRIVATE
   collectionhierarchybuilder.cpp
-  settingsdialogcontroller.cpp
   settingshelpers.cpp
   settingsmanager.cpp
   settingsmanager_appearance.cpp

@@ -24,6 +24,7 @@
 #include "navigationmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
+#include "settingsdialogcontroller.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -155,7 +156,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
     if (m_appManager->getSettingsManager()) {
       currentCollectionIndex = 0;
       SettingsDialogContext context = makeSettingsDialogContext();
-      m_appManager->getSettingsManager()->openSettingsDialog(context);
+      settingsDialogController()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {
         currentCollectionIndex = 0;

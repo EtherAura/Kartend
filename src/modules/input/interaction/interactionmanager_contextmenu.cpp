@@ -32,6 +32,7 @@
 #include "iplaylistmanager.h"
 #include "iselectionmanager.h"
 #include "itemmetadata.h"
+#include "itemmetadataactioncontroller.h"
 #include "itemwidget.h"
 #include "launchmanager.h"
 #include "metadatalookupprovider.h"
@@ -109,8 +110,11 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     menu.addSeparator();
     QAction *editMetadataAction = menu.addAction(tr("Edit metadata..."));
     const QString &itemName = widget->getItemName();
-    QObject::connect(editMetadataAction, &QAction::triggered, this,
-                     [this, filePath, itemName]() { editItemMetadata(filePath, itemName); });
+    QObject::connect(editMetadataAction, &QAction::triggered, this, [this, filePath, itemName]() {
+      if (m_itemMetadataActions) {
+        m_itemMetadataActions->editItemMetadata(filePath, itemName);
+      }
+    });
     // Preview the launch command without spawning the launcher. Surfaces
     // resolved paths, archive-extraction behaviour, and any validation
     // warnings the dry-run picked up.
@@ -150,15 +154,24 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
     if (!flagUuid.isEmpty()) {
       QAction *pinAction = menu.addAction(isPinned ? tr("Unpin") : tr("Pin to top"));
-      QObject::connect(pinAction, &QAction::triggered, this,
-                       [this, filePath]() { toggleItemPinned(filePath); });
+      QObject::connect(pinAction, &QAction::triggered, this, [this, filePath]() {
+        if (m_itemMetadataActions) {
+          m_itemMetadataActions->toggleItemPinned(filePath);
+        }
+      });
       QAction *continueAction = menu.addAction(continueLater ? tr("Clear continue-later marker")
                                                              : tr("Mark as continue later"));
-      QObject::connect(continueAction, &QAction::triggered, this,
-                       [this, filePath]() { toggleItemContinueLater(filePath); });
+      QObject::connect(continueAction, &QAction::triggered, this, [this, filePath]() {
+        if (m_itemMetadataActions) {
+          m_itemMetadataActions->toggleItemContinueLater(filePath);
+        }
+      });
       QAction *hideAction = menu.addAction(isHidden ? tr("Unhide") : tr("Hide"));
-      QObject::connect(hideAction, &QAction::triggered, this,
-                       [this, filePath]() { toggleItemHidden(filePath); });
+      QObject::connect(hideAction, &QAction::triggered, this, [this, filePath]() {
+        if (m_itemMetadataActions) {
+          m_itemMetadataActions->toggleItemHidden(filePath);
+        }
+      });
     }
 
     // --- Look up online (Stage 1: URL providers only) ---
@@ -274,7 +287,9 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       if (picked.isEmpty()) {
         return;
       }
-      setItemManualPath(filePath, picked);
+      if (m_itemMetadataActions) {
+        m_itemMetadataActions->setItemManualPath(filePath, picked);
+      }
     });
 
     // Only offer "Clear" when a manual_path override actually exists for the
@@ -293,8 +308,11 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         const ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
         if (!md.manualPath.isEmpty()) {
           QAction *clearManualAction = menu.addAction(tr("Clear manual override"));
-          QObject::connect(clearManualAction, &QAction::triggered, this,
-                           [this, filePath]() { setItemManualPath(filePath, QString()); });
+          QObject::connect(clearManualAction, &QAction::triggered, this, [this, filePath]() {
+            if (m_itemMetadataActions) {
+              m_itemMetadataActions->setItemManualPath(filePath, QString());
+            }
+          });
         }
       }
 
@@ -329,12 +347,17 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
                            if (chosen < 0) {
                              return; // User cancelled.
                            }
-                           setItemLauncherOverride(filePath, chosen);
+                           if (m_itemMetadataActions) {
+                             m_itemMetadataActions->setItemLauncherOverride(filePath, chosen);
+                           }
                          });
         if (currentOverride >= 0) {
           QAction *clearLauncherAction = menu.addAction(tr("Clear launcher override"));
-          QObject::connect(clearLauncherAction, &QAction::triggered, this,
-                           [this, filePath]() { setItemLauncherOverride(filePath, -1); });
+          QObject::connect(clearLauncherAction, &QAction::triggered, this, [this, filePath]() {
+            if (m_itemMetadataActions) {
+              m_itemMetadataActions->setItemLauncherOverride(filePath, -1);
+            }
+          });
         }
       }
     }
@@ -409,23 +432,32 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QMenu *addToMenu = menu.addMenu(tr("Add to playlist"));
 
       QAction *newPlaylistAction = addToMenu->addAction(tr("New playlist…"));
-      QObject::connect(newPlaylistAction, &QAction::triggered, this,
-                       [this, srcUuid, filePath]() { addItemToNewPlaylist(srcUuid, filePath); });
+      QObject::connect(newPlaylistAction, &QAction::triggered, this, [this, srcUuid, filePath]() {
+        if (m_playlistMenu) {
+          m_playlistMenu->addItemToNewPlaylist(srcUuid, filePath);
+        }
+      });
 
       // Smart-playlist counterpart sits next to the static creator so the
       // discovery surface for "make a new playlist" stays one menu. The
       // right-clicked item is intentionally not added — smart playlists
       // populate from the filter, not from individual references.
       QAction *newSmartAction = addToMenu->addAction(tr("New smart playlist…"));
-      QObject::connect(newSmartAction, &QAction::triggered, this,
-                       [this]() { createSmartPlaylistDialog(); });
+      QObject::connect(newSmartAction, &QAction::triggered, this, [this]() {
+        if (m_playlistMenu) {
+          m_playlistMenu->createSmartPlaylistDialog();
+        }
+      });
 
       // import a playlist from a JSON or M3U file. Lives next
       // to "New playlist…" rather than under a separate top-level entry so
       // the discovery surface for "create a playlist" is one place.
       QAction *importAction = addToMenu->addAction(tr("Import playlist from file…"));
-      QObject::connect(importAction, &QAction::triggered, this,
-                       [this]() { importPlaylistFromFile(); });
+      QObject::connect(importAction, &QAction::triggered, this, [this]() {
+        if (m_playlistMenu) {
+          m_playlistMenu->importPlaylistFromFile();
+        }
+      });
 
       const QList<PlaylistRow> playlists = playlistMgr()->loadAll();
       if (!playlists.isEmpty()) {
@@ -445,7 +477,9 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
           const QString playlistId = row.id;
           QObject::connect(action, &QAction::triggered, this,
                            [this, playlistId, srcUuid, filePath]() {
-                             addItemToPlaylist(playlistId, srcUuid, filePath);
+                             if (m_playlistMenu) {
+                               m_playlistMenu->addItemToPlaylist(playlistId, srcUuid, filePath);
+                             }
                            });
         }
       }
@@ -488,7 +522,9 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
 
       QAction *renameAction = menu.addAction(tr("Rename playlist…"));
       QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
-        renamePlaylistDialog(playlistId, currentName);
+        if (m_playlistMenu) {
+          m_playlistMenu->renamePlaylistDialog(playlistId, currentName);
+        }
       });
 
       // Smart-playlist edit action — sits next to rename so the two
@@ -498,7 +534,9 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         QAction *editFilterAction = menu.addAction(tr("Edit smart filter…"));
         QObject::connect(editFilterAction, &QAction::triggered, this,
                          [this, playlistId, currentName]() {
-                           editSmartPlaylistDialog(playlistId, currentName);
+                           if (m_playlistMenu) {
+                             m_playlistMenu->editSmartPlaylistDialog(playlistId, currentName);
+                           }
                          });
       }
 
@@ -509,19 +547,28 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QAction *exportJsonAction = exportMenu->addAction(tr("As JSON…"));
       QObject::connect(exportJsonAction, &QAction::triggered, this,
                        [this, playlistId, currentName]() {
-                         exportPlaylistToFile(playlistId, currentName, /*asJson=*/true);
+                         if (m_playlistMenu) {
+                           m_playlistMenu->exportPlaylistToFile(playlistId, currentName,
+                                                                /*asJson=*/true);
+                         }
                        });
       QAction *exportM3uAction = exportMenu->addAction(tr("As M3U…"));
       QObject::connect(exportM3uAction, &QAction::triggered, this,
                        [this, playlistId, currentName]() {
-                         exportPlaylistToFile(playlistId, currentName, /*asJson=*/false);
+                         if (m_playlistMenu) {
+                           m_playlistMenu->exportPlaylistToFile(playlistId, currentName,
+                                                                /*asJson=*/false);
+                         }
                        });
 
       if (!isReserved) {
         QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
-        QObject::connect(
-            deleteAction, &QAction::triggered, this,
-            [this, playlistId, currentName]() { deletePlaylistConfirm(playlistId, currentName); });
+        QObject::connect(deleteAction, &QAction::triggered, this,
+                         [this, playlistId, currentName]() {
+                           if (m_playlistMenu) {
+                             m_playlistMenu->deletePlaylistConfirm(playlistId, currentName);
+                           }
+                         });
       }
     }
   }

@@ -40,7 +40,7 @@
 #include "gamepadcapturecontroller.h"
 #include "iinteractionmanager.h"
 #include "imainwindow.h"
-#include "iscrollmanager.h"
+#include "iscrolldatasource.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
@@ -444,7 +444,7 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     // since this used to be a live-apply side-effect and the panel pattern
     // makes the field deferred-save.
     ItemWidget::setShowTitleInPlaceholder(m_generalSettings.view.showTitleInPlaceholder);
-    if (auto *scrollManager = m_ctx->scrollManager()) {
+    if (auto *scrollManager = m_ctx->scrollData()) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
       for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
         if (auto *widget = it.value()) {
@@ -471,7 +471,7 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     mainWindow->applyToolbarCustomization();
 
     // Refresh all visible widgets to apply text appearance changes immediately
-    IScrollManager *scrollManager = m_ctx->scrollManager();
+    IScrollDataSource *scrollManager = m_ctx->scrollData();
     if (scrollManager) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
       for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {

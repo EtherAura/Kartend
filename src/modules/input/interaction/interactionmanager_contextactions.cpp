@@ -2,27 +2,21 @@
 // Context-menu *action handlers* — the slot-side of the right-click menu
 // items showContextMenu() builds. These are split out of
 // interactionmanager_contextmenu.cpp so that file can stay focused on the
-// QMenu / action assembly. Each function below is a discrete user action:
-// add-to-playlist, smart-playlist CRUD, playlist import/export, and the
-// command-preview dialog. The item-metadata mutation cluster (edit dialog,
-// manual path, launcher override, pin/hide/continue-later) moved to
-// ItemMetadataActionController (Kartend-5lmt7); the one-line delegates for
-// it live at the top of this file.
+// QMenu / action assembly. The item-metadata mutation cluster (edit dialog,
+// manual path, launcher override, pin/hide/continue-later) lives on
+// ItemMetadataActionController and the playlist actions on
+// PlaylistMenuController (Kartend-5lmt7); callers reach both controllers
+// directly via the itemMetadataActions() / playlistMenu() accessors — the
+// one-line delegates that used to live here were deleted (Kartend-i5ai0).
+// What remains is the launch-command preview, which stays on the facade
+// because it composes LaunchManager + the owner-supplied dialog runner.
 
 #include "interactionmanager.h"
-
-#include "itemmetadataactioncontroller.h"
-
-#include <QFileInfo>
 
 #include "collection/collectionconfig.h"
 #include "collection/launcherpreset.h"
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
-// The two dialogs (createsmartplaylistdialog.h / editmetadatadialog.h) are
-// launched via owner-supplied closures so the input layer doesn't need the
-// ui/ dialog headers. EditMetadataPayload's full definition lives in
-// itemmetadata.h, included below.
 #include "idatabasemanager.h"
 #include "itemmetadata.h"
 #include "launchmanager.h"
@@ -31,74 +25,6 @@
 #include <algorithm>
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
-
-// Kartend-5lmt7: the playlist action bodies moved to PlaylistMenuController
-// (playlistmenucontroller.cpp). One-line delegates below keep the context-menu
-// lambdas in interactionmanager_contextmenu.cpp unchanged.
-
-void InteractionManager::addItemToNewPlaylist(const QString &srcUuid, const QString &filePath) {
-  if (m_playlistMenu) {
-    m_playlistMenu->addItemToNewPlaylist(srcUuid, filePath);
-  }
-}
-
-void InteractionManager::addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
-                                           const QString &filePath) {
-  if (m_playlistMenu) {
-    m_playlistMenu->addItemToPlaylist(playlistId, srcUuid, filePath);
-  }
-}
-
-void InteractionManager::createSmartPlaylistDialog() {
-  if (m_playlistMenu) {
-    m_playlistMenu->createSmartPlaylistDialog();
-  }
-}
-
-void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
-                                                 const QString &currentName) {
-  if (m_playlistMenu) {
-    m_playlistMenu->editSmartPlaylistDialog(playlistId, currentName);
-  }
-}
-
-void InteractionManager::renamePlaylistDialog(const QString &playlistId,
-                                              const QString &currentName) {
-  if (m_playlistMenu) {
-    m_playlistMenu->renamePlaylistDialog(playlistId, currentName);
-  }
-}
-
-void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
-                                               const QString &currentName) {
-  if (m_playlistMenu) {
-    m_playlistMenu->deletePlaylistConfirm(playlistId, currentName);
-  }
-}
-
-// Kartend-5lmt7: the item-metadata mutation bodies moved to
-// ItemMetadataActionController (itemmetadataactioncontroller.cpp). The
-// methods below stay as one-line delegates so every existing caller — the
-// context-menu lambdas in interactionmanager_contextmenu.cpp and MainWindow's
-// edit-metadata entry points — is unchanged.
-
-void InteractionManager::editItemMetadata(const QString &filePath, const QString &itemName) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->editItemMetadata(filePath, itemName);
-  }
-}
-
-void InteractionManager::setItemManualPath(const QString &filePath, const QString &manualPath) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->setItemManualPath(filePath, manualPath);
-  }
-}
-
-void InteractionManager::setItemLauncherOverride(const QString &filePath, int launcherIndex) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->setItemLauncherOverride(filePath, launcherIndex);
-  }
-}
 
 void InteractionManager::previewLaunchCommand(const QString &filePath, const QString &itemName) {
   if (!m_runLaunchPreviewDialog || !m_collections || !m_currentCollectionIndex) {
@@ -152,35 +78,4 @@ void InteractionManager::previewLaunchCommand(const QString &filePath, const QSt
 
   const auto preview = LaunchManager::previewLaunchCommand(owning, launcher, filePath);
   m_runLaunchPreviewDialog(itemName, launcherName, filePath, preview);
-}
-
-void InteractionManager::toggleItemPinned(const QString &filePath) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->toggleItemPinned(filePath);
-  }
-}
-
-void InteractionManager::toggleItemHidden(const QString &filePath) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->toggleItemHidden(filePath);
-  }
-}
-
-void InteractionManager::toggleItemContinueLater(const QString &filePath) {
-  if (m_itemMetadataActions) {
-    m_itemMetadataActions->toggleItemContinueLater(filePath);
-  }
-}
-
-void InteractionManager::exportPlaylistToFile(const QString &playlistId, const QString &currentName,
-                                              bool asJson) {
-  if (m_playlistMenu) {
-    m_playlistMenu->exportPlaylistToFile(playlistId, currentName, asJson);
-  }
-}
-
-void InteractionManager::importPlaylistFromFile() {
-  if (m_playlistMenu) {
-    m_playlistMenu->importPlaylistFromFile();
-  }
 }

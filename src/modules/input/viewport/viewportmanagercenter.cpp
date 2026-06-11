@@ -5,9 +5,10 @@
 #include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
+#include "igridlayoutscroll.h"
 #include "interactionstateholder.h"
-#include "iscrollmanager.h"
 #include "iselectionmanager.h"
+#include "iselectionoverlayscroll.h"
 #include "viewporthelpers.h"
 #include "viewportmanager.h"
 
@@ -49,12 +50,12 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   // selection along the scroll axis" entry point) but we drive the
   // horizontal scrollbar with a simpler animation path. Vertical centering
   // is unnecessary because the column always fits in the viewport.
-  if (scrollMgr() && scrollMgr()->getMetrics().isHorizontal) {
+  if (scrollGrid() && scrollGrid()->getMetrics().isHorizontal) {
     QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
     if (!hScrollBar) {
       return;
     }
-    const auto &metrics = scrollMgr()->getMetrics();
+    const auto &metrics = scrollGrid()->getMetrics();
     int viewportWidth = m_itemScrollArea->viewport()->width();
     if (viewportWidth <= 0 || metrics.itemsPerRow <= 0) {
       return;
@@ -71,16 +72,16 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     if (forceImmediate || qAbs(targetX - curX) <= 1) {
       setProgrammaticScrollGuarded(true);
       hScrollBar->setValue(targetX);
-      if (scrollMgr()) {
+      if (scrollGrid()) {
         if (m_isWrappingNavigation) {
-          scrollMgr()->cleanupActiveWidgets();
+          scrollGrid()->cleanupActiveWidgets();
         }
-        scrollMgr()->updateVirtualView();
+        scrollGrid()->updateVirtualView();
         int idxDyn = (state() && state()->isSelectionSuppressed())
                          ? state()->pendingSelectionIndex()
                          : index;
         if (idxDyn >= 0) {
-          scrollMgr()->updateSelectionForIndex(idxDyn);
+          scrollOverlay()->updateSelectionForIndex(idxDyn);
         }
       }
       setProgrammaticScrollGuarded(false);
@@ -98,16 +99,16 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
         if (state()) {
           state()->scroll().programmaticScroll = false;
         }
-        if (scrollMgr()) {
-          scrollMgr()->refreshSelectionOverlayState();
-          scrollMgr()->updateVirtualView();
+        if (scrollGrid()) {
+          scrollOverlay()->refreshSelectionOverlayState();
+          scrollGrid()->updateVirtualView();
         }
       };
       setProgrammaticScrollGuarded(true);
       animMgr()->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX, onFinished);
     }
-    if (scrollMgr()) {
-      scrollMgr()->updateVirtualView();
+    if (scrollGrid()) {
+      scrollGrid()->updateVirtualView();
     }
     m_lastSelectedRow = colIndex;
     if (selectionMgr()) {
@@ -122,8 +123,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   int itemHeight = collection.gridLayout.itemHeight;
   int vSpacing = collection.gridLayout.verticalSpacing;
 
-  if (scrollMgr()) {
-    const auto &metrics = scrollMgr()->getMetrics();
+  if (scrollGrid()) {
+    const auto &metrics = scrollGrid()->getMetrics();
     gridWidth = metrics.itemsPerRow;
     itemHeight = metrics.itemHeight;
     vSpacing = metrics.verticalSpacing;
@@ -150,8 +151,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   int totalHeight = 0;
   int logicalHeight = 0;
   int headerOffset = 0;
-  if (scrollMgr()) {
-    const auto &metrics = scrollMgr()->getMetrics();
+  if (scrollGrid()) {
+    const auto &metrics = scrollGrid()->getMetrics();
     totalHeight = metrics.totalHeight;
     logicalHeight = metrics.logicalHeight;
     headerOffset = metrics.headerOffset;
@@ -223,12 +224,12 @@ int ViewportManager::computeSmallThreshold(int currentRow) const {
 
 bool ViewportManager::handleSmallMovementEarlyReturn(int /*distance*/, bool clickScroll, int index,
                                                      int currentRow) {
-  if (scrollMgr()) {
-    scrollMgr()->updateVirtualView();
+  if (scrollGrid()) {
+    scrollGrid()->updateVirtualView();
     int idxDyn =
         (state() && state()->isSelectionSuppressed()) ? state()->pendingSelectionIndex() : index;
     if (idxDyn >= 0) {
-      scrollMgr()->updateSelectionForIndex(idxDyn);
+      scrollOverlay()->updateSelectionForIndex(idxDyn);
     }
   }
   if (clickScroll && state()) {
@@ -291,8 +292,8 @@ void ViewportManager::adjustForForceClickZeroDistance(QScrollBar *verticalScroll
     if (state()) {
       state()->scroll().programmaticScroll = true;
     }
-    if (scrollMgr()) {
-      scrollMgr()->refreshSelectionOverlayState();
+    if (scrollOverlay()) {
+      scrollOverlay()->refreshSelectionOverlayState();
     }
     int startVal = qBound(0, targetY + adjust, verticalScrollBar->maximum());
     verticalScrollBar->setValue(startVal);
@@ -302,8 +303,8 @@ void ViewportManager::adjustForForceClickZeroDistance(QScrollBar *verticalScroll
       if (state()) {
         state()->scroll().programmaticScroll = false;
       }
-      if (scrollMgr()) {
-        scrollMgr()->refreshSelectionOverlayState();
+      if (scrollOverlay()) {
+        scrollOverlay()->refreshSelectionOverlayState();
       }
     });
     curY = startVal;
@@ -333,8 +334,8 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
-  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
-                               : collection.gridLayout.horizontalSpacing;
+  int hSpacing = (scrollGrid()) ? scrollGrid()->getEffectiveHorizontalSpacing()
+                                : collection.gridLayout.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
   int itemX =
       GridUtils::computeItemX(index, gridWidth, collection.gridLayout.itemWidth, hSpacing, margins);
@@ -353,13 +354,13 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
                                                viewportWidth, hScrollBar->maximum());
   vScrollBar->setValue(targetY);
   hScrollBar->setValue(targetX);
-  if (scrollMgr()) {
+  if (scrollGrid()) {
     // When wrapping, clear all widgets to prevent stale artwork from showing
     // at wrong positions after the large scroll jump
     if (m_isWrappingNavigation) {
-      scrollMgr()->cleanupActiveWidgets();
+      scrollGrid()->cleanupActiveWidgets();
     }
-    scrollMgr()->updateVirtualView();
+    scrollGrid()->updateVirtualView();
   }
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
   if (selectionMgr()) {

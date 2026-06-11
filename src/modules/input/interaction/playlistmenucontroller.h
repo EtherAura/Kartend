@@ -72,8 +72,9 @@ struct PlaylistMenuControllerSetup {
  * the context menu is where the user reaches them. They drive
  * IPlaylistManager (+ a view reload via INavigationManager where the result
  * must render immediately); nothing about them is input coordination.
- * InteractionManager keeps one-line delegating wrappers, so every existing
- * caller (the context-menu lambdas) is unchanged.
+ * Callers (the context-menu lambdas) reach this controller directly via
+ * InteractionManager::playlistMenu() — the facade's one-line delegating
+ * wrappers were deleted (Kartend-i5ai0).
  *
  * QObject solely for tr() — the confirmation/completion dialogs carry
  * user-visible strings. No signals or slots.

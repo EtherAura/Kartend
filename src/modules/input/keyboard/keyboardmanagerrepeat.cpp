@@ -13,8 +13,8 @@
 #include "collection/validationhelpers.h"
 #include "collectiontypes.h"
 #include "interactionstateholder.h"
+#include "iselectionoverlayscroll.h"
 #include "keyboardhelpers.h"
-#include "scrollmanager.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcKeyboardManager)
@@ -93,7 +93,7 @@ void KeyboardManager::beginHoldRepeat() {
 
 void KeyboardManager::stopRepeat(bool suppressRecentering) {
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  ISelectionOverlayScroll *scroll = m_ctx ? m_ctx->scrollOverlay() : nullptr;
 
   if (m_isShuttingDown || QApplication::closingDown()) {
     clearRepeatState();
@@ -153,7 +153,7 @@ void KeyboardManager::onRepeatStep() {
     stopRepeat();
     return;
   }
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  ISelectionOverlayScroll *scroll = m_ctx ? m_ctx->scrollOverlay() : nullptr;
   if (!scroll || !m_collections || !m_currentCollectionIndex) {
     stopRepeat();
     return;

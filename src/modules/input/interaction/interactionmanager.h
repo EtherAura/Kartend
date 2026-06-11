@@ -174,6 +174,14 @@ public:
   [[nodiscard]] EventManager *eventManager() const { return m_eventManager.get(); }
   [[nodiscard]] SearchManager *searchManager() const { return m_searchManager.get(); }
   [[nodiscard]] LaunchManager *launchManager() const { return m_launchManager.get(); }
+  // Extracted action controllers (Kartend-5lmt7 / Kartend-i5ai0). Callers
+  // reach the item-metadata mutations and playlist menu actions through
+  // these accessors directly — the facade no longer keeps one-line
+  // delegating wrappers for them.
+  [[nodiscard]] ItemMetadataActionController *itemMetadataActions() const {
+    return m_itemMetadataActions.get();
+  }
+  [[nodiscard]] PlaylistMenuController *playlistMenu() const { return m_playlistMenu.get(); }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Public API
@@ -209,80 +217,19 @@ public:
   void stopScrollAnimations() override;
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
-  // Opens the per-item metadata editor (notes, tags, rating, source URL,
-  // custom fields). Persists changes via DatabaseManager::saveItemMetadata()
-  // and refreshes the sidebar so new fields render immediately.
-  void editItemMetadata(const QString &filePath, const QString &itemName);
 
   // Opens the read-only launch-preview / dry-run dialog. Resolves the
   // launcher (incl. preset + per-item override), builds the command via
   // LaunchManager::previewLaunchCommand, and hands the result to the
   // owner-supplied dialog runner. No external process is spawned.
   void previewLaunchCommand(const QString &filePath, const QString &itemName);
-  // Sets or clears the per-item manual override for a media item
-  // Stored in `item_metadata.manual_path`; passing an empty
-  // path clears the override and re-enables auto-discovery in the
-  // collection's manualDirectory. Refreshes the sidebar afterwards.
-  void setItemManualPath(const QString &filePath, const QString &manualPath);
-  // Sets or clears the per-item launcher override. Pass an
-  // index into the owning collection's unified launcher list (0 = primary,
-  // 1..N = launcher.additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
-  // the override and re-enable the multi-launcher chooser at launch.
-  void setItemLauncherOverride(const QString &filePath, int launcherIndex);
 
-  // Per-item state flag toggles (item_metadata.is_pinned / is_hidden /
-  // continue_later). Each reads the current row, flips the relevant flag,
-  // stamps source='user', persists, and refreshes the sidebar so the new
-  // state surfaces immediately.
-  void toggleItemPinned(const QString &filePath);
-  void toggleItemHidden(const QString &filePath);
-  void toggleItemContinueLater(const QString &filePath);
-
-  // Builds the live (displayName, uuid) list fed to the smart-playlist
-  // dialog's ByCollection picker. Playlists are skipped because anchoring
-  // a smart filter on a playlist's synthetic uuid would yield a recursive
-  // dependency. Built fresh on each open so collection renames / additions
-  // are picked up.
-
-  // ─── Playlist context-menu handlers ────────────────────────
-  // Prompts for a playlist name, creates the playlist, and adds the given
-  // (srcUuid, filePath) reference. Cancelling the prompt is a no-op; an empty
-  // reference creates an empty playlist (useful for "set up first, fill
-  // later" workflows).
-  void addItemToNewPlaylist(const QString &srcUuid, const QString &filePath);
-  // Idempotent add — duplicates are silently rejected by PlaylistManager.
-  void addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
-                         const QString &filePath);
-  // Smart-playlist counterpart of addItemToNewPlaylist. Pops the
-  // CreateSmartPlaylistDialog and creates a filter-driven playlist on
-  // accept; cancellation is a no-op. The current item context is
-  // intentionally ignored — smart playlists derive their members from
-  // the filter, not from the right-clicked item.
-  void createSmartPlaylistDialog();
-  // Open the create dialog pre-loaded with an existing smart playlist's
-  // filter so the user can edit the criterion + parameters in place.
-  // Called from the Edit smart filter… action that appears inside a
-  // smart playlist view.
-  void editSmartPlaylistDialog(const QString &playlistId, const QString &currentName);
-  // Inline-rename via a single QInputDialog. No-ops on cancel or unchanged
-  // name; the rename is always reflected in the sidebar via the
-  // playlistsChanged → resyncPlaylistCollections chain.
-  void renamePlaylistDialog(const QString &playlistId, const QString &currentName);
-  // Confirms (the cascade can't be undone) then deletes the playlist row plus
-  // all of its items. Source items in their owning collections are untouched.
-  void deletePlaylistConfirm(const QString &playlistId, const QString &currentName);
-
-  // ─── Playlist import / export ──────────────────────────────
-  // Pops a save-file dialog and writes the playlist as JSON or M3U via
-  // PlaylistManager. M3U is a basic dialect (#EXTM3U + path-per-line); JSON
-  // is the lossless Kartend format that round-trips through importFromJson.
-  void exportPlaylistToFile(const QString &playlistId, const QString &currentName, bool asJson);
-  // Pops an open-file dialog and creates a new playlist from the chosen file.
-  // Format is auto-detected by extension (.json → JSON, anything else → M3U).
-  // M3U entries that don't resolve to a known item are skipped, with the
-  // count surfaced in a single completion message-box so the user knows
-  // why their imported playlist may be shorter than the source.
-  void importPlaylistFromFile();
+  // Item-metadata mutations (edit dialog, manual path, launcher override,
+  // pin/hide/continue-later) live on ItemMetadataActionController; the
+  // playlist context-menu actions (create/add/rename/delete, smart-playlist
+  // dialogs, import/export) live on PlaylistMenuController. Reach both via
+  // the itemMetadataActions() / playlistMenu() accessors above — the
+  // delegating wrappers were deleted (Kartend-i5ai0).
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
@@ -403,6 +350,8 @@ private:
   // below are the canonical read path; never cache sibling-manager pointers
   // as direct fields.
   const ApplicationContext *m_ctx = nullptr;
+  // Kartend-h1l8f: keeps the IScrollManager facade — its partials span five
+  // scroll roles (data, grid, overlay, preview, search).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
@@ -457,9 +406,9 @@ private:
 
   // Item-metadata mutation handlers (edit dialog, manual path, launcher
   // override, pin/hide/continue-later), extracted from this class's
-  // context-action partial (Kartend-5lmt7). The public methods of the same
-  // names on this class are one-line delegates so existing callers
-  // (context-menu lambdas, MainWindow's edit entry points) are unchanged.
+  // context-action partial (Kartend-5lmt7). Callers (context-menu lambdas,
+  // MainWindow's edit entry points) use the controller directly via the
+  // itemMetadataActions() accessor (Kartend-i5ai0).
   std::unique_ptr<ItemMetadataActionController> m_itemMetadataActions;
   // Playlist context-menu actions (create/add/rename/delete, smart-playlist
   // dialogs, import/export), same extraction (Kartend-5lmt7).

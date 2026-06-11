@@ -17,10 +17,11 @@
 #include "collection/validationhelpers.h"
 #include "idetailspanemanager.h"
 #include "interactionstateholder.h"
+#include "iscrolldatasource.h"
 #include "iselectionmanager.h"
+#include "iselectionoverlayscroll.h"
 #include "itemwidget.h"
 #include "iviewportmanager.h"
-#include "scrollmanager.h"
 #include "uiconstants/mouse.h"
 
 namespace {
@@ -34,7 +35,7 @@ ItemWidget *itemWidgetForObject(QObject *obj) {
   return nullptr;
 }
 
-int visualIndexForWidget(ItemWidget *widget, IScrollManager *scroll) {
+int visualIndexForWidget(ItemWidget *widget, IScrollDataSource *scroll) {
   if (!widget || !scroll) {
     return -1;
   }
@@ -77,7 +78,7 @@ bool HoverScrollHandler::handleEvent(QObject *obj, QEvent *event, bool isRestori
     clearPendingScroll();
     return false;
   }
-  if (!scrollMgr() || !selectionMgr() || !m_itemScrollArea || !m_gridContainer) {
+  if (!scrollData() || !selectionMgr() || !m_itemScrollArea || !m_gridContainer) {
     clearPendingScroll();
     return false;
   }
@@ -109,7 +110,7 @@ bool HoverScrollHandler::handleEvent(QObject *obj, QEvent *event, bool isRestori
     return false;
   }
 
-  const int visualIndex = visualIndexForWidget(widget, scrollMgr());
+  const int visualIndex = visualIndexForWidget(widget, scrollData());
   if (visualIndex < 0) {
     if (!m_pendingWidget) {
       clearPendingScroll();
@@ -172,12 +173,12 @@ void HoverScrollHandler::commitPendingScroll() {
   const QPoint stagedGlobalPos = m_pendingGlobalPos;
 
   if (!widget || visualIndex < 0 || !m_generalSettings ||
-      !m_generalSettings->input.selectItemOnHover || !selectionMgr() || !scrollMgr() ||
+      !m_generalSettings->input.selectItemOnHover || !selectionMgr() || !scrollData() ||
       !widget->isVisible()) {
     clearPendingScroll();
     return;
   }
-  if (visualIndexForWidget(widget, scrollMgr()) != visualIndex ||
+  if (visualIndexForWidget(widget, scrollData()) != visualIndex ||
       visualIndex != selectionMgr()->currentSelectedIndex()) {
     clearPendingScroll();
     return;
@@ -221,8 +222,8 @@ void HoverScrollHandler::commitPendingScroll() {
   if (viewportMgr()) {
     viewportMgr()->centerItemVertically(visualIndex, false);
   }
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(visualIndex);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(visualIndex);
   }
 
   // After centering, schedule a deferred poll to check whether the viewport
@@ -235,7 +236,7 @@ void HoverScrollHandler::commitPendingScroll() {
 
 void HoverScrollHandler::pollCursorForContinue() {
   if (!m_generalSettings || !m_generalSettings->input.selectItemOnHover || !selectionMgr() ||
-      !scrollMgr() || !m_itemScrollArea || !m_gridContainer) {
+      !scrollData() || !m_itemScrollArea || !m_gridContainer) {
     return;
   }
   if (QApplication::activeModalWidget() || !m_stackedWidget || !m_itemsPage ||
@@ -277,7 +278,7 @@ void HoverScrollHandler::pollCursorForContinue() {
     return;
   }
 
-  const int visualIndex = visualIndexForWidget(widget, scrollMgr());
+  const int visualIndex = visualIndexForWidget(widget, scrollData());
   if (visualIndex < 0) {
     return;
   }

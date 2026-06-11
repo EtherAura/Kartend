@@ -144,6 +144,8 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
+  // Kartend-h1l8f: keeps the IScrollManager facade — it connects to the
+  // virtualScrollSetupComplete signal, which lives on the QObject facade.
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

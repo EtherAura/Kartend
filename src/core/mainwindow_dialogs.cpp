@@ -44,6 +44,7 @@
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemartwork.h"
+#include "itemmetadataactioncontroller.h"
 #include "kartmanager.h"
 #include "launchmanager.h"
 #include "layoutprofilesdialog.h"
@@ -60,6 +61,7 @@
 #include "scraperprovidersdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
+#include "settingsdialogcontroller.h"
 #include "toolbarcontroller.h"
 #include "variantgrouping.h"
 #include "variantgroupingdialog.h"
@@ -73,6 +75,16 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
+
+SettingsDialogController *MainWindow::settingsDialogController() {
+  if (!m_settingsDialogController) {
+    // QObject-parented to this window — parent() is the runtime lifetime
+    // guard. Long-lived (not per-open) because the controller tracks pending
+    // "Collection Added" scan summaries that resolve after the dialog closes.
+    m_settingsDialogController = new SettingsDialogController(&m_appContext, this);
+  }
+  return m_settingsDialogController;
+}
 
 SettingsDialogContext MainWindow::makeSettingsDialogContext() {
   SettingsDialogContext context;
@@ -91,13 +103,16 @@ SettingsDialogContext MainWindow::makeSettingsDialogContext() {
 }
 
 void MainWindow::openSettingsDialog(SettingsPage initialPage) {
+  // Without a settings manager there is nothing for the dialog flow to save
+  // against — keep the historical guard even though the controller itself
+  // reaches SettingsManager through the ApplicationContext.
   auto *settings = m_appManager ? m_appManager->getSettingsManager() : nullptr;
   if (!settings) {
     return;
   }
   SettingsDialogContext context = makeSettingsDialogContext();
   context.initialPage = initialPage;
-  settings->openSettingsDialog(context);
+  settingsDialogController()->openSettingsDialog(context);
   // Settings may have flipped watchFilesystem on/off or changed a mediaDirectory;
   // reconcile the watch set so the next file event lands on the right collection.
   refreshCollectionFilesystemWatcher();
@@ -583,9 +598,9 @@ void MainWindow::openCommandPalette() {
   commands.append({tr("Tools"), tr("Open settings"), [this]() {
                      // Mirror ctx.onOpenSettings (mainwindow_setup createMenuBar) so the
                      // palette opens the same dialog the Settings menu entry uses.
-                     if (auto *settings = m_appManager->getSettingsManager()) {
+                     if (m_appManager->getSettingsManager() != nullptr) {
                        SettingsDialogContext context = makeSettingsDialogContext();
-                       settings->openSettingsDialog(context);
+                       settingsDialogController()->openSettingsDialog(context);
                      }
                    }});
   commands.append({tr("Tools"), tr("Rescan current collection"), [this]() {
@@ -639,11 +654,12 @@ void MainWindow::reviewMissingMetadataInteractive() {
         // interaction manager (it owns the closure that pops EditMetadataDialog
         // and persists the result). Returns true when something changed.
         auto onEdit = [this](const QString &filePath, const QString &itemName) {
-          if (auto *im = m_appManager->getInteractionManager()) {
+          auto *im = m_appManager->getInteractionManager();
+          if (im && im->itemMetadataActions()) {
             // editItemMetadata is fire-and-forget; we can't tell from its
             // signature whether the user actually saved. Conservative: assume
             // an edit attempt counts and let reevaluate filter the queue.
-            im->editItemMetadata(filePath, itemName);
+            im->itemMetadataActions()->editItemMetadata(filePath, itemName);
             return true;
           }
           return false;

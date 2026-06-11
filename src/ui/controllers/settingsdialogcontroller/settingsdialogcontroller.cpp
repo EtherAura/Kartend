@@ -1,25 +1,29 @@
-// Settings dialog orchestration extracted from settingsmanager.cpp:
+// Settings dialog orchestration, extracted from settingsmanager.cpp and then
+// relocated out of modules/data/ into this ui-layer controller class
+// (Kartend-q8p29, following the DetailsPaneManager precedent):
 //   - openSettingsDialog
 //   - handleReloadRequired
 //   - handleLayoutChanges
+//   - onCollectionScanSummary (async "Collection Added" summary boxes)
 // Plus the file-local anonymous-namespace helpers used by these methods
 // (compareNonReloadFields, compareReloadFields, updateViewingFlags,
 // updateWindowTitle, applyScrollbarSettings, refreshSidebar,
 // handleScrollBranch, detectChanges).
+#include "settingsdialogcontroller.h"
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/typehelpers.h"
-#include "databasemanager.h"
 #include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
+#include "idatabasemanager.h"
 #include "idetailspanemanager.h"
 #include "imainwindow.h"
 #include "inavigationmanager.h"
 #include "iscrollmanager.h"
 #include "isettingsdialog.h"
-#include "settingsmanager.h"
+#include "isettingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants/timing.h"
@@ -289,7 +293,7 @@ auto detectChanges(const QList<CollectionConfig> &newCollections,
 
 } // namespace
 
-void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
+void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &context) {
   if (!context.collections || !context.currentCollectionIndex) {
     return;
   }
@@ -305,11 +309,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   int viewingCollectionIndex = currentCollectionIndex;
   QList<CollectionConfig> originalCollections = collections;
 
-  // The concrete SettingsDialog lives in the ui/ layer; the data layer must
-  // not name it. MainWindow supplies a factory that constructs the dialog and
-  // wires its collectionSaved / rescanRequired Qt signals to the two callbacks
-  // below (the signal connections need the concrete symbols). We then drive
-  // the dialog through the neutral ISettingsDialog interface.
+  // MainWindow supplies a factory that constructs the concrete SettingsDialog
+  // and wires its collectionSaved / rescanRequired Qt signals to the two
+  // callbacks below (the signal connections need the concrete symbols). We
+  // then drive the dialog through the neutral ISettingsDialog interface.
   if (!context.createSettingsDialog) {
     return;
   }
@@ -320,8 +323,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     // Persist + surface disk-write failures back through the open settings
     // dialog. Without this the toolbar/tree-driven save buttons would lie
     // about a successful save when QSettings::sync() returns a status error.
-    if (auto result = saveCollections(collections); result.isError()) {
-      ErrorPresentation::showError(parent, result.error());
+    if (ISettingsManager *settings = m_ctx ? m_ctx->settingsManager() : nullptr) {
+      if (auto result = settings->saveCollections(collections); result.isError()) {
+        ErrorPresentation::showError(parent, result.error());
+      }
     }
   };
 
@@ -412,8 +417,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   // saveCollections emits collectionsModified itself, so
   // an explicit emit here would double-fire and run rebuildHierarchyCache
   // twice for no benefit. Removed.
-  if (auto result = saveCollections(collections); result.isError()) {
-    ErrorPresentation::showError(parent, result.error());
+  if (ISettingsManager *settings = m_ctx ? m_ctx->settingsManager() : nullptr) {
+    if (auto result = settings->saveCollections(collections); result.isError()) {
+      ErrorPresentation::showError(parent, result.error());
+    }
   }
 
   // Drop items/collections rows that no live collection owns — orphans
@@ -459,8 +466,8 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
       // signal so the user sees a single message box per newly added
       // collection even across repeated openSettingsDialog invocations.
       if (databaseManager) {
-        connect(databaseManager, &DatabaseManager::collectionScanSummary, this,
-                &SettingsManager::onCollectionScanSummary, Qt::UniqueConnection);
+        connect(databaseManager, &IDatabaseManager::collectionScanSummary, this,
+                &SettingsDialogController::onCollectionScanSummary, Qt::UniqueConnection);
       }
     }
   }
@@ -511,7 +518,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   }
 }
 
-auto SettingsManager::handleReloadRequired(
+auto SettingsDialogController::handleReloadRequired(
     const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
     IDetailsPaneManager *detailsPaneManager, IScrollManager *scrollManager,
@@ -572,7 +579,7 @@ auto SettingsManager::handleReloadRequired(
   }
 }
 
-auto SettingsManager::handleLayoutChanges(
+auto SettingsDialogController::handleLayoutChanges(
     QWidget *parent, const QList<CollectionConfig> &collections, int viewingCollectionIndex,
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
@@ -600,8 +607,9 @@ auto SettingsManager::handleLayoutChanges(
 // first scan for a newly-added collection completes. Tracked UUIDs come from
 // openSettingsDialog's diff of the collection list at dialog open vs on
 // accept.
-void SettingsManager::onCollectionScanSummary(const QString &collectionUuid, int itemsScanned,
-                                              int itemsApplied, bool success) {
+void SettingsDialogController::onCollectionScanSummary(const QString &collectionUuid,
+                                                       int itemsScanned, int itemsApplied,
+                                                       bool success) {
   if (!m_pendingAddSummaries.contains(collectionUuid)) {
     return;
   }

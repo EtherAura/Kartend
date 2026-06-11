@@ -5,9 +5,10 @@
 #include "collection/generalsettings.h"
 #include "collection/validationhelpers.h"
 #include "interactionstateholder.h"
+#include "iscrolldatasource.h"
+#include "iselectionoverlayscroll.h"
 #include "iviewportmanager.h"
 #include "keyboardmanager.h"
-#include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "uiconstants/mouse.h"
 
@@ -48,7 +49,7 @@ void ArrowNavigationHandler::setupReferences(const ArrowNavigationHandlerSetup &
 }
 
 void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertical) {
-  if (!scrollMgr() ||
+  if (!scrollData() ||
       !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
@@ -131,8 +132,8 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
   if (selectionMgr()) {
     selectionMgr()->setSelectedIndex(newSelection);
   }
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(newSelection);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(newSelection);
   }
 
   // Request full selection update from parent (includes file path update)
@@ -161,7 +162,7 @@ void ArrowNavigationHandler::handleRepeatStep() {
     return;
   }
 
-  if (!scrollMgr() || !m_collections || !m_currentCollectionIndex) {
+  if (!scrollData() || !m_collections || !m_currentCollectionIndex) {
     if (keyboardMgr()) {
       keyboardMgr()->stopRepeat();
     }
@@ -244,8 +245,8 @@ void ArrowNavigationHandler::handleRepeatStep() {
   }
 
   // Update scroll state
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(newSelection);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(newSelection);
   }
 
   emit requestFullSelectionUpdate(newSelection);
@@ -344,7 +345,7 @@ int ArrowNavigationHandler::getCurrentSelection() const {
 }
 
 int ArrowNavigationHandler::getTotalItems() const {
-  return scrollMgr() ? scrollMgr()->getTotalItems() : 0;
+  return scrollData() ? scrollData()->getTotalItems() : 0;
 }
 
 bool ArrowNavigationHandler::isWrapEnabled() const {

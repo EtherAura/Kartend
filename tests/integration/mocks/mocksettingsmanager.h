@@ -10,9 +10,9 @@ namespace KartendTest {
  * exercise the QSettings layer.
  *
  * Every method is a no-op: loadCollections leaves its argument untouched,
- * saves are dropped, the settings dialog is a stub. The selection cache is
- * an in-memory QHash so tests that rely on round-tripping last-selected
- * indices still work without disk.
+ * saves are dropped. The selection cache is an in-memory QHash so tests
+ * that rely on round-tripping last-selected indices still work without
+ * disk.
  */
 class MockSettingsManager : public ISettingsManager {
   Q_OBJECT
@@ -23,7 +23,6 @@ public:
   ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &) override {
     return ErrorUtils::Result<void>::success();
   }
-  void openSettingsDialog(const SettingsDialogContext &) override {}
   void loadGeneralSettings(GeneralSettings &) override {}
   ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &) override {
     return ErrorUtils::Result<void>::success();
@@ -39,14 +38,10 @@ public:
   // No keychain in the in-memory double — credentials are never demoted.
   [[nodiscard]] QString credentialDemotionReason() const override { return {}; }
 
-  void handleReloadRequired(const QList<CollectionConfig> &, const QList<CollectionConfig> &,
-                            const QList<CollectionConfig> &, int, IDetailsPaneManager *,
-                            IScrollManager *, INavigationManager *, IArtworkManager *,
-                            ICacheManager *, int) override {}
-
-  void handleLayoutChanges(QWidget *, const QList<CollectionConfig> &, int, bool, bool, bool, bool,
-                           bool, bool, bool, bool, IDetailsPaneManager *, IScrollManager *,
-                           IArtworkManager *, int) override {}
+  // The dialog-orchestration methods (openSettingsDialog, handleReloadRequired,
+  // handleLayoutChanges) left ISettingsManager for the ui-layer
+  // SettingsDialogController in Kartend-q8p29, so there is nothing
+  // dialog-shaped to stub here anymore.
 
 private:
   QHash<int, int> m_lastSelected;

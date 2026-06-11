@@ -220,6 +220,8 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
+  // Kartend-h1l8f: keeps the IScrollManager facade — spans four scroll roles
+  // (data, grid, overlay, search).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

@@ -2,9 +2,13 @@
 #define COVERFLOWCONTROLLER_H
 
 #include "collection/collectioncontext.h"
+#include <QHash>
 #include <QObject>
+#include <QSet>
+#include <QString>
 
 class QScrollArea;
+class QTimer;
 class QWidget;
 class CoverFlowWidget;
 struct CoverFlowCardData;
@@ -54,7 +58,7 @@ class CoverFlowController : public QObject {
   Q_DISABLE_COPY_MOVE(CoverFlowController)
 public:
   explicit CoverFlowController(QObject *parent = nullptr);
-  ~CoverFlowController() override = default;
+  ~CoverFlowController() override;
 
   void setupReferences(const CoverFlowControllerSetup &setup);
 
@@ -94,6 +98,13 @@ public:
 
   [[nodiscard]] CoverFlowWidget *widget() const { return m_widget; }
 
+  /// Number of carousel slots still waiting on a cold artwork-directory
+  /// cache (Kartend-6x8tn). Observability for tests / diagnostics only.
+  [[nodiscard]] int pendingArtworkCount() const { return m_pendingArtwork.size(); }
+  /// True while the trailing artwork-retry timer is armed (Kartend-6x8tn).
+  /// Observability for tests / diagnostics only.
+  [[nodiscard]] bool artworkRetryActive() const;
+
 signals:
   void selectItemByIndex(int index);
   void subcollectionEntered(int subcollectionIndex);
@@ -108,6 +119,31 @@ private:
   /// Build the card descriptor for one actual (unfiltered) index — the
   /// per-item body shared by rebuildCards() and updateCardsIfActive().
   [[nodiscard]] CoverFlowCardData buildCard(int actualIndex, IDatabaseManager *db) const;
+
+  // ── Pending-artwork retry (Kartend-6x8tn) ────────────────────────────
+  // resolveCardArtworkPath is cache-only, so cards built against a cold
+  // DirectoryCache come back with an empty artworkPath and would stay
+  // blank forever on normal collections (Kartend-x7bn8 removed the
+  // per-chunk full rebuilds that used to self-heal them). These helpers
+  // track those slots, prewarm their directories off-thread, and patch
+  // just the pending cards once the cache is warm.
+
+  /// Queue @p visualIndex for the trailing retry when its artwork
+  /// directory is still cold; warm-cache empties are genuinely artless
+  /// and are skipped. Adds the directory to @p dirsToWarm.
+  void notePendingArtwork(int visualIndex, int actualIndex, IDatabaseManager *db,
+                          QSet<QString> &dirsToWarm);
+  /// schedulePrewarm() @p dirsToWarm and start the retry timer with a
+  /// fresh attempt budget when anything is pending.
+  void armArtworkRetry(const QSet<QString> &dirsToWarm);
+  /// Timer body: re-run buildCard for pending slots whose directory is now
+  /// cached; re-arm (bounded) while still-cold directories remain.
+  void retryPendingArtwork();
+  /// Drop all pending slots, reset the attempt budget, stop the timer.
+  void clearArtworkRetry();
+  /// The directory resolveCardArtworkPath would search for @p actualIndex
+  /// — empty for non-media indices.
+  [[nodiscard]] QString artworkDirForActual(int actualIndex, IDatabaseManager *db) const;
 
   /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old
   /// m_filterManager pointer-as-setup-struct-field pattern. Returns the
@@ -128,6 +164,16 @@ private:
   CoverFlowWidget *m_widget = nullptr;
   TimerUtils::DebouncedTimer *m_resolveDebouncer = nullptr;
   int m_pendingVisualIndex = -1;
+
+  // Kartend-6x8tn: carousel slots whose primary artwork resolved empty
+  // against a still-cold DirectoryCache, keyed by visual index → the
+  // directory the lookup searches. The bounded trailing retry re-runs
+  // buildCard for just these slots once their directory is cached —
+  // positive entry patches the card, cached negative means genuinely
+  // artless and the slot is dropped.
+  QHash<int, QString> m_pendingArtwork;
+  QTimer *m_artworkRetryTimer = nullptr;
+  int m_artworkRetryAttempts = 0;
 };
 
 #endif

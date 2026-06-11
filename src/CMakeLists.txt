@@ -223,11 +223,14 @@ target_link_libraries(kartend_media PUBLIC kartend_data kartend_chrome kartend_a
 # kartend_ui: dialogs, widget panes, DetailsPaneManager. Above input/data
 # because dialogs (SettingsDialog) reference InteractionManager, etc.
 # Includes the controllers/ subdir added in Kartend-uk5z when
-# DetailsPaneManager moved out of media/.
+# DetailsPaneManager moved out of media/; SettingsDialogController joined it
+# in Kartend-q8p29 when the dialog-orchestration half of SettingsManager
+# moved out of modules/data/settings/.
 # ---------------------------------------------------------------------------
 target_include_directories(kartend_ui PUBLIC
   ${CMAKE_BINARY_DIR}/src/kartend_ui_autogen/include
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/detailspanemanager
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/settingsdialogcontroller
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/dataudit
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/collection

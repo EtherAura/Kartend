@@ -144,6 +144,8 @@ private:
   // ctx is the single source of truth for sibling managers + state. Inline
   // accessors below are the canonical read path.
   const ApplicationContext *m_ctx = nullptr;
+  // Kartend-h1l8f: keeps the IScrollManager facade — spans four scroll roles
+  // (data, search, grid, preview).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

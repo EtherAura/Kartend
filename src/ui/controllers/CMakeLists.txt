@@ -1,1 +1,2 @@
 add_subdirectory(detailspanemanager)
+add_subdirectory(settingsdialogcontroller)

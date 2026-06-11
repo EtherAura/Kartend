@@ -231,6 +231,8 @@ private:
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
+  // Kartend-h1l8f: keeps the IScrollManager facade — its partials span five
+  // scroll roles (lifecycle, grid, search, data, overlay).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

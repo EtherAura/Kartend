@@ -116,7 +116,8 @@ void ApplicationManager::destroyManagersAndClearContextSlots() {
   m_detailsPaneManager.reset();
 
   if (ctx) {
-    ctx->managers.scrollManager = nullptr;
+    // Null the facade and its six role aliases together (Kartend-h1l8f).
+    ctx->managers.seedScrollRoles(nullptr);
     // FilterManager is owned by ScrollManager's DataSourceCoordinator; its
     // alias dangles the moment ScrollManager dies.
     ctx->managers.filterManager = nullptr;
@@ -234,7 +235,8 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   // during ScrollManager::setupReferences().
   m_scrollManager = std::make_unique<ScrollManager>(nullptr);
   if (ctx) {
-    ctx->managers.scrollManager = m_scrollManager.get();
+    // Seeds the facade plus its six role views in lockstep (Kartend-h1l8f).
+    ctx->managers.seedScrollRoles(m_scrollManager.get());
   }
 
   // 8. DetailsPaneManager

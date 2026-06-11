@@ -43,9 +43,10 @@ struct ItemMetadataActionControllerSetup {
  * pin / hide / continue-later toggles — lived on the input coordinator only
  * because the context menu is where the user reaches them. They mutate the
  * item_metadata store and refresh the sidebar; nothing about them is input
- * coordination. InteractionManager keeps one-line delegating wrappers, so
- * every existing caller (context-menu lambdas, MainWindow's edit-metadata
- * entry points) is unchanged.
+ * coordination. Callers (context-menu lambdas, MainWindow's edit-metadata
+ * entry points) reach this controller directly via
+ * InteractionManager::itemMetadataActions() — the facade's one-line
+ * delegating wrappers were deleted (Kartend-i5ai0).
  *
  * Not a QObject: the actions are imperative (dialog → DB write → sidebar
  * refresh) with no signals of their own. Borrowed state (collections /
