@@ -22,6 +22,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QSet>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -140,6 +141,8 @@ private slots:
   void scanThenSave_persistsMatchingFiles();
   void deleteThenRescan_prunesMissingFile();
   void cancelledSave_leavesCommittedStateIntact();
+  void cancelledScan_doesNotPoisonRescan();
+  void genuineScanFailure_poisonsUuidForSession();
   void emptiedDirectoryRescan_prunesAllAndStampsMetadata();
   void missingDirectoryScan_reportsNotCompleted();
   void fileSize_persistsAndUpdatesOnRescan();
@@ -226,6 +229,79 @@ void TestScanServicePersist::cancelledSave_leavesCommittedStateIntact() {
   QVERIFY2(!names.contains(QStringLiteral("c.bin")), "a cancelled scan must not apply staged rows");
   QVERIFY(names.contains(QStringLiteral("a.bin")));
   QVERIFY(names.contains(QStringLiteral("b.bin")));
+}
+
+void TestScanServicePersist::cancelledScan_doesNotPoisonRescan() {
+  // Kartend-n0daq: a user-cancelled scan also returns false from
+  // scanAndSaveItemsToDatabase, but it must NOT land in m_failedScanUuids —
+  // poisoning the uuid would block rescanning the collection until restart.
+  // The next ensureCollectionScanned pass must retry and succeed.
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "a"));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("b.bin")), "b"));
+
+  const CollectionConfig cfg = makeConfig(media.path());
+
+  // Cancel the moment the scan starts. ensureCollectionScanned resets the
+  // cancel token BEFORE emitting scanStarting, so a synchronous
+  // requestCancelScan() from the slot survives into the staging/apply
+  // isScanCancelled() bails — the same ordering as a user cancelling
+  // mid-scan from the UI.
+  const QMetaObject::Connection cancelOnStart =
+      QObject::connect(fx.service(), &ScanService::scanStarting, fx.service(),
+                       [&fx]() { fx.service()->requestCancelScan(); });
+  QVERIFY2(!fx.service()->ensureCollectionScanned(0, cfg),
+           "a cancelled scan must report failure to the caller");
+  QObject::disconnect(cancelOnStart);
+  QCOMPARE(itemCount(fx.db()), 0); // the cancelled scan applied nothing
+
+  // The uuid must not be poisoned: the next pass retries and lands both rows.
+  QVERIFY2(fx.service()->ensureCollectionScanned(0, cfg),
+           "a rescan after user cancellation must run and succeed");
+  QCOMPARE(itemCount(fx.db()), 2);
+  QCOMPARE(itemBaseNames(fx.db()),
+           (QSet<QString>{QStringLiteral("a.bin"), QStringLiteral("b.bin")}));
+}
+
+void TestScanServicePersist::genuineScanFailure_poisonsUuidForSession() {
+  // Counterpart to cancelledScan_doesNotPoisonRescan: a deterministic scan
+  // failure must still poison the uuid so reload-driven passes do not spin an
+  // unbreakable scan->fail->reload loop (the original m_failedScanUuids
+  // contract).
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "a"));
+
+  const CollectionConfig cfg = makeConfig(media.path());
+
+  // Deterministic genuine failure: without the items table the apply phase
+  // cannot upsert and the scan rolls back.
+  {
+    QSqlQuery drop(fx.db());
+    QVERIFY(drop.exec(QStringLiteral("DROP TABLE items")));
+  }
+
+  QSignalSpy startSpy(fx.service(), &ScanService::scanStarting);
+  QVERIFY(!fx.service()->ensureCollectionScanned(0, cfg));
+  QCOMPARE(startSpy.count(), 1);
+
+  // Repair the schema; a non-poisoned uuid would now scan successfully. The
+  // poisoned uuid must instead be skipped without even emitting scanStarting.
+  DatabaseSchema::createTables(fx.db());
+  DatabaseSchema::createIndexes(fx.db());
+  QVERIFY2(!fx.service()->ensureCollectionScanned(0, cfg),
+           "a genuinely failed scan must stay skipped for the session");
+  QCOMPARE(startSpy.count(), 1);
+  QCOMPARE(itemCount(fx.db()), 0);
 }
 
 void TestScanServicePersist::emptiedDirectoryRescan_prunesAllAndStampsMetadata() {

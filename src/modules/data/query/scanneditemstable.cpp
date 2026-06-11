@@ -140,8 +140,12 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
   return true;
 }
 
-bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid) {
+bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid,
+                                                   QString *errorDetailsOut) {
   if (!m_db.isOpen()) {
+    if (errorDetailsOut) {
+      *errorDetailsOut = QStringLiteral("database connection not open");
+    }
     return false;
   }
   QSqlQuery q(m_db);
@@ -150,10 +154,17 @@ bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid
             "items.path)");
   q.addBindValue(collectionUuid);
   if (!q.exec()) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to delete missing items using scanned_items",
-                                               "ScannedItemsTable::deleteItemsMissingFromScan")
-                             .withDetails(q.lastError().text()));
+    if (errorDetailsOut) {
+      // Caller owns reporting (it classifies lock contention for its retry
+      // ladder, Kartend-kt39d) — logging here too would double up.
+      *errorDetailsOut = q.lastError().text();
+    } else {
+      ErrorUtils::logError(
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to delete missing items using scanned_items",
+                                "ScannedItemsTable::deleteItemsMissingFromScan")
+              .withDetails(q.lastError().text()));
+    }
     return false;
   }
   return true;

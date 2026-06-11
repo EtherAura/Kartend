@@ -852,8 +852,10 @@ bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionC
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // A scan that already failed this session is not retried automatically.
-  // The failure is deterministic (schema/IO/bind-limit) and rolls back without
-  // persisting dir_signature, so needsRescan() stays true. Re-running it on
+  // The failure is deterministic (schema/IO/bind-limit) or has already
+  // exhausted the apply transaction's bounded lock-contention retries
+  // (Kartend-kt39d), and rolls back without persisting dir_signature, so
+  // needsRescan() stays true. Re-running it on
   // every collectionScanCompleted-driven reload spins an unbreakable
   // scan->fail->reload loop. Return without emitting scanStarting/
   // collectionScanCompleted: emitting them would re-trigger the reload and
@@ -883,8 +885,13 @@ bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionC
       scanAndSaveItemsToDatabase(collectionIndex, collection, &itemsScanned, &itemsApplied);
 
   // Remember a failed scan so the next reload-driven pass skips it instead of
-  // retrying forever (see the m_failedScanUuids guard above).
-  if (!success) {
+  // retrying forever (see the m_failedScanUuids guard above). A user-cancelled
+  // scan is exempt (Kartend-n0daq): it also returns false (the staging/apply
+  // bails on isScanCancelled()), but it is not a deterministic failure —
+  // poisoning the uuid would block rescanning the collection until restart.
+  // The cancel token is still set here: it is only cleared by the
+  // resetScanCancellation() at the top of the NEXT ensureCollectionScanned.
+  if (!success && !isScanCancelled()) {
     m_failedScanUuids.insert(uuid);
   }
 

@@ -187,10 +187,25 @@ private:
   // persistent items table, delete items no longer on disk, and update
   // collection metadata. Must be called inside a valid staging window
   // (i.e. after stageFilesystemScan succeeded and before the temp table is
-  // cleared). Returns the number of items applied.
+  // cleared). Returns the number of items applied. The apply transaction is
+  // retried a bounded number of times on lock contention (Kartend-kt39d) —
+  // the staged temp table is connection-local and a failed attempt rolls
+  // back, so each retry replays against a fresh snapshot.
   [[nodiscard]] bool commitStagedScanResults(const CollectionConfig &collection,
                                              const QString &uuid, const QString &extSignature,
                                              const QString &dirSignature, int &itemsApplied);
+
+  // One attempt of commitStagedScanResults' apply transaction
+  // (Kartend-kt39d). Returns true on a committed apply. On failure sets
+  // @p lockContention when the failure class is SQLITE_BUSY/SQLITE_LOCKED
+  // (KartendDb::isLockContentionError) so the caller can retry the whole
+  // transaction on a fresh snapshot; failure reporting is demoted to debug
+  // on non-final attempts and keeps warning + errorOccurred on the final
+  // one (and for every non-lock failure).
+  [[nodiscard]] bool
+  applyStagedScanResultsAttempt(const QString &uuid, const QString &dirSignature, int legacyId,
+                                const std::function<void(int, int, bool)> &maybeEmitScanProgress,
+                                bool finalAttempt, bool &lockContention, int &itemsApplied);
 
   [[nodiscard]] bool prepareCollectionForItemsInsert(const CollectionConfig &collection,
                                                      const QString &uuid,
@@ -216,6 +231,12 @@ private:
   // that re-enters ensureCollectionScanned(), an always-failing scan spins an
   // unbreakable scan->fail->reload loop. Once a UUID lands here it is not
   // retried automatically — only worker-thread access, so no locking needed.
+  // Transient lock contention no longer reaches this set in practice: the
+  // apply transaction retries in-place on a fresh snapshot (Kartend-kt39d),
+  // so entries represent the exhausted-retries / deterministic-failure class.
+  // User-cancelled scans are exempt (Kartend-n0daq): cancellation also makes
+  // scanAndSaveItemsToDatabase return false, but it must stay retryable —
+  // ensureCollectionScanned skips the insert when isScanCancelled() is set.
   QSet<QString> m_failedScanUuids;
 
   // scanned_items TEMP-table staging — borrows m_db by reference (see

@@ -18,6 +18,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -35,6 +36,28 @@ using ErrorUtils::ErrorContext;
 using QueryManagerInternal::canonicalKeyPath;
 using QueryManagerInternal::displayNameForBase;
 using QueryManagerInternal::insertIfAbsent;
+
+Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
+
+namespace {
+// Kartend-h62cc: the v13 path reconcile runs on BOTH worker connections
+// (loadAllCollections on the query worker, ensureScannedForContext on the
+// scan worker) right before scan work, so under scan churn it routinely
+// loses the SQLite write lock to a scan transaction on the other connection.
+// That failure self-heals — the 'items_paths_absolutized' gate flag stays
+// '0', so the next connection ensure retries the (idempotent) reconcile —
+// so lock-contention failures log at debug with a will-retry note instead
+// of warning. Anything else is a genuine failure and keeps warning level.
+void logAbsolutizeFailure(const ErrorUtils::ErrorContext &err) {
+  if (KartendDb::isLockContentionError(err)) {
+    qCDebug(lcQueryManager) << QString("[%1] %2 (%3) — transient lock contention; "
+                                       "will retry on a later connection ensure")
+                                   .arg(err.source, err.message, err.details);
+    return;
+  }
+  ErrorUtils::logError(err);
+}
+} // namespace
 
 void QueryManagerInternal::appendFileMapsAndListCanonical(
     int collectionIndex, const CollectionConfig &expandedCollection,
@@ -360,8 +383,9 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
   }
 
   KartendDb::DbTransaction txn(db, "QueryManagerInternal::maybeAbsolutizeItemPaths");
-  if (!txn.activeOrReport("Failed to start transaction to absolutize item paths",
-                          ErrorUtils::Severity::Warning)) {
+  if (!txn.active()) {
+    logAbsolutizeFailure(txn.beginError("Failed to start transaction to absolutize item paths",
+                                        nullptr, ErrorUtils::Severity::Warning));
     return;
   }
 
@@ -395,11 +419,10 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
     rows.prepare("SELECT id, path, rel_path FROM items WHERE collection_uuid = ?");
     rows.addBindValue(uuid);
     if (!rows.exec()) {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to read items for path absolutization",
-                                       "QueryManagerInternal::maybeAbsolutizeItemPaths")
-                     .withDetails(rows.lastError().text());
-      ErrorUtils::logError(err);
+      logAbsolutizeFailure(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to read items for path absolutization",
+                                                 "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                               .withDetails(rows.lastError().text()));
       reconcileFailed = true;
       break;
     }
@@ -436,11 +459,10 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
       update.bindValue(1, u.relPath);
       update.bindValue(2, u.id);
       if (!update.exec()) {
-        auto err =
-            ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to absolutize item path",
-                                  "QueryManagerInternal::maybeAbsolutizeItemPaths")
-                .withDetails(update.lastError().text());
-        ErrorUtils::logError(err);
+        logAbsolutizeFailure(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                   "Failed to absolutize item path",
+                                                   "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                                 .withDetails(update.lastError().text()));
         reconcileFailed = true;
         break;
       }
@@ -461,15 +483,16 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
     QSqlQuery mark(db);
     mark.prepare("UPDATE meta SET value = '1' WHERE key = 'items_paths_absolutized'");
     if (!mark.exec()) {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to mark item paths as absolutized",
-                                       "QueryManagerInternal::maybeAbsolutizeItemPaths")
-                     .withDetails(mark.lastError().text());
-      ErrorUtils::logError(err);
+      logAbsolutizeFailure(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to mark item paths as absolutized",
+                                                 "QueryManagerInternal::maybeAbsolutizeItemPaths")
+                               .withDetails(mark.lastError().text()));
       return; // guard dtor rolls back
     }
   }
 
-  (void)txn.commitOrReport("Failed to commit item path absolutization",
-                           ErrorUtils::Severity::Warning);
+  if (!txn.commit()) {
+    logAbsolutizeFailure(txn.commitError("Failed to commit item path absolutization", nullptr,
+                                         ErrorUtils::Severity::Warning));
+  }
 }

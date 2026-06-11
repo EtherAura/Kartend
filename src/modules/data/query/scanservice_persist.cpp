@@ -76,26 +76,107 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
                                           int &itemsApplied) {
   itemsApplied = 0;
 
-  // Throttle progress emissions during the apply phase.
+  // Throttle progress emissions during the apply phase. Shared across retry
+  // attempts so a retried apply keeps the emission cadence instead of
+  // restarting it.
   ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
                                 [this](int p, int t) { emit scanItemsProgress(p, t); });
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+  auto maybeEmitScanProgress = [&](int processed, int total, bool force) {
     throttle.report(processed, total, force);
   };
 
-  // Prepare collection row (upsert into collections table).
+  // Prepare collection row (upsert into collections table). Has its own
+  // bounded SQLITE_BUSY retry ladder (Kartend-5s54/6yhq).
   int legacyId = -1;
   if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
     return false;
   }
 
+  // Kartend-kt39d: bounded retry of the WHOLE apply transaction on lock
+  // contention. The apply is a deferred BEGIN, then a COUNT read, then
+  // writes — so a commit landing on another connection (main-thread
+  // DatabaseManager, the query slots) between the snapshot read and the
+  // write-lock upgrade fails the first write INSTANTLY with
+  // SQLITE_BUSY_SNAPSHOT (the busy handler never engages; extending
+  // busy_timeout does nothing — measured and documented in Kartend-h62cc).
+  // A fresh attempt takes a new snapshot, which resolves BUSY_SNAPSHOT
+  // outright; a writer genuinely HOLDING the lock engages this connection's
+  // busy_timeout inside the attempt instead. The scanned_items staging table
+  // is TEMP (connection-local) and only read by the apply, and a failed
+  // attempt rolls back completely, so the apply is restartable as-is.
+  // Without this ladder a single lost lock was TERMINAL for the session:
+  // ensureCollectionScanned records the uuid in m_failedScanUuids and every
+  // later reload-driven pass skips the collection until app restart.
+  constexpr int MAX_APPLY_ATTEMPTS = 3;
+  constexpr int BASE_DELAY_MS = 100;
+  for (int attempt = 0; attempt < MAX_APPLY_ATTEMPTS; ++attempt) {
+    if (attempt > 0) {
+      if (isScanCancelled()) {
+        return false;
+      }
+      // Brief backoff (100ms, 200ms) so a writer mid-commit can clear; the
+      // BUSY_SNAPSHOT case would succeed immediately either way.
+      QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+    }
+    bool lockContention = false;
+    const bool finalAttempt = (attempt == MAX_APPLY_ATTEMPTS - 1);
+    if (applyStagedScanResultsAttempt(uuid, dirSignature, legacyId, maybeEmitScanProgress,
+                                      finalAttempt, lockContention, itemsApplied)) {
+      if (attempt > 0) {
+        qCWarning(lcQueryManager).nospace()
+            << "ScanService::commitStagedScanResults: apply landed on attempt " << (attempt + 1)
+            << " after database-is-locked contention";
+      }
+      return true;
+    }
+    if (!lockContention) {
+      // Genuine failure or cancellation — already reported by the attempt.
+      return false;
+    }
+    // Lock contention with retries remaining: the attempt logged at debug
+    // with a will-retry note; loop for a fresh snapshot.
+  }
+  return false; // terminal: the final attempt reported at warning + errorOccurred
+}
+
+bool ScanService::applyStagedScanResultsAttempt(
+    const QString &uuid, const QString &dirSignature, int legacyId,
+    const std::function<void(int, int, bool)> &maybeEmitScanProgress, bool finalAttempt,
+    bool &lockContention, int &itemsApplied) {
+  itemsApplied = 0;
+  lockContention = false;
+
+  // Classifying reporter (Kartend-kt39d, mirroring the h62cc shape in
+  // ensureItemsFtsReady): lock contention on a non-final attempt logs at
+  // debug with a will-retry note — the caller retries the whole transaction
+  // on a fresh snapshot — while the final attempt and every non-lock failure
+  // keep the warning/critical log + errorOccurred emission.
+  const auto reportFailure = [&](const ErrorUtils::ErrorContext &err) {
+    if (KartendDb::isLockContentionError(err)) {
+      lockContention = true;
+      if (!finalAttempt) {
+        qCDebug(lcQueryManager).nospace()
+            << err.source << ": " << err.message << " (" << err.details
+            << ") — transient lock contention; retrying the apply on a fresh snapshot";
+        return;
+      }
+    }
+    ErrorUtils::logError(err);
+    emit errorOccurred(err);
+  };
+  const auto queryError = [](const QString &what, const QSqlError &e) {
+    return ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
+                                 "ScanService::commitStagedScanResults")
+        .withDetails(e.text());
+  };
+
   // Begin the apply transaction on the shared QueryManager depth counter
   // (Kartend-l94tw: was the depth-less ctor, which bypassed coordination with
-  // other guards on this connection).
-  KartendDb::DbTransaction txn(
-      m_db, m_txnDepth, "ScanService::commitStagedScanResults",
-      [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
-  if (!txn.activeOrReport("Failed to start transaction to apply scan results")) {
+  // other guards on this connection). No error sink on the guard: failures
+  // route through reportFailure above so retried attempts stay quiet.
+  KartendDb::DbTransaction txn(m_db, m_txnDepth, "ScanService::commitStagedScanResults");
+  if (!txn.active()) {
+    reportFailure(txn.beginError("Failed to start transaction to apply scan results"));
     return false;
   }
 
@@ -106,12 +187,7 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
     if (count.exec("SELECT COUNT(*) FROM scanned_items") && count.next()) {
       totalToApply = count.value(0).toLongLong();
     } else {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to count staged scan results",
-                                       "ScanService::commitStagedScanResults")
-                     .withDetails(count.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
+      reportFailure(queryError("Failed to count staged scan results", count.lastError()));
       return false; // guard dtor rolls back
     }
   }
@@ -121,25 +197,21 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
       0, static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max())), true);
 
   // Batched upsert: scanned_items → items.
-  bool upsertOk = true;
   if (totalToApply > 0) {
     qint64 applied = 0;
     qint64 lastRowId = 0;
 
     while (applied < totalToApply) {
       if (isScanCancelled()) {
-        upsertOk = false;
-        break;
+        return false; // guard dtor rolls back; not retried (lockContention stays false)
       }
 
       QSqlQuery &sel = m_cache.get(QuerySQL::SELECT_STAGED_SCAN_RESULTS);
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
-      if (auto err = execAndLog(sel, "Failed to read staged scan results",
-                                "ScanService::commitStagedScanResults")) {
-        emit errorOccurred(*err);
-        upsertOk = false;
-        break;
+      if (!sel.exec()) {
+        reportFailure(queryError("Failed to read staged scan results", sel.lastError()));
+        return false;
       }
 
       QStringList paths;
@@ -217,11 +289,11 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
         ins.addBindValue(fileSizes[i]);
         ins.addBindValue(nowEpochSec);
       }
-      if (auto err = execAndLog(ins, "Failed to apply staged scan results",
-                                "ScanService::commitStagedScanResults")) {
-        emit errorOccurred(*err);
-        upsertOk = false;
-        break;
+      if (!ins.exec()) {
+        // The hot lock-contention site: the txn's first write after the
+        // deferred COUNT read — where SQLITE_BUSY_SNAPSHOT lands.
+        reportFailure(queryError("Failed to apply staged scan results", ins.lastError()));
+        return false;
       }
 
       lastRowId = batchMaxRowId;
@@ -231,7 +303,7 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
           static_cast<int>(std::min<qint64>(applied, std::numeric_limits<int>::max()));
       const int clampedTotal =
           static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
-      maybeEmitScanProgress(clampedApplied, clampedTotal);
+      maybeEmitScanProgress(clampedApplied, clampedTotal, false);
     }
 
     // Force a final progress update so the overlay reaches 100% for indexing.
@@ -240,8 +312,17 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
     maybeEmitScanProgress(clampedTotal, clampedTotal, true);
   }
 
-  // Delete items no longer on disk.
-  const bool deleteOk = m_scannedItems.deleteItemsMissingFromScan(uuid);
+  // Delete items no longer on disk. When the staged set is empty this is the
+  // txn's first write, so it can hit BUSY_SNAPSHOT too — classify via the
+  // error details it exposes.
+  QString deleteErrorDetails;
+  if (!m_scannedItems.deleteItemsMissingFromScan(uuid, &deleteErrorDetails)) {
+    reportFailure(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                        "Failed to delete missing items using scanned_items",
+                                        "ScanService::commitStagedScanResults")
+                      .withDetails(deleteErrorDetails));
+    return false;
+  }
 
   // Update collection metadata (last_scanned + dir_signature).
   QSqlQuery &meta = m_cache.get("UPDATE collections SET last_scanned = ?, "
@@ -249,22 +330,22 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
   meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
   meta.bindValue(1, dirSignature);
   meta.bindValue(2, uuid);
-  const bool metaOk = meta.exec();
-
-  // Commit or rollback the apply transaction.
-  bool committed = false;
-  if (upsertOk && deleteOk && metaOk) {
-    committed = txn.commitOrReport("Failed to commit scan results");
+  if (!meta.exec()) {
+    // Pre-kt39d this failure was silent (metaOk just skipped the commit).
+    reportFailure(queryError("Failed to update collection scan metadata", meta.lastError()));
+    return false;
   }
-  // Not committed (failed phases or failed commit): the guard's dtor rolls
-  // back on scope exit — nothing below touches the connection.
 
-  const bool success = upsertOk && deleteOk && metaOk && committed;
-  if (success) {
-    itemsApplied =
-        static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+  // Commit the apply transaction. On failure the guard's dtor rolls back on
+  // scope exit — nothing below touches the connection. commitError() must be
+  // built before any other DB work disturbs lastError().
+  if (!txn.commit()) {
+    reportFailure(txn.commitError("Failed to commit scan results"));
+    return false;
   }
-  return success;
+
+  itemsApplied = static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+  return true;
 }
 
 // ============================================================================

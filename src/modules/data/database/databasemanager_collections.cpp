@@ -94,33 +94,55 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
   if (!m_db.isOpen()) {
     return;
   }
-  KartendDb::DbTransaction txn(m_db, "DatabaseManager::clearCollectionFromDatabaseByUuid");
-  if (!txn.activeOrReport("Failed to start database transaction")) {
-    return;
-  }
-  try {
-    QSqlQuery query(m_db);
-    query.prepare("DELETE FROM items WHERE collection_uuid = ?");
-    query.addBindValue(collectionUuid);
-    if (!query.exec()) {
-      throw std::runtime_error(query.lastError().text().toStdString());
+  // Kartend-h62cc: bounded IMMEDIATE retry on lock contention, the main-thread
+  // sibling of the QueryManagerInternal::clearCollectionFromDatabaseByUuid
+  // ladder (which sleeps between attempts — acceptable on a worker, not here).
+  // In WAL mode this deferred transaction can fail INSTANTLY with
+  // SQLITE_BUSY_SNAPSHOT — the 30s busy_timeout never engages — when a worker
+  // commit (a scan, or the one-shot FTS rebuild) lands between this
+  // transaction's first read and its write-lock upgrade. A fresh attempt takes
+  // a new snapshot, so retrying immediately resolves it without blocking the
+  // main thread; a writer actually HOLDING the lock engages the busy handler
+  // instead and never reaches this path within the timeout.
+  constexpr int MAX_RETRIES = 3;
+  for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
+    KartendDb::DbTransaction txn(m_db, "DatabaseManager::clearCollectionFromDatabaseByUuid");
+    if (!txn.activeOrReport("Failed to start database transaction")) {
+      return;
     }
-    QSqlQuery delc(m_db);
-    delc.prepare("DELETE FROM collections WHERE uuid = ?");
-    delc.addBindValue(collectionUuid);
-    if (!delc.exec()) {
-      throw std::runtime_error(delc.lastError().text().toStdString());
+    try {
+      QSqlQuery query(m_db);
+      query.prepare("DELETE FROM items WHERE collection_uuid = ?");
+      query.addBindValue(collectionUuid);
+      if (!query.exec()) {
+        throw std::runtime_error(query.lastError().text().toStdString());
+      }
+      QSqlQuery delc(m_db);
+      delc.prepare("DELETE FROM collections WHERE uuid = ?");
+      delc.addBindValue(collectionUuid);
+      if (!delc.exec()) {
+        throw std::runtime_error(delc.lastError().text().toStdString());
+      }
+      if (!txn.commit()) {
+        throw std::runtime_error(m_db.lastError().text().toStdString());
+      }
+      m_metadataCache.invalidateCollection(collectionUuid);
+      return; // success
+    } catch (const std::exception &e) {
+      // guard dtor rolls back at iteration end, before the next attempt
+      const QString errorText = ErrorUtils::exceptionMessage(e);
+      const bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
+      if (!isLockError || attempt == MAX_RETRIES - 1) {
+        // Non-lock error or final attempt — genuine terminal failure.
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to clear collection from database",
+                                          "DatabaseManager::clearCollectionFromDatabaseByUuid")
+                       .withDetails(errorText);
+        ErrorUtils::logError(err);
+        return;
+      }
+      // Lock contention — retry with a fresh snapshot.
     }
-    if (!txn.commit()) {
-      throw std::runtime_error(m_db.lastError().text().toStdString());
-    }
-    m_metadataCache.invalidateCollection(collectionUuid);
-  } catch (const std::exception &e) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                      "Failed to clear collection from database",
-                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
-                   .withDetails(ErrorUtils::exceptionMessage(e));
-    ErrorUtils::logError(err);
   }
 }
 

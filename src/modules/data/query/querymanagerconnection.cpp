@@ -353,26 +353,52 @@ void QueryManager::ensureItemsFtsReady() {
 
   ensureMetaTable(m_db);
 
-  KartendDb::DbTransaction txn(
-      m_db, m_txnDepth, "QueryManager::ensureItemsFtsReady",
-      [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
-  if (!txn.activeOrReport("Failed to start transaction for FTS rebuild",
-                          ErrorUtils::Severity::Warning)) {
-    return;
-  }
-
-  const auto reportFailure = [this](const char *what, const QSqlQuery &q) {
-    // guard dtor rolls back; retried on next launch, LIKE fallback meanwhile
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
-                                     "QueryManager::ensureItemsFtsReady")
-                   .withDetails(q.lastError().text());
+  // Failure reporting (Kartend-h62cc): lock contention here is the routine
+  // scan-churn race, and it self-heals — the rebuild re-queues on the next
+  // scan completion and search uses the LIKE fallback meanwhile — so it logs
+  // at debug with a will-retry note instead of warning. Anything else is a
+  // genuine failure and keeps the warning + errorOccurred emission.
+  //
+  // Deliberately NOT extended: a busy_timeout bump for this transaction was
+  // tried and reverted. While the rebuild only WAITS it holds nothing, but
+  // winning the lock mid-churn means COMMITTING mid-churn, and that commit
+  // snapshot-busts concurrent deferred read-then-write transactions on the
+  // other connections (SQLITE_BUSY_SNAPSHOT returns instantly; their
+  // busy_timeout never engages) — measurably tripling scan-apply failures in
+  // the integration fixtures. The scan apply now retries in-place on a fresh
+  // snapshot (Kartend-kt39d), but exhausted retries are still terminal for
+  // the session (m_failedScanUuids suppresses the re-scan), so gratuitously
+  // snapshot-busting it remains a bad trade. Failing fast here keeps the
+  // scan-completion retry wiring (databasemanager.cpp) landing this commit in
+  // the quiet gap right after a scan finishes.
+  const auto reportFailure = [this](const ErrorUtils::ErrorContext &err) {
+    // guard dtor rolls back; retried on next scan completion, LIKE fallback
+    // meanwhile
+    if (KartendDb::isLockContentionError(err)) {
+      debugLog(QString("[%1] %2 (%3) — transient lock contention; will retry "
+                       "on next scan completion")
+                   .arg(err.source, err.message, err.details));
+      return;
+    }
     ErrorUtils::logError(err);
     emit errorOccurred(err);
   };
+  const auto queryError = [](const char *what, const QSqlQuery &q) {
+    return ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
+                                 "QueryManager::ensureItemsFtsReady")
+        .withDetails(q.lastError().text());
+  };
+
+  KartendDb::DbTransaction txn(m_db, m_txnDepth, "QueryManager::ensureItemsFtsReady");
+  if (!txn.active()) {
+    reportFailure(txn.beginError("Failed to start transaction for FTS rebuild", nullptr,
+                                 ErrorUtils::Severity::Warning));
+    return;
+  }
 
   QSqlQuery q(m_db);
   if (!q.exec("INSERT INTO items_fts(items_fts) VALUES('rebuild')")) {
-    reportFailure("FTS index rebuild failed (search will use LIKE)", q);
+    reportFailure(queryError("FTS index rebuild failed (search will use LIKE)", q));
     return;
   }
 
@@ -381,7 +407,7 @@ void QueryManager::ensureItemsFtsReady() {
   if (!q.exec(DbMigrations::kItemsFtsTriggerInsertSql) ||
       !q.exec(DbMigrations::kItemsFtsTriggerDeleteSql) ||
       !q.exec(DbMigrations::kItemsFtsTriggerUpdateSql)) {
-    reportFailure("FTS sync trigger creation failed (search will use LIKE)", q);
+    reportFailure(queryError("FTS sync trigger creation failed (search will use LIKE)", q));
     return;
   }
 
@@ -390,7 +416,7 @@ void QueryManager::ensureItemsFtsReady() {
   q.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES('items_fts_ready', ?)");
   q.addBindValue(QLatin1String(kItemsFtsReadyGeneration));
   if (!q.exec()) {
-    reportFailure("FTS readiness stamp failed (search will use LIKE)", q);
+    reportFailure(queryError("FTS readiness stamp failed (search will use LIKE)", q));
     return;
   }
   QSqlQuery cleanupQ(m_db);
@@ -398,7 +424,9 @@ void QueryManager::ensureItemsFtsReady() {
   cleanupQ.addBindValue(QStringLiteral("items_fts_indexed_up_to_id"));
   (void)cleanupQ.exec(); // best-effort: a stale key is inert
 
-  if (!txn.commitOrReport("Failed to commit FTS rebuild", ErrorUtils::Severity::Warning)) {
+  if (!txn.commit()) {
+    reportFailure(
+        txn.commitError("Failed to commit FTS rebuild", nullptr, ErrorUtils::Severity::Warning));
     return;
   }
   m_itemsFtsReady = true;
