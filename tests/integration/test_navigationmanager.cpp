@@ -2,9 +2,13 @@
 
 #include "applicationmanager.h"
 #include "collection/collectionconfig.h"
+#include "emptystatewidget.h"
 #include "errorutils.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 
@@ -35,7 +39,7 @@ CollectionConfig makeCollectionStub(const QString &name, int parentIndex = -1) {
 } // namespace
 
 void TestNavigationManager::testOnCollectionSelectedClearsNavigationStack() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
   QVERIFY(nav);
@@ -59,7 +63,7 @@ void TestNavigationManager::testOnCollectionSelectedClearsNavigationStack() {
 }
 
 void TestNavigationManager::testOnSubcollectionEnteredIgnoresOutOfRangeIndex() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
@@ -80,7 +84,7 @@ void TestNavigationManager::testOnSubcollectionEnteredIgnoresOutOfRangeIndex() {
 }
 
 void TestNavigationManager::testOnSubcollectionEnteredUnwindsPushOnNavigationFailure() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
@@ -102,7 +106,7 @@ void TestNavigationManager::testOnSubcollectionEnteredUnwindsPushOnNavigationFai
 }
 
 void TestNavigationManager::testOnSubcollectionEnteredSkipsPushWhenNoCurrentCollection() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
@@ -120,7 +124,7 @@ void TestNavigationManager::testOnSubcollectionEnteredSkipsPushWhenNoCurrentColl
 }
 
 void TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
   QWidget *gridContainer = win->gridContainer;
@@ -155,4 +159,223 @@ void TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget() {
   auto *errorLabel = labels.first()->findChild<QLabel *>();
   QVERIFY(errorLabel);
   QCOMPARE(errorLabel->text(), QStringLiteral("integration test forced error"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Root/Home view routing
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestNavigationManager::testLoadRootViewEntersRootState() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("RootA")));
+  win->m_collections.append(makeCollectionStub(QStringLiteral("RootB")));
+  win->m_collections.append(makeCollectionStub(QStringLiteral("ChildOfA"), /*parentIndex=*/0));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+  nav->stackManager()->push(0); // stale traversal that Home must discard
+
+  QVERIFY(!nav->isInRootView());
+
+  nav->loadRootView();
+
+  // The synthetic Home view has no host collection: index parks at -1, the
+  // root-view flag drives search routing, and any pending hierarchy
+  // traversal is discarded (Back from Home must not pop into stale state).
+  QVERIFY(nav->isInRootView());
+  QCOMPARE(win->currentCollectionIndex, -1);
+  QVERIFY(nav->stackManager()->isEmpty());
+
+  // Default label when no custom homeViewLabel is configured.
+  auto *titleLabel = win->itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
+  QVERIFY(titleLabel);
+  QCOMPARE(titleLabel->text(), QStringLiteral("Home"));
+}
+
+void TestNavigationManager::testLoadRootViewHonorsCustomHomeLabel() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+  win->m_generalSettings.startup.homeViewLabel = QStringLiteral("  My Hub  ");
+
+  nav->loadRootView();
+
+  // The configured label is trimmed before display; only a (trimmed-)empty
+  // value falls back to the localized "Home".
+  auto *titleLabel = win->itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
+  QVERIFY(titleLabel);
+  QCOMPARE(titleLabel->text(), QStringLiteral("My Hub"));
+}
+
+void TestNavigationManager::testLoadRootViewWithNoCollectionsShowsEmptyState() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  QVERIFY(win->m_collections.isEmpty());
+
+  nav->loadRootView();
+
+  QVERIFY(nav->isInRootView());
+  QCOMPARE(win->currentCollectionIndex, -1);
+
+  // With zero root collections there are no tiles to render, so the empty
+  // state widget must explain the situation instead of leaving a blank grid.
+  QVERIFY(win->loadingLabel);
+  bool found = false;
+  const auto labels = win->loadingLabel->findChildren<QLabel *>();
+  for (const QLabel *label : labels) {
+    if (label->text().contains(QStringLiteral("No collections yet"))) {
+      found = true;
+      break;
+    }
+  }
+  QVERIFY2(found, "EmptyStateWidget should carry the 'No collections yet' message");
+}
+
+void TestNavigationManager::testGoBackIsNoOpInRootView() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+
+  nav->loadRootView();
+  QVERIFY(nav->isInRootView());
+
+  // Home is the top of the navigation hierarchy: Back must not kick the
+  // user into a root collection (the pre-root-view fallback behavior).
+  nav->goBackToCollections();
+
+  QVERIFY(nav->isInRootView());
+  QCOMPARE(win->currentCollectionIndex, -1);
+}
+
+void TestNavigationManager::testGoBackEscapesToHomeViewForRootCollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+  QVERIFY(nav->stackManager()->isEmpty());
+
+  // Without the home-view opt-in, an empty-stack Back from a root collection
+  // falls back to chooseFallbackCollectionIndex (stays put) — no root view.
+  win->m_generalSettings.startup.useHomeView = false;
+  nav->goBackToCollections();
+  QVERIFY(!nav->isInRootView());
+  QCOMPARE(win->currentCollectionIndex, 0);
+
+  // With the opt-in, the same Back routes to the synthetic Home view rather
+  // than re-entering the first root collection.
+  win->m_generalSettings.startup.useHomeView = true;
+  nav->goBackToCollections();
+  QVERIFY(nav->isInRootView());
+  QCOMPARE(win->currentCollectionIndex, -1);
+}
+
+void TestNavigationManager::testGoBackPopsNavigationStack() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("RootA")));
+  win->m_collections.append(makeCollectionStub(QStringLiteral("RootB")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+
+  nav->stackManager()->push(1);
+
+  // A non-empty stack takes the pop branch: the entry is consumed
+  // synchronously (the actual view switch is deferred on a timer that never
+  // fires in this test), and the home-view escape is not consulted.
+  win->m_generalSettings.startup.useHomeView = true; // must NOT divert to Home
+  nav->goBackToCollections();
+
+  QVERIFY(nav->stackManager()->isEmpty());
+  QVERIFY(!nav->isInRootView());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Virtual-folder navigation
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestNavigationManager::testVirtualFolderNavigationUpdatesSubfolderPath() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+
+  const auto subfolder = [&]() -> QString {
+    return win->m_collections[0].folderBrowsing.currentSubfolder;
+  };
+  QCOMPARE(subfolder(), QString());
+
+  // Descend two levels. Each entry updates the persisted subfolder scope on
+  // the collection config (the reload itself is debounced and async).
+  nav->onVirtualFolderEntered(QStringLiteral("Videos"));
+  QCOMPARE(subfolder(), QStringLiteral("Videos"));
+  nav->onVirtualFolderEntered(QStringLiteral("Videos/2024"));
+  QCOMPARE(subfolder(), QStringLiteral("Videos/2024"));
+
+  // Back walks up exactly one level per call...
+  nav->goBackFromVirtualFolder();
+  QCOMPARE(subfolder(), QStringLiteral("Videos"));
+  nav->goBackFromVirtualFolder();
+  QCOMPARE(subfolder(), QString());
+
+  // ...and is a no-op at the collection root.
+  nav->goBackFromVirtualFolder();
+  QCOMPARE(subfolder(), QString());
+}
+
+void TestNavigationManager::testVirtualFolderEnterIgnoredWithoutCurrentCollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = -1; // pre-startup / Home view: no host scope
+
+  // With no current collection there is no config to scope the subfolder
+  // to — the call must bail before mutating any collection entry.
+  nav->onVirtualFolderEntered(QStringLiteral("Videos"));
+
+  QCOMPARE(win->m_collections[0].folderBrowsing.currentSubfolder, QString());
+}
+
+void TestNavigationManager::testBreadcrumbLinksDriveSubfolderNavigation() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
+  win->currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+  win->m_collections[0].folderBrowsing.currentSubfolder = QStringLiteral("Videos/2024/Q1");
+
+  // A "subfolder:" link jumps straight to that level (not one-at-a-time).
+  nav->onBreadcrumbLinkClicked(QStringLiteral("subfolder:Videos"));
+  QCOMPARE(win->m_collections[0].folderBrowsing.currentSubfolder, QStringLiteral("Videos"));
+
+  // A malformed link parses as Kind::Invalid and must change nothing.
+  nav->onBreadcrumbLinkClicked(QStringLiteral("bogus-link"));
+  QCOMPARE(win->m_collections[0].folderBrowsing.currentSubfolder, QStringLiteral("Videos"));
+
+  // A "root:" link clears the subfolder scope entirely.
+  nav->onBreadcrumbLinkClicked(QStringLiteral("root:"));
+  QCOMPARE(win->m_collections[0].folderBrowsing.currentSubfolder, QString());
 }

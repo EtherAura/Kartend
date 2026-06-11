@@ -66,6 +66,13 @@ private slots:
   void emptyDefaults();
   void setCardsStoresCount();
   void setCardsClampsSelectionWhenShrinking();
+
+  // updateCard (incremental patch, Kartend-x7bn8)
+  void cardAtOutOfRangeReturnsDefault();
+  void updateCardOutOfRangeNoOp();
+  void updateCardPatchesTitleAndArtwork();
+  void updateCardPreservesVideoPath();
+  void updateCardDoesNotDisturbSelection();
   void setSelectedIndexClampsBelowZero();
   void setSelectedIndexClampsAboveSize();
   void setSelectedIndexEmptyCardsResets();
@@ -160,6 +167,69 @@ void TestCoverFlowWidget::setCardsClampsSelectionWhenShrinking() {
   w.setCards(makeCards(5));
   QCOMPARE(w.cardCount(), 5);
   QCOMPARE(w.selectedIndex(), 4);
+}
+
+// ----- updateCard (incremental patch, Kartend-x7bn8) -----
+
+void TestCoverFlowWidget::cardAtOutOfRangeReturnsDefault() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(3));
+  QCOMPARE(w.cardAt(-1).title, QString());
+  QCOMPARE(w.cardAt(3).title, QString());
+  QCOMPARE(w.cardAt(1).title, QStringLiteral("Card 1"));
+}
+
+void TestCoverFlowWidget::updateCardOutOfRangeNoOp() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(3));
+  CoverFlowCardData patch;
+  patch.title = QStringLiteral("patched");
+  w.updateCard(-1, patch);
+  w.updateCard(3, patch);
+  QCOMPARE(w.cardCount(), 3);
+  QCOMPARE(w.cardAt(0).title, QStringLiteral("Card 0"));
+  QCOMPARE(w.cardAt(2).title, QStringLiteral("Card 2"));
+}
+
+void TestCoverFlowWidget::updateCardPatchesTitleAndArtwork() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(5));
+  CoverFlowCardData patch;
+  patch.title = QStringLiteral("New Title");
+  patch.artworkPath = QStringLiteral("/art/new.png");
+  w.updateCard(2, patch);
+  QCOMPARE(w.cardAt(2).title, QStringLiteral("New Title"));
+  QCOMPARE(w.cardAt(2).artworkPath, QStringLiteral("/art/new.png"));
+  // Neighbours untouched.
+  QCOMPARE(w.cardAt(1).title, QStringLiteral("Card 1"));
+  QCOMPARE(w.cardAt(3).title, QStringLiteral("Card 3"));
+}
+
+void TestCoverFlowWidget::updateCardPreservesVideoPath() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(5));
+  // Video paths are resolved lazily by the controller via
+  // setVideoPathForIndex; a chunk-arrival patch must not clobber one.
+  w.setVideoPathForIndex(2, QStringLiteral("/videos/two.mp4"));
+  CoverFlowCardData patch;
+  patch.title = QStringLiteral("New Title");
+  patch.artworkPath = QStringLiteral("/art/new.png");
+  w.updateCard(2, patch);
+  QCOMPARE(w.cardAt(2).videoPath, QStringLiteral("/videos/two.mp4"));
+  QCOMPARE(w.cardAt(2).title, QStringLiteral("New Title"));
+}
+
+void TestCoverFlowWidget::updateCardDoesNotDisturbSelection() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(10));
+  w.setSelectedIndex(6, false);
+  CoverFlowCardData patch;
+  patch.title = QStringLiteral("patched");
+  w.updateCard(6, patch);
+  w.updateCard(0, patch);
+  // Unlike setCards, the incremental patch keeps selection + glide state.
+  QCOMPARE(w.selectedIndex(), 6);
+  QCOMPARE(w.selectionPositionF(), 0.0);
 }
 
 void TestCoverFlowWidget::setSelectedIndexClampsBelowZero() {

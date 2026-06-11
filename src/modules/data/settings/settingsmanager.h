@@ -4,7 +4,6 @@
 #include "isettingsmanager.h"
 #include <QHash>
 #include <QLoggingCategory>
-#include <QPointer>
 #include <QString>
 
 class QFile;
@@ -29,36 +28,19 @@ public:
   // settings-dialog-driven ones. Non-const for that reason; the disk write
   // itself doesn't mutate SettingsManager state.
   ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &collections) override;
-  void openSettingsDialog(const SettingsDialogContext &context) override;
   void loadGeneralSettings(GeneralSettings &settings) override;
   ErrorUtils::Result<void> saveGeneralSettings(const GeneralSettings &settings) override;
   void setLastSelectedItem(int collectionIndex, int itemIndex) override;
   [[nodiscard]] int getLastSelectedItem(int collectionIndex) const override;
+  [[nodiscard]] QString credentialDemotionReason() const override {
+    return m_credentialDemotionReason;
+  }
 
-  void handleReloadRequired(const QList<CollectionConfig> &collections,
-                            const QList<CollectionConfig> &newCollections,
-                            const QList<CollectionConfig> &originalCollections,
-                            int viewingCollectionIndex, IDetailsPaneManager *detailsPaneManager,
-                            IScrollManager *scrollManager, INavigationManager *navigationManager,
-                            IArtworkManager *artworkManager, ICacheManager *cacheManager,
-                            int currentCollectionIndex) override;
-
-  void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
-                           int viewingCollectionIndex, bool titleChangedForView,
-                           bool scrollbarChangedForView, bool sidebarModeChangedForView,
-                           bool gridWidthChangedForView, bool spacingChangedForView,
-                           bool alignmentChangedForView, bool fontSizeChangedForView,
-                           bool hideTitlesChangedForView, IDetailsPaneManager *detailsPaneManager,
-                           IScrollManager *scrollManager, IArtworkManager *artworkManager,
-                           int currentCollectionIndex) override;
-
-private slots:
-  /// Handles QueryManager's post-scan summary (forwarded via DatabaseManager).
-  /// If the scan's UUID matches a collection the user just added through the
-  /// settings dialog, pops a "Collection Added — X of Y items" message box.
-
-  void onCollectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
-                               bool success);
+  // The settings-dialog orchestration half of this class (openSettingsDialog,
+  // handleReloadRequired, handleLayoutChanges, onCollectionScanSummary plus
+  // the pending-add-summary state) moved to the ui-layer
+  // SettingsDialogController in Kartend-q8p29; this class keeps the
+  // QSettings-backed persistence surface only.
 
 private:
   // ctx is the single source of truth for sibling managers (SessionManager,
@@ -66,13 +48,14 @@ private:
   const ApplicationContext *m_ctx = nullptr;
   GeneralSettings m_generalSettings;
 
-  // UUIDs of collections the user just added through the settings
-  // dialog that are still waiting for their first scan-summary signal. Value is
-  // the collection's display name so the message box can reference it.
-  QHash<QString, QString> m_pendingAddSummaries;
-  // Parent widget for the confirmation message box. QPointer so we don't
-  // outlive it if the dialog is destroyed before the async scan finishes.
-  QPointer<QWidget> m_pendingAddSummaryParent;
+  // Kartend-ztc64: mirror of the [Scrapers]/credentialDemotionReason meta key.
+  // Non-empty while a failed keychain write left plaintext credential(s) in
+  // the INI. Loaded in loadScraperSection, recomputed on every
+  // saveScraperSection (each save retries the keychain writes, so a healthy
+  // keychain self-heals the demotion and clears this). The change signal is
+  // emitted from saveGeneralSettings after a clean sync, matching the
+  // per-domain hot-reload pattern.
+  QString m_credentialDemotionReason;
 
   // Last successfully-saved collection list, used as the diff baseline for
   // the per-domain *Changed signals emitted from saveCollections(). Updated

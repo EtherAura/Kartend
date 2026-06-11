@@ -48,6 +48,12 @@ struct MouseManagerSetup {
 class MouseManager : public QObject, public IMouseManager {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(MouseManager)
+  // Kartend-ior0a: the unit test drives the private timer-timeout slots and
+  // inspects timer intervals directly (the same access pattern as
+  // TestGamepadManager) — the timers' real delays are settings-driven and
+  // waiting them out would make the suite slow and flaky.
+  friend class TestMouseManager;
+
 public:
   explicit MouseManager(QObject *parent = nullptr);
   ~MouseManager() override;

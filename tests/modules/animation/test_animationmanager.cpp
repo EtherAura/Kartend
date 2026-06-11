@@ -163,7 +163,8 @@ void TestAnimationManager::targetYForIndex_clippedHeightUsesViewportInterpolatio
 
 void TestAnimationManager::horizontalTargetX_itemAlreadyVisibleNoMove() {
   // Item at x=300, width=200, viewport spans 100..900 with margins=20.
-  // itemLeft=300 >= visibleLeft+margins=120, itemRight=500 <= visibleRight-margins=880 -> no scroll.
+  // itemLeft=300 >= visibleLeft+margins=120, itemRight=500 <= visibleRight-margins=880 -> no
+  // scroll.
   const int target = AnimationManager::computeHorizontalTargetX(
       /*itemX=*/300, /*collectionItemWidth=*/200, /*curX=*/100, /*viewportWidth=*/800,
       /*margins=*/20, /*scrollMax=*/5000);

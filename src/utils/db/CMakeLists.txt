@@ -18,6 +18,7 @@ target_sources(kartend_utils PRIVATE
   bulkedit.h
   collectionhealth.h
   datauditprofile.h
+  dbtxn.h
   dbmigrations.h
   filehashcache.h
   historystore.h

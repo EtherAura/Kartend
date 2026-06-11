@@ -40,6 +40,7 @@ set(INTEGRATION_TEST_SOURCES
   test_dbeventscontroller.cpp
   test_detailpagemanager.cpp
   test_kartmanager.cpp
+  test_launchflow.cpp
   test_scanservice.cpp
 )
 
@@ -69,6 +70,7 @@ set(INTEGRATION_TEST_HEADERS
   test_dbeventscontroller.h
   test_detailpagemanager.h
   test_kartmanager.h
+  test_launchflow.h
   test_scanservice.h
   mocks/mockdatabasemanager.h
   mocks/mockedmainwindowfixture.h
@@ -143,6 +145,7 @@ set(INTEGRATION_TEST_CLASSES
   TestAttractManager
   TestDetailPageManager
   TestKartManager
+  TestLaunchFlow
   TestScanService
 )
 foreach(_integration_class IN LISTS INTEGRATION_TEST_CLASSES)

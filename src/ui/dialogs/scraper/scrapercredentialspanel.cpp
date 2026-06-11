@@ -3,6 +3,7 @@
 #include "collectiontypes.h"
 #include "settingsmodel.h"
 
+#include <QFont>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -57,6 +58,21 @@ void ScraperCredentialsPanel::rebuildLayout() {
   }
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
+
+  // ── Credential-storage demotion banner (Kartend-ztc64) ─────────────
+  // Non-modal inline notice shown when a keychain write failed and the
+  // credentials were persisted as plaintext in settings.ini. Same inline
+  // warning idiom as ScraperSettingsPanel's re-scrape warning (styled
+  // QLabel, hidden by default) — the project doesn't link KMessageWidget.
+  m_storageDemotionBanner = new QLabel(this);
+  m_storageDemotionBanner->setObjectName(QStringLiteral("credentialStorageWarningLabel"));
+  m_storageDemotionBanner->setWordWrap(true);
+  QFont bannerFont = m_storageDemotionBanner->font();
+  bannerFont.setBold(true);
+  m_storageDemotionBanner->setFont(bannerFont);
+  m_storageDemotionBanner->hide();
+  root->addWidget(m_storageDemotionBanner);
+  updateStorageDemotionBanner();
 
   const bool showAll = m_providerFilter.isEmpty();
   const bool showTmdb = showAll || m_providerFilter == QLatin1String("tmdb");
@@ -141,6 +157,28 @@ void ScraperCredentialsPanel::addField(QFormLayout *form, const QString &provide
 void ScraperCredentialsPanel::setModel(SettingsModel *model) {
   m_model = model;
   load();
+}
+
+void ScraperCredentialsPanel::setStorageDemotionNotice(const QString &reason) {
+  if (m_storageDemotionReason == reason) return;
+  m_storageDemotionReason = reason;
+  updateStorageDemotionBanner();
+}
+
+void ScraperCredentialsPanel::updateStorageDemotionBanner() {
+  if (!m_storageDemotionBanner) return;
+  if (m_storageDemotionReason.isEmpty()) {
+    m_storageDemotionBanner->hide();
+    m_storageDemotionBanner->clear();
+    return;
+  }
+  m_storageDemotionBanner->setText(
+      tr("⚠ Warning — your scraper credentials are stored unencrypted in "
+         "settings.ini because the system keychain was unavailable (%1). "
+         "They will move back to the keychain automatically once it is "
+         "available again.")
+          .arg(m_storageDemotionReason));
+  m_storageDemotionBanner->show();
 }
 
 void ScraperCredentialsPanel::save() {

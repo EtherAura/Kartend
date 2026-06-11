@@ -26,12 +26,16 @@ class PreparedStatementCache;
  * in-memory save pipeline, the per-session rescan-needed checks, and the
  * scan cancellation token.
  *
- * Like ScannedItemsTable, ScanService borrows its database connection and
- * prepared-statement cache by reference — the references bind to
- * QueryManager's `m_db` / `m_statementCache` members, whose addresses are
- * stable even across reconnects. There is deliberately NO QueryManager
- * back-pointer: the dependency is strictly unidirectional (QueryManager ->
- * ScanService), so the load/scan boundary stays untangled.
+ * Like ScannedItemsTable, ScanService borrows its database connection,
+ * prepared-statement cache and transaction-depth counter by reference — the
+ * references bind to QueryManager's `m_db` / `m_statementCache` /
+ * `m_txnDepth` members, whose addresses are stable even across reconnects.
+ * Sharing the depth counter means every KartendDb::DbTransaction guard on
+ * this connection coordinates (Kartend-l94tw): a scan transaction nested
+ * under a QueryManager guard defers instead of silently breaking atomicity.
+ * There is deliberately NO QueryManager back-pointer: the dependency is
+ * strictly unidirectional (QueryManager -> ScanService), so the load/scan
+ * boundary stays untangled.
  *
  * QueryManager keeps a ScanService member and a thin delegating surface:
  * its public scan slots forward to this object, and its scan signals are
@@ -45,7 +49,8 @@ class ScanService : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScanService)
 public:
-  explicit ScanService(QSqlDatabase &db, PreparedStatementCache &cache, QObject *parent = nullptr);
+  explicit ScanService(QSqlDatabase &db, PreparedStatementCache &cache, int &txnDepth,
+                       QObject *parent = nullptr);
   ~ScanService() override = default;
 
 signals:
@@ -91,8 +96,16 @@ public:
   /// Walks the media directory (flat or recursive) and returns the discovered
   /// relative file paths plus their timestamps. Used by the in-memory save
   /// pipeline (loadOrScanCollection).
+  ///
+  /// @p scanCompletedOut (optional, Kartend-fys4o) is set true only when the
+  /// directory EXISTS and the walk ran to completion uncancelled — i.e. an
+  /// empty result genuinely means "zero files on disk" and is safe to
+  /// persist (prune + scan-metadata update). It stays false for a missing /
+  /// unmounted directory and for cancelled scans, where persisting an empty
+  /// result would wrongly delete the collection's rows.
   QStringList scanMediaDirectory(const CollectionConfig &collection,
-                                 QHash<QString, QDateTime> &timestamps, QString *dirSignatureOut);
+                                 QHash<QString, QDateTime> &timestamps, QString *dirSignatureOut,
+                                 bool *scanCompletedOut = nullptr);
 
   /// In-memory save pipeline: stages the supplied file list into scanned_items
   /// then upserts into the persistent items table.
@@ -144,13 +157,6 @@ private:
                                                 int *outItemsScanned = nullptr,
                                                 int *outItemsApplied = nullptr);
 
-  // stageFilesystemScan's three identical DatabaseTransactionFailed exits,
-  // collapsed into one helper: build + log + emit the critical error (details
-  // from m_db.lastError() BEFORE any rollback so the real cause is captured),
-  // optionally roll back the open staging transaction, and return false so
-  // callers can tail-return it.
-  bool failStagingTransaction(const QString &message, bool rollbackOpenTransaction);
-
   // stageFilesystemScan's two arms, split out verbatim (mirroring the
   // scanSequential/scanParallel split above). Both stream discovered files
   // into the pending batch via stageScannedFile()/flushBatch and seed
@@ -181,10 +187,25 @@ private:
   // persistent items table, delete items no longer on disk, and update
   // collection metadata. Must be called inside a valid staging window
   // (i.e. after stageFilesystemScan succeeded and before the temp table is
-  // cleared). Returns the number of items applied.
+  // cleared). Returns the number of items applied. The apply transaction is
+  // retried a bounded number of times on lock contention (Kartend-kt39d) —
+  // the staged temp table is connection-local and a failed attempt rolls
+  // back, so each retry replays against a fresh snapshot.
   [[nodiscard]] bool commitStagedScanResults(const CollectionConfig &collection,
                                              const QString &uuid, const QString &extSignature,
                                              const QString &dirSignature, int &itemsApplied);
+
+  // One attempt of commitStagedScanResults' apply transaction
+  // (Kartend-kt39d). Returns true on a committed apply. On failure sets
+  // @p lockContention when the failure class is SQLITE_BUSY/SQLITE_LOCKED
+  // (KartendDb::isLockContentionError) so the caller can retry the whole
+  // transaction on a fresh snapshot; failure reporting is demoted to debug
+  // on non-final attempts and keeps warning + errorOccurred on the final
+  // one (and for every non-lock failure).
+  [[nodiscard]] bool
+  applyStagedScanResultsAttempt(const QString &uuid, const QString &dirSignature, int legacyId,
+                                const std::function<void(int, int, bool)> &maybeEmitScanProgress,
+                                bool finalAttempt, bool &lockContention, int &itemsApplied);
 
   [[nodiscard]] bool prepareCollectionForItemsInsert(const CollectionConfig &collection,
                                                      const QString &uuid,
@@ -195,6 +216,10 @@ private:
   // reconnects (the QueryManager member objects' addresses are stable).
   QSqlDatabase &m_db;
   PreparedStatementCache &m_cache;
+  // The owning QueryManager's m_txnDepth — shared so DbTransaction guards in
+  // the scan pipeline coordinate with QueryManager's guards on the same
+  // connection (see the class comment).
+  int &m_txnDepth;
 
   // Owns the per-scan cancellation token + the dedicated worker pool that
   // dispatches directory-walk tasks.
@@ -206,6 +231,12 @@ private:
   // that re-enters ensureCollectionScanned(), an always-failing scan spins an
   // unbreakable scan->fail->reload loop. Once a UUID lands here it is not
   // retried automatically — only worker-thread access, so no locking needed.
+  // Transient lock contention no longer reaches this set in practice: the
+  // apply transaction retries in-place on a fresh snapshot (Kartend-kt39d),
+  // so entries represent the exhausted-retries / deterministic-failure class.
+  // User-cancelled scans are exempt (Kartend-n0daq): cancellation also makes
+  // scanAndSaveItemsToDatabase return false, but it must stay retryable —
+  // ensureCollectionScanned skips the insert when isScanCancelled() is set.
   QSet<QString> m_failedScanUuids;
 
   // scanned_items TEMP-table staging — borrows m_db by reference (see

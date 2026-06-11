@@ -164,7 +164,8 @@ QString mergeCustomFields(const QString &existingJson, const QHash<QString, QStr
 } // namespace
 
 MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
-                                 const QList<PendingMediaWrite> &media, RescrapeMode rescrapeMode) {
+                                 const QList<PendingMediaWrite> &media, RescrapeMode rescrapeMode,
+                                 const std::shared_ptr<std::atomic<bool>> &cancelToken) {
   MediaWriteResult result;
   // Per-asset re-scrape gate. Returns true if the destFile should be
   // written; false if the existing file already satisfies the policy.
@@ -228,6 +229,12 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   if (!artworkDirectory.isEmpty() && !baseName.isEmpty()) {
     const QDir artRoot(artworkDirectory);
     for (const auto &write : media) {
+      // Cooperative cancel (Kartend-vi76q): the owning runner was cancelled
+      // or is being destroyed — stop before the next asset so its teardown
+      // drain isn't blocked behind multi-MB writes nobody will consume.
+      if (cancelToken && cancelToken->load(std::memory_order_acquire)) {
+        break;
+      }
       if (write.bytes.isEmpty() || write.asset.type.isEmpty()) {
         ++result.mediaSkipped;
         if (result.firstFailures.size() < kMaxReportedFailures) {

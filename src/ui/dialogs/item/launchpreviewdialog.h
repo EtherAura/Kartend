@@ -3,7 +3,7 @@
 
 #include <QDialog>
 
-#include "launchmanager.h" // LaunchPreview
+#include "launchpreview.h" // LaunchPreview leaf header (Kartend-rq33v)
 
 QT_BEGIN_NAMESPACE
 class QLabel;

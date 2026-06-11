@@ -68,8 +68,7 @@ void TestScrollHelpers::movementDirection_sameRowWithSkip_returnsTrue() {
   QVERIFY(ScrollHelpers::movementDirection(0, 4, 6));
 }
 
-void TestScrollHelpers::
-    movementDirection_differentRowNonAdjacent_returnsFalse() {
+void TestScrollHelpers::movementDirection_differentRowNonAdjacent_returnsFalse() {
   // 0 -> 12: row 0 -> row 2, |delta| = 12
   QVERIFY(!ScrollHelpers::movementDirection(12, 0, 6));
 }
@@ -89,8 +88,7 @@ void TestScrollHelpers::movementDirection_wrapBackward_returnsTrue() {
   QVERIFY(ScrollHelpers::movementDirection(5, 6, 6));
 }
 
-void TestScrollHelpers::
-    movementDirection_adjacentDifferentRowNoWrap_returnsFalse() {
+void TestScrollHelpers::movementDirection_adjacentDifferentRowNoWrap_returnsFalse() {
   // gridWidth 4: index 4 (col 0, row 1) -> index 3 (col 3, row 0).
   // Adjacent (|delta|==1) AND wrap (prevCol 0 -> currCol 3) -> isHorizontal.
   QVERIFY(ScrollHelpers::movementDirection(3, 4, 4));
@@ -99,47 +97,39 @@ void TestScrollHelpers::
 }
 
 void TestScrollHelpers::effectiveAlignment_unfiltered_returnsRequested() {
-  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, false,
-                                             5, 8),
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, false, 5, 8),
            HorizontalAlignment::Left);
-  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, false,
-                                             1, 8),
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, false, 1, 8),
            HorizontalAlignment::Right);
 }
 
 void TestScrollHelpers::effectiveAlignment_filteredEmpty_returnsRequested() {
   // totalItems == 0: helper returns requested unchanged
-  QCOMPARE(
-      ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 0, 8),
-      HorizontalAlignment::Left);
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 0, 8),
+           HorizontalAlignment::Left);
 }
 
-void TestScrollHelpers::
-    effectiveAlignment_filteredZeroItemsPerRow_returnsRequested() {
-  QCOMPARE(
-      ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 3, 0),
-      HorizontalAlignment::Left);
+void TestScrollHelpers::effectiveAlignment_filteredZeroItemsPerRow_returnsRequested() {
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 3, 0),
+           HorizontalAlignment::Left);
 }
 
 void TestScrollHelpers::effectiveAlignment_filteredFewItems_returnsCenter() {
   // itemsPerRow 8 -> threshold is 6 (8 - 2). totalItems 5 < 6 -> Center.
-  QCOMPARE(
-      ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 5, 8),
-      HorizontalAlignment::Center);
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Left, true, 5, 8),
+           HorizontalAlignment::Center);
 }
 
 void TestScrollHelpers::effectiveAlignment_filteredManyItems_returnsRequested() {
   // totalItems 7 >= threshold 6 -> requested unchanged
-  QCOMPARE(
-      ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, true, 7, 8),
-      HorizontalAlignment::Right);
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, true, 7, 8),
+           HorizontalAlignment::Right);
 }
 
 void TestScrollHelpers::effectiveAlignment_filteredBoundary_returnsRequested() {
   // totalItems == itemsPerRow - 2 (boundary, NOT less-than) -> requested
-  QCOMPARE(
-      ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, true, 6, 8),
-      HorizontalAlignment::Right);
+  QCOMPARE(ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, true, 6, 8),
+           HorizontalAlignment::Right);
 }
 
 // ------------------------------ chunkSizeFor --------------------------------
@@ -214,8 +204,8 @@ void TestScrollHelpers::prefetch_subtractsPrefixFromTargetIndex() {
   // sliderValue=2500, itemHeight=50 -> row=50. itemsPerRow=4 -> targetIndex=200.
   // subcollections=3, virtualFolders=2 -> prefix=5. mediaIndex = 195.
   // chunk=100 -> chunkStart = (195 / 100) * 100 = 100.
-  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(2500, 50, 4, 3, 2, false, 100, 5000,
-                                                              100, 1000);
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(2500, 50, 4, 3, 2, false, 100, 5000, 100, 1000);
   QVERIFY(plan.valid);
   QCOMPARE(plan.chunkSize, 100);
   QCOMPARE(plan.chunkStart, 100);
@@ -224,8 +214,8 @@ void TestScrollHelpers::prefetch_subtractsPrefixFromTargetIndex() {
 void TestScrollHelpers::prefetch_alignsChunkStartToChunkBoundary() {
   // sliderValue=1000, itemHeight=10 -> row=100. itemsPerRow=10 -> targetIndex=1000.
   // No prefix. mediaIndex=1000. chunk=300 -> chunkStart=(1000/300)*300=900.
-  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(1000, 10, 10, 0, 0, false, 100, 5000,
-                                                              300, 1000);
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(1000, 10, 10, 0, 0, false, 100, 5000, 300, 1000);
   QVERIFY(plan.valid);
   QCOMPARE(plan.chunkSize, 300);
   QCOMPARE(plan.chunkStart, 900);
@@ -246,8 +236,8 @@ void TestScrollHelpers::prefetch_usesLargeChunkAboveThreshold() {
   // showAll=true and totalItems > threshold -> largeChunk wins.
   // sliderValue=10000, itemHeight=50 -> row=200. itemsPerRow=4 -> targetIndex=800.
   // No prefix. mediaIndex=800. largeChunk=1000 -> chunkStart=(800/1000)*1000=0.
-  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(10000, 50, 4, 0, 0, true, 50000, 5000,
-                                                              100, 1000);
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(10000, 50, 4, 0, 0, true, 50000, 5000, 100, 1000);
   QVERIFY(plan.valid);
   QCOMPARE(plan.chunkSize, 1000);
   QCOMPARE(plan.chunkStart, 0);

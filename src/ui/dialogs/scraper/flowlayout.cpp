@@ -48,7 +48,11 @@ int FlowLayout::doLayout(const QRect &rect, bool testOnly) const {
   for (auto *it : m_items) {
     const QSize sz = it->sizeHint();
     int nextX = x + sz.width() + m_hSpace;
-    if (nextX - m_hSpace > eff.right() && lineH > 0) {
+    // eff.x() + eff.width(), NOT eff.right(): right() is width - 1, and the
+    // canonical Qt FlowLayout example this derives from used it verbatim —
+    // wrapping a chip whose right edge lands exactly flush with the
+    // container edge one row early (Kartend-29vam).
+    if (nextX - m_hSpace > eff.x() + eff.width() && lineH > 0) {
       x = eff.x();
       y += lineH + m_vSpace;
       nextX = x + sz.width() + m_hSpace;

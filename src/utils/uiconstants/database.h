@@ -26,19 +26,6 @@ inline constexpr int SCAN_DIR_RESULT_CHUNK_SIZE = 2048;
 /// bounded during very fast directory scans.
 inline constexpr int SCAN_READY_MAX_RESULTS = 32;
 
-/// FTS backfill batch size when building the index lazily.
-/// Kept modest to reduce lock contention with normal query operations.
-inline constexpr int FTS_BACKFILL_BATCH_SIZE = 2000;
-
-/// Time budget for each incremental FTS backfill slice.
-/// Keeps the scan worker responsive and avoids long write locks.
-inline constexpr int FTS_BACKFILL_TIME_BUDGET_MS = 80;
-
-/// Delay between incremental FTS backfill slices.
-/// Prevents the scan worker from running a tight 0ms timer loop that can
-/// consume a full CPU core on very large databases.
-inline constexpr int FTS_BACKFILL_SLICE_DELAY_MS = 20;
-
 /// Default chunk size for on-demand range loading during virtual scroll.
 /// Balances latency (smaller = faster first paint) vs throughput (larger =
 /// fewer round-trips).

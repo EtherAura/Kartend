@@ -8,10 +8,11 @@
 #include "gridlayoutcalculator.h"
 #include "ikeyboardmanager.h"
 #include "interactionstateholder.h"
+#include "iscrolldatasource.h"
+#include "iscrollmanager.h"
 #include "iselectionmanager.h"
 #include "itemwidget.h"
 #include "mousehelpers.h"
-#include "scrollmanager.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/mouse.h"
 
@@ -139,7 +140,7 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
                                            int gridWidth, int totalItems) {
   Q_UNUSED(clickPos);
 
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollDataSource *scroll = m_ctx ? m_ctx->scrollData() : nullptr;
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   if (!scroll || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
@@ -316,7 +317,7 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex, int gridWidth)
 }
 
 void MouseManager::onMouseHoldScrollStep() {
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  IScrollDataSource *scroll = m_ctx ? m_ctx->scrollData() : nullptr;
   if (!m_mouseHoldScrolling || !scroll) {
     stopMouseHoldScrolling();
     return;

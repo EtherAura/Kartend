@@ -89,7 +89,7 @@ jobs:
         # can't auto-detect the tag from the event context. Source
         # it from workflow_run.head_branch, which carries the tag
         # name for tag-pushed runs.
-        uses: vedantmgoyal9/winget-releaser@v2
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         with:
           identifier: EtherAura.Kartend
           installers-regex: '-windows-x64-setup\.exe$'

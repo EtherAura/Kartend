@@ -22,8 +22,9 @@
 #include <QTest>
 #include <QThread>
 
-#include <utility>
-
+#include "../../support/inspectordb.h"
+#include "../../support/scopeexit.h"
+#include "../../support/testsandbox.h"
 #include "collection/collectioncontext.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
@@ -37,39 +38,8 @@ private slots:
   void cachedNameSortIsFlatAcrossSubcollections();
 };
 
-template <typename Func> class ScopeExit {
-public:
-  explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
-  ~ScopeExit() { m_func(); }
-
-  ScopeExit(const ScopeExit &) = delete;
-  ScopeExit &operator=(const ScopeExit &) = delete;
-
-private:
-  Func m_func;
-};
-
-template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
-  return ScopeExit<Func>(std::forward<Func>(func));
-}
-
 void TestQueryManagerShellCollectionSort::initTestCase() {
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-shell-collection-sort"));
-}
-
-static auto openInspectorDb(const QString &dbFilePath) -> QSqlDatabase {
-  const QString connectionName = QStringLiteral("test_querymanager_shell_sort_inspect");
-  if (QSqlDatabase::contains(connectionName)) {
-    QSqlDatabase::removeDatabase(connectionName);
-  }
-  QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
-  db.setDatabaseName(dbFilePath);
-  if (!db.open()) {
-    return {};
-  }
-  return db;
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-shell-collection-sort"));
 }
 
 void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollections() {
@@ -125,7 +95,7 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
   qm->moveToThread(&worker);
   worker.start();
 
-  const auto workerCleanup = makeScopeExit([&]() {
+  const auto workerCleanup = KartendTest::makeScopeExit([&]() {
     if (qm) {
       qm->requestCancelScan();
       qm->deleteLater();
@@ -143,8 +113,10 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
 
   const QString dbDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   const QString dbFilePath = QDir(dbDir).absoluteFilePath(QStringLiteral("media.db"));
-  QSqlDatabase inspectDb = openInspectorDb(dbFilePath);
-  QVERIFY2(inspectDb.isValid() && inspectDb.isOpen(), "Failed to open inspector database");
+  KartendTest::InspectorDb inspector(dbFilePath,
+                                     QStringLiteral("test_querymanager_shell_sort_inspect"));
+  QVERIFY2(inspector.isOpen(), "Failed to open inspector database");
+  QSqlDatabase inspectDb = inspector.db();
 
   // Clean slate so prior test runs don't pollute the result set.
   {

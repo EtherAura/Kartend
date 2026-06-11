@@ -1,5 +1,7 @@
 #include "datauditprofile.h"
 
+#include "dbtxn.h"
+
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -164,10 +166,9 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Profile name is required",
                                "DatAuditProfile::insert");
   }
-  if (!db.transaction()) {
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to begin transaction",
-                               "DatAuditProfile::insert")
-        .withDetails(db.lastError().text());
+  KartendDb::DbTransaction txn(db, "DatAuditProfile::insert");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin transaction", nullptr, ErrorUtils::Severity::Error);
   }
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   qint64 newId = -1;
@@ -192,7 +193,6 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(now);
     if (!q.exec()) {
       const QString err = q.lastError().text();
-      db.rollback();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert profile",
                                  "DatAuditProfile::insert")
           .withDetails(err);
@@ -201,16 +201,12 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
   }
   QString datErr;
   if (!writeDats(db, newId, p.dats, datErr)) {
-    db.rollback();
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to write profile DAT rows",
                                "DatAuditProfile::insert")
         .withDetails(datErr);
   }
-  if (!db.commit()) {
-    db.rollback();
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to commit profile",
-                               "DatAuditProfile::insert")
-        .withDetails(db.lastError().text());
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit profile", nullptr, ErrorUtils::Severity::Error);
   }
   return newId;
 }
@@ -228,10 +224,9 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Profile name is required",
                                "DatAuditProfile::update");
   }
-  if (!db.transaction()) {
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to begin transaction",
-                               "DatAuditProfile::update")
-        .withDetails(db.lastError().text());
+  KartendDb::DbTransaction txn(db, "DatAuditProfile::update");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin transaction", nullptr, ErrorUtils::Severity::Error);
   }
   {
     QSqlQuery q(db);
@@ -254,29 +249,23 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(p.id);
     if (!q.exec()) {
       const QString err = q.lastError().text();
-      db.rollback();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to update profile",
                                  "DatAuditProfile::update")
           .withDetails(err);
     }
     if (q.numRowsAffected() == 0) {
-      db.rollback();
       return ErrorContext::error(ErrorCode::CollectionNotFound, "No profile with that id",
                                  "DatAuditProfile::update");
     }
   }
   QString datErr;
   if (!writeDats(db, p.id, p.dats, datErr)) {
-    db.rollback();
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to write profile DAT rows",
                                "DatAuditProfile::update")
         .withDetails(datErr);
   }
-  if (!db.commit()) {
-    db.rollback();
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to commit profile",
-                               "DatAuditProfile::update")
-        .withDetails(db.lastError().text());
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit profile", nullptr, ErrorUtils::Severity::Error);
   }
   return true;
 }
@@ -286,10 +275,9 @@ ErrorUtils::Result<bool> remove(QSqlDatabase &db, qint64 id) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "DatAuditProfile::remove");
   }
-  if (!db.transaction()) {
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to begin transaction",
-                               "DatAuditProfile::remove")
-        .withDetails(db.lastError().text());
+  KartendDb::DbTransaction txn(db, "DatAuditProfile::remove");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin transaction", nullptr, ErrorUtils::Severity::Error);
   }
   // Delete children explicitly so removal works regardless of the
   // foreign_keys pragma state on this connection.
@@ -300,7 +288,6 @@ ErrorUtils::Result<bool> remove(QSqlDatabase &db, qint64 id) {
     q.addBindValue(id);
     if (!q.exec()) {
       const QString err = q.lastError().text();
-      db.rollback();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                  "Failed to delete profile children", "DatAuditProfile::remove")
           .withDetails(err);
@@ -312,17 +299,13 @@ ErrorUtils::Result<bool> remove(QSqlDatabase &db, qint64 id) {
     q.addBindValue(id);
     if (!q.exec()) {
       const QString err = q.lastError().text();
-      db.rollback();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to delete profile",
                                  "DatAuditProfile::remove")
           .withDetails(err);
     }
   }
-  if (!db.commit()) {
-    db.rollback();
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed, "Failed to commit removal",
-                               "DatAuditProfile::remove")
-        .withDetails(db.lastError().text());
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit removal", nullptr, ErrorUtils::Severity::Error);
   }
   return true;
 }

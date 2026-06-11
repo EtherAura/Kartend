@@ -186,6 +186,19 @@ void GamepadManager::pollSdlState() {
   SDL_GameController *controller = static_cast<SDL_GameController *>(m_controller);
   SDL_GameControllerUpdate();
 
+  // Kartend-tjww5: a hot-unplugged (or Bluetooth-sleeping) controller keeps
+  // its handle alive but reads as all-zeros forever, and the !m_controller
+  // re-attach branch above never runs again — gamepad input would stay dead
+  // for the session. Detach explicitly (releasing any held direction/repeat
+  // state) and drop to the idle poll cadence so the next plug-in re-attaches.
+  if (SDL_GameControllerGetAttached(controller) == SDL_FALSE) {
+    detachController();
+    if (m_pollTimer && m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS) {
+      m_pollTimer->setInterval(UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS);
+    }
+    return;
+  }
+
   const Sint16 rawX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
   const Sint16 rawY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
 

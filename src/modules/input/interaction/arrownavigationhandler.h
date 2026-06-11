@@ -13,7 +13,8 @@ class QWidget;
 QT_END_NAMESPACE
 
 class IKeyboardManager;
-class IScrollManager;
+class IScrollDataSource;
+class ISelectionOverlayScroll;
 class IAnimationManager;
 class IViewportManager;
 class ISelectionManager;
@@ -116,8 +117,15 @@ private:
   [[nodiscard]] IKeyboardManager *keyboardMgr() const {
     return m_ctx ? m_ctx->keyboardManager() : nullptr;
   }
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-h1l8f: ArrowNavigationHandler only reads item totals and drives
+  // the selection overlay, so it takes the two narrow scroll roles instead of
+  // the IScrollManager facade. Both alias the same ScrollManager and are null
+  // together, so guarding on either is sound.
+  [[nodiscard]] IScrollDataSource *scrollData() const {
+    return m_ctx ? m_ctx->scrollData() : nullptr;
+  }
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const {
+    return m_ctx ? m_ctx->scrollOverlay() : nullptr;
   }
   [[nodiscard]] IAnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;

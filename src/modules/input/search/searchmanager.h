@@ -122,6 +122,8 @@ private:
   [[nodiscard]] INavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
+  // Kartend-h1l8f: keeps the IScrollManager facade — spans three scroll roles
+  // (search state, lifecycle, data).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

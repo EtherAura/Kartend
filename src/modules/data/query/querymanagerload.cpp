@@ -40,6 +40,16 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using QueryManagerInternal::buildFtsPrefixQuery;
 
+namespace {
+// Kartend-m9r1s: the sort-metadata maps only feed the Date/Size sort modes;
+// skip building them for the (common) Name/Random sorts so those loads don't
+// pay per-item hash inserts for data sortFiles will never read.
+bool sortModeUsesFileMetadata(SortMode mode) {
+  return mode == SortMode::DateAscending || mode == SortMode::DateDescending ||
+         mode == SortMode::SizeAscending || mode == SortMode::SizeDescending;
+}
+} // namespace
+
 void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections,
                                       quint64 loadGeneration) {
   assertOwnerThread();
@@ -127,8 +137,12 @@ void QueryManager::loadItems(const CollectionContext &context,
     return;
   }
 
+  // Kartend-m9r1s: capture the per-path sort metadata the load already has
+  // (scan-collected mtimes, or last_modified/file_size off the items rows) so
+  // a Date/Size sort below doesn't stat every file again.
   QHash<QString, QDateTime> timestamps;
-  QStringList filePaths = loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps);
+  QHash<QString, qint64> dbSizes;
+  QStringList filePaths = loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps, &dbSizes);
 
   // Apply subfolder filtering
   const QString &subfolder = ctx.config.folderBrowsing.currentSubfolder;
@@ -171,7 +185,16 @@ void QueryManager::loadItems(const CollectionContext &context,
       ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths, allFilePaths, allFileNames,
       fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
 
-  QueryManagerInternal::sortFiles(allFilePaths, ctx.sortMode);
+  // Re-key the relative-keyed metadata to the absolute paths sortFiles sees
+  // (no canonical-path cache here — this load path doesn't dedup).
+  QHash<QString, qint64> mtimeMsByPath;
+  QHash<QString, qint64> sizeByPath;
+  if (sortModeUsesFileMetadata(ctx.sortMode)) {
+    QueryManagerInternal::buildSortMetadata(ctx.config.mediaDirectory, timestamps, dbSizes, nullptr,
+                                            mtimeMsByPath, sizeByPath);
+  }
+
+  QueryManagerInternal::sortFiles(allFilePaths, ctx.sortMode, &mtimeMsByPath, &sizeByPath);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                    fileToCollectionIndex, loadGeneration);
@@ -211,11 +234,19 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
   QSet<QString> seenCanonicalPaths;
   QHash<QString, QString> canonicalPathCache;
 
+  // Kartend-m9r1s: accumulate the per-path sort metadata each collection's
+  // load already has in hand so a Date/Size sort at the end doesn't stat
+  // every aggregated file again. Keyed like allFilePaths (canonical absolute
+  // paths) via buildSortMetadata after each append call below.
+  QHash<QString, qint64> mtimeMsByPath;
+  QHash<QString, qint64> sizeByPath;
+
   bool hasMainMediaDirectory = !mainCtx.config.mediaDirectory.trimmed().isEmpty();
   if (hasMainMediaDirectory) {
     QHash<QString, QDateTime> timestamps;
+    QHash<QString, qint64> dbSizes;
     QStringList mainFilePaths =
-        loadOrScanCollection(mainCtx.currentIndex, mainCtx.config, timestamps);
+        loadOrScanCollection(mainCtx.currentIndex, mainCtx.config, timestamps, &dbSizes);
 
     // Apply subfolder filtering for the main collection
     const QString &subfolder = mainCtx.config.folderBrowsing.currentSubfolder;
@@ -245,11 +276,28 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     seenCanonicalPaths.reserve(mainFilePaths.size());
     canonicalPathCache.reserve(mainFilePaths.size());
 
+    // Kartend-4fmu1: pre-seed the per-load cache with still-valid (mtime
+    // match) resolutions from previous loads so appendFileMapsAndListCanonical
+    // skips the per-item realpath walk for them, then harvest what this load
+    // resolved for the next switch.
+    QueryManagerInternal::seedCanonicalPathCache(mainCtx.config.mediaDirectory, timestamps,
+                                                 m_persistentCanonicalPaths, canonicalPathCache);
+
     QueryManagerInternal::appendFileMapsAndListCanonical(
         mainCtx.currentIndex, mainCtx.config,
         CollectionUtils::resolveArtworkDirectory(mainCtx.currentIndex, allCollections),
         mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
         fileToCollectionIndex, true, &seenCanonicalPaths, &canonicalPathCache);
+
+    QueryManagerInternal::harvestCanonicalPathCache(mainCtx.config.mediaDirectory, timestamps,
+                                                    canonicalPathCache, m_persistentCanonicalPaths);
+
+    // Must run AFTER the append call: it consumes the canonical-path cache
+    // entries the append just populated.
+    if (sortModeUsesFileMetadata(context.sortMode)) {
+      QueryManagerInternal::buildSortMetadata(mainCtx.config.mediaDirectory, timestamps, dbSizes,
+                                              &canonicalPathCache, mtimeMsByPath, sizeByPath);
+    }
   }
 
   // Use pre-computed descendants if available (O(1) from cache), otherwise
@@ -286,16 +334,31 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     }
 
     QHash<QString, QDateTime> subTimestamps;
-    QStringList subFilePaths = loadOrScanCollection(collectionIndex, collection, subTimestamps);
+    QHash<QString, qint64> subDbSizes;
+    QStringList subFilePaths =
+        loadOrScanCollection(collectionIndex, collection, subTimestamps, &subDbSizes);
+
+    // Kartend-4fmu1: same seed/harvest bracket as the main collection above.
+    QueryManagerInternal::seedCanonicalPathCache(collection.mediaDirectory, subTimestamps,
+                                                 m_persistentCanonicalPaths, canonicalPathCache);
 
     QueryManagerInternal::appendFileMapsAndListCanonical(
         collectionIndex, collection,
         CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), subFilePaths,
         allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, true,
         &seenCanonicalPaths, &canonicalPathCache);
+
+    QueryManagerInternal::harvestCanonicalPathCache(collection.mediaDirectory, subTimestamps,
+                                                    canonicalPathCache, m_persistentCanonicalPaths);
+
+    // After the append call for the same reason as the main collection above.
+    if (sortModeUsesFileMetadata(context.sortMode)) {
+      QueryManagerInternal::buildSortMetadata(collection.mediaDirectory, subTimestamps, subDbSizes,
+                                              &canonicalPathCache, mtimeMsByPath, sizeByPath);
+    }
   }
 
-  QueryManagerInternal::sortFiles(allFilePaths, context.sortMode);
+  QueryManagerInternal::sortFiles(allFilePaths, context.sortMode, &mtimeMsByPath, &sizeByPath);
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                    fileToCollectionIndex, loadGeneration);
 }

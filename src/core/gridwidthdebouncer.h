@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QPointer>
 
+#include "uiconstants/timing.h"
+
 namespace TimerUtils {
 class DebouncedTimer;
 }
@@ -36,7 +38,17 @@ class GridWidthDebouncer : public QObject {
 public:
   using StageCallback = std::function<void()>;
 
+  /// Per-stage debounce delays. Production callers take the defaults
+  /// (UIConstants::Timing); tests inject 1 ms delays so the suite can use
+  /// QTRY_* instead of fixed qWait sleeps (Kartend-e9jmu).
+  struct StageDelays {
+    int saveMs = UIConstants::Timing::LONG_DELAY_MS;
+    int precalcMs = UIConstants::Timing::LONG_DELAY_MS;
+    int finalizeMs = UIConstants::Timing::MEDIUM_DELAY_MS;
+  };
+
   explicit GridWidthDebouncer(QObject *parent = nullptr);
+  GridWidthDebouncer(QObject *parent, StageDelays delays);
 
   /// Install the per-stage callbacks. Safe to call once after construction.
   /// @p onPrecalc runs preCalculateLayout + forceVirtualViewUpdate.

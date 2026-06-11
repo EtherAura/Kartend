@@ -1,9 +1,12 @@
 #ifndef LAUNCHMANAGER_H
 #define LAUNCHMANAGER_H
 
+#include <atomic>
 #include <functional>
+#include <memory>
 
 #include <QDateTime>
+#include <QFuture>
 #include <QHash>
 #include <QObject>
 #include <QPointer>
@@ -64,39 +67,10 @@ struct LaunchCommand {
   QStringList arguments;
 };
 
-/// Read-only summary of what `launchItem()` would do for a given
-/// (collection, launcher, file) triple, without spawning a child process.
-/// Drives the launch-preview / dry-run validation UI: each warning surfaces
-/// a specific user-fixable issue (missing executable, file gone, archive
-/// extraction without a target extension, etc.). `buildOk` is false when
-/// buildLaunchCommand itself rejected the input (e.g. missing libretro
-/// core); `buildError` carries the message.
-struct LaunchPreview {
-  /// True iff buildLaunchCommand returned a valid program + arguments.
-  /// When false, `program` and `arguments` are empty and `warnings` is the
-  /// single-entry list `[buildError]`.
-  bool buildOk = false;
-  /// Diagnostic message from buildLaunchCommand when buildOk == false.
-  QString buildError;
-  /// Raw launcher path as configured (may be a bare command name).
-  QString program;
-  /// Argument list, with %collection% / preset substitutions applied.
-  QStringList arguments;
-  /// Path returned by validateLauncherPath — empty when the launcher is
-  /// not on PATH / doesn't exist on disk.
-  QString resolvedProgram;
-  /// True when the file at `filePath` exists on disk at preview time.
-  bool fileExists = false;
-  /// True when the collection's archive-extraction toggle would apply to
-  /// this file. UI shows the extracted-extension target alongside.
-  bool wouldExtractArchive = false;
-  /// The target extension the archive would be unpacked to (set when
-  /// wouldExtractArchive is true). Empty string when extraction is on but
-  /// no extension was configured — surfaced as a warning.
-  QString archiveTargetExtension;
-  /// Human-readable warnings — empty list means the command is ready.
-  QStringList warnings;
-};
+// LaunchPreview moved to its own leaf header (launchpreview.h,
+// Kartend-rq33v) so struct-only consumers no longer drag in this manager
+// header; included here because LaunchManager's API returns it by value.
+#include "launchpreview.h"
 
 /// Handles launching media items with their configured launchers.
 /// Manages libretro cores, parameter parsing, and launch debouncing.
@@ -105,7 +79,10 @@ class LaunchManager : public QObject {
   Q_DISABLE_COPY_MOVE(LaunchManager)
 public:
   explicit LaunchManager(QObject *parent = nullptr);
-  ~LaunchManager() override = default;
+  /// Never abandons a running extractor child (Kartend-mkcak): requests
+  /// cancellation (the watchdog loop kills the child within one poll
+  /// interval) and waits for the worker to drain before destruction.
+  ~LaunchManager() override;
 
   void setupReferences(const LaunchManagerSetup &setup);
 
@@ -183,9 +160,21 @@ public:
   [[nodiscard]] static bool isArchiveFile(const QString &filePath);
 
   /// Extracts an archive to a temporary directory and returns the path to the
-  /// target file matching the specified extension
+  /// target file matching the specified extension.
+  ///
+  /// Blocking — launchItem() runs it on a QtConcurrent worker thread
+  /// (Kartend-mkcak); only tests call it synchronously. `cancelRequested`
+  /// (optional) is polled by the extraction watchdog: setting it kills the
+  /// extractor child and returns OperationCancelled. `maxDecompressedBytes`
+  /// bounds the cumulative bytes written to the extraction dir
+  /// (Kartend-ijglg); pass a negative value (the default) to use
+  /// UIConstants::Launch::MAX_EXTRACTION_BYTES. Exceeding the cap kills the
+  /// extractor and returns ResourceLimitExceeded; every abort path removes
+  /// the partial extraction dir.
   [[nodiscard]] static ErrorUtils::Result<QString>
-  extractArchiveToTemp(const QString &archivePath, const QString &targetExtension);
+  extractArchiveToTemp(const QString &archivePath, const QString &targetExtension,
+                       const std::atomic_bool *cancelRequested = nullptr,
+                       qint64 maxDecompressedBytes = -1);
 
   /// Finds a file with the given extension in a directory (recursive)
   [[nodiscard]] static QString findFileWithExtension(const QString &directory,
@@ -195,7 +184,28 @@ public:
   /// Always false when runtime detection is disabled.
   [[nodiscard]] bool isRuntimeChildRunning() const { return m_trackedChild; }
 
+  /// True while a launch-time archive extraction is running on the worker
+  /// thread. Only one extraction runs at a time; a second archive launch
+  /// while one is in flight is rejected.
+  [[nodiscard]] bool isExtractionRunning() const { return m_extractionActive; }
+
+  /// Requests cancellation of the in-flight archive extraction (no-op when
+  /// none is running). The extraction watchdog observes the flag within one
+  /// poll interval, kills the extractor child, removes the partial
+  /// extraction dir, and the pending launch is abandoned silently.
+  void cancelExtraction();
+
 signals:
+  /// Emitted when a launch-time archive extraction moves to the worker
+  /// thread. `displayName` is a human-readable label (the archive basename)
+  /// suitable for a busy overlay.
+  void extractionStarted(const QString &filePath, const QString &displayName);
+
+  /// Emitted when the in-flight extraction ends for any reason — success
+  /// (the launch then continues), failure, or cancellation. Always paired
+  /// with a preceding extractionStarted.
+  void extractionFinished(const QString &filePath);
+
   /// Emitted when a runtime-tracked child process starts.
   /// `displayName` is a human-readable label (typically the file basename)
   /// suitable for showing in a "Now Playing" overlay.
@@ -223,6 +233,16 @@ private:
   /// already running is rejected.
   QPointer<QProcess> m_trackedChild;
   QString m_trackedFilePath;
+
+  /// In-flight archive-extraction state (Kartend-mkcak). The cancel flag is
+  /// shared with the worker lambda so it stays valid even if this manager
+  /// dies first; the future lets the destructor wait for the worker to
+  /// drain after requesting cancellation.
+  bool m_extractionActive = false;
+  QString m_extractionFilePath;
+  std::shared_ptr<std::atomic_bool> m_extractionCancel;
+  QFuture<ErrorUtils::Result<QString>> m_extractionFuture;
+
   /// Collection UUID + start timestamp captured at runtimeStarted so the
   /// session duration can be accumulated on runtimeFinished.
   QString m_trackedCollectionUuid;
@@ -236,6 +256,23 @@ private:
   /// runtimeFinished. Returns true on a successful start.
   bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd, const QString &filePath,
                      const QString &collectionUuid);
+
+  /// Runs extractArchiveToTemp on a QtConcurrent worker (Kartend-mkcak) and
+  /// continues the launch in the completion callback on the GUI thread.
+  /// The launch context (resolved launcher, collection name/uuid) is captured
+  /// by value so a settings edit during extraction can't dangle references.
+  void startExtractionAndLaunch(const QString &filePath, const QString &targetExtension,
+                                const LauncherConfig &launcher, const QString &collectionName,
+                                const QString &collectionUuid);
+
+  /// Tail half of launchItem(): builds + validates the command and spawns the
+  /// tracked or detached child. `originalFilePath` keys stats/debounce (the
+  /// archive path for extracted launches); `launchFilePath` is what the
+  /// launcher receives. `extractedDir` (empty for non-archive launches) is
+  /// removed on every failure path before the child owns it.
+  void finishLaunch(const LauncherConfig &launcher, const QString &collectionName,
+                    const QString &originalFilePath, const QString &launchFilePath,
+                    const QString &extractedDir, const QString &collectionUuid);
 
   /// Resolves the collection UUID for a given collection index using the
   /// collection name + expanded media directory. Returns empty when index is

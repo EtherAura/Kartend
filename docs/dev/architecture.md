@@ -31,7 +31,7 @@ src/
 │   │   ├── restore/     # Selection state restoration during navigation
 │   │   ├── scraper/     # Metadata scraping (core/ + parsers/ + providers/)
 │   │   ├── session/     # Selection state persistence
-│   │   └── settings/    # Config file I/O, settings dialog
+│   │   └── settings/    # Config file I/O, collection settings persistence
 │   ├── input/           # User input, navigation, and input-driven behavior
 │   │   ├── animation/   # Scroll animations, easing curves
 │   │   ├── attract/     # Attract-mode idle scroll/advance
@@ -57,8 +57,11 @@ src/
 ├── ui/                  # UI components (dialogs, widget panes, controllers)
 │   ├── controllers/     # Controllers that orchestrate UI widgets but stay
 │   │   │                # at the ui/ layer (e.g. DetailsPaneManager, moved
-│   │   │                # out of modules/media/ when relayered as ui/)
-│   │   └── detailspanemanager/
+│   │   │                # out of modules/media/ when relayered as ui/;
+│   │   │                # SettingsDialogController, moved out of
+│   │   │                # modules/data/settings/ in Kartend-q8p29)
+│   │   ├── detailspanemanager/
+│   │   └── settingsdialogcontroller/
 │   ├── dialogs/         # Dialogs grouped by domain: settings/ (further
 │   │                    # split into core/ + appearance/ + behavior/ +
 │   │                    # artwork/ + launchers/ + collections/),
@@ -75,7 +78,7 @@ src/
 | Component | Description |
 |-----------|-------------|
 | `main.cpp` | Application entry point that initializes Qt and displays the main window. |
-| `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. The implementation is split across six sibling TUs (`mainwindow.cpp`, `mainwindow_setup.cpp`, `mainwindow_wiring.cpp`, `mainwindow_timers.cpp`, `mainwindow_scraper.cpp`, `mainwindow_toolbar.cpp`); see [mainwindow-partials.md](mainwindow-partials.md) for the responsibility map and the rule for where new code goes. |
+| `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. The implementation is split across eight sibling TUs (`mainwindow.cpp`, `mainwindow_setup.cpp`, `mainwindow_wiring.cpp`, `mainwindow_managerwiring.cpp`, `mainwindow_timers.cpp`, `mainwindow_scraper.cpp`, `mainwindow_toolbar.cpp`, `mainwindow_dialogs.cpp`); see [mainwindow-partials.md](mainwindow-partials.md) for the responsibility map and the rule for where new code goes. |
 | `marqueecontroller` | Drives the secondary-monitor marquee / topper window — owns the MarqueeWindow and the artwork-refresh debounce timer (extracted from MainWindow). |
 | `scrolleventscontroller` | Owns MainWindow's reactions to ScrollManager view-mode / column-resize / CoverFlow activation signals (sort-mode change, list-column-width persist, CoverFlow item-launch, sidebar-yield for CoverFlow / artwork-preview overlay). Replaces the prior `mainwindow_scrollevents.cpp` partial. |
 
@@ -101,7 +104,7 @@ src/
 | `querymanager` | Executes SQLite queries on worker thread for paginated item loading and filtering. |
 | `cachemanager` | Manages in-memory pixmap cache with LRU eviction and optional disk persistence. |
 | `sessionmanager` | Persists and restores selection state and item counts across application sessions. |
-| `settingsmanager` | Handles config file I/O, collection settings, and the settings dialog interface. |
+| `settingsmanager` | Handles config file I/O and collection settings persistence. The settings-dialog orchestration (open/diff/apply flow + the async "Collection Added" summaries) moved to `SettingsDialogController` at `src/ui/controllers/settingsdialogcontroller/` (Kartend-q8p29, following the DetailsPaneManager precedent). |
 | `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). Lives at `src/ui/controllers/detailspanemanager/` — a controller for a ui-layer widget (DetailsPane), at the ui/ layer. |
 | `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
 | `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
@@ -129,7 +132,7 @@ not a guarantee. Prefer these meanings for new classes:
 |--------|------|
 | `Manager` | Owns lifecycle and/or mutable state for a feature; long-lived; coordinates sub-helpers. The default for a feature module's top-level object. |
 | `Service` | Performs an operation (often DB- or IO-backed) with little long-lived UI state of its own (e.g. `ScanService`, `ScraperService`). |
-| `Controller` | Orchestrates UI widgets / dialogs at the `ui/` or `core/` layer (e.g. `MenuController`, `DetailsPaneManager`'s controller role). |
+| `Controller` | Orchestrates UI widgets / dialogs at the `ui/` or `core/` layer (e.g. `MenuController`, `SettingsDialogController`, `DetailsPaneManager`'s controller role). |
 | `Coordinator` | Cross-manager glue that sequences work across siblings without owning their state (e.g. `SelectionRestoreCoordinator`). |
 | `Runner` | Drives a bounded, often-cancellable batch job (e.g. `BatchScrapeRunner`, `DatAuditRunner`). |
 | `Provider` / `Parser` | Pluggable scraper backends and their response parsers under `modules/data/scraper/`. |
@@ -282,6 +285,20 @@ if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
 `setupReferences()` runs; setup calls are wired in
 `MainWindow::setupManagers()` and related methods.
 
+The scroll layer is additionally exposed as six narrow **role interfaces**
+(Kartend-h1l8f): `IScrollManager` is a pure facade union of
+`IVirtualScrollLifecycle`, `IGridLayoutScroll`, `ISelectionOverlayScroll`,
+`ISearchStateScroll`, `IArtworkPreviewScroll`, and `IScrollDataSource`, each
+reachable through its own ctx accessor (`ctx->scrollLifecycle()`,
+`ctx->scrollGrid()`, `ctx->scrollOverlay()`, `ctx->scrollSearch()`,
+`ctx->scrollPreview()`, `ctx->scrollData()`). All seven pointers alias the
+same `ScrollManager` and are seeded/nulled in lockstep via
+`ManagerRefs::seedScrollRoles()`. Consumers take the narrowest role(s) they
+use; the facade remains for consumers spanning three or more roles, for the
+`virtualScrollSetupComplete` signal connection, and for QObject-based
+lifetime guards (`QPointer`, `singleShotGuarded`) — the roles are plain
+abstract classes.
+
 ### Two ctx patterns: `ApplicationContext` vs controller-ctx structs
 
 There are two distinct context shapes in the codebase. They are
@@ -350,39 +367,42 @@ bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
 Adopters: `SessionManager`, `PlaylistManager`, `KartWriter` / `KartReader`,
 `CacheDiskStorage`.
 
-### QObject lifecycle: `parent()` as a runtime guard
+### QObject lifecycle: teardown guards (and where `parent()` still matters)
 
-In this codebase `QObject::parent()` is treated as a **runtime lifetime
-guard**, not merely ownership metadata. Several manager paths read
-`parent()` to decide whether the object is still attached to its expected
-QObject tree before touching siblings — when a manager is detached (e.g.
-during teardown, or because a parent re-parenting freed sibling
-infrastructure), the parent-pointer goes null and the guard short-circuits.
+**Primary convention (current).** Manager teardown safety is guarded by
+**explicit shutdown flags**, not by `parent()` checks: per-class
+`m_destroying` / `m_isShuttingDown` members, `appNotShuttingDown()`-style
+predicates threaded through setup structs, and
+`QApplication::closingDown()`. The historical `!parent()` manager guards
+have been retired as they were found to be dead or fragile — e.g.
+`SelectionRestoreCoordinator`'s former `!parent()` check was removed as
+dead (Kartend-je2wy; the coordinator's parent is non-null for its whole
+lifetime) and `SettingsManager`'s
+`dynamic_cast<IMainWindow *>(parent())` host derivation moved off the
+manager entirely (see settingsmanager.cpp:285's provenance comment).
+When you need a destruction-phase guard in new code, add a shutdown
+flag — don't reach for `parent()`.
 
-Example sites:
+**Where `parent()` IS still load-bearing.** Two narrower patterns
+survive and are legitimate:
 
-- `SelectionRestoreCoordinator::validateSelectionRestoreContext()`
-  ([selectionrestoremanager.cpp:106](../../src/modules/data/restore/selectionrestoremanager.cpp))
-  bails on `!parent() || QApplication::closingDown()` before reaching
-  through `m_ctx` to `ScrollManager` / `InteractionManager`.
-- `BackdropBlurOverlay`, `BackgroundVideoWidget`, `LoadingOverlay`
-  filter parent-resize events by comparing `watched == parent()` before
-  re-laying themselves out — when the overlay has been re-parented away
-  from the original chrome, the event is no longer theirs to handle.
-- `SettingsManager::openSettingsDialog()`
-  ([settingsmanager.cpp:993](../../src/modules/data/settings/settingsmanager.cpp))
-  uses `dynamic_cast<IMainWindow *>(parent())` to confirm the dialog
-  is being mounted under a real `MainWindow`; headless contexts (tests,
-  CLI flows) get `nullptr` and the dialog code skips MainWindow-specific
-  wiring.
+- **Chrome/navigation overlay event filters** compare
+  `watched == parent()` before re-laying themselves out on parent
+  resize (`BackdropBlurOverlay`, `BackgroundVideoWidget`,
+  `LoadingOverlay`, `VignetteOverlay`) — when the overlay has been
+  re-parented away from the original chrome, the event is no longer
+  theirs to handle.
+- **Dialog host derivation**: `ShortcutsDialog` and the settings dialog
+  form re-derive their host via `dynamic_cast<IMainWindow *>(parent())`
+  at point of use; headless contexts (tests, CLI flows) get `nullptr`
+  and skip MainWindow-specific wiring. (Known fragility: the failure
+  mode is a silent no-op — tracked as an audit follow-up.)
 
 **Rule for changing constructor parents.** Before flipping a
 constructor's parent from `this` to `nullptr` (or removing a parent
-argument), `grep -rn "parent()" src/<module>` and confirm no
-runtime-guard call relies on it. Don't assume "parent is just an
-ownership hint" — the codebase's manager-tree teardown specifically
-uses these guards to keep destruction-phase reads from racing the
-sibling tree's collapse.
+argument), `grep -rn "parent()" src/<module>` and confirm no surviving
+guard of the two kinds above relies on it. The grep is cheap and the
+silent-no-op failure mode is not.
 
 The full hard-rule wording — including the
 "setup-struct sibling-manager pointer" complement — lives in

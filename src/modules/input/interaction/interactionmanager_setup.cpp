@@ -24,6 +24,7 @@
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "idatabasemanager.h"
+#include "itemmetadataactioncontroller.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "mousemanager.h"
@@ -71,9 +72,40 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
 
   // Kartend-n8kh: capture the dialog runners. Either may be null in
   // headless contexts; the call sites guard before invoking.
-  m_runSmartPlaylistDialog = setup.runSmartPlaylistDialog;
-  m_runEditMetadataDialog = setup.runEditMetadataDialog;
   m_runLaunchPreviewDialog = setup.runLaunchPreviewDialog;
+  // Kartend-sqoq0: generic stock-modal runners. Null members fall back to
+  // direct Qt dialog construction at each call site.
+  m_dialogs = setup.dialogs;
+
+  // Item-metadata mutation handlers (Kartend-5lmt7) — the controller owns
+  // the edit-metadata dialog runner outright (it is its only consumer).
+  m_itemMetadataActions = std::make_unique<ItemMetadataActionController>();
+  {
+    ItemMetadataActionControllerSetup metaSetup;
+    metaSetup.ctx = setup.ctx;
+    metaSetup.collections = setup.getCollections();
+    metaSetup.currentCollectionIndex = setup.getCurrentCollectionIndex();
+    metaSetup.runEditMetadataDialog = setup.runEditMetadataDialog;
+    m_itemMetadataActions->setupReferences(metaSetup);
+  }
+
+  // Playlist context-menu actions (Kartend-5lmt7) — owns the smart-playlist
+  // dialog runner outright (it is its only consumer). Constructed parentless
+  // under unique_ptr ownership: lifetime follows the coordinator via the
+  // member, not the QObject tree (Kartend-c0dwd comment fix — it was never
+  // QObject-parented to this).
+  m_playlistMenu = std::make_unique<PlaylistMenuController>();
+  {
+    PlaylistMenuControllerSetup plSetup;
+    plSetup.ctx = setup.ctx;
+    plSetup.collections = setup.getCollections();
+    plSetup.currentCollectionIndex = setup.getCurrentCollectionIndex();
+    plSetup.runSmartPlaylistDialog = setup.runSmartPlaylistDialog;
+    // Kartend-sqoq0: the playlist menu's name prompts, confirmations, and
+    // import/export pickers run through the same generic runner set.
+    plSetup.dialogs = setup.dialogs;
+    m_playlistMenu->setupReferences(plSetup);
+  }
 
   // Setup SearchManager with its dependencies
   if (m_searchManager) {

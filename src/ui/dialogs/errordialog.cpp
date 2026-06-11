@@ -238,7 +238,7 @@ auto ErrorDialog::showCriticalError(QWidget *parent, const ErrorUtils::ErrorCont
 
 // Kartend-hx6l: the ErrorPresentation namespace implementation moved
 // to src/utils/app/errorpresentation_default.cpp so kartend_data callers
-// (settingsdialogcontroller.cpp) don't drag a kartend_data → kartend_ui
+// (settingsmanagercollections.cpp) don't drag a kartend_data → kartend_ui
 // link edge into every test executable. Production binaries register
 // the ErrorDialog-backed override at MainWindow startup (see
 // mainwindow_setup.cpp). The header in src/api/errorpresentation.h

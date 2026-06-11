@@ -118,8 +118,10 @@ void TestKartManager::testImportRoundtripRegistersCollection() {
   // initialize() call wires settings, session, database, and the kart
   // sub-manager against the qttest sandbox, so register paths land
   // somewhere safe to inspect after the import.
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY2(kartMgr != nullptr, "ApplicationManager must hand out a KartManager");
@@ -151,8 +153,10 @@ void TestKartManager::testExportProducesReadableBundle() {
   // sibling-manager access (settings, sessions). ApplicationManager
   // wires the ctx via initialize(), so the manual setup here just
   // populates the getter closures the export flow consults.
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
 
   auto src = buildSyntheticCollection(QStringLiteral("Test Video"), QStringLiteral("clip.mp4"),
@@ -195,8 +199,10 @@ void TestKartManager::testFullRoundtripExportThenImport() {
   QList<CollectionConfig> collections{src->cfg};
 
   // 2. Spin up KartManager wired to the synthetic collection.
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);
@@ -239,6 +245,59 @@ void TestKartManager::testFullRoundtripExportThenImport() {
   QCOMPARE(f.readAll(), QByteArray("audio-payload"));
 }
 
+void TestKartManager::testInteractiveFlowsUseStubbedDialogRunners() {
+  // Kartend-sqoq0: the interactive entry points used to construct
+  // QFileDialog / QMessageBox directly, which made them untestable
+  // headlessly. With DialogRunners stubs wired, the whole flow runs
+  // without a modal and the warnings land in the stub.
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QList<CollectionConfig> collections; // deliberately empty
+  QStringList warnings;                // "title|text" per warn call
+  QString nextOpenFile;                // canned picker answer
+
+  kart::KartManagerSetup setup;
+  setup.ctx = &appCtx;
+  setup.getCollections = [&collections]() -> QList<CollectionConfig> * { return &collections; };
+  setup.getLauncherPresets = []() -> QList<LauncherPreset> { return {}; };
+  setup.getParentWindow = []() -> QWidget * { return nullptr; };
+  setup.getPlaylistManager = []() -> IPlaylistManager * { return nullptr; };
+  setup.dialogs.warn = [&warnings](const QString &title, const QString &text) {
+    warnings.append(title + QStringLiteral("|") + text);
+  };
+  setup.dialogs.getOpenFileName = [&nextOpenFile](const QString &, const QString &,
+                                                  const QString &) { return nextOpenFile; };
+  kartMgr->setupReferences(setup);
+
+  // 1. Export with an out-of-range index → the warn runner receives the
+  // "No collection selected" failure; nothing modal, nothing exported.
+  kartMgr->exportCollectionInteractive(/*collectionIndex=*/5);
+  QCOMPARE(warnings.size(), 1);
+  QVERIFY(warnings.first().startsWith(QStringLiteral("Export Kart|")));
+  warnings.clear();
+
+  // 2. Import with the picker stubbed to "cancel" (empty path) → clean
+  // no-op: no warning, no importFailed.
+  QSignalSpy failedSpy(kartMgr, &kart::KartManager::importFailed);
+  nextOpenFile.clear();
+  kartMgr->importInteractive();
+  QCOMPARE(warnings.size(), 0);
+  QCOMPARE(failedSpy.count(), 0);
+
+  // 3. Import with the picker stubbed to a nonexistent bundle → the
+  // manifest peek fails, importFailed fires, and the failure text reaches
+  // the warn runner instead of a QMessageBox.
+  nextOpenFile = QStringLiteral("/nonexistent/bundle.kart");
+  kartMgr->importInteractive();
+  QCOMPARE(failedSpy.count(), 1);
+  QCOMPARE(warnings.size(), 1);
+  QVERIFY(warnings.first().startsWith(QStringLiteral("Import Kart|")));
+}
+
 void TestKartManager::testImportWithUnknownLauncherPathStillSucceeds() {
   // 1. Synthesize a collection whose launcher.launcherPath points at an
   // absolute location that doesn't exist on this test host — the
@@ -265,8 +324,10 @@ void TestKartManager::testImportWithUnknownLauncherPathStillSucceeds() {
   // import just because the launcher isn't on this host — it preserves
   // the configured path so the user can fix it after install or on
   // re-import to the target machine).
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);
@@ -305,8 +366,10 @@ void TestKartManager::testImportFiresMissingLauncherPathsReporter() {
   auto writeRes = writer.writeKart(kartPath, prep.value());
   QVERIFY2(writeRes.isOk(), qPrintable(writeRes.isError() ? writeRes.error().message : QString()));
 
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);
@@ -365,8 +428,10 @@ void TestKartManager::testImportSkipsReporterWhenAllLauncherPathsResolve() {
   KartWriter::Writer writer;
   QVERIFY(writer.writeKart(kartPath, prep.value()).isOk());
 
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);
@@ -419,8 +484,10 @@ void TestKartManager::testHeadlessImportRefusesInTreeLauncherByDefault() {
   const QString kartPath = buildKartWithInTreeLauncher(destRoot.path(), kartHome);
   QVERIFY(!kartPath.isEmpty());
 
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);
@@ -442,8 +509,10 @@ void TestKartManager::testHeadlessImportAcceptsInTreeLauncherWhenOptedIn() {
   const QString kartPath = buildKartWithInTreeLauncher(destRoot.path(), kartHome);
   QVERIFY(!kartPath.isEmpty());
 
-  ApplicationManager appManager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager appManager;
   appManager.initialize(&appCtx);
   kart::KartManager *kartMgr = appManager.getKartManager();
   QVERIFY(kartMgr != nullptr);

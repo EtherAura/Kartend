@@ -80,6 +80,13 @@ auto tableExists(QSqlDatabase &db, const QString &tableName) -> bool {
   return q.exec() && q.next();
 }
 
+auto triggerExists(QSqlDatabase &db, const QString &triggerName) -> bool {
+  QSqlQuery q(db);
+  q.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?");
+  q.addBindValue(triggerName);
+  return q.exec() && q.next();
+}
+
 } // namespace
 
 class TestDbMigrations : public QObject {
@@ -110,6 +117,7 @@ private slots:
   void v15AddsStateFlagColumns();
   void v16AddsFileHashCacheTable();
   void v17AddsDatAuditProfileTables();
+  void v18DropsEagerFtsSyncTriggers();
   void preservesExistingDataAcrossUpgrade();
   void failedBlockRollsBackAndKeepsVersion();
   void newerSchemaVersionIsLeftUntouched();
@@ -131,8 +139,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 15 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 17);
+  // Must equal CURRENT_SCHEMA_VERSION in dbmigrations.cpp.
+  QCOMPARE(getUserVersion(db), 18);
 
   closeAndRemove(db, conn);
 }
@@ -308,7 +316,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -324,7 +332,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -337,7 +345,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -366,7 +374,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -400,7 +408,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -416,7 +424,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -429,7 +437,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -464,7 +472,7 @@ void TestDbMigrations::v10AddsPlaylistTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableExists(db, "playlists"));
   QVERIFY(tableHasColumn(db, "playlists", "id"));
   QVERIFY(tableHasColumn(db, "playlists", "name"));
@@ -496,7 +504,7 @@ void TestDbMigrations::v12AddsDateAddedColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "items", "date_added"));
   QVERIFY(indexExists(db, "idx_items_date_added"));
 
@@ -544,7 +552,7 @@ void TestDbMigrations::v13AddsRelPathColumn() {
 
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "items", "rel_path"));
 
   // The pre-existing row survives and its rel_path defaults to NULL — the
@@ -567,7 +575,7 @@ void TestDbMigrations::v14AddsCurationColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "item_metadata", "notes"));
   QVERIFY(tableHasColumn(db, "item_metadata", "rating"));
   QVERIFY(tableHasColumn(db, "item_metadata", "source_url"));
@@ -597,7 +605,7 @@ void TestDbMigrations::v15AddsStateFlagColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "item_metadata", "is_pinned"));
   QVERIFY(tableHasColumn(db, "item_metadata", "is_hidden"));
   QVERIFY(tableHasColumn(db, "item_metadata", "continue_later"));
@@ -625,7 +633,7 @@ void TestDbMigrations::v16AddsFileHashCacheTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableExists(db, "file_hash_cache"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "path"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "file_size"));
@@ -646,7 +654,7 @@ void TestDbMigrations::v17AddsDatAuditProfileTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableExists(db, "dat_audit_profile"));
   QVERIFY(tableExists(db, "dat_audit_profile_dat"));
   QVERIFY(tableExists(db, "dat_audit_result"));
@@ -668,9 +676,28 @@ void TestDbMigrations::v11AddsSmartPlaylistColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 17);
+  QCOMPARE(getUserVersion(db), 18);
   QVERIFY(tableHasColumn(db, "playlists", "is_smart"));
   QVERIFY(tableHasColumn(db, "playlists", "smart_filter"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v18DropsEagerFtsSyncTriggers() {
+  // v18 (Kartend-4i5e4): after the full ladder, the items_fts sync triggers
+  // must NOT exist — v3 creates them eagerly (alongside an EMPTY
+  // external-content index, where their FTS 'delete' commands could corrupt
+  // the index), and v18 drops them again. They are re-created at runtime by
+  // QueryManager::ensureItemsFtsReady, atomically with the one-shot rebuild.
+  const QString conn = "test_v18_fts_triggers";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 18);
+  QVERIFY(!triggerExists(db, "items_fts_ai"));
+  QVERIFY(!triggerExists(db, "items_fts_ad"));
+  QVERIFY(!triggerExists(db, "items_fts_au"));
 
   closeAndRemove(db, conn);
 }

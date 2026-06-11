@@ -306,9 +306,9 @@ void TestKartPreflight::inTree_emptyRootOrPath_notFlagged() {
   // or an empty launcher path must never report a false positive.
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(QStringLiteral("/anything")),
-                                           QString())
-              .isEmpty());
+  QVERIFY(
+      kart::collectInTreeLauncherPaths(configWithLauncher(QStringLiteral("/anything")), QString())
+          .isEmpty());
   QVERIFY(kart::collectInTreeLauncherPaths(configWithLauncher(QString()), root.path()).isEmpty());
 }
 

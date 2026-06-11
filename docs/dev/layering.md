@@ -9,29 +9,34 @@ lint catches violations before they hit CI.
 ## The layers
 
 ```
-       ┌────────────────┐
-       │  src/core/     │   App entry, MainWindow, controllers
-       └────────────────┘
+       ┌──────────────────────┐
+       │  src/core/           │   App entry, MainWindow, controllers
+       └──────────────────────┘
               ▲
               │
-       ┌────────────────┐
-       │  src/ui/       │   Dialogs, widgets coupled to ui/
-       └────────────────┘
+       ┌──────────────────────┐
+       │  src/modules/behavior│   ApplicationManager (manager lifecycles —
+       └──────────────────────┘   owns the ui-layer DetailsPaneManager, so
+              ▲                   it sits ABOVE ui/; its only forbidden
+              │                   upward edge is core/)
+       ┌──────────────────────┐
+       │  src/ui/             │   Dialogs, widgets coupled to ui/
+       └──────────────────────┘
               ▲
               │
-       ┌────────────────┐
-       │  src/modules/  │   Feature managers (input/data/media/behavior)
-       └────────────────┘
+       ┌──────────────────────┐
+       │  src/modules/        │   Feature managers (input/data/media)
+       └──────────────────────┘
               ▲
               │
-       ┌────────────────┐
-       │  src/chrome/   │   Neutral, "dumb" widgets shared between layers
-       └────────────────┘
+       ┌──────────────────────┐
+       │  src/chrome/         │   Neutral, "dumb" widgets shared between layers
+       └──────────────────────┘
               ▲
               │
-       ┌────────────────┐
-       │  src/utils/    │   Foundation: types, helpers, no widgets
-       └────────────────┘
+       ┌──────────────────────┐
+       │  src/utils/          │   Foundation: types, helpers, no widgets
+       └──────────────────────┘
 
        (api/ headers can be included from anywhere — they're role
         interfaces, no implementation)
@@ -47,7 +52,7 @@ itself or any layer below it; **never** from a layer above.
 | `src/api/` | Header-only role interfaces (`iartworkmanager.h`, `iselectionmanager.h`, …). No `.cpp` files. | Anything stateful or imperative. |
 | `src/utils/` | Pure helpers: types, validation, math, path tools, threading utilities. | QWidgets, manager state, business logic. |
 | `src/chrome/` | "Dumb" widgets — pixmaps and strings in / Qt signals out. `ItemWidget`, `CoverFlowWidget`, `VideoPreviewWidget`, overlay layer manager. | Coupling to the ui/ layer. Domain logic. |
-| `src/modules/` | Feature managers grouped by domain (`input/`, `data/`, `media/`, `behavior/`). | Direct widget creation outside the chrome boundary. |
+| `src/modules/` | Feature managers grouped by domain (`input/`, `data/`, `media/`). `behavior/` is the exception that sits ABOVE `src/ui/` — `ApplicationManager` owns the ui-layer `DetailsPaneManager` controller (sanctioned in `src/CMakeLists.txt`); its only forbidden upward include is `core/` (linted, Kartend-1ha73). | Direct widget creation outside the chrome boundary. |
 | `src/ui/` | UI-coupled widgets and dialogs (settings dialog, details pane, marquee window). | Anything `src/chrome/` could provide more neutrally. |
 | `src/core/` | `main.cpp`, `MainWindow`, top-level controllers. | Feature implementation that belongs in a module. |
 

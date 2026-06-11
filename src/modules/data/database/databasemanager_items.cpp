@@ -22,10 +22,14 @@
 // worker behind a queued request/result signal like the existing fetch paths.
 #include "databasemanager.h"
 
+#include "dbtxn.h"
+
 #include <functional>
 #include <utility>
 
+#include <QCoreApplication>
 #include <QMetaObject>
+#include <QPointer>
 #include <QSqlError>
 
 #include "errorutils.h"
@@ -185,7 +189,8 @@ UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QStrin
   return result.value();
 }
 
-void DatabaseManager::queueWorkerWrite(std::function<void(QSqlDatabase &)> op) {
+void DatabaseManager::queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
+                                       std::function<void()> onCompleted, const QString &context) {
   if (!m_worker || !op) {
     return;
   }
@@ -193,8 +198,28 @@ void DatabaseManager::queueWorkerWrite(std::function<void(QSqlDatabase &)> op) {
   // connection (m_db there), never the GUI-thread connection. Ordering is
   // preserved (single worker thread, FIFO event queue), so successive
   // increment-style writes for the same item still apply in order.
+  //
+  // The completion hop targets qApp (alive while any loop runs) and checks
+  // the QPointer ON THE GUI THREAD — resolving a QPointer on the worker
+  // would be the check-then-deref race fixed in scrollmanagerdata
+  // (Kartend-t4e00); the worker only copies the pointer value here.
+  QPointer<DatabaseManager> self(this);
   QMetaObject::invokeMethod(
-      m_worker, [w = m_worker, op = std::move(op)]() { w->runWrite(op); }, Qt::QueuedConnection);
+      m_worker,
+      [w = m_worker, op = std::move(op), onCompleted = std::move(onCompleted), self, context]() {
+        w->runWrite(op, context);
+        if (onCompleted) {
+          QMetaObject::invokeMethod(
+              qApp,
+              [self, onCompleted]() {
+                if (self) {
+                  onCompleted();
+                }
+              },
+              Qt::QueuedConnection);
+        }
+      },
+      Qt::QueuedConnection);
 }
 
 void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
@@ -202,13 +227,33 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
   // write lock — so run it on the worker connection rather than blocking the UI
   // (Kartend-fkvs). Usage is read back only by the sidebar/stats display
   // (cache-mediated, cosmetic), so the brief eventual-consistency window is
-  // acceptable; invalidate so the next read refreshes once the write lands.
-  queueWorkerWrite([collectionUuid, path](QSqlDatabase &db) {
-    auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path);
-    if (result.isError()) {
-      ErrorUtils::logError(result.error());
-    }
-  });
+  // acceptable.
+  //
+  // Kartend-4tprf: invalidate BOTH eagerly and in the post-write completion
+  // hop. Eager-only invalidation had a hole: the details pane refreshes right
+  // after launch, its read re-populated the LRU with the PRE-launch row, and
+  // nothing invalidated again after the write landed — so the stale count
+  // stuck for the session. Same for the smart-playlist scope key: a re-open
+  // between invalidate and write-completion cached a stale scope.
+  queueWorkerWrite(
+      [collectionUuid, path](QSqlDatabase &db) -> bool {
+        auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path);
+        if (result.isError()) {
+          // Transient lock contention (a scan transaction on the scan-worker
+          // connection) -> let runWrite retry instead of dropping the launch
+          // (Kartend-cbtml).
+          if (KartendDb::isLockContentionError(result.error())) {
+            return false;
+          }
+          ErrorUtils::logError(result.error());
+        }
+        return true;
+      },
+      [this, collectionUuid, path]() {
+        m_metadataCache.invalidateUsage(collectionUuid, path);
+        emit requestInvalidateSmartPlaylistScope();
+      },
+      QStringLiteral("DatabaseManager::recordItemLaunch"));
   m_metadataCache.invalidateUsage(collectionUuid, path);
   // play_count / last_played changed -> smart playlists like "Recently
   // launched" / "Most played" must re-evaluate (Kartend-s9jw).
@@ -217,12 +262,21 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
                                             qint64 seconds) {
-  queueWorkerWrite([collectionUuid, path, seconds](QSqlDatabase &db) {
-    auto result = UsageStatsStore::recordPlaySession(db, collectionUuid, path, seconds);
-    if (result.isError()) {
-      ErrorUtils::logError(result.error());
-    }
-  });
+  // See recordItemLaunch for the eager + completion-hop invalidation pair
+  // (Kartend-4tprf).
+  queueWorkerWrite(
+      [collectionUuid, path, seconds](QSqlDatabase &db) -> bool {
+        auto result = UsageStatsStore::recordPlaySession(db, collectionUuid, path, seconds);
+        if (result.isError()) {
+          if (KartendDb::isLockContentionError(result.error())) {
+            return false; // retried by runWrite (Kartend-cbtml)
+          }
+          ErrorUtils::logError(result.error());
+        }
+        return true;
+      },
+      [this, collectionUuid, path]() { m_metadataCache.invalidateUsage(collectionUuid, path); },
+      QStringLiteral("DatabaseManager::recordItemPlaySession"));
   m_metadataCache.invalidateUsage(collectionUuid, path);
 }
 
@@ -305,37 +359,45 @@ void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QS
   // Also fires on launch (same hook as recordItemLaunch). The history log is
   // read only by the history dialog, so route the append + trim onto the worker
   // connection instead of blocking the launch on the UI thread (Kartend-fkvs).
-  queueWorkerWrite([collectionUuid, path, name, maxEntries](QSqlDatabase &db) {
-    // Append + trim in one transaction so a crash between them can't leave the
-    // history table over the cap (Kartend-5rcf). If the transaction can't start,
-    // fall back to the prior autocommit behaviour rather than dropping the write.
-    const bool inTransaction = db.transaction();
-    auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
-    if (result.isError()) {
-      ErrorUtils::logError(result.error());
-      if (inTransaction) {
-        db.rollback();
-      }
-      return;
-    }
-    if (maxEntries > 0) {
-      auto trim = HistoryStore::trimToMaxEntries(db, maxEntries);
-      if (trim.isError()) {
-        ErrorUtils::logError(trim.error());
-        if (inTransaction) {
-          db.rollback();
+  queueWorkerWrite(
+      [collectionUuid, path, name, maxEntries](QSqlDatabase &db) -> bool {
+        // Append + trim in one transaction so a crash between them can't leave
+        // the history table over the cap (Kartend-5rcf). If the transaction
+        // can't start, fall back to the prior autocommit behaviour rather than
+        // dropping the write — the guard is inert then (no rollback on scope
+        // exit), exactly the old inTransaction-gated handling.
+        KartendDb::DbTransaction txn(db, "DatabaseManager::recordHistoryEntry");
+        auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
+        if (result.isError()) {
+          // Guard dtor rolls back iff the BEGIN succeeded; on transient lock
+          // contention runWrite re-runs the whole append+trim (Kartend-cbtml).
+          if (KartendDb::isLockContentionError(result.error())) {
+            return false;
+          }
+          ErrorUtils::logError(result.error());
+          return true;
         }
-        return;
-      }
-    }
-    if (inTransaction && !db.commit()) {
-      ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseTransactionFailed,
-                                               "Failed to commit history append+trim",
-                                               "DatabaseManager::recordHistoryEntry")
-                               .withDetails(db.lastError().text()));
-      db.rollback();
-    }
-  });
+        if (maxEntries > 0) {
+          auto trim = HistoryStore::trimToMaxEntries(db, maxEntries);
+          if (trim.isError()) {
+            if (KartendDb::isLockContentionError(trim.error())) {
+              return false;
+            }
+            ErrorUtils::logError(trim.error());
+            return true;
+          }
+        }
+        if (txn.active()) {
+          if (!txn.commitOrReport("Failed to commit history append+trim",
+                                  ErrorUtils::Severity::Error)) {
+            // A locked COMMIT is the most likely failure inside a scan-commit
+            // window — re-running the rolled-back append+trim is safe.
+            return false;
+          }
+        }
+        return true;
+      },
+      {}, QStringLiteral("DatabaseManager::recordHistoryEntry"));
 }
 
 QList<HistoryStore::HistoryEntry> DatabaseManager::loadRecentHistory(int limit) const {

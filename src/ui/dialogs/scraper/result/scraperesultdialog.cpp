@@ -267,6 +267,7 @@ void ScrapeResultDialog::buildUi() {
   root->addLayout(skipRow);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+  m_buttonBox = buttons;
   m_applyButton = buttons->addButton(tr("Apply"), QDialogButtonBox::AcceptRole);
   m_applyButton->setEnabled(false);
   // Cancel semantics:

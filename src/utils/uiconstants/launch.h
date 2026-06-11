@@ -23,6 +23,26 @@ inline constexpr int MIN_HISTORY_MAX_ENTRIES = 10;
 /// Maximum configurable launch-history cap. Bounds the per-launch trim
 /// query so the journal can't grow unbounded.
 inline constexpr int MAX_HISTORY_MAX_ENTRIES = 50000;
+/// Hard ceiling on cumulative decompressed bytes written by a launch-time
+/// archive extraction (Kartend-ijglg). TMPDIR is tmpfs on most Linux
+/// systems, so an unbounded extraction (a zip bomb inside an imported
+/// archive) is a RAM/OOM DoS, not just a disk-space leak. 4 GiB comfortably
+/// covers real media archives (dual-layer DVD images) while staying well
+/// below typical tmpfs limits (half of RAM).
+inline constexpr long long MAX_EXTRACTION_BYTES = 4LL * 1024 * 1024 * 1024;
+/// Poll interval for the extraction watchdog loop. Each tick re-checks the
+/// cancellation flag and the decompressed-size cap, so this bounds both the
+/// cancel latency and the cap-overshoot window.
+inline constexpr int EXTRACTION_WATCHDOG_POLL_MS = 250;
+/// Overall extraction timeout. Historically 30s because extraction blocked
+/// the GUI thread; now that it runs on a worker (Kartend-mkcak) and is
+/// cancellable, the timeout only has to catch a genuinely hung extractor,
+/// so it is generous enough for large legitimate archives on slow disks.
+inline constexpr int EXTRACTION_TIMEOUT_MS = 120000;
+/// Bounded wait for the extractor child to die after kill() on the
+/// cancel / size-cap / timeout paths, and for the child to reach the
+/// running state after start().
+inline constexpr int EXTRACTION_KILL_GRACE_MS = 3000;
 } // namespace Launch
 } // namespace UIConstants
 

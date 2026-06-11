@@ -42,6 +42,12 @@ inline constexpr auto kCollectionIcon = "collectionIcon";
 inline constexpr auto kCollectionTypeFilter = "collectionTypeFilter";
 inline constexpr auto kCorePath = "corePath";
 inline constexpr auto kCornerRadius = "cornerRadius";
+// Meta key inside [Scrapers] (no provider/field slash, so the credential
+// key-walk skips it). Non-empty = a keychain write failed and at least one
+// credential currently sits in the INI as plaintext; the value is the
+// human-readable failure reason surfaced by the settings-dialog banner.
+// Cleared by the next save whose keychain writes all succeed.
+inline constexpr auto kCredentialDemotionReason = "credentialDemotionReason";
 inline constexpr auto kCustomArtworkTypes = "customArtworkTypes";
 inline constexpr auto kCustomFontFamily = "customFontFamily";
 inline constexpr auto kDatFilePath = "datFilePath";

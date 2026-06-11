@@ -301,9 +301,18 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
     // Don't fall back to direct lookup - let prewarm handle it
+  } else if (ArtworkUtils::DirectoryCache::instance().isDirectoryCached(artworkDir)) {
+    // Kartend-urrpp: the dir listing is already warm (early prewarm fires on
+    // every collection selection now) — resolve via the O(1) cached lookup,
+    // including cached NEGATIVES, instead of re-paying the multi-stat sweep
+    // on every widget materialization while scrolling. First-ever misses
+    // self-patch with a bounded probe inside findInDirectory.
+    artworkPath =
+        ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
   } else if (!ArtworkUtils::DirectoryCache::instance().isDirectoryQueued(artworkDir)) {
-    // No prewarm in flight for this dir — do the direct lookup so the tile
-    // paints artwork on the first frame (the common, non-scroll-burst case).
+    // Genuinely uncached dir with no prewarm in flight — do the direct
+    // lookup so the tile paints artwork on the first frame (cold-start
+    // before the early prewarm lands).
     artworkPath = ArtworkUtils::findArtworkForFile(QFileInfo(fullPath).fileName(), artworkDir);
   } else {
     // A background prewarm is queued for this dir (fast scroll over a cold

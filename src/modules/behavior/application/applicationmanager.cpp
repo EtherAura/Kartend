@@ -43,9 +43,10 @@ ApplicationManager::~ApplicationManager() {
   // covers paths where shutdown() is skipped (e.g. abnormal teardown).
   //
   // Signal cancellation FIRST so an in-flight initialize() short-circuits
-  // its 50MB timestamps parse rather than stalling the destructor for
-  // multiple seconds (Kartend-bu5n). cancelPendingIo is idempotent and
-  // safe to call repeatedly.
+  // its timestamp-store load rather than stalling the destructor
+  // (Kartend-bu5n; the load is a single SELECT since Kartend-0ldg2, but the
+  // early signal still bounds a slow-disk worst case). cancelPendingIo is
+  // idempotent and safe to call repeatedly.
   if (m_cacheManager) {
     m_cacheManager->cancelPendingIo();
   }
@@ -58,9 +59,110 @@ ApplicationManager::~ApplicationManager() {
   // that publishes the worker's last writes. On a default-constructed or
   // already-finished future it is effectively a no-op.
   m_cacheInitFuture.waitForFinished();
+
+  // Kartend-w06qp: destroy managers explicitly so each ctx->managers.* slot
+  // can be nulled immediately before its manager dies. Without this, ctx
+  // accessors return stale non-null pointers for the whole destruction
+  // window and the `if (auto *m = ctx->x())` idiom silently stops
+  // protecting exactly when it matters.
+  destroyManagersAndClearContextSlots();
+}
+
+void ApplicationManager::destroyManagersAndClearContextSlots() {
+  // Mirrors the member declaration order in applicationmanager.h, reversed —
+  // i.e. exactly what implicit member destruction did before this method
+  // existed. Each slot is nulled BEFORE the owning unique_ptr resets so a
+  // later-destroyed manager reading the slot during its own teardown sees
+  // null (guarded no-op) rather than a dangling pointer. Slots owned by
+  // sub-objects of a manager (InteractionManager's sub-managers,
+  // ScrollManager's FilterManager) are cleared in the same step as their
+  // owner. Registration of several of these slots happens in
+  // MainWindow::initializeAppContext rather than initialize(), but they all
+  // dangle at the same moment their owner dies, so they are all cleared here.
+  ApplicationContext *ctx = m_ctx;
+
+  // KartManager has no ctx->managers slot.
+  m_kartManager.reset();
+
+  if (ctx) {
+    ctx->managers.detailPageManager = nullptr;
+  }
+  m_detailPageManager.reset();
+
+  if (ctx) {
+    ctx->managers.interactionManager = nullptr;
+    // InteractionManager-owned sub-managers (registered by
+    // MainWindow::initializeAppContext) die with it.
+    ctx->managers.animationManager = nullptr;
+    ctx->managers.selectionManager = nullptr;
+    ctx->managers.viewportManager = nullptr;
+    ctx->managers.mouseManager = nullptr;
+    ctx->managers.keyboardManager = nullptr;
+    ctx->managers.eventManager = nullptr;
+    ctx->managers.searchManager = nullptr;
+    ctx->managers.launchManager = nullptr;
+    ctx->managers.interactionState = nullptr;
+  }
+  m_interactionManager.reset();
+
+  if (ctx) {
+    ctx->managers.navigationManager = nullptr;
+  }
+  m_navigationManager.reset();
+
+  if (ctx) {
+    ctx->managers.detailsPaneManager = nullptr;
+  }
+  m_detailsPaneManager.reset();
+
+  if (ctx) {
+    // Null the facade and its six role aliases together (Kartend-h1l8f).
+    ctx->managers.seedScrollRoles(nullptr);
+    // FilterManager is owned by ScrollManager's DataSourceCoordinator; its
+    // alias dangles the moment ScrollManager dies.
+    ctx->managers.filterManager = nullptr;
+  }
+  m_scrollManager.reset();
+
+  if (ctx) {
+    ctx->managers.settingsManager = nullptr;
+  }
+  m_settingsManager.reset();
+
+  if (ctx) {
+    ctx->managers.playlistManager = nullptr;
+  }
+  m_playlistManager.reset();
+
+  if (ctx) {
+    ctx->managers.databaseManager = nullptr;
+  }
+  m_databaseManager.reset();
+
+  if (ctx) {
+    ctx->managers.artworkManager = nullptr;
+  }
+  m_artworkManager.reset();
+
+  if (ctx) {
+    ctx->managers.sessionManager = nullptr;
+  }
+  m_sessionManager.reset();
+
+  if (ctx) {
+    ctx->managers.cacheManager = nullptr;
+  }
+  m_cacheManager.reset();
+
+  m_ctx = nullptr;
 }
 
 void ApplicationManager::initialize(ApplicationContext *ctx) {
+  // Retained for teardown: the destructor nulls each ctx->managers.* slot
+  // immediately before destroying that manager (Kartend-w06qp). ctx must
+  // therefore outlive this ApplicationManager.
+  m_ctx = ctx;
+
   // Sub-managers are owned solely by their std::unique_ptr members; the
   // QObject parent stays null so destruction is driven purely by
   // member order and Qt's children sweep can never double-delete one if
@@ -133,7 +235,8 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   // during ScrollManager::setupReferences().
   m_scrollManager = std::make_unique<ScrollManager>(nullptr);
   if (ctx) {
-    ctx->managers.scrollManager = m_scrollManager.get();
+    // Seeds the facade plus its six role views in lockstep (Kartend-h1l8f).
+    ctx->managers.seedScrollRoles(m_scrollManager.get());
   }
 
   // 8. DetailsPaneManager
@@ -171,10 +274,10 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
 void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
   // 0a. Signal cancellation for any in-flight cache I/O BEFORE we wait for
   // the cache-init future to finish. CacheManager::initialize() runs on
-  // QtConcurrent and parses a metadata file that can reach ~50 MB on
-  // large libraries — without this early signal, closeEvent stalls for
-  // multiple seconds while the worker drains an already-irrelevant load
-  // (Kartend-bu5n). The cancellation flag is polled inside
+  // QtConcurrent and loads the timestamp store (formerly a ~50 MB JSON
+  // parse, now a single SELECT — Kartend-0ldg2); without this early signal,
+  // closeEvent could stall while the worker drains an already-irrelevant
+  // load (Kartend-bu5n). The cancellation flag is polled inside
   // CacheDiskStorage::readTimestampsInto so the worker bails on its next
   // 1024-entry sample. Safe to call before the cache manager has finished
   // initialising — cancelPendingIo only touches m_diskStorage and timer
@@ -209,11 +312,14 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
   // 3. Snapshot state for persistence BEFORE releasing GUI resources.
   // Take snapshots while managers are still valid, then write asynchronously.
   QByteArray sessionSnapshot;
-  QHash<QString, qint64> cacheTimestamps;
+  CacheTimestampsSnapshot cacheTimestamps;
   if (m_sessionManager) {
     sessionSnapshot = m_sessionManager->snapshotSessionJsonBytesForShutdown();
   }
   if (m_cacheManager) {
+    // Carries both the full timestamp map and the removals still pending
+    // their deleting flush (invalidations inside the final debounce window),
+    // so the shutdown write below DELETEs them too (Kartend-2zkm8).
     cacheTimestamps = m_cacheManager->snapshotTimestampsForShutdown();
   }
 

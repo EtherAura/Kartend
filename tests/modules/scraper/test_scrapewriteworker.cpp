@@ -40,6 +40,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include "../../support/testsandbox.h"
 #include "databaseschema.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
@@ -178,9 +179,7 @@ void TestScrapeWriteWorker::initTestCase() {
   // media.db) resolves to a per-test sandbox, never the developer's real
   // ~/.local/share/Kartend. Same approach as
   // test_batchscraperunner_integration.
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-scrapewriteworker"));
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-scrapewriteworker"));
 }
 
 void TestScrapeWriteWorker::init() {

@@ -181,7 +181,7 @@ void TestAttractHelpers::accumulateScrollDelta_returnsFractionalResidual() {
 
 void TestAttractHelpers::nextScrollPosition_movesForward() {
   const auto p = nextScrollPosition(/*current=*/50, /*delta=*/3, /*direction=*/1,
-                                     /*min=*/0, /*max=*/100);
+                                    /*min=*/0, /*max=*/100);
   QCOMPARE(p.next, 53);
   QVERIFY(!p.hitMax);
   QVERIFY(!p.hitMin);

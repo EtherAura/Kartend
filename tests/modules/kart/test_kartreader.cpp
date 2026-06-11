@@ -101,6 +101,8 @@ private slots:
   void testPeekManifestRejectsTooShort();
   void testPeekManifestSucceedsOnGoodKart();
   void testExtractToWritesFiles();
+  void testExtractToWritesPathVariantEntries_data();
+  void testExtractToWritesPathVariantEntries();
   void testExtractToValidatesShaAndFailsOnTamper();
   void testExtractToHandlesTruncatedEntry();
   void testExtractToHandlesZstdEntries();
@@ -158,6 +160,39 @@ void TestKartReader::testExtractToWritesFiles() {
   QFile read2(QDir(dest.path()).filePath("artwork/b.png"));
   QVERIFY(read2.open(QIODevice::ReadOnly));
   QCOMPARE(read2.readAll(), b);
+}
+
+void TestKartReader::testExtractToWritesPathVariantEntries_data() {
+  // Entry paths are length-prefixed UTF-8 (quint16 of BYTES, not characters),
+  // so multi-byte names exercise the size-vs-length distinction in the entry
+  // parser. Spaces/diacritics/CJK/emoji must extract to identically-named
+  // files and pass the path-safety checks (Kartend-1yev5).
+  QTest::addColumn<QString>("relPath");
+
+  QTest::newRow("spaces") << QStringLiteral("media/file with spaces.bin");
+  QTest::newRow("diacritics") << QStringLiteral("media/vidéo préférée — Übung.bin");
+  QTest::newRow("cjk") << QStringLiteral("media/テスト動画.bin");
+  QTest::newRow("emoji") << QStringLiteral("media/clip 🎬🎞.bin");
+  QTest::newRow("unicode-subdir") << QStringLiteral("media/動画 集/clip 🎥.bin");
+}
+
+void TestKartReader::testExtractToWritesPathVariantEntries() {
+  QFETCH(QString, relPath);
+
+  const QByteArray data("variant entry contents");
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entryBytes(relPath, data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().files.size(), 1);
+
+  QFile out(QDir(dest.path()).filePath(relPath));
+  QVERIFY2(out.open(QIODevice::ReadOnly), qPrintable(out.errorString()));
+  QCOMPARE(out.readAll(), data);
 }
 
 void TestKartReader::testExtractToValidatesShaAndFailsOnTamper() {

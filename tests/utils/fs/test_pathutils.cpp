@@ -475,8 +475,8 @@ void TestPathUtils::testIsPrivateDir_ownerOnlyDirIsPrivate() {
   // bits — the "safe to trust the cache" state.
   const QString dir = QDir(m_tempDir.path()).filePath(QStringLiteral("private0700"));
   QVERIFY(QDir().mkpath(dir));
-  QVERIFY(QFile::setPermissions(
-      dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+  QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                         QFileDevice::ExeOwner));
   QVERIFY(PathUtils::isPrivateDirOfCurrentUser(dir));
 }
 

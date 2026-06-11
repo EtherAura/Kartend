@@ -1,12 +1,14 @@
 #include "gridwidthdebouncer.h"
 
 #include "timerutils.h"
-#include "uiconstants/timing.h"
 
-GridWidthDebouncer::GridWidthDebouncer(QObject *parent) : QObject(parent) {
-  m_saveTimer = new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
-  m_precalcTimer = new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
-  m_finalizeTimer = new TimerUtils::DebouncedTimer(UIConstants::Timing::MEDIUM_DELAY_MS, this);
+GridWidthDebouncer::GridWidthDebouncer(QObject *parent)
+    : GridWidthDebouncer(parent, StageDelays{}) {}
+
+GridWidthDebouncer::GridWidthDebouncer(QObject *parent, StageDelays delays) : QObject(parent) {
+  m_saveTimer = new TimerUtils::DebouncedTimer(delays.saveMs, this);
+  m_precalcTimer = new TimerUtils::DebouncedTimer(delays.precalcMs, this);
+  m_finalizeTimer = new TimerUtils::DebouncedTimer(delays.finalizeMs, this);
 
   connect(m_saveTimer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
     if (m_onSave) {

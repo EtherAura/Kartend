@@ -6,6 +6,8 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include "sqllike.h"
+
 #include "batchsizes.h"
 #include "loggingcategories.h"
 #include <algorithm>
@@ -74,13 +76,10 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   // runs inside buildSortedItemsCache's transaction it joins that one rather
   // than issuing a second BEGIN (which SQLite drops) and a commit that would
   // close the outer transaction early (Kartend-gv7f).
-  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth);
-  if (!txn.active()) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                              "Failed to begin transaction to populate query_uuids",
-                              "QueryManager::populateQueryUuidsTempTable")
-            .withDetails(m_db.lastError().text()));
+  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth,
+                                          "QueryManager::populateQueryUuidsTempTable");
+  if (!txn.activeOrReport("Failed to begin transaction to populate query_uuids",
+                          ErrorUtils::Severity::Warning)) {
     return false;
   }
 
@@ -256,7 +255,9 @@ QString QueryManager::buildSortedSelectSql(const QStringList &uuids, bool useTem
   QString filterClause;
   if (!freeText.isEmpty() && !useFts) {
     filterClause =
-        (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
+        QString::fromLatin1((needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?"
+                                                                     : " AND name LIKE ?") +
+        KartendDb::kLikeEscape; // Kartend-joird: bound needle is escaped
   }
 
   // (collection_uuid, path) is the item identity — emit one row per item so
@@ -412,7 +413,11 @@ bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
       ++position;
 
       if (paths.size() >= INSERT_BATCH_SIZE) {
-        if (!flushBatch()) {
+        // Kartend-kfnv7: bail per batch when ~DatabaseManager requested
+        // teardown — a 100k-item build straddling shutdown used to outlive
+        // the dtor's 2s wait budget (debug abort / release leak). Returning
+        // false rolls the outer build transaction back via its guard.
+        if (teardownRequested() || !flushBatch()) {
           return false;
         }
       }
@@ -425,7 +430,8 @@ bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
       ++position;
 
       if (paths.size() >= INSERT_BATCH_SIZE) {
-        if (!flushBatch()) {
+        // See the random-sort arm: teardown poll per batch (Kartend-kfnv7).
+        if (teardownRequested() || !flushBatch()) {
           return false;
         }
       }
@@ -442,6 +448,11 @@ bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
 
 bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QString &filter,
                                             SortMode sortMode) {
+  // Kartend-kfnv7: a build queued behind teardown (e.g. the deferred
+  // re-run from performDeferredCacheBuild) must not start at all.
+  if (teardownRequested()) {
+    return false;
+  }
   if (!m_db.isOpen() || uuids.isEmpty()) {
     return false;
   }
@@ -472,12 +483,10 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   // below nests under this via the shared depth counter so the build stays
   // atomic (Kartend-gv7f). Every error path just returns false; the guard rolls
   // back on scope exit.
-  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth);
-  if (!txn.active()) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                               "Failed to begin transaction to build sorted cache",
-                                               "QueryManager::populateSortedItemsCache")
-                             .withDetails(m_db.lastError().text()));
+  QueryManagerInternal::DbTransaction txn(m_db, m_txnDepth,
+                                          "QueryManager::populateSortedItemsCache");
+  if (!txn.activeOrReport("Failed to begin transaction to build sorted cache",
+                          ErrorUtils::Severity::Warning)) {
     return false;
   }
 
@@ -547,7 +556,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     }
   }
   if (!freeText.isEmpty() && !useFts) {
-    selectQuery.bindValue(bindPos++, "%" + freeText + "%");
+    selectQuery.bindValue(bindPos++, "%" + KartendDb::escapeLike(freeText) + "%");
   }
   for (const QVariant &v : tokenClauses.binds) {
     selectQuery.bindValue(bindPos++, v);
@@ -593,11 +602,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     return false;
   }
 
-  if (!txn.commit()) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                               "Failed to commit sorted items cache",
-                                               "QueryManager::populateSortedItemsCache")
-                             .withDetails(m_db.lastError().text()));
+  if (!txn.commitOrReport("Failed to commit sorted items cache", ErrorUtils::Severity::Warning)) {
     return false;
   }
 

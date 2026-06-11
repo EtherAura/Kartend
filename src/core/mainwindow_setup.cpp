@@ -44,6 +44,7 @@
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemartwork.h"
+#include "itemmetadataactioncontroller.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
@@ -233,24 +234,23 @@ void MainWindow::setupUI() {
 void MainWindow::showEvent(QShowEvent *event) {
   QMainWindow::showEvent(event);
 
-  // One-shot reconcile at startup: drop items/collections rows left
-  // orphaned by past collection renames or removals so the Statistics
-  // totals line up with the live collections without needing a
-  // settings-save round trip. Deferred to QTimer::singleShot(0) inside
-  // showEvent so it lands after the first paint — purgeOrphanCollectionData
-  // iterates the items table and runs multiple seconds on large libraries,
-  // freezing an unpainted window if invoked synchronously from setupUI.
-  // Gating on showEvent keeps the work out of nested event loops opened
-  // by modal dialogs in test harnesses that never call show().
+  // One-shot reconcile at startup: drop rows left orphaned by past
+  // collection renames or removals so the Statistics totals line up with
+  // the live collections without needing a settings-save round trip.
+  // Kartend-dbqt5: the purge itself now runs on the DB worker thread and is
+  // gated on a collections-set hash (skipped entirely when the set is
+  // unchanged), so this defer is only about keeping the dispatch out of
+  // showEvent's critical path. Gating on showEvent keeps the work out of
+  // nested event loops opened by modal dialogs in test harnesses that
+  // never call show().
   if (m_deferredStartupDone) {
     return;
   }
   m_deferredStartupDone = true;
 
-  // Defer the orphan purge off the showEvent's critical path so the window
-  // paints (and the user sees the first frame) before the multi-second
-  // table scan starts. Running synchronously inside showEvent blocks paint
-  // and produces a visibly-frozen window on large libraries.
+  // Event-loop defer: let showEvent return and the first frame paint before
+  // dispatching the purge (cheap now, but still a uuid-set hash + a queued
+  // worker invoke that has no business on the paint-critical path).
   QTimer::singleShot(0, this, [this]() { maybePurgeOrphanCollectionData(); });
 }
 
@@ -413,7 +413,9 @@ void MainWindow::initializeAppContext() {
 
   // Top-level managers — registered eagerly so ctx is fully populated before
   // any manager's setupReferences() runs.
-  m_appContext.managers.scrollManager = m_appManager->getScrollManager();
+  // Seeds the scroll facade plus its six role views in lockstep
+  // (Kartend-h1l8f).
+  m_appContext.managers.seedScrollRoles(m_appManager->getScrollManager());
   if (auto *sm = m_appManager->getScrollManager()) {
     // ScrollManager's ctor already wired m_filterManager off DataSourceCoordinator,
     // so this alias is non-null the moment ScrollManager exists (Kartend-yeik).
@@ -620,8 +622,9 @@ void MainWindow::setupSidebar() {
     // through InteractionManager so the dialog, persistence, and sidebar
     // refresh all match the right-click "Edit metadata…" entry exactly.
     setup.runEditMetadataForItem = [this](const QString &filePath, const QString &itemName) {
-      if (auto *im = m_appManager ? m_appManager->getInteractionManager() : nullptr) {
-        im->editItemMetadata(filePath, itemName);
+      auto *im = m_appManager ? m_appManager->getInteractionManager() : nullptr;
+      if (im && im->itemMetadataActions()) {
+        im->itemMetadataActions()->editItemMetadata(filePath, itemName);
       }
     };
 
@@ -699,13 +702,10 @@ void MainWindow::setupEventFilters() {
 
   m_appManager->getScrollManager()->setupReferences(setup);
 
-  if (ui->itemScrollArea) {
-    ui->itemScrollArea->installEventFilter(m_appManager->getInteractionManager());
-    if (ui->itemScrollArea->viewport()) {
-      ui->itemScrollArea->viewport()->installEventFilter(m_appManager->getInteractionManager());
-    }
-  }
-  if (gridContainer) {
-    gridContainer->installEventFilter(m_appManager->getInteractionManager());
-  }
+  // Kartend-gutqx: the InteractionManager-side installer
+  // (InteractionManager::installEventFilters, run from its setupReferences)
+  // is the single owner of these widget filters now. The duplicate installs
+  // that used to live here were harmless at runtime (Qt dedupes delivery)
+  // but guaranteed drift: only the manager-side set is removed in
+  // ~InteractionManager, and only it tracks viewport recreation.
 }

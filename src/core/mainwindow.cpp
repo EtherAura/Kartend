@@ -179,7 +179,20 @@ void MainWindow::showStartupSplash() {
       !m_generalSettings.startup.startupVideoPath.isEmpty()) {
     auto *videoOverlay = new StartupVideoOverlay(this);
     videoOverlay->setGeometry(rect());
-    videoOverlay->raise();
+    // Kartend-1ha73: stack via the z-order registry (the StartupVideo layer
+    // slot already existed but the overlay was never registered) — a raw
+    // raise() here shared MainWindow's stacking context with the registered
+    // splash / text-zoom HUD, so any registry restack after this point
+    // could bury the playing video. registerOverlay() records the layer;
+    // restack() applies it now. Fallback raise() covers the (test-only)
+    // case where the registry isn't constructed yet.
+    if (m_overlayLayerManager) {
+      m_overlayLayerManager->registerOverlay(videoOverlay,
+                                             OverlayZOrderRegistry::Layer::StartupVideo);
+      m_overlayLayerManager->restack();
+    } else {
+      videoOverlay->raise();
+    }
     if (videoOverlay->playVideo(m_generalSettings.startup.startupVideoPath)) {
       videoOverlay->show();
       connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {

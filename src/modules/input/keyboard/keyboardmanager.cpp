@@ -14,9 +14,9 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/validationhelpers.h"
+#include "igridlayoutscroll.h"
 #include "interactionstateholder.h"
 #include "keyboardhelpers.h"
-#include "scrollmanager.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/timing.h"
 
@@ -153,7 +153,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       (key == navLeftKey || key == navRightKey || key == navUpKey || key == navDownKey);
   if (isNavKey) {
     int gridWidth = 1;
-    if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+    if (auto *scroll = m_ctx ? m_ctx->scrollGrid() : nullptr) {
       gridWidth = scroll->getCurrentGridWidth();
       if (gridWidth <= 0) {
         gridWidth = UIConstants::Grid::DEFAULT_WIDTH;

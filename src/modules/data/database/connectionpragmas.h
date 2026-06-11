@@ -18,7 +18,7 @@ namespace MediaDbConnectionInit {
 
 /// Per-connection PRAGMA knobs. The busy_timeout differs between the main
 /// thread (short — main thread can't block long) and worker connections
-/// (longer — workers compete with FTS backfill etc.). foreign_keys + WAL
+/// (longer — workers compete with the FTS rebuild etc.). foreign_keys + WAL
 /// + synchronous=NORMAL are non-negotiable for every connection.
 struct PragmaConfig {
   int busyTimeoutMs = 0;

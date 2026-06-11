@@ -7,8 +7,8 @@
  */
 
 #include "interactionstateholder.h"
-#include <QTest>
 #include <QSignalSpy>
+#include <QTest>
 
 class TestInteractionStateHolder : public QObject {
   Q_OBJECT

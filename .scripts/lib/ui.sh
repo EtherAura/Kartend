@@ -60,6 +60,13 @@ Maintenance-only:
   --format-check     Run clang-format check (requires --maintenance)
   --format-apply     Apply clang-format (requires --maintenance)
 
+Environment (maintenance-only):
+  KARTEND_TIDY_ONLY_FILES=PATH
+                    Scope clang-tidy to the .cpp TUs listed (one per line,
+                    repo-relative or absolute) in PATH instead of the full
+                    src/ sweep. CI sets this on pull_request events; changed
+                    headers do NOT pull in their including TUs.
+
 Other:
   -h, --help        Show this help
 EOF

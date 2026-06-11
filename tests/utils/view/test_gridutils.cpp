@@ -267,8 +267,8 @@ void TestGridUtils::testCalculateGridMetrics_widthClampedOnOverflow() {
   // silently (clampValues no longer caps the width); now it is computed in
   // int64 and clamped to kQtMaxWidgetSize - 1000, symmetric with the height
   // clamp (Kartend-4cmu).
-  GridUtils::calculateGridMetrics(1000000, 100000, 100000, 100, 10, 10, 20, totalWidth,
-                                  totalHeight, actualGridWidth);
+  GridUtils::calculateGridMetrics(1000000, 100000, 100000, 100, 10, 10, 20, totalWidth, totalHeight,
+                                  actualGridWidth);
 
   constexpr int kMaxWidth = 16777215 - 1000;
   QCOMPARE(totalWidth, kMaxWidth);

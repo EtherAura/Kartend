@@ -12,6 +12,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/collectionhierarchycache.h"
 #include "collection/generalsettings.h"
+#include <cstddef>
 #include <functional>
 #include <QList>
 
@@ -34,6 +35,15 @@ class OverlayZOrderRegistry;
 
 // Forward declarations for managers
 class IScrollManager;
+// Role views of the scroll layer (Kartend-h1l8f) — six plain abstract
+// interfaces IScrollManager unions. The role pointers below alias the same
+// ScrollManager object; consumers take the narrowest role they actually use.
+class IVirtualScrollLifecycle;
+class IGridLayoutScroll;
+class ISelectionOverlayScroll;
+class ISearchStateScroll;
+class IArtworkPreviewScroll;
+class IScrollDataSource;
 class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
@@ -80,7 +90,7 @@ class IPlaylistManager;
  *   m_appContext.collection.collections = &m_collections;
  *   m_appContext.collection.currentCollectionIndex = &currentCollectionIndex;
  *   m_appContext.ui.itemScrollArea = ui->itemScrollArea;
- *   m_appContext.managers.scrollManager = getScrollManager();
+ *   m_appContext.managers.seedScrollRoles(getScrollManager());
  *
  *   // In setup structs, ctx pointer fans out via SETUP_GETTER macros:
  *   SomeManagerSetup setup;
@@ -132,6 +142,17 @@ struct ApplicationContext {
   // ─────────────────────────────────────────────────────────────────────────
   struct ManagerRefs {
     IScrollManager *scrollManager = nullptr;
+    /// Role views of the scroll layer (Kartend-h1l8f): raw aliases to the
+    /// same object as scrollManager, stored separately because this header
+    /// only forward-declares the interfaces (the upcasts need the complete
+    /// IScrollManager hierarchy). Seed/unseed via seedScrollRoles() so the
+    /// seven pointers never diverge.
+    IVirtualScrollLifecycle *scrollLifecycle = nullptr;
+    IGridLayoutScroll *scrollGrid = nullptr;
+    ISelectionOverlayScroll *scrollOverlay = nullptr;
+    ISearchStateScroll *scrollSearch = nullptr;
+    IArtworkPreviewScroll *scrollPreview = nullptr;
+    IScrollDataSource *scrollData = nullptr;
     IArtworkManager *artworkManager = nullptr;
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
@@ -160,6 +181,30 @@ struct ApplicationContext {
 
     // Centralized interaction state (owned by InteractionManager)
     InteractionStateHolder *interactionState = nullptr;
+
+    /// Seed the scroll facade plus its six role views in lockstep
+    /// (Kartend-h1l8f). Template so the upcasts resolve at the call site,
+    /// where the complete IScrollManager hierarchy is visible — this header
+    /// only forward-declares the interfaces.
+    template <typename ScrollT> void seedScrollRoles(ScrollT *scroll) {
+      scrollManager = scroll;
+      scrollLifecycle = scroll;
+      scrollGrid = scroll;
+      scrollOverlay = scroll;
+      scrollSearch = scroll;
+      scrollPreview = scroll;
+      scrollData = scroll;
+    }
+    /// Unseed overload (teardown): null all seven scroll pointers together.
+    void seedScrollRoles(std::nullptr_t) {
+      scrollManager = nullptr;
+      scrollLifecycle = nullptr;
+      scrollGrid = nullptr;
+      scrollOverlay = nullptr;
+      scrollSearch = nullptr;
+      scrollPreview = nullptr;
+      scrollData = nullptr;
+    }
   } managers;
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -190,6 +235,16 @@ struct ApplicationContext {
   // managers; managers should not cache sibling-manager pointers as fields.
   // ─────────────────────────────────────────────────────────────────────────
   [[nodiscard]] IScrollManager *scrollManager() const { return managers.scrollManager; }
+  // Scroll-layer role accessors (Kartend-h1l8f) — same object as
+  // scrollManager(), narrowed to one role each. All seven are null together.
+  [[nodiscard]] IVirtualScrollLifecycle *scrollLifecycle() const {
+    return managers.scrollLifecycle;
+  }
+  [[nodiscard]] IGridLayoutScroll *scrollGrid() const { return managers.scrollGrid; }
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const { return managers.scrollOverlay; }
+  [[nodiscard]] ISearchStateScroll *scrollSearch() const { return managers.scrollSearch; }
+  [[nodiscard]] IArtworkPreviewScroll *scrollPreview() const { return managers.scrollPreview; }
+  [[nodiscard]] IScrollDataSource *scrollData() const { return managers.scrollData; }
   [[nodiscard]] IArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }

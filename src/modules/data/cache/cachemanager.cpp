@@ -81,22 +81,29 @@ CacheManager::CacheManager() : m_diskStorage(std::make_unique<CacheDiskStorage>(
 }
 
 CacheManager::~CacheManager() {
-  // Sever the timer→lambda connection FIRST. The lambda captures 'this' and
-  // calls saveToDisk(); if it fired later in the destructor (e.g. while the
-  // I/O pool drain spins the event loop), it would run against a
-  // half-destructed CacheManager.
+  // Cancel FIRST: scheduleSaveToDisk() is callable from disk-I/O workers and
+  // gates on isCancelled() before reading the raw m_timerContext pointer, so
+  // cancelling before the timer-context deletion below closes the window
+  // where a worker passes the gate and invokes on a freed QObject
+  // (Kartend-lwq3a — mirrors the ordering cancelPendingIo() already uses).
+  m_diskStorage->cancel();
+
+  // Then sever the timer→lambda connection BEFORE the pool drain. The lambda
+  // captures 'this' and calls saveToDisk(); if it fired later in the
+  // destructor (e.g. while the I/O pool drain spins the event loop), it
+  // would run against a half-destructed CacheManager. Queued metacalls
+  // targeting m_timerContext are dropped at its deletion.
   if (m_debouncedSaveTimer) {
     m_debouncedSaveTimer->stop();
   }
   delete m_timerContext;
   m_timerContext = nullptr;
 
-  // Cooperative shutdown: cancel + bounded drain. The disk-I/O lambda
-  // captured the cancellation token by shared_ptr value, so in-flight
-  // tasks return within milliseconds in the common case. If they don't
-  // drain within the budget, CacheDiskStorage abandons the pool (the
-  // OS reaps at process exit; tests/suppressions/lsan.txt covers this path).
-  m_diskStorage->cancel();
+  // Cooperative shutdown: bounded drain. The disk-I/O lambda captured the
+  // cancellation token by shared_ptr value, so in-flight tasks return
+  // within milliseconds in the common case. If they don't drain within the
+  // budget, CacheDiskStorage abandons the pool (the OS reaps at process
+  // exit; tests/suppressions/lsan.txt covers this path).
   constexpr int kShutdownDrainMs = 2000;
   if (!m_diskStorage->drainWithBudget(kShutdownDrainMs)) {
     qCWarning(lcCacheManager) << "CacheManager: I/O thread pool did not drain in"
@@ -111,16 +118,22 @@ CacheManager::~CacheManager() {
   m_cacheSizeWalkFuture.waitForFinished();
 }
 
-auto CacheManager::snapshotTimestampsForShutdown() const -> QHash<QString, qint64> {
+auto CacheManager::snapshotTimestampsForShutdown() const -> CacheTimestampsSnapshot {
   QMutexLocker locker(&m_mutex);
-  return fileTimestamps;
+  // Capture the full map AND the pending removal set under the same lock so
+  // an invalidation inside the final debounce window (its deleting flush
+  // never fired) is carried through the shutdown write (Kartend-2zkm8).
+  // Const/non-clearing by design: a later saveToDiskForShutdown() re-deleting
+  // the same rows is a harmless no-op DELETE.
+  return {fileTimestamps, QStringList(dirtyRemovals.cbegin(), dirtyRemovals.cend())};
 }
 
 void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
-    const QHash<QString, qint64> &timestampsCopy) {
+    const CacheTimestampsSnapshot &snapshot) {
   // Write-only operation: safe to call from a worker thread. On shutdown,
-  // write all timestamps (full save, not incremental).
-  CacheDiskStorage::writeTimestamps(timestampsCopy);
+  // write all timestamps (full save, not incremental) and DELETE the rows
+  // still pending invalidation.
+  CacheDiskStorage::writeTimestamps(snapshot.timestamps, snapshot.removedPaths);
 }
 
 void CacheManager::cancelPendingIo() {
@@ -195,6 +208,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     return {};
   }
 
+  bool invalidated = false;
   QMutexLocker locker(&m_mutex);
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
@@ -202,7 +216,6 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
         (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
     // Only construct QFileInfo / stat the file once the throttle window has
     // elapsed — a fresh memory hit skips the QFileInfo allocation (Kartend-5agy1).
-    bool invalidated = false;
     if (dueForRevalidation) {
       const QFileInfo fileInfo(artworkPath);
       if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
@@ -212,6 +225,8 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
         QFile::remove(cachePath);
         artworkCache.remove(artworkPath);
         fileTimestamps.remove(artworkPath);
+        dirtyTimestamps.remove(artworkPath);
+        dirtyRemovals.insert(artworkPath);
         m_lastRevalidatedMs.remove(artworkPath);
         m_metadataDirty = true;
         ++m_metrics.invalidations;
@@ -227,6 +242,13 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     }
   }
   locker.unlock();
+
+  // Flush the invalidation's store-row deletion on the debounced save path —
+  // an invalidate-then-never-recache key must not wait for the bounded prune
+  // pass (or the next session) to drop its stale row (Kartend-9lm54).
+  if (invalidated) {
+    scheduleSaveToDisk();
+  }
 
   if (QApplication::closingDown()) {
     return {};
@@ -301,11 +323,17 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
         QFile::remove(cachePath);
         artworkCache.remove(artworkPath);
         fileTimestamps.remove(artworkPath);
+        dirtyTimestamps.remove(artworkPath);
+        dirtyRemovals.insert(artworkPath);
         dirtyArtwork.remove(artworkPath);
         m_lastRevalidatedMs.remove(artworkPath);
         m_metadataDirty = true;
         ++m_metrics.invalidations;
         ++m_metrics.misses;
+        locker.unlock();
+        // Flush the store-row deletion on the debounced save path; see
+        // getArtwork (Kartend-9lm54).
+        scheduleSaveToDisk();
         return {};
       }
       m_lastRevalidatedMs.insert(artworkPath, nowMs);
@@ -342,6 +370,8 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
     auto it = fileTimestamps.constFind(artworkPath);
     if (it != fileTimestamps.constEnd() && it.value() != currentTimestamp) {
       fileTimestamps.remove(artworkPath);
+      dirtyTimestamps.remove(artworkPath);
+      dirtyRemovals.insert(artworkPath);
       dirtyArtwork.remove(artworkPath);
       m_metadataDirty = true;
       ++m_metrics.invalidations;
@@ -349,6 +379,10 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
       locker.unlock();
       const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
       QFile::remove(cachePath);
+      // Flush the store-row deletion on the debounced save path; see
+      // getArtwork (Kartend-9lm54). Worker-thread safe — scheduleSaveToDisk
+      // posts the timer start to its owning thread.
+      scheduleSaveToDisk();
       return {};
     }
   }
@@ -403,6 +437,11 @@ void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixma
   if (fileInfo.exists()) {
     fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
     dirtyTimestamps.insert(artworkPath); // Track which timestamps are new/changed
+    // A re-cache supersedes any invalidation queued for this key. Belt and
+    // braces — writeTimestamps also runs deletions before upserts, so a key
+    // snapshotted into both batches still ends with the fresh row
+    // (Kartend-9lm54).
+    dirtyRemovals.remove(artworkPath);
   }
   dirtyArtwork.insert(artworkPath);
   m_metadataDirty = true;
@@ -507,18 +546,136 @@ qint64 CacheManager::getCacheSize() const {
         dirIt.next();
         totalSize += dirIt.fileInfo().size();
       }
-      // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't
-      // see that ~CacheManager waits on m_cacheSizeWalkFuture, so the
-      // lambda never outlives `this`. The captured pointer is safe.
-      QMutexLocker locker(&m_diskCacheSizeMutex);
-      m_cachedDiskCacheSize = totalSize;
-      m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();
-      m_diskWalkInFlight = false;
-      // NOLINTEND(clang-analyzer-core.NullDereference)
+      {
+        // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't
+        // see that ~CacheManager waits on m_cacheSizeWalkFuture, so the
+        // lambda never outlives `this`. The captured pointer is safe.
+        QMutexLocker locker(&m_diskCacheSizeMutex);
+        m_cachedDiskCacheSize = totalSize;
+        m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();
+        m_diskWalkInFlight = false;
+        // NOLINTEND(clang-analyzer-core.NullDereference)
+      }
+      // Opportunistic timestamp GC piggybacks on this walk thread so it
+      // never runs on the GUI thread (Kartend-0ldg2). getCacheSize() is
+      // conceptually a read — the const signature comes from ICacheManager —
+      // but the maintenance pass mutates bookkeeping this object owns, so
+      // cast the const away here rather than poisoning the maps with
+      // `mutable` (precedent: databasemanager_items.cpp).
+      const_cast<CacheManager *>(this)->pruneStaleEntries();
     });
   }
 
   return result;
+}
+
+// Opportunistic GC for the timestamp store + in-memory bookkeeping
+// (Kartend-0ldg2). Runs on the background getCacheSize() walk thread (the
+// walk is single-flight, so passes never overlap; ~CacheManager waits on the
+// walk future, so the pass can't outlive the object). Each pass is bounded:
+// it stats at most 2 * kPruneBatchPerWalk files, so a pass over a 100k-entry
+// store costs milliseconds and the rotating cursors cover the full keyspace
+// over successive walks (one walk per ≥30 s of getCacheSize() traffic).
+void CacheManager::pruneStaleEntries() {
+  constexpr int kPruneBatchPerWalk = 256;
+  if (m_diskStorage->isCancelled()) {
+    return; // shutting down — leave the store alone
+  }
+
+  QString dbCursor;
+  QString memCursor;
+  {
+    QMutexLocker locker(&m_diskCacheSizeMutex);
+    dbCursor = m_pruneDbCursor;
+    memCursor = m_sweepCursor;
+  }
+
+  // 1. Disk store: delete a bounded batch of rows whose source path no
+  // longer exists. Returns the deleted paths so the in-memory maps can drop
+  // the same keys without re-stating them.
+  const QStringList deadDbRows =
+      CacheDiskStorage::pruneDeadTimestamps(kPruneBatchPerWalk, &dbCursor);
+
+  // 2. In-memory bookkeeping. Collect the stat candidates under the lock,
+  // stat OUTSIDE the lock (filesystem I/O must not block the GUI-thread
+  // cache paths), then re-check + erase under the lock.
+  QStringList candidates;
+  bool sweepExhausted = false;
+  {
+    QMutexLocker locker(&m_mutex);
+    // a) Revalidation stamps are only consulted on artworkCache hits; an
+    // entry whose pixmap was evicted is dead weight. Dropping it merely
+    // forces one revalidating stat if the key is ever re-inserted. No stat
+    // needed, so this sweep is unbounded (O(map) pointer work).
+    for (auto it = m_lastRevalidatedMs.begin(); it != m_lastRevalidatedMs.end();) {
+      if (!artworkCache.contains(it.key())) {
+        it = m_lastRevalidatedMs.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    // b) Keys the disk prune just confirmed dead.
+    for (const QString &path : deadDbRows) {
+      if (!artworkCache.contains(path)) {
+        fileTimestamps.remove(path);
+        dirtyTimestamps.remove(path);
+      }
+    }
+    // c) Candidates for the stat-based sweep: fileTimestamps keys not
+    // currently in artworkCache (covers entries seeded from the store at
+    // startup AND cacheArtworkInMemoryOnly inserts the store never sees).
+    for (auto it = fileTimestamps.cbegin(); it != fileTimestamps.cend(); ++it) {
+      if (it.key() > memCursor && !artworkCache.contains(it.key())) {
+        candidates.append(it.key());
+      }
+    }
+  }
+  // Keep only the kPruneBatchPerWalk smallest keys above the cursor so the
+  // batch is deterministic against QHash's arbitrary iteration order.
+  if (candidates.size() <= kPruneBatchPerWalk) {
+    sweepExhausted = true;
+  } else {
+    std::partial_sort(candidates.begin(), candidates.begin() + kPruneBatchPerWalk,
+                      candidates.end());
+    candidates.resize(kPruneBatchPerWalk);
+  }
+
+  QStringList deadMemKeys;
+  for (const QString &path : std::as_const(candidates)) {
+    if (!QFileInfo::exists(path)) {
+      deadMemKeys.append(path);
+    }
+  }
+  {
+    QMutexLocker locker(&m_mutex);
+    for (const QString &path : std::as_const(deadMemKeys)) {
+      // Re-check under the lock — the key may have been re-cached while we
+      // were statting.
+      if (!artworkCache.contains(path)) {
+        fileTimestamps.remove(path);
+        dirtyTimestamps.remove(path);
+        m_lastRevalidatedMs.remove(path);
+      }
+    }
+  }
+
+  {
+    QMutexLocker locker(&m_diskCacheSizeMutex);
+    m_pruneDbCursor = dbCursor;
+    m_sweepCursor = (sweepExhausted || candidates.isEmpty())
+                        ? QString()
+                        : *std::max_element(candidates.cbegin(), candidates.cend());
+  }
+}
+
+int CacheManager::fileTimestampCountForTesting() const {
+  QMutexLocker locker(&m_mutex);
+  return fileTimestamps.size();
+}
+
+int CacheManager::lastRevalidatedCountForTesting() const {
+  QMutexLocker locker(&m_mutex);
+  return m_lastRevalidatedMs.size();
 }
 
 auto CacheManager::metrics() const -> CacheMetrics {

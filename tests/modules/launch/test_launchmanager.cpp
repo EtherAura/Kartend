@@ -9,11 +9,17 @@
 #include "collection/launcherconfig.h"
 #include "launchmanager.h"
 #include <QDir>
+#include <QElapsedTimer>
 #include <QProcess>
+#include <QScopeGuard>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
+
+#include <atomic>
+#include <memory>
 
 // Kartend-68wbk: a missing archive tool is a graceful QSKIP locally, but a hard
 // QFAIL in CI (KARTEND_REQUIRE_ARCHIVE_TOOLS=1). CI installs the tools
@@ -21,11 +27,11 @@
 // that ever regresses, so the archive-extraction coverage can't evaporate
 // unnoticed. Both QFAIL and QSKIP return from the test, so this is drop-in for a
 // bare QSKIP.
-#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                              \
-  do {                                                                                              \
-    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                              \
-      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                       \
-    QSKIP(msg);                                                                                     \
+#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                             \
+  do {                                                                                             \
+    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                             \
+      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                      \
+    QSKIP(msg);                                                                                    \
   } while (false)
 
 class TestLaunchManager : public QObject {
@@ -112,6 +118,16 @@ private slots:
   // launchItem extracted-dir cleanup when the launcher fails to start (Kartend-dyu1k).
   void testLaunchItem_failedStartRemovesExtractedDir();
 
+  // Kartend-ijglg: decompressed-size bound on launch-time extraction.
+  void testExtractArchive_rejectsArchiveLargerThanCap();
+  void testExtractArchive_enforcesDecompressedSizeCap();
+  void testExtractArchive_sizeCapKillsRunawayExtractor();
+
+  // Kartend-mkcak: cancellable worker-thread extraction.
+  void testExtractArchive_preSetCancelReturnsCancelled();
+  void testLaunchItem_cancelExtractionAbortsPendingLaunch();
+  void testLaunchManagerDtor_drainsRunningExtraction();
+
 private:
   // Creates an executable file whose shebang points at a nonexistent
   // interpreter: it passes validateLauncherPath (exists + executable) but
@@ -127,6 +143,13 @@ private:
   QString makeZipFixture(const QString &baseName, const QList<QPair<QString, QByteArray>> &entries);
   // True when extractArchiveToTemp will find one of its extractors on PATH.
   static bool extractorAvailable();
+  // Creates a directory holding a fake `7z` shell script that writes
+  // `kibToWrite` KiB of zeros into its working directory (the extraction
+  // dir) and then sleeps `sleepSecs`. Prepending the directory to PATH makes
+  // extractArchiveToTemp pick it as its extractor, giving the watchdog tests
+  // a deterministic slow/runaway child. Returns the directory path (empty on
+  // failure); the owning temp dir is tracked in m_fixtureDirs. POSIX-only.
+  QString makeFakeExtractorDir(int kibToWrite, int sleepSecs);
   // Absolute path of the per-archive extraction dir extractArchiveToTemp uses
   // for an archive whose completeBaseName is <baseName>.
   static QString extractionDirFor(const QString &baseName);
@@ -189,6 +212,12 @@ void TestLaunchManager::cleanupTestCase() {
   QDir(extractionDirFor("kartend_extract_ok")).removeRecursively();
   QDir(extractionDirFor("kartend_extract_miss")).removeRecursively();
   QDir(extractionDirFor("kartend_collide")).removeRecursively();
+  QDir(extractionDirFor("kartend_cap_pre")).removeRecursively();
+  QDir(extractionDirFor("kartend_cap_post")).removeRecursively();
+  QDir(extractionDirFor("kartend_cap_runaway")).removeRecursively();
+  QDir(extractionDirFor("kartend_cancel_pre")).removeRecursively();
+  QDir(extractionDirFor("kartend_cancel_launch")).removeRecursively();
+  QDir(extractionDirFor("kartend_dtor")).removeRecursively();
   qDeleteAll(m_fixtureDirs);
   m_fixtureDirs.clear();
 }
@@ -281,6 +310,35 @@ QString TestLaunchManager::makeFailingLauncher() {
     return {};
   }
   return path;
+}
+
+QString TestLaunchManager::makeFakeExtractorDir(int kibToWrite, int sleepSecs) {
+  auto *dir = new QTemporaryDir();
+  if (!dir->isValid()) {
+    delete dir;
+    return {};
+  }
+  m_fixtureDirs.append(dir);
+
+  const QString path = dir->filePath(QStringLiteral("7z"));
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return {};
+  }
+  // extractArchiveToTemp runs the extractor with CWD == the extraction dir,
+  // so payload.bin lands exactly where the size watchdog measures.
+  QByteArray script = "#!/bin/sh\n";
+  if (kibToWrite > 0) {
+    script += "dd if=/dev/zero of=payload.bin bs=1024 count=" + QByteArray::number(kibToWrite) +
+              " 2>/dev/null\n";
+  }
+  script += "sleep " + QByteArray::number(sleepSecs) + "\n";
+  f.write(script);
+  f.close();
+  if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
+    return {};
+  }
+  return dir->path();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1238,10 +1296,253 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
 
   // Runtime detection stays off (no ctx/settings wired) -> the detached path,
   // whose startDetached failure is the branch that cleans up the extraction.
+  // Kartend-mkcak: extraction now runs on a worker thread, so launchItem
+  // returns immediately with the extraction still in flight; the failure +
+  // cleanup land in the completion callback on the GUI thread.
+  QSignalSpy startedSpy(&manager, &LaunchManager::extractionStarted);
+  QSignalSpy finishedSpy(&manager, &LaunchManager::extractionFinished);
   manager.launchItem(zip, 0);
 
+  // The async contract: the watcher callback can only run once the event
+  // loop spins, so right after launchItem returns the extraction must still
+  // be flagged in-flight and the busy signal must have fired.
+  QCOMPARE(startedSpy.count(), 1);
+  QVERIFY2(manager.isExtractionRunning(),
+           "launchItem must return while the extraction is still running on the worker");
+
+  QVERIFY2(finishedSpy.count() == 1 || finishedSpy.wait(15000),
+           "extractionFinished must fire once the worker completes");
+  QVERIFY(!manager.isExtractionRunning());
+  QTRY_VERIFY2(!QDir(extractionDir).exists(),
+               "the extracted archive dir must be removed when the launcher fails to start");
+#endif
+}
+
+void TestLaunchManager::testExtractArchive_rejectsArchiveLargerThanCap() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture shells out via QProcess");
+#endif
+  // Kartend-ijglg pre-check: compression only inflates, so an archive whose
+  // on-disk size already exceeds the decompressed cap is rejected before any
+  // extractor is spawned (no extraction dir is ever created).
+  const QString base = QStringLiteral("kartend_cap_pre");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  QVERIFY(QFileInfo(zip).size() > 16); // any real zip clears this
+
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/16);
+  QVERIFY2(result.isError(), "an archive larger than the cap must be rejected outright");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
   QVERIFY2(!QDir(extractionDir).exists(),
-           "the extracted archive dir must be removed when the launcher fails to start");
+           "the pre-check must fire before any extraction dir is created");
+}
+
+void TestLaunchManager::testExtractArchive_enforcesDecompressedSizeCap() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+#endif
+  // Kartend-ijglg: a small *compressed* archive that inflates past the cap
+  // (64 KiB of zeros vs a 4 KiB cap — the zip-bomb shape) must fail with
+  // ResourceLimitExceeded and leave no partial extraction behind. A tiny
+  // archive can finish inside the watchdog's first poll window, so this
+  // exercises the unconditional post-completion size check.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QString base = QStringLiteral("kartend_cap_post");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArray(64 * 1024, '\0')}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  QVERIFY2(QFileInfo(zip).size() <= 4096,
+           "fixture must compress below the cap so the pre-check does not short-circuit");
+
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/4096);
+  QVERIFY2(result.isError(), "extraction inflating past the cap must fail");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
+  QVERIFY2(!QDir(extractionDir).exists(), "the over-cap extraction dir must be removed");
+}
+
+void TestLaunchManager::testExtractArchive_sizeCapKillsRunawayExtractor() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The fake shell-script extractor is POSIX-specific");
+#else
+  // Kartend-ijglg mid-flight arm: a fake `7z` writes 64 KiB into the
+  // extraction dir and then sleeps far past the test horizon. The watchdog
+  // must observe the over-cap growth within a poll interval and KILL the
+  // child — if the kill path regresses, the extractor sleeps out its 30s and
+  // the test fails on the error code (FileNotFound from the missing .iso).
+  const QString base = QStringLiteral("kartend_cap_runaway");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries); // before PATH is faked
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/64, /*sleepSecs=*/30);
+  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
+  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+
+  QElapsedTimer clock;
+  clock.start();
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/4096);
+  QVERIFY2(result.isError(), "a runaway extraction must be aborted");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
+  QVERIFY2(clock.elapsed() < 20000,
+           "the watchdog must kill the child within a poll interval, not wait out the sleep");
+  QVERIFY2(!QDir(extractionDir).exists(), "the killed extraction must be cleaned up");
+#endif
+}
+
+void TestLaunchManager::testExtractArchive_preSetCancelReturnsCancelled() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture shells out via QProcess");
+#endif
+  // A cancellation that lands before the worker starts must short-circuit:
+  // OperationCancelled, no extractor spawned, no extraction dir created.
+  const QString base = QStringLiteral("kartend_cancel_pre");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  std::atomic_bool cancelled{true};
+  auto result = LaunchManager::extractArchiveToTemp(zip, ".iso", &cancelled);
+  QVERIFY2(result.isError(), "a pre-set cancel flag must abort the extraction");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::OperationCancelled);
+  QVERIFY(!QDir(extractionDir).exists());
+}
+
+void TestLaunchManager::testLaunchItem_cancelExtractionAbortsPendingLaunch() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The fake shell-script extractor is POSIX-specific");
+#else
+  // Kartend-mkcak end-to-end cancel: a fake `7z` that only sleeps keeps the
+  // extraction in flight; cancelExtraction() must make the watchdog kill the
+  // child within a poll interval, clean up the partial extraction, and
+  // abandon the pending launch silently.
+  const QString base = QStringLiteral("kartend_cancel_launch");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries); // before PATH is faked
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString launcher = makeFailingLauncher();
+  QVERIFY2(!launcher.isEmpty(), "could not create the launcher fixture");
+  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
+  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
+  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".iso");
+  collection.launcher.launcherPath = launcher;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+
+  QSignalSpy finishedSpy(&manager, &LaunchManager::extractionFinished);
+  manager.launchItem(zip, 0);
+  QVERIFY2(manager.isExtractionRunning(), "the sleeping fake extractor must still be running");
+
+  QElapsedTimer clock;
+  clock.start();
+  manager.cancelExtraction();
+  QVERIFY2(finishedSpy.count() == 1 || finishedSpy.wait(15000),
+           "cancel must terminate the extraction promptly");
+  QVERIFY2(clock.elapsed() < 20000,
+           "cancel must kill the child within a poll interval, not wait out the sleep");
+  QVERIFY(!manager.isExtractionRunning());
+  QTRY_VERIFY2(!QDir(extractionDir).exists(), "the cancelled extraction dir must be removed");
+#endif
+}
+
+void TestLaunchManager::testLaunchManagerDtor_drainsRunningExtraction() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The fake shell-script extractor is POSIX-specific");
+#else
+  // Kartend-mkcak teardown contract: destroying the manager mid-extraction
+  // must not abandon the extractor child — the dtor requests cancellation
+  // and waits (bounded by poll interval + kill grace) for the worker.
+  const QString base = QStringLiteral("kartend_dtor");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  const QString zip = makeZipFixture(base, entries); // before PATH is faked
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString launcher = makeFailingLauncher();
+  QVERIFY2(!launcher.isEmpty(), "could not create the launcher fixture");
+  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
+  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
+  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".iso");
+  collection.launcher.launcherPath = launcher;
+  collections.append(collection);
+
+  QElapsedTimer clock;
+  clock.start();
+  {
+    LaunchManager manager;
+    LaunchManagerSetup setup;
+    setup.collections = &collections;
+    manager.setupReferences(setup);
+    manager.launchItem(zip, 0);
+    QVERIFY2(manager.isExtractionRunning(), "the sleeping fake extractor must still be running");
+  } // dtor: cancel + bounded wait for the worker
+  QVERIFY2(clock.elapsed() < 20000,
+           "the dtor must drain the worker promptly instead of waiting out the sleep");
+  QVERIFY2(!QDir(extractionDir).exists(),
+           "the worker-side cleanup guard must have removed the partial extraction");
 #endif
 }
 

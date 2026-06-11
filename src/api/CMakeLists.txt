@@ -9,6 +9,7 @@
 target_sources(kartend_api PRIVATE
   ianimationmanager.h
   iartworkmanager.h
+  iartworkpreviewscroll.h
   icachemanager.h
   idatabasemanager.h
   idetailpagemanager.h
@@ -16,16 +17,21 @@ target_sources(kartend_api PRIVATE
   idetailspane.h
   idetailspanemanager.h
   ifiltermanager.h
+  igridlayoutscroll.h
   iinteractionmanager.h
   ikeyboardmanager.h
   imainwindow.h
   imousemanager.h
   inavigationmanager.h
   iplaylistmanager.h
+  iscrolldatasource.h
   iscrollmanager.h
+  isearchstatescroll.h
   iselectionmanager.h
+  iselectionoverlayscroll.h
   isessionmanager.h
   isettingsdialog.h
   isettingsmanager.h
+  ivirtualscrolllifecycle.h
   iviewportmanager.h
 )

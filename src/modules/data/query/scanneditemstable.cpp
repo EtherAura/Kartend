@@ -4,6 +4,7 @@
 
 #include "errorutils.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QSqlDatabase>
@@ -102,10 +103,17 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
   // parses "FROM scanned_items ON CONFLICT ..." as the start of a JOIN ... ON
   // and rejects the upsert with a "near DO: syntax error". This is the
   // documented workaround for an INSERT ... SELECT ... ON CONFLICT statement.
+  //
+  // date_added: stamped at insert time and intentionally OMITTED from the
+  // ON CONFLICT update clause (rescans must not reset it) — mirrors the
+  // streaming pipeline in scanservice_persist.cpp. It was missing here
+  // entirely (Kartend-fux2w), so rows persisted through this legacy path
+  // took DEFAULT 0 and never matched ByDateAdded smart playlists (the
+  // evaluator treats date_added <= 0 as "unknown" and excludes the row).
   if (!upsert.prepare(
           "INSERT INTO items (collection_id, collection_uuid, path, "
-          "rel_path, name, last_modified, file_size) "
-          "SELECT ?, ?, path, rel_path, name, last_modified, file_size FROM scanned_items "
+          "rel_path, name, last_modified, file_size, date_added) "
+          "SELECT ?, ?, path, rel_path, name, last_modified, file_size, ? FROM scanned_items "
           "WHERE true "
           "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
           "collection_id=excluded.collection_id, "
@@ -121,6 +129,7 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
   }
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
+  upsert.addBindValue(QDateTime::currentSecsSinceEpoch());
   if (!upsert.exec()) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to apply scanned_items upsert",
@@ -131,8 +140,12 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
   return true;
 }
 
-bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid) {
+bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid,
+                                                   QString *errorDetailsOut) {
   if (!m_db.isOpen()) {
+    if (errorDetailsOut) {
+      *errorDetailsOut = QStringLiteral("database connection not open");
+    }
     return false;
   }
   QSqlQuery q(m_db);
@@ -141,10 +154,17 @@ bool ScannedItemsTable::deleteItemsMissingFromScan(const QString &collectionUuid
             "items.path)");
   q.addBindValue(collectionUuid);
   if (!q.exec()) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to delete missing items using scanned_items",
-                                               "ScannedItemsTable::deleteItemsMissingFromScan")
-                             .withDetails(q.lastError().text()));
+    if (errorDetailsOut) {
+      // Caller owns reporting (it classifies lock contention for its retry
+      // ladder, Kartend-kt39d) — logging here too would double up.
+      *errorDetailsOut = q.lastError().text();
+    } else {
+      ErrorUtils::logError(
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to delete missing items using scanned_items",
+                                "ScannedItemsTable::deleteItemsMissingFromScan")
+              .withDetails(q.lastError().text()));
+    }
     return false;
   }
   return true;

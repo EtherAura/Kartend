@@ -7,7 +7,7 @@
 #include "collection/hierarchyhelpers.h"
 #include "iartworkmanager.h" // unused but pulled along by ApplicationContext header chain
 #include "idatabasemanager.h"
-#include "iscrollmanager.h"
+#include "iscrolldatasource.h"
 #include "isessionmanager.h"
 #include "loadingoverlay.h"
 #include "stringutils.h"
@@ -76,7 +76,7 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
     }
   };
 
-  auto *scroll = ctx.scrollManager();
+  auto *scroll = ctx.scrollData();
 
   // Check if we're in a subfolder
   const QString &subfolder = collections[cur].folderBrowsing.currentSubfolder;

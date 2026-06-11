@@ -85,21 +85,19 @@ void TestScrapePersistenceDirect::writesNewMetadataRowAndArtworkRows() {
   QVERIFY(ok);
 
   // Re-load and assert the row landed with the merged values.
-  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/song.flac"));
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/song.flac"));
   QVERIFY(loaded.isOk());
   QCOMPARE(loaded.value().title, QStringLiteral("Test Title"));
   QCOMPARE(loaded.value().publisher, QStringLiteral("Test Publisher"));
   QCOMPARE(loaded.value().source, QStringLiteral("teststub"));
 
   // Non-standard artwork row landed via ItemArtworkStore.
-  auto rows = ItemArtworkStore::loadAllForItem(db, QStringLiteral("u1"),
-                                                QStringLiteral("/m/song.flac"));
+  auto rows =
+      ItemArtworkStore::loadAllForItem(db, QStringLiteral("u1"), QStringLiteral("/m/song.flac"));
   QVERIFY(rows.isOk());
   QCOMPARE(rows.value().size(), 1);
   QCOMPARE(rows.value().first().artworkType, QStringLiteral("back"));
-  QCOMPARE(rows.value().first().manualPath,
-           QStringLiteral("/some/path/back.png"));
+  QCOMPARE(rows.value().first().manualPath, QStringLiteral("/some/path/back.png"));
 
   closeAndRemove(db, conn);
 }
@@ -124,11 +122,9 @@ void TestScrapePersistenceDirect::preservesExistingFieldsWhenScrapeIsEmpty() {
   scraped.publisher = QStringLiteral("New Publisher");
 
   QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/song.flac"),
-                                              scraped, {}));
+                                             QStringLiteral("/m/song.flac"), scraped, {}));
 
-  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/song.flac"));
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/song.flac"));
   QVERIFY(loaded.isOk());
   QCOMPARE(loaded.value().title, QStringLiteral("User Title"));
   QCOMPARE(loaded.value().contentRating, QStringLiteral("PG"));
@@ -154,12 +150,10 @@ void TestScrapePersistenceDirect::overwritesScrapedFieldsWhenBothPresent() {
   scraped.title = QStringLiteral("New Title");
   scraped.publisher = QStringLiteral("New Publisher");
 
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/g.bin"),
-                                              scraped, {}));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scraped, {}));
 
-  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/g.bin"));
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(loaded.isOk());
   QCOMPARE(loaded.value().title, QStringLiteral("New Title"));
   QCOMPARE(loaded.value().publisher, QStringLiteral("New Publisher"));
@@ -177,23 +171,19 @@ void TestScrapePersistenceDirect::mergesCustomFieldsScrapeWinsOnSharedKeys() {
   ItemMetadataStore::ItemMetadata existing;
   existing.collectionUuid = QStringLiteral("u1");
   existing.path = QStringLiteral("/m/g.bin");
-  existing.customFields =
-      QStringLiteral(R"({"region":"US","userNote":"keep me"})");
+  existing.customFields = QStringLiteral(R"({"region":"US","userNote":"keep me"})");
   QVERIFY(ItemMetadataStore::save(db, existing).isOk());
 
   Scraper::ScrapedItem scraped;
   scraped.customFields.insert(QStringLiteral("region"), QStringLiteral("EU"));
   scraped.customFields.insert(QStringLiteral("genre2"), QStringLiteral("RPG"));
 
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/g.bin"),
-                                              scraped, {}));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scraped, {}));
 
-  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/g.bin"));
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(loaded.isOk());
-  const auto fields =
-      ItemMetadataStore::parseCustomFields(loaded.value().customFields);
+  const auto fields = ItemMetadataStore::parseCustomFields(loaded.value().customFields);
   // Convert to a hash for order-independent assertions — parseCustomFields
   // returns alphabetically-sorted pairs, but we only care about contents.
   QHash<QString, QString> got;
@@ -226,8 +216,8 @@ void TestScrapePersistenceDirect::capsCustomFieldCountAndValueSize() {
   }
   scraped.customFields.insert(QStringLiteral("field000"), QString(5000, QChar('x')));
 
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                             QStringLiteral("/m/g.bin"), scraped, {}));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scraped, {}));
 
   auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(loaded.isOk());
@@ -258,9 +248,8 @@ void TestScrapePersistenceDirect::emptyCollectionUuidReturnsFalseAndNoSave() {
   scraped.title = QStringLiteral("Should not land");
 
   // Empty uuid → guard returns false before the save runs.
-  QVERIFY(!Scraper::saveScrapedMetadataDirect(db, QString(),
-                                                QStringLiteral("/m/x.flac"),
-                                                scraped, {}));
+  QVERIFY(
+      !Scraper::saveScrapedMetadataDirect(db, QString(), QStringLiteral("/m/x.flac"), scraped, {}));
 
   closeAndRemove(db, conn);
 }
@@ -273,8 +262,7 @@ void TestScrapePersistenceDirect::emptySourcePathReturnsFalseAndNoSave() {
   Scraper::ScrapedItem scraped;
   scraped.title = QStringLiteral("Should not land");
 
-  QVERIFY(!Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                                QString(), scraped, {}));
+  QVERIFY(!Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QString(), scraped, {}));
 
   closeAndRemove(db, conn);
 }
@@ -286,9 +274,8 @@ void TestScrapePersistenceDirect::closedDatabaseReturnsFalse() {
   QSqlDatabase db; // Not opened.
   Scraper::ScrapedItem scraped;
   scraped.title = QStringLiteral("Should not land");
-  QVERIFY(!Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                                QStringLiteral("/m/x.flac"),
-                                                scraped, {}));
+  QVERIFY(!Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/x.flac"),
+                                              scraped, {}));
 }
 
 void TestScrapePersistenceDirect::nonStandardArtworkRowsLandViaItemArtworkStore() {
@@ -303,12 +290,11 @@ void TestScrapePersistenceDirect::nonStandardArtworkRowsLandViaItemArtworkStore(
   artwork.append({QStringLiteral("back"), QStringLiteral("/disk/back.png")});
   artwork.append({QStringLiteral("manual"), QStringLiteral("/disk/manual.pdf")});
 
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/x.bin"),
-                                              scraped, artwork));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/x.bin"),
+                                             scraped, artwork));
 
-  auto rows = ItemArtworkStore::loadAllForItem(db, QStringLiteral("u1"),
-                                                QStringLiteral("/m/x.bin"));
+  auto rows =
+      ItemArtworkStore::loadAllForItem(db, QStringLiteral("u1"), QStringLiteral("/m/x.bin"));
   QVERIFY(rows.isOk());
   QCOMPARE(rows.value().size(), 2);
   // Order isn't contractual; assert both rows are present by type.
@@ -339,11 +325,9 @@ void TestScrapePersistenceDirect::runtimeSecondsHonoredOnlyWhenNonNegative() {
   Scraper::ScrapedItem scrape1;
   scrape1.title = QStringLiteral("Whatever");
   // runtimeSeconds defaults to -1.
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/g.bin"),
-                                              scrape1, {}));
-  auto after1 = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/g.bin"));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scrape1, {}));
+  auto after1 = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(after1.isOk());
   QCOMPARE(after1.value().runtimeSeconds, 42);
 
@@ -351,11 +335,9 @@ void TestScrapePersistenceDirect::runtimeSecondsHonoredOnlyWhenNonNegative() {
   // valid scraped 0-second runtime should land, not be treated as unset).
   Scraper::ScrapedItem scrape2;
   scrape2.runtimeSeconds = 0;
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/g.bin"),
-                                              scrape2, {}));
-  auto after2 = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/g.bin"));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scrape2, {}));
+  auto after2 = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(after2.isOk());
   QCOMPARE(after2.value().runtimeSeconds, 0);
 
@@ -377,11 +359,9 @@ void TestScrapePersistenceDirect::sourceProviderIdSkippedWhenScrapeEmpty() {
   Scraper::ScrapedItem scraped;
   scraped.title = QStringLiteral("X");
 
-  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"),
-                                              QStringLiteral("/m/g.bin"),
-                                              scraped, {}));
-  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"),
-                                         QStringLiteral("/m/g.bin"));
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"),
+                                             scraped, {}));
+  auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(loaded.isOk());
   QCOMPARE(loaded.value().source, QStringLiteral("user-tagged"));
 

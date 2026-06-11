@@ -275,7 +275,7 @@ case "$ARG" in
       rm -rf build/Release-clang
       cmake -S . -B build/Release-clang -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
       cmake --build build/Release-clang --parallel
-      QT_QPA_PLATFORM=offscreen ctest --test-dir build/Release-clang --output-on-failure
+      QT_QPA_PLATFORM=offscreen ctest --test-dir build/Release-clang --output-on-failure -LE benchmark
     '
     ;;
 
@@ -287,7 +287,10 @@ case "$ARG" in
       rm -rf build/TSan
       cmake -S . -B build/TSan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON
       cmake --build build/TSan --parallel
-      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt ctest --test-dir build/TSan --output-on-failure
+      # -LE benchmark matches every CI ctest invocation (Kartend-egd3a): the
+      # QBENCHMARK suites only run in the nightly benchmark job, never under
+      # sanitizers or the PR matrix.
+      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt ctest --test-dir build/TSan --output-on-failure -LE benchmark
     '
     ;;
 

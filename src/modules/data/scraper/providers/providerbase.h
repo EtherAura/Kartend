@@ -33,6 +33,23 @@ public:
   /// {User-Agent: userAgent()} header list, ready for HttpClient::get.
   [[nodiscard]] static Scraper::HttpClient::RawHeaders userAgentHeader();
 
+  /// Test seam (Kartend-ym7z3): a fetch function that stands in for
+  /// HttpClient::instance()->get(). When set, getJson / getImageBytes
+  /// route every request through it instead of the live singleton, so
+  /// provider-orchestration tests can capture the outbound URL/headers
+  /// and answer with canned bytes — no QNetworkAccessManager, no
+  /// network. The HttpClient-side response guards (size cap, image/*
+  /// Content-Type pin) are intentionally bypassed under the hook; they
+  /// have their own coverage in test_httpclient.cpp.
+  ///
+  /// Pass {} to restore live behaviour. Not thread-safe — set it from
+  /// the test's init/cleanup on the main thread, never while a request
+  /// is in flight. Production code must never call this.
+  using TestFetchFunction =
+      std::function<void(const QUrl &url, const Scraper::HttpClient::RawHeaders &headers,
+                         Scraper::HttpClient::ResponseCallback callback)>;
+  static void setFetchFunctionForTesting(TestFetchFunction fetch);
+
 protected:
   /// Register per-host request throttles on the shared HttpClient.
   /// Idempotent — setRateLimit overwrites the entry — so re-running it on
@@ -50,15 +67,20 @@ protected:
   static void getJson(const Scraper::HttpClient::RawHeaders &headers, const QUrl &url,
                       std::function<ErrorUtils::Result<T>(const QByteArray &)> parse,
                       std::function<void(ErrorUtils::Result<T>)> callback) {
-    Scraper::HttpClient::instance()->get(url, headers,
-                                         [parse = std::move(parse), callback = std::move(callback)](
-                                             ErrorUtils::Result<QByteArray> response) {
-                                           if (response.isError()) {
-                                             callback(response.error());
-                                             return;
-                                           }
-                                           callback(parse(response.value()));
-                                         });
+    Scraper::HttpClient::ResponseCallback onResponse =
+        [parse = std::move(parse),
+         callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
+          if (response.isError()) {
+            callback(response.error());
+            return;
+          }
+          callback(parse(response.value()));
+        };
+    if (s_testFetch) {
+      s_testFetch(url, headers, std::move(onResponse));
+      return;
+    }
+    Scraper::HttpClient::instance()->get(url, headers, std::move(onResponse));
   }
 
   /// GET an image asset, pinning the response to image/* (the 9ryx
@@ -67,10 +89,20 @@ protected:
   /// reach the image decoder.
   static void getImageBytes(const Scraper::HttpClient::RawHeaders &headers, const QUrl &url,
                             MediaCallback callback) {
+    if (s_testFetch) {
+      s_testFetch(url, headers, std::move(callback));
+      return;
+    }
     Scraper::HttpClient::instance()->get(url, headers, std::move(callback),
                                          Scraper::HttpClient::kDefaultMaxResponseBytes,
                                          QStringLiteral("image/"));
   }
+
+private:
+  /// Backing store for the Kartend-ym7z3 test seam. Null in production
+  /// (the default), so getJson/getImageBytes hit the live HttpClient
+  /// singleton. Defined in providerbase.cpp.
+  static TestFetchFunction s_testFetch;
 };
 
 #endif // PROVIDERBASE_H

@@ -104,7 +104,8 @@ void NowPlayingOverlay::setupUI() {
   textLayout->addWidget(m_hintLabel);
 }
 
-void NowPlayingOverlay::showOverlay(const QString &displayName) {
+void NowPlayingOverlay::showOverlay(const QString &displayName, const QString &title,
+                                    const QString &hint) {
   if (!parentWidget()) {
     return;
   }
@@ -115,6 +116,15 @@ void NowPlayingOverlay::showOverlay(const QString &displayName) {
   m_active = true;
   if (m_subtitleLabel) {
     m_subtitleLabel->setText(displayName);
+  }
+  // Empty title/hint restore the "Now Playing" defaults so the historical
+  // one-arg call keeps its behavior even after an "Extracting" reuse.
+  if (m_titleLabel) {
+    m_titleLabel->setText(title.isEmpty() ? tr("Now Playing") : title);
+  }
+  if (m_hintLabel) {
+    m_hintLabel->setText(hint.isEmpty() ? tr("Kartend will return when the program closes.")
+                                        : hint);
   }
   updatePosition();
 

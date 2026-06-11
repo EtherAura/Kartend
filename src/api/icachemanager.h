@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QPixmap>
 #include <QString>
+#include <QStringList>
 
 // Statistics for monitoring cache performance.
 struct CacheMetrics {
@@ -26,6 +27,17 @@ struct CacheMetrics {
   }
 
   void reset() { memoryHits = diskHits = misses = inserts = evictions = invalidations = 0; }
+};
+
+/// Shutdown snapshot of the artwork timestamp store: the full timestamp map
+/// plus the keys invalidated since the last flush whose store rows must be
+/// DELETEd. Both are captured under the same lock so the pair is coherent —
+/// carrying only the map (the pre-Kartend-2zkm8 contract) let a row
+/// invalidated inside the final debounce window survive the shutdown write
+/// and linger until the next session self-healed it.
+struct CacheTimestampsSnapshot {
+  QHash<QString, qint64> timestamps;
+  QStringList removedPaths;
 };
 
 /**
@@ -52,7 +64,10 @@ public:
   virtual void saveToDiskForShutdown() = 0;
   virtual void scheduleSaveToDisk(int delayMs = -1) = 0;
 
-  [[nodiscard]] virtual QHash<QString, qint64> snapshotTimestampsForShutdown() const = 0;
+  /// Snapshot the timestamp map together with the pending removal set (keys
+  /// invalidated since the last flush) under one lock acquisition, so the
+  /// shutdown write can both upsert the live rows and DELETE the dead ones.
+  [[nodiscard]] virtual CacheTimestampsSnapshot snapshotTimestampsForShutdown() const = 0;
 
   virtual void cancelPendingIo() = 0;
 

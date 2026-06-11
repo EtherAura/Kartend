@@ -15,8 +15,9 @@ namespace {
 // Build an HTTP-status error the way mapScreenScraperHttpError-adjacent code
 // does: a generic failure carrying the upstream status.
 ErrorContext httpError(int status, int retryAfter = 0) {
-  auto e = ErrorContext::error(ErrorCode::DatabaseQueryFailed, QStringLiteral("x"), QStringLiteral("t"))
-               .withHttpStatus(status);
+  auto e =
+      ErrorContext::error(ErrorCode::DatabaseQueryFailed, QStringLiteral("x"), QStringLiteral("t"))
+          .withHttpStatus(status);
   if (retryAfter > 0) e.withRetryAfter(retryAfter);
   return e;
 }

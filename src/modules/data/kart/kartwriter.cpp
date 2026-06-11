@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QSqlDatabase>
 
+#include "extensionutils.h"
 #include "itemmetadata.h"
 #include "kartcompression.h"
 #include "kartformat.h"
@@ -255,10 +256,7 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
                                            "KartWriter::prepareFromCollection")
         .withDetails(cfg.mediaDirectory);
   }
-  QStringList nameFilters;
-  for (const QString &ext : cfg.extensions) {
-    nameFilters.append("*." + ext);
-  }
+  QStringList nameFilters = ExtensionUtils::toNameFilters(cfg.extensions);
   if (nameFilters.isEmpty()) {
     nameFilters << "*.*";
   }

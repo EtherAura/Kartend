@@ -25,6 +25,23 @@ private slots:
   void testOnSubcollectionEnteredUnwindsPushOnNavigationFailure();
   void testOnSubcollectionEnteredSkipsPushWhenNoCurrentCollection();
   void testOnMediaLibraryErrorRendersErrorWidget();
+
+  // Root/Home view routing (Kartend-ood0m): loadRootView's synchronous state
+  // transition and goBackToCollections' three dispatch branches (root-view
+  // no-op, home-view escape, stack pop).
+  void testLoadRootViewEntersRootState();
+  void testLoadRootViewHonorsCustomHomeLabel();
+  void testLoadRootViewWithNoCollectionsShowsEmptyState();
+  void testGoBackIsNoOpInRootView();
+  void testGoBackEscapesToHomeViewForRootCollection();
+  void testGoBackPopsNavigationStack();
+
+  // Virtual-folder navigation (Kartend-ood0m): the currentSubfolder state
+  // machine driven by onVirtualFolderEntered / goBackFromVirtualFolder /
+  // onBreadcrumbLinkClicked.
+  void testVirtualFolderNavigationUpdatesSubfolderPath();
+  void testVirtualFolderEnterIgnoredWithoutCurrentCollection();
+  void testBreadcrumbLinksDriveSubfolderNavigation();
 };
 
 #endif // KARTEND_TESTS_TEST_NAVIGATIONMANAGER_H

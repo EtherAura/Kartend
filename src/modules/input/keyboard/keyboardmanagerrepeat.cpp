@@ -13,8 +13,8 @@
 #include "collection/validationhelpers.h"
 #include "collectiontypes.h"
 #include "interactionstateholder.h"
+#include "iselectionoverlayscroll.h"
 #include "keyboardhelpers.h"
-#include "scrollmanager.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcKeyboardManager)
@@ -55,7 +55,10 @@ void KeyboardManager::beginHoldRepeat() {
       m_generalSettings ? m_generalSettings->input.scrollVelocityMultiplier : 1.0;
   baseInterval = KeyboardHelpers::scaleRepeatInterval(baseInterval, velocityMult, 10);
   int verticalInterval = baseInterval;
-  int horizontalInterval = baseInterval / 2;
+  // Kartend-l06g6: re-apply the 10ms floor AFTER halving — halving a clamped
+  // base could yield a 5ms (200Hz) horizontal timer at high velocity
+  // multipliers, defeating the event-loop-saturation guard documented above.
+  int horizontalInterval = std::max(10, baseInterval / 2);
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
 
   // m_repeatTimer is created + connected once in initTimers() (ctor), so the
@@ -90,7 +93,7 @@ void KeyboardManager::beginHoldRepeat() {
 
 void KeyboardManager::stopRepeat(bool suppressRecentering) {
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  ISelectionOverlayScroll *scroll = m_ctx ? m_ctx->scrollOverlay() : nullptr;
 
   if (m_isShuttingDown || QApplication::closingDown()) {
     clearRepeatState();
@@ -150,7 +153,7 @@ void KeyboardManager::onRepeatStep() {
     stopRepeat();
     return;
   }
-  IScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  ISelectionOverlayScroll *scroll = m_ctx ? m_ctx->scrollOverlay() : nullptr;
   if (!scroll || !m_collections || !m_currentCollectionIndex) {
     stopRepeat();
     return;

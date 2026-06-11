@@ -11,12 +11,19 @@ on:
     tags:
       - 'v*'
 
+# Kartend-itn8a: default the whole workflow to read-only; jobs that publish
+# the release or push commits opt in to contents: write individually so a
+# future job added here does not silently inherit write access to the repo.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-24.04
+    # Needs write: creates the GitHub Release (action-gh-release) and pushes
+    # the post-publish PKGBUILD sha256 commit to the default branch.
+    permissions:
+      contents: write
     # Expose the parsed tag version as a job output so the windows-release
     # job (below) can name its artifacts consistently without re-deriving
     # GITHUB_REF.
@@ -59,6 +66,15 @@ jobs:
           # ebuild filename — must be exactly packaging/kartend-<version>.ebuild
           if [ ! -f "packaging/kartend-${TAG_VERSION}.ebuild" ]; then
             echo "::error::Expected ebuild file packaging/kartend-${TAG_VERSION}.ebuild not found (existing: $(ls packaging/kartend-*.ebuild 2>/dev/null || echo none))"
+            fail=1
+          fi
+
+          # vcpkg.json version-string (Kartend-szdbl — drifted to 0.0.9 once
+          # because bump-version.sh never touched it; now it does, and this
+          # check keeps the pair honest)
+          VCPKG_VERSION="$(python3 -c 'import json; print(json.load(open("vcpkg.json"))["version-string"])')"
+          if [ "$VCPKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error file=vcpkg.json::version-string is '$VCPKG_VERSION', expected '$TAG_VERSION'"
             fail=1
           fi
 
@@ -180,7 +196,7 @@ jobs:
           echo "ebuild=kartend-${VERSION}.ebuild" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: |
             ${{ steps.version.outputs.tarball }}
@@ -241,12 +257,19 @@ jobs:
   windows-release:
     needs: release
     runs-on: windows-latest
+    # Needs write: attaches the Windows assets to the existing release via
+    # action-gh-release (uploading release assets requires contents: write).
+    # This job also holds SIGNPATH_API_TOKEN, which is exactly why the
+    # workflow-level default above is read — a compromised dependency here
+    # should not be able to push to the repo.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Qt 6.7 LTS
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           version: '6.7.*'
           host: windows
@@ -256,7 +279,7 @@ jobs:
           cache: true
 
       - name: Setup MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
         with:
           arch: x64
 
@@ -349,7 +372,7 @@ jobs:
 
       - name: Sign kartend.exe via SignPath
         if: steps.signpath_check.outputs.configured == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -434,7 +457,7 @@ jobs:
 
       - name: Sign setup.exe via SignPath
         if: steps.signpath_check.outputs.configured == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -468,7 +491,7 @@ jobs:
         # sha256 sidecars alongside. fail_on_unmatched_files keeps a
         # packaging bug from silently publishing a release without the
         # Windows assets.
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: |
             ${{ steps.package.outputs.zip }}

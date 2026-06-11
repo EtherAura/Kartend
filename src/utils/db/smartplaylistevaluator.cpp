@@ -3,6 +3,8 @@
 // SQL is in arm's reach for review.
 #include "smartplaylistevaluator.h"
 
+#include "sqllike.h"
+
 #include <algorithm>
 
 #include <QDateTime>
@@ -268,15 +270,15 @@ QList<Match> evalByTitleSearch(QSqlDatabase &db, const QString &needle) {
   // common case for English-language libraries. Unicode case folding via
   // LOWER() on both sides could be a follow-up if multibyte titles need
   // it.
-  if (!q.prepare("SELECT collection_uuid, path FROM items WHERE name LIKE ? "
-                 "ORDER BY name COLLATE NOCASE ASC")) {
+  if (!q.prepare(QStringLiteral("SELECT collection_uuid, path FROM items WHERE name LIKE ?") +
+                 KartendDb::kLikeEscape + QStringLiteral(" ORDER BY name COLLATE NOCASE ASC"))) {
     ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                              "Failed to prepare title-search smart query",
                                              "SmartPlaylistEvaluator::evalByTitleSearch")
                              .withDetails(q.lastError().text()));
     return out;
   }
-  q.addBindValue(QStringLiteral("%") + trimmed + QStringLiteral("%"));
+  q.addBindValue(QStringLiteral("%") + KartendDb::escapeLike(trimmed) + QStringLiteral("%"));
   if (!q.exec()) {
     ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                              "Failed to run title-search smart query",

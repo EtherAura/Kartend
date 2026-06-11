@@ -15,11 +15,13 @@
 #include <QFile>
 #include <QSet>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "../../support/testsandbox.h"
 #include "applicationcontext.h"
 #include "batchsizes.h"
 #include "collection/collectioncontext.h"
@@ -63,14 +65,15 @@ private slots:
   void testPurgeOrphanCollectionData_dropsRowsNotInLiveSet();
   void testPurgeOrphanCollectionData_largeLiveSetUsesTempTable();
 
+  // Worker-write contention (Kartend-cbtml) ----------------------------------
+  void testRecordItemLaunch_survivesHeldWriteLock();
+
 private:
   std::unique_ptr<SessionManager> m_session;
 };
 
 void TestDatabaseManager::initTestCase() {
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-databasemanager"));
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-databasemanager"));
 }
 
 void TestDatabaseManager::cleanup() {
@@ -240,10 +243,18 @@ void TestDatabaseManager::testResolveRelativeFilePath_resolvesViaMap() {
   fileNames.insert(QStringLiteral("/abs/path/to/foo.bin"), QStringLiteral("foo.bin"));
   fileNames.insert(QStringLiteral("/abs/path/to/bar.bin"), QStringLiteral("bar.bin"));
 
-  // Looking up by display name should return the absolute path stored as the
-  // key in the reverse-lookup map.
-  const QString resolved = db.resolveRelativeFilePath(QStringLiteral("foo.bin"), fileNames);
-  QCOMPARE(resolved, QStringLiteral("/abs/path/to/foo.bin"));
+  // An exact key in the caller's map passes through unchanged.
+  QCOMPARE(db.resolveRelativeFilePath(QStringLiteral("/abs/path/to/foo.bin"), fileNames),
+           QStringLiteral("/abs/path/to/foo.bin"));
+
+  // Kartend-ardm7: leaf-name / relative-path resolution now answers from the
+  // FileMapCache reverse index built on items load — the per-call linear
+  // suffix scan over the caller's map is gone (it made widget creation
+  // O(items^2)). With no load delivered to this manager the index is empty,
+  // so a leaf-name lookup misses instead of scanning. The index-backed
+  // resolution contract is covered by FileMapCacheResolve
+  // (test_filemapcache.cpp), which drives replaceFromItemsLoaded directly.
+  QCOMPARE(db.resolveRelativeFilePath(QStringLiteral("foo.bin"), fileNames), QString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,12 +274,24 @@ QSqlDatabase openInspector() {
   QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
   db.setDatabaseName(dbPath);
   db.open();
+  if (db.isOpen()) {
+    // The purge/write paths now run on the DB worker thread (Kartend-dbqt5),
+    // so inspector statements can overlap worker commits/checkpoints. Without
+    // a busy timeout those overlaps surface as spurious instant
+    // "database is locked" failures.
+    QSqlQuery pragma(db);
+    pragma.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
+  }
   return db;
 }
 
 bool runSql(QSqlDatabase &db, const QString &sql) {
   QSqlQuery q(db);
-  return q.exec(sql);
+  if (!q.exec(sql)) {
+    qWarning() << "runSql failed:" << q.lastError().text() << "sql:" << sql.left(120);
+    return false;
+  }
+  return true;
 }
 
 int scalar(QSqlDatabase &db, const QString &sql) {
@@ -418,6 +441,10 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() 
   QVERIFY(insp.isValid() && insp.isOpen());
   QVERIFY(runSql(insp, "DELETE FROM items"));
   QVERIFY(runSql(insp, "DELETE FROM collections"));
+  // The purge is gated on a hash of the live-uuid set stamped into meta
+  // (Kartend-dbqt5); this suite's sandbox db survives across runs, so clear
+  // the stamp or a re-run with the same deterministic live set would skip.
+  QVERIFY(runSql(insp, "DELETE FROM meta WHERE key='orphan_purge_uuid_set_hash'"));
   QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
                                       "VALUES (1, 'Live', 'x', '%1'), "
                                       "(2, 'Stale', 'x', 'orphan-uuid')")
@@ -431,15 +458,76 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() 
                                       "(2, '/m/c.bin', 'c', 'x', 'orphan-uuid'), "
                                       "(1, '/m/d.bin', 'd', 'x', '')")
                            .arg(liveUuid)));
+  // Child-table rows under the orphan uuid must be purged too
+  // (Kartend-yyudl); previously they leaked forever. Clear first so a
+  // suite re-run against the surviving sandbox db can't collide on keys.
+  QVERIFY(runSql(insp, "DELETE FROM item_metadata WHERE collection_uuid='orphan-uuid'"));
+  QVERIFY(runSql(insp, "DELETE FROM item_artwork WHERE collection_uuid='orphan-uuid'"));
+  QVERIFY(runSql(insp, "DELETE FROM launch_history WHERE collection_uuid='orphan-uuid'"));
+  QVERIFY(runSql(insp, "DELETE FROM playlist_items WHERE playlist_id='pp1'"));
+  QVERIFY(runSql(insp, "DELETE FROM playlists WHERE id='pp1'"));
+  QVERIFY(runSql(insp, "INSERT INTO item_metadata (collection_uuid, path, title) "
+                       "VALUES ('orphan-uuid', '/m/c.bin', 't')"));
+  QVERIFY(runSql(insp, "INSERT INTO item_artwork (collection_uuid, path, artwork_type, "
+                       "manual_path, updated_at) "
+                       "VALUES ('orphan-uuid', '/m/c.bin', 'cover', '/x.png', 'x')"));
+  QVERIFY(runSql(insp, "INSERT INTO launch_history (collection_uuid, path, name, launched_at) "
+                       "VALUES ('orphan-uuid', '/m/c.bin', 'c', 'x')"));
+  QVERIFY(runSql(insp, "INSERT INTO playlists (id, name, parent_collection_uuid) "
+                       "VALUES ('pp1', 'PL', 'orphan-uuid')"));
+  QVERIFY(runSql(insp, "INSERT INTO playlist_items (playlist_id, position, "
+                       "source_collection_uuid, source_path, added_at) "
+                       "VALUES ('pp1', 0, 'orphan-uuid', '/m/c.bin', 'x')"));
 
   db.purgeOrphanCollectionData({live});
 
-  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items"), 2);
+  // Kartend-dbqt5: the purge now runs as a queued write on the DB worker
+  // thread — wait for it to land instead of asserting synchronously.
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, "SELECT COUNT(*) FROM items"), 2, 10000);
   QCOMPARE(
       scalar(insp,
              QStringLiteral("SELECT COUNT(*) FROM items WHERE collection_uuid='%1'").arg(liveUuid)),
       2);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), 1);
+  // Child tables purged of the orphan uuid (Kartend-yyudl).
+  for (const char *t : {"item_metadata", "item_artwork", "launch_history"}) {
+    QCOMPARE(
+        scalar(
+            insp,
+            QStringLiteral("SELECT COUNT(*) FROM %1 WHERE collection_uuid='orphan-uuid'").arg(t)),
+        0);
+  }
+  QCOMPARE(scalar(insp,
+                  "SELECT COUNT(*) FROM playlist_items WHERE source_collection_uuid='orphan-uuid'"),
+           0);
+
+  // Gate behavior (Kartend-dbqt5): with the live set unchanged, a second
+  // purge call is skipped — a freshly re-inserted orphan row survives it.
+  QVERIFY(runSql(insp, "INSERT INTO items (collection_id, path, name, last_modified, "
+                       "collection_uuid) VALUES (2, '/m/e.bin', 'e', 'x', 'orphan-uuid')"));
+  db.purgeOrphanCollectionData({live});
+  // Queue an observable write BEHIND the (skipped) purge op — worker FIFO
+  // ordering guarantees the purge decision happened once this lands.
+  db.recordItemLaunch(liveUuid, QStringLiteral("/m/a.bin"));
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT play_count FROM items WHERE collection_uuid='%1' "
+                                  "AND path='/m/a.bin'")
+                       .arg(liveUuid)),
+      1, 10000);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='orphan-uuid'"), 1);
+
+  // A CHANGED live set (different hash) re-arms the gate and purges again.
+  CollectionConfig second;
+  second.name = QStringLiteral("Second");
+  second.mediaDirectory = QStringLiteral("/media/second");
+  const QString secondUuid =
+      CollectionUtils::computeCollectionUuid(second.name, second.mediaDirectory);
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (3, 'Second', 'x', '%1')")
+                           .arg(secondUuid)));
+  db.purgeOrphanCollectionData({live, second});
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='orphan-uuid'"), 0, 10000);
 }
 
 void TestDatabaseManager::testPurgeOrphanCollectionData_largeLiveSetUsesTempTable() {
@@ -452,6 +540,10 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_largeLiveSetUsesTempTabl
   QVERIFY(insp.isValid() && insp.isOpen());
   QVERIFY(runSql(insp, "DELETE FROM items"));
   QVERIFY(runSql(insp, "DELETE FROM collections"));
+  // See testPurgeOrphanCollectionData_dropsRowsNotInLiveSet — clear the
+  // Kartend-dbqt5 gate stamp so a suite re-run against the surviving
+  // sandbox db doesn't skip the purge.
+  QVERIFY(runSql(insp, "DELETE FROM meta WHERE key='orphan_purge_uuid_set_hash'"));
 
   // More live collections than the inline-NOT-IN threshold, so the purge takes
   // the temp-table path. With one bind per uuid the old inline form would
@@ -487,11 +579,62 @@ void TestDatabaseManager::testPurgeOrphanCollectionData_largeLiveSetUsesTempTabl
 
   // Every live collection + item survives; the single orphan pair is purged —
   // i.e. the temp-table NOT IN (SELECT …) form handled all the uuids without
-  // tripping the bind-variable cap.
-  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), kLiveCount);
+  // tripping the bind-variable cap. (QTRY: the purge is a queued worker
+  // write now, Kartend-dbqt5.)
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, "SELECT COUNT(*) FROM collections"), kLiveCount, 10000);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items"), kLiveCount);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='orphan-uuid'"), 0);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='orphan-uuid'"), 0);
+}
+
+void TestDatabaseManager::testRecordItemLaunch_survivesHeldWriteLock() {
+  // Kartend-cbtml: recordItemLaunch / recordHistoryEntry run on the query
+  // worker connection (busy_timeout 500ms) while a scan transaction on the
+  // SEPARATE scan-worker connection can hold the SQLite write lock for
+  // longer. Pre-fix, the worker write failed once with "database is locked"
+  // and was dropped silently — the launch never landed in play_count or the
+  // history log. The fix retries with bounded backoff in
+  // QueryManager::runWrite. Simulate the scan's lock with an inspector
+  // connection holding BEGIN IMMEDIATE past the 500ms busy window.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, "DELETE FROM launch_history"));
+  const QString uuid = QStringLiteral("locked-write-uuid");
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (1, 'Locked', 'x', '%1')")
+                           .arg(uuid)));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, collection_uuid) "
+                                      "VALUES (1, '/m/locked.bin', 'locked', 'x', '%1')")
+                           .arg(uuid)));
+
+  // Take the write lock and keep it held well past the worker connection's
+  // 500ms busy_timeout, so the first write attempt deterministically fails
+  // with SQLITE_BUSY (the pre-fix code dropped the write right there).
+  QVERIFY(runSql(insp, "BEGIN IMMEDIATE"));
+  db.recordItemLaunch(uuid, QStringLiteral("/m/locked.bin"));
+  db.recordHistoryEntry(uuid, QStringLiteral("/m/locked.bin"), QStringLiteral("locked"),
+                        /*maxEntries=*/50);
+  QTest::qWait(1200); // worker is inside the retry ladder during this window
+  QVERIFY(runSql(insp, "COMMIT"));
+
+  // With the retry ladder both writes land once the lock clears.
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT play_count FROM items WHERE collection_uuid='%1' "
+                                  "AND path='/m/locked.bin'")
+                       .arg(uuid)),
+      1, 10000);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
+                       .arg(uuid)),
+      1, 10000);
 }
 
 QTEST_MAIN(TestDatabaseManager)

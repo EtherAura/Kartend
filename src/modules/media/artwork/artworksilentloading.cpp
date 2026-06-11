@@ -32,12 +32,15 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
     return;
   }
   const CollectionConfig &collection = (*collections)[collectionIndex];
-  if (!collection.showAllSubcollectionItems) {
-    return; // Only needed for flattened subcollection views
-  }
-
-  const QStringList dirList = ArtworkPathCatalog::collectArtworkDirs(collections, collectionIndex,
-                                                                     /*includeDescendants=*/true);
+  // Kartend-urrpp: prewarm NORMAL collections too, not just flattened views.
+  // The per-tile artwork branch in ItemWidgetFactory now prefers the
+  // DirectoryCache whenever the dir is cached; warming it here (while the DB
+  // query runs) means tiles resolve via O(1) cached lookups — including
+  // cached negatives — instead of paying the multi-stat sweep per
+  // materialization. Descendant dirs are only needed for flattened views.
+  const QStringList dirList = ArtworkPathCatalog::collectArtworkDirs(
+      collections, collectionIndex,
+      /*includeDescendants=*/collection.showAllSubcollectionItems);
   if (dirList.isEmpty()) {
     return;
   }

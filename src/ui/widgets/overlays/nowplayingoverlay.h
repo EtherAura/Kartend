@@ -27,7 +27,12 @@ public:
   explicit NowPlayingOverlay(QWidget *parent = nullptr);
   ~NowPlayingOverlay() override;
 
-  void showOverlay(const QString &displayName);
+  /// Shows the overlay with `displayName` as the subtitle. `title` and
+  /// `hint` override the "Now Playing" header / return hint when non-empty
+  /// (used by the archive-extraction busy state, Kartend-mkcak); empty
+  /// values restore the defaults.
+  void showOverlay(const QString &displayName, const QString &title = QString(),
+                   const QString &hint = QString());
   void hideOverlay();
   [[nodiscard]] bool isActive() const { return m_active; }
 

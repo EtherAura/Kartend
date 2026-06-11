@@ -27,6 +27,7 @@ private slots:
   void unknownPerCollectionKey_preservedThroughLoadSave();
   void knownKey_overwritesPreservedDuplicate();
   void legacyBlocklistedKey_droppedNotPreserved();
+  void extensions_legacyGlobFormMigratesToBare();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -150,6 +151,39 @@ void TestSettingsRoundtrip::legacyBlocklistedKey_droppedNotPreserved() {
       !rewritten.contains(QStringLiteral("manualDirectory=")),
       qPrintable(
           QStringLiteral("Blocklisted manualDirectory leaked on round-trip:\n%1").arg(rewritten)));
+}
+
+void TestSettingsRoundtrip::extensions_legacyGlobFormMigratesToBare() {
+  // Kartend-693zb: the pre-fix canonical INI form was glob ("*.mp4"), which
+  // ScanService::buildNameFilters double-prefixed into the never-matching
+  // "*.*.mp4" — extension-filtered scans found nothing after an INI
+  // round-trip. Canonical form is now bare; a legacy glob/dotted INI must
+  // load as bare AND be rewritten in place so the migration sticks.
+  writeConfigIni(QStringLiteral("[TestCol]\n"
+                                "name=TestCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "extensions=*.mp4, .MKV, avi\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 1);
+  const QStringList expected = {QStringLiteral("mp4"), QStringLiteral("mkv"),
+                                QStringLiteral("avi")};
+  QCOMPARE(collections[0].extensions, expected);
+
+  // loadCollections rewrites the INI when normalization changed anything.
+  const QString rewritten = readConfigIni();
+  QVERIFY2(rewritten.contains(QStringLiteral("extensions=mp4, mkv, avi")),
+           qPrintable(QStringLiteral("Legacy glob extensions were not migrated to bare form:\n%1")
+                          .arg(rewritten)));
+
+  // A second load of the migrated file must be a no-op (idempotence) — the
+  // scan filter composed from it must target single-dot filenames.
+  QList<CollectionConfig> reloaded;
+  mgr.loadCollections(reloaded);
+  QCOMPARE(reloaded.size(), 1);
+  QCOMPARE(reloaded[0].extensions, expected);
 }
 
 // Expanded QTEST_GUILESS_MAIN so the macOS HOME sandbox is installed before

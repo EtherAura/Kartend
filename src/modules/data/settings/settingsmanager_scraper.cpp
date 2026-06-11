@@ -89,16 +89,30 @@ QString syncReadKeychain(const QString &key, bool *ok) {
   return {};
 }
 
-bool syncWriteKeychain(const QString &key, const QString &value) {
+// On failure, errorOut (when non-null) receives a human-readable reason —
+// QKeychain's own error string, or a timeout note when the daemon stalled.
+// The reason feeds the credential-demotion banner (Kartend-ztc64), so it is
+// user-facing text, not a log-only detail.
+bool syncWriteKeychain(const QString &key, const QString &value, QString *errorOut = nullptr) {
   const QString service = QLatin1String(kKeychainService);
   QKeychain::WritePasswordJob job(service);
   job.setAutoDelete(false);
   job.setKey(key);
   job.setTextData(value);
   if (!runKeychainJobBounded(job, "write")) {
+    if (errorOut) {
+      *errorOut = QStringLiteral("keychain did not respond within %1 ms").arg(kKeychainTimeoutMs);
+    }
     return false;
   }
-  return job.error() == QKeychain::NoError;
+  if (job.error() == QKeychain::NoError) {
+    return true;
+  }
+  if (errorOut) {
+    *errorOut = job.errorString().isEmpty() ? QStringLiteral("keychain error %1").arg(job.error())
+                                            : job.errorString();
+  }
+  return false;
 }
 
 bool syncDeleteKeychain(const QString &key) {
@@ -130,11 +144,18 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
   // to the keychain on next save) or came from a build without keychain support.
   settings.scraper.credentials.clear();
   s.beginGroup(keys::kGroupScrapers);
+  // Kartend-ztc64: meta key persisted by saveScraperSection when a keychain
+  // write failed and a credential was demoted to plaintext. Loaded into the
+  // member (not GeneralSettings — it's manager state, not a user preference)
+  // so the settings dialog can seed its warning banner across restarts.
+  // Having no '/' it is skipped by the provider/field walk below.
+  m_credentialDemotionReason = s.value(keys::kCredentialDemotionReason).toString();
   for (const QString &fullKey : s.allKeys()) {
     const int slash = fullKey.indexOf('/');
     if (slash <= 0 || slash >= fullKey.size() - 1) {
       // Malformed key (no provider prefix or empty field name) — skip rather
-      // than poison the credential map.
+      // than poison the credential map. The credentialDemotionReason meta key
+      // intentionally lands here too.
       continue;
     }
     const QString providerId = fullKey.left(slash);
@@ -210,6 +231,12 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
 #endif
   s.remove(keys::kGroupScrapers);
   s.beginGroup(keys::kGroupScrapers);
+  // Kartend-ztc64: recomputed on every save. Each save retries the keychain
+  // write for every credential, so a recovered keychain re-promotes any
+  // previously-demoted plaintext value and this stays empty — the demotion
+  // self-heals without user action. First failure reason wins (one banner,
+  // not one per field).
+  QString newDemotionReason;
   for (auto pIt = m_generalSettings.scraper.credentials.constBegin();
        pIt != m_generalSettings.scraper.credentials.constEnd(); ++pIt) {
     const QString &providerId = pIt.key();
@@ -222,29 +249,49 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
       if (fIt.value().isEmpty()) continue;
       const QString fullKey = providerId + QLatin1Char('/') + field;
 #ifdef KARTEND_HAVE_QTKEYCHAIN
-      if (syncWriteKeychain(fullKey, fIt.value())) {
+      QString writeError;
+      if (syncWriteKeychain(fullKey, fIt.value(), &writeError)) {
         s.setValue(fullKey, QLatin1String(kKeychainSentinel));
         retainedKeys.insert(fullKey);
       } else {
         // No backend available — fall back to plaintext INI (matches a build
         // without keychain support; the security improvement is best-effort,
-        // not load-bearing).
-        qCWarning(lcSettingsManager)
-            << "Keychain write failed for" << fullKey << "; falling back to plaintext INI";
+        // not load-bearing). Record the demotion so the settings dialog can
+        // surface a non-modal banner instead of this log-only breadcrumb.
+        qCWarning(lcSettingsManager) << "Keychain write failed for" << fullKey << "(" << writeError
+                                     << "); falling back to plaintext INI";
         s.setValue(fullKey, fIt.value());
+        if (newDemotionReason.isEmpty()) {
+          newDemotionReason =
+              writeError.isEmpty() ? QStringLiteral("keychain unavailable") : writeError;
+        }
       }
 #else
       s.setValue(fullKey, fIt.value());
 #endif
     }
   }
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+  // Persist the demotion marker inside [Scrapers] (the group wipe above
+  // removed any previous copy, so omitting the write doubles as the clear).
+  if (!newDemotionReason.isEmpty()) {
+    s.setValue(keys::kCredentialDemotionReason, newDemotionReason);
+  }
+#endif
+  // Outside the ifdef: a build without keychain support stores plaintext by
+  // design, so any demotion marker inherited from a keychain-enabled build is
+  // cleared by the group wipe and the member follows suit here.
+  m_credentialDemotionReason = newDemotionReason;
   s.endGroup();
 #ifdef KARTEND_HAVE_QTKEYCHAIN
   // Sweep keychain entries the user removed in the UI. preWipeKeys is the union
   // of keys present before the wipe (legacy plaintext + existing @keychain
   // sentinels); anything not retained this round gets a delete. EntryNotFound
   // from the delete is fine — it means we already cleaned up on a prior save.
+  // Meta keys (no provider/field slash, e.g. credentialDemotionReason) never
+  // had a keychain entry, so skip them rather than issue a pointless RPC.
   for (const QString &k : preWipeKeys) {
+    if (!k.contains(QLatin1Char('/'))) continue;
     if (!retainedKeys.contains(k)) {
       syncDeleteKeychain(k);
     }

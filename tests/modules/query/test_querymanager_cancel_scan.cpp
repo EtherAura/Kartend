@@ -9,8 +9,9 @@
 #include <QTest>
 #include <QThread>
 
-#include <utility>
-
+#include "../../support/inspectordb.h"
+#include "../../support/scopeexit.h"
+#include "../../support/testsandbox.h"
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "querymanager.h"
@@ -24,40 +25,8 @@ private slots:
   void testCancelledScanDoesNotMutateDatabase();
 };
 
-template <typename Func> class ScopeExit {
-public:
-  explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
-  ~ScopeExit() { m_func(); }
-
-  ScopeExit(const ScopeExit &) = delete;
-  ScopeExit &operator=(const ScopeExit &) = delete;
-
-private:
-  Func m_func;
-};
-
-template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
-  return ScopeExit<Func>(std::forward<Func>(func));
-}
-
 void TestQueryManagerCancelScan::initTestCase() {
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-querymanager"));
-}
-
-static auto openInspectorDb(const QString &dbFilePath) -> QSqlDatabase {
-  const QString connectionName = QStringLiteral("test_querymanager_inspect");
-  if (QSqlDatabase::contains(connectionName)) {
-    QSqlDatabase::removeDatabase(connectionName);
-  }
-
-  QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
-  db.setDatabaseName(dbFilePath);
-  if (!db.open()) {
-    return {};
-  }
-  return db;
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-querymanager"));
 }
 
 void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
@@ -99,7 +68,7 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
 
   // Ensure the worker thread is always stopped before leaving this test function,
   // even when QVERIFY/QCOMPARE early-returns on failure.
-  const auto workerCleanup = makeScopeExit([&]() {
+  const auto workerCleanup = KartendTest::makeScopeExit([&]() {
     if (qm) {
       // Best-effort cancellation to avoid long-running scans on failure paths.
       qm->requestCancelScan();
@@ -121,8 +90,9 @@ void TestQueryManagerCancelScan::testCancelledScanDoesNotMutateDatabase() {
   // Open a separate inspector connection on the test thread (Qt SQL connections are per-thread).
   const QString dbDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   const QString dbFilePath = QDir(dbDir).absoluteFilePath(QStringLiteral("media.db"));
-  QSqlDatabase inspectDb = openInspectorDb(dbFilePath);
-  QVERIFY2(inspectDb.isValid() && inspectDb.isOpen(), "Failed to open inspector database");
+  KartendTest::InspectorDb inspector(dbFilePath, QStringLiteral("test_querymanager_inspect"));
+  QVERIFY2(inspector.isOpen(), "Failed to open inspector database");
+  QSqlDatabase inspectDb = inspector.db();
 
   // Seed DB with a row that would be deleted on a successful scan apply.
   // If cancellation is truly non-mutating, this row must remain.

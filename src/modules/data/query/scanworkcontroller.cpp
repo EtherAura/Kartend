@@ -55,12 +55,6 @@ void ScanWorkController::start(QRunnable *runnable) {
   m_pool->start(runnable);
 }
 
-void ScanWorkController::clearQueue() {
-  if (m_pool) {
-    m_pool->clear();
-  }
-}
-
 int ScanWorkController::maxThreadCount() const {
   return m_pool ? std::max(1, m_pool->maxThreadCount()) : 1;
 }
@@ -77,11 +71,14 @@ void ScanWorkController::requestCancel() {
   if (tok) {
     tok->store(true, std::memory_order_release);
   }
-  // Drain any tasks waiting in the queue; in-flight tasks check the
-  // cancellation token themselves. QThreadPool::clear is thread-safe.
-  if (m_pool) {
-    m_pool->clear();
-  }
+  // Deliberately NOT calling m_pool->clear() here: queued DirectoryScanTasks
+  // were already counted into ScanCompletionQueue::inFlight at enqueue time,
+  // and the only decrement is at the end of run(). clear() deletes queued
+  // auto-delete runnables WITHOUT running them, stranding the count and
+  // wedging the post-cancel drain loop in scanParallel/stageRecursiveScan
+  // forever (Kartend-t2my8 — the Kartend-8fnlp abort). Cancelled tasks
+  // fast-exit on their first token check, so letting them run is cheap and
+  // keeps the inFlight handshake balanced.
 }
 
 bool ScanWorkController::isCancelled() const {

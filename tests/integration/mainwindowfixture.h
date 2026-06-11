@@ -11,6 +11,7 @@
 #ifndef KARTEND_TESTS_MAINWINDOWFIXTURE_H
 #define KARTEND_TESTS_MAINWINDOWFIXTURE_H
 
+#include <functional>
 #include <memory>
 #include <QHash>
 #include <QString>
@@ -46,6 +47,17 @@ struct RealUserPathSnapshot {
 class MainWindowFixture {
 public:
   MainWindowFixture();
+  /**
+   * Kartend-8h8e2: variant with a pre-construction sandbox seed. The
+   * callback runs after the qttest sandbox has been wiped + pre-seeded
+   * (firstRunComplete etc.) but BEFORE MainWindow is constructed — the only
+   * window where a test can persist collections into the sandbox INI so the
+   * window starts populated. Starting with zero collections queues the
+   * modal "Create First Collection" QInputDialog from
+   * setupInitialTimersEmptyCollections, which deadlocks any test that
+   * pumps the event loop afterwards.
+   */
+  explicit MainWindowFixture(const std::function<void()> &seedSandbox);
   ~MainWindowFixture();
 
   MainWindowFixture(const MainWindowFixture &) = delete;

@@ -7,8 +7,11 @@
 #include "idetailspanemanager.h"
 #include "itemdetaildata.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
 #include "mocks/mockdatabasemanager.h"
+#include "mocks/mockedmainwindowfixture.h"
 
 #include <QTest>
 
@@ -160,7 +163,7 @@ void TestDetailPageManager::testShowForCurrentSelectionWithoutContextIsNoOp() {
 }
 
 void TestDetailPageManager::testFixtureExposesDetailPageManagerViaApplicationManager() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   auto *detailPage = win->getApplicationManager()->getDetailPageManager();
 

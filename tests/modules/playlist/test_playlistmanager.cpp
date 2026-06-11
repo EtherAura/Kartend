@@ -552,8 +552,7 @@ void TestPlaylistManager::createSmartPlaylist_persistsFlagAndFilter() {
   // The serialized filter must round-trip back through loadSmartFilter.
   auto loaded = m_pm->loadSmartFilter(id);
   QVERIFY(loaded.isOk());
-  QCOMPARE(static_cast<int>(loaded.value().kind),
-           static_cast<int>(SmartFilter::Kind::TopPlayed));
+  QCOMPARE(static_cast<int>(loaded.value().kind), static_cast<int>(SmartFilter::Kind::TopPlayed));
   QCOMPARE(loaded.value().limit, 25);
 }
 

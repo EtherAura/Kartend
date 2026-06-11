@@ -1,9 +1,10 @@
 // Kartend-hx6l: low-layer implementation of the ErrorPresentation
 // namespace declared in src/api/errorpresentation.h. Lives in
-// kartend_utils so the data-layer call sites in
-// settingsdialogcontroller.cpp (Kartend-ncot) can resolve the symbol
-// without dragging a kartend_data → kartend_ui link edge into every
-// test executable that links kartend_data.
+// kartend_utils so data-layer call sites (Kartend-ncot — e.g.
+// settingsmanagercollections.cpp; historically also the settings-dialog
+// orchestration before it moved to the ui layer in Kartend-q8p29) can
+// resolve the symbol without dragging a kartend_data → kartend_ui link
+// edge into every test executable that links kartend_data.
 //
 // The default behaviour is a qCWarning() log line — no modal dialog,
 // no UI dependency. kartend_ui's MainWindow startup is expected to

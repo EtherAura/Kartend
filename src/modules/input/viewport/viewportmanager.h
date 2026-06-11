@@ -14,7 +14,8 @@ class QScrollBar;
 QT_END_NAMESPACE
 
 class IAnimationManager;
-class IScrollManager;
+class IGridLayoutScroll;
+class ISelectionOverlayScroll;
 class ISelectionManager;
 class IArtworkManager;
 class InteractionStateHolder;
@@ -158,8 +159,17 @@ private:
   // accessors below are the canonical read path; never cache sibling-manager
   // pointers as direct fields.
   const ApplicationContext *m_ctx = nullptr;
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-h1l8f: ViewportManager spans exactly two scroll roles — grid
+  // metrics / view refresh and the selection overlay — so it takes the two
+  // role accessors instead of the IScrollManager facade. Both alias the same
+  // ScrollManager and are null together, so guarding on either is sound.
+  // (Two deferred-lambda sites still capture QPointer<IScrollManager> via
+  // ctx->scrollManager() directly: QPointer needs the QObject facade.)
+  [[nodiscard]] IGridLayoutScroll *scrollGrid() const {
+    return m_ctx ? m_ctx->scrollGrid() : nullptr;
+  }
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const {
+    return m_ctx ? m_ctx->scrollOverlay() : nullptr;
   }
   [[nodiscard]] ISelectionManager *selectionMgr() const {
     return m_ctx ? m_ctx->selectionManager() : nullptr;

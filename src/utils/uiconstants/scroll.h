@@ -23,6 +23,16 @@ inline constexpr int MIN_EFFECTIVE_VIEWPORT_WIDTH = 200;
 /// resolution at the trailing edge instead of running DB + filesystem
 /// probes for every intermediate selection.
 inline constexpr int COVER_FLOW_RESOLVE_DEBOUNCE_MS = 60;
+/// Trailing retry cadence for cover-flow cards whose primary artwork
+/// resolved empty against a still-cold DirectoryCache (Kartend-6x8tn).
+/// Long enough for the off-thread dentry prewarm to land between passes,
+/// short enough that the centered cards fill within ~1s of entering the
+/// view on a normal (non-flattened) collection.
+inline constexpr int COVER_FLOW_ARTWORK_RETRY_MS = 400;
+/// Upper bound on consecutive cover-flow artwork retry passes. Keeps a
+/// wedged or starved prewarm from re-arming the retry timer forever; the
+/// next rebuild / range-chunk arrival restores a fresh budget.
+inline constexpr int COVER_FLOW_ARTWORK_RETRY_MAX_ATTEMPTS = 10;
 /// Default user-configurable scroll velocity multiplier. 1.0 = unmodified.
 inline constexpr double DEFAULT_VELOCITY_MULTIPLIER = 1.0;
 /// Minimum configurable scroll velocity multiplier. Bounded so the

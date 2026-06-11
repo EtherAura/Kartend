@@ -47,7 +47,7 @@
 #include "gamepadmanager.h"
 #include "generalsettingspanel.h"
 #include "imainwindow.h"
-#include "iscrollmanager.h"
+#include "iscrolldatasource.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
@@ -56,7 +56,6 @@
 #include "pathutils.h"
 #include "scrapercredentialspanel.h"
 #include "scrapersettingspanel.h"
-#include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "sidebarpanel.h"
 #include "splashpanel.h"
@@ -196,7 +195,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
             // Repaint visible items so the new base color shows immediately
             // rather than only on the next incidental repaint (Kartend-f3ivg) —
             // mirrors saveGeneralSettingsFromUI's applyTitleTint sweep.
-            if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+            if (auto *scroll = m_ctx ? m_ctx->scrollData() : nullptr) {
               const auto &active = scroll->getActiveWidgets();
               for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
                 if (auto *w = it.value()) w->applyTitleTint();
@@ -290,6 +289,21 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->tmdbCredentialsPanel->setModel(&m_model);
   connect(ui->tmdbCredentialsPanel, &ScraperCredentialsPanel::changed, this,
           &SettingsDialog::checkForChanges);
+  // Kartend-ztc64: non-modal "credentials stored unencrypted" banner. Seed
+  // from the persisted demotion flag so the warning survives a restart, and
+  // track live changes so the banner appears when an Apply demotes the
+  // credentials and clears the moment a later save re-promotes them. The
+  // demotion is provider-agnostic (any failed keychain write sets it), so
+  // both credential panels mirror the same state.
+  if (auto *settingsManager = m_ctx ? m_ctx->settingsManager() : nullptr) {
+    const auto applyDemotionNotice = [this](const QString &reason) {
+      ui->screenScraperCredentialsPanel->setStorageDemotionNotice(reason);
+      ui->tmdbCredentialsPanel->setStorageDemotionNotice(reason);
+    };
+    applyDemotionNotice(settingsManager->credentialDemotionReason());
+    connect(settingsManager, &ISettingsManager::credentialStorageDemotionChanged, this,
+            applyDemotionNotice);
+  }
 
   // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
   // controller's widget pointers to the panel's own gamepad widgets so the
@@ -475,7 +489,7 @@ void SettingsDialog::restoreLiveAppliedSettings() {
   ItemWidget::setTitleBaseColor(m_originalGeneralSettings.appearance.titleBaseColor);
   // Repaint visible items so the reverted base color is reflected immediately
   // (Kartend-f3ivg) — mirrors the live-apply path above.
-  if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+  if (auto *scroll = m_ctx ? m_ctx->scrollData() : nullptr) {
     const auto &active = scroll->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
       if (auto *w = it.value()) w->applyTitleTint();

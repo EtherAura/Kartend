@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "../../support/testsandbox.h"
 #include "metadatalookupprovider.h"
 #include "scraperservice.h"
 
@@ -96,9 +97,7 @@ QByteArray TestScraperServiceResume::validPendingJson() {
 }
 
 void TestScraperServiceResume::initTestCase() {
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-scraperservice-resume"));
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-scraperservice-resume"));
 }
 
 void TestScraperServiceResume::writePendingFile(const QByteArray &json) {

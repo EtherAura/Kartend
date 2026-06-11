@@ -8,9 +8,11 @@
 #include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
+#include "igridlayoutscroll.h"
 #include "interactionstateholder.h"
 #include "iscrollmanager.h"
 #include "iselectionmanager.h"
+#include "iselectionoverlayscroll.h"
 
 #include "gridutils.h"
 #include "uiconstants/timing.h"
@@ -85,25 +87,25 @@ int ViewportManager::targetRestoreIndex() const {
 }
 
 double ViewportManager::getScrollScale() const {
-  if (scrollMgr()) {
-    return scrollMgr()->getMetrics().scrollScale;
+  if (scrollGrid()) {
+    return scrollGrid()->getMetrics().scrollScale;
   }
   return 1.0;
 }
 
 int ViewportManager::toWidgetScrollY(int logicalScrollY) const {
-  if (!scrollMgr() || !m_itemScrollArea) {
+  if (!scrollGrid() || !m_itemScrollArea) {
     return logicalScrollY;
   }
-  const auto &metrics = scrollMgr()->getMetrics();
+  const auto &metrics = scrollGrid()->getMetrics();
   int viewportHeight = m_itemScrollArea->viewport()->height();
   return metrics.toWidgetScrollY(logicalScrollY, viewportHeight);
 }
 
 int ViewportManager::getCurrentGridWidth() const {
   // Prefer ScrollManager's value for filtered/nested views
-  if (scrollMgr()) {
-    int width = scrollMgr()->getCurrentGridWidth();
+  if (scrollGrid()) {
+    int width = scrollGrid()->getCurrentGridWidth();
     if (width > 0) {
       return width;
     }
@@ -129,11 +131,11 @@ void ViewportManager::setProgrammaticScrollGuarded(bool enable) {
   }
   if (enable) {
     state()->scroll().programmaticScroll = true;
-    if (scrollMgr()) {
-      scrollMgr()->refreshSelectionOverlayState();
+    if (scrollOverlay()) {
+      scrollOverlay()->refreshSelectionOverlayState();
     }
   } else {
-    QPointer<IScrollManager> scrollMgrPtr = scrollMgr();
+    QPointer<IScrollManager> scrollMgrPtr = m_ctx ? m_ctx->scrollManager() : nullptr;
     QPointer<InteractionStateHolder> statePtr = state();
     // Defer clearing ProgrammaticScroll flag until after Qt processes pending
     // scroll events - prevents selection overlay flicker during programmatic
@@ -153,17 +155,17 @@ void ViewportManager::setProgrammaticScrollGuarded(bool enable) {
 void ViewportManager::setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar, int targetY,
                                                        int index) {
   verticalScrollBar->setValue(targetY);
-  if (scrollMgr()) {
+  if (scrollGrid()) {
     // When wrapping, clear all widgets to prevent stale artwork from showing
     // at wrong positions after the large scroll jump
     if (m_isWrappingNavigation) {
-      scrollMgr()->cleanupActiveWidgets();
+      scrollGrid()->cleanupActiveWidgets();
     }
-    scrollMgr()->updateVirtualView();
+    scrollGrid()->updateVirtualView();
     int idxDyn =
         (state() && state()->isSelectionSuppressed()) ? state()->pendingSelectionIndex() : index;
     if (idxDyn >= 0) {
-      scrollMgr()->updateSelectionForIndex(idxDyn);
+      scrollOverlay()->updateSelectionForIndex(idxDyn);
     }
   }
 }
@@ -233,8 +235,8 @@ void ViewportManager::onVScrollAnimationFinished() {
   if (state()) {
     state()->click().clickForceAnim = false;
   }
-  if (scrollMgr()) {
-    scrollMgr()->updateVirtualView();
+  if (scrollGrid()) {
+    scrollGrid()->updateVirtualView();
     int idxDyn =
         (state() && state()->isSelectionSuppressed()) ? state()->pendingSelectionIndex() : -1;
     // Signal that we need a selection update (InteractionManager will handle)
@@ -246,8 +248,8 @@ void ViewportManager::onVScrollAnimationFinished() {
   }
   if (state()) {
     state()->scroll().programmaticScroll = false;
-    if (scrollMgr()) {
-      scrollMgr()->refreshSelectionOverlayState();
+    if (scrollOverlay()) {
+      scrollOverlay()->refreshSelectionOverlayState();
     }
   }
   if (state() && !m_repeating && !m_physicalKeyDown) {

@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -15,6 +16,7 @@
 #include <QString>
 #include <QTemporaryDir>
 
+#include <atomic>
 #include <optional>
 
 #include <QLoggingCategory>
@@ -30,6 +32,34 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
+namespace {
+// Kartend-ijglg: true when the extraction dir's cumulative file size exceeds
+// maxBytes — the decompressed-size watchdog's measurement. Also trips on an
+// absurd entry count (a many-tiny-files bomb costs inodes and scan time
+// rather than bytes, and would otherwise make this walk itself the DoS).
+// NoSymLinks: a symlink consumes no meaningful space and following one could
+// double-count or escape the extraction root.
+bool extractionSizeExceeds(const QString &directory, qint64 maxBytes) {
+  qint64 total = 0;
+  int inspected = 0;
+  QDirIterator it(directory,
+                  QDir::Files | QDir::Hidden | QDir::System | QDir::NoSymLinks |
+                      QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    it.next();
+    total += it.fileInfo().size();
+    if (total > maxBytes) {
+      return true;
+    }
+    if (++inspected > UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
+
 bool LaunchManager::isArchiveFile(const QString &filePath) {
   static const QStringList archiveExtensions = {".zip", ".7z",  ".rar", ".gz",
                                                 ".tar", ".bz2", ".xz"};
@@ -42,7 +72,9 @@ bool LaunchManager::isArchiveFile(const QString &filePath) {
   return false;
 }
 
-auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension)
+auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension,
+                                         const std::atomic_bool *cancelRequested,
+                                         qint64 maxDecompressedBytes)
     -> ErrorUtils::Result<QString> {
   // Validate archivePath at the same gate as media files in
   // buildLaunchCommand. QProcess argument lists prevent shell injection, but
@@ -51,6 +83,28 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   auto archiveValidation = PathUtils::validatePathSecurity(archivePath);
   if (archiveValidation.isError()) {
     return archiveValidation.error();
+  }
+
+  const qint64 maxBytes = maxDecompressedBytes < 0
+                              ? static_cast<qint64>(UIConstants::Launch::MAX_EXTRACTION_BYTES)
+                              : maxDecompressedBytes;
+
+  // Kartend-ijglg: bound the *input* before any disk work. Compression can
+  // only inflate the payload, so an archive whose on-disk size already
+  // exceeds the decompressed-size cap can never legitimately extract within
+  // it — reject without spawning an extractor.
+  if (QFileInfo(archivePath).size() > maxBytes) {
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                               "Archive is larger than the extraction size limit",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
+  }
+
+  // Honour a cancellation that raced ahead of the worker actually starting.
+  if (cancelRequested && cancelRequested->load()) {
+    return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(archivePath);
   }
 
   // Create a persistent temp directory for extractions
@@ -212,10 +266,57 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   qCDebug(lcLaunchManager) << "Extracting with" << extractor << args;
 
   process.start(extractor, args);
-  if (!process.waitForFinished(30000)) { // 30 second timeout
-    return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
+  if (!process.waitForStarted(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS)) {
+    return ErrorContext::error(ErrorCode::UnknownError, "Failed to start archive extractor",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails(archivePath);
+        .withDetails(QString("%1: %2").arg(extractor, process.errorString()));
+  }
+
+  // Kartend-mkcak / Kartend-ijglg: poll instead of a single blocking
+  // waitForFinished so the extraction (running on a worker thread) stays
+  // cancellable and the decompressed-size watchdog can kill a zip bomb
+  // mid-flight instead of letting it fill tmpfs. Each pass blocks at most
+  // one poll interval, then re-checks cancel flag, size cap, and the
+  // overall timeout.
+  QElapsedTimer extractionClock;
+  extractionClock.start();
+  enum class Abort { None, Cancelled, SizeExceeded, TimedOut };
+  Abort abort = Abort::None;
+  while (!process.waitForFinished(UIConstants::Launch::EXTRACTION_WATCHDOG_POLL_MS)) {
+    if (cancelRequested && cancelRequested->load()) {
+      abort = Abort::Cancelled;
+      break;
+    }
+    if (extractionSizeExceeds(uniqueDir, maxBytes)) {
+      abort = Abort::SizeExceeded;
+      break;
+    }
+    if (extractionClock.elapsed() >= UIConstants::Launch::EXTRACTION_TIMEOUT_MS) {
+      abort = Abort::TimedOut;
+      break;
+    }
+  }
+  if (abort != Abort::None) {
+    // Never abandon the child: kill it and give it a bounded grace period to
+    // die so the cleanupTargetDir guard below removes a quiescent tree.
+    process.kill();
+    process.waitForFinished(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS);
+    switch (abort) {
+    case Abort::Cancelled:
+      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(archivePath);
+    case Abort::SizeExceeded:
+      return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                 "Archive extraction exceeded the decompressed size limit",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
+    case Abort::TimedOut:
+    default:
+      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(archivePath);
+    }
   }
 
   if (process.exitCode() != 0) {
@@ -224,6 +325,16 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(
             QString("Exit code: %1, Error: %2").arg(process.exitCode()).arg(errorOutput.left(200)));
+  }
+
+  // Kartend-ijglg: a fast extraction can finish inside the first poll window
+  // without the watchdog ever running — re-check the final size so the cap
+  // holds unconditionally.
+  if (extractionSizeExceeds(uniqueDir, maxBytes)) {
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                               "Archive extraction exceeded the decompressed size limit",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
   }
 
   // Find the file with the target extension

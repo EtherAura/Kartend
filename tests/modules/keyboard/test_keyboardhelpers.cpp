@@ -46,24 +46,24 @@ private slots:
 
 void TestKeyboardHelpers::confirm_exactMatch() {
   QVERIFY(KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Return),
-                                         static_cast<int>(Qt::Key_Return)));
+                                        static_cast<int>(Qt::Key_Return)));
 }
 
 void TestKeyboardHelpers::confirm_returnTriggersOnEnter() {
   // Configured = Return, user pressed keypad Enter — should fire.
   QVERIFY(KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Enter),
-                                         static_cast<int>(Qt::Key_Return)));
+                                        static_cast<int>(Qt::Key_Return)));
 }
 
 void TestKeyboardHelpers::confirm_enterTriggersOnReturn() {
   // Configured = Enter, user pressed Return.
   QVERIFY(KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Return),
-                                         static_cast<int>(Qt::Key_Enter)));
+                                        static_cast<int>(Qt::Key_Enter)));
 }
 
 void TestKeyboardHelpers::confirm_unrelatedKeyRejected() {
   QVERIFY(!KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Space),
-                                          static_cast<int>(Qt::Key_Return)));
+                                         static_cast<int>(Qt::Key_Return)));
 }
 
 void TestKeyboardHelpers::confirm_customConfirmKeyRequiresExactMatch() {
@@ -71,11 +71,11 @@ void TestKeyboardHelpers::confirm_customConfirmKeyRequiresExactMatch() {
   // Return/Enter equivalence is only when one of the two is the configured
   // key.
   QVERIFY(KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Space),
-                                         static_cast<int>(Qt::Key_Space)));
+                                        static_cast<int>(Qt::Key_Space)));
   QVERIFY(!KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Return),
-                                          static_cast<int>(Qt::Key_Space)));
+                                         static_cast<int>(Qt::Key_Space)));
   QVERIFY(!KeyboardHelpers::isConfirmKey(static_cast<int>(Qt::Key_Enter),
-                                          static_cast<int>(Qt::Key_Space)));
+                                         static_cast<int>(Qt::Key_Space)));
 }
 
 // ------------------------------ scaleRepeatInterval ------------------------
@@ -123,17 +123,17 @@ constexpr int kDown = static_cast<int>(Qt::Key_Down);
 } // namespace
 
 void TestKeyboardHelpers::arrow_invalidWhenGridWidthZero() {
-  const auto out = KeyboardHelpers::computeArrowDirection(kLeft, kLeft, kRight, kUp, kDown,
-                                                           ViewType::Grid, 0);
+  const auto out =
+      KeyboardHelpers::computeArrowDirection(kLeft, kLeft, kRight, kUp, kDown, ViewType::Grid, 0);
   QVERIFY(!out.valid);
-  const auto neg = KeyboardHelpers::computeArrowDirection(kLeft, kLeft, kRight, kUp, kDown,
-                                                           ViewType::Grid, -3);
+  const auto neg =
+      KeyboardHelpers::computeArrowDirection(kLeft, kLeft, kRight, kUp, kDown, ViewType::Grid, -3);
   QVERIFY(!neg.valid);
 }
 
 void TestKeyboardHelpers::arrow_unknownKeyReturnsInvalid() {
   const auto out = KeyboardHelpers::computeArrowDirection(static_cast<int>(Qt::Key_A), kLeft,
-                                                           kRight, kUp, kDown, ViewType::Grid, 6);
+                                                          kRight, kUp, kDown, ViewType::Grid, 6);
   QVERIFY(!out.valid);
 }
 
@@ -185,7 +185,7 @@ void TestKeyboardHelpers::arrow_listAllAxesStepOne() {
 
 void TestKeyboardHelpers::arrow_coverFlowAllAxesStepOne() {
   const auto u = KeyboardHelpers::computeArrowDirection(kUp, kLeft, kRight, kUp, kDown,
-                                                         ViewType::CoverFlow, 6);
+                                                        ViewType::CoverFlow, 6);
   QCOMPARE(u.direction, -1);
   QVERIFY(u.vertical);
 }
@@ -194,24 +194,24 @@ void TestKeyboardHelpers::arrow_horizontalLeftRightStepGridWidthVerticalTrue() {
   // In Horizontal view, Left/Right step ±gridWidth and the helper marks
   // them as vertical=true so the column-wrap path activates downstream.
   const auto l = KeyboardHelpers::computeArrowDirection(kLeft, kLeft, kRight, kUp, kDown,
-                                                         ViewType::Horizontal, 4);
+                                                        ViewType::Horizontal, 4);
   QCOMPARE(l.direction, -4);
   QVERIFY(l.vertical);
 
   const auto r = KeyboardHelpers::computeArrowDirection(kRight, kLeft, kRight, kUp, kDown,
-                                                         ViewType::Horizontal, 4);
+                                                        ViewType::Horizontal, 4);
   QCOMPARE(r.direction, 4);
   QVERIFY(r.vertical);
 }
 
 void TestKeyboardHelpers::arrow_horizontalUpDownStepOneVerticalFalse() {
   const auto u = KeyboardHelpers::computeArrowDirection(kUp, kLeft, kRight, kUp, kDown,
-                                                         ViewType::Horizontal, 4);
+                                                        ViewType::Horizontal, 4);
   QCOMPARE(u.direction, -1);
   QVERIFY(!u.vertical);
 
   const auto d = KeyboardHelpers::computeArrowDirection(kDown, kLeft, kRight, kUp, kDown,
-                                                         ViewType::Horizontal, 4);
+                                                        ViewType::Horizontal, 4);
   QCOMPARE(d.direction, 1);
   QVERIFY(!d.vertical);
 }

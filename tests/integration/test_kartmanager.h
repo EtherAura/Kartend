@@ -48,6 +48,13 @@ private slots:
   // import.
   void testImportSkipsReporterWhenAllLauncherPathsResolve();
 
+  // Kartend-sqoq0: the interactive entry points must route their modals
+  // through the owner-supplied DialogRunners when wired — no stock
+  // QFileDialog / QMessageBox opens. Stubs the file picker to return a
+  // canned path / cancel and asserts the warn runner receives the
+  // "No collection selected" failure instead of a modal popping.
+  void testInteractiveFlowsUseStubbedDialogRunners();
+
   // Kartend-u8wf0: a headless import whose launcher path resolves inside
   // the extracted kart tree (a self-bundled executable) is refused by
   // default, with an error that names the opt-in flag.

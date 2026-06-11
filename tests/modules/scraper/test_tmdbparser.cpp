@@ -143,8 +143,7 @@ void TestTmdbParser::parseSearchResponse_malformedJsonReturnsError() {
 }
 
 void TestTmdbParser::parseDetailResponse_movieMapsCanonicalFields() {
-  auto result =
-      TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
+  auto result = TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
   QVERIFY(result.isOk());
   const auto item = result.value();
   QCOMPARE(item.title, QStringLiteral("Star Wars"));
@@ -160,8 +159,7 @@ void TestTmdbParser::parseDetailResponse_movieMapsCanonicalFields() {
 }
 
 void TestTmdbParser::parseDetailResponse_tvMapsAirDateAndEpisodeRuntime() {
-  auto result =
-      TmdbParser::parseDetailResponse(TV_DETAIL_FIXTURE, QStringLiteral("tv"));
+  auto result = TmdbParser::parseDetailResponse(TV_DETAIL_FIXTURE, QStringLiteral("tv"));
   QVERIFY(result.isOk());
   const auto item = result.value();
   QCOMPARE(item.title, QStringLiteral("Star Trek"));
@@ -180,15 +178,13 @@ void TestTmdbParser::parseDetailResponse_contentRatingPrefersUS() {
 }
 
 void TestTmdbParser::parseDetailResponse_runtimeMinutesConvertedToSeconds() {
-  auto result =
-      TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
+  auto result = TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
   QVERIFY(result.isOk());
   QCOMPARE(result.value().runtimeSeconds, 121 * 60);
 }
 
 void TestTmdbParser::parseDetailResponse_appendsPosterAndBackdrop() {
-  auto result =
-      TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
+  auto result = TmdbParser::parseDetailResponse(MOVIE_DETAIL_FIXTURE, QStringLiteral("movie"));
   QVERIFY(result.isOk());
   const auto item = result.value();
   QCOMPARE(item.media.size(), 2);

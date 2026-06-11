@@ -15,15 +15,19 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QHash>
 #include <QList>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QtConcurrent>
 #include <QTemporaryDir>
 
 #include <algorithm>
+#include <atomic>
+#include <memory>
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
 #define debugLog(msg)                                                                              \
@@ -36,6 +40,19 @@ Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
 SETUP_GETTER_DEF_COL_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
+
+LaunchManager::~LaunchManager() {
+  // Kartend-mkcak: never abandon a running extractor child. Setting the
+  // cancel flag makes the extraction watchdog kill the child within one poll
+  // interval; the waitForFinished below is therefore bounded (poll interval +
+  // kill grace), not the full extraction time.
+  if (m_extractionCancel) {
+    m_extractionCancel->store(true);
+  }
+  if (m_extractionActive && m_extractionFuture.isValid()) {
+    m_extractionFuture.waitForFinished();
+  }
+}
 
 void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
   m_ctx = setup.ctx;
@@ -449,36 +466,108 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       collection.launcher.launcherAt(resolvedLauncherIndex),
       m_generalSettings ? m_generalSettings->launchers.launcherPresets : QList<LauncherPreset>{});
 
-  // Determine the actual file to launch (may be extracted from archive)
-  QString launchFilePath = filePath;
+  // Resolve UUID once: both the detached and tracked paths route stats
+  // updates through the same key. Empty UUID skips tracking silently — the
+  // launch itself still proceeds. Resolved here (not in finishLaunch) so the
+  // async extraction continuation doesn't have to re-derefence
+  // m_collections, which a settings edit could have mutated meanwhile.
+  const QString collectionUuid = resolveCollectionUuid(collectionIndex);
 
+  if (collection.archive.extractArchives && !collection.archive.extractedExtension.isEmpty() &&
+      isArchiveFile(filePath)) {
+    qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
+    // Kartend-mkcak: extraction blocks for up to the full extraction timeout,
+    // so it runs on a worker thread; the launch continues in the completion
+    // callback on the GUI thread. launchItem returns immediately.
+    startExtractionAndLaunch(filePath, collection.archive.extractedExtension, launcher,
+                             collection.name, collectionUuid);
+    return;
+  }
+
+  finishLaunch(launcher, collection.name, filePath, filePath, QString(), collectionUuid);
+}
+
+void LaunchManager::startExtractionAndLaunch(const QString &filePath,
+                                             const QString &targetExtension,
+                                             const LauncherConfig &launcher,
+                                             const QString &collectionName,
+                                             const QString &collectionUuid) {
+  // Only one extraction at a time; overlapping archive launches would race
+  // on the busy state (and potentially on the same cache dir).
+  if (m_extractionActive) {
+    ErrorPresentation::showError(
+        nullptr,
+        ErrorContext::info(
+            ErrorCode::OperationCancelled,
+            tr("Another archive is currently being extracted:\n%1").arg(m_extractionFilePath),
+            QStringLiteral("LaunchManager::startExtractionAndLaunch")));
+    return;
+  }
+
+  m_extractionActive = true;
+  m_extractionFilePath = filePath;
+  // Fresh flag per extraction, shared with the worker lambda so it outlives
+  // this manager if teardown races the worker.
+  m_extractionCancel = std::make_shared<std::atomic_bool>(false);
+  const std::shared_ptr<std::atomic_bool> cancelFlag = m_extractionCancel;
+
+  // Codebase-standard worker pattern (see coverflowwidget_artwork.cpp):
+  // QtConcurrent::run + a QFutureWatcher parented to this manager delivers
+  // the result back on the GUI thread; the connection dies with us, so the
+  // continuation can safely touch members.
+  auto *watcher = new QFutureWatcher<ErrorUtils::Result<QString>>(this);
+  connect(watcher, &QFutureWatcher<ErrorUtils::Result<QString>>::finished, this,
+          [this, watcher, cancelFlag, launcher, collectionName, collectionUuid, filePath]() {
+            watcher->deleteLater();
+            const ErrorUtils::Result<QString> result = watcher->result();
+            m_extractionActive = false;
+            m_extractionFilePath.clear();
+            emit extractionFinished(filePath);
+            if (result.isError()) {
+              // A user-requested cancel is not an error condition — the
+              // partial extraction was already cleaned up worker-side; just
+              // drop the pending launch quietly.
+              if (cancelFlag->load()) {
+                qCDebug(lcLaunchManager) << "Archive extraction cancelled for" << filePath;
+                return;
+              }
+              ErrorUtils::logError(result.error());
+              ErrorPresentation::showError(nullptr, result.error());
+              return;
+            }
+            const QString &launchFilePath = result.value();
+            qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
+            finishLaunch(launcher, collectionName, filePath, launchFilePath,
+                         QFileInfo(launchFilePath).absolutePath(), collectionUuid);
+          });
+
+  emit extractionStarted(filePath, QFileInfo(filePath).completeBaseName());
+  m_extractionFuture = QtConcurrent::run([filePath, targetExtension, cancelFlag]() {
+    return extractArchiveToTemp(filePath, targetExtension, cancelFlag.get());
+  });
+  watcher->setFuture(m_extractionFuture);
+}
+
+void LaunchManager::cancelExtraction() {
+  if (m_extractionActive && m_extractionCancel) {
+    m_extractionCancel->store(true);
+  }
+}
+
+void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &collectionName,
+                                 const QString &originalFilePath, const QString &launchFilePath,
+                                 const QString &extractedDir, const QString &collectionUuid) {
   // Cleanup guard for the extracted directory. Dismissed only on a successful
   // launch path; any earlier return below (validation failure, missing
   // launcher binary, failed startDetached) removes the extracted directory so
   // /tmp does not accumulate orphaned archive contents.
-  QString extractedDir;
-  auto cleanupExtraction = qScopeGuard([&extractedDir]() {
+  auto cleanupExtraction = qScopeGuard([extractedDir]() {
     if (!extractedDir.isEmpty()) {
       QDir(extractedDir).removeRecursively();
     }
   });
 
-  if (collection.archive.extractArchives && !collection.archive.extractedExtension.isEmpty() &&
-      isArchiveFile(filePath)) {
-    qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
-
-    auto extractResult = extractArchiveToTemp(filePath, collection.archive.extractedExtension);
-    if (extractResult.isError()) {
-      ErrorUtils::logError(extractResult.error());
-      ErrorPresentation::showError(nullptr, extractResult.error());
-      return;
-    }
-    launchFilePath = extractResult.value();
-    extractedDir = QFileInfo(launchFilePath).absolutePath();
-    qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
-  }
-
-  auto commandResult = buildLaunchCommand(launcher, collection.name, launchFilePath);
+  auto commandResult = buildLaunchCommand(launcher, collectionName, launchFilePath);
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
     ErrorPresentation::showError(nullptr, commandResult.error());
@@ -512,14 +601,9 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
         nullptr, ErrorContext::critical(
                      ErrorCode::InvalidFilePath,
                      tr("Launcher is no longer accessible or executable:\n%1").arg(launcherPath),
-                     QStringLiteral("LaunchManager::launchItem")));
+                     QStringLiteral("LaunchManager::finishLaunch")));
     return;
   }
-
-  // Resolve UUID once: both the detached and tracked paths route stats
-  // updates through the same key. Empty UUID skips tracking silently — the
-  // launch itself still proceeds.
-  const QString collectionUuid = resolveCollectionUuid(collectionIndex);
 
   // when runtime detection is enabled, route through a tracked
   // QProcess so we can emit started/finished signals and let the UI sleep
@@ -527,11 +611,33 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // detached launch which leaves Kartend ignorant of the child lifetime.
   if (runtimeDetectionEnabled()) {
     if (launchTracked(launcherPath, cmd, launchFilePath, collectionUuid)) {
-      // increment play_count + last_played as soon as the
-      // tracked child has been spawned. Session duration is recorded
-      // separately when runtimeFinished fires.
+      // The child reads the extracted file while it runs, so the scope guard
+      // must release the directory on the spawn path regardless of outcome.
       cleanupExtraction.dismiss();
-      recordSuccessfulLaunch(filePath, collectionUuid);
+      if (m_trackedChild) {
+        QProcess *child = m_trackedChild;
+        // Kartend-yu1e5: stamp play_count/last_played only once the child
+        // ACTUALLY starts — QProcess::start() is asynchronous on Unix and
+        // launchTracked returning true only means the spawn was issued;
+        // FailedToStart arrives later via errorOccurred. A misconfigured
+        // launcher no longer inflates usage stats (parity with the detached
+        // path, which gates on startDetached's return).
+        connect(child, &QProcess::started, this, [this, originalFilePath, collectionUuid]() {
+          recordSuccessfulLaunch(originalFilePath, collectionUuid);
+        });
+        // And reclaim the extracted dir if the child never ran — the guard
+        // above was already dismissed, so FailedToStart used to leak it.
+        if (!extractedDir.isEmpty()) {
+          // By-value capture detaches the QString from the reference param,
+          // which dies with this frame while the lambda outlives it.
+          connect(child, &QProcess::errorOccurred, this,
+                  [extractedDir](QProcess::ProcessError error) {
+                    if (error == QProcess::FailedToStart) {
+                      QDir(extractedDir).removeRecursively();
+                    }
+                  });
+        }
+      }
       return;
     }
     // launchTracked already showed a message box on failure to start.
@@ -555,7 +661,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
 
     ErrorPresentation::showError(
         nullptr, ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
-                                        QStringLiteral("LaunchManager::launchItem")));
+                                        QStringLiteral("LaunchManager::finishLaunch")));
     return;
   }
 
@@ -563,7 +669,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // own the child PID), but we still record the launch event. Time-played
   // remains zero until the user enables runtime detection.
   cleanupExtraction.dismiss();
-  recordSuccessfulLaunch(filePath, collectionUuid);
+  recordSuccessfulLaunch(originalFilePath, collectionUuid);
 }
 
 bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,

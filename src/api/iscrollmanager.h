@@ -1,29 +1,39 @@
 #ifndef ISCROLLMANAGER_H
 #define ISCROLLMANAGER_H
 
-#include "collection/collectioncontext.h"
-#include <QHash>
+#include "iartworkpreviewscroll.h"
+#include "igridlayoutscroll.h"
+#include "iscrolldatasource.h"
+#include "isearchstatescroll.h"
+#include "iselectionoverlayscroll.h"
+#include "ivirtualscrolllifecycle.h"
 #include <QObject>
-#include <QString>
-#include <QStringList>
-
-class ItemWidget;
-struct GridMetrics;
 
 /**
- * @brief Sibling-facing interface to the virtual-scrolling / grid layer.
+ * @brief Sibling-facing facade to the virtual-scrolling / grid layer.
  *
- * Role interface (interface-segregation): the slice sibling managers reach
- * for through ApplicationContext, not ScrollManager's full surface (its
- * helper-manager wiring, private layout internals and the bulk of its
- * signal/slot set stay on the concrete class, which the owner — MainWindow —
- * holds directly).
+ * Kartend-h1l8f: pure union of six role interfaces (interface-segregation),
+ * carrying no methods of its own. Each method lives on exactly one role,
+ * grouped to match the extracted sub-managers:
+ *
+ *   IVirtualScrollLifecycle  ctx->scrollLifecycle()  setup/teardown + data feed
+ *   IGridLayoutScroll        ctx->scrollGrid()       metrics, layout, view refresh
+ *   ISelectionOverlayScroll  ctx->scrollOverlay()    selection overlay + restore
+ *   ISearchStateScroll       ctx->scrollSearch()     filter + pre-search state
+ *   IArtworkPreviewScroll    ctx->scrollPreview()    artwork/media preview overlay
+ *   IScrollDataSource        ctx->scrollData()       raw data + subcollection queries
+ *
+ * Consumers should reach for the narrowest role accessor(s); the facade stays
+ * for consumers spanning three or more roles, for Qt signal connections, and
+ * for QObject-based lifetime guards (QPointer, singleShotGuarded) — the roles
+ * are plain abstract classes, so QObject-ness is only available here.
  *
  * Unlike INavigationManager / IDetailsPaneManager (plain abstract classes),
- * this interface is a QObject — the same shape as IDatabaseManager. A
- * sibling (SelectionRestoreCoordinator) connects to ScrollManager's
+ * this facade is a QObject — the same shape as IDatabaseManager. A sibling
+ * (SelectionRestoreCoordinator) connects to ScrollManager's
  * virtualScrollSetupComplete signal through ctx, so that one signal is
- * promoted to the interface; QObject + Q_OBJECT is required to declare it.
+ * promoted here; QObject + Q_OBJECT is required to declare it, and QObject
+ * must stay a single base, which is why the roles cannot carry it.
  * ScrollManager keeps its remaining signals/slots on the concrete class and
  * derives this interface directly (single QObject base).
  *
@@ -32,82 +42,18 @@ struct GridMetrics;
  * and cannot reach this neutral api/ header. Its sole caller obtains the
  * concrete ScrollManager for that one call.
  */
-class IScrollManager : public QObject {
+class IScrollManager : public QObject,
+                       public IVirtualScrollLifecycle,
+                       public IGridLayoutScroll,
+                       public ISelectionOverlayScroll,
+                       public ISearchStateScroll,
+                       public IArtworkPreviewScroll,
+                       public IScrollDataSource {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(IScrollManager)
 public:
   using QObject::QObject;
   ~IScrollManager() override = default;
-
-  virtual void setupVirtualScrolling(int totalCount, const CollectionContext &context) = 0;
-  virtual void updateMediaItemCount(int mediaItemCount) = 0;
-  virtual void receiveItemsRange(int offset, const QStringList &filePaths,
-                                 const QHash<QString, QString> &fileNames,
-                                 const QHash<QString, QString> &fileToArtworkDir) = 0;
-  virtual void cleanup() = 0;
-  virtual void updateGridWidth(int newGridWidth) = 0;
-  virtual void updateHorizontalGridHeight(int newHorizontalGridHeight) = 0;
-  virtual void setSidebarShrinkingActive(bool active) = 0;
-  [[nodiscard]] virtual bool sidebarShrinkingActive() const = 0;
-  virtual void updateViewType(ViewType viewType) = 0;
-  virtual void updateVirtualView() = 0;
-  [[nodiscard]] virtual int getEffectiveHorizontalSpacing() const = 0;
-  [[nodiscard]] virtual QString getSubcollectionName(int subcollectionIndex) const = 0;
-  virtual void updateSelectionForIndex(int selectedIndex) = 0;
-  virtual void refreshSelectionOverlayState() = 0;
-  virtual void setForceSelectionOverlayVisible(bool force) = 0;
-  virtual void applyFilter(const QString &searchText) = 0;
-  virtual void cleanupActiveWidgets() = 0;
-  virtual void clearFilter() = 0;
-  virtual void showSearchLoadingOverlay() = 0;
-  virtual void hideSearchLoadingOverlay() = 0;
-  virtual void savePreSearchState() = 0;
-  virtual void restorePreSearchState() = 0;
-  [[nodiscard]] virtual bool hasPreSearchState() const = 0;
-  [[nodiscard]] virtual int getFilteredIndex(int visualIndex) const = 0;
-  [[nodiscard]] virtual int getTotalItems() const = 0;
-  [[nodiscard]] virtual const GridMetrics &getMetrics() const = 0;
-  virtual void recreateLayout() = 0;
-
-  virtual void setPendingSelectionRestoreByPath(const QString &filePath) = 0;
-  [[nodiscard]] virtual bool hasPendingSelectionRestoreByPath() const = 0;
-
-  [[nodiscard]] virtual bool isArtworkPreviewVisible() const = 0;
-  virtual bool hideArtworkPreview() = 0;
-  virtual bool showMediaPreview(const QString &filePath, const QString &artworkDir,
-                                const QString &videoDir) = 0;
-
-  virtual void centerHorizontalScrollbar(int currentCollectionIndex,
-                                         const QList<CollectionConfig> &collections) = 0;
-  virtual void recenterVirtualContainer() = 0;
-  virtual void handleLayoutChange() = 0;
-  [[nodiscard]] virtual int getCurrentGridWidth() const = 0;
-  virtual void updateContextForSubcollection(int subcollectionIndex) = 0;
-  virtual void applySubcollectionFilter(int subcollectionIndex) = 0;
-  virtual void recalculateContainerMetrics() = 0;
-  virtual void forceVirtualViewUpdate() = 0;
-  virtual void preCalculateLayout() = 0;
-  [[nodiscard]] virtual const QHash<int, ItemWidget *> &getActiveWidgets() const = 0;
-  // O(1) widget -> visual index lookup (reverse of getActiveWidgets); -1 if the
-  // widget isn't currently placed (Kartend-th8z).
-  [[nodiscard]] virtual int indexForWidget(ItemWidget *widget) const = 0;
-  virtual void injectCachedItems(int startIndex, const QStringList &filePaths,
-                                 const QHash<QString, QString> &fileNames,
-                                 const QHash<QString, QString> &artworkPaths = {}) = 0;
-  [[nodiscard]] virtual bool
-  getCurrentViewportForCache(int &startIndex, int &totalItems, QStringList &filePaths,
-                             QHash<QString, QString> &fileNames,
-                             QHash<QString, QString> &artworkPaths) const = 0;
-  [[nodiscard]] virtual const QStringList &getFilePaths() const = 0;
-  [[nodiscard]] virtual const QHash<QString, QString> &getFileNames() const = 0;
-  [[nodiscard]] virtual int getSubcollectionCount() const = 0;
-  [[nodiscard]] virtual int getVirtualFolderCount() const = 0;
-  [[nodiscard]] virtual QString filePathForVisualIndex(int visualIndex) const = 0;
-  [[nodiscard]] virtual QString virtualFolderPathForVisualIndex(int visualIndex) const = 0;
-  virtual void primeLayoutFor(const CollectionConfig &config) = 0;
-  virtual void setInitialScrollIndex(int index) = 0;
-
-  [[nodiscard]] virtual int subcollectionIndexFromActual(int actualIndex) const = 0;
 
 signals:
   void virtualScrollSetupComplete();

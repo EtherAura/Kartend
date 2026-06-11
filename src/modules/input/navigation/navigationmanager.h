@@ -156,6 +156,7 @@ public slots:
   void filterItems(const QString &searchText) override;
   void filterItemsCurrentAndSubcollections(const QString &searchText) override;
   void filterItemsAllCollections(const QString &searchText) override;
+  void invalidatePendingItemCount() override;
   void scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs) override;
   void onItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);
@@ -230,6 +231,8 @@ private:
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
+  // Kartend-h1l8f: keeps the IScrollManager facade — its partials span five
+  // scroll roles (lifecycle, grid, search, data, overlay).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }

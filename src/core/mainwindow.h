@@ -58,7 +58,9 @@ class MenuController;
 class MarqueeController;
 class DbEventsController;
 class DialogController;
+class SettingsDialogController;
 struct SettingsDialogContext;
+struct DialogRunners;
 class ScraperController;
 class DatAuditController;
 class ScrollEventsController;
@@ -332,6 +334,10 @@ private:
   /// (Kartend-20utj). Lazily constructed on first resize.
   QTimer *m_resizeRecenterTimer = nullptr;
   std::unique_ptr<MenuController> m_menuController;
+  /// Ui-layer settings-dialog orchestrator (Kartend-q8p29). Lazily created by
+  /// settingsDialogController() and QObject-parented to this window, so Qt
+  /// tears it down with the window (raw pointer, no unique_ptr).
+  SettingsDialogController *m_settingsDialogController = nullptr;
   /// Central z-order coordinator for every registered overlay. Constructed
   /// before any overlay widget so each overlay's setLayerManager() call
   /// during setupUI() registers against a live instance. Owns no widgets —
@@ -423,6 +429,20 @@ private:
   /// one place. Does not set initialPage — callers needing a non-default page
   /// set it on the returned context.
   [[nodiscard]] SettingsDialogContext makeSettingsDialogContext();
+  /// Lazily constructs the ui-layer SettingsDialogController (Kartend-q8p29 —
+  /// the dialog-orchestration half that used to live on SettingsManager).
+  /// QObject-parented to this window; long-lived because it tracks pending
+  /// "Collection Added" scan summaries across dialog sessions. Defined in
+  /// mainwindow_dialogs.cpp.
+  [[nodiscard]] SettingsDialogController *settingsDialogController();
+  /// Builds the generic stock-Qt-modal runner set (Kartend-sqoq0): confirm /
+  /// warn / info / getText / file pickers, each parented on this window.
+  /// Assigned onto the setup structs of every module that previously
+  /// constructed QMessageBox / QInputDialog / QFileDialog directly, so the
+  /// dialog construction lives in the UI layer and headless tests can stub
+  /// the closures instead of fighting a modal. Defined in
+  /// mainwindow_managerwiring.cpp.
+  [[nodiscard]] DialogRunners makeDialogRunners();
   /// Wire and refresh the toolbar's filter button. Idempotent — installs
   /// the QMenu::triggered handler the first time and rebuilds the action
   /// list on every call. Delegates to the ToolbarController.

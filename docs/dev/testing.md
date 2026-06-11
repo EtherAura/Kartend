@@ -165,24 +165,36 @@ QTEST_MAIN(TestClassName)
 #include "test_classname.moc"
 ```
 
-2. Add to `tests/CMakeLists.txt`. Link the per-area `OBJECT` lib(s) the
-   source compiles into (plus their downward deps) — there is **no**
-   `${SOURCES}` variable. A `src/utils/` test usually needs only
-   `kartend_utils`; a `src/modules/` test links its area-lib closure
-   (e.g. `kartend_input kartend_data kartend_chrome kartend_api
-   kartend_utils`). The source path is relative to `tests/`, and the
-   `add_test` NAME is CamelCase and independent of the binary name:
+2. Add to `tests/CMakeLists.txt` via the `kartend_add_test()` helper
+   (Kartend-j0yin). `LINK` names the per-area lib(s) the source compiles
+   into (plus their downward deps) — there is **no** `${SOURCES}` variable.
+   A `src/utils/` test usually needs only `kartend_utils`; a `src/modules/`
+   test links its area-lib closure (e.g. `kartend_input kartend_data
+   kartend_chrome kartend_api kartend_utils`). The source path is relative
+   to `tests/`, the `NAME` is CamelCase and independent of the binary name,
+   and the build target is derived from the first source's basename
+   (`utils/text/test_classname.cpp` → `test_classname`). `Qt6::Test` is
+   appended automatically — don't list it.
 
 ```cmake
 # Utility test — links only kartend_utils:
-add_executable(test_classname utils/text/test_classname.cpp)
-target_link_libraries(test_classname PRIVATE kartend_utils Qt6::Test)
-add_test(NAME ClassName COMMAND test_classname)
+kartend_add_test(NAME ClassName
+  SOURCES utils/text/test_classname.cpp
+  LINK kartend_utils
+)
 
 # Module test — links the area-lib closure (see existing entries for the
 # exact set per area), e.g. a src/modules/input/ test:
-# target_link_libraries(test_foo PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+#   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 ```
+
+   The helper rewrites each area lib to its `_static` twin (an archive of
+   the same object files, declared at the top of `tests/CMakeLists.txt`) so
+   the linker dead-strips unreferenced objects instead of embedding every
+   area `.o` the way a direct `OBJECT`-lib link does. Extra per-target
+   tweaks (`set_tests_properties`, `target_include_directories`,
+   `target_compile_definitions`, conditional links) go as trailing
+   statements referencing the derived target name.
 
 ## Integration Test Harness (UI-Coordinator Managers)
 

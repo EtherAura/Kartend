@@ -64,10 +64,13 @@ void TestMenuController::syncSortActions_checksMatchingEntry() {
   controller.syncSortActions();
 
   auto *action = win.findChild<QAction *>(QString::fromLatin1(expectedAction));
-  QVERIFY2(action, qPrintable(QStringLiteral("missing action %1")
-                                  .arg(QString::fromLatin1(expectedAction))));
-  QVERIFY2(action->isChecked(), qPrintable(QStringLiteral("expected %1 to be checked")
-                                               .arg(QString::fromLatin1(expectedAction))));
+  QVERIFY2(
+      action,
+      qPrintable(QStringLiteral("missing action %1").arg(QString::fromLatin1(expectedAction))));
+  QVERIFY2(
+      action->isChecked(),
+      qPrintable(
+          QStringLiteral("expected %1 to be checked").arg(QString::fromLatin1(expectedAction))));
 }
 
 void TestMenuController::syncSortActions_listViewOnlyModeLeavesPriorSelection() {
@@ -94,9 +97,8 @@ void TestMenuController::syncSortActions_listViewOnlyModeLeavesPriorSelection() 
   QVERIFY(priorAction->isChecked());
 
   // Each list-view-only mode must leave that checkmark in place.
-  for (const SortMode listOnly :
-       {SortMode::ArtworkFirst, SortMode::ArtworkLast, SortMode::CollectionAscending,
-        SortMode::CollectionDescending}) {
+  for (const SortMode listOnly : {SortMode::ArtworkFirst, SortMode::ArtworkLast,
+                                  SortMode::CollectionAscending, SortMode::CollectionDescending}) {
     settings.view.sortMode = listOnly;
     controller.syncSortActions();
     QVERIFY2(priorAction->isChecked(),

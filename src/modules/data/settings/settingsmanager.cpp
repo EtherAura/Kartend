@@ -178,6 +178,10 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   // per-domain change signal at the bottom fires only when a value actually
   // changed. Cheap value copy of a POD-ish leaf struct.
   const ScraperOptions oldScraperOptions = m_generalSettings.scraper.options;
+  // Kartend-ztc64: demotion-state snapshot. saveScraperSection recomputes
+  // m_credentialDemotionReason (set on a failed keychain write, cleared when
+  // every write succeeds); the change signal fires below, after a clean sync.
+  const QString oldDemotionReason = m_credentialDemotionReason;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
@@ -264,6 +268,12 @@ ErrorUtils::Result<void> SettingsManager::saveGeneralSettings(const GeneralSetti
   // nothing in that domain changed.
   if (m_generalSettings.scraper.options != oldScraperOptions) {
     emit scraperOptionsChanged(m_generalSettings.scraper.options);
+  }
+  // Kartend-ztc64: notify the settings dialog banner when the credential
+  // demotion state flipped (set on a failed keychain write, cleared once a
+  // later save's keychain writes all succeed and re-promote the plaintext).
+  if (m_credentialDemotionReason != oldDemotionReason) {
+    emit credentialStorageDemotionChanged(m_credentialDemotionReason);
   }
 
   return ErrorUtils::Result<void>::success();

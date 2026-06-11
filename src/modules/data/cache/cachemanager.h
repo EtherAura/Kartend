@@ -40,8 +40,8 @@ public:
   // These allow ApplicationManager to snapshot state while the CacheManager is
   // still alive and then write it out asynchronously without holding a raw
   // pointer to this instance.
-  [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const override;
-  static void saveTimestampsSnapshotToDiskForShutdown(const QHash<QString, qint64> &timestampsCopy);
+  [[nodiscard]] CacheTimestampsSnapshot snapshotTimestampsForShutdown() const override;
+  static void saveTimestampsSnapshotToDiskForShutdown(const CacheTimestampsSnapshot &snapshot);
 
   // Cancels pending I/O operations and waits for in-flight tasks to complete.
   // Call before shutdown to ensure clean state for final save.
@@ -90,12 +90,39 @@ public:
   /// metrics() instead.
   [[nodiscard]] int artworkCacheMaxCostForTesting() const { return artworkCache.maxCost(); }
 
+  /// Test-only introspection + trigger for the opportunistic bookkeeping
+  /// sweep (Kartend-0ldg2). Production runs pruneStaleEntries() from the
+  /// background getCacheSize() walk; tests invoke it synchronously and
+  /// assert the map sizes directly (same precedent as
+  /// artworkCacheMaxCostForTesting).
+  [[nodiscard]] int fileTimestampCountForTesting() const;
+  [[nodiscard]] int lastRevalidatedCountForTesting() const;
+  void pruneStaleEntriesForTesting() { pruneStaleEntries(); }
+
+  /// Test-only: synchronously drain the disk-I/O worker pool so a slot can
+  /// assert on the store contents a scheduled async save produced
+  /// (Kartend-9lm54). Single-shot like CacheDiskStorage::drainWithBudget —
+  /// the pool is gone afterwards — so call it only at the end of a slot.
+  [[nodiscard]] bool drainPendingIoForTesting(int budgetMs) {
+    return m_diskStorage->drainWithBudget(budgetMs);
+  }
+
   // Cache metrics access
   [[nodiscard]] CacheMetrics metrics() const override;
   void resetMetrics() override;
   void logMetrics() const override;
 
 private:
+  /// Opportunistic GC pass run on the background getCacheSize() walk thread
+  /// (Kartend-0ldg2): prunes a bounded batch of dead rows from the SQLite
+  /// timestamp store, then sweeps the in-memory bookkeeping maps —
+  /// fileTimestamps entries that are neither in artworkCache nor backed by
+  /// a file on disk, and m_lastRevalidatedMs entries whose pixmap was
+  /// evicted. Bounded per pass so a pass never stats more than a few
+  /// hundred files; rotating cursors make successive passes cover the whole
+  /// keyspace.
+  void pruneStaleEntries();
+
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
@@ -104,6 +131,11 @@ private:
   // hot path (Kartend-qszks).
   QHash<QString, qint64> m_lastRevalidatedMs;
   QSet<QString> dirtyTimestamps; // Paths whose timestamps changed since last save
+  // Paths invalidated since the last save whose store rows must be DELETEd —
+  // the dirty-row upsert only touches keys still in fileTimestamps, so
+  // without this set an invalidated row would survive on disk until the
+  // bounded prune pass happened to reach it (Kartend-9lm54).
+  QSet<QString> dirtyRemovals;
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
 
@@ -122,10 +154,11 @@ private:
   // scheduleSaveToDisk() calls during initial cache fill produces at most one
   // outstanding QueuedConnection invokeMethod task.
   QAtomicInteger<int> m_savePostInFlight = 0;
-  // Kartend-7s2mv: run-once guard so the disk-timestamp parse happens exactly
+  // Kartend-7s2mv: run-once guard so the disk-timestamp load happens exactly
   // once even if initialize() is reached from more than one path. The load is
   // owned by ApplicationManager's background QtConcurrent future; this prevents
-  // a second caller from re-parsing the (50MB+) timestamps file.
+  // a second caller from re-reading and re-clearing the timestamp store
+  // (formerly a 50MB+ JSON parse, now a single SELECT — Kartend-0ldg2).
   QAtomicInteger<int> m_initStarted = 0;
   bool m_metadataDirty = false;
   qint64 m_firstDirtyAtMs = 0;
@@ -141,6 +174,10 @@ private:
   mutable qint64 m_lastDiskWalkMs = 0;
   mutable bool m_diskWalkInFlight = false;
   mutable QFuture<void> m_cacheSizeWalkFuture;
+  // Rotating cursors for pruneStaleEntries' bounded batches (guarded by
+  // m_diskCacheSizeMutex; only the single-flight walk thread advances them).
+  QString m_pruneDbCursor;
+  QString m_sweepCursor;
 };
 
 #endif // CACHEMANAGER_H

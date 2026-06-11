@@ -48,7 +48,11 @@ public:
 
   /// Delete `items` rows for `collectionUuid` whose path is absent from
   /// scanned_items — i.e. files removed from disk since the last scan.
-  [[nodiscard]] bool deleteItemsMissingFromScan(const QString &collectionUuid);
+  /// @p errorDetailsOut (optional, Kartend-kt39d) receives the driver error
+  /// text on failure so callers can classify lock contention
+  /// (KartendDb::isLockContentionError) for their retry ladders.
+  [[nodiscard]] bool deleteItemsMissingFromScan(const QString &collectionUuid,
+                                                QString *errorDetailsOut = nullptr);
 
 private:
   QSqlDatabase &m_db;

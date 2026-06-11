@@ -36,6 +36,7 @@ private slots:
   void testManagersHaveNullQObjectParent();
   void testShutdownAfterInitializeIsSafe();
   void testDestructAfterInitializeWithoutShutdownIsSafe();
+  void testDestructorNullsContextManagerSlots();
 };
 
 #endif // KARTEND_TESTS_TEST_APPLICATIONMANAGER_LIFECYCLE_H

@@ -108,8 +108,7 @@ void TestScreenScraperSystemCache::parseSystemsResponse_collectsEveryNomFieldAsA
 void TestScreenScraperSystemCache::parseSystemsResponse_splitsCommaSeparatedExtensions() {
   auto result = ScreenScraperSystemCache::parseSystemsResponse(FIXTURE_WRAPPED);
   QVERIFY(result.isOk());
-  QCOMPARE(result.value()[0].extensions,
-           QStringList({"fmt-a", "fmt-b", "7z"}));
+  QCOMPARE(result.value()[0].extensions, QStringList({"fmt-a", "fmt-b", "7z"}));
   QCOMPARE(result.value()[1].extensions, QStringList({"fmt-c"}));
 }
 
@@ -124,12 +123,10 @@ void TestScreenScraperSystemCache::parseSystemsResponse_acceptsArrayValuedNoms()
 }
 
 void TestScreenScraperSystemCache::parseSystemsResponse_acceptsArrayValuedExtensions() {
-  auto result =
-      ScreenScraperSystemCache::parseSystemsResponse(FIXTURE_ARRAY_EXTENSIONS);
+  auto result = ScreenScraperSystemCache::parseSystemsResponse(FIXTURE_ARRAY_EXTENSIONS);
   QVERIFY(result.isOk());
   // Leading dot stripped; lowercased; deduped.
-  QCOMPARE(result.value()[0].extensions,
-           QStringList({"fmt-p", "fmt-q", "fmt-r"}));
+  QCOMPARE(result.value()[0].extensions, QStringList({"fmt-p", "fmt-q", "fmt-r"}));
 }
 
 void TestScreenScraperSystemCache::parseSystemsResponse_skipsEntriesWithoutId() {
@@ -193,15 +190,14 @@ void TestScreenScraperSystemCache::loadCachedSystems_missingFileReturnsEmptySucc
   // "Not cached yet" is a successful empty list, not an error — so
   // the provider's ensureSystemsCatalog can distinguish a fresh
   // install from a corrupted cache.
-  auto result = ScreenScraperSystemCache::loadCachedSystems(
-      QStringLiteral("/nonexistent/path/foo.json"));
+  auto result =
+      ScreenScraperSystemCache::loadCachedSystems(QStringLiteral("/nonexistent/path/foo.json"));
   QVERIFY(result.isOk());
   QCOMPARE(result.value().size(), 0);
 }
 
 void TestScreenScraperSystemCache::isCacheStale_missingFileIsStale() {
-  QVERIFY(ScreenScraperSystemCache::isCacheStale(
-      QStringLiteral("/nonexistent/path/cache.json")));
+  QVERIFY(ScreenScraperSystemCache::isCacheStale(QStringLiteral("/nonexistent/path/cache.json")));
 }
 
 void TestScreenScraperSystemCache::isCacheStale_recentFileIsFresh() {

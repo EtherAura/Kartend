@@ -16,6 +16,8 @@
 // via the `using namespace` below.
 
 #include "scanservice.h"
+
+#include "dbtxn.h"
 #include "scanservice_internal.h"
 
 #include "batchsizes.h"
@@ -74,27 +76,107 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
                                           int &itemsApplied) {
   itemsApplied = 0;
 
-  // Throttle progress emissions during the apply phase.
+  // Throttle progress emissions during the apply phase. Shared across retry
+  // attempts so a retried apply keeps the emission cadence instead of
+  // restarting it.
   ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
                                 [this](int p, int t) { emit scanItemsProgress(p, t); });
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+  auto maybeEmitScanProgress = [&](int processed, int total, bool force) {
     throttle.report(processed, total, force);
   };
 
-  // Prepare collection row (upsert into collections table).
+  // Prepare collection row (upsert into collections table). Has its own
+  // bounded SQLITE_BUSY retry ladder (Kartend-5s54/6yhq).
   int legacyId = -1;
   if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
     return false;
   }
 
-  // Begin the apply transaction.
-  if (!m_db.transaction()) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                      "Failed to start transaction to apply scan results",
-                                      "ScanService::commitStagedScanResults")
-                   .withDetails(m_db.lastError().text());
+  // Kartend-kt39d: bounded retry of the WHOLE apply transaction on lock
+  // contention. The apply is a deferred BEGIN, then a COUNT read, then
+  // writes — so a commit landing on another connection (main-thread
+  // DatabaseManager, the query slots) between the snapshot read and the
+  // write-lock upgrade fails the first write INSTANTLY with
+  // SQLITE_BUSY_SNAPSHOT (the busy handler never engages; extending
+  // busy_timeout does nothing — measured and documented in Kartend-h62cc).
+  // A fresh attempt takes a new snapshot, which resolves BUSY_SNAPSHOT
+  // outright; a writer genuinely HOLDING the lock engages this connection's
+  // busy_timeout inside the attempt instead. The scanned_items staging table
+  // is TEMP (connection-local) and only read by the apply, and a failed
+  // attempt rolls back completely, so the apply is restartable as-is.
+  // Without this ladder a single lost lock was TERMINAL for the session:
+  // ensureCollectionScanned records the uuid in m_failedScanUuids and every
+  // later reload-driven pass skips the collection until app restart.
+  constexpr int MAX_APPLY_ATTEMPTS = 3;
+  constexpr int BASE_DELAY_MS = 100;
+  for (int attempt = 0; attempt < MAX_APPLY_ATTEMPTS; ++attempt) {
+    if (attempt > 0) {
+      if (isScanCancelled()) {
+        return false;
+      }
+      // Brief backoff (100ms, 200ms) so a writer mid-commit can clear; the
+      // BUSY_SNAPSHOT case would succeed immediately either way.
+      QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+    }
+    bool lockContention = false;
+    const bool finalAttempt = (attempt == MAX_APPLY_ATTEMPTS - 1);
+    if (applyStagedScanResultsAttempt(uuid, dirSignature, legacyId, maybeEmitScanProgress,
+                                      finalAttempt, lockContention, itemsApplied)) {
+      if (attempt > 0) {
+        qCWarning(lcQueryManager).nospace()
+            << "ScanService::commitStagedScanResults: apply landed on attempt " << (attempt + 1)
+            << " after database-is-locked contention";
+      }
+      return true;
+    }
+    if (!lockContention) {
+      // Genuine failure or cancellation — already reported by the attempt.
+      return false;
+    }
+    // Lock contention with retries remaining: the attempt logged at debug
+    // with a will-retry note; loop for a fresh snapshot.
+  }
+  return false; // terminal: the final attempt reported at warning + errorOccurred
+}
+
+bool ScanService::applyStagedScanResultsAttempt(
+    const QString &uuid, const QString &dirSignature, int legacyId,
+    const std::function<void(int, int, bool)> &maybeEmitScanProgress, bool finalAttempt,
+    bool &lockContention, int &itemsApplied) {
+  itemsApplied = 0;
+  lockContention = false;
+
+  // Classifying reporter (Kartend-kt39d, mirroring the h62cc shape in
+  // ensureItemsFtsReady): lock contention on a non-final attempt logs at
+  // debug with a will-retry note — the caller retries the whole transaction
+  // on a fresh snapshot — while the final attempt and every non-lock failure
+  // keep the warning/critical log + errorOccurred emission.
+  const auto reportFailure = [&](const ErrorUtils::ErrorContext &err) {
+    if (KartendDb::isLockContentionError(err)) {
+      lockContention = true;
+      if (!finalAttempt) {
+        qCDebug(lcQueryManager).nospace()
+            << err.source << ": " << err.message << " (" << err.details
+            << ") — transient lock contention; retrying the apply on a fresh snapshot";
+        return;
+      }
+    }
     ErrorUtils::logError(err);
     emit errorOccurred(err);
+  };
+  const auto queryError = [](const QString &what, const QSqlError &e) {
+    return ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
+                                 "ScanService::commitStagedScanResults")
+        .withDetails(e.text());
+  };
+
+  // Begin the apply transaction on the shared QueryManager depth counter
+  // (Kartend-l94tw: was the depth-less ctor, which bypassed coordination with
+  // other guards on this connection). No error sink on the guard: failures
+  // route through reportFailure above so retried attempts stay quiet.
+  KartendDb::DbTransaction txn(m_db, m_txnDepth, "ScanService::commitStagedScanResults");
+  if (!txn.active()) {
+    reportFailure(txn.beginError("Failed to start transaction to apply scan results"));
     return false;
   }
 
@@ -105,14 +187,8 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
     if (count.exec("SELECT COUNT(*) FROM scanned_items") && count.next()) {
       totalToApply = count.value(0).toLongLong();
     } else {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to count staged scan results",
-                                       "ScanService::commitStagedScanResults")
-                     .withDetails(count.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      m_db.rollback();
-      return false;
+      reportFailure(queryError("Failed to count staged scan results", count.lastError()));
+      return false; // guard dtor rolls back
     }
   }
 
@@ -121,35 +197,33 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
       0, static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max())), true);
 
   // Batched upsert: scanned_items → items.
-  bool upsertOk = true;
   if (totalToApply > 0) {
     qint64 applied = 0;
     qint64 lastRowId = 0;
 
     while (applied < totalToApply) {
       if (isScanCancelled()) {
-        upsertOk = false;
-        break;
+        return false; // guard dtor rolls back; not retried (lockContention stays false)
       }
 
       QSqlQuery &sel = m_cache.get(QuerySQL::SELECT_STAGED_SCAN_RESULTS);
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
-      if (auto err = execAndLog(sel, "Failed to read staged scan results",
-                                "ScanService::commitStagedScanResults")) {
-        emit errorOccurred(*err);
-        upsertOk = false;
-        break;
+      if (!sel.exec()) {
+        reportFailure(queryError("Failed to read staged scan results", sel.lastError()));
+        return false;
       }
 
       QStringList paths;
       QStringList relPaths;
       QStringList names;
       QStringList lastModified;
+      QList<qint64> fileSizes;
       paths.reserve(APPLY_BATCH_SIZE);
       relPaths.reserve(APPLY_BATCH_SIZE);
       names.reserve(APPLY_BATCH_SIZE);
       lastModified.reserve(APPLY_BATCH_SIZE);
+      fileSizes.reserve(APPLY_BATCH_SIZE);
 
       qint64 batchMaxRowId = lastRowId;
       while (sel.next()) {
@@ -159,6 +233,7 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
         relPaths.append(sel.value(2).toString());
         names.append(sel.value(3).toString());
         lastModified.append(sel.value(4).toString());
+        fileSizes.append(sel.value(5).toLongLong());
       }
 
       if (paths.isEmpty()) {
@@ -173,19 +248,27 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
       // an earlier scan recorded.
       const qint64 nowEpochSec = QDateTime::currentSecsSinceEpoch();
 
+      // file_size IS in the DO UPDATE clause (unlike date_added): sizes
+      // change on rescan and the Size sort / SQL fast paths read this
+      // column, so a stale value is as bad as a missing one. The streaming
+      // pipeline previously omitted the column entirely and every row it
+      // persisted kept file_size DEFAULT 0 — degrading sort_file_size to
+      // name order and forcing the metadata path to stat-fallback
+      // (Kartend-3gb7e). Mirrors ScannedItemsTable::applyToItems.
       QString sql = "INSERT INTO items (collection_id, collection_uuid, path, "
-                    "rel_path, name, last_modified, date_added) VALUES ";
+                    "rel_path, name, last_modified, file_size, date_added) VALUES ";
       QStringList valueSets;
       valueSets.reserve(paths.size());
       for (int i = 0; i < paths.size(); ++i) {
-        valueSets.append("(?, ?, ?, ?, ?, ?, ?)");
+        valueSets.append("(?, ?, ?, ?, ?, ?, ?, ?)");
       }
       sql += valueSets.join(", ");
       sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
              "collection_id=excluded.collection_id, "
              "rel_path=excluded.rel_path, "
              "name=excluded.name, "
-             "last_modified=excluded.last_modified";
+             "last_modified=excluded.last_modified, "
+             "file_size=excluded.file_size";
 
       // Route through the prepared-statement cache so full batches (the
       // common case — every batch except the last is APPLY_BATCH_SIZE rows
@@ -203,13 +286,14 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
         ins.addBindValue(relPaths[i]);
         ins.addBindValue(names[i]);
         ins.addBindValue(lastModified[i]);
+        ins.addBindValue(fileSizes[i]);
         ins.addBindValue(nowEpochSec);
       }
-      if (auto err = execAndLog(ins, "Failed to apply staged scan results",
-                                "ScanService::commitStagedScanResults")) {
-        emit errorOccurred(*err);
-        upsertOk = false;
-        break;
+      if (!ins.exec()) {
+        // The hot lock-contention site: the txn's first write after the
+        // deferred COUNT read — where SQLITE_BUSY_SNAPSHOT lands.
+        reportFailure(queryError("Failed to apply staged scan results", ins.lastError()));
+        return false;
       }
 
       lastRowId = batchMaxRowId;
@@ -219,7 +303,7 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
           static_cast<int>(std::min<qint64>(applied, std::numeric_limits<int>::max()));
       const int clampedTotal =
           static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
-      maybeEmitScanProgress(clampedApplied, clampedTotal);
+      maybeEmitScanProgress(clampedApplied, clampedTotal, false);
     }
 
     // Force a final progress update so the overlay reaches 100% for indexing.
@@ -228,8 +312,17 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
     maybeEmitScanProgress(clampedTotal, clampedTotal, true);
   }
 
-  // Delete items no longer on disk.
-  const bool deleteOk = m_scannedItems.deleteItemsMissingFromScan(uuid);
+  // Delete items no longer on disk. When the staged set is empty this is the
+  // txn's first write, so it can hit BUSY_SNAPSHOT too — classify via the
+  // error details it exposes.
+  QString deleteErrorDetails;
+  if (!m_scannedItems.deleteItemsMissingFromScan(uuid, &deleteErrorDetails)) {
+    reportFailure(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                        "Failed to delete missing items using scanned_items",
+                                        "ScanService::commitStagedScanResults")
+                      .withDetails(deleteErrorDetails));
+    return false;
+  }
 
   // Update collection metadata (last_scanned + dir_signature).
   QSqlQuery &meta = m_cache.get("UPDATE collections SET last_scanned = ?, "
@@ -237,31 +330,22 @@ bool ScanService::commitStagedScanResults(const CollectionConfig &collection, co
   meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
   meta.bindValue(1, dirSignature);
   meta.bindValue(2, uuid);
-  const bool metaOk = meta.exec();
-
-  // Commit or rollback the apply transaction.
-  bool committed = false;
-  if (upsertOk && deleteOk && metaOk) {
-    committed = m_db.commit();
-    if (!committed) {
-      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                        "Failed to commit scan results",
-                                        "ScanService::commitStagedScanResults")
-                     .withDetails(m_db.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      m_db.rollback();
-    }
-  } else {
-    m_db.rollback();
+  if (!meta.exec()) {
+    // Pre-kt39d this failure was silent (metaOk just skipped the commit).
+    reportFailure(queryError("Failed to update collection scan metadata", meta.lastError()));
+    return false;
   }
 
-  const bool success = upsertOk && deleteOk && metaOk && committed;
-  if (success) {
-    itemsApplied =
-        static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+  // Commit the apply transaction. On failure the guard's dtor rolls back on
+  // scope exit — nothing below touches the connection. commitError() must be
+  // built before any other DB work disturbs lastError().
+  if (!txn.commit()) {
+    reportFailure(txn.commitError("Failed to commit scan results"));
+    return false;
   }
-  return success;
+
+  itemsApplied = static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+  return true;
 }
 
 // ============================================================================
@@ -309,19 +393,11 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  // Temporarily disable synchronous writes for bulk insert performance.
-  QSqlQuery pragmaOff(m_db);
-  // Kartend-y9if: NORMAL has the same speed envelope as OFF under WAL
-  // (the actual win comes from coalescing fsyncs across the transaction,
-  // not from skipping them entirely) and rules out the torn-page
-  // corruption window a crash mid-scan could otherwise leave behind.
-  if (!pragmaOff.exec("PRAGMA synchronous = NORMAL")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to set synchronous=OFF for bulk insert",
-                                               "ScanService::scanAndSaveItemsToDatabase")
-                             .withDetails(pragmaOff.lastError().text()));
-  }
-  const SynchronousPragmaGuard restoreSynchronous(m_db);
+  // Kartend-fux2w: the per-scan "PRAGMA synchronous" set + restore guard were
+  // deleted — every connection already opens at NORMAL via ConnectionPragmas
+  // (Kartend-y9if chose NORMAL over OFF: same speed envelope under WAL, no
+  // torn-page window), so both were no-ops with a misleading
+  // "synchronous=OFF" failure message.
 
   // Prepare the staging temp table.
   if (!m_scannedItems.ensure()) {
@@ -405,7 +481,11 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
       QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
     }
 
-    if (!m_db.transaction()) {
+    // Guard on the shared depth counter (Kartend-l94tw). A failed BEGIN just
+    // retries the attempt; any exception below unwinds into the catch and the
+    // guard's dtor rolls back at the end of the iteration.
+    KartendDb::DbTransaction txn(m_db, m_txnDepth, "ScanService::prepareCollectionForItemsInsert");
+    if (!txn.active()) {
       continue;
     }
 
@@ -415,7 +495,13 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
       update.addBindValue(collection.name);
       update.addBindValue(extSignature);
       update.addBindValue(uuid);
-      update.exec();
+      // Kartend-fux2w: a failed UPDATE (lock, IO) must enter the SQLITE_BUSY
+      // retry ladder like every other statement in this try block — the
+      // discarded return previously dropped collection renames / signature
+      // refreshes silently.
+      if (!update.exec()) {
+        throw SqlStepError(update.lastError());
+      }
 
       QSqlQuery check(m_db);
       check.prepare("SELECT COUNT(*) FROM collections WHERE uuid=?");
@@ -445,13 +531,13 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
         }
       }
 
-      if (!m_db.commit()) {
+      if (!txn.commit()) {
         throw SqlStepError(m_db.lastError());
       }
       prepareSuccess = true;
     } catch (const std::exception &e) {
-      m_db.rollback();
-
+      // No explicit rollback: the guard's dtor rolls back when this attempt's
+      // scope exits without a successful commit.
       const QString errorText = ErrorUtils::exceptionMessage(e);
       // Prefer the driver's native result code (locale/phrasing-stable):
       // SQLITE_BUSY = 5, SQLITE_LOCKED = 6. Keep the text match as a fallback so
@@ -498,19 +584,8 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  // Temporarily disable synchronous writes for bulk insert performance
-  QSqlQuery pragmaOff(m_db);
-  // Kartend-y9if: NORMAL has the same speed envelope as OFF under WAL
-  // (the actual win comes from coalescing fsyncs across the transaction,
-  // not from skipping them entirely) and rules out the torn-page
-  // corruption window a crash mid-scan could otherwise leave behind.
-  if (!pragmaOff.exec("PRAGMA synchronous = NORMAL")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to set synchronous=OFF for bulk insert",
-                                               "ScanService::saveItemsToDatabase")
-                             .withDetails(pragmaOff.lastError().text()));
-  }
-  const SynchronousPragmaGuard restoreSynchronous(m_db);
+  // Kartend-fux2w: per-scan synchronous-pragma set + guard deleted — see the
+  // matching note in scanAndSaveItemsToDatabase above.
 
   // Kartend-v5d4: BATCH_SIZE / COMMIT_INTERVAL_BATCHES / PROGRESS_REPORT_INTERVAL
   // are file-scope constants in the anonymous namespace at the top of this
@@ -537,33 +612,31 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     }
   } scannedItemsCleanup{this, true};
 
-  // Second phase: insert items in batches with periodic commits
+  // Second phase: insert items in batches with periodic commits. The
+  // interval-commit transaction uses the shared DbTransaction guard on the
+  // QueryManager-owned depth counter (Kartend-l94tw): emplace() begins,
+  // commit()+reset() closes an interval, reset() alone rolls back
+  // (cancellation), and destruction covers every early return.
   int batchesSinceCommit = 0;
-  bool inTransaction = false;
+  std::optional<KartendDb::DbTransaction> txn;
   int itemsInserted = 0; // cppcheck-suppress unreadVariable - used for progress reporting
 
   for (int batchStart = 0; batchStart < totalItems; batchStart += BATCH_SIZE) {
     // Check for cancellation between batches
     if (isScanCancelled()) {
-      if (inTransaction) {
-        m_db.rollback();
-        inTransaction = false;
-      }
+      txn.reset(); // rolls back any open interval transaction
       break;
     }
 
-    // Start new transaction if needed
-    if (!inTransaction) {
-      if (!m_db.transaction()) {
-        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                          "Failed to start transaction for bulk insert",
-                                          "ScanService::saveItemsToDatabase")
-                       .withDetails(m_db.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
+    // Start new transaction if needed. emplace() inline (not via a helper
+    // lambda) so bugprone-unchecked-optional-access can see the optional is
+    // engaged before the accesses below.
+    if (!txn.has_value()) {
+      txn.emplace(m_db, m_txnDepth, "ScanService::saveItemsToDatabase",
+                  [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
+      if (!txn->activeOrReport("Failed to start transaction for bulk insert")) {
         return;
       }
-      inTransaction = true;
       batchesSinceCommit = 0;
     }
 
@@ -581,19 +654,14 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     itemsInserted = batchEnd;
     ++batchesSinceCommit;
 
-    // Commit periodically to save incremental progress
-    if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
-      if (!m_db.commit()) {
-        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                          "Failed to commit bulk insert transaction",
-                                          "ScanService::saveItemsToDatabase")
-                       .withDetails(m_db.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
-        m_db.rollback();
-        return;
+    // Commit periodically to save incremental progress. The has_value()
+    // term is always true here (the loop top engages the optional) but makes
+    // the access provably checked for bugprone-unchecked-optional-access.
+    if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES && txn.has_value()) {
+      if (!txn->commitOrReport("Failed to commit bulk insert transaction")) {
+        return; // guard dtor rolls back the aborted transaction (no-op)
       }
-      inTransaction = false;
+      txn.reset();
 
       // Report progress
       emit scanItemsProgress(itemsInserted, totalItems);
@@ -606,17 +674,11 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
   }
 
   // Final commit for any remaining items
-  if (inTransaction) {
-    if (!m_db.commit()) {
-      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                        "Failed to commit final bulk insert transaction",
-                                        "ScanService::saveItemsToDatabase")
-                     .withDetails(m_db.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      m_db.rollback();
-      return;
+  if (txn) {
+    if (!txn->commitOrReport("Failed to commit final bulk insert transaction")) {
+      return; // guard dtor rolls back the aborted transaction (no-op)
     }
+    txn.reset();
   }
 
   // Final progress report
@@ -629,13 +691,10 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     }
 
     // Apply staged results atomically.
-    if (!m_db.transaction()) {
-      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                        "Failed to start transaction to apply staged scan results",
-                                        "ScanService::saveItemsToDatabase")
-                     .withDetails(m_db.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
+    KartendDb::DbTransaction applyTxn(
+        m_db, m_txnDepth, "ScanService::saveItemsToDatabase",
+        [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
+    if (!applyTxn.activeOrReport("Failed to start transaction to apply staged scan results")) {
       return;
     }
 
@@ -649,20 +708,12 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     const bool metaOk = meta.exec();
 
     if (upsertOk && deleteOk && metaOk) {
-      if (!m_db.commit()) {
-        // A dropped commit leaves the scan metadata unpersisted, so
-        // needsRescan() keeps returning true and the collection re-scans every
-        // launch (Kartend-gv7f). Surface it and roll back rather than swallow.
-        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                          "Failed to commit staged scan results",
-                                          "ScanService::saveItemsToDatabase")
-                       .withDetails(m_db.lastError().text());
-        ErrorUtils::logError(err);
-        emit errorOccurred(err);
-        m_db.rollback();
-      }
-    } else {
-      m_db.rollback();
+      // A dropped commit leaves the scan metadata unpersisted, so
+      // needsRescan() keeps returning true and the collection re-scans every
+      // launch (Kartend-gv7f). Surface it rather than swallow; the guard's
+      // dtor rolls back the aborted transaction.
+      (void)applyTxn.commitOrReport("Failed to commit staged scan results");
     }
+    // On any step failure the guard's dtor rolls back.
   }
 }

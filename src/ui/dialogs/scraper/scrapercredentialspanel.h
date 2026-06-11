@@ -6,6 +6,7 @@
 #include <QString>
 #include <QWidget>
 
+class QLabel;
 class QLineEdit;
 class QFormLayout;
 struct SettingsModel;
@@ -29,6 +30,14 @@ public:
   void setProvider(const QString &providerId);
 
   void setModel(SettingsModel *model);
+
+  /// Kartend-ztc64: show/hide the non-modal "credentials stored unencrypted"
+  /// banner. Non-empty @p reason (the keychain failure description) shows the
+  /// banner; empty hides it. The host dialog seeds this from
+  /// ISettingsManager::credentialDemotionReason() and tracks live changes via
+  /// the credentialStorageDemotionChanged signal, so the banner clears as
+  /// soon as a later save lands the secret back in the keychain.
+  void setStorageDemotionNotice(const QString &reason);
   // ISettingsPanel (Kartend-ny2ki). load() was refresh(); save() flushes via
   // the existing private writeModel() (the panel's live-edit flush); clear()
   // is a no-op — this global panel is always backed by the single live model.
@@ -45,8 +54,17 @@ private:
                 const QString &label, bool sensitive, const QString &placeholder = QString());
   void writeModel();
 
+  void updateStorageDemotionBanner();
+
   SettingsModel *m_model = nullptr;
   QString m_providerFilter; // empty = all providers
+  /// Kartend-ztc64: last reason passed to setStorageDemotionNotice. Kept as a
+  /// member (not just label state) because rebuildLayout() recreates the
+  /// banner widget on every setProvider call.
+  QString m_storageDemotionReason;
+  /// Warning banner row above the provider groups. Built by rebuildLayout,
+  /// hidden unless m_storageDemotionReason is non-empty.
+  QLabel *m_storageDemotionBanner = nullptr;
   /// Field-key → QLineEdit. Key shape `<providerId>/<fieldName>` so
   /// onSave can recover the GeneralSettings::scraperCredentials path.
   QHash<QString, QLineEdit *> m_fields;

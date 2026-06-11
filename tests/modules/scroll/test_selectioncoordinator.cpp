@@ -25,7 +25,8 @@ private slots:
 
 void TestSelectionCoordinator::analyzeMovement_invalidInputsReturnNeutral() {
   SelectionCoordinator c;
-  for (auto m : {c.analyzeMovement(-1, 0, 4), c.analyzeMovement(0, -1, 4), c.analyzeMovement(1, 0, 0)}) {
+  for (auto m :
+       {c.analyzeMovement(-1, 0, 4), c.analyzeMovement(0, -1, 4), c.analyzeMovement(1, 0, 0)}) {
     QVERIFY(!m.isHorizontal);
     QCOMPARE(m.direction, 0);
   }

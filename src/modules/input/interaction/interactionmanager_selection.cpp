@@ -309,6 +309,14 @@ void InteractionManager::launchItemWithCollection(const QString &filePath, int c
   if (!m_launchManager) {
     return;
   }
+  // Kartend-l06g6: debounce EVERY launch surface here, not just mouse
+  // double-click — keyboard Enter, gamepad Confirm, context-menu Launch,
+  // cover-flow activation, and the detail page all funnel through this
+  // method, and two quick presses (bouncy Enter key, gamepad chatter)
+  // previously spawned two child processes.
+  if (!filePath.isEmpty() && !m_launchManager->canLaunch(filePath)) {
+    return;
+  }
   // Kartend-w2n0: gate Enter/launch when the collection's launcher profile
   // has unresolvable paths. Replaces the silent "launch fails 200ms later
   // with a QMessageBox from validateLauncherPath" surprise with an upfront
@@ -325,7 +333,13 @@ void InteractionManager::launchItemWithCollection(const QString &filePath, int c
       }
       body += QLatin1Char('\n');
       body += tr("Fix the paths in Settings → Launchers, then try again.");
-      QMessageBox::warning(QApplication::activeWindow(), tr("Launcher unavailable"), body);
+      // Kartend-sqoq0: owner-supplied runner when wired; stock QMessageBox
+      // fallback otherwise (headless tests stub the runner instead).
+      if (m_dialogs.warn) {
+        m_dialogs.warn(tr("Launcher unavailable"), body);
+      } else {
+        QMessageBox::warning(QApplication::activeWindow(), tr("Launcher unavailable"), body);
+      }
       return;
     }
   }
@@ -337,6 +351,8 @@ void InteractionManager::launchItemWithCollection(const QString &filePath, int c
   if (m_attractManager) {
     m_attractManager->onActivityDetected();
   }
+  // Stamp the debounce window only once we actually proceed — stamping on a
+  // validation-rejected launch used to block a corrective retry for 500ms.
   m_launchManager->recordLaunch(filePath);
   m_launchManager->launchItem(filePath, collectionIndex);
 }

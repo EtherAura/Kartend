@@ -51,20 +51,17 @@ void TestSettingsHelpers::coerceModifier_acceptsMeta() {
 
 void TestSettingsHelpers::coerceModifier_zeroFallsBackToShift() {
   // 0 == Qt::NoModifier — explicitly disallowed by the production switch.
-  QCOMPARE(SettingsHelpers::coerceArtworkCycleModifier(0),
-           static_cast<int>(Qt::ShiftModifier));
+  QCOMPARE(SettingsHelpers::coerceArtworkCycleModifier(0), static_cast<int>(Qt::ShiftModifier));
 }
 
 void TestSettingsHelpers::coerceModifier_negativeFallsBackToShift() {
-  QCOMPARE(SettingsHelpers::coerceArtworkCycleModifier(-1),
-           static_cast<int>(Qt::ShiftModifier));
+  QCOMPARE(SettingsHelpers::coerceArtworkCycleModifier(-1), static_cast<int>(Qt::ShiftModifier));
 }
 
 void TestSettingsHelpers::coerceModifier_compoundBitmaskFallsBackToShift() {
   // Shift|Control would equal a different integer than either single modifier;
   // the helper must reject compound masks instead of pretending it's "ok-ish".
-  const int compound =
-      static_cast<int>(Qt::ShiftModifier) | static_cast<int>(Qt::ControlModifier);
+  const int compound = static_cast<int>(Qt::ShiftModifier) | static_cast<int>(Qt::ControlModifier);
   QCOMPARE(SettingsHelpers::coerceArtworkCycleModifier(compound),
            static_cast<int>(Qt::ShiftModifier));
 }

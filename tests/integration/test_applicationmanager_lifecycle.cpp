@@ -72,8 +72,10 @@ void TestApplicationManagerLifecycle::testGettersReturnNullBeforeInitialize() {
 
 void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
   ensureSandbox();
-  ApplicationManager manager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager manager;
   manager.initialize(&appCtx);
 
   // Each getter must return a distinct, non-null pointer. Aliased managers
@@ -99,8 +101,10 @@ void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
 
 void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
   ensureSandbox();
-  ApplicationManager manager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager manager;
   manager.initialize(&appCtx);
 
   // Kartend-d70s (re-attempted after Kartend-3v92 replaced
@@ -130,8 +134,10 @@ void TestApplicationManagerLifecycle::testManagersHaveNullQObjectParent() {
 
 void TestApplicationManagerLifecycle::testShutdownAfterInitializeIsSafe() {
   ensureSandbox();
-  ApplicationManager manager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager manager;
   manager.initialize(&appCtx);
 
   // shutdown() with an empty collection list exercises every conditional
@@ -155,8 +161,56 @@ void TestApplicationManagerLifecycle::testDestructAfterInitializeWithoutShutdown
   // QtConcurrent::run, then we destruct before shutdown() ever runs. The
   // destructor must wait for the deferred task before letting CacheManager
   // be destroyed (otherwise the worker would dereference a freed cache).
-  ApplicationManager manager;
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
   ApplicationContext appCtx;
+  ApplicationManager manager;
   manager.initialize(&appCtx);
   // Intentionally no shutdown() call — block scope ends and dtor runs.
+}
+
+void TestApplicationManagerLifecycle::testDestructorNullsContextManagerSlots() {
+  ensureSandbox();
+  // Kartend-w06qp: ~ApplicationManager must null every ctx->managers.* slot
+  // it (or MainWindow::initializeAppContext) registered, immediately before
+  // the corresponding manager is destroyed. Otherwise the pervasive
+  // `if (auto *m = ctx->x())` guards read stale non-null pointers during
+  // the destruction window — a latent use-after-free class.
+  ApplicationContext appCtx;
+  {
+    ApplicationManager manager;
+    manager.initialize(&appCtx);
+    // initialize() registers the slots it owns; sanity-check a few are live.
+    QVERIFY(appCtx.cacheManager() != nullptr);
+    QVERIFY(appCtx.sessionManager() != nullptr);
+    QVERIFY(appCtx.interactionManager() != nullptr);
+    // Simulate the slots MainWindow::initializeAppContext registers on top
+    // (playlist manager + a sub-manager-owned slot) so the dtor's clearing
+    // of those is exercised too.
+    appCtx.managers.playlistManager = manager.getPlaylistManager();
+    QVERIFY(appCtx.playlistManager() != nullptr);
+  }
+  // After the dtor, every manager slot must be null — a stale non-null here
+  // means a ctx accessor would hand out a dangling pointer post-teardown.
+  QVERIFY(appCtx.scrollManager() == nullptr);
+  QVERIFY(appCtx.artworkManager() == nullptr);
+  QVERIFY(appCtx.settingsManager() == nullptr);
+  QVERIFY(appCtx.sessionManager() == nullptr);
+  QVERIFY(appCtx.detailsPaneManager() == nullptr);
+  QVERIFY(appCtx.detailPageManager() == nullptr);
+  QVERIFY(appCtx.databaseManager() == nullptr);
+  QVERIFY(appCtx.navigationManager() == nullptr);
+  QVERIFY(appCtx.interactionManager() == nullptr);
+  QVERIFY(appCtx.cacheManager() == nullptr);
+  QVERIFY(appCtx.playlistManager() == nullptr);
+  QVERIFY(appCtx.filterManager() == nullptr);
+  QVERIFY(appCtx.animationManager() == nullptr);
+  QVERIFY(appCtx.selectionManager() == nullptr);
+  QVERIFY(appCtx.viewportManager() == nullptr);
+  QVERIFY(appCtx.mouseManager() == nullptr);
+  QVERIFY(appCtx.keyboardManager() == nullptr);
+  QVERIFY(appCtx.eventManager() == nullptr);
+  QVERIFY(appCtx.searchManager() == nullptr);
+  QVERIFY(appCtx.launchManager() == nullptr);
+  QVERIFY(appCtx.interactionState() == nullptr);
 }

@@ -28,11 +28,11 @@
 // Kartend-68wbk: missing archive tool → graceful QSKIP locally, hard QFAIL in CI
 // (KARTEND_REQUIRE_ARCHIVE_TOOLS=1, where Kartend-03lcs installs the tools) so
 // silent skips can't hide lost coverage. Drop-in for a bare QSKIP.
-#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                              \
-  do {                                                                                              \
-    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                              \
-      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                       \
-    QSKIP(msg);                                                                                     \
+#define KARTEND_ARCHIVE_TOOL_SKIP(msg)                                                             \
+  do {                                                                                             \
+    if (!qEnvironmentVariableIsEmpty("KARTEND_REQUIRE_ARCHIVE_TOOLS"))                             \
+      QFAIL("KARTEND_REQUIRE_ARCHIVE_TOOLS is set but " msg);                                      \
+    QSKIP(msg);                                                                                    \
   } while (false)
 
 class TestRomHasher : public QObject {

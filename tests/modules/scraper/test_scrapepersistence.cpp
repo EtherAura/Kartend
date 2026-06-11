@@ -83,6 +83,7 @@ private slots:
   void updateChanged_identicalBytesSkipped();
   void updateChanged_sizeMismatchRewritten();
   void updateChanged_sameSizeDifferentBytesRewritten();
+  void cancelToken_stopsWriteFanOut();
 };
 
 void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
@@ -614,6 +615,36 @@ void TestScrapePersistence::updateChanged_sameSizeDifferentBytesRewritten() {
   QFile after(tmp.path() + "/screenshot/foo.png");
   QVERIFY(after.open(QIODevice::ReadOnly));
   QCOMPARE(after.readAll(), incoming);
+}
+
+void TestScrapePersistence::cancelToken_stopsWriteFanOut() {
+  // Kartend-vi76q: a set cancel token is polled between assets, so a
+  // cancelled/destructing owner (BatchScrapeRunner::cancel() / its dtor)
+  // stops the fan-out before the next file lands on disk. A pre-set token
+  // is the deterministic boundary case: nothing must be written at all.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"),
+                QByteArray("PAYLOAD_A")),
+      makeMedia(QStringLiteral("title"), QStringLiteral("Title"), QByteArray("PAYLOAD_B"))};
+
+  const auto token = std::make_shared<std::atomic<bool>>(true);
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::Overwrite, token);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QVERIFY(!QFile::exists(tmp.path() + "/screenshot/foo.png"));
+  QVERIFY(!QFile::exists(tmp.path() + "/title/foo.png"));
+
+  // Unset token (the default-constructed shared_ptr path is covered by every
+  // other slot in this file): identical media must write both assets.
+  const auto result2 = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                                Scraper::RescrapeMode::Overwrite,
+                                                std::make_shared<std::atomic<bool>>(false));
+  QCOMPARE(result2.mediaWritten, 2);
+  QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
+  QVERIFY(QFile::exists(tmp.path() + "/title/foo.png"));
 }
 
 QTEST_MAIN(TestScrapePersistence)

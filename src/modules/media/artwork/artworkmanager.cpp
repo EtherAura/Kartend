@@ -93,8 +93,10 @@ ICacheManager *ArtworkManager::cacheMgr() const {
 // Destructor stops timers, cancels in-flight dispatch, and clears widget state.
 ArtworkManager::~ArtworkManager() {
   // Kartend-cl86n: the off-thread catalog build task captures &m_pathCatalog,
-  // so it must not outlive this manager. Wait for any in-flight build before
-  // our members tear down. No-op when no build was ever kicked / already done.
+  // so it must not outlive this manager. This waits only for the CURRENT
+  // (watched) build; superseded builds from rapid collection switches are
+  // drained by ~ArtworkPathCatalog itself, which tracks every live build
+  // future (Kartend-lz1zp). No-op when no build was ever kicked.
   m_catalogBuildWatcher.waitForFinished();
 
   // Tell the dispatcher to stop accepting new work; its destructor (run when
@@ -139,7 +141,8 @@ void ArtworkManager::clearLoadedArtworkState() {
 
 // Kartend-7s2mv: the persistent-cache disk load is owned by ApplicationManager,
 // which kicks CacheManager::initialize() onto a background QtConcurrent thread
-// during initialize() so startup never blocks on the 50MB+ timestamps parse.
+// during initialize() so startup never blocks on the timestamp-store load
+// (formerly a 50MB+ JSON parse, now a single SELECT — Kartend-0ldg2).
 // This method used to also call cache->initialize() synchronously on the main
 // thread, which duplicated the parse and raced the background future. It is now
 // intentionally a no-op kept as an explicit hook (and to preserve the

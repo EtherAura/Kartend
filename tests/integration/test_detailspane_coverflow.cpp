@@ -1,5 +1,5 @@
-#include "applicationmanager.h"
 #include "test_detailspane_coverflow.h"
+#include "applicationmanager.h"
 
 #include "coverflowwidget.h"
 #include "detailspane.h"
@@ -73,8 +73,7 @@ void TestDetailsPaneCoverflow::formatTags_emptyStaysEmpty() {
 
 void TestDetailsPaneCoverflow::formatTags_skipsEmptyParts() {
   // ",foo,,bar," should produce "foo, bar" — empty parts are dropped.
-  QCOMPARE(DetailsPane::formatTags(QStringLiteral(",foo,,bar,")),
-           QStringLiteral("foo, bar"));
+  QCOMPARE(DetailsPane::formatTags(QStringLiteral(",foo,,bar,")), QStringLiteral("foo, bar"));
 }
 
 void TestDetailsPaneCoverflow::formatLastScanned_invalidReturnsNeverLabel() {
@@ -85,17 +84,16 @@ void TestDetailsPaneCoverflow::formatLastScanned_validRendersIso() {
   // Construct in UTC so the local-time render is deterministic relative to
   // a single locale; we don't pin the exact string (TZ-dependent) but
   // assert the format shape: "yyyy-MM-dd HH:mm" with two-digit fields.
-  const QDateTime dt = QDateTime::fromString(QStringLiteral("2026-05-07T14:23:00Z"),
-                                             Qt::ISODate);
+  const QDateTime dt = QDateTime::fromString(QStringLiteral("2026-05-07T14:23:00Z"), Qt::ISODate);
   QVERIFY(dt.isValid());
   const QString rendered = DetailsPane::formatLastScanned(dt);
   QVERIFY(!rendered.isEmpty());
   QVERIFY(rendered != QStringLiteral("never"));
   // Pattern: 4 digits, hyphen, 2 digits, hyphen, 2 digits, space, 2 digits,
   // colon, 2 digits.
-  QVERIFY2(rendered.contains(QRegularExpression(
-               QStringLiteral("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$"))),
-           qPrintable(QStringLiteral("Unexpected format: ") + rendered));
+  QVERIFY2(
+      rendered.contains(QRegularExpression(QStringLiteral("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$"))),
+      qPrintable(QStringLiteral("Unexpected format: ") + rendered));
 }
 
 // ─── CoverFlowWidget public surface ───────────────────────────────────────
@@ -133,7 +131,8 @@ void TestDetailsPaneCoverflow::coverflow_setSelectedIndexClampsToValidRange() {
   // (in [0, cardCount-1]) or at minimum be the prior valid value.
   w.setSelectedIndex(99, false);
   QVERIFY2(w.selectedIndex() >= 0 && w.selectedIndex() < w.cardCount(),
-           qPrintable(QStringLiteral("Out-of-range setSelectedIndex left widget at index %1 with cardCount %2")
+           qPrintable(QStringLiteral(
+                          "Out-of-range setSelectedIndex left widget at index %1 with cardCount %2")
                           .arg(w.selectedIndex())
                           .arg(w.cardCount())));
 }
@@ -163,8 +162,9 @@ void TestDetailsPaneCoverflow::coverflow_selectionChangeFromUserEmitsRequest() {
   // pointing at a valid card.
   if (spy.count() > 0) {
     const int idx = spy.takeFirst().at(0).toInt();
-    QVERIFY2(idx >= 0 && idx < w.cardCount(),
-             qPrintable(QStringLiteral("selectionChangeRequested emitted invalid index %1").arg(idx)));
+    QVERIFY2(
+        idx >= 0 && idx < w.cardCount(),
+        qPrintable(QStringLiteral("selectionChangeRequested emitted invalid index %1").arg(idx)));
   }
 }
 

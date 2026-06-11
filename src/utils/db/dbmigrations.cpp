@@ -192,7 +192,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 17;
+  constexpr int CURRENT_SCHEMA_VERSION = 18;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -293,54 +293,34 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
           // Lightweight metadata store for tracking background maintenance.
           // Note: This is intentionally a plain table (not PRAGMA-based) so it
           // can evolve without bumping user_version again.
-          ensureIndex(db,
-                      "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, "
-                      "value TEXT NOT NULL)",
-                      origin, "meta");
-
-          // Mark FTS as not-yet-ready and backfill incrementally on the scan
-          // worker. Avoid blocking app startup by running a full synchronous
-          // rebuild here.
-          ensureIndex(db,
-                      "INSERT OR IGNORE INTO meta(key, value) "
-                      "VALUES('items_fts_ready', '0')",
-                      origin, "meta items_fts_ready");
-          ensureIndex(db,
-                      "INSERT OR IGNORE INTO meta(key, value) "
-                      "VALUES('items_fts_indexed_up_to_id', '0')",
-                      origin, "meta items_fts_indexed_up_to_id");
-
-          // Keep the FTS index in sync with the items table.
-          ensureIndex(db,
-                      "CREATE TRIGGER IF NOT EXISTS items_fts_ai AFTER INSERT ON items "
-                      "BEGIN "
-                      "  INSERT INTO items_fts(rowid, name, path, collection_uuid) "
-                      "  VALUES (new.id, new.name, new.path, new.collection_uuid); "
-                      "END;",
-                      origin, "items_fts_ai");
-
-          ensureIndex(db,
-                      "CREATE TRIGGER IF NOT EXISTS items_fts_ad AFTER DELETE ON "
-                      "items BEGIN "
-                      "  INSERT INTO items_fts(items_fts, rowid, name, path, "
-                      "collection_uuid) "
-                      "  VALUES('delete', old.id, old.name, old.path, "
-                      "old.collection_uuid); "
-                      "END;",
-                      origin, "items_fts_ad");
-
-          ensureIndex(db,
-                      "CREATE TRIGGER IF NOT EXISTS items_fts_au AFTER UPDATE ON items "
-                      "BEGIN "
-                      "  INSERT INTO items_fts(items_fts, rowid, name, path, "
-                      "collection_uuid) "
-                      "  VALUES('delete', old.id, old.name, old.path, "
-                      "old.collection_uuid); "
-                      "  INSERT INTO items_fts(rowid, name, path, collection_uuid) "
-                      "  VALUES (new.id, new.name, new.path, new.collection_uuid); "
-                      "END;",
-                      origin, "items_fts_au");
-          return true;
+          // Mark FTS as not-yet-ready; population happens later on the scan
+          // worker (ensureItemsFtsReady). Avoid blocking app startup by
+          // running a full synchronous rebuild here.
+          //
+          // Kartend-4i5e4: the statements below are chained with && so a
+          // failure rolls the whole block back and v3 retries next launch —
+          // previously a discarded ensureIndex result could commit an FTS
+          // table with no sync triggers, leaving the index permanently stale.
+          // The triggers themselves are dropped again by v18 (and re-created
+          // atomically with the index rebuild in ensureItemsFtsReady); v3
+          // keeps creating them so its committed semantics stay intact for
+          // databases that stop migrating mid-ladder.
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, "
+                             "value TEXT NOT NULL)",
+                             origin, "meta") &&
+                 ensureIndex(db,
+                             "INSERT OR IGNORE INTO meta(key, value) "
+                             "VALUES('items_fts_ready', '0')",
+                             origin, "meta items_fts_ready") &&
+                 ensureIndex(db,
+                             "INSERT OR IGNORE INTO meta(key, value) "
+                             "VALUES('items_fts_indexed_up_to_id', '0')",
+                             origin, "meta items_fts_indexed_up_to_id") &&
+                 // Keep the FTS index in sync with the items table.
+                 ensureIndex(db, DbMigrations::kItemsFtsTriggerInsertSql, origin, "items_fts_ai") &&
+                 ensureIndex(db, DbMigrations::kItemsFtsTriggerDeleteSql, origin, "items_fts_ad") &&
+                 ensureIndex(db, DbMigrations::kItemsFtsTriggerUpdateSql, origin, "items_fts_au");
         })) {
       return;
     }
@@ -760,9 +740,42 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 17;
+  }
+
+  if (mutableVersion < 18) {
+    // v18 (Kartend-4i5e4): drop the eagerly-created items_fts sync triggers.
+    // v3 created them together with the EMPTY external-content FTS table, so
+    // until the deferred backfill finished, the AFTER UPDATE / AFTER DELETE
+    // triggers issued FTS5 'delete' commands for rows the index never held —
+    // documented FTS5 external-content corruption (newer SQLite detects it and
+    // fails the triggering items write with SQLITE_CORRUPT; older SQLite lets
+    // garbage postings accumulate). The triggers are re-created by
+    // QueryManager::ensureItemsFtsReady inside the SAME transaction as a
+    // one-shot index rebuild (INSERT INTO items_fts(items_fts)
+    // VALUES('rebuild')), so from then on trigger existence implies index
+    // consistency. Dropping them here also funnels every existing install —
+    // including ones whose index the old interplay already damaged — through
+    // that self-healing rebuild on next launch (the readiness check treats the
+    // legacy items_fts_ready='1' marker as not-ready).
+    //
+    // Writes that land between this migration and the rebuild are simply not
+    // FTS-indexed; the rebuild reads the items table and captures them. Search
+    // falls back to LIKE until the rebuild completes, as it always did while
+    // FTS was not ready.
+    if (!runBlock(db, 18, origin, [&]() -> bool {
+          return ensureIndex(db, "DROP TRIGGER IF EXISTS items_fts_ai", origin,
+                             "drop items_fts_ai") &&
+                 ensureIndex(db, "DROP TRIGGER IF EXISTS items_fts_ad", origin,
+                             "drop items_fts_ad") &&
+                 ensureIndex(db, "DROP TRIGGER IF EXISTS items_fts_au", origin,
+                             "drop items_fts_au");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v18 block stays a pure copy-paste.
-    mutableVersion = 17; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v19 block stays a pure copy-paste.
+    mutableVersion = 18; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

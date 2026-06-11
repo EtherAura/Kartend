@@ -5,6 +5,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/validationhelpers.h"
+#include "extensionutils.h"
 #include "idatabasemanager.h"
 #include "inavigationmanager.h"
 #include "interactionstateholder.h"
@@ -19,6 +20,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -247,10 +249,17 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
     if (!dir.exists()) {
       return false;
     }
-    const QStringList filters = collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
-    const QStringList files =
-        filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
-    return !files.isEmpty();
+    // Kartend-z6rnd: bounded existence probe instead of a full entryList()
+    // enumeration — this runs on the GUI thread on every collection switch /
+    // search-mode toggle, and a full readdir of a huge directory over
+    // NFS/SMB stalled the UI. QDirIterator::hasNext() stops at the FIRST
+    // matching entry. Glob composition goes through
+    // ExtensionUtils::toNameFilters (Kartend-693zb): extensions are stored
+    // bare ("bin") and the helper is the one place that prepends "*.",
+    // mirroring ScanService::buildNameFilters.
+    const QStringList nameFilters = ExtensionUtils::toNameFilters(collCfg.extensions);
+    QDirIterator it(mediaDir, nameFilters, QDir::Files | QDir::System);
+    return it.hasNext();
   };
 
   const bool result = compute();
