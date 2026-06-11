@@ -11,6 +11,7 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/launcherpreset.h"
+#include "dialogrunners.h"
 #include "errorutils.h"
 #include "kartmerge.h"
 #include "kartpreflight.h"
@@ -106,6 +107,12 @@ struct KartManagerSetup {
   /// import has already committed; this is informational only. Null in
   /// headless contexts — the issues still get logged.
   MissingLauncherPathsReporter missingLauncherPathsReporter;
+
+  /// Kartend-sqoq0: generic stock-modal runners for the import/export file
+  /// pickers and failure warnings. Null runners fall back to direct
+  /// QFileDialog / QMessageBox construction parented on getParentWindow(),
+  /// so headless contexts behave exactly as before.
+  DialogRunners dialogs;
 };
 
 /// Classify the imported manifest's externally-controlled path fields against
@@ -211,6 +218,11 @@ private:
   /// the user has effectively approved them before, so re-prompting on
   /// every re-import would be noise.
   [[nodiscard]] QSet<QString> previouslyTrustedLauncherPaths() const;
+
+  /// Kartend-sqoq0: warn via the owner-supplied runner when wired, else the
+  /// stock QMessageBox parented on getParentWindow() (shown only when a
+  /// parent exists, matching the pre-runner behavior).
+  void showWarning(const QString &title, const QString &text);
 };
 
 } // namespace kart

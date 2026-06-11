@@ -28,7 +28,76 @@
 #include <QThreadPool>
 
 #include <QLoggingCategory>
+#include <QReadWriteLock>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
+
+/// Shared, self-owned forwarding surface between the dispatcher and its
+/// worker tasks (Kartend-xoftg). Workers co-own this handle via shared_ptr
+/// capture (mirroring the generation-counter pattern) and route every
+/// disk-cache read through tryLoadFromDiskCache(); ~ArtworkLoadDispatcher
+/// invalidates the inner pointer before CacheManager can be destroyed later
+/// in ApplicationManager teardown, so a task abandoned by the bounded pool
+/// drain (threadpoolutils.h abandon-on-timeout contract) makes a guarded
+/// no-op call instead of dereferencing a freed cache.
+///
+/// Two layers of protection:
+///   - The atomic pointer is nulled first, so no NEW disk-cache read can
+///     begin after invalidate() starts (one cheap atomic load per item).
+///   - The read-write lock pins the cache for the duration of each read;
+///     invalidate() then waits (bounded) for the write lock, so an
+///     in-flight read that already entered the cache is drained rather
+///     than raced. Only a read wedged inside the cache beyond the quiesce
+///     budget retains the (loudly logged) residual risk.
+class ArtworkDispatcherCacheHandle {
+public:
+  explicit ArtworkDispatcherCacheHandle(ICacheManager *cacheManager)
+      : m_cacheManager(cacheManager) {}
+
+  /// Worker-side disk-cache read. Cost on the hot path is one tryLockForRead
+  /// (uncontended atomic CAS) plus one atomic load per item — negligible next
+  /// to the disk I/O it guards.
+  QImage tryLoadFromDiskCache(const QString &artworkPath) {
+    if (!m_pinLock.tryLockForRead()) {
+      // invalidate() holds (or is waiting on) the write lock: the cache is
+      // going away. Skip the disk cache; the caller falls back to decoding
+      // the original artwork file, which is owned by nobody we can outlive.
+      return {};
+    }
+    QImage img;
+    if (ICacheManager *cm = m_cacheManager.load(std::memory_order_acquire)) {
+      img = cm->tryLoadArtworkImageFromDiskCache(artworkPath);
+    }
+    m_pinLock.unlock();
+    return img;
+  }
+
+  /// Startup wiring only (Kartend-davi): rebinding while reads are in
+  /// flight would expose the previous pointer to the same lifetime hazard
+  /// invalidate() exists to close.
+  void setCacheManager(ICacheManager *cacheManager) {
+    m_cacheManager.store(cacheManager, std::memory_order_release);
+  }
+
+  /// Cuts workers off from the cache and waits (bounded) for any read that
+  /// already entered it to exit. Called from ~ArtworkLoadDispatcher, after
+  /// the pool drain attempt: if the pool drained, the write lock is free
+  /// and this is instant; if the pool was abandoned, the budget gives a
+  /// wedged in-cache read a last chance to finish before the cache dies.
+  void invalidate(int quiesceBudgetMs) {
+    m_cacheManager.store(nullptr, std::memory_order_release);
+    if (m_pinLock.tryLockForWrite(quiesceBudgetMs)) {
+      m_pinLock.unlock();
+    } else {
+      qCWarning(lcArtworkManager)
+          << "ArtworkDispatcherCacheHandle: abandoned artwork task still inside the disk cache"
+          << quiesceBudgetMs << "ms after invalidation; cache teardown may race the in-flight read";
+    }
+  }
+
+private:
+  std::atomic<ICacheManager *> m_cacheManager;
+  QReadWriteLock m_pinLock;
+};
 
 namespace {
 
@@ -78,10 +147,10 @@ inline bool isCancelledForGeneration(const std::atomic<quint64> &counter, quint6
   return counter.load(std::memory_order_acquire) != capturedGen;
 }
 
-QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
-                                                const std::atomic<quint64> &generationCounter,
-                                                quint64 capturedGeneration,
-                                                ICacheManager *cacheManager, qreal dpr) {
+QList<ArtworkInfo::Result>
+processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64> &generationCounter,
+                     quint64 capturedGeneration,
+                     const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle, qreal dpr) {
   // Worker-only contract: QImage is reentrant, QPixmap is not. Any code path
   // that reaches here on the GUI thread would risk a future maintainer
   // constructing QPixmap below, which Qt explicitly forbids off the main
@@ -99,12 +168,11 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
     if (info.mediaItem.isNull()) {
       continue;
     }
-    bool loadedFromDiskCache = false;
-    QImage img;
-    if (cacheManager) {
-      img = cacheManager->tryLoadArtworkImageFromDiskCache(info.artworkPath);
-      loadedFromDiskCache = !img.isNull();
-    }
+    // Disk-cache reads go through the shared handle, never a raw cache
+    // pointer — the handle is invalidated in ~ArtworkLoadDispatcher so a
+    // task abandoned by the bounded pool drain no-ops here (Kartend-xoftg).
+    QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(info.artworkPath) : QImage{};
+    const bool loadedFromDiskCache = !img.isNull();
     if (!loadedFromDiskCache) {
       img = loadAndProcessImage(info.artworkPath, dpr);
     }
@@ -139,10 +207,11 @@ QList<ArtworkInfo::Result> processBatchOnWorker(const QList<ArtworkInfo> &batch,
   return results;
 }
 
-QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
-                                                     const std::atomic<quint64> &generationCounter,
-                                                     quint64 capturedGeneration,
-                                                     ICacheManager *cacheManager, qreal dpr) {
+QList<ArtworkPrecacheResult>
+processPrecacheOnWorker(const QStringList &paths, const std::atomic<quint64> &generationCounter,
+                        quint64 capturedGeneration,
+                        const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle,
+                        qreal dpr) {
   // Worker-only contract — see processBatchOnWorker.
   Q_ASSERT_X(QThread::currentThread() != QCoreApplication::instance()->thread(),
              "processPrecacheOnWorker",
@@ -154,12 +223,9 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
         isCancelledForGeneration(generationCounter, capturedGeneration)) {
       break;
     }
-    bool loadedFromDiskCache = false;
-    QImage img;
-    if (cacheManager) {
-      img = cacheManager->tryLoadArtworkImageFromDiskCache(artworkPath);
-      loadedFromDiskCache = !img.isNull();
-    }
+    // Shared-handle disk-cache read — see processBatchOnWorker (Kartend-xoftg).
+    QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(artworkPath) : QImage{};
+    const bool loadedFromDiskCache = !img.isNull();
     if (!loadedFromDiskCache) {
       img = loadAndProcessImage(artworkPath, dpr);
     }
@@ -179,7 +245,7 @@ QList<ArtworkPrecacheResult> processPrecacheOnWorker(const QStringList &paths,
 } // namespace
 
 ArtworkLoadDispatcher::ArtworkLoadDispatcher(ICacheManager *cacheManager, QObject *parent)
-    : QObject(parent), m_cacheManager(cacheManager),
+    : QObject(parent), m_cacheHandle(std::make_shared<ArtworkDispatcherCacheHandle>(cacheManager)),
       m_currentGeneration(std::make_shared<std::atomic<quint64>>(0)) {
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
@@ -207,6 +273,18 @@ ArtworkLoadDispatcher::~ArtworkLoadDispatcher() {
                                 << "ms during shutdown; abandoning pool to avoid blocking exit";
   }
 
+  // Kartend-xoftg: cut abandoned tasks off from the cache BEFORE this
+  // destructor returns — CacheManager is destroyed later in
+  // ApplicationManager teardown, and an abandoned task's next disk-cache
+  // read must be a guarded no-op rather than a use-after-free. When the
+  // pool drained above, no worker exists and this is instant; on the
+  // abandon path the small quiesce budget drains a read that already
+  // entered the cache.
+  constexpr int kCacheQuiesceMs = 500;
+  if (m_cacheHandle) {
+    m_cacheHandle->invalidate(kCacheQuiesceMs);
+  }
+
   QMutexLocker futureLock(&m_futureMutex);
   for (auto &future : m_futures) {
     if (future.isRunning()) {
@@ -216,13 +294,21 @@ ArtworkLoadDispatcher::~ArtworkLoadDispatcher() {
   m_futures.clear();
 }
 
+void ArtworkLoadDispatcher::setCacheManager(ICacheManager *cacheManager) {
+  if (m_cacheHandle) {
+    m_cacheHandle->setCacheManager(cacheManager);
+  }
+}
+
 void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPriority,
                                           BatchHandler onComplete) {
   if (batch.isEmpty() || !m_threadPool) {
     return;
   }
 
-  ICacheManager *const cacheManager = m_cacheManager;
+  // Workers capture the shared handle, never a raw cache pointer — the
+  // dtor invalidates the handle so abandoned tasks no-op (Kartend-xoftg).
+  const auto cacheHandle = m_cacheHandle;
   const auto generationCounter = m_currentGeneration;
   // Snapshot the live generation at dispatch time. cancelAll() bumps the
   // counter atomically; this captures the value *now*, so this task only
@@ -242,7 +328,7 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
 
   QFuture<void> future = QtConcurrent::run(
       m_threadPool, [batch = std::move(batch), highPriority, generationCounter, generation,
-                     batchItemCount, appReceiver, cacheManager, handler, dpr]() {
+                     batchItemCount, appReceiver, cacheHandle, handler, dpr]() {
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
           return;
@@ -250,7 +336,7 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
         QElapsedTimer timer;
         timer.start();
         QList<ArtworkInfo::Result> results =
-            processBatchOnWorker(batch, *generationCounter, generation, cacheManager, dpr);
+            processBatchOnWorker(batch, *generationCounter, generation, cacheHandle, dpr);
         const qint64 elapsedMs = timer.elapsed();
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
@@ -285,7 +371,8 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
     return;
   }
 
-  ICacheManager *const cacheManager = m_cacheManager;
+  // Shared handle, not a raw cache pointer — see dispatchBatch (Kartend-xoftg).
+  const auto cacheHandle = m_cacheHandle;
   const auto generationCounter = m_currentGeneration;
   const quint64 generation =
       generationCounter ? generationCounter->load(std::memory_order_acquire) : quint64{0};
@@ -299,7 +386,7 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
 
   QFuture<void> future =
       QtConcurrent::run(m_threadPool, [paths = std::move(paths), generationCounter, generation,
-                                       batchItemCount, appReceiver, cacheManager, handler, dpr]() {
+                                       batchItemCount, appReceiver, cacheHandle, handler, dpr]() {
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
           return;
@@ -307,7 +394,7 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
         QElapsedTimer timer;
         timer.start();
         QList<ArtworkPrecacheResult> results =
-            processPrecacheOnWorker(paths, *generationCounter, generation, cacheManager, dpr);
+            processPrecacheOnWorker(paths, *generationCounter, generation, cacheHandle, dpr);
         const qint64 elapsedMs = timer.elapsed();
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {

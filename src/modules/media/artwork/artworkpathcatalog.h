@@ -23,6 +23,16 @@ class ArtworkPathCatalog {
 public:
   ArtworkPathCatalog() = default;
 
+  /// Drains ALL in-flight build tasks, not just the most recent one. A
+  /// superseded build (rapid collection switch) keeps running after the
+  /// owner's QFutureWatcher stops watching it — generation-guarded, but it
+  /// still locks m_mutex and reads m_buildGeneration, so it must never
+  /// outlive this object (Kartend-lz1zp).
+  ~ArtworkPathCatalog();
+
+  ArtworkPathCatalog(const ArtworkPathCatalog &) = delete;
+  ArtworkPathCatalog &operator=(const ArtworkPathCatalog &) = delete;
+
   /// Walks @p collections from @p currentIndex to populate the path list.
   /// Includes descendants when showAllSubcollectionItems is set. Kartend-cl86n:
   /// the directory enumeration runs off the calling thread — this clears the
@@ -79,6 +89,10 @@ private:
   /// so a superseded build (rapid collection switch) can't pour stale paths
   /// into the list the newer build just cleared.
   int m_buildGeneration = 0;
+  /// Every live build future, including superseded ones (Kartend-lz1zp).
+  /// Pruned of finished entries on each new build; drained in the dtor.
+  /// Guarded by m_mutex.
+  QList<QFuture<void>> m_inFlightBuilds;
 };
 
 #endif // ARTWORKPATHCATALOG_H

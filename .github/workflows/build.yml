@@ -43,14 +43,16 @@ concurrency:
 jobs:
   script-lint:
     runs-on: ubuntu-24.04
-    # Fast, build-independent preflight: shellcheck every .scripts shell file.
-    # Split out from maintenance-check (~52 min) so a shell typo fails in ~30s.
-    timeout-minutes: 5
+    # Fast, build-independent preflight: shellcheck, clang-format, and the
+    # python/metadata guardrails. Split out from maintenance-check (~52 min)
+    # so a shell typo / one-line formatting drift / layering violation fails
+    # in ~30s instead of costing a contributor an hour of CI (Kartend-cifqk).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install shellcheck
-        run: command -v shellcheck >/dev/null 2>&1 || sudo apt-get install -y --no-install-recommends shellcheck
+      - name: Install lint dependencies
+        run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils
 
       - name: Shellcheck
         # -x follows `source` directives into .scripts/lib/*.sh so build.sh is
@@ -63,6 +65,41 @@ jobs:
           shellcheck -x .scripts/*.sh .scripts/lib/*.sh \
             .scripts/git-hooks/pre-commit .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh
 
+      - name: clang-format check (v19 pin)
+        # Kartend-cifqk: moved out of maintenance-check — the format check is
+        # purely file-based (no compdb), so failing it behind a ~52-minute
+        # clang build wasted an hour per drifted PR. Same v19 pin + file walk
+        # as .scripts/lib/quality.sh's do_clang_format, but ENFORCING.
+        run: |
+          clang-format-19 --version
+          fail=0
+          while IFS= read -r -d '' file; do
+            if ! clang-format-19 --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+              echo "::error file=$file::not formatted with clang-format-19 (run .scripts/build.sh --format-apply)"
+              fail=1
+            fi
+          done < <(find src tests \( -name '*.cpp' -o -name '*.h' \) -print0)
+          exit $fail
+
+      - name: Check module layering
+        # Build-independent guardrail (moved from maintenance-check,
+        # Kartend-cifqk — same below).
+        run: python3 .scripts/check-layering.py
+
+      - name: Check QTimer::singleShot 'why' comments
+        run: python3 .scripts/check-singleshot-comments.py
+
+      - name: Check src/modules ↔ tests/modules mapping
+        run: python3 .scripts/check-test-mapping.py
+
+      - name: Check bd issue ID leakage to user-facing surfaces
+        run: python3 .scripts/check-bd-id-leakage.py
+
+      - name: Validate AppStream + desktop metadata
+        run: |
+          appstreamcli validate --pedantic packaging/*.metainfo.xml
+          desktop-file-validate packaging/*.desktop
+
   build:
     runs-on: ubuntu-24.04
     # Catch a hung build/test before it burns the 6h default. ~30 min covers
@@ -74,6 +111,14 @@ jobs:
       matrix:
         build_type: [Release, Debug]
         compiler: [gcc, clang]
+        # Kartend-d00xf: the plain Debug×clang cell is dropped — clang Debug
+        # is already exercised (with far stricter checking) by the sanitizers
+        # and thread-sanitizer jobs below, so the cell only duplicated their
+        # compile coverage. Release×clang stays: it is the only optimized
+        # clang build in the matrix and feeds the maintenance toolchain match.
+        exclude:
+          - build_type: Debug
+            compiler: clang
         include:
           - compiler: gcc
             cc: gcc
@@ -111,6 +156,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Create build directory
@@ -218,6 +265,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake
@@ -281,6 +330,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Create build directory
@@ -373,6 +424,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake (Debug + TSan)
@@ -418,13 +471,47 @@ jobs:
 
   maintenance-check:
     runs-on: ubuntu-24.04
-    # clang-tidy maintenance build is the slowest Linux job (~52 min observed);
-    # 90 absorbs cold-ccache variance without false-failing a healthy run.
-    timeout-minutes: 90
+    # clang-tidy maintenance build is the slowest Linux job (~52 min observed
+    # for src/ alone; Kartend-rni3g added the ~430 test TUs, roughly doubling
+    # the analyzed set). 150 absorbs the grown run + cold-ccache variance;
+    # tighten once a few post-rni3g runs establish the new baseline.
+    # Kartend-z4ev0: on pull_request the clang-tidy pass is diff-scoped to the
+    # changed .cpp TUs (see the "Compute clang-tidy diff scope" step), so PR
+    # runs are dominated by the build, not the analysis; the full ~1430-TU
+    # sweep still runs on every push to main. The timeout stays sized for the
+    # full-sweep push runs.
+    timeout-minutes: 150
 
     steps:
       - uses: actions/checkout@v6
-      
+        with:
+          # Full history so the diff-scope step below can resolve the merge
+          # base against the PR's target branch (origin/$GITHUB_BASE_REF...HEAD).
+          fetch-depth: 0
+
+      - name: Compute clang-tidy diff scope (PRs only)
+        # Kartend-z4ev0: restrict the PR clang-tidy pass to the .cpp TUs the
+        # PR actually changed (vs the merge base). The list is consumed by
+        # .scripts/build.sh via KARTEND_TIDY_ONLY_FILES; push-to-main runs
+        # skip this step, leave the env unset, and keep the full sweep.
+        # KNOWN LIMITATION (kept simple on purpose): a changed header does
+        # NOT pull its including TUs into the scope — header-only regressions
+        # are caught by the full sweep on main after merge. An empty list
+        # (e.g. a docs-only PR reaching this job) short-circuits cleanly
+        # inside do_clang_tidy. cppcheck and IWYU intentionally stay
+        # full-scope: cppcheck runs off the compdb project view and IWYU off
+        # iwyu_tool, so per-file scoping is not a trivial drop-in for either.
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${GITHUB_BASE_REF}"
+          git diff --name-only --diff-filter=d \
+            "origin/${GITHUB_BASE_REF}...HEAD" -- '*.cpp' \
+            > "$RUNNER_TEMP/tidy-changed-tus.txt"
+          echo "KARTEND_TIDY_ONLY_FILES=$RUNNER_TEMP/tidy-changed-tus.txt" >> "$GITHUB_ENV"
+          echo "Changed .cpp TUs vs origin/${GITHUB_BASE_REF}:"
+          cat "$RUNNER_TEMP/tidy-changed-tus.txt"
+          echo "($(wc -l < "$RUNNER_TEMP/tidy-changed-tus.txt") TU(s) in scope)"
+
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
@@ -450,48 +537,26 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
           
-      - name: Check module layering
-        # Fails if the foundation layer (src/utils/) reaches upward into
-        # src/modules|ui|core. Cheap, build-independent guardrail.
-        run: python3 .scripts/check-layering.py
-
-      - name: Check QTimer::singleShot 'why' comments
-        # Project rule: every QTimer::singleShot call must carry a preceding
-        # comment explaining WHY the delay exists (event-loop defer, layout
-        # settle, reentrancy break, ...). Build-independent grep, <1s.
-        run: python3 .scripts/check-singleshot-comments.py
-
-      - name: Check src/modules ↔ tests/modules mapping
-        # Catches drift between src/modules/<group>/<feature>/ and
-        # tests/modules/<feature>/. Integration-only features are
-        # allowlisted in the script. Build-independent, <1s.
-        run: python3 .scripts/check-test-mapping.py
-
-      - name: Check bd issue ID leakage to user-facing surfaces
-        # Blocks `Kartend-XXXX` issue IDs from landing in user-visible
-        # surfaces (readme.md, docs/user/*.md wiki content, AppStream
-        # metadata). Allowed in code comments / CHANGELOG / dev docs.
-        # See CONTRIBUTING.md → "Issue tracking conventions".
-        run: python3 .scripts/check-bd-id-leakage.py
-
-      - name: Validate AppStream + desktop metadata
-        # appstreamcli validate (--pedantic) is the Flathub/distro gate;
-        # desktop-file-validate catches malformed .desktop entries. Both are
-        # cheap and build-independent. Previously unchecked — release.yml only
-        # compared the latest <release> version to the tag, so malformed
-        # metainfo could ship. The one --pedantic note here
-        # (cid-contains-uppercase-letter) is inherent to the EtherAura GitHub
-        # namespace and is informational only; appstreamcli still exits 0.
-        run: |
-          sudo apt-get install -y --no-install-recommends appstream desktop-file-utils
-          appstreamcli validate --pedantic packaging/*.metainfo.xml
-          desktop-file-validate packaging/*.desktop
+      # The build-independent guardrails (layering, singleshot comments,
+      # test mapping, bd-id leakage, AppStream/desktop validation) and the
+      # clang-format check moved to the fast script-lint job
+      # (Kartend-cifqk) — failing them behind this job's ~52-minute clang
+      # build cost an hour per trivially-broken PR.
 
       - name: Run maintenance build script
+        # --tests (Kartend-rni3g): configure with KARTEND_BUILD_TESTS=ON so
+        # compile_commands.json includes the ~430 test TUs and clang-tidy /
+        # cppcheck / IWYU analyze the hand-maintained test tree too (it was a
+        # complete static-analysis blind spot). Expected cost: the analysis
+        # roughly doubles its TU count; the timeout below already
+        # accommodates it. --format-check moved to script-lint
+        # (Kartend-cifqk).
         run: |
-          bash .scripts/build.sh --maintenance --format-check
+          bash .scripts/build.sh --maintenance --tests
 
       - name: Surface promoted-error clang-tidy findings
         if: ${{ failure() }}
@@ -534,7 +599,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Qt 6.7 LTS
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           version: '6.7.*'
           host: windows
@@ -549,9 +614,18 @@ jobs:
           cache: true
 
       - name: Setup MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
         with:
           arch: x64
+
+      # Kartend-t2w4i: MSVC compiler cache. The Linux legs have had
+      # content-addressed ccache from the start; this leg recompiled all
+      # ~1000 TUs from scratch every run (~45 min warm). sccache supports
+      # MSVC; mozilla/sccache-action installs the binary and wires the
+      # GitHub Actions cache backend (SCCACHE_GHA_ENABLED) so no separate
+      # actions/cache block is needed for the object cache.
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
 
       # vcpkg is preinstalled on windows-latest at C:\vcpkg. Cache the
       # downloads + per-package binary outputs keyed on the manifest
@@ -579,16 +653,25 @@ jobs:
         # SDL2 and zstd.
         env:
           VCPKG_BINARY_SOURCES: 'clear;files,${{ github.workspace }}\vcpkg-cache,readwrite'
+          SCCACHE_GHA_ENABLED: 'true'
         run: |
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DKARTEND_BUILD_TESTS=ON `
             -DKARTEND_ENABLE_CCACHE=OFF `
             -DKARTEND_PORTABLE_RELEASE=ON `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build (kartend + tests)
+        env:
+          SCCACHE_GHA_ENABLED: 'true'
         run: cmake --build build --parallel
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats
 
       - name: Run tests
         # QT_QPA_PLATFORM=offscreen mirrors every Linux ctest invocation —
@@ -678,7 +761,7 @@ jobs:
             unzip p7zip-full
 
       - name: Install Qt 6.8
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           version: '6.8.*'
           host: linux
@@ -703,6 +786,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake
@@ -755,7 +840,7 @@ jobs:
         run: brew install ninja ccache zstd
 
       - name: Install Qt 6.8
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           version: '6.8.*'
           host: mac
@@ -777,6 +862,8 @@ jobs:
       - name: Configure ccache
         run: |
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake

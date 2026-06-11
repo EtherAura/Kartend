@@ -432,19 +432,35 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex, cons
   return {};
 }
 
+// Kartend-sqoq0: route the warning through the owner-supplied runner when
+// wired; otherwise fall back to the stock QMessageBox parented on
+// getParentWindow() — shown only when a parent exists, matching the
+// pre-runner behavior (headless contexts stayed silent).
+void KartManager::showWarning(const QString &title, const QString &text) {
+  if (m_setup.dialogs.warn) {
+    m_setup.dialogs.warn(title, text);
+    return;
+  }
+  QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
+  if (parent) {
+    QMessageBox::warning(parent, title, text);
+  }
+}
+
 void KartManager::importInteractive() {
   QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
 
   const QString kartPath =
-      QFileDialog::getOpenFileName(parent, tr("Import Kart"), QString(), tr("Kart files (*.kart)"));
+      m_setup.dialogs.getOpenFileName
+          ? m_setup.dialogs.getOpenFileName(tr("Import Kart"), QString(), tr("Kart files (*.kart)"))
+          : QFileDialog::getOpenFileName(parent, tr("Import Kart"), QString(),
+                                         tr("Kart files (*.kart)"));
   if (kartPath.isEmpty()) return;
 
   auto peeked = KartReader::peekManifest(kartPath);
   if (peeked.isError()) {
     emit importFailed(peeked.error());
-    if (parent) {
-      QMessageBox::warning(parent, tr("Import Kart"), peeked.error().message);
-    }
+    showWarning(tr("Import Kart"), peeked.error().message);
     return;
   }
 
@@ -472,9 +488,12 @@ void KartManager::importInteractive() {
 
   const QString suggested = QDir::homePath() + "/" +
                             (peeked.value().name.isEmpty() ? QString("kart") : peeked.value().name);
-  const QString destDir = QFileDialog::getExistingDirectory(
-      parent, tr("Choose import destination"), suggested,
-      QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+  const QString destDir =
+      m_setup.dialogs.getExistingDirectory
+          ? m_setup.dialogs.getExistingDirectory(tr("Choose import destination"), suggested)
+          : QFileDialog::getExistingDirectory(parent, tr("Choose import destination"), suggested,
+                                              QFileDialog::ShowDirsOnly |
+                                                  QFileDialog::DontResolveSymlinks);
   if (destDir.isEmpty()) return;
 
   runImport(kartPath, destDir);
@@ -483,22 +502,22 @@ void KartManager::importInteractive() {
 void KartManager::exportCollectionInteractive(int collectionIndex) {
   QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
   if (!m_setup.getCollections) {
-    if (parent) {
-      QMessageBox::warning(parent, tr("Export Kart"), tr("KartManager not wired"));
-    }
+    showWarning(tr("Export Kart"), tr("KartManager not wired"));
     return;
   }
   QList<CollectionConfig> *collections = m_setup.getCollections();
   if (!collections || collectionIndex < 0 || collectionIndex >= collections->size()) {
-    if (parent) {
-      QMessageBox::warning(parent, tr("Export Kart"), tr("No collection selected"));
-    }
+    showWarning(tr("Export Kart"), tr("No collection selected"));
     return;
   }
   const QString suggestedName = collections->at(collectionIndex).name + ".kart";
-  const QString outPath = QFileDialog::getSaveFileName(parent, tr("Export Collection as Kart"),
-                                                       QDir::homePath() + "/" + suggestedName,
-                                                       tr("Kart files (*.kart)"));
+  const QString suggestedPath = QDir::homePath() + "/" + suggestedName;
+  const QString outPath =
+      m_setup.dialogs.getSaveFileName
+          ? m_setup.dialogs.getSaveFileName(tr("Export Collection as Kart"), suggestedPath,
+                                            tr("Kart files (*.kart)"))
+          : QFileDialog::getSaveFileName(parent, tr("Export Collection as Kart"), suggestedPath,
+                                         tr("Kart files (*.kart)"));
   if (outPath.isEmpty()) return;
 
   runExport(collectionIndex, outPath);
@@ -528,13 +547,9 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
             if (extracted.isError()) {
               emit importFailed(extracted.error());
               emit kartProgressFailed();
-              QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
-              if (parent) {
-                QMessageBox::warning(parent, tr("Import Kart"), extracted.error().message);
-              }
+              showWarning(tr("Import Kart"), extracted.error().message);
               return;
             }
-            QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
             // Kartend-s6mj: ask the user before importing a .kart whose
             // launcher / icon / placeholder paths fall outside the safe
             // allowlist. The pre-extracted manifest's collectionConfig
@@ -564,9 +579,7 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
             if (finalRes.isError()) {
               emit importFailed(finalRes.error());
               emit kartProgressFailed();
-              if (parent) {
-                QMessageBox::warning(parent, tr("Import Kart"), finalRes.error().message);
-              }
+              showWarning(tr("Import Kart"), finalRes.error().message);
               return;
             }
             emit kartProgressFinished();
@@ -602,10 +615,7 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
             if (res.isError()) {
               emit exportFailed(res.error());
               emit kartProgressFailed();
-              QWidget *parent = m_setup.getParentWindow ? m_setup.getParentWindow() : nullptr;
-              if (parent) {
-                QMessageBox::warning(parent, tr("Export Kart"), res.error().message);
-              }
+              showWarning(tr("Export Kart"), res.error().message);
             } else {
               emit kartProgressFinished();
               emit kartExported(outPath);

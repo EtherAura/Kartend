@@ -1,4 +1,5 @@
 #include <QImageReader>
+#include <QRegularExpression>
 #include <QTest>
 
 #include "extensionutils.h"
@@ -17,6 +18,11 @@ private slots:
   void webpIsAlwaysDecodable();
   void avifTracksRuntimePluginSupport();
   void videoBaseExtensions_returnsKnownExtensions();
+  void normalizeStoredExtensions_canonicalizesToBare();
+  void normalizeStoredExtensions_isIdempotent();
+  void parseUserExtensionList_handlesSeparatorsAndForms();
+  void toNameFilters_singleGlobPrefixFromAnyForm();
+  void nameFiltersMatchSingleDotFilenames();
 };
 
 void TestExtensionUtils::imagePathsAreDecodable() {
@@ -84,6 +90,64 @@ void TestExtensionUtils::videoBaseExtensions_returnsKnownExtensions() {
   QVERIFY(exts.contains(QStringLiteral("mkv")));
   QVERIFY(exts.contains(QStringLiteral("mov")));
   QVERIFY(exts.contains(QStringLiteral("avi")));
+}
+
+// Kartend-693zb: the canonical stored form for collection extensions is
+// BARE lowercase ("mp4"). The old canonical glob form ("*.mp4") made every
+// consumer that prepends "*." compose the never-matching "*.*.mp4" — Qt
+// wildcard matching requires TWO literal dots for that pattern, so
+// extension-filtered scans found nothing after an INI round-trip.
+void TestExtensionUtils::normalizeStoredExtensions_canonicalizesToBare() {
+  const QStringList raw = {QStringLiteral("*.MP4"),
+                           QStringLiteral(".mkv"),
+                           QStringLiteral(" avi "),
+                           QStringLiteral("mp4"),
+                           QString(),
+                           QStringLiteral("  ")};
+  const QStringList expected = {QStringLiteral("mp4"), QStringLiteral("mkv"),
+                                QStringLiteral("avi")};
+  QCOMPARE(ExtensionUtils::normalizeStoredExtensions(raw), expected);
+}
+
+void TestExtensionUtils::normalizeStoredExtensions_isIdempotent() {
+  // The INI load path normalizes on every startup and rewrites when the
+  // result differs — a non-idempotent normalize would rewrite forever.
+  const QStringList once =
+      ExtensionUtils::normalizeStoredExtensions({QStringLiteral("*.mp4"), QStringLiteral("Mkv")});
+  QCOMPARE(ExtensionUtils::normalizeStoredExtensions(once), once);
+}
+
+void TestExtensionUtils::parseUserExtensionList_handlesSeparatorsAndForms() {
+  const QStringList parsed =
+      ExtensionUtils::parseUserExtensionList(QStringLiteral("mp4, *.MKV; .avi\tmov  mp4"));
+  const QStringList expected = {QStringLiteral("mp4"), QStringLiteral("mkv"), QStringLiteral("avi"),
+                                QStringLiteral("mov")};
+  QCOMPARE(parsed, expected);
+}
+
+void TestExtensionUtils::toNameFilters_singleGlobPrefixFromAnyForm() {
+  // Glob composition must be tolerant of every historical stored form so a
+  // pre-fix glob token can never double-prefix.
+  const QStringList filters = ExtensionUtils::toNameFilters(
+      {QStringLiteral("mp4"), QStringLiteral("*.mkv"), QStringLiteral(".avi"), QString()});
+  const QStringList expected = {QStringLiteral("*.mp4"), QStringLiteral("*.mkv"),
+                                QStringLiteral("*.avi")};
+  QCOMPARE(filters, expected);
+}
+
+void TestExtensionUtils::nameFiltersMatchSingleDotFilenames() {
+  // The empirical core of Kartend-693zb: "*.mp4" matches "video.mp4" but
+  // "*.*.mp4" does not. Pin the composed filter against Qt's own matcher.
+  const QStringList filters =
+      ExtensionUtils::toNameFilters({QStringLiteral("*.mp4")}); // worst-case legacy form
+  QCOMPARE(filters, QStringList{QStringLiteral("*.mp4")});
+  const QRegularExpression rx =
+      QRegularExpression::fromWildcard(filters.first(), Qt::CaseInsensitive);
+  QVERIFY(rx.match(QStringLiteral("video.mp4")).hasMatch());
+  // And the pre-fix composed pattern really never matched single-dot names.
+  const QRegularExpression broken =
+      QRegularExpression::fromWildcard(QStringLiteral("*.*.mp4"), Qt::CaseInsensitive);
+  QVERIFY(!broken.match(QStringLiteral("video.mp4")).hasMatch());
 }
 
 QTEST_MAIN(TestExtensionUtils)

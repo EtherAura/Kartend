@@ -4,8 +4,12 @@
 // databasemanager.cpp — see that TU's header comment for the responsibility map.
 #include "databasemanager.h"
 
+#include "dbtxn.h"
+
+#include <algorithm>
 #include <stdexcept>
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QSet>
 #include <QSqlError>
@@ -90,12 +94,8 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
   if (!m_db.isOpen()) {
     return;
   }
-  if (!m_db.transaction()) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                      "Failed to start database transaction",
-                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
-                   .withDetails(m_db.lastError().text());
-    ErrorUtils::logError(err);
+  KartendDb::DbTransaction txn(m_db, "DatabaseManager::clearCollectionFromDatabaseByUuid");
+  if (!txn.activeOrReport("Failed to start database transaction")) {
     return;
   }
   try {
@@ -111,12 +111,11 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
     if (!delc.exec()) {
       throw std::runtime_error(delc.lastError().text().toStdString());
     }
-    if (!m_db.commit()) {
+    if (!txn.commit()) {
       throw std::runtime_error(m_db.lastError().text().toStdString());
     }
     m_metadataCache.invalidateCollection(collectionUuid);
   } catch (const std::exception &e) {
-    m_db.rollback();
     auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
                                       "Failed to clear collection from database",
                                       "DatabaseManager::clearCollectionFromDatabaseByUuid")
@@ -129,11 +128,8 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
   if (!m_db.isOpen() || oldUuid.isEmpty() || newUuid.isEmpty() || oldUuid == newUuid) {
     return;
   }
-  if (!m_db.transaction()) {
-    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                                "Failed to start database transaction",
-                                                "DatabaseManager::migrateCollectionUuid")
-                             .withDetails(m_db.lastError().text()));
+  KartendDb::DbTransaction txn(m_db, "DatabaseManager::migrateCollectionUuid");
+  if (!txn.activeOrReport("Failed to start database transaction")) {
     return;
   }
   try {
@@ -212,13 +208,12 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
     run("DELETE FROM collections WHERE uuid=?", {newUuid});
     run("UPDATE collections SET uuid=? WHERE uuid=?", {newUuid, oldUuid});
 
-    if (!m_db.commit()) {
+    if (!txn.commit()) {
       throw std::runtime_error(m_db.lastError().text().toStdString());
     }
     m_metadataCache.invalidateCollection(oldUuid);
     m_metadataCache.invalidateCollection(newUuid);
   } catch (const std::exception &e) {
-    m_db.rollback();
     ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
                                                 "Failed to migrate collection uuid",
                                                 "DatabaseManager::migrateCollectionUuid")
@@ -293,6 +288,162 @@ DatabaseManager::loadItemStateFlagsForCollection(const QString &collectionUuid) 
   return out;
 }
 
+namespace {
+
+/// Meta-table key for the purge gate (Kartend-dbqt5): SHA-1 of the sorted
+/// live-uuid set the last successful purge ran against. When the set is
+/// unchanged since then, the orphan scan is provably a no-op and is skipped.
+const QString kOrphanPurgeHashKey = QStringLiteral("orphan_purge_uuid_set_hash");
+
+QString readMetaValueOn(QSqlDatabase &db, const QString &key) {
+  QSqlQuery q(db);
+  q.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT "
+                        "NOT NULL DEFAULT '')"));
+  q.prepare(QStringLiteral("SELECT value FROM meta WHERE key = ?"));
+  q.addBindValue(key);
+  if (q.exec() && q.next()) {
+    return q.value(0).toString();
+  }
+  return {};
+}
+
+/// Body of the orphan purge, run on the WORKER connection via
+/// queueWorkerWrite (Kartend-dbqt5 — this used to run synchronously on the
+/// GUI-thread connection right after first paint, stalling the UI for
+/// multiple seconds on large libraries).
+void purgeOrphanRowsOnConnection(QSqlDatabase &db, const QSet<QString> &liveUuids,
+                                 const QString &uuidSetHash) {
+  using ErrorUtils::ErrorCode;
+  using ErrorUtils::ErrorContext;
+
+  if (!db.isOpen() || liveUuids.isEmpty()) {
+    return;
+  }
+
+  // Gate (Kartend-dbqt5): skip the multi-second table scans when the live
+  // collection set hasn't changed since the last successful purge — the
+  // overwhelming majority of launches.
+  if (readMetaValueOn(db, kOrphanPurgeHashKey) == uuidSetHash) {
+    return;
+  }
+
+  // Kartend-yyudl: purge every table keyed by a collection uuid, not just
+  // items + collections — child rows (scraped metadata, artwork overrides,
+  // launch history, playlist entries) otherwise leak forever once their
+  // collection is removed. This is deliberate clean-delete semantics; the
+  // re-key path for deliberate renames is migrateCollectionUuid above.
+  // file_hash_cache is excluded: it is keyed by absolute path only (no
+  // uuid column) and self-validates via size+mtime.
+  const QList<QPair<QString, QString>> targets = {
+      {QStringLiteral("items"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("collections"), QStringLiteral("uuid")},
+      {QStringLiteral("item_metadata"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("item_artwork"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("launch_history"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("playlist_items"), QStringLiteral("source_collection_uuid")}};
+
+  // The inline NOT IN (?, …) form binds one variable per live uuid. With
+  // hundreds of collections (each contributing up to two uuids) that count
+  // approaches SQLite's 999-variable cap (KartendDb::BatchSizes::
+  // SqliteVariableLimit), at which point the DELETE fails with "too many SQL
+  // variables" and orphan rows are never purged. Past a batch's worth of
+  // uuids, switch to the temp-table form: feed a purge-owned temp table in
+  // bounded batches, then DELETE … NOT IN (SELECT uuid FROM …), which
+  // carries no per-uuid binds in the DELETE itself. (Deliberately NOT the
+  // worker's query_uuids table — its contents back cached query scopes.)
+  const bool useTempTable = liveUuids.size() > KartendDb::BatchSizes::UuidListBatch;
+
+  KartendDb::DbTransaction txn(db, "DatabaseManager::purgeOrphanCollectionData");
+  if (!txn.activeOrReport("Failed to start database transaction")) {
+    return;
+  }
+  try {
+    if (useTempTable) {
+      QSqlQuery ddl(db);
+      if (!ddl.exec(QStringLiteral(
+              "CREATE TEMP TABLE IF NOT EXISTS purge_live_uuids (uuid TEXT PRIMARY KEY)"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
+      }
+      // Clear any rows left from a previous purge on this connection.
+      if (!ddl.exec(QStringLiteral("DELETE FROM purge_live_uuids"))) {
+        throw std::runtime_error(ddl.lastError().text().toStdString());
+      }
+      const QStringList uuidList(liveUuids.cbegin(), liveUuids.cend());
+      constexpr int kBatch = KartendDb::BatchSizes::UuidListBatch;
+      for (qsizetype start = 0; start < uuidList.size(); start += kBatch) {
+        const qsizetype end = qMin(start + kBatch, uuidList.size());
+        QStringList placeholders;
+        placeholders.reserve(end - start);
+        for (qsizetype i = start; i < end; ++i) {
+          placeholders << QStringLiteral("(?)");
+        }
+        QSqlQuery ins(db);
+        ins.prepare(QStringLiteral("INSERT OR IGNORE INTO purge_live_uuids (uuid) VALUES ") +
+                    placeholders.join(QStringLiteral(", ")));
+        for (qsizetype i = start; i < end; ++i) {
+          ins.addBindValue(uuidList.at(i));
+        }
+        if (!ins.exec()) {
+          throw std::runtime_error(ins.lastError().text().toStdString());
+        }
+      }
+      for (const auto &target : targets) {
+        QSqlQuery del(db);
+        del.prepare(
+            QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN (SELECT uuid FROM purge_live_uuids)")
+                .arg(target.first, target.second));
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
+      }
+    } else {
+      // Small uuid counts stay well under the bind cap — a bound inline IN
+      // clause is fine (no temp-table overhead).
+      QStringList placeholders;
+      placeholders.reserve(liveUuids.size());
+      for (int i = 0; i < liveUuids.size(); ++i) {
+        placeholders << QStringLiteral("?");
+      }
+      const QString inClause =
+          QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
+      for (const auto &target : targets) {
+        QSqlQuery del(db);
+        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
+                        .arg(target.first, target.second, inClause));
+        for (const QString &uuid : liveUuids) {
+          del.addBindValue(uuid);
+        }
+        if (!del.exec()) {
+          throw std::runtime_error(del.lastError().text().toStdString());
+        }
+      }
+    }
+    // Stamp the gate INSIDE the purge transaction so a crash between purge
+    // and stamp can't record a purge that never committed (the
+    // watermark-outside-txn failure mode flagged on the FTS backfill,
+    // Kartend-4i5e4).
+    {
+      QSqlQuery stamp(db);
+      stamp.prepare(QStringLiteral("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)"));
+      stamp.addBindValue(kOrphanPurgeHashKey);
+      stamp.addBindValue(uuidSetHash);
+      if (!stamp.exec()) {
+        throw std::runtime_error(stamp.lastError().text().toStdString());
+      }
+    }
+    if (!txn.commit()) {
+      throw std::runtime_error(db.lastError().text().toStdString());
+    }
+  } catch (const std::exception &e) {
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to purge orphan collection data",
+                                                "DatabaseManager::purgeOrphanCollectionData")
+                             .withDetails(ErrorUtils::exceptionMessage(e)));
+  }
+}
+
+} // namespace
+
 void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) {
   // Derive the uuid set to keep. A collection's uuid is
   // hash(name, mediaDir); different scan paths feed either the raw or
@@ -312,102 +463,30 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
   // An empty live set means "no collections" — but that is also the
   // transient state during early startup, so refuse to nuke every
   // row on it. A genuinely empty library has nothing to purge anyway.
-  if (!m_db.isOpen() || liveUuids.isEmpty()) {
+  if (liveUuids.isEmpty()) {
     return;
   }
 
-  // items keys on `collection_uuid`, collections on `uuid`.
-  const QList<QPair<QString, QString>> targets = {
-      {QStringLiteral("items"), QStringLiteral("collection_uuid")},
-      {QStringLiteral("collections"), QStringLiteral("uuid")}};
+  // Stable fingerprint of the live set for the skip-gate (sorted so QSet
+  // iteration order can't produce spurious mismatches).
+  QStringList sorted(liveUuids.cbegin(), liveUuids.cend());
+  std::sort(sorted.begin(), sorted.end());
+  const QString uuidSetHash = QString::fromLatin1(
+      QCryptographicHash::hash(sorted.join(QLatin1Char('\n')).toUtf8(), QCryptographicHash::Sha1)
+          .toHex());
 
-  // The inline NOT IN (?, …) form binds one variable per live uuid. With
-  // hundreds of collections (each contributing up to two uuids) that count
-  // approaches SQLite's 999-variable cap (KartendDb::BatchSizes::
-  // SqliteVariableLimit), at which point the DELETE fails with "too many SQL
-  // variables" and orphan rows are never purged. Past a batch's worth of
-  // uuids, switch to the temp-table form: feed query_uuids in bounded batches,
-  // then DELETE … NOT IN (SELECT uuid FROM query_uuids), which carries no
-  // per-uuid binds in the DELETE itself.
-  const bool useTempTable = liveUuids.size() > KartendDb::BatchSizes::UuidListBatch;
-
-  if (!m_db.transaction()) {
-    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                                "Failed to start database transaction",
-                                                "DatabaseManager::purgeOrphanCollectionData")
-                             .withDetails(m_db.lastError().text()));
-    return;
-  }
-  try {
-    if (useTempTable) {
-      QSqlQuery ddl(m_db);
-      if (!ddl.exec(QStringLiteral(
-              "CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY KEY)"))) {
-        throw std::runtime_error(ddl.lastError().text().toStdString());
-      }
-      // Clear any rows left from a previous purge on this connection.
-      if (!ddl.exec(QStringLiteral("DELETE FROM query_uuids"))) {
-        throw std::runtime_error(ddl.lastError().text().toStdString());
-      }
-      const QStringList uuidList(liveUuids.cbegin(), liveUuids.cend());
-      constexpr int kBatch = KartendDb::BatchSizes::UuidListBatch;
-      for (qsizetype start = 0; start < uuidList.size(); start += kBatch) {
-        const qsizetype end = qMin(start + kBatch, uuidList.size());
-        QStringList placeholders;
-        placeholders.reserve(end - start);
-        for (qsizetype i = start; i < end; ++i) {
-          placeholders << QStringLiteral("(?)");
-        }
-        QSqlQuery ins(m_db);
-        ins.prepare(QStringLiteral("INSERT OR IGNORE INTO query_uuids (uuid) VALUES ") +
-                    placeholders.join(QStringLiteral(", ")));
-        for (qsizetype i = start; i < end; ++i) {
-          ins.addBindValue(uuidList.at(i));
-        }
-        if (!ins.exec()) {
-          throw std::runtime_error(ins.lastError().text().toStdString());
-        }
-      }
-      for (const auto &target : targets) {
-        QSqlQuery del(m_db);
-        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN (SELECT uuid FROM query_uuids)")
-                        .arg(target.first, target.second));
-        if (!del.exec()) {
-          throw std::runtime_error(del.lastError().text().toStdString());
-        }
-      }
-    } else {
-      // Small uuid counts stay well under the bind cap — a bound inline IN
-      // clause is fine (no temp-table overhead).
-      QStringList placeholders;
-      placeholders.reserve(liveUuids.size());
-      for (int i = 0; i < liveUuids.size(); ++i) {
-        placeholders << QStringLiteral("?");
-      }
-      const QString inClause =
-          QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
-      for (const auto &target : targets) {
-        QSqlQuery del(m_db);
-        del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
-                        .arg(target.first, target.second, inClause));
-        for (const QString &uuid : liveUuids) {
-          del.addBindValue(uuid);
-        }
-        if (!del.exec()) {
-          throw std::runtime_error(del.lastError().text().toStdString());
-        }
-      }
-    }
-    if (!m_db.commit()) {
-      throw std::runtime_error(m_db.lastError().text().toStdString());
-    }
-  } catch (const std::exception &e) {
-    m_db.rollback();
-    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                                "Failed to purge orphan collection data",
-                                                "DatabaseManager::purgeOrphanCollectionData")
-                             .withDetails(ErrorUtils::exceptionMessage(e)));
-  }
+  // Kartend-dbqt5: run the purge on the worker connection — it iterates the
+  // items table and historically froze the GUI for multiple seconds right
+  // after first paint. FIFO ordering with other worker writes is preserved.
+  queueWorkerWrite(
+      [liveUuids, uuidSetHash](QSqlDatabase &db) -> bool {
+        // Always "settled": the purge logs its own failures and re-arms via
+        // the uuid-set-hash gate on the next startup, so a lock-contended run
+        // self-heals without the runWrite retry ladder (Kartend-cbtml).
+        purgeOrphanRowsOnConnection(db, liveUuids, uuidSetHash);
+        return true;
+      },
+      {}, QStringLiteral("DatabaseManager::purgeOrphanCollectionData"));
 }
 
 void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {

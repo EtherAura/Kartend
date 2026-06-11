@@ -3,7 +3,10 @@
 #include "applicationmanager.h"
 #include "collection/generalsettings.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 #include "selectiondisplaymanager.h"
 #include "selectionoverlaymanager.h"
@@ -139,7 +142,7 @@ void TestSelectionDisplayManager::testSelectionOverlayRectForInvalidIndexReturns
 }
 
 void TestSelectionDisplayManager::testFixtureWiresArtworkPreviewForwardersThroughScrollManager() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   auto *scroll = win->getApplicationManager()->getScrollManager();
   QVERIFY(scroll);

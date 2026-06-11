@@ -317,6 +317,18 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
   return context;
 }
 
+void NavigationManager::invalidatePendingItemCount() {
+  // Kartend-8uoe1: a count request fired for a now-abandoned search would
+  // otherwise pass the stale-token guard in onItemCountLoaded (no newer
+  // request exists on the clear path) and — because m_itemsQueryFilter still
+  // holds the abandoned query — rebuild the freshly restored view as a
+  // search-results view. Bump the token so the in-flight result is dropped,
+  // and clear the filter so nothing can re-derive search state from it.
+  ++m_itemCountRequestToken;
+  m_itemsQueryFilter.clear();
+  qCDebug(lcSearchDiag) << "invalidatePendingItemCount: newToken=" << m_itemCountRequestToken;
+}
+
 void NavigationManager::requestItemCountForContext(const CollectionContext &context,
                                                    const QString &filter) {
   if (!databaseMgr() || !m_collections) {

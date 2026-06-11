@@ -6,10 +6,12 @@
 #include "itemdetaildata.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
+#include <atomic>
 #include <functional>
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
+#include <QPair>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
@@ -109,7 +111,14 @@ public slots:
   /// (launch/session/history) here via a queued QMetaObject::invokeMethod so the
   /// UI never blocks on a write that contends with a background scan
   /// (Kartend-fkvs / Kartend-30s24). Must only be invoked on the owner thread.
-  void runWrite(const std::function<void(QSqlDatabase &)> &op);
+  ///
+  /// Kartend-cbtml: @p op returns true when settled (success, or a permanent
+  /// failure it already logged) and false on transient SQLITE_BUSY/LOCKED
+  /// contention — runWrite then retries with bounded exponential backoff so a
+  /// concurrent scan transaction on the scan-worker connection cannot drop
+  /// the write. @p context labels the retry/loss warnings.
+  void runWrite(const std::function<bool(QSqlDatabase &)> &op,
+                const QString &context = QStringLiteral("QueryManager::runWrite"));
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
@@ -186,10 +195,26 @@ public:
   /// Delegates to m_scanService.
   void resetScanCancellation();
 
+  /// Kartend-kfnv7: thread-safe teardown request, set by ~DatabaseManager
+  /// (cross-thread, same Kartend-mkm4u rationale as requestCancelScan — a
+  /// queued signal would sit behind the very slot it needs to interrupt).
+  /// The heavy non-scan worker slots (sorted-cache build's row streaming,
+  /// the reconnect retry ladder) poll it and bail, so a 100k-item cache
+  /// build straddling teardown no longer blows the dtor's 2s wait budget
+  /// (debug abort / release thread+connection leak).
+  void requestTeardown() { m_teardownRequested.store(true, std::memory_order_release); }
+  [[nodiscard]] bool teardownRequested() const {
+    return m_teardownRequested.load(std::memory_order_acquire);
+  }
+
   /// Force connection to see latest WAL commits from other connections
   void refreshWalView();
 
 private:
+  /// Kartend-kfnv7: flipped cross-thread by ~DatabaseManager; polled by the
+  /// heavy worker slots. Atomic — see requestTeardown().
+  std::atomic<bool> m_teardownRequested{false};
+
   // Thread-affinity guard. QueryManager owns a QSqlDatabase that Qt's SQL
   // drivers explicitly forbid sharing across threads. Every slot must be
   // invoked on the worker thread that owns this object. Compiles out in
@@ -224,12 +249,14 @@ private:
   PreparedStatementCache m_statementCache{MAX_STATEMENT_CACHE_SIZE};
 
   // The collection-rescan subsystem (filesystem walk, scanned_items staging,
-  // scan-and-save pipelines, cancellation token). Borrows m_db and
-  // m_statementCache by reference — declared AFTER both so those members are
-  // already constructed. QueryManager keeps only a thin delegating surface:
-  // its scan slots forward here, and its scan signals are re-emitted from
-  // this object's matching signals (wired in the constructor).
-  ScanService m_scanService{m_db, m_statementCache, this};
+  // scan-and-save pipelines, cancellation token). Borrows m_db,
+  // m_statementCache and m_txnDepth by reference — declared AFTER all three
+  // so those members are already constructed. Sharing m_txnDepth keeps the
+  // scan pipeline's DbTransaction guards coordinated with QueryManager's own
+  // guards on this connection (Kartend-l94tw). QueryManager keeps only a thin
+  // delegating surface: its scan slots forward here, and its scan signals are
+  // re-emitted from this object's matching signals (wired in the constructor).
+  ScanService m_scanService{m_db, m_statementCache, m_txnDepth, this};
 
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);
@@ -256,16 +283,27 @@ private:
 
   [[nodiscard]] bool isItemsFtsReadyFromDb();
 
-  QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
+  // Optional out-params hand back the per-path sort metadata persisted by the
+  // scan (last_modified / file_size, keyed like the returned paths) so the
+  // Date/Size sort modes can skip per-file stats (Kartend-m9r1s). Entries are
+  // omitted when the stored value is unusable (invalid timestamp, file_size
+  // never persisted) — callers must stat for missing keys.
+  QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid,
+                                          QHash<QString, QDateTime> *timestamps = nullptr,
+                                          QHash<QString, qint64> *sizes = nullptr);
 
   // Load-or-scan hybrid used by the four load slots. Unidirectional bridge
   // into the scan subsystem: when a rescan is needed it routes through
   // m_scanService (needsRescan / scanMediaDirectory / saveItemsToDatabase),
   // otherwise it loads cached rows via loadItemsFromDatabaseByUuid. No
   // ScanService->QueryManager calls, so the load/scan boundary stays
-  // untangled.
+  // untangled. @p timestamps is filled by both branches; @p sizes only by the
+  // cached branch (the scan stages sizes straight into SQLite and never holds
+  // them in memory here) — see loadItemsFromDatabaseByUuid for the
+  // missing-key contract (Kartend-m9r1s).
   QStringList loadOrScanCollection(int collectionIndex, const CollectionConfig &collection,
-                                   QHash<QString, QDateTime> &timestamps);
+                                   QHash<QString, QDateTime> &timestamps,
+                                   QHash<QString, qint64> *sizes = nullptr);
 
   // The scan subsystem (needsRescan, scanMediaDirectory, the scan-and-save
   // pipelines, prepareCollectionForItemsInsert, the scanned_items staging)
@@ -384,6 +422,23 @@ private:
 
   // Builds SQL IN clause with placeholders for the given UUID count
   [[nodiscard]] static QString buildUuidInClause(int uuidCount);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Persistent canonical-path cache (Kartend-4fmu1)
+  // ───────────────────────────────────────────────────────────────────────────
+  // loadItemsWithSubcollections dedups across collections via
+  // QFileInfo::canonicalFilePath() — a full realpath walk per item. The
+  // per-load cache it passes to appendFileMapsAndListCanonical only collapses
+  // duplicates WITHIN one load, so every flattened collection switch used to
+  // re-resolve all 10k+ paths. This map survives across loads on the worker:
+  // absolute path -> (mtime ms, canonical path), the mtime acting as the
+  // validity stamp so a touched/replaced file re-resolves. Seeded into /
+  // harvested from each load's cache via seedCanonicalPathCache /
+  // harvestCanonicalPathCache (querymanagerhelpers.h). Owner-thread only,
+  // like every other cache member; cleared alongside the query caches in
+  // invalidateQueryCaches() because a rescan can retarget symlinks without
+  // changing the target's mtime.
+  QHash<QString, QPair<qint64, QString>> m_persistentCanonicalPaths;
 
   // appendFileMapsAndListCanonical() and sortFiles() were pure static
   // members; they are now free functions in the QueryManagerInternal

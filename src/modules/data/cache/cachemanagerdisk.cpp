@@ -1,5 +1,5 @@
 // Sibling TU: disk-persistence orchestration for CacheManager. The
-// path-hashing scheme, JSON metadata read/write, and the worker pool that
+// path-hashing scheme, the SQLite timestamp store, and the worker pool that
 // runs async PNG encodes now live on CacheDiskStorage. This TU keeps the
 // orchestration glue: timer-driven debounce, snapshot-under-lock, and the
 // shutdown-time synchronous flush.
@@ -20,10 +20,11 @@
 Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
 
 void CacheManager::initialize() {
-  // Kartend-7s2mv: parse the timestamps file exactly once. ApplicationManager
+  // Kartend-7s2mv: load the timestamp store exactly once. ApplicationManager
   // kicks this off on a background QtConcurrent thread; this guard makes any
   // additional caller (now or in future) a cheap no-op instead of re-reading
-  // and re-clearing the 50MB+ file, which previously ran twice at startup.
+  // and re-clearing the store (formerly a 50MB+ JSON parse that ran twice at
+  // startup; now a single SELECT — Kartend-0ldg2).
   if (!m_initStarted.testAndSetOrdered(0, 1)) {
     return;
   }
@@ -103,11 +104,13 @@ void CacheManager::saveToDisk() {
 
   bool shouldWriteMetadata = false;
   QHash<QString, qint64> dirtyTimestampsCopy;
+  QStringList removedPathsCopy;
   QList<QPair<QString, QPixmap>> dirtyPixmaps;
 
   {
     QMutexLocker locker(&m_mutex);
-    shouldWriteMetadata = m_metadataDirty && !dirtyTimestamps.isEmpty();
+    shouldWriteMetadata =
+        m_metadataDirty && (!dirtyTimestamps.isEmpty() || !dirtyRemovals.isEmpty());
     if (shouldWriteMetadata) {
       // Only copy timestamps for paths that actually changed.
       for (const QString &path : std::as_const(dirtyTimestamps)) {
@@ -115,7 +118,11 @@ void CacheManager::saveToDisk() {
           dirtyTimestampsCopy[path] = fileTimestamps[path];
         }
       }
+      // Snapshot the invalidated keys so their store rows are DELETEd in the
+      // same write batch (Kartend-9lm54).
+      removedPathsCopy = QStringList(dirtyRemovals.cbegin(), dirtyRemovals.cend());
       dirtyTimestamps.clear();
+      dirtyRemovals.clear();
       m_metadataDirty = false;
     }
     for (const QString &path : std::as_const(dirtyArtwork)) {
@@ -139,24 +146,32 @@ void CacheManager::saveToDisk() {
     dirtyImages.append(qMakePair(entry.first, entry.second.toImage()));
   }
 
-  m_diskStorage->scheduleAsyncSave(shouldWriteMetadata, dirtyTimestampsCopy, dirtyImages);
+  m_diskStorage->scheduleAsyncSave(shouldWriteMetadata, dirtyTimestampsCopy, removedPathsCopy,
+                                   dirtyImages);
 }
 
 // Synchronous shutdown flush: cancels any in-flight async writes (so
-// they can't overwrite the final snapshot), then writes the full
-// timestamp map directly. Pixmap flush is intentionally skipped — it's
-// expensive and the in-memory pixmaps may already be invalidated.
+// they can't overwrite the final snapshot), then upserts the full
+// timestamp map directly (one transaction; rows already current are
+// simply rewritten in place) and deletes any rows still pending
+// invalidation (Kartend-9lm54). Pixmap flush is intentionally skipped —
+// it's expensive and the in-memory pixmaps may already be invalidated.
 void CacheManager::saveToDiskForShutdown() {
   m_diskStorage->cancel();
   m_diskStorage->clearQueue();
 
   QHash<QString, qint64> timestampsCopy;
+  QStringList removedPathsCopy;
   {
     QMutexLocker locker(&m_mutex);
     timestampsCopy = fileTimestamps;
+    removedPathsCopy = QStringList(dirtyRemovals.cbegin(), dirtyRemovals.cend());
     dirtyArtwork.clear();
     dirtyTimestamps.clear();
+    dirtyRemovals.clear();
   }
 
-  CacheDiskStorage::writeTimestamps(timestampsCopy);
+  // Deletions run before the upserts, so a key that was invalidated and then
+  // re-seeded into fileTimestamps still lands with its current value.
+  CacheDiskStorage::writeTimestamps(timestampsCopy, removedPathsCopy);
 }

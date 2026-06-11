@@ -13,8 +13,10 @@
 #include "databasemanager.h"
 
 #include <atomic>
+#include <memory>
 
 #include <QMetaType>
+#include <QSemaphore>
 #include <QStandardPaths>
 #include <QtGlobal>
 #include <QThread>
@@ -110,6 +112,23 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestEnsureItemsFtsReady, m_scanWorker,
           &QueryManager::ensureItemsFtsReady);
 
+  // Kartend-4i5e4: retry the FTS readiness pass (one-shot index rebuild) after
+  // every collection scan commits. The startup pass can lose its write lock to
+  // a long first-scan transaction on the OTHER worker connection and bail
+  // (search then falls back to LIKE); a scan completing is exactly the moment
+  // that contention has cleared. Once ready, the slot early-returns after a
+  // cheap meta read, so this wiring is effectively free in steady state. Both
+  // workers can run scans (loadOrScanCollection on m_worker, background scans
+  // on m_scanWorker); the readiness pass itself always runs on m_scanWorker.
+  // Explicitly queued: the same-object connect would otherwise run DIRECT,
+  // i.e. inside the emitting scan slot — potentially within its transaction
+  // scope, where the rebuild's nested guard could stamp readiness that the
+  // outer transaction later rolls back.
+  connect(m_worker, &QueryManager::collectionScanCompleted, m_scanWorker,
+          &QueryManager::ensureItemsFtsReady, Qt::QueuedConnection);
+  connect(m_scanWorker, &QueryManager::collectionScanCompleted, m_scanWorker,
+          &QueryManager::ensureItemsFtsReady, Qt::QueuedConnection);
+
   // Kartend-fvye: route cancelScan through the same queued-signal
   // pattern as the other request* signals, so the worker translates
   // the atomic flip on its own thread instead of the GUI thread
@@ -165,8 +184,9 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   m_workerThread->start();
   m_scanThread->start();
 
-  // Defer FTS backfill until after the event loop starts so startup UI is not
-  // blocked by any optional maintenance work.
+  // Defer the FTS readiness pass (one-shot index rebuild, Kartend-4i5e4)
+  // until after the event loop starts so startup UI is not blocked by any
+  // optional maintenance work.
   QTimer::singleShot(0, this, [this] { emit requestEnsureItemsFtsReady(); });
 }
 
@@ -187,9 +207,35 @@ DatabaseManager::~DatabaseManager() {
   // cross-thread call remains race-free.
   if (m_worker) {
     m_worker->requestCancelScan();
+    // Kartend-kfnv7: also interrupt the heavy NON-scan slots (sorted-cache
+    // build streaming, the reconnect retry ladder) — they were the only
+    // worker work with no cancellation polling, so a 100k-item build
+    // straddling teardown blew the wait(2000) below (debug abort /
+    // release thread+connection leak). Same cross-thread atomic-flip
+    // rationale as requestCancelScan (Kartend-mkm4u).
+    m_worker->requestTeardown();
   }
   if (m_scanWorker) {
     m_scanWorker->requestCancelScan();
+    m_scanWorker->requestTeardown();
+  }
+
+  // Kartend-juvb7: flush queued fire-and-forget writes (launch stats /
+  // history rows / the orphan purge — everything queueWorkerWrite posted)
+  // BEFORE quit(). Events still pending in the worker's queue when its loop
+  // exits are never executed, so "launch an item, then quit Kartend" used
+  // to silently drop the final play_count / last_played / history write —
+  // precisely the most common moment those writes happen. The sentinel is
+  // queued BEHIND every pending write (single worker thread, FIFO), so its
+  // release proves the queue drained. Bounded: a wedged worker (busy slot
+  // that never yields) just falls through to the existing quit + bounded
+  // wait + leak path below. The semaphore is shared_ptr-owned because on
+  // timeout the still-queued lambda must not dangle a stack reference.
+  if (m_worker && m_workerThread && m_workerThread->isRunning()) {
+    auto flushed = std::make_shared<QSemaphore>();
+    QMetaObject::invokeMethod(m_worker, [flushed]() { flushed->release(); }, Qt::QueuedConnection);
+    constexpr int FLUSH_WAIT_MS = 1500;
+    (void)flushed->tryAcquire(1, FLUSH_WAIT_MS); // best-effort; timeout = proceed to quit
   }
 
   // Quit + bounded wait. If the worker thread doesn't return within the

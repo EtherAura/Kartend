@@ -5,13 +5,16 @@
 #include "eventmanager.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 
 #include <QSignalSpy>
 #include <QTest>
 
 void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   QVERIFY(win);
   InteractionManager *im = win->getApplicationManager()->getInteractionManager();
@@ -21,7 +24,7 @@ void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
 }
 
 void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_flipsVisibilityAndEmits() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
@@ -39,7 +42,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleSidebar_flipsVisibili
 
 void TestEventManagerDetailsPane::
     detailsPaneManager_toggleSidebar_doubleToggleRestoresInitialState() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
@@ -52,7 +55,7 @@ void TestEventManagerDetailsPane::
 
 void TestEventManagerDetailsPane::
     detailsPaneManager_externallyHidden_overridesVisibilityWhileSet() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
@@ -87,7 +90,7 @@ void TestEventManagerDetailsPane::
 }
 
 void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_redundantSetIsNoOp() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);
@@ -103,7 +106,7 @@ void TestEventManagerDetailsPane::detailsPaneManager_externallyHidden_redundantS
 }
 
 void TestEventManagerDetailsPane::detailsPaneManager_toggleClearsExternallyHidden() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   DetailsPaneManager *mgr = win->getApplicationManager()->getDetailsPaneManager();
   QVERIFY(mgr);

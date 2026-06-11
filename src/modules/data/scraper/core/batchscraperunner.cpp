@@ -13,9 +13,11 @@
 // global QThreadPool via QtConcurrent::run.
 #include "batchscraperunner.h"
 
+#include <atomic>
 #include <utility>
 
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -67,6 +69,35 @@ BatchScrapeRunner::BatchScrapeRunner(const ApplicationContext *ctx,
 }
 
 BatchScrapeRunner::~BatchScrapeRunner() {
+  // Stop and drain the in-flight global-pool media writes (Kartend-vi76q).
+  // The token makes both the lambda preamble and writeMediaFiles' per-asset
+  // loop exit promptly, so the drain normally completes within one
+  // in-progress asset write. Kartend-8mx2q: the wait is BOUNDED now — the
+  // runner lives on the GUI thread, and the old unconditional
+  // waitForFinished() hung the UI for as long as one multi-MB write to
+  // wedged/network storage took (unbounded), unlike every other teardown in
+  // the codebase (2s budgets). Abandoning past the budget is safe: the
+  // write lambdas capture values + the shared cancel token only (no
+  // `this`), so the worst case is the current asset file finishing its
+  // write to disk after the runner is gone. The watchers are children of
+  // `this` and are destroyed below — they never fire post-dtor.
+  m_mediaWriteCancel->store(true, std::memory_order_release);
+  constexpr int kMediaWriteDrainBudgetMs = 2000;
+  QDeadlineTimer deadline(kMediaWriteDrainBudgetMs);
+  bool abandoned = false;
+  for (auto &future : m_inFlightMediaWrites) {
+    while (!future.isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!future.isFinished()) {
+      abandoned = true;
+    }
+  }
+  if (abandoned) {
+    qWarning() << "BatchScrapeRunner: media writes did not drain in" << kMediaWriteDrainBudgetMs
+               << "ms during destruction; abandoned them (value-captures only — the "
+                  "in-progress asset may still finish writing to disk)";
+  }
   shutdownWriteWorker();
 }
 
@@ -122,11 +153,18 @@ void BatchScrapeRunner::ensureWriteWorkerStarted() {
   if (!dbMgr()) return;
   if (m_writeWorker) return;
 
-  // Connection name keyed on the runner address so concurrent runners
-  // (e.g. a stale dialog session that overlapped with a fresh start)
-  // don't collide in Qt's global QSqlDatabase registry.
+  // Connection name keyed on a process-global monotonic counter (the
+  // g_connectionInstanceId pattern from databasemanager.cpp). It was
+  // previously keyed on the runner's heap address — but when
+  // shutdownWriteWorker()'s bounded join times out the thread (and its
+  // still-registered connection) is intentionally leaked, and a later
+  // runner allocated at the SAME address would addDatabase() under the
+  // identical name, replacing the leaked thread's in-use connection
+  // (Qt-documented UB, Kartend-fux2w). A counter never reuses a name.
+  static std::atomic<quint64> s_writerInstanceId{0};
   const QString connectionName =
-      QStringLiteral("kartend_scrape_writer_%1").arg(reinterpret_cast<quintptr>(this), 0, 16);
+      QStringLiteral("kartend_scrape_writer_%1")
+          .arg(s_writerInstanceId.fetch_add(1, std::memory_order_relaxed));
 
   // Threads aren't parented to the runner — same rationale as
   // DatabaseManager's worker threads (~QObject would auto-delete a
@@ -191,6 +229,11 @@ void BatchScrapeRunner::cancel() {
       state->cancelToken->store(true, std::memory_order_release);
     }
   }
+  // Also stop the global-pool media-write fan-out (Kartend-vi76q): a
+  // cancelled batch shouldn't keep writing artwork files the user just
+  // abandoned. onWriteCompleted already discards results once m_cancelled
+  // is set, so partial results from a mid-write cancel are dropped cleanly.
+  m_mediaWriteCancel->store(true, std::memory_order_release);
   // Don't emit finished here — let the in-flight callbacks observe the
   // flag and drain. The last completing callback emits finished()
   // once m_inFlight returns to 0, which avoids a double-emit if any
@@ -788,14 +831,28 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
                 Q_ARG(QString, state->path), Q_ARG(Scraper::ScrapedItem, effective),
                 Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
           });
-  watcher->setFuture(QtConcurrent::run(
-      [artworkDir = m_artworkDir, baseName, writes, effective, rescrapeMode = m_rescrapeMode]() {
+  // Track the task and hand it the runner-lifetime cancel token
+  // (Kartend-vi76q): the global pool has no per-runner drain, so the
+  // destructor flips the token and waits on this list instead. Prune
+  // finished entries first so the list stays O(itemConcurrency).
+  m_inFlightMediaWrites.removeIf(
+      [](const QFuture<Scraper::MediaWriteResult> &f) { return f.isFinished(); });
+  const QFuture<Scraper::MediaWriteResult> writeFuture =
+      QtConcurrent::run([artworkDir = m_artworkDir, baseName, writes, effective,
+                         rescrapeMode = m_rescrapeMode, mediaCancel = m_mediaWriteCancel]() {
+        // Cancelled while queued (pool saturated during a long batch):
+        // skip the sidecar + media writes entirely.
+        if (mediaCancel->load(std::memory_order_acquire)) {
+          return Scraper::MediaWriteResult{};
+        }
         // Human-readable JSON sidecar alongside the artwork. `effective`
         // is blank when the user opted out of metadata, so the sidecar
         // helper self-skips in that case.
         (void)Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
-        return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode);
-      }));
+        return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, mediaCancel);
+      });
+  m_inFlightMediaWrites.append(writeFuture);
+  watcher->setFuture(writeFuture);
 }
 
 void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {

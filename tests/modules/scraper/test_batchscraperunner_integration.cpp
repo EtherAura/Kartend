@@ -30,6 +30,7 @@
 #include <QTest>
 #include <QTimer>
 
+#include "../../support/testsandbox.h"
 #include "applicationcontext.h"
 #include "batchscraperunner.h"
 #include "databasemanager.h"
@@ -94,10 +95,7 @@ void TestBatchScrapeRunnerIntegration::initTestCase() {
   // Same setup test_databasemanager uses; the worker thread inherits
   // the same writableLocation so its connection lands in the same file
   // DatabaseManager opened.
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(
-      QStringLiteral("kartend-test-batchscraperunner-integration"));
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-batchscraperunner-integration"));
 }
 
 void TestBatchScrapeRunnerIntegration::writesLandInDatabaseAndCacheGetsInvalidated() {

@@ -67,27 +67,24 @@ public:
     QTimer::singleShot(0, [this, query, cb = std::move(cb)]() {
       const Canned &c = byQuery.value(query);
       if (!c.lookupError.isEmpty()) {
-        cb(ErrorUtils::ErrorContext::error(
-            ErrorUtils::ErrorCode::InvalidArgument, c.lookupError, "stub"));
+        cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument, c.lookupError,
+                                           "stub"));
         return;
       }
       cb(c.candidates);
     });
   }
 
-  void fetchDetail(const Scraper::ScrapeCandidate &candidate,
-                   DetailCallback cb) override {
+  void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback cb) override {
     QTimer::singleShot(0, [this, candidate, cb = std::move(cb)]() {
       // Walk byQuery looking for the candidate's id — small test tables
       // make the linear scan fine.
       for (auto it = byQuery.constBegin(); it != byQuery.constEnd(); ++it) {
         if (!it.value().candidates.isEmpty() &&
-            it.value().candidates.first().providerSpecificId ==
-                candidate.providerSpecificId) {
+            it.value().candidates.first().providerSpecificId == candidate.providerSpecificId) {
           if (!it.value().detailError.isEmpty()) {
-            cb(ErrorUtils::ErrorContext::error(
-                ErrorUtils::ErrorCode::InvalidArgument,
-                it.value().detailError, "stub"));
+            cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                               it.value().detailError, "stub"));
             return;
           }
           cb(it.value().detail);
@@ -102,9 +99,8 @@ public:
     mediaRequestLog.append(url);
     QTimer::singleShot(0, [this, url, cb = std::move(cb)]() {
       if (mediaErrorUrls.contains(url)) {
-        cb(ErrorUtils::ErrorContext::error(
-            ErrorUtils::ErrorCode::InvalidArgument,
-            QStringLiteral("media fetch failed"), "stub"));
+        cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           QStringLiteral("media fetch failed"), "stub"));
         return;
       }
       cb(mediaByUrl.value(url));
@@ -115,8 +111,7 @@ public:
 /// Helper to build a deterministic candidate + detail pair for a given
 /// query. Keeps test bodies focused on controller behaviour rather than
 /// structural data.
-inline StubMetadataProvider::Canned makeStubMatch(const QString &id,
-                                                  const QString &title) {
+inline StubMetadataProvider::Canned makeStubMatch(const QString &id, const QString &title) {
   StubMetadataProvider::Canned c;
   Scraper::ScrapeCandidate cand;
   cand.displayName = title;

@@ -56,6 +56,15 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     if (m_searchDebounceTimer) {
       m_searchDebounceTimer->cancel();
     }
+    // Kartend-8uoe1: the debounce cancel above only stops queries that have
+    // not fired yet. A count query already in flight for the abandoned text
+    // would land AFTER the restore below, pass the stale-token guard (no
+    // newer request exists on this path), and rebuild the restored view as
+    // search results. Invalidate it before restoring. (filterItems-based
+    // branches bump the token again themselves — harmless.)
+    if (navMgr()) {
+      navMgr()->invalidatePendingItemCount();
+    }
     // Reset adaptive debounce state when search is cleared
     m_lastKeystrokeTime = 0;
     m_adaptiveDebounceMs = 0;

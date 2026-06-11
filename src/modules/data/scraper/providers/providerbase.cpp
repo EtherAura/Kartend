@@ -18,3 +18,9 @@ void ProviderBase::registerThrottles(
     client->setRateLimit(QString::fromLatin1(host), intervalMs);
   }
 }
+
+ProviderBase::TestFetchFunction ProviderBase::s_testFetch;
+
+void ProviderBase::setFetchFunctionForTesting(TestFetchFunction fetch) {
+  s_testFetch = std::move(fetch);
+}

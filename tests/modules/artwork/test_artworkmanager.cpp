@@ -14,18 +14,21 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "cachemanager.h"
+#include "icachemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 
+#include <atomic>
+#include <memory>
 #include <QApplication>
 #include <QDateTime>
 #include <QPixmap>
 #include <QPointer>
+#include <QSemaphore>
 #include <QStackedWidget>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWidget>
-#include <memory>
 
 class TestArtworkManager : public QObject {
   Q_OBJECT
@@ -63,6 +66,8 @@ private slots:
   // ArtworkLoadDispatcher generation-counter regression coverage (Kartend-7rpq)
   void testDispatcher_dispatchAfterCancelAllStillCompletes();
   void testDispatcher_cancelMidFlightSuppressesHandler();
+  // Abandon-on-timeout cache-handle coverage (Kartend-xoftg)
+  void testDispatcher_abandonedTaskNeverTouchesCacheAfterDestruct();
 
   // loadArtworkParallel ------------------------------------------------------
   void testLoadArtworkParallel_emptyListNoop();
@@ -91,7 +96,9 @@ private:
   void wireSetup(ArtworkManager *manager);
 };
 
-void TestArtworkManager::initTestCase() { QVERIFY(m_tempDir.isValid()); }
+void TestArtworkManager::initTestCase() {
+  QVERIFY(m_tempDir.isValid());
+}
 
 void TestArtworkManager::cleanupTestCase() {}
 
@@ -149,8 +156,7 @@ void TestArtworkManager::testCreateProcessedArtwork_validPixmap() {
 
 void TestArtworkManager::testFindArtworkForFile_missing() {
   // Empty directory should return empty path.
-  const QString path =
-      ArtworkManager::findArtworkForFile("nonexistent.rom", m_tempDir.path());
+  const QString path = ArtworkManager::findArtworkForFile("nonexistent.rom", m_tempDir.path());
   QVERIFY(path.isEmpty());
 }
 
@@ -355,12 +361,12 @@ void TestArtworkManager::testDispatcher_dispatchAfterCancelAllStillCompletes() {
   bool handlerCalled = false;
   int seenResults = -1;
   dispatcher.dispatchBatch(std::move(batch), /*highPriority=*/true,
-                            [&handlerCalled, &seenResults](
-                                const QList<ArtworkInfo::Result> &results, int /*requestedCount*/,
-                                qint64 /*elapsedMs*/, bool /*highPriority*/) {
-                              handlerCalled = true;
-                              seenResults = results.size();
-                            });
+                           [&handlerCalled, &seenResults](
+                               const QList<ArtworkInfo::Result> &results, int /*requestedCount*/,
+                               qint64 /*elapsedMs*/, bool /*highPriority*/) {
+                             handlerCalled = true;
+                             seenResults = results.size();
+                           });
 
   QTRY_VERIFY_WITH_TIMEOUT(handlerCalled, 5000);
   QCOMPARE(seenResults, 1);
@@ -391,8 +397,9 @@ void TestArtworkManager::testDispatcher_cancelMidFlightSuppressesHandler() {
 
   bool handlerCalled = false;
   dispatcher.dispatchBatch(std::move(batch), /*highPriority=*/false,
-                            [&handlerCalled](const QList<ArtworkInfo::Result> &, int, qint64,
-                                             bool) { handlerCalled = true; });
+                           [&handlerCalled](const QList<ArtworkInfo::Result> &, int, qint64, bool) {
+                             handlerCalled = true;
+                           });
   dispatcher.cancelAll();
 
   // Pump events for long enough that a non-cancelled batch would have
@@ -404,6 +411,105 @@ void TestArtworkManager::testDispatcher_cancelMidFlightSuppressesHandler() {
 
   QVERIFY2(!handlerCalled,
            "cancelAll() before delivery must suppress the handler on the queued posting");
+
+  qDeleteAll(widgets);
+  QCoreApplication::processEvents();
+}
+
+namespace {
+
+/// ICacheManager double whose disk-cache read blocks on a caller-controlled
+/// gate, simulating wedged storage so the dispatcher destructor's bounded
+/// pool drain expires and abandons the task (Kartend-xoftg).
+class BlockingCacheMock : public ICacheManager {
+public:
+  std::atomic<int> diskCacheCalls{0};
+  QSemaphore entered;
+  QSemaphore gate;
+
+  QImage tryLoadArtworkImageFromDiskCache(const QString & /*artworkPath*/) override {
+    diskCacheCalls.fetch_add(1, std::memory_order_acq_rel);
+    entered.release();
+    gate.acquire(); // wedge until the test releases us
+    return {};
+  }
+
+  // Inert remainder of the interface.
+  void initialize() override {}
+  void saveToDisk() override {}
+  void saveToDiskForShutdown() override {}
+  void scheduleSaveToDisk(int /*delayMs*/) override {}
+  [[nodiscard]] CacheTimestampsSnapshot snapshotTimestampsForShutdown() const override {
+    return {};
+  }
+  void cancelPendingIo() override {}
+  [[nodiscard]] QPixmap getArtwork(const QString & /*artworkPath*/) override { return {}; }
+  [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString & /*artworkPath*/) override {
+    return {};
+  }
+  void cacheArtwork(const QString & /*artworkPath*/, const QPixmap & /*pixmap*/) override {}
+  void cacheArtworkInMemoryOnly(const QString & /*artworkPath*/,
+                                const QPixmap & /*pixmap*/) override {}
+  void clearCollectionCache(const QString & /*artworkDirectoryPrefix*/) override {}
+  void releaseGuiResources() override {}
+  void setArtworkCacheBudgetMB(int /*megabytes*/) override {}
+  [[nodiscard]] CacheMetrics metrics() const override { return {}; }
+  void resetMetrics() override {}
+  void logMetrics() const override {}
+  [[nodiscard]] qint64 getCacheSize() const override { return 0; }
+};
+
+} // namespace
+
+void TestArtworkManager::testDispatcher_abandonedTaskNeverTouchesCacheAfterDestruct() {
+  // Kartend-xoftg: workers must reach the disk cache only through the
+  // dispatcher's shared cache handle. When the destructor's bounded pool
+  // drain expires (wedged storage) and the task is abandoned, the handle
+  // has been invalidated — so the task must NEVER call back into the cache
+  // once ~ArtworkLoadDispatcher returns, even though CacheManager is only
+  // destroyed later in ApplicationManager teardown. This test wedges the
+  // first disk-cache read past the drain budget and asserts no further
+  // cache call happens after destruction. Runtime ~2.5s (2s drain budget
+  // + 500ms handle quiesce budget, both intentionally exhausted).
+  BlockingCacheMock mock;
+  auto *dispatcher = new ArtworkLoadDispatcher(&mock);
+
+  QList<ItemWidget *> widgets;
+  QList<ArtworkInfo> batch;
+  for (int i = 0; i < 3; ++i) {
+    auto *w = new ItemWidget();
+    widgets.append(w);
+    batch.append(ArtworkInfo{QPointer<ItemWidget>(w),
+                             m_tempDir.path() + QStringLiteral("/missing_%1.png").arg(i)});
+  }
+
+  bool handlerCalled = false;
+  dispatcher->dispatchBatch(std::move(batch), /*highPriority=*/false,
+                            [&handlerCalled](const QList<ArtworkInfo::Result> &, int, qint64,
+                                             bool) { handlerCalled = true; });
+
+  // Wait until the worker is wedged inside the mock's disk-cache read.
+  QVERIFY2(mock.entered.tryAcquire(1, 5000), "worker never reached the disk cache");
+  QCOMPARE(mock.diskCacheCalls.load(std::memory_order_acquire), 1);
+
+  // Destruct while the read is wedged: the 2s drain budget expires, the
+  // pool is abandoned, and the handle quiesce budget (500ms) also expires
+  // because the worker still holds the read pin. The destructor must
+  // return regardless (bounded teardown) — the leaked pool is the
+  // documented abandon-on-timeout trade-off.
+  delete dispatcher;
+
+  // Un-wedge the abandoned task. It exits the mock, and on its next
+  // per-item step must observe the invalidated handle / bumped generation
+  // and bail without ever touching the cache again.
+  mock.gate.release(widgets.size()); // release generously; only one acquire is pending
+  const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 500;
+  while (QDateTime::currentMSecsSinceEpoch() < deadline) {
+    QCoreApplication::processEvents();
+  }
+
+  QCOMPARE(mock.diskCacheCalls.load(std::memory_order_acquire), 1);
+  QVERIFY2(!handlerCalled, "abandoned batch must not deliver its handler after destruction");
 
   qDeleteAll(widgets);
   QCoreApplication::processEvents();

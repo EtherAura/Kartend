@@ -6,8 +6,9 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include "dbtxn.h"
+
 #include <QDir>
-#include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -17,7 +18,6 @@
 #include <QStringList>
 #include <QtGlobal>
 #include <QThread>
-#include <QTimer>
 
 #include "connectionpragmas.h"
 #include "dbmigrations.h"
@@ -110,6 +110,12 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
       return true;
     }
 
+    // Kartend-kfnv7: bail out of the retry ladder when teardown was
+    // requested — sleeping through the remaining attempts could alone
+    // exceed the destructor's 2s wait budget.
+    if (teardownRequested()) {
+      return false;
+    }
     // Wait before next attempt (unless it's the last one)
     if (attempt < MAX_RECONNECT_ATTEMPTS) {
       QThread::msleep(RECONNECT_DELAY_MS);
@@ -183,7 +189,7 @@ void QueryManager::initDatabase() {
   }
 
   // Kartend-67wo: shared PRAGMA helper — worker connection uses the longer
-  // busy_timeout (FTS backfill etc. holds locks) and synchronous=NORMAL for
+  // busy_timeout (the FTS rebuild etc. holds locks) and synchronous=NORMAL for
   // write throughput.
   MediaDbConnectionInit::PragmaConfig pragmaCfg;
   pragmaCfg.busyTimeoutMs = UIConstants::Database::WORKER_BUSY_TIMEOUT_MS;
@@ -253,6 +259,18 @@ void QueryManager::refreshSearchCapabilities() {
 }
 
 namespace {
+// Readiness generation stored under meta key 'items_fts_ready'
+// (Kartend-4i5e4):
+//   '0' — not ready (v3 migration seed); search uses the LIKE fallback.
+//   '1' — LEGACY: the old incremental backfill completed. Those installs ran
+//         with sync triggers active while the index was only partially
+//         populated, so their index may hold FTS5 'delete' damage. Treated as
+//         NOT ready so the next launch funnels them through one self-healing
+//         rebuild.
+//   '2' — the one-shot rebuild committed (index rebuilt from the items table
+//         and the sync triggers created in the same transaction).
+constexpr const char *kItemsFtsReadyGeneration = "2";
+
 static auto ensureMetaTable(QSqlDatabase &db) -> void {
   if (!db.isOpen()) {
     return;
@@ -273,27 +291,6 @@ static auto tryReadMetaValue(QSqlDatabase &db, const QString &key, QString &valu
   return true;
 }
 
-static auto writeMetaValue(QSqlDatabase &db, const QString &key, const QString &value) -> void {
-  QSqlQuery q(db);
-  q.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)");
-  q.addBindValue(key);
-  q.addBindValue(value);
-  q.exec();
-}
-
-static auto tryReadMetaInt(QSqlDatabase &db, const QString &key, qint64 &valueOut) -> bool {
-  QString value;
-  if (!tryReadMetaValue(db, key, value)) {
-    return false;
-  }
-  bool ok = false;
-  const qint64 parsed = value.toLongLong(&ok);
-  if (!ok) {
-    return false;
-  }
-  valueOut = parsed;
-  return true;
-}
 } // namespace
 
 bool QueryManager::isItemsFtsReadyFromDb() {
@@ -302,17 +299,41 @@ bool QueryManager::isItemsFtsReadyFromDb() {
   }
 
   // Read-only check: if the meta table or key doesn't exist, assume FTS is NOT
-  // ready. The scan worker will set the "items_fts_ready" marker when backfill
-  // completes. This avoids write operations that could block on the scan
-  // worker's FTS backfill transaction.
+  // ready. The scan worker will stamp the readiness generation when its
+  // one-shot rebuild commits. This avoids write operations that could block on
+  // the scan worker's FTS rebuild transaction.
   QString ready;
   if (!tryReadMetaValue(m_db, QStringLiteral("items_fts_ready"), ready)) {
-    // Key not found - FTS backfill hasn't completed yet
+    // Key not found - the FTS rebuild hasn't completed yet
     return false;
   }
-  return ready.trimmed() == QLatin1String("1");
+  // Note: the legacy '1' (incremental backfill completed) is deliberately NOT
+  // ready — see kItemsFtsReadyGeneration.
+  return ready.trimmed() == QLatin1String(kItemsFtsReadyGeneration);
 }
 
+// Brings the items_fts external-content index to a ready state via a one-shot
+// rebuild (Kartend-4i5e4). The previous incremental backfill ran with the v3
+// sync triggers already active, so (a) trigger-fired FTS 'delete' commands
+// could target rows the backfill had not indexed yet — documented FTS5
+// external-content corruption that made rescan upserts/prunes on upgraded
+// installs fail with SQLITE_CORRUPT — and (b) its progress watermark was
+// persisted outside the batch transaction, re-inserting committed batches
+// after a crash. The rebuild scheme has no such bookkeeping:
+//
+//   one transaction:  INSERT INTO items_fts(items_fts) VALUES('rebuild')
+//                     + CREATE the sync triggers
+//                     + stamp the readiness generation in meta
+//
+// 'rebuild' discards the entire index and re-derives it from the items table,
+// so it is idempotent AND self-healing — any damage left behind by the old
+// trigger/backfill interplay is erased. Because the triggers only come into
+// existence in the same transaction, every trigger-fired 'delete' from then on
+// targets postings that exist; items writes that land before the rebuild are
+// simply captured by it. Runs once per database (per readiness generation) on
+// the scan worker; cost is one full reindex, after which the triggers maintain
+// the index forever. Until then searches use the LIKE fallback, exactly as
+// they did while the old backfill was incomplete.
 void QueryManager::ensureItemsFtsReady() {
   assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::ensureItemsFtsReady")) {
@@ -332,99 +353,53 @@ void QueryManager::ensureItemsFtsReady() {
 
   ensureMetaTable(m_db);
 
-  QElapsedTimer slice;
-  slice.start();
-
-  qint64 indexedUpToId = 0;
-  (void)tryReadMetaInt(m_db, QStringLiteral("items_fts_indexed_up_to_id"), indexedUpToId);
-
-  while (slice.elapsed() < UIConstants::Database::FTS_BACKFILL_TIME_BUDGET_MS) {
-    // Determine the current max id in the content table.
-    qint64 maxId = 0;
-    {
-      QSqlQuery maxQ(m_db);
-      if (maxQ.exec("SELECT COALESCE(MAX(id), 0) FROM items") && maxQ.next()) {
-        maxId = maxQ.value(0).toLongLong();
-      }
-    }
-
-    if (maxId == 0) {
-      // No items in database yet - don't mark FTS ready since there's nothing
-      // to index. Items will be populated by a scan; we'll be called again
-      // after the scan completes to do the actual backfill.
-      return;
-    }
-
-    if (maxId <= indexedUpToId) {
-      writeMetaValue(m_db, QStringLiteral("items_fts_ready"), QStringLiteral("1"));
-      m_itemsFtsReady = true;
-      return;
-    }
-
-    if (!m_db.transaction()) {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                       "Failed to start transaction for FTS backfill",
-                                       "QueryManager::ensureItemsFtsReady")
-                     .withDetails(m_db.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      return;
-    }
-
-    QSqlQuery insertQ(m_db);
-    insertQ.prepare("INSERT INTO items_fts(rowid, name, path, collection_uuid) "
-                    "SELECT id, name, path, collection_uuid "
-                    "FROM items "
-                    "WHERE id > ? "
-                    "ORDER BY id "
-                    "LIMIT ?");
-    insertQ.addBindValue(indexedUpToId);
-    insertQ.addBindValue(UIConstants::Database::FTS_BACKFILL_BATCH_SIZE);
-
-    if (!insertQ.exec()) {
-      m_db.rollback();
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "FTS backfill insert failed (search will use LIKE)",
-                                       "QueryManager::ensureItemsFtsReady")
-                     .withDetails(insertQ.lastError().text());
-      ErrorUtils::logError(err);
-      emit errorOccurred(err);
-      return;
-    }
-
-    qint64 newIndexedUpToId = indexedUpToId;
-    {
-      // Compute the last id included in this batch.
-      // Do NOT use MAX(rowid) from items_fts because triggers may insert higher
-      // ids concurrently (e.g., during scans), which would incorrectly skip
-      // unindexed rows.
-      QSqlQuery lastIdQ(m_db);
-      lastIdQ.prepare("SELECT COALESCE(MAX(id), ?) FROM ("
-                      "  SELECT id FROM items WHERE id > ? ORDER BY id LIMIT ?"
-                      ")");
-      lastIdQ.addBindValue(indexedUpToId);
-      lastIdQ.addBindValue(indexedUpToId);
-      lastIdQ.addBindValue(UIConstants::Database::FTS_BACKFILL_BATCH_SIZE);
-      if (lastIdQ.exec() && lastIdQ.next()) {
-        newIndexedUpToId = lastIdQ.value(0).toLongLong();
-      }
-    }
-
-    (void)m_db.commit();
-
-    if (newIndexedUpToId <= indexedUpToId) {
-      // No progress; avoid tight looping.
-      break;
-    }
-
-    indexedUpToId = newIndexedUpToId;
-    writeMetaValue(m_db, QStringLiteral("items_fts_indexed_up_to_id"),
-                   QString::number(indexedUpToId));
+  KartendDb::DbTransaction txn(
+      m_db, m_txnDepth, "QueryManager::ensureItemsFtsReady",
+      [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
+  if (!txn.activeOrReport("Failed to start transaction for FTS rebuild",
+                          ErrorUtils::Severity::Warning)) {
+    return;
   }
 
-  // Continue in another slice.
-  // Defer between slices to keep the scan worker event loop responsive AND
-  // avoid a tight 0ms loop that can peg a CPU core on very large databases.
-  QTimer::singleShot(UIConstants::Database::FTS_BACKFILL_SLICE_DELAY_MS, this,
-                     &QueryManager::ensureItemsFtsReady);
+  const auto reportFailure = [this](const char *what, const QSqlQuery &q) {
+    // guard dtor rolls back; retried on next launch, LIKE fallback meanwhile
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
+                                     "QueryManager::ensureItemsFtsReady")
+                   .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+    emit errorOccurred(err);
+  };
+
+  QSqlQuery q(m_db);
+  if (!q.exec("INSERT INTO items_fts(items_fts) VALUES('rebuild')")) {
+    reportFailure("FTS index rebuild failed (search will use LIKE)", q);
+    return;
+  }
+
+  // (Re)create the sync triggers atomically with the rebuilt index — dropped
+  // by the v18 migration; see DbMigrations::kItemsFtsTrigger*Sql.
+  if (!q.exec(DbMigrations::kItemsFtsTriggerInsertSql) ||
+      !q.exec(DbMigrations::kItemsFtsTriggerDeleteSql) ||
+      !q.exec(DbMigrations::kItemsFtsTriggerUpdateSql)) {
+    reportFailure("FTS sync trigger creation failed (search will use LIKE)", q);
+    return;
+  }
+
+  // Readiness stamp INSIDE the same transaction as the work it describes.
+  // The legacy incremental-backfill watermark key is obsolete; drop it.
+  q.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES('items_fts_ready', ?)");
+  q.addBindValue(QLatin1String(kItemsFtsReadyGeneration));
+  if (!q.exec()) {
+    reportFailure("FTS readiness stamp failed (search will use LIKE)", q);
+    return;
+  }
+  QSqlQuery cleanupQ(m_db);
+  cleanupQ.prepare("DELETE FROM meta WHERE key = ?");
+  cleanupQ.addBindValue(QStringLiteral("items_fts_indexed_up_to_id"));
+  (void)cleanupQ.exec(); // best-effort: a stale key is inert
+
+  if (!txn.commitOrReport("Failed to commit FTS rebuild", ErrorUtils::Severity::Warning)) {
+    return;
+  }
+  m_itemsFtsReady = true;
 }

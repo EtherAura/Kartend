@@ -17,7 +17,8 @@ using DetailPagePayloadBuilder::pickDisplayTitle;
 
 namespace {
 
-auto makeRow(const QString &type, const QString &manualPath = QString()) -> ItemArtworkStore::ItemArtwork {
+auto makeRow(const QString &type, const QString &manualPath = QString())
+    -> ItemArtworkStore::ItemArtwork {
   ItemArtworkStore::ItemArtwork row;
   row.artworkType = type;
   row.manualPath = manualPath;
@@ -107,8 +108,8 @@ void TestDetailPageHelpers::collectCustomArtworkTypes_filtersOutStandardTypes() 
       makeRow(QStringLiteral("logo")),
       makeRow(QStringLiteral("custom-manual-scan")),
   });
-  QCOMPARE(customs, (QStringList{QStringLiteral("custom-cart"),
-                                  QStringLiteral("custom-manual-scan")}));
+  QCOMPARE(customs,
+           (QStringList{QStringLiteral("custom-cart"), QStringLiteral("custom-manual-scan")}));
 }
 
 void TestDetailPageHelpers::collectCustomArtworkTypes_preservesInputOrder() {
@@ -120,7 +121,7 @@ void TestDetailPageHelpers::collectCustomArtworkTypes_preservesInputOrder() {
       makeRow(QStringLiteral("middle")),
   });
   QCOMPARE(customs, (QStringList{QStringLiteral("zebra"), QStringLiteral("alpha"),
-                                  QStringLiteral("middle")}));
+                                 QStringLiteral("middle")}));
 }
 
 void TestDetailPageHelpers::collectCustomArtworkTypes_emptyRowsYieldEmpty() {

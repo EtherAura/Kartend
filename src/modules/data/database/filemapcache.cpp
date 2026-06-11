@@ -115,14 +115,17 @@ QString FileMapCache::resolveRelativeFilePath(const QString &rawFileName,
       return it.value();
     }
   }
-  // Compatibility fallback: preserve previous suffix-scan behavior.
-  for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
-    const QString &key = it.key();
-    if (key.endsWith("/" + rawFileName) || key.endsWith(QDir::separator() + rawFileName) ||
-        key == rawFileName) {
-      return key;
-    }
-  }
+  // Kartend-ardm7: a "compatibility fallback" here used to linear-scan every
+  // fileNames key with endsWith per unresolved entry — O(items) per call, so
+  // O(items^2) across a widget-creation pass, freezing the GUI thread on
+  // large flattened views. m_relativeToFullPath already indexes every form
+  // that scan could realistically match (full path, leaf name, media-dir-
+  // relative path; the key == rawFileName arm was dead — caught by the
+  // contains() fast path above). Exotic multi-segment suffixes that are not
+  // the media-dir-relative form now fall through to the collection-index
+  // lookup below and, failing that, the debug log — the log-and-skip option
+  // from the issue.
+  //
   // Fallback: use collection index to find media directory
   QMutexLocker locker(&m_mutex);
   const int ownerIndex = m_fileToCollectionIndex.value(rawFileName, -1);

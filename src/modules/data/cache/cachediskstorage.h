@@ -8,12 +8,13 @@
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QStringList>
 
 class QThreadPool;
 
 /// Owns CacheManager's disk-persistence responsibilities: the cache
 /// directory layout, the path-hashing scheme that maps an artwork file to
-/// its on-disk cache filename, the JSON metadata read/write, and the
+/// its on-disk cache filename, the SQLite timestamp store, and the
 /// async write pipeline (dedicated single-thread QThreadPool plus the
 /// cooperative cancellation token that keeps shutdown bounded).
 ///
@@ -40,28 +41,55 @@ public:
   /// will be rebuilt on next decode.
   [[nodiscard]] static QString artworkCachePath(const QString &artworkPath);
 
-  /// Path to the cache metadata JSON file (timestamps + future fields).
+  /// Path to the LEGACY cache metadata JSON file. Timestamps now live in
+  /// the SQLite store (databasePath()); this path is retained only for the
+  /// one-way migration that imports a pre-existing JSON blob and renames it
+  /// to "<name>.migrated" on the store's first open (Kartend-0ldg2).
   [[nodiscard]] static QString metadataPath();
 
-  /// Read the cache metadata file synchronously and populate @p outTimestamps
-  /// with the deserialized timestamp map. Returns silently when the file
-  /// doesn't exist (first-run case) or is malformed.
+  /// Path to the SQLite timestamp store (path TEXT PRIMARY KEY,
+  /// ts_ms INTEGER). Lives beside the legacy JSON under metadata/. Its own
+  /// file, deliberately NOT media.db — the cache layer stays independent of
+  /// DatabaseManager.
+  [[nodiscard]] static QString databasePath();
+
+  /// Read the timestamp store synchronously (one full SELECT) and populate
+  /// @p outTimestamps. Returns silently when neither the store nor the
+  /// legacy JSON exists (first-run case — no empty store is created) or the
+  /// store can't be opened. Imports + renames a legacy JSON file first when
+  /// one is present.
   void readTimestampsInto(QHash<QString, qint64> &outTimestamps) const;
 
-  /// Write the timestamp map to the metadata JSON file synchronously,
-  /// merging with any existing fields. Used both inline (shutdown
-  /// snapshot) and from the async-save lambda. Static because the
-  /// caller already snapshotted state — the helper has no per-instance
-  /// dependencies for the write.
-  static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps);
+  /// Upsert ONLY @p dirtyTimestamps into the store — and DELETE the
+  /// @p removedPaths rows — in one transaction. Rows in neither batch are
+  /// untouched: this is the keyed-store replacement for the old
+  /// read-50MB/merge/rewrite JSON cycle. Removals run BEFORE the upserts,
+  /// so a key invalidated and re-cached within the same debounce window
+  /// (present in both batches) ends up with the fresh row (Kartend-9lm54).
+  /// Used both inline (shutdown snapshot, where the "dirty" batch is the
+  /// full map) and from the async-save lambda. Static because the caller
+  /// already snapshotted state — the helper has no per-instance
+  /// dependencies.
+  static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+                              const QStringList &removedPaths = {});
+
+  /// Opportunistic GC: examine up to @p maxRowsToExamine rows (ordered by
+  /// path, resuming after @p *cursorPath) and DELETE the ones whose source
+  /// path no longer exists on disk, in one transaction. Advances the cursor
+  /// to the last examined row, clearing it when the keyspace is exhausted so
+  /// the next pass wraps to the start. Returns the deleted paths so the
+  /// caller can sweep its in-memory bookkeeping for the same keys. No-op
+  /// (and cursor reset) when the store doesn't exist yet.
+  [[nodiscard]] static QStringList pruneDeadTimestamps(int maxRowsToExamine, QString *cursorPath);
 
   /// Schedule an async save on the worker pool. Encodes @p dirtyImages
   /// to PNG inside the dedicated cache directory; writes (or skips
-  /// writing) @p dirtyTimestamps based on @p shouldWriteMetadata. The
-  /// lambda captures the cancellation token by shared_ptr value so it
-  /// keeps observing cancellation even if the storage instance is
-  /// being torn down.
+  /// writing) @p dirtyTimestamps and the @p removedTimestampPaths
+  /// deletions based on @p shouldWriteMetadata. The lambda captures the
+  /// cancellation token by shared_ptr value so it keeps observing
+  /// cancellation even if the storage instance is being torn down.
   void scheduleAsyncSave(bool shouldWriteMetadata, const QHash<QString, qint64> &dirtyTimestamps,
+                         const QStringList &removedTimestampPaths,
                          const QList<QPair<QString, QImage>> &dirtyImages);
 
   /// Set the cancellation token. In-flight tasks see it via shared_ptr;

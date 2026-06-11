@@ -7,7 +7,9 @@
 class QScrollArea;
 class QWidget;
 class CoverFlowWidget;
+struct CoverFlowCardData;
 class ScrollDataStore;
+class IDatabaseManager;
 class IFilterManager;
 #include "applicationcontext_fwd.h"
 
@@ -72,6 +74,16 @@ public:
   /// data/filter refresh paths that should not pay the per-item descriptor
   /// cost while in grid/list mode.
   void rebuildCardsIfActive();
+  /// Incremental sibling of rebuildCardsIfActive() for range-chunk arrivals
+  /// (Kartend-x7bn8): patches only the cards whose backing data changed
+  /// (@p updatedIndices, in unfiltered visual-index space — exactly what
+  /// ScrollDataStore::receiveItemsRange returns) instead of re-deriving all
+  /// N descriptors with per-item DB resolution on every chunk. Falls back to
+  /// a full rebuildCards() when a filter is active (the chunk indices are
+  /// actual-space and IFilterManager has no reverse mapping) or when the
+  /// widget's card count no longer matches the store (count change ⇒ the
+  /// whole list shifted). No-op while the carousel is hidden.
+  void updateCardsIfActive(const QList<int> &updatedIndices);
   /// ensure + config + rebuild + applyVisibility, all unconditional. Safe on
   /// every view-type transition because ensureWidget() is idempotent.
   void refreshForViewTypeChange();
@@ -92,6 +104,10 @@ signals:
 private:
   void resolveAndPushVideo(int visualIndex);
   void resolveAndPushGallery(int visualIndex);
+
+  /// Build the card descriptor for one actual (unfiltered) index — the
+  /// per-item body shared by rebuildCards() and updateCardsIfActive().
+  [[nodiscard]] CoverFlowCardData buildCard(int actualIndex, IDatabaseManager *db) const;
 
   /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old
   /// m_filterManager pointer-as-setup-struct-field pattern. Returns the

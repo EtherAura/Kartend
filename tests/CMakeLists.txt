@@ -154,6 +154,14 @@ add_executable(test_metadataqueue
 target_link_libraries(test_metadataqueue PRIVATE kartend_utils Qt6::Test)
 add_test(NAME MetadataQueue COMMAND test_metadataqueue)
 
+# DirectoryCache contract tests (Kartend-s723v / Kartend-bjrw1): queue-on-cold,
+# positive lookup, externally-dropped-file miss-probe, negative caching.
+add_executable(test_directorycache
+  utils/view/test_directorycache.cpp
+)
+target_link_libraries(test_directorycache PRIVATE kartend_utils Qt6::Test)
+add_test(NAME DirectoryCache COMMAND test_directorycache)
+
 # ArtworkCandidates tests (Kartend-y02i). Pure ranker, no filesystem.
 add_executable(test_artworkcandidates
   utils/view/test_artworkcandidates.cpp
@@ -279,6 +287,14 @@ add_executable(test_playlistmanager
 target_link_libraries(test_playlistmanager PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME PlaylistManager COMMAND test_playlistmanager)
 
+# PlaylistSerializer round-trip + malformed-input tests (Kartend-c0dwd):
+# pins the v2 JSON envelope, v1 fallback, and the Extended-M3U dialect.
+add_executable(test_playlistserializer
+  modules/playlist/test_playlistserializer.cpp
+)
+target_link_libraries(test_playlistserializer PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME PlaylistSerializer COMMAND test_playlistserializer)
+
 # SessionManager tests
 add_executable(test_sessionmanager
   modules/session/test_sessionmanager.cpp
@@ -293,6 +309,27 @@ add_executable(test_querymanager_cancel_scan
 )
 target_link_libraries(test_querymanager_cancel_scan PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
+
+# items_fts readiness pipeline regression tests (Kartend-4i5e4): the v3
+# trigger/backfill interplay let FTS 'delete' ops target never-indexed rows
+# (external-content corruption — rescan upserts failed with SQLITE_CORRUPT on
+# upgraded installs). Drives the real QueryManager init + ensureItemsFtsReady
+# slots against an on-disk SQLite db across upgrade / fresh-install /
+# legacy-self-heal flows.
+add_executable(test_querymanager_fts_backfill
+  modules/query/test_querymanager_fts_backfill.cpp
+)
+target_link_libraries(test_querymanager_fts_backfill PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerFtsBackfill COMMAND test_querymanager_fts_backfill)
+
+# ScanWorkController cancel contract (Kartend-t2my8): requestCancel() must
+# not drop queued runnables — the scan drain loop balances an inFlight count
+# that only the runnables themselves decrement.
+add_executable(test_scanworkcontroller
+  modules/query/test_scanworkcontroller.cpp
+)
+target_link_libraries(test_scanworkcontroller PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ScanWorkController COMMAND test_scanworkcontroller)
 
 # ScanService persist/prune round-trip tests (Kartend-7vubk): drive
 # scan -> saveItemsToDatabase -> prune against a real on-disk SQLite db seeded
@@ -369,6 +406,36 @@ add_executable(test_querymanager_shell_collection_sort
 target_link_libraries(test_querymanager_shell_collection_sort PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME QueryManagerShellCollectionSort COMMAND test_querymanager_shell_collection_sort)
 
+# Large-collection paging test (Kartend-1yev5): fetchItemsRange ordering and
+# page boundaries at 50k seeded rows, where OFFSET / sorted-cache regressions
+# that are invisible at small N would surface.
+add_executable(test_querymanager_fetchrange_paging
+  modules/query/test_querymanager_fetchrange_paging.cpp
+  modules/query/workersignalspy.h
+)
+target_link_libraries(test_querymanager_fetchrange_paging PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerFetchRangePaging COMMAND test_querymanager_fetchrange_paging)
+
+# Regression test (Kartend-m9r1s): sortFiles takes optional caller-supplied
+# mtime/size maps for the Date/Size sort modes and only stats paths missing
+# from them; ordering semantics must stay identical to the historical
+# stat-everything path. Also covers buildSortMetadata's re-keying contract.
+add_executable(test_querymanager_sortfiles
+  modules/query/test_querymanager_sortfiles.cpp
+)
+target_link_libraries(test_querymanager_sortfiles PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerSortFiles COMMAND test_querymanager_sortfiles)
+
+# Regression test (Kartend-4fmu1): the canonical-path dedup cache survives
+# across flattened-subcollection loads via the persistent (path, mtime)-keyed
+# map on QueryManager; seed/harvest helpers validate by mtime so touched
+# files re-resolve while unchanged ones skip the per-item realpath walk.
+add_executable(test_querymanager_canonicalcache
+  modules/query/test_querymanager_canonicalcache.cpp
+)
+target_link_libraries(test_querymanager_canonicalcache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME QueryManagerCanonicalCache COMMAND test_querymanager_canonicalcache)
+
 # DatabaseManager lifecycle / threading tests
 # Reuses the same query-stack source list as QueryManagerCancelScan and adds
 # the databasemanager TUs. Validates worker-thread shutdown, SQL connection
@@ -378,6 +445,17 @@ add_executable(test_databasemanager
 )
 target_link_libraries(test_databasemanager PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME DatabaseManager COMMAND test_databasemanager)
+
+# Regression test (Kartend-ardm7): FileMapCache::resolveRelativeFilePath
+# resolves leaf-name / media-dir-relative entries from the reverse index
+# built on items load instead of linear-scanning the caller's fileNames map
+# per unresolved entry (which made widget creation / subcollection filtering
+# O(items^2)).
+add_executable(test_filemapcache
+  modules/database/test_filemapcache.cpp
+)
+target_link_libraries(test_filemapcache PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME FileMapCacheResolve COMMAND test_filemapcache)
 
 # CachedCountsService: stale-completion drop via monotonic generation token.
 # Small surface — only needs the service TU, the session interface header,
@@ -472,6 +550,17 @@ add_executable(test_generalsettingsequality
 )
 target_link_libraries(test_generalsettingsequality PRIVATE kartend_utils Qt6::Test)
 add_test(NAME GeneralSettingsEquality COMMAND test_generalsettingsequality)
+
+# Field-level save->load round-trip tests for every per-domain settings
+# persistence unit in src/utils/app/collection (Kartend-dwxuc). One slot per
+# domain: every persisted field set non-default, saved to a fresh INI, loaded
+# back, compared via the struct's operator== — catches asymmetric key typos
+# and save/load default drift that silently lose user settings.
+add_executable(test_settingspersistence_roundtrip
+  utils/app/test_settingspersistence_roundtrip.cpp
+)
+target_link_libraries(test_settingspersistence_roundtrip PRIVATE kartend_utils Qt6::Test)
+add_test(NAME SettingsPersistenceRoundtrip COMMAND test_settingspersistence_roundtrip)
 
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
@@ -778,6 +867,16 @@ add_executable(test_providerrequests
 target_link_libraries(test_providerrequests PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
 add_test(NAME ProviderRequests COMMAND test_providerrequests)
 
+# Provider orchestration tests (Kartend-ym7z3): the request -> parse ->
+# callback chain of MusicBrainz / Open Library / TMDB through the
+# ProviderBase test fetch seam with canned JSON — request shape, error
+# propagation, and guard paths. No network, no QNetworkAccessManager.
+add_executable(test_providerorchestration
+  modules/scraper/test_providerorchestration.cpp
+)
+target_link_libraries(test_providerorchestration PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME ProviderOrchestration COMMAND test_providerorchestration)
+
 # ScreenScraperRegion: No-Intro region heuristic (pure, network-free).
 add_executable(test_screenscraperregion
   modules/scraper/test_screenscraperregion.cpp
@@ -957,6 +1056,24 @@ add_executable(test_usagestatsstore
 )
 target_link_libraries(test_usagestatsstore PRIVATE kartend_utils Qt6::Test)
 add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
+
+# KartendDb::DbTransaction contract tests against real SQLite (Kartend-c0dwd):
+# commit/rollback, nested-guard deferral via a shared depth counter, the
+# depth-less always-outermost ctor, and failed-BEGIN reporting.
+add_executable(test_dbtxn
+  utils/db/test_dbtxn.cpp
+)
+target_link_libraries(test_dbtxn PRIVATE kartend_utils Qt6::Test)
+add_test(NAME DbTxn COMMAND test_dbtxn)
+
+# KartendDb::escapeLike contract + real-SQLite ESCAPE round trip
+# (Kartend-joird): underscore/percent in user text must stop acting as
+# LIKE wildcards across the search / subfolder / smart-playlist paths.
+add_executable(test_sqllike
+  utils/db/test_sqllike.cpp
+)
+target_link_libraries(test_sqllike PRIVATE kartend_utils Qt6::Test)
+add_test(NAME SqlLike COMMAND test_sqllike)
 
 # HistoryStore tests
 add_executable(test_historystore
@@ -1160,6 +1277,16 @@ add_executable(test_mousehelpers
 target_link_libraries(test_mousehelpers PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME MouseHelpers COMMAND test_mousehelpers)
 
+# MouseManager unit tests (Kartend-ior0a): hold-scroll state machine, click-
+# hold timers (driven via friend access, no real waits), wheel-step
+# computation over synthesized QWheelEvents, and the static widget-finding
+# helpers against real ItemWidgets under the offscreen QPA.
+add_executable(test_mousemanager
+  modules/mouse/test_mousemanager.cpp
+)
+target_link_libraries(test_mousemanager PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME MouseManager COMMAND test_mousemanager)
+
 # SelectionHelpers tests (pure helpers extracted)
 add_executable(test_selectionhelpers
   modules/selection/test_selectionhelpers.cpp
@@ -1241,12 +1368,40 @@ target_link_libraries(bench_fuzzymatch PRIVATE kartend_utils Qt6::Test)
 add_test(NAME BenchFuzzyMatch COMMAND bench_fuzzymatch)
 set_tests_properties(BenchFuzzyMatch PROPERTIES LABELS "benchmark")
 
+# Artwork path-resolution benchmarks (Kartend-w9s8e): per-tile scroll cost of
+# ArtworkUtils::findArtworkForFile / findArtworkForFileCached against a
+# synthetic 2000-file temp-dir artwork tree (hit/miss, warm/cold cache).
+add_executable(bench_artworkresolve
+  benchmarks/bench_artworkresolve.cpp
+)
+target_link_libraries(bench_artworkresolve PRIVATE kartend_utils Qt6::Test)
+add_test(NAME BenchArtworkResolve COMMAND bench_artworkresolve)
+set_tests_properties(BenchArtworkResolve PROPERTIES LABELS "benchmark")
+
+# Collection-load sort benchmarks (Kartend-w9s8e):
+# QueryManagerInternal::sortFiles over 10k synthetic paths, name modes plus
+# the map-backed Date/Size fast path (Kartend-m9r1s).
+add_executable(bench_sortfiles
+  benchmarks/bench_sortfiles.cpp
+)
+target_link_libraries(bench_sortfiles PRIVATE kartend_data kartend_api kartend_utils Qt6::Test)
+add_test(NAME BenchSortFiles COMMAND bench_sortfiles)
+set_tests_properties(BenchSortFiles PROPERTIES LABELS "benchmark")
+
 # GamepadHelpers tests (pure helpers extracted from GamepadManager)
 add_executable(test_gamepadhelpers
   modules/gamepad/test_gamepadhelpers.cpp
 )
 target_link_libraries(test_gamepadhelpers PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
 add_test(NAME GamepadHelpers COMMAND test_gamepadhelpers)
+
+# GamepadManager tests (input-translation layer: button dispatch, binding
+# capture, suspend gating, keyboard-repeat handshake — Kartend-npoh2)
+add_executable(test_gamepadmanager
+  modules/gamepad/test_gamepadmanager.cpp
+)
+target_link_libraries(test_gamepadmanager PRIVATE kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Test)
+add_test(NAME GamepadManager COMMAND test_gamepadmanager)
 
 # OverlayHelpers tests (pure helpers extracted from SelectionOverlayManager)
 add_executable(test_overlayhelpers

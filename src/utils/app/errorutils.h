@@ -87,6 +87,10 @@ enum class ErrorCode {
   InvalidArgument = 900,
   OperationCancelled = 901,
   ResponseTooLarge = 902,
+  // A bounded resource (e.g. the decompressed-size cap on launch-time
+  // archive extraction, Kartend-ijglg) was exhausted and the operation was
+  // aborted to protect the host.
+  ResourceLimitExceeded = 903,
   UnknownError = 999
 };
 
@@ -299,6 +303,8 @@ inline void logError(const ErrorContext &ctx) {
     return "OperationCancelled";
   case ErrorCode::ResponseTooLarge:
     return "ResponseTooLarge";
+  case ErrorCode::ResourceLimitExceeded:
+    return "ResourceLimitExceeded";
   case ErrorCode::UnknownError:
     return "UnknownError";
   }

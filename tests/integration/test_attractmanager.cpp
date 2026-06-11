@@ -5,7 +5,10 @@
 #include "collection/generalsettings.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 
 #include <QSignalSpy>
 #include <QTest>
@@ -105,7 +108,7 @@ void TestAttractManager::testSetSuspendedDoesNotStartAttract() {
 }
 
 void TestAttractManager::testFixtureExposesAttractManagerViaInteractionManager() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   auto *interaction = win->getApplicationManager()->getInteractionManager();
   QVERIFY(interaction);

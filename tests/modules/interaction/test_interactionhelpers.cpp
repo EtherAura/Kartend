@@ -75,17 +75,15 @@ void TestInteractionHelpers::stepSizeFallsBackToOneForNonPositiveGridWidth() {
 // ------------------------------ computeVerticalHoldStep — guards ------------
 
 void TestInteractionHelpers::holdStepReturnsInvalidWhenTotalItemsZeroOrNegative() {
-  const auto a =
-      InteractionHelpers::computeVerticalHoldStep(/*currentIndex=*/0,
-                                                  /*direction=*/1,
-                                                  /*stepSize=*/1,
-                                                  /*totalItems=*/0,
-                                                  /*wrap=*/true);
+  const auto a = InteractionHelpers::computeVerticalHoldStep(/*currentIndex=*/0,
+                                                             /*direction=*/1,
+                                                             /*stepSize=*/1,
+                                                             /*totalItems=*/0,
+                                                             /*wrap=*/true);
   QCOMPARE(a.nextIndex, -1);
   QVERIFY(!a.didWrap);
 
-  const auto b =
-      InteractionHelpers::computeVerticalHoldStep(0, 1, 1, -5, false);
+  const auto b = InteractionHelpers::computeVerticalHoldStep(0, 1, 1, -5, false);
   QCOMPARE(b.nextIndex, -1);
   QVERIFY(!b.didWrap);
 }
@@ -93,8 +91,7 @@ void TestInteractionHelpers::holdStepReturnsInvalidWhenTotalItemsZeroOrNegative(
 void TestInteractionHelpers::holdStepReturnsInvalidWhenStepSizeZeroOrNegative() {
   const auto a = InteractionHelpers::computeVerticalHoldStep(0, 1, 0, 10, true);
   QCOMPARE(a.nextIndex, -1);
-  const auto b =
-      InteractionHelpers::computeVerticalHoldStep(0, 1, -2, 10, true);
+  const auto b = InteractionHelpers::computeVerticalHoldStep(0, 1, -2, 10, true);
   QCOMPARE(b.nextIndex, -1);
 }
 
@@ -103,8 +100,7 @@ void TestInteractionHelpers::holdStepReturnsInvalidWhenStepSizeZeroOrNegative() 
 void TestInteractionHelpers::holdStepClampsToZeroAtTopEdge() {
   // currentIndex=2, direction=-1, stepSize=5, totalItems=10, wrap=false
   // raw next = 2 - 5 = -3 → clamp to 0.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(2, -1, 5, 10, false);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(2, -1, 5, 10, false);
   QCOMPARE(step.nextIndex, 0);
   QVERIFY(!step.didWrap);
 }
@@ -112,34 +108,29 @@ void TestInteractionHelpers::holdStepClampsToZeroAtTopEdge() {
 void TestInteractionHelpers::holdStepClampsToLastIndexAtBottomEdge() {
   // currentIndex=8, direction=+1, stepSize=5, totalItems=10, wrap=false
   // raw next = 13 → clamp to 9.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(8, 1, 5, 10, false);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(8, 1, 5, 10, false);
   QCOMPARE(step.nextIndex, 9);
   QVERIFY(!step.didWrap);
 }
 
 void TestInteractionHelpers::holdStepReturnsCurrentWhenAlreadyAtEdgeWithoutWrap() {
   // currentIndex=0, direction=-1: clamps right back to 0.
-  const auto top =
-      InteractionHelpers::computeVerticalHoldStep(0, -1, 5, 10, false);
+  const auto top = InteractionHelpers::computeVerticalHoldStep(0, -1, 5, 10, false);
   QCOMPARE(top.nextIndex, 0);
 
   // currentIndex=9, direction=+1: clamps to 9.
-  const auto bot =
-      InteractionHelpers::computeVerticalHoldStep(9, 1, 5, 10, false);
+  const auto bot = InteractionHelpers::computeVerticalHoldStep(9, 1, 5, 10, false);
   QCOMPARE(bot.nextIndex, 9);
 }
 
 void TestInteractionHelpers::holdStepNormalAdvanceDownDoesNotWrap() {
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(0, 1, 5, 100, false);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(0, 1, 5, 100, false);
   QCOMPARE(step.nextIndex, 5);
   QVERIFY(!step.didWrap);
 }
 
 void TestInteractionHelpers::holdStepNormalAdvanceUpDoesNotWrap() {
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(20, -1, 5, 100, false);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(20, -1, 5, 100, false);
   QCOMPARE(step.nextIndex, 15);
   QVERIFY(!step.didWrap);
 }
@@ -149,8 +140,7 @@ void TestInteractionHelpers::holdStepNormalAdvanceUpDoesNotWrap() {
 void TestInteractionHelpers::holdStepWrapsBelowZeroToEnd() {
   // currentIndex=2, direction=-1, stepSize=5, totalItems=10, wrap=true
   // raw next = -3 → ((-3 % 10) + 10) % 10 = 7.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(2, -1, 5, 10, true);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(2, -1, 5, 10, true);
   QCOMPARE(step.nextIndex, 7);
   QVERIFY(step.didWrap);
 }
@@ -158,31 +148,27 @@ void TestInteractionHelpers::holdStepWrapsBelowZeroToEnd() {
 void TestInteractionHelpers::holdStepWrapsAboveLastIndexToStart() {
   // currentIndex=8, direction=+1, stepSize=5, totalItems=10, wrap=true
   // raw next = 13 → 13 % 10 = 3.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(8, 1, 5, 10, true);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(8, 1, 5, 10, true);
   QCOMPARE(step.nextIndex, 3);
   QVERIFY(step.didWrap);
 }
 
 void TestInteractionHelpers::holdStepDoesNotWrapWhenStepStaysInRange() {
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(0, 1, 5, 10, true);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(0, 1, 5, 10, true);
   QCOMPARE(step.nextIndex, 5);
   QVERIFY(!step.didWrap);
 }
 
 void TestInteractionHelpers::holdStepWrapsLargeNegativeStep() {
   // raw next = 0 - 23 = -23 → ((-23 % 10) + 10) % 10 = 7.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(0, -1, 23, 10, true);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(0, -1, 23, 10, true);
   QCOMPARE(step.nextIndex, 7);
   QVERIFY(step.didWrap);
 }
 
 void TestInteractionHelpers::holdStepWrapsLargePositiveStep() {
   // raw next = 0 + 23 = 23 → 23 % 10 = 3.
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(0, 1, 23, 10, true);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(0, 1, 23, 10, true);
   QCOMPARE(step.nextIndex, 3);
   QVERIFY(step.didWrap);
 }

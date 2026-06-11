@@ -645,7 +645,10 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
   // (the ScraperService keeps running); Cancel stops the active
   // scrape entirely.
   if (!m_dlg->m_scrapeButton) {
-    auto *box = qobject_cast<QDialogButtonBox *>(m_dlg->m_applyButton->parent());
+    // Kartend-l06g6: use the stored handle instead of re-deriving the box
+    // from m_applyButton's parentage (broke silently if the button were
+    // ever wrapped in a container).
+    QDialogButtonBox *box = m_dlg->m_buttonBox;
     if (box) {
       m_dlg->m_scrapeButton = box->addButton(tr("Scrape"), QDialogButtonBox::ActionRole);
       connect(m_dlg->m_scrapeButton, &QPushButton::clicked, this,

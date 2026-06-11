@@ -46,10 +46,8 @@ void BenchFilterHelpers::initTestCase() {
   m_subcollectionNames.reserve(1024);
   for (int i = 0; i < 1024; ++i) {
     const QString &prefix = prefixes[i % prefixes.size()];
-    m_subcollectionNames.append(QStringLiteral("%1 Title #%2 (Region %3)")
-                                    .arg(prefix)
-                                    .arg(i)
-                                    .arg(i % 4));
+    m_subcollectionNames.append(
+        QStringLiteral("%1 Title #%2 (Region %3)").arg(prefix).arg(i).arg(i % 4));
   }
 
   m_filePathToDisplayName.reserve(1024);

@@ -56,7 +56,7 @@ public:
     }
     m_cache = std::make_unique<PreparedStatementCache>();
     m_cache->setDatabase(m_db);
-    m_svc = std::make_unique<ScanService>(m_db, *m_cache);
+    m_svc = std::make_unique<ScanService>(m_db, *m_cache, m_txnDepth);
   }
   ~PersistFixture() {
     // Tear down everything that holds the connection (ScanService's queries
@@ -81,6 +81,8 @@ private:
   QSqlDatabase m_db;
   bool m_opened = false;
   std::unique_ptr<PreparedStatementCache> m_cache;
+  // Stands in for QueryManager::m_txnDepth (the guard's shared depth counter).
+  int m_txnDepth = 0;
   std::unique_ptr<ScanService> m_svc;
 };
 
@@ -138,6 +140,9 @@ private slots:
   void scanThenSave_persistsMatchingFiles();
   void deleteThenRescan_prunesMissingFile();
   void cancelledSave_leavesCommittedStateIntact();
+  void emptiedDirectoryRescan_prunesAllAndStampsMetadata();
+  void missingDirectoryScan_reportsNotCompleted();
+  void fileSize_persistsAndUpdatesOnRescan();
 };
 
 void TestScanServicePersist::initTestCase() {
@@ -221,6 +226,101 @@ void TestScanServicePersist::cancelledSave_leavesCommittedStateIntact() {
   QVERIFY2(!names.contains(QStringLiteral("c.bin")), "a cancelled scan must not apply staged rows");
   QVERIFY(names.contains(QStringLiteral("a.bin")));
   QVERIFY(names.contains(QStringLiteral("b.bin")));
+}
+
+void TestScanServicePersist::emptiedDirectoryRescan_prunesAllAndStampsMetadata() {
+  // Kartend-fys4o: a directory the user emptied is a COMPLETED zero-file
+  // scan — it must persist (prune every stale row + stamp last_scanned) so
+  // the items disappear from DB-backed counts and needsRescan stops
+  // re-walking the directory on every load.
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "a"));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("b.bin")), "b"));
+
+  const CollectionConfig cfg = makeConfig(media.path());
+  scanAndSave(fx.service(), cfg);
+  QCOMPARE(itemCount(fx.db()), 2);
+
+  // Empty the directory (it still exists) and rescan, mirroring
+  // loadOrScanCollection's gating: persist when non-empty OR completed.
+  QVERIFY(QFile::remove(dir.filePath(QStringLiteral("a.bin"))));
+  QVERIFY(QFile::remove(dir.filePath(QStringLiteral("b.bin"))));
+
+  QHash<QString, QDateTime> timestamps;
+  QString signature;
+  bool scanCompleted = false;
+  const QStringList found =
+      fx.service()->scanMediaDirectory(cfg, timestamps, &signature, &scanCompleted);
+  QVERIFY(found.isEmpty());
+  QVERIFY2(scanCompleted, "empty result from an existing directory is a completed scan");
+
+  fx.service()->saveItemsToDatabase(/*collectionIndex=*/0, found, timestamps, cfg, signature);
+
+  QCOMPARE(itemCount(fx.db()), 0);
+  // Scan metadata was stamped: last_scanned is no longer NULL/empty.
+  QSqlQuery q(fx.db());
+  QVERIFY(q.exec(QStringLiteral("SELECT last_scanned FROM collections LIMIT 1")));
+  QVERIFY(q.next());
+  QVERIFY2(!q.value(0).toString().isEmpty(), "last_scanned must be stamped by the empty save");
+}
+
+void TestScanServicePersist::missingDirectoryScan_reportsNotCompleted() {
+  // Kartend-fys4o: a missing / unmounted directory must NOT be treated as a
+  // completed zero-file scan — loadOrScanCollection's gate would otherwise
+  // prune the whole collection while a network share is briefly down.
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  CollectionConfig cfg = makeConfig(QStringLiteral("/nonexistent/kartend-test-missing-dir"));
+  QHash<QString, QDateTime> timestamps;
+  QString signature;
+  bool scanCompleted = true; // must be reset to false by the call
+  const QStringList found =
+      fx.service()->scanMediaDirectory(cfg, timestamps, &signature, &scanCompleted);
+  QVERIFY(found.isEmpty());
+  QVERIFY2(!scanCompleted, "missing directory must not report a completed scan");
+}
+
+void TestScanServicePersist::fileSize_persistsAndUpdatesOnRescan() {
+  // Kartend-3gb7e: the streaming pipeline staged file_size into scanned_items
+  // but the commitStagedScanResults INSERT omitted the column, so every row
+  // it persisted kept file_size DEFAULT 0 — the ORDER BY file_size fast
+  // paths silently degraded to name order and the metadata sort path had to
+  // stat-fallback. file_size must land on first scan AND be refreshed by the
+  // ON CONFLICT update on rescan (sizes change, unlike date_added).
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "aaa"));   // 3 bytes
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("b.bin")), "bbbbb")); // 5 bytes
+
+  const CollectionConfig cfg = makeConfig(media.path());
+  scanAndSave(fx.service(), cfg);
+
+  const auto sizeOf = [&fx](const QString &baseName) -> qint64 {
+    QSqlQuery q(fx.db());
+    q.prepare(QStringLiteral("SELECT file_size FROM items WHERE path LIKE ?"));
+    q.addBindValue(QStringLiteral("%/") + baseName);
+    if (!q.exec() || !q.next()) return -1;
+    return q.value(0).toLongLong();
+  };
+  QCOMPARE(sizeOf(QStringLiteral("a.bin")), qint64(3));
+  QCOMPARE(sizeOf(QStringLiteral("b.bin")), qint64(5));
+
+  // Grow a.bin and rescan: the conflict-update arm must refresh the stored
+  // size for the existing row (a stale value is as bad as a missing one).
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "aaaaaaaaaa")); // 10 bytes
+  scanAndSave(fx.service(), cfg);
+  QCOMPARE(sizeOf(QStringLiteral("a.bin")), qint64(10));
+  QCOMPARE(sizeOf(QStringLiteral("b.bin")), qint64(5));
 }
 
 QTEST_MAIN(TestScanServicePersist)

@@ -73,6 +73,11 @@ private:
   // Parent widget for the confirmation message box. QPointer so we don't
   // outlive it if the dialog is destroyed before the async scan finishes.
   QPointer<QWidget> m_pendingAddSummaryParent;
+  // Kartend-sqoq0: owner-supplied stock-modal runners captured from the
+  // SettingsDialogContext at openSettingsDialog time, used by the async
+  // scan-summary message boxes. Null runners fall back to direct
+  // QMessageBox construction (the pre-sqoq0 behavior).
+  DialogRunners m_dialogRunners;
 
   // Last successfully-saved collection list, used as the diff baseline for
   // the per-domain *Changed signals emitted from saveCollections(). Updated

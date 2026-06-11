@@ -26,8 +26,7 @@ private slots:
 
 namespace {
 
-ScreenScraperSystems::System makeSystem(int id, const QString &display,
-                                        const QStringList &exts,
+ScreenScraperSystems::System makeSystem(int id, const QString &display, const QStringList &exts,
                                         const QStringList &aliases) {
   ScreenScraperSystems::System s;
   s.id = id;
@@ -43,9 +42,8 @@ void TestScreenScraperSystems::emptyCatalog_returnsMinusOne() {
   // No catalog supplied (cache fetcher hasn't run / is offline) →
   // autodetect must return -1 so the provider falls back to
   // systemeid=0 instead of guessing wildly.
-  const int id = ScreenScraperSystems::autodetect(QStringLiteral("anything"),
-                                                  QStringLiteral("anything"),
-                                                  {QStringLiteral("anything")}, {});
+  const int id = ScreenScraperSystems::autodetect(
+      QStringLiteral("anything"), QStringLiteral("anything"), {QStringLiteral("anything")}, {});
   QCOMPARE(id, -1);
 }
 
@@ -64,9 +62,9 @@ void TestScreenScraperSystems::autodetect_matchesByExtension() {
       makeSystem(1, QStringLiteral("Display A"), {QStringLiteral("fmt-a")}, {}),
       makeSystem(2, QStringLiteral("Display B"), {QStringLiteral("fmt-b")}, {}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QString(), QString(),
-                                            {QStringLiteral("fmt-b")}, catalog),
-           2);
+  QCOMPARE(
+      ScreenScraperSystems::autodetect(QString(), QString(), {QStringLiteral("fmt-b")}, catalog),
+      2);
 }
 
 void TestScreenScraperSystems::autodetect_matchesByCollectionName() {
@@ -74,8 +72,7 @@ void TestScreenScraperSystems::autodetect_matchesByCollectionName() {
       makeSystem(1, QStringLiteral("Display A"), {}, {QStringLiteral("alpha")}),
       makeSystem(2, QStringLiteral("Display B"), {}, {QStringLiteral("beta")}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("My Beta Roms"),
-                                            QString(), {}, catalog),
+  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("My Beta Roms"), QString(), {}, catalog),
            2);
 }
 
@@ -83,9 +80,7 @@ void TestScreenScraperSystems::autodetect_matchesByCollectionType() {
   const QList<ScreenScraperSystems::System> catalog = {
       makeSystem(7, QStringLiteral("Display G"), {}, {QStringLiteral("gamma")}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QString(),
-                                            QStringLiteral("GAMMA"), {}, catalog),
-           7);
+  QCOMPARE(ScreenScraperSystems::autodetect(QString(), QStringLiteral("GAMMA"), {}, catalog), 7);
 }
 
 void TestScreenScraperSystems::autodetect_aliasOutweighsExtensionWhenTotalsTie() {
@@ -93,12 +88,11 @@ void TestScreenScraperSystems::autodetect_aliasOutweighsExtensionWhenTotalsTie()
   // matches the name. Alias gives +2, extension gives +1 — alias
   // candidate (id 5) wins.
   const QList<ScreenScraperSystems::System> catalog = {
-      makeSystem(4, QStringLiteral("Plain"),  {QStringLiteral("fmt-x")}, {}),
+      makeSystem(4, QStringLiteral("Plain"), {QStringLiteral("fmt-x")}, {}),
       makeSystem(5, QStringLiteral("Aliased"), {QStringLiteral("fmt-x")},
                  {QStringLiteral("alpha")}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("Alpha Things"),
-                                            QString(),
+  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("Alpha Things"), QString(),
                                             {QStringLiteral("fmt-x")}, catalog),
            5);
 }
@@ -108,8 +102,7 @@ void TestScreenScraperSystems::autodetect_returnsMinusOneWhenNoMatch() {
       makeSystem(1, QStringLiteral("Display A"), {QStringLiteral("fmt-a")},
                  {QStringLiteral("alpha")}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("Random Stuff"),
-                                            QStringLiteral("misc"),
+  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("Random Stuff"), QStringLiteral("misc"),
                                             {QStringLiteral("zzz")}, catalog),
            -1);
 }
@@ -118,9 +111,9 @@ void TestScreenScraperSystems::autodetect_normalizesExtensionPrefix() {
   const QList<ScreenScraperSystems::System> catalog = {
       makeSystem(1, QStringLiteral("Display A"), {QStringLiteral("fmt-a")}, {}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QString(), QString(),
-                                            {QStringLiteral(".fmt-a")}, catalog),
-           1);
+  QCOMPARE(
+      ScreenScraperSystems::autodetect(QString(), QString(), {QStringLiteral(".fmt-a")}, catalog),
+      1);
 }
 
 void TestScreenScraperSystems::autodetect_avoidsSubstringFalseMatchOnShortAliases() {
@@ -130,11 +123,10 @@ void TestScreenScraperSystems::autodetect_avoidsSubstringFalseMatchOnShortAliase
   // the "ab" system.
   const QList<ScreenScraperSystems::System> catalog = {
       makeSystem(1, QStringLiteral("Short"), {}, {QStringLiteral("ab")}),
-      makeSystem(2, QStringLiteral("Long"),  {}, {QStringLiteral("abxy")}),
+      makeSystem(2, QStringLiteral("Long"), {}, {QStringLiteral("abxy")}),
   };
-  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("My ABXY Stuff"),
-                                            QString(), {}, catalog),
-           2);
+  QCOMPARE(
+      ScreenScraperSystems::autodetect(QStringLiteral("My ABXY Stuff"), QString(), {}, catalog), 2);
 }
 
 QTEST_MAIN(TestScreenScraperSystems)

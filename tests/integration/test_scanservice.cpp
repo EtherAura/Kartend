@@ -46,7 +46,7 @@ public:
     m_db.setDatabaseName(QStringLiteral(":memory:"));
     m_opened = m_db.open();
     m_cache.setDatabase(m_db);
-    m_svc = std::make_unique<ScanService>(m_db, m_cache);
+    m_svc = std::make_unique<ScanService>(m_db, m_cache, m_txnDepth);
   }
   ~ScanServiceFixture() {
     m_svc.reset();
@@ -63,6 +63,8 @@ private:
   QSqlDatabase m_db;
   bool m_opened = false;
   PreparedStatementCache m_cache;
+  // Stands in for QueryManager::m_txnDepth (the guard's shared depth counter).
+  int m_txnDepth = 0;
   std::unique_ptr<ScanService> m_svc;
 };
 

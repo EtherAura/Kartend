@@ -156,6 +156,7 @@ public slots:
   void filterItems(const QString &searchText) override;
   void filterItemsCurrentAndSubcollections(const QString &searchText) override;
   void filterItemsAllCollections(const QString &searchText) override;
+  void invalidatePendingItemCount() override;
   void scheduleSelectionRestore(int desiredIndex, int finalEnsureDelayMs) override;
   void onItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);

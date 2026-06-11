@@ -83,37 +83,31 @@ void TestSelectionHelpers::shouldTreatAsNewRow_rowBoundary() {
   QVERIFY(SelectionHelpers::shouldTreatAsNewRow(6, 0, 6));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_negativeFromIndex_returnsFalse() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_negativeFromIndex_returnsFalse() {
   QVERIFY(!SelectionHelpers::shouldAnimateHorizontalHop(-1, 5, 6));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_zeroGridWidth_returnsFalse() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_zeroGridWidth_returnsFalse() {
   QVERIFY(!SelectionHelpers::shouldAnimateHorizontalHop(2, 5, 0));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_adjacentSameRow_returnsFalse() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_adjacentSameRow_returnsFalse() {
   // Both on row 0, adjacent
   QVERIFY(!SelectionHelpers::shouldAnimateHorizontalHop(2, 3, 6));
   QVERIFY(!SelectionHelpers::shouldAnimateHorizontalHop(3, 2, 6));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_skipSameRow_returnsTrue() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_skipSameRow_returnsTrue() {
   // Both on row 0, skipping
   QVERIFY(SelectionHelpers::shouldAnimateHorizontalHop(0, 3, 6));
   QVERIFY(SelectionHelpers::shouldAnimateHorizontalHop(1, 5, 6));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_skipBackwardSameRow_returnsTrue() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_skipBackwardSameRow_returnsTrue() {
   QVERIFY(SelectionHelpers::shouldAnimateHorizontalHop(5, 1, 6));
 }
 
-void TestSelectionHelpers::
-    shouldAnimateHorizontalHop_differentRow_returnsFalse() {
+void TestSelectionHelpers::shouldAnimateHorizontalHop_differentRow_returnsFalse() {
   // 2 -> 8 = row 0 to row 1
   QVERIFY(!SelectionHelpers::shouldAnimateHorizontalHop(2, 8, 6));
 }

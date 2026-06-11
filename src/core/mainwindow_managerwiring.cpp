@@ -20,6 +20,7 @@
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
 #include "dialogcontroller.h"
+#include "dialogrunners.h"
 #include "errorpresentation.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
@@ -39,10 +40,56 @@
 #include "ui_mainwindow.h"
 
 #include <QDesktopServices>
+#include <QFileDialog>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStringList>
 #include <QUrl>
+
+DialogRunners MainWindow::makeDialogRunners() {
+  // Kartend-sqoq0: the generic stock-Qt-modal runners. Modules-layer code
+  // used to construct QMessageBox / QInputDialog / QFileDialog directly;
+  // these closures move the construction to the UI layer (parented on the
+  // main window) while the modules invoke them through their setup structs.
+  // Headless tests supply stubs instead and never see a modal; an unset
+  // runner falls back to the module's original direct construction.
+  DialogRunners r;
+  r.confirm = [this](const QString &title, const QString &text) {
+    return QMessageBox::question(this, title, text, QMessageBox::Yes | QMessageBox::No,
+                                 QMessageBox::No) == QMessageBox::Yes;
+  };
+  r.warn = [this](const QString &title, const QString &text) {
+    QMessageBox::warning(this, title, text);
+  };
+  r.info = [this](const QString &title, const QString &text) {
+    QMessageBox::information(this, title, text);
+  };
+  r.getText = [this](const QString &title, const QString &label,
+                     const QString &initialText) -> std::optional<QString> {
+    bool ok = false;
+    const QString out =
+        QInputDialog::getText(this, title, label, QLineEdit::Normal, initialText, &ok);
+    if (!ok) {
+      return std::nullopt;
+    }
+    return out;
+  };
+  r.getOpenFileName = [this](const QString &caption, const QString &startPath,
+                             const QString &filter) {
+    return QFileDialog::getOpenFileName(this, caption, startPath, filter);
+  };
+  r.getSaveFileName = [this](const QString &caption, const QString &startPath,
+                             const QString &filter) {
+    return QFileDialog::getSaveFileName(this, caption, startPath, filter);
+  };
+  r.getExistingDirectory = [this](const QString &caption, const QString &startDir) {
+    return QFileDialog::getExistingDirectory(
+        this, caption, startDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+  };
+  return r;
+}
 
 void MainWindow::wireInteractionManager() {
   InteractionManagerSetup setup;
@@ -67,6 +114,11 @@ void MainWindow::wireInteractionManager() {
                                         const QString &filePath, const LaunchPreview &preview) {
     m_dialogController->runLaunchPreviewDialog(itemTitle, launcherName, filePath, preview);
   };
+  // Kartend-sqoq0: generic stock-Qt-modal runners for the warn / file-picker
+  // / text-prompt sites in the interaction module (launcher-unavailable
+  // warning, manual-file picker, playlist menu actions). Threaded onward to
+  // PlaylistMenuController by InteractionManager's setup.
+  setup.dialogs = makeDialogRunners();
 
   loadingLabel = ui->loadingLabel;
 
@@ -127,6 +179,27 @@ void MainWindow::wireInteractionManager() {
       // exits — the user expects "return on close" behavior.
       raise();
       activateWindow();
+    });
+
+    // Kartend-mkcak: archive extraction now runs on a worker thread; show
+    // the same overlay as a busy state so a slow extraction doesn't look
+    // like a dead launch. extractionFinished always fires before the launch
+    // continues, so on success the overlay flips back to "Now Playing" when
+    // the tracked child starts.
+    connect(launch, &LaunchManager::extractionStarted, this,
+            [this](const QString & /*filePath*/, const QString &displayName) {
+              if (m_nowPlayingOverlay) {
+                m_nowPlayingOverlay->showOverlay(displayName, tr("Extracting Archive"),
+                                                 tr("Preparing to launch..."));
+              }
+            });
+    connect(launch, &LaunchManager::extractionFinished, this, [this](const QString & /*filePath*/) {
+      if (m_isShuttingDown) {
+        return;
+      }
+      if (m_nowPlayingOverlay) {
+        m_nowPlayingOverlay->hideOverlay();
+      }
     });
   }
 
@@ -232,6 +305,9 @@ void MainWindow::wireKartManager() {
     kartSetup.getPlaylistManager = [this]() -> IPlaylistManager * {
       return m_appManager ? m_appManager->getPlaylistManager() : nullptr;
     };
+    // Kartend-sqoq0: generic runners for the import/export file pickers and
+    // failure warnings KartManager used to construct directly.
+    kartSetup.dialogs = makeDialogRunners();
     // Kartend-a3ir: the interactive merge dialog lives in the UI layer
     // and is constructed here. KartManager (data layer) just invokes the
     // closure with the conflicting metadata and uses the returned

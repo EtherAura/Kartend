@@ -60,7 +60,11 @@ Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
   } while (0)
 
 auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
-  const int currentSelection = std::max(0, currentSelectedIndex());
+  // Kartend-l06g6: capture UNCLAMPED — the old std::max(0, …) made the < 0
+  // guard unsatisfiable, so Enter/Confirm with nothing selected (e.g. right
+  // after entering a collection with rememberSelection off) activated item 0
+  // instead of no-op'ing as the guard intended.
+  const int currentSelection = currentSelectedIndex();
   if (currentSelection < 0 || currentSelection >= totalItems) {
     return true;
   }

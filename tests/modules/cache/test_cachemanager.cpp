@@ -5,12 +5,17 @@
  * Tests the in-memory pixmap cache, disk persistence, and cache metrics.
  */
 
+#include "cachediskstorage.h"
 #include "cachemanager.h"
 #include <QApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QHash>
 #include <QPixmap>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -54,13 +59,31 @@ private slots:
   void testSetArtworkCacheBudgetMB_resizesCeiling();
   void testSetArtworkCacheBudgetMB_clampsBelowOneMB();
 
+  // Timestamp-store persistence + bookkeeping sweep (Kartend-0ldg2)
+  void testShutdownSnapshotPersistsAllTimestamps();
+  void testPruneSweepsDeadBookkeeping();
+
+  // Invalidation propagation to the timestamp store (Kartend-9lm54)
+  void testInvalidationDeletesStoreRowOnDebouncedSave();
+  void testShutdownFlushDeletesInvalidatedRow();
+  void testSnapshotCarriesPendingRemovalThroughShutdownWrite();
+
 private:
   CacheManager *m_cacheManager;
   QTemporaryDir *m_tempDir;
   QString m_testArtworkPath;
+  // Per-process HOME so the timestamp store these slots create (and the
+  // legacy-JSON migration that renames files on first open) lands in a
+  // private test-mode QStandardPaths tree, never the developer's real
+  // ~/.cache/kartend (same pattern as test_cachediskstorage, Kartend-j1ahs).
+  QTemporaryDir m_homeDir;
 };
 
 void TestCacheManager::initTestCase() {
+  QVERIFY(m_homeDir.isValid());
+  qputenv("HOME", m_homeDir.path().toUtf8());
+  QStandardPaths::setTestModeEnabled(true);
+
   // Create a temporary directory for test artwork files
   m_tempDir = new QTemporaryDir();
   QVERIFY(m_tempDir->isValid());
@@ -470,6 +493,199 @@ void TestCacheManager::testSetArtworkCacheBudgetMB_clampsBelowOneMB() {
 
   m_cacheManager->setArtworkCacheBudgetMB(-5);
   QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 1 * 1024 * 1024);
+}
+
+// ─── Timestamp-store persistence + bookkeeping sweep (Kartend-0ldg2) ─────────
+
+void TestCacheManager::testShutdownSnapshotPersistsAllTimestamps() {
+  // The shutdown path: snapshot the full timestamp map while the manager is
+  // alive, then write it via the static helper (ApplicationManager calls it
+  // after teardown has begun). The snapshot must land in the store and be
+  // readable by the next session's initialize() path.
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
+
+  const CacheTimestampsSnapshot snapshot = m_cacheManager->snapshotTimestampsForShutdown();
+  QVERIFY(snapshot.timestamps.contains(m_testArtworkPath));
+  QVERIFY(snapshot.removedPaths.isEmpty());
+  CacheManager::saveTimestampsSnapshotToDiskForShutdown(snapshot);
+
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY(persisted.contains(m_testArtworkPath));
+  QCOMPARE(persisted.value(m_testArtworkPath), snapshot.timestamps.value(m_testArtworkPath));
+  QVERIFY(storage.drainWithBudget(1000));
+}
+
+void TestCacheManager::testPruneSweepsDeadBookkeeping() {
+  // The opportunistic sweep must drop fileTimestamps entries that are
+  // neither in artworkCache nor backed by a file on disk, and every
+  // m_lastRevalidatedMs entry whose pixmap was evicted — while keeping
+  // entries whose source file still exists (they remain useful for disk-
+  // cache validation).
+  const QString disposablePath = m_tempDir->path() + "/disposable.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::green);
+  QVERIFY(onDisk.save(disposablePath, "PNG"));
+
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
+  m_cacheManager->cacheArtwork(disposablePath, pixmap);
+  // Populate the revalidation map (a memory hit's first revalidation pass
+  // inserts the stamp).
+  (void)m_cacheManager->getArtwork(m_testArtworkPath);
+  (void)m_cacheManager->getArtwork(disposablePath);
+  QVERIFY(m_cacheManager->lastRevalidatedCountForTesting() > 0);
+
+  const int countWithBoth = m_cacheManager->fileTimestampCountForTesting();
+  QVERIFY(countWithBoth >= 2);
+
+  // Kill the disposable source file and evict everything from the pixmap
+  // cache so both entries become sweep candidates; only the one whose file
+  // is gone may be dropped.
+  QVERIFY(QFile::remove(disposablePath));
+  m_cacheManager->releaseGuiResources();
+
+  m_cacheManager->pruneStaleEntriesForTesting();
+
+  QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), countWithBoth - 1);
+  QCOMPARE(m_cacheManager->lastRevalidatedCountForTesting(), 0);
+
+  // The surviving entry must still validate the on-disk artwork: a second
+  // sweep with nothing newly dead is a no-op.
+  m_cacheManager->pruneStaleEntriesForTesting();
+  QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), countWithBoth - 1);
+}
+
+// ─── Invalidation propagation to the timestamp store (Kartend-9lm54) ─────────
+
+void TestCacheManager::testInvalidationDeletesStoreRowOnDebouncedSave() {
+  // tryLoadArtworkImageFromDiskCache invalidation flavor, end-to-end through
+  // the debounced save path: a store row whose ts_ms no longer matches the
+  // source file's mtime is invalidated on access, the invalidation schedules
+  // a flush, and the flush DELETEs the row from the store — the old
+  // behavior left the row behind until the bounded prune pass reached it.
+  const QString path = m_tempDir->path() + "/invalidated_row.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::green);
+  QVERIFY(onDisk.save(path, "PNG"));
+
+  // Seed the store with a deliberately stale ts_ms for the key.
+  const qint64 staleTs = QFileInfo(path).lastModified().toMSecsSinceEpoch() - 12345;
+  CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{path, staleTs}});
+
+  // A fresh manager seeds fileTimestamps from the store on initialize().
+  CacheManager manager;
+  manager.initialize();
+
+  // The mismatch invalidates: no image back, one invalidation recorded, and
+  // the debounced save timer is armed (the queued timer-start post needs the
+  // event loop, hence QTRY).
+  QVERIFY(manager.tryLoadArtworkImageFromDiskCache(path).isNull());
+  QCOMPARE(manager.metrics().invalidations, qint64(1));
+  QTRY_VERIFY(manager.isSaveTimerActive());
+
+  // Flush deterministically instead of waiting out the debounce.
+  manager.saveToDisk();
+  QVERIFY(manager.drainPendingIoForTesting(5000));
+
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY2(!persisted.contains(path),
+           "the invalidated key's row must be deleted from the timestamp store");
+  QVERIFY(storage.drainWithBudget(1000));
+}
+
+void TestCacheManager::testShutdownFlushDeletesInvalidatedRow() {
+  // getArtwork (memory-hit revalidation) invalidation flavor, propagated
+  // through the synchronous shutdown flush: the full-map upsert must not
+  // resurrect the key, and the pending removal must delete its store row.
+  const QString path = m_tempDir->path() + "/shutdown_invalidated.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::yellow);
+  QVERIFY(onDisk.save(path, "PNG"));
+
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(path, pixmap);
+
+  // Materialize a store row for the key (the debounced async save has not
+  // run — nothing here processes the event loop).
+  CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{path, 1234}});
+
+  // Bump the source file's mtime so the next memory hit revalidates (the
+  // first hit after an insert always does) and detects the change.
+  {
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(10),
+                             QFileDevice::FileModificationTime));
+  }
+  (void)m_cacheManager->getArtwork(path);
+  QCOMPARE(m_cacheManager->metrics().invalidations, qint64(1));
+
+  m_cacheManager->saveToDiskForShutdown();
+
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY2(!persisted.contains(path),
+           "the shutdown flush must delete the invalidated key's store row");
+  QVERIFY(storage.drainWithBudget(1000));
+}
+
+void TestCacheManager::testSnapshotCarriesPendingRemovalThroughShutdownWrite() {
+  // The ApplicationManager-style shutdown path (Kartend-2zkm8): snapshot via
+  // snapshotTimestampsForShutdown() while the manager is alive, then write
+  // via the static helper after teardown has begun. A key invalidated inside
+  // the final debounce window (its deleting flush never fired) must travel
+  // in the snapshot's removedPaths and have its store row DELETEd by the
+  // shutdown write — the prior map-only snapshot let it survive a session.
+  const QString stalePath = m_tempDir->path() + "/snapshot_invalidated.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::yellow);
+  QVERIFY(onDisk.save(stalePath, "PNG"));
+
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(stalePath, pixmap);
+  // A healthy second key proves the upsert half of the write still lands.
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
+
+  // Materialize a store row for the key (the debounced async save has not
+  // run — nothing here processes the event loop).
+  CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{stalePath, 1234}});
+
+  // Bump the source file's mtime so the next memory hit revalidates (the
+  // first hit after an insert always does) and detects the change.
+  {
+    QFile file(stalePath);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(10),
+                             QFileDevice::FileModificationTime));
+  }
+  (void)m_cacheManager->getArtwork(stalePath);
+  QCOMPARE(m_cacheManager->metrics().invalidations, qint64(1));
+
+  const CacheTimestampsSnapshot snapshot = m_cacheManager->snapshotTimestampsForShutdown();
+  QVERIFY2(snapshot.removedPaths.contains(stalePath),
+           "the snapshot must carry the invalidation still pending its deleting flush");
+  QVERIFY(!snapshot.timestamps.contains(stalePath));
+  QVERIFY(snapshot.timestamps.contains(m_testArtworkPath));
+
+  CacheManager::saveTimestampsSnapshotToDiskForShutdown(snapshot);
+
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY2(!persisted.contains(stalePath),
+           "the shutdown snapshot write must delete the invalidated key's store row");
+  QVERIFY(persisted.contains(m_testArtworkPath));
+  QVERIFY(storage.drainWithBudget(1000));
 }
 
 QTEST_MAIN(TestCacheManager)

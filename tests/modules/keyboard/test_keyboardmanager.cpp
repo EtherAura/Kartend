@@ -14,8 +14,8 @@
  */
 
 #include "keyboardmanager.h"
-#include <QTest>
 #include <Qt>
+#include <QTest>
 
 class TestKeyboardManager : public QObject {
   Q_OBJECT
@@ -73,48 +73,48 @@ private slots:
 
 void TestKeyboardManager::testHorizontal_moveRightWithinRow() {
   bool didWrap = true;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 3, 1, /*wrapEnabled=*/false, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 3, 1, /*wrapEnabled=*/false, didWrap);
   QCOMPARE(result, 4);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testHorizontal_moveLeftWithinRow() {
   bool didWrap = true;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 5, -1, /*wrapEnabled=*/false, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 5, -1, /*wrapEnabled=*/false, didWrap);
   QCOMPARE(result, 4);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testHorizontal_clampAtStartNoWrap() {
   bool didWrap = true;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 0, -1, /*wrapEnabled=*/false, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 0, -1, /*wrapEnabled=*/false, didWrap);
   QCOMPARE(result, 0);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testHorizontal_clampAtEndNoWrap() {
   bool didWrap = true;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 9, 1, /*wrapEnabled=*/false, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 9, 1, /*wrapEnabled=*/false, didWrap);
   QCOMPARE(result, 9);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testHorizontal_wrapFromStartToEnd() {
   bool didWrap = false;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 0, -1, /*wrapEnabled=*/true, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 0, -1, /*wrapEnabled=*/true, didWrap);
   QCOMPARE(result, 9);
   QVERIFY(didWrap);
 }
 
 void TestKeyboardManager::testHorizontal_wrapFromEndToStart() {
   bool didWrap = false;
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      10, 9, 1, /*wrapEnabled=*/true, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(10, 9, 1, /*wrapEnabled=*/true, didWrap);
   QCOMPARE(result, 0);
   QVERIFY(didWrap);
 }
@@ -122,8 +122,8 @@ void TestKeyboardManager::testHorizontal_wrapFromEndToStart() {
 void TestKeyboardManager::testHorizontal_singleItem() {
   bool didWrap = false;
   // wrap right with single item -> wraps back to 0
-  const int result = KeyboardManager::calculateHorizontalSelection(
-      1, 0, 1, /*wrapEnabled=*/true, didWrap);
+  const int result =
+      KeyboardManager::calculateHorizontalSelection(1, 0, 1, /*wrapEnabled=*/true, didWrap);
   QCOMPARE(result, 0);
   QVERIFY(didWrap);
 }
@@ -135,8 +135,8 @@ void TestKeyboardManager::testHorizontal_singleItem() {
 void TestKeyboardManager::testVertical_moveDownWithinGrid() {
   bool didWrap = true;
   // 4-wide grid, item 5 (row 1 col 1) moving down by gridWidth=4 -> 9
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 5, 4, /*wrapEnabled=*/false, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 5, 4, /*wrapEnabled=*/false, 4, didWrap);
   QCOMPARE(result, 9);
   QVERIFY(!didWrap);
 }
@@ -144,8 +144,8 @@ void TestKeyboardManager::testVertical_moveDownWithinGrid() {
 void TestKeyboardManager::testVertical_moveUpWithinGrid() {
   bool didWrap = true;
   // 4-wide grid, item 9 moving up by 4 -> 5
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 9, -4, /*wrapEnabled=*/false, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 9, -4, /*wrapEnabled=*/false, 4, didWrap);
   QCOMPARE(result, 5);
   QVERIFY(!didWrap);
 }
@@ -153,8 +153,8 @@ void TestKeyboardManager::testVertical_moveUpWithinGrid() {
 void TestKeyboardManager::testVertical_clampAtTopNoWrap() {
   bool didWrap = true;
   // first row, moving up with no wrap -> clamped to 0
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 1, -4, /*wrapEnabled=*/false, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 1, -4, /*wrapEnabled=*/false, 4, didWrap);
   QCOMPARE(result, 0);
   QVERIFY(!didWrap);
 }
@@ -162,8 +162,8 @@ void TestKeyboardManager::testVertical_clampAtTopNoWrap() {
 void TestKeyboardManager::testVertical_clampAtBottomNoWrap() {
   bool didWrap = true;
   // last row of 5x4 grid (20 items), item 18 moving down with no wrap
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 18, 4, /*wrapEnabled=*/false, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 18, 4, /*wrapEnabled=*/false, 4, didWrap);
   QCOMPARE(result, 19);
   QVERIFY(!didWrap);
 }
@@ -171,8 +171,8 @@ void TestKeyboardManager::testVertical_clampAtBottomNoWrap() {
 void TestKeyboardManager::testVertical_wrapUpFromFirstRowFullColumn() {
   bool didWrap = false;
   // 4-wide grid, 20 items (5 full rows). Item 2 wrap-up -> last row col 2 = 18
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 2, -4, /*wrapEnabled=*/true, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 2, -4, /*wrapEnabled=*/true, 4, didWrap);
   QCOMPARE(result, 18);
   QVERIFY(didWrap);
 }
@@ -181,8 +181,8 @@ void TestKeyboardManager::testVertical_wrapUpFromFirstRowPartialLastRow() {
   bool didWrap = false;
   // 4-wide grid, 18 items. Last row = items 16, 17 (cols 0, 1).
   // Item 3 (col 3) wraps up -> last-row-first(16) + col(3) = 19, clamped to 17.
-  const int result = KeyboardManager::calculateVerticalSelection(
-      18, 3, -4, /*wrapEnabled=*/true, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(18, 3, -4, /*wrapEnabled=*/true, 4, didWrap);
   QCOMPARE(result, 17);
   QVERIFY(didWrap);
 }
@@ -190,8 +190,8 @@ void TestKeyboardManager::testVertical_wrapUpFromFirstRowPartialLastRow() {
 void TestKeyboardManager::testVertical_wrapDownFromLastRow() {
   bool didWrap = false;
   // 4-wide grid, 20 items. Item 17 (last row col 1) wrap-down -> col 1 = 1
-  const int result = KeyboardManager::calculateVerticalSelection(
-      20, 17, 4, /*wrapEnabled=*/true, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(20, 17, 4, /*wrapEnabled=*/true, 4, didWrap);
   QCOMPARE(result, 1);
   QVERIFY(didWrap);
 }
@@ -200,8 +200,8 @@ void TestKeyboardManager::testVertical_wrapDownClampsToLastItem() {
   bool didWrap = false;
   // 4-wide grid, 3 items only. Item 2 (col 2) wrap-down: target col 2,
   // but col 2 < totalItems(3) so result is 2 (wraps to itself).
-  const int result = KeyboardManager::calculateVerticalSelection(
-      3, 2, 4, /*wrapEnabled=*/true, 4, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(3, 2, 4, /*wrapEnabled=*/true, 4, didWrap);
   QCOMPARE(result, 2);
   QVERIFY(didWrap);
 }
@@ -209,8 +209,8 @@ void TestKeyboardManager::testVertical_wrapDownClampsToLastItem() {
 void TestKeyboardManager::testVertical_zeroGridWidthDoesNotWrap() {
   bool didWrap = true;
   // gridWidth=0 disables wrap branch; direction 0 means no movement, clamped.
-  const int result = KeyboardManager::calculateVerticalSelection(
-      10, 5, 0, /*wrapEnabled=*/true, 0, didWrap);
+  const int result =
+      KeyboardManager::calculateVerticalSelection(10, 5, 0, /*wrapEnabled=*/true, 0, didWrap);
   QCOMPARE(result, 5);
   QVERIFY(!didWrap);
 }
@@ -221,24 +221,24 @@ void TestKeyboardManager::testVertical_zeroGridWidthDoesNotWrap() {
 
 void TestKeyboardManager::testDispatcher_routesHorizontal() {
   bool didWrap = false;
-  const int result = KeyboardManager::calculateNewSelection(
-      10, 3, 1, /*wrapEnabled=*/false, /*vertical=*/false, 4, didWrap);
+  const int result = KeyboardManager::calculateNewSelection(10, 3, 1, /*wrapEnabled=*/false,
+                                                            /*vertical=*/false, 4, didWrap);
   QCOMPARE(result, 4);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testDispatcher_routesVertical() {
   bool didWrap = false;
-  const int result = KeyboardManager::calculateNewSelection(
-      20, 5, 4, /*wrapEnabled=*/false, /*vertical=*/true, 4, didWrap);
+  const int result = KeyboardManager::calculateNewSelection(20, 5, 4, /*wrapEnabled=*/false,
+                                                            /*vertical=*/true, 4, didWrap);
   QCOMPARE(result, 9);
   QVERIFY(!didWrap);
 }
 
 void TestKeyboardManager::testDispatcher_resetsDidWrap() {
   bool didWrap = true; // caller-provided stale value
-  const int result = KeyboardManager::calculateNewSelection(
-      10, 3, 1, /*wrapEnabled=*/false, /*vertical=*/false, 4, didWrap);
+  const int result = KeyboardManager::calculateNewSelection(10, 3, 1, /*wrapEnabled=*/false,
+                                                            /*vertical=*/false, 4, didWrap);
   QCOMPARE(result, 4);
   QVERIFY(!didWrap); // must be reset to false
 }
@@ -273,8 +273,7 @@ void TestKeyboardManager::testHasRowChanged_zeroGridWidth() {
 void TestKeyboardManager::testDerive_leftKey() {
   int direction = 99;
   bool vertical = true;
-  const bool handled =
-      KeyboardManager::deriveDirectionForKey(Qt::Key_Left, 4, direction, vertical);
+  const bool handled = KeyboardManager::deriveDirectionForKey(Qt::Key_Left, 4, direction, vertical);
   QVERIFY(handled);
   QCOMPARE(direction, -1);
   QVERIFY(!vertical);
@@ -283,8 +282,8 @@ void TestKeyboardManager::testDerive_leftKey() {
 void TestKeyboardManager::testDerive_rightKey() {
   int direction = 99;
   bool vertical = true;
-  const bool handled = KeyboardManager::deriveDirectionForKey(
-      Qt::Key_Right, 4, direction, vertical);
+  const bool handled =
+      KeyboardManager::deriveDirectionForKey(Qt::Key_Right, 4, direction, vertical);
   QVERIFY(handled);
   QCOMPARE(direction, 1);
   QVERIFY(!vertical);
@@ -293,8 +292,7 @@ void TestKeyboardManager::testDerive_rightKey() {
 void TestKeyboardManager::testDerive_upKey() {
   int direction = 99;
   bool vertical = false;
-  const bool handled =
-      KeyboardManager::deriveDirectionForKey(Qt::Key_Up, 6, direction, vertical);
+  const bool handled = KeyboardManager::deriveDirectionForKey(Qt::Key_Up, 6, direction, vertical);
   QVERIFY(handled);
   QCOMPARE(direction, -6);
   QVERIFY(vertical);
@@ -303,8 +301,7 @@ void TestKeyboardManager::testDerive_upKey() {
 void TestKeyboardManager::testDerive_downKey() {
   int direction = 99;
   bool vertical = false;
-  const bool handled = KeyboardManager::deriveDirectionForKey(
-      Qt::Key_Down, 6, direction, vertical);
+  const bool handled = KeyboardManager::deriveDirectionForKey(Qt::Key_Down, 6, direction, vertical);
   QVERIFY(handled);
   QCOMPARE(direction, 6);
   QVERIFY(vertical);
@@ -313,8 +310,8 @@ void TestKeyboardManager::testDerive_downKey() {
 void TestKeyboardManager::testDerive_unhandledKey() {
   int direction = 99;
   bool vertical = true;
-  const bool handled = KeyboardManager::deriveDirectionForKey(
-      Qt::Key_Space, 4, direction, vertical);
+  const bool handled =
+      KeyboardManager::deriveDirectionForKey(Qt::Key_Space, 4, direction, vertical);
   QVERIFY(!handled);
   // Out-params are reset to defaults even on unhandled keys
   QCOMPARE(direction, 0);

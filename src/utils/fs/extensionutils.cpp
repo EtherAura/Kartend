@@ -8,28 +8,41 @@
 #include <QSet>
 #include <QString>
 
+auto ExtensionUtils::bareExtension(const QString &token) -> QString {
+  QString out = token.trimmed().toLower();
+  if (out.startsWith(QLatin1String("*."))) {
+    out.remove(0, 2);
+  } else if (out.startsWith(QLatin1Char('.'))) {
+    out.remove(0, 1);
+  }
+  return out.trimmed();
+}
+
 auto ExtensionUtils::normalizeStoredExtensions(const QStringList &raw) -> QStringList {
   QStringList out;
   QSet<QString> seen;
   out.reserve(raw.size());
-  for (QString token : raw) {
-    token = token.trimmed().toLower();
-    if (token.isEmpty()) {
+  for (const QString &token : raw) {
+    const QString bare = bareExtension(token);
+    if (bare.isEmpty() || seen.contains(bare)) {
       continue;
     }
-    if (token.startsWith("*.")) {
-      // keep
-    } else if (token.startsWith('.')) {
-      token = "*" + token;
-    } else {
-      token = "*." + token;
-    }
-    if (!seen.contains(token)) {
-      out.append(token);
-      seen.insert(token);
-    }
+    out.append(bare);
+    seen.insert(bare);
   }
   return out;
+}
+
+auto ExtensionUtils::toNameFilters(const QStringList &extensions) -> QStringList {
+  QStringList filters;
+  filters.reserve(extensions.size());
+  for (const QString &token : extensions) {
+    const QString bare = bareExtension(token);
+    if (!bare.isEmpty()) {
+      filters << QStringLiteral("*.") + bare;
+    }
+  }
+  return filters;
 }
 
 // Parse a free-form extension list into normalized, deduplicated patterns

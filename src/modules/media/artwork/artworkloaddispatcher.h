@@ -14,6 +14,7 @@
 #include <QString>
 #include <QStringList>
 
+class ArtworkDispatcherCacheHandle;
 class ICacheManager;
 class QThreadPool;
 
@@ -24,12 +25,16 @@ class QThreadPool;
 /// thread.
 ///
 /// Threading invariants:
-///   - Worker tasks capture only stable values (cache pointer, a
-///     shared_ptr to the current-generation atomic, the generation
-///     they were dispatched at, the input batch). They never capture
-///     the dispatcher or any host raw — completion is posted to the
-///     main thread via QCoreApplication::instance() as receiver, and
-///     the handler is invoked there.
+///   - Worker tasks capture no raw pointers to externally-owned objects:
+///     a shared_ptr to the cache handle (whose inner ICacheManager* the
+///     destructor invalidates — Kartend-xoftg), a shared_ptr to the
+///     current-generation atomic, the generation they were dispatched
+///     at, and the input batch. They never capture the dispatcher or
+///     any host raw — completion is posted to the main thread via
+///     QCoreApplication::instance() as receiver, and the handler is
+///     invoked there. This satisfies the threadpoolutils.h
+///     abandon-on-timeout contract: a task abandoned by the bounded
+///     pool drain only ever touches shared state it co-owns.
 ///   - cancelAll() atomically increments the generation counter. New
 ///     dispatches read the current generation at dispatch time and
 ///     capture it; in-flight tasks compare `counter->load() !=
@@ -57,8 +62,9 @@ public:
   /// Kartend-davi: ArtworkManager constructs the dispatcher before the
   /// app context is wired (so cancellation paths stay non-null even before
   /// setupReferences runs); the cache pointer is then bound here once
-  /// ctx becomes available.
-  void setCacheManager(ICacheManager *cacheManager) { m_cacheManager = cacheManager; }
+  /// ctx becomes available. Rebinding is startup wiring — it must not race
+  /// in-flight dispatches that hold the previous pointer.
+  void setCacheManager(ICacheManager *cacheManager);
 
   /// Dispatch a UI-batch decode. @p onComplete runs on the main thread once
   /// every result is decoded (or the batch is cancelled / app is closing).
@@ -81,7 +87,13 @@ public:
 private:
   void pruneFinishedFutures();
 
-  ICacheManager *m_cacheManager;
+  /// Shared forwarding surface for worker disk-cache reads (Kartend-xoftg).
+  /// Workers co-own it via shared_ptr capture; the destructor invalidates
+  /// the inner ICacheManager* before CacheManager can be destroyed later in
+  /// ApplicationManager teardown, so a task abandoned by the bounded pool
+  /// drain makes a guarded no-op call instead of dereferencing a freed
+  /// cache. See the class definition in artworkloaddispatcher.cpp.
+  std::shared_ptr<ArtworkDispatcherCacheHandle> m_cacheHandle;
   QThreadPool *m_threadPool = nullptr;
   mutable QMutex m_futureMutex;
   QList<QFuture<void>> m_futures;

@@ -3,7 +3,10 @@
 #include "applicationmanager.h"
 #include "detailspanemanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 
 #include <QSignalSpy>
 #include <QTest>
@@ -118,7 +121,7 @@ void TestDetailsPaneManager::testSidebarWidgetReturnsNullBeforeSetup() {
 }
 
 void TestDetailsPaneManager::testFixtureExposesDetailsPaneManagerViaApplicationManager() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   auto *details = win->getApplicationManager()->getDetailsPaneManager();
 

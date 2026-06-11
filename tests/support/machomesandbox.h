@@ -68,8 +68,9 @@ inline void installMacHomeSandbox() {
   if (::mkdtemp(buf.data()) == nullptr) {
     // Refuse to run unsandboxed — the suites wipe/write config locations and
     // must never do that against the real user home.
-    std::fprintf(stderr, "installMacHomeSandbox: mkdtemp(%s) failed — refusing to run tests "
-                         "against the real HOME\n",
+    std::fprintf(stderr,
+                 "installMacHomeSandbox: mkdtemp(%s) failed — refusing to run tests "
+                 "against the real HOME\n",
                  buf.data());
     std::abort();
   }

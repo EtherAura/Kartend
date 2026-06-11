@@ -30,6 +30,10 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-24.04
+    # Kartend-oizkj: every other job in the repo carries an explicit timeout;
+    # without one a test hung under gcov instrumentation burns the 6h default.
+    # Coverage build+test runs slower than plain Debug — pad accordingly.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -59,6 +63,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake (Debug + coverage)
@@ -108,31 +114,41 @@ jobs:
       # Kartend-5qmjp: the floor check below is whole-repo only, so a PR adding a
       # large untested file barely moves the percentage and slips through.
       # diff-cover reports coverage of just the lines this PR changed, catching
-      # new untested code regardless of repo-wide %. Report-only for now
-      # (continue-on-error + `|| true` throughout, so it can never fail the job);
-      # a hard patch-coverage gate can be layered on later once the report has
-      # been observed to be reliable on real PRs.
-      - name: Patch coverage of changed lines (report-only)
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
+      # new untested code regardless of repo-wide %.
+      # Kartend-oizkj: promoted from report-only to ENFORCING (--fail-under=50)
+      # after the observation period — the report machinery proved reliable and
+      # the report-only mode let an 800-line untested refactor sail through.
+      # Tooling failures (diff-cover unavailable, no merge base) still soft-skip
+      # so infra flakes can't block a PR; only a real below-threshold patch
+      # coverage fails. Escape hatch for legitimately untestable changes: the
+      # `skip-patch-coverage` PR label.
+      - name: Patch coverage of changed lines (enforced)
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-patch-coverage')
         run: |
-          python3 -m pip install --quiet --user diff-cover || pip install --quiet diff-cover || true
+          if ! python3 -m pip install --quiet --user diff-cover && ! pip install --quiet diff-cover; then
+            echo "::warning::diff-cover could not be installed; skipping patch-coverage gate"
+            exit 0
+          fi
           base="origin/${{ github.base_ref }}"
-          git fetch --no-tags origin "${{ github.base_ref }}" 2>/dev/null || true
+          if ! git fetch --no-tags origin "${{ github.base_ref }}"; then
+            echo "::warning::could not fetch base branch; skipping patch-coverage gate"
+            exit 0
+          fi
           # diff-cover reads the lcov .info directly (recent versions); compare
           # the working tree against the PR's base branch.
+          status=0
           diff-cover build/coverage/coverage.filtered.info \
             --compare-branch "$base" \
-            --markdown-report build/coverage/patch-coverage.md || true
+            --fail-under 50 \
+            --markdown-report build/coverage/patch-coverage.md || status=$?
           if [ -f build/coverage/patch-coverage.md ]; then
             {
               echo "## Patch coverage (changed lines)"
               echo ""
               cat build/coverage/patch-coverage.md
             } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "patch-coverage report not produced (diff-cover unavailable or no diff)"
           fi
+          exit "$status"
 
       - name: Surface coverage in step summary + enforce floor
         env:

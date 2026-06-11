@@ -147,6 +147,14 @@ ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectio
                                "UsageStatsStore::recordLaunch")
         .withDetails(q.lastError().text());
   }
+  // Kartend-fux2w: a zero-row UPDATE means the (uuid, path) key matched no
+  // items row — the historical v13 path-convention regression dropped every
+  // launch record this way with zero diagnostics. Leave a breadcrumb.
+  if (q.numRowsAffected() == 0) {
+    qCWarning(ErrorUtils::lcErrors())
+        << "UsageStatsStore::recordLaunch matched no items row; launch not recorded."
+        << "uuid=" << collectionUuid << "path=" << path;
+  }
   return true;
 }
 
@@ -180,6 +188,12 @@ ErrorUtils::Result<bool> recordPlaySession(QSqlDatabase &db, const QString &coll
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to record play session",
                                "UsageStatsStore::recordPlaySession")
         .withDetails(q.lastError().text());
+  }
+  // See recordLaunch: zero rows affected = key mismatch, not success.
+  if (q.numRowsAffected() == 0) {
+    qCWarning(ErrorUtils::lcErrors())
+        << "UsageStatsStore::recordPlaySession matched no items row; session not recorded."
+        << "uuid=" << collectionUuid << "path=" << path;
   }
   return true;
 }

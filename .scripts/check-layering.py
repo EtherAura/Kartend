@@ -146,6 +146,12 @@ def main() -> int:
         "modules/data": {"ui", "core"},
         "modules/input": {"ui", "core"},
         "modules/media": {"ui", "core"},
+        # modules/behavior sits ABOVE ui/ in the real DAG (ApplicationManager
+        # owns the ui-layer DetailsPaneManager controller; src/CMakeLists.txt
+        # links kartend_behavior PUBLIC kartend_ui — sanctioned). Its one
+        # forbidden upward edge is core/ — previously unlinted entirely
+        # (Kartend-1ha73).
+        "modules/behavior": {"core"},
     }
     violations: list[tuple[str, str, str, str]] = []  # (layer, file, include, target)
 

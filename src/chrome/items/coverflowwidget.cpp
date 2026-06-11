@@ -133,6 +133,39 @@ void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
   update();
 }
 
+void CoverFlowWidget::updateCard(int index, const CoverFlowCardData &card) {
+  if (index < 0 || index >= static_cast<int>(m_cards.size())) {
+    return;
+  }
+  CoverFlowCardData &slot = m_cards[index];
+  if (slot.title == card.title && slot.artworkPath == card.artworkPath) {
+    return;
+  }
+  const QString oldPath = slot.artworkPath;
+  slot.title = card.title;
+  slot.artworkPath = card.artworkPath;
+  // slot.videoPath is intentionally preserved: video paths are resolved
+  // lazily via setVideoPathForIndex, not by the card-list builders, so a
+  // chunk-arrival patch must not clobber an already-resolved preview.
+  if (!oldPath.isEmpty() && oldPath != card.artworkPath) {
+    // Drop only the scaled entries bound to the replaced artwork; every
+    // other card's cache hits stay warm (this is the point of the
+    // incremental path vs setCards' wholesale clear).
+    for (auto it = m_scaledPixmapCache.begin(); it != m_scaledPixmapCache.end();) {
+      if (it.key().path == oldPath) {
+        it = m_scaledPixmapCache.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+  // Repaint only when the patched card is inside the drawn window around the
+  // (possibly animating) center — off-screen patches are pure data updates.
+  if (std::abs(index - currentPositionF()) <= kVisibleSideCards + 1) {
+    update();
+  }
+}
+
 void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   if (m_cards.isEmpty()) {
     m_selectedIndex = 0;

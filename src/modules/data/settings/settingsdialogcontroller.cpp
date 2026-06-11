@@ -452,6 +452,9 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     }
     if (stagedAny) {
       m_pendingAddSummaryParent = parent;
+      // Kartend-sqoq0: capture the owner-supplied runners for the async
+      // summary boxes — the context is gone by the time the scan finishes.
+      m_dialogRunners = context.dialogs;
       // Connect once (UniqueConnection) to the database manager's forwarded
       // signal so the user sees a single message box per newly added
       // collection even across repeated openSettingsDialog invocations.
@@ -604,25 +607,33 @@ void SettingsManager::onCollectionScanSummary(const QString &collectionUuid, int
   }
   const QString name = m_pendingAddSummaries.take(collectionUuid);
 
-  // Use the last-known dialog parent if still alive; fall back to nullptr so
-  // the message box is still shown as a top-level window.
-  QWidget *parent = m_pendingAddSummaryParent.data();
-
+  const QString title = tr("Collection Added");
   if (success) {
-    QMessageBox::information(
-        parent, tr("Collection Added"),
+    const QString text =
         tr("Collection \"%1\" added.\n\n%2 of %3 items added from the media directory.")
             .arg(name)
             .arg(itemsApplied)
-            .arg(itemsScanned));
+            .arg(itemsScanned);
+    // Kartend-sqoq0: prefer the owner-supplied runner; fall back to the
+    // stock QMessageBox (parented on the last-known dialog parent if still
+    // alive, else shown as a top-level window) when none is wired.
+    if (m_dialogRunners.info) {
+      m_dialogRunners.info(title, text);
+    } else {
+      QMessageBox::information(m_pendingAddSummaryParent.data(), title, text);
+    }
   } else {
-    QMessageBox::warning(parent, tr("Collection Added"),
-                         tr("Collection \"%1\" added, but the initial scan did not complete "
+    const QString text = tr("Collection \"%1\" added, but the initial scan did not complete "
                             "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
                             "Check the media directory path and file extensions, then try "
                             "again.")
                              .arg(name)
                              .arg(itemsApplied)
-                             .arg(itemsScanned));
+                             .arg(itemsScanned);
+    if (m_dialogRunners.warn) {
+      m_dialogRunners.warn(title, text);
+    } else {
+      QMessageBox::warning(m_pendingAddSummaryParent.data(), title, text);
+    }
   }
 }

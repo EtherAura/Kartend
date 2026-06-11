@@ -68,12 +68,54 @@ sanitize_compdb() {
 }
 
 # Optional tool runners
+#
+# Kartend-z4ev0: when KARTEND_TIDY_ONLY_FILES is set (a path to a
+# newline-delimited list of .cpp paths, relative to the repo root or
+# absolute), do_clang_tidy analyzes only the listed TUs that exist under
+# $srcdir instead of fanning out over every .cpp. CI sets this on
+# pull_request events so a PR only pays for the TUs it touched; push-to-main
+# runs leave it unset and keep the full sweep. KNOWN LIMITATION: a changed
+# header does not pull its including TUs into the scoped set — header-only
+# regressions surface in the post-merge full sweep on main, not on the PR.
 do_clang_tidy() {
   local compdb="$1" srcdir="$2" checks="$3"
   if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
     local tmpdir rc rootdir
     tmpdir="$(mktemp -d)"
     rootdir="$(dirname "$srcdir")"
+
+    # Resolve the optional diff scope BEFORE doing any work so an empty
+    # changed-set short-circuits cleanly (e.g. a docs-only PR).
+    local -a scoped_tus=()
+    if [ -n "${KARTEND_TIDY_ONLY_FILES:-}" ]; then
+      if [ ! -f "$KARTEND_TIDY_ONLY_FILES" ]; then
+        echo "Error: KARTEND_TIDY_ONLY_FILES points to a missing file: $KARTEND_TIDY_ONLY_FILES" >&2
+        rm -rf "$tmpdir"
+        return 1
+      fi
+      local entry resolved
+      while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        case "$entry" in
+          /*) resolved="$entry" ;;
+          *)  resolved="$rootdir/$entry" ;;
+        esac
+        # Keep only .cpp TUs that still exist (diff lists can contain
+        # deleted files) and live under the scan root this call covers.
+        case "$resolved" in
+          "$srcdir"/*.cpp)
+            [ -f "$resolved" ] && scoped_tus+=("$resolved")
+            ;;
+        esac
+      done < "$KARTEND_TIDY_ONLY_FILES"
+      if [ "${#scoped_tus[@]}" -eq 0 ]; then
+        echo "skipped: diff scope is empty — no changed .cpp TUs under $srcdir (KARTEND_TIDY_ONLY_FILES)"
+        rm -rf "$tmpdir"
+        return 0
+      fi
+      echo "diff scope: analyzing ${#scoped_tus[@]} changed TU(s) under $srcdir (KARTEND_TIDY_ONLY_FILES)"
+    fi
+
     sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
     # Focus on project code only, exclude Qt/system headers
     # Use .clang-tidy config file if present (checks arg is fallback)
@@ -83,11 +125,19 @@ do_clang_tidy() {
     else
       config_arg=(-checks="$checks")
     fi
-    find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
-      -p="$tmpdir" \
-      "${config_arg[@]}" \
-      --header-filter="$srcdir/.*"
-    rc=$?
+    if [ "${#scoped_tus[@]}" -gt 0 ]; then
+      printf '%s\0' "${scoped_tus[@]}" | xargs -0 -n1 -P"$(nproc)" clang-tidy \
+        -p="$tmpdir" \
+        "${config_arg[@]}" \
+        --header-filter="$srcdir/.*"
+      rc=$?
+    else
+      find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
+        -p="$tmpdir" \
+        "${config_arg[@]}" \
+        --header-filter="$srcdir/.*"
+      rc=$?
+    fi
     rm -rf "$tmpdir"
     return $rc
   else
@@ -157,19 +207,42 @@ do_iwyu() {
   fi
 }
 
+# First arg is the src/ root (anchors the -I include set); any further args
+# are additional scan roots (Kartend-rni3g: build.sh passes tests/ so the
+# test tree gets the same cppcheck pass).
 do_cppcheck() {
   local srcdir="$1"
   if command -v cppcheck >/dev/null 2>&1; then
     # Use C++23 standard, remove excessive suppressions, focus on actionable issues
-    cppcheck \
-      --enable=warning,style,performance,portability \
-      --std=c++23 \
-      --suppress=missingIncludeSystem \
-      --suppress=unusedFunction \
-      --library=qt \
-      --inline-suppr \
-      -I "$srcdir" -I "$srcdir/core" -I "$srcdir/managers" -I "$srcdir/ui" -I "$srcdir/utils" \
-      "$srcdir"
+    local common_args=(
+      "--enable=warning,style,performance,portability"
+      --std=c++23
+      --suppress=missingIncludeSystem
+      --suppress=unusedFunction
+      --library=qt
+      --inline-suppr
+    )
+    # Kartend-oizkj: prefer the compile database. The old hand-rolled -I list
+    # had gone stale (src/managers/ no longer exists; modules/, api/, chrome/
+    # were never listed), so cppcheck silently failed to resolve most project
+    # includes and skipped every check that needed them — a green gate that
+    # analyzed far less than intended. The compdb carries the real per-TU
+    # include dirs and defines. Positional dir args become file filters.
+    if [ -n "${COMPDB_FILE:-}" ] && [ -f "${COMPDB_FILE:-}" ]; then
+      local file_filters=()
+      local p
+      for p in "$@"; do
+        file_filters+=("--file-filter=${p}/*")
+      done
+      cppcheck "${common_args[@]}" --project="$COMPDB_FILE" "${file_filters[@]}"
+    else
+      # Fallback when no build dir / compdb exists: corrected include list
+      # covering the real top-level src/ areas.
+      cppcheck "${common_args[@]}" \
+        -I "$srcdir" -I "$srcdir/api" -I "$srcdir/chrome" -I "$srcdir/core" \
+        -I "$srcdir/modules" -I "$srcdir/ui" -I "$srcdir/utils" \
+        "$@"
+    fi
   else
     echo "skipped: cppcheck not installed"; return 0
   fi
@@ -197,18 +270,22 @@ resolve_clang_format_19() {
   return 1
 }
 
+# Accepts one or more directories (Kartend-rni3g: callers pass src/ AND
+# tests/ so the hand-maintained test tree is held to the same format bar).
 do_clang_format() {
-  local srcdir="$1"
   local cf
   if cf=$(resolve_clang_format_19); then
     # Check formatting without applying changes, report issues but don't fail
-    local issues=0
-    while IFS= read -r -d '' file; do
-      if ! "$cf" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
-        echo "Format issue: $file"
-        issues=$((issues + 1))
-      fi
-    done < <(find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0)
+    local issues=0 srcdir
+    for srcdir in "$@"; do
+      [ -d "$srcdir" ] || continue
+      while IFS= read -r -d '' file; do
+        if ! "$cf" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+          echo "Format issue: $file"
+          issues=$((issues + 1))
+        fi
+      done < <(find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0)
+    done
     if [ $issues -gt 0 ]; then
       echo "Found $issues files with formatting issues (use --format-apply to fix)"
     else
@@ -221,14 +298,17 @@ do_clang_format() {
 }
 
 do_clang_format_apply() {
-  local srcdir="$1"
   local cf
   if cf=$(resolve_clang_format_19); then
     # Apply formatting fixes to all source files
     echo "Applying formatting with $cf"
-    find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0 | \
-      xargs -0 "$cf" --style=file -i
-    return $?
+    local srcdir
+    for srcdir in "$@"; do
+      [ -d "$srcdir" ] || continue
+      find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0 | \
+        xargs -0 -r "$cf" --style=file -i || return $?
+    done
+    return 0
   else
     echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
   fi

@@ -24,6 +24,7 @@
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
 
+#include <QCoreApplication>
 #include <QHash>
 
 #include <QLoggingCategory>
@@ -144,10 +145,24 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
         cache.prewarmDirectories(artworkDirs);
         cache.processQueuedDirectories();
 
-        // Single callback when complete
-        if (self) {
-          QMetaObject::invokeMethod(self, "reconfigureArtworkForActiveWidgets",
-                                    Qt::QueuedConnection);
+        // Single callback when complete. Kartend-t4e00: the QPointer is
+        // resolved ON THE GUI THREAD inside the qApp hop — reading it here
+        // on the pool thread while ScrollManager is destroyed on the GUI
+        // thread is a data race, and check-then-invoke was TOCTOU even when
+        // the read happened to be safe. The worker only copies the pointer
+        // value. qApp can be gone if this abandoned task outlives the app —
+        // skip the callback in that case (nothing left to reconfigure).
+        if (QCoreApplication *app = QCoreApplication::instance()) {
+          QMetaObject::invokeMethod(
+              app,
+              [self]() {
+                if (self) {
+                  // String-based: the target is a private slot.
+                  QMetaObject::invokeMethod(self, "reconfigureArtworkForActiveWidgets",
+                                            Qt::DirectConnection);
+                }
+              },
+              Qt::QueuedConnection);
         }
       });
     }
@@ -186,8 +201,13 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   // cover-flow keeps a flat card list, refresh it whenever new file data
   // lands. Skip when not in cover flow — building a card descriptor for
   // every visual index is fast per-item but pointless work when the widget
-  // is hidden, and 30+ chunk arrivals × 29k items adds up.
-  m_coverFlow->rebuildCardsIfActive();
+  // is hidden, and 30+ chunk arrivals × 29k items adds up. When it IS
+  // active, patch only the chunk's own indices (Kartend-x7bn8): the old
+  // full rebuildCardsIfActive() redid per-item DB resolution for all N
+  // cards on every chunk — O(N) work × O(N/chunk) arrivals on the GUI
+  // thread. updateCardsIfActive falls back to the full rebuild itself when
+  // a filter is active or the card count changed.
+  m_coverFlow->updateCardsIfActive(updatedIndices);
 }
 
 void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,

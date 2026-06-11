@@ -11,13 +11,13 @@ inline constexpr int SqliteVariableLimit = 999;
 
 // Column count for the staged_items upsert in commitStagedScanResults
 // (collection_id, collection_uuid, path, rel_path, name, last_modified,
-// date_added). Keep in sync with the SQL column list — if a new column is
-// added, drop StagedScanApplyBatch accordingly to stay under
+// file_size, date_added). Keep in sync with the SQL column list — if a new
+// column is added, drop StagedScanApplyBatch accordingly to stay under
 // SqliteVariableLimit.
-inline constexpr int StagedScanColumns = 7;
+inline constexpr int StagedScanColumns = 8;
 
-// Apply-batch row count for the staged-scan upsert. 142 rows * 7 columns =
-// 994 binds, leaving headroom under SqliteVariableLimit (999). Derived
+// Apply-batch row count for the staged-scan upsert. 123 rows * 8 columns =
+// 984 binds, leaving headroom under SqliteVariableLimit (999). Derived
 // rather than written as a literal so a column addition can't silently
 // blow the limit at runtime.
 inline constexpr int StagedScanApplyBatch = SqliteVariableLimit / StagedScanColumns - 1;

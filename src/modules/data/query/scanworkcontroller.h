@@ -13,11 +13,16 @@ class QThreadPool;
 /// capture the cancellation token by shared_ptr value so they can observe
 /// the flag even after the controller resets to a fresh token mid-scan.
 ///
-/// requestCancel() flips the current token AND drains the pool's queue —
-/// any task that hasn't started yet is dropped, any in-flight task observes
-/// the flag and returns early. reset() swaps in a brand-new token, leaving
-/// the OLD token permanently cancelled so a slow worker won't "resurrect"
-/// when the same atomic gets flipped back to false.
+/// requestCancel() flips the current token; every task — queued or
+/// in-flight — observes the flag and returns early. Queued tasks are
+/// deliberately NOT dropped via QThreadPool::clear(): scan accounting
+/// (ScanCompletionQueue::inFlight) is incremented at enqueue time and only
+/// decremented at the end of DirectoryScanTask::run(), so a cleared task
+/// would strand the count and wedge the post-cancel drain loop forever
+/// (Kartend-t2my8). Letting cancelled tasks run costs one fast token check
+/// each and keeps the handshake balanced. reset() swaps in a brand-new
+/// token, leaving the OLD token permanently cancelled so a slow worker
+/// won't "resurrect" when the same atomic gets flipped back to false.
 ///
 /// Threading: the cancellation-token shared_ptr is read/written across
 /// threads (requestCancel on the GUI thread, reset/token/start on the
@@ -41,15 +46,12 @@ public:
   /// still alive.
   void start(QRunnable *runnable);
 
-  /// Drop everything pending in the queue. Used by requestCancel() and by
-  /// the deferred-cleanup hook in QueryManager's dtor.
-  void clearQueue();
-
   /// Maximum thread count of the underlying pool (>= 1).
   [[nodiscard]] int maxThreadCount() const;
 
-  /// Set the cancellation flag and drain pending tasks. In-flight tasks
-  /// observe the flag via captured shared_ptr.
+  /// Set the cancellation flag. All tasks (queued and in-flight) observe it
+  /// via their captured shared_ptr and fast-exit; the queue is intentionally
+  /// not cleared (see class comment).
   void requestCancel();
 
   /// True iff the current token is set. Worker tasks check this via the

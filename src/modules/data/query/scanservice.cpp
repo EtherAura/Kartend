@@ -15,7 +15,7 @@
 // ScanService borrows its QSqlDatabase + PreparedStatementCache by reference
 // from the owning QueryManager (the ScannedItemsTable pattern); there is no
 // QueryManager back-pointer. Scan-only free helpers (DirectoryScanTask,
-// ScanCompletionQueue, SynchronousPragmaGuard, dirSignature*) live in
+// ScanCompletionQueue, dirSignature*) live in
 // querymanagerhelpers.h::QueryManagerInternal — pulled in via the
 // `using namespace` below. The connection-level free functions
 // (maybeAbsolutizeItemPaths, clearCollectionFromDatabaseByUuid) are also
@@ -54,7 +54,9 @@
 #include "collection/collectioncontext.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/typehelpers.h"
+#include "dbtxn.h"
 #include "errorutils.h"
+#include "extensionutils.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
@@ -67,8 +69,9 @@ using ErrorUtils::ErrorContext;
 using namespace QueryManagerInternal;
 using namespace ScanServiceInternal;
 
-ScanService::ScanService(QSqlDatabase &db, PreparedStatementCache &cache, QObject *parent)
-    : QObject(parent), m_db(db), m_cache(cache) {}
+ScanService::ScanService(QSqlDatabase &db, PreparedStatementCache &cache, int &txnDepth,
+                         QObject *parent)
+    : QObject(parent), m_db(db), m_cache(cache), m_txnDepth(txnDepth) {}
 
 void ScanService::requestCancelScan() {
   m_scanWork.requestCancel();
@@ -218,22 +221,26 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
 }
 
 QStringList ScanService::buildNameFilters(const CollectionConfig &collection) {
-  QStringList nameFilters;
-  if (!collection.extensions.isEmpty()) {
-    for (const QString &ext : collection.extensions) {
-      nameFilters << "*." + ext;
-    }
-  }
-  return nameFilters;
+  // Glob composition is centralized in ExtensionUtils::toNameFilters — it
+  // strips any "*."/"." prefix before prepending "*.", so a glob-form token
+  // (the pre-Kartend-693zb canonical INI form) can never double-prefix into
+  // the never-matching "*.*.ext".
+  return ExtensionUtils::toNameFilters(collection.extensions);
 }
 
 QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
                                             QHash<QString, QDateTime> &timestamps,
-                                            QString *dirSignatureOut) {
+                                            QString *dirSignatureOut, bool *scanCompletedOut) {
+  if (scanCompletedOut) {
+    *scanCompletedOut = false;
+  }
   QStringList filePaths;
   QDir dir(collection.mediaDirectory);
 
   if (!dir.exists()) {
+    // Missing / unmounted directory: NOT a completed scan — an empty result
+    // here must never be persisted as "the collection is empty"
+    // (Kartend-fys4o).
     return filePaths;
   }
 
@@ -247,10 +254,13 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   // Parallel scanning has overhead that only pays off with multiple directories
   if (!collection.folderBrowsing.includeContentSubfolders) {
     scanSequential(dir, nameFilters, timestamps, filePaths, dirSignatureOut);
-    return filePaths;
+  } else {
+    scanParallel(dir, nameFilters, collection, timestamps, filePaths, dirSignatureOut);
   }
 
-  scanParallel(dir, nameFilters, collection, timestamps, filePaths, dirSignatureOut);
+  if (scanCompletedOut) {
+    *scanCompletedOut = !isScanCancelled();
+  }
   return filePaths;
 }
 
@@ -504,20 +514,6 @@ bool ScanService::stageScannedFile(QStringList &batchPaths,
 // Phase 1 – stageFilesystemScan
 // ============================================================================
 
-bool ScanService::failStagingTransaction(const QString &message, bool rollbackOpenTransaction) {
-  // Capture lastError() BEFORE rolling back so the details carry the failure's
-  // real cause rather than the rollback's outcome.
-  auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed, message,
-                                    "ScanService::stageFilesystemScan")
-                 .withDetails(m_db.lastError().text());
-  ErrorUtils::logError(err);
-  emit errorOccurred(err);
-  if (rollbackOpenTransaction) {
-    m_db.rollback();
-  }
-  return false;
-}
-
 // ── Non-recursive arm: stream files directly off a flat QDirIterator ───────
 bool ScanService::stageFlatScan(const QDir &dir, const QStringList &nameFilters,
                                 QStringList &batchPaths, QHash<QString, QDateTime> &batchTimestamps,
@@ -728,7 +724,23 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
     throttle.report(processed, total, /*force=*/false);
   };
 
-  bool inTransaction = false;
+  // Streaming staging transaction (Kartend-l94tw: shared DbTransaction guard
+  // on the QueryManager-owned depth counter instead of a hand-rolled
+  // inTransaction flag). engaged = transaction open; commit()+reset() closes
+  // an interval; reset() alone rolls back (cancellation); destruction at
+  // function exit covers every early return.
+  std::optional<KartendDb::DbTransaction> txn;
+  const auto makeTxn = [&]() {
+    txn.emplace(m_db, m_txnDepth, "ScanService::stageFilesystemScan",
+                [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
+  };
+  // Distinguishes a staging-transaction failure from a cooperative cancel:
+  // both make flushBatch return false (so the arms stop walking), but only a
+  // failure may abort the whole scan. Without this, a swallowed mid-scan
+  // BEGIN/COMMIT failure left the staging table PARTIAL while phase 2 still
+  // ran deleteItemsMissingFromScan against it — silently pruning items that
+  // exist on disk (Kartend-tlfgf).
+  bool stagingFailed = false;
   int batchesSinceCommit = 0;
 
   QStringList batchPaths;
@@ -737,25 +749,28 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   batchTimestamps.reserve(BATCH_SIZE * 2);
 
   const std::function<bool()> flushBatch = [&]() -> bool {
+    if (stagingFailed) {
+      // Failure is latched; don't re-attempt the batch (the arms call
+      // flushBatch once more after their walk loop exits).
+      return false;
+    }
     if (batchPaths.isEmpty()) {
       return true;
     }
     if (isScanCancelled()) {
-      if (inTransaction) {
-        m_db.rollback();
-        inTransaction = false;
-      }
+      txn.reset(); // rolls back any open staging transaction
       batchPaths.clear();
       batchTimestamps.clear();
       return false;
     }
 
-    if (!inTransaction) {
-      if (!m_db.transaction()) {
-        return failStagingTransaction("Failed to start transaction for streaming insert",
-                                      /*rollbackOpenTransaction=*/false);
+    if (!txn) {
+      makeTxn();
+      if (!txn->activeOrReport("Failed to start transaction for streaming insert")) {
+        txn.reset();
+        stagingFailed = true;
+        return false;
       }
-      inTransaction = true;
       batchesSinceCommit = 0;
     }
 
@@ -767,11 +782,17 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
     batchTimestamps.clear();
 
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
-      if (!m_db.commit()) {
-        return failStagingTransaction("Failed to commit streaming insert transaction",
-                                      /*rollbackOpenTransaction=*/true);
+      if (!txn->commitOrReport("Failed to commit streaming insert transaction")) {
+        // Drop the guard so the final-commit epilogue can't re-attempt a
+        // commit on the no-longer-open transaction and double-report
+        // (Kartend-3ibqt — the quirk noted when this was extracted in
+        // Kartend-in6cl). The dtor's rollback on the aborted transaction is
+        // a harmless no-op at the SQLite level (see dbtxn.h).
+        txn.reset();
+        stagingFailed = true;
+        return false;
       }
-      inTransaction = false;
+      txn.reset();
       reportProgress(itemsStaged, -1);
     }
     if (itemsStaged % PROGRESS_REPORT_INTERVAL == 0) {
@@ -793,12 +814,19 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
     }
   }
 
+  // A staging-transaction failure means the temp table holds only a partial
+  // file list; phase 2 would treat every unstaged item as deleted. The error
+  // was already logged + emitted by the guard's *OrReport — just abort.
+  if (stagingFailed) {
+    return false;
+  }
+
   // Final commit for any remaining items in an open staging transaction.
-  if (inTransaction) {
-    if (!m_db.commit()) {
-      return failStagingTransaction("Failed to commit final streaming insert transaction",
-                                    /*rollbackOpenTransaction=*/true);
+  if (txn) {
+    if (!txn->commitOrReport("Failed to commit final streaming insert transaction")) {
+      return false; // guard dtor rolls back the aborted transaction (no-op)
     }
+    txn.reset();
   }
 
   if (itemsStaged > 0 && !isScanCancelled()) {

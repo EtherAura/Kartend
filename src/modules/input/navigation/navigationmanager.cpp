@@ -6,6 +6,7 @@
 #include "collection/hierarchyhelpers.h"
 #include "collection/validationhelpers.h"
 #include "collectionbackgroundcontroller.h"
+#include "extensionutils.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
 #include "idetailspane.h"
@@ -342,7 +343,9 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
   if (!mediaDir.trimmed().isEmpty()) {
     QDir dir(mediaDir);
     if (dir.exists()) {
-      QStringList filters = collection.extensions.isEmpty() ? QStringList() : collection.extensions;
+      // Extensions are stored bare ("mp4"); compose globs at the QDir
+      // boundary (Kartend-693zb).
+      const QStringList filters = ExtensionUtils::toNameFilters(collection.extensions);
       QStringList files =
           filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
       hasItems = !files.isEmpty();

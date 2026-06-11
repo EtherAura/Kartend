@@ -1,5 +1,7 @@
 #include "queryhelpers.h"
 
+#include "sqllike.h"
+
 #include <QChar>
 #include <QRegularExpression>
 #include <QStringList>
@@ -159,11 +161,19 @@ auto buildSearchTokenClauses(const SearchQueryParser::SearchQuery &query,
     QString sub =
         QStringLiteral(" AND EXISTS (SELECT 1 FROM item_metadata m WHERE m.collection_uuid = ");
     sub += prefix + QStringLiteral("collection_uuid AND m.path = ") + prefix +
-           QStringLiteral("path AND LOWER(m.tags) LIKE ?)");
+           QStringLiteral("path AND LOWER(m.tags) LIKE ?") + KartendDb::kLikeEscape +
+           QStringLiteral(")");
     out.sql += sub;
-    out.binds.append(QVariant(QStringLiteral("%\"") +
-                              tag.toLower().replace('"', QStringLiteral("\\\"")) +
-                              QStringLiteral("\"%")));
+    // Compose the JSON-text needle first (embedded quotes appear as \" in
+    // the stored JSON column, matching QJson serialization), THEN LIKE-escape
+    // the whole thing (Kartend-joird): escapeLike doubles the needle's
+    // backslashes so ESCAPE decodes them back to the literal \" sequence,
+    // and a literal % / _ in a tag name stops acting as a wildcard.
+    const QString jsonNeedle = QStringLiteral("\"") +
+                               tag.toLower().replace('"', QStringLiteral("\\\"")) +
+                               QStringLiteral("\"");
+    out.binds.append(
+        QVariant(QStringLiteral("%") + KartendDb::escapeLike(jsonNeedle) + QStringLiteral("%")));
   }
 
   // favorite:true|false joins through the reserved favorites playlist row.

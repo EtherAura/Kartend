@@ -154,6 +154,151 @@ race:ArtworkInfo::~ArtworkInfo
 # stripped. Only the start-up window of a fresh QNAM is racy.
 race:Scraper::HttpClient::drainHost
 
+# ─── 2026-06-10 audit wave: per-site hand-off anchors (Kartend-felhb) ───
+# New tests/code from the 2026-06 audit exercise the same two
+# uninstrumented-Qt false-positive classes as Groups A/B — Qt orders the
+# hand-off through futex/atomic fast paths (event-queue QMutex, QThreadPool
+# queue mutex, QReadWriteLock d_ptr CAS, QtConcurrent ThreadEngineBarrier)
+# that TSan cannot intercept, so the allocation-write on the posting thread
+# appears to race the first worker-side read. Each entry below anchors on
+# the narrowest Kartend-visible (or inlined-template) symbol its report
+# leaves after libQt6* strips its own frames.
+
+# QtConcurrent::blockingMap inline kernel teardown: startMap heap-allocates
+# a MapKernel/IterateKernel (template code compiled into our binary, so the
+# symbols are visible); pooled workers read the kernel vptr in
+# forThreadFunction / shouldStartThread while the last finisher destroys it
+# via ThreadEngine::asynchronousFinish. The last-thread-out ordering is
+# ThreadEngineBarrier's atomic semaphore inside uninstrumented
+# libQt6Concurrent — invisible to TSan. Surfaces under
+# DirectoryCache::processQueuedDirectories / prewarmDirectories
+# (test_directorycache, bench_artworkresolve).
+race:QtConcurrent::ThreadEngine
+
+# ScanWorkController queued-runnable hand-off (Kartend-t2my8 test): the test
+# news CountingTask runnables on the main thread and ScanWorkController's
+# QThreadPool::start hands them to pooled workers; the worker's first read
+# of the runnable's members appears to race the allocation-write because
+# QThreadPool's queue QMutex fast path is futex-based. The test
+# intentionally synchronises through pool internals (that IS the contract
+# under test), so the hand-off edge cannot be made TSan-visible.
+race:TestScanWorkController::testQueuedTasksStillRunAfterCancel
+
+# Startup orphan purge queued onto the DB worker (Kartend-dbqt5):
+# DatabaseManager::purgeOrphanCollectionData copies the live-uuid QSet into
+# a std::function on the GUI thread and posts it to the worker thread via
+# queueWorkerWrite -> QMetaObject::invokeMethod; the worker's first read of
+# the capture (liveUuids.isEmpty()) races the capture-copy allocation across
+# the event-queue boundary. Same class as Group A's invokeMethod entry, but
+# this report's stacks inline/strip every Qt frame, leaving only the
+# Kartend purge symbols to anchor on.
+race:purgeOrphanRowsOnConnection
+
+# ArtworkLoadDispatcher abandon-path teardown (Kartend-xoftg): the dtor's
+# bounded ArtworkDispatcherCacheHandle::invalidate() calls
+# m_pinLock.tryLockForWrite while an abandoned worker still holds the read
+# pin. The contended QReadWriteLock inflates to a QReadWriteLockPrivate
+# drawn from Qt's global freelist — whose backing operator new[] block is
+# first allocated by the destructing (main) thread — and the worker's later
+# unlock() locks the private's std::mutex inside that block. The private is
+# published through QReadWriteLock's d_ptr atomic CAS in uninstrumented
+# libQt6Core, so TSan sees no happens-before edge. Verified 2026-06-11: the
+# abandoned task touches ONLY the shared_ptr-co-owned handle (m_pinLock +
+# the nulled m_cacheManager atomic), never freed dispatcher or pool memory.
+race:ArtworkLoadDispatcher::~ArtworkLoadDispatcher
+
+# Same freelist artifact, surfaced as a mutex report instead of a race:
+# the worker's m_pinLock.unlock() goes through the inflated
+# QReadWriteLockPrivate's wait-condition pthread mutex, which TSan first
+# observes at that unlock (the private was published through the d_ptr CAS
+# it can't see), so it reports "unlock of an unlocked mutex (or by a wrong
+# thread)". The lock/unlock pairing in tryLoadFromDiskCache is structurally
+# correct (tryLockForRead checked, early return on failure).
+mutex:ArtworkDispatcherCacheHandle::tryLoadFromDiskCache
+
+# Cache-init QtConcurrent::run hand-off: ApplicationManager::initialize
+# news the StoredFunctionCall task object on the GUI thread and
+# QThreadPool::start hands it to a pooled worker, whose very first read at
+# RunFunctionTaskBase::run() entry (QFutureInterface state) appears to race
+# the allocation-write — the pool-queue QMutex's futex fast path provides
+# no TSan-visible edge. Companion of Group B's CacheManager::initialize
+# entry (that one anchors the worker-side frames; this report's racing
+# stacks only keep the dispatch site). Anchoring on the dispatch site
+# rather than RunFunctionTaskBase keeps every other QtConcurrent::run
+# functor body fully visible to TSan. Surfaces under the MainWindow
+# integration fixtures (TestNavigationManager, TestLaunchFlow).
+race:ApplicationManager::initialize
+
+# Same StoredFunctionCall dispatch-site hand-off for the per-item media
+# write: BatchScrapeRunner::applyAndFinish QtConcurrent::run's the write
+# task on the GUI thread and the pooled worker's first read at
+# RunFunctionTaskBase<MediaWriteResult>::run() entry races the allocation.
+# Surfaces intermittently under test_batchscraperunner.
+race:Scraper::BatchScrapeRunner::applyAndFinish
+
+# Consume-side counterpart of Group A's QMetaType::create entry: the
+# main thread copies a queued signal's payload via QMetaType::construct
+# (ScrapedItem copy-ctor into the QMetaCallEvent) and the worker thread
+# frees the previous payload via QMetaType::destroy after dispatching the
+# slot; the event-queue mutex ordering both is futex-based and invisible.
+# Surfaces intermittently under test_scrapewriteworker.
+race:QMetaType::destroy
+
+# Launch usage-stats completion hop (Kartend-cbtml):
+# DatabaseManager::recordItemLaunch queues its write to the DB worker; the
+# worker then copies the onCompleted std::function into the queued
+# main-thread hop (databasemanager_items.cpp invokeMethod(qApp, ...)), and
+# the main thread's later read of the captured QStrings races that copy
+# across the event-queue boundary. The lambda's enclosing-function name is
+# embedded in the symbolized std::function/_M_create template frames on
+# both stacks, so the suppression anchors there.
+race:DatabaseManager::recordItemLaunch
+
+# Placeholder-tile render: QPixmap::fromImage inside
+# ItemPlaceholderRenderer::buildTile triggers Qt Gui's multithreaded image
+# conversion, which fans segments out to global-pool threads synchronised
+# by a QSemaphore (futex fast path, invisible to TSan). Surfaces as the
+# main thread's tile allocation racing a pooled worker's buffer free
+# (TestNavigationManager); buildTile is the only named frame the racing
+# stacks keep.
+race:ItemPlaceholderRenderer::buildTile
+
+# QThreadPool queue churn between two pooled workers: enqueueTask's
+# operator new of a queue node vs another pooled thread's operator delete
+# when it dequeues — ordered by the pool's QMutex (futex fast path,
+# invisible). Both stacks are otherwise stripped libQt6Core frames;
+# enqueueTask is the lone exported symbol to anchor on. Surfaces under
+# DirectoryCache's nested QtConcurrent prewarm.
+race:QThreadPoolPrivate::enqueueTask
+
+# QThreadPool per-thread QWaitCondition lifecycle: one pooled worker
+# constructs the wait condition (operator new inside QWaitCondition's
+# ctor) while another worker's wakeOne locks its internal mutex; the
+# hand-off is the pool's QMutex again. Ctor-side counterpart of Group B's
+# ~QWaitCondition entry. Surfaces under DirectoryCache / BenchArtworkResolve
+# global-pool fan-out.
+race:QWaitCondition::QWaitCondition
+
+# Qt-internal pool bookkeeping with EVERY frame stripped (e.g. two pooled
+# workers' memmoves on a recycled QArrayData block inside libQt6Core's
+# QThreadPool code, or libQt6Gui's threaded image-conversion buffer free):
+# no race: symbol pattern can target these because GCC's libtsan matches
+# suppressions only against the racing-access stacks, and those contain
+# nothing but <null> libQt6* frames (the CI image's Qt is stripped).
+# called_from_lib matches by MODULE, so it works on stripped libraries and
+# suppresses only interceptor events whose caller is inside the named .so —
+# Kartend's instrumented code stays fully visible, including Qt template
+# code inlined into Kartend TUs from headers. Same rationale and tradeoff
+# as the module-scoped Group D on the in-flight Kartend-t9u0o branch (these
+# two lines converge with it textually; dedup is a no-op at merge). The
+# narrower race: entries above are kept deliberately: they anchor on
+# Kartend-visible symbols, cost nothing, and document the known shapes.
+# Surfaces under Integration.TestNavigationManager / TestLaunchFlow
+# (MainWindow fixture spins the global pool via cache init + placeholder
+# tile conversion).
+called_from_lib:libQt6Core.so.6
+called_from_lib:libQt6Gui.so.6
+
 # ─── Group C: Third-party library sync primitives (Kartend-d4x4) ────────
 # These libraries use sync primitives TSan can't observe; the races
 # originate inside them. None are fixable in Kartend code; re-evaluate

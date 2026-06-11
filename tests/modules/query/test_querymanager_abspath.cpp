@@ -25,8 +25,9 @@
 #include <QTest>
 #include <QThread>
 
-#include <utility>
-
+#include "../../support/inspectordb.h"
+#include "../../support/scopeexit.h"
+#include "../../support/testsandbox.h"
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "querymanager.h"
@@ -41,39 +42,8 @@ private slots:
   void reconcileAbsolutizesExistingRowsPreservingStats();
 };
 
-template <typename Func> class ScopeExit {
-public:
-  explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
-  ~ScopeExit() { m_func(); }
-
-  ScopeExit(const ScopeExit &) = delete;
-  ScopeExit &operator=(const ScopeExit &) = delete;
-
-private:
-  Func m_func;
-};
-
-template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
-  return ScopeExit<Func>(std::forward<Func>(func));
-}
-
 void TestQueryManagerAbsPath::initTestCase() {
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-abspath"));
-}
-
-static auto openInspectorDb(const QString &dbFilePath, const QString &connectionName)
-    -> QSqlDatabase {
-  if (QSqlDatabase::contains(connectionName)) {
-    QSqlDatabase::removeDatabase(connectionName);
-  }
-  QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
-  db.setDatabaseName(dbFilePath);
-  if (!db.open()) {
-    return {};
-  }
-  return db;
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-abspath"));
 }
 
 void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
@@ -136,7 +106,7 @@ void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
   qm->moveToThread(&worker);
   worker.start();
 
-  const auto workerCleanup = makeScopeExit([&]() {
+  const auto workerCleanup = KartendTest::makeScopeExit([&]() {
     if (qm) {
       qm->requestCancelScan();
       qm->deleteLater();
@@ -154,9 +124,9 @@ void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
 
   const QString dbDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   const QString dbFilePath = QDir(dbDir).absoluteFilePath(QStringLiteral("media.db"));
-  QSqlDatabase inspectDb =
-      openInspectorDb(dbFilePath, QStringLiteral("test_qm_abspath_scan_inspect"));
-  QVERIFY2(inspectDb.isValid() && inspectDb.isOpen(), "Failed to open inspector database");
+  KartendTest::InspectorDb inspector(dbFilePath, QStringLiteral("test_qm_abspath_scan_inspect"));
+  QVERIFY2(inspector.isOpen(), "Failed to open inspector database");
+  QSqlDatabase inspectDb = inspector.db();
 
   // Clean slate so prior runs don't contaminate the assertions.
   {
@@ -240,7 +210,7 @@ void TestQueryManagerAbsPath::reconcileAbsolutizesExistingRowsPreservingStats() 
   qm->moveToThread(&worker);
   worker.start();
 
-  const auto workerCleanup = makeScopeExit([&]() {
+  const auto workerCleanup = KartendTest::makeScopeExit([&]() {
     if (qm) {
       qm->requestCancelScan();
       qm->deleteLater();
@@ -258,9 +228,10 @@ void TestQueryManagerAbsPath::reconcileAbsolutizesExistingRowsPreservingStats() 
 
   const QString dbDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   const QString dbFilePath = QDir(dbDir).absoluteFilePath(QStringLiteral("media.db"));
-  QSqlDatabase inspectDb =
-      openInspectorDb(dbFilePath, QStringLiteral("test_qm_abspath_reconcile_inspect"));
-  QVERIFY2(inspectDb.isValid() && inspectDb.isOpen(), "Failed to open inspector database");
+  KartendTest::InspectorDb inspector(dbFilePath,
+                                     QStringLiteral("test_qm_abspath_reconcile_inspect"));
+  QVERIFY2(inspector.isOpen(), "Failed to open inspector database");
+  QSqlDatabase inspectDb = inspector.db();
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);

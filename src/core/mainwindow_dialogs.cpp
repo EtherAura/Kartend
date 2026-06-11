@@ -39,6 +39,7 @@
 #include "commandpalettedialog.h"
 #include "detailpagemanager.h"
 #include "dialogcontroller.h"
+#include "dialogrunners.h"
 #include "errorpresentation.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
@@ -83,6 +84,9 @@ SettingsDialogContext MainWindow::makeSettingsDialogContext() {
   context.navigationManager = m_appManager->getNavigationManager();
   context.databaseManager = m_appManager->getDatabaseManager();
   context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
+  // Kartend-sqoq0: generic runners for the "Collection Added" scan-summary
+  // message boxes SettingsManager used to construct directly.
+  context.dialogs = makeDialogRunners();
   return context;
 }
 

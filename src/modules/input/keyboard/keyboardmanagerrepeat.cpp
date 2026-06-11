@@ -55,7 +55,10 @@ void KeyboardManager::beginHoldRepeat() {
       m_generalSettings ? m_generalSettings->input.scrollVelocityMultiplier : 1.0;
   baseInterval = KeyboardHelpers::scaleRepeatInterval(baseInterval, velocityMult, 10);
   int verticalInterval = baseInterval;
-  int horizontalInterval = baseInterval / 2;
+  // Kartend-l06g6: re-apply the 10ms floor AFTER halving — halving a clamped
+  // base could yield a 5ms (200Hz) horizontal timer at high velocity
+  // multipliers, defeating the event-loop-saturation guard documented above.
+  int horizontalInterval = std::max(10, baseInterval / 2);
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
 
   // m_repeatTimer is created + connected once in initTimers() (ctor), so the

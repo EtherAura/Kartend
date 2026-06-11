@@ -50,8 +50,7 @@ const QList<int> &seedEmptySubcollections() {
 }
 
 void seedThreeItems(FilterManager &mgr) {
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(),
-                    seedEmptySubcollections());
+  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedEmptySubcollections());
 }
 
 } // namespace

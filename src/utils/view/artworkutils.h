@@ -7,7 +7,7 @@
 #include <QColor>
 #include <QHash>
 #include <QImage>
-#include <QMutex>
+#include <QReadWriteLock>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -105,6 +105,17 @@ public:
   [[nodiscard]] bool isDirectoryQueued(const QString &directory) const;
 
   /**
+   * @brief True when @p directory's listing is already in the cache
+   * (Kartend-urrpp).
+   *
+   * Callers use this to prefer the O(1) cached lookup (positive AND
+   * negative entries, self-patching on first miss) over a synchronous
+   * per-extension stat sweep. Distinct from isDirectoryQueued(): queued
+   * means a background scan is pending; cached means lookups are warm now.
+   */
+  [[nodiscard]] bool isDirectoryCached(const QString &directory) const;
+
+  /**
    * @brief Clear all cached directory contents and queued directories.
    * Call when collection changes or artwork directories are modified.
    */
@@ -114,8 +125,19 @@ private:
   DirectoryCache() = default;
   void ensureDirectoryCached(const QString &directory);
 
-  mutable QMutex m_mutex;
-  // Maps directory path -> (baseName lowercase -> full artwork path)
+  // Reader/writer split (Kartend-s723v): the cache-hit path — per visible
+  // tile during scroll, from the GUI thread AND artwork worker threads —
+  // only reads, so lookups take a shared read lock and run concurrently.
+  // The write lock is reserved for inserts/patches/clear, which are brief
+  // (directory scans happen outside the lock).
+  mutable QReadWriteLock m_lock;
+  // Maps directory path -> (baseMatchKey -> full artwork path). A contained
+  // key with a NULL/empty value is a cached NEGATIVE result (Kartend-bjrw1):
+  // the per-extension stat sweep ran once for that (dir, baseName) and found
+  // nothing, so re-materializing the same tile skips the sweep entirely.
+  // Negative entries (like positives) live until clear() — a file dropped in
+  // mid-session becomes visible on the next collection switch, same contract
+  // as the directory listing itself.
   QHash<QString, QHash<QString, QString>> m_cache;
   // Directories requested but not yet scanned
   QSet<QString> m_queuedDirectories;

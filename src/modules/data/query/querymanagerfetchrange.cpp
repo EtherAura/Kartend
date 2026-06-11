@@ -5,6 +5,8 @@
 // it here so this TU does not depend on private symbols of the main TU.
 #include "querymanager.h"
 
+#include "sqllike.h"
+
 #include "loggingcategories.h"
 #include <QDir>
 #include <QElapsedTimer>
@@ -325,8 +327,11 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // row left with a NULL rel_path before the v13 reconcile runs.
   const QString &subfolder = ctx.config.folderBrowsing.currentSubfolder;
   if (!subfolder.isEmpty()) {
-    // In a subfolder - show only items whose rel_path starts with subfolder/
-    sql += " AND COALESCE(rel_path, path) LIKE ?";
+    // In a subfolder - show only items whose rel_path starts with subfolder/.
+    // ESCAPE + escapeLike (Kartend-joird): an unescaped underscore in the
+    // folder name is a single-char wildcard, so `my_videos/%` also matched
+    // sibling `myXvideos/...` rows.
+    sql += QStringLiteral(" AND COALESCE(rel_path, path) LIKE ?") + KartendDb::kLikeEscape;
   } else if (ctx.config.folderBrowsing.includeContentSubfolders &&
              !ctx.config.folderBrowsing.showAllSubfolderItems && freeText.isEmpty() &&
              tokenClauses.sql.isEmpty()) {
@@ -343,7 +348,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   if (!freeText.isEmpty()) {
     if (!useFts) {
-      sql += " AND name LIKE ?";
+      sql += QStringLiteral(" AND name LIKE ?") + KartendDb::kLikeEscape;
     }
   }
 
@@ -394,10 +399,10 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     }
   }
   if (!subfolder.isEmpty()) {
-    query.bindValue(bindPos++, subfolder + "/%");
+    query.bindValue(bindPos++, KartendDb::escapeLike(subfolder) + "/%");
   }
   if (!freeText.isEmpty() && !useFts) {
-    query.bindValue(bindPos++, "%" + freeText + "%");
+    query.bindValue(bindPos++, "%" + KartendDb::escapeLike(freeText) + "%");
   }
   for (const QVariant &v : tokenClauses.binds) {
     query.bindValue(bindPos++, v);

@@ -45,6 +45,8 @@ class TestKartWriter : public QObject {
 private slots:
   void testExtensionShouldCompress();
   void testWriteAndReadBackRoundTrip();
+  void testRoundTripSurvivesPathVariants_data();
+  void testRoundTripSurvivesPathVariants();
   void testRoundTripWithMultipleEntryKinds();
   void testWriterRefusesMissingSourceFile();
   void testWriterStoresUncompressedWhenCompressionGrowsPayload();
@@ -72,8 +74,8 @@ void TestKartWriter::testWriteAndReadBackRoundTrip() {
   const QString mediaSrc = writeFile(QDir(src.path()), "rom.bin", rom);
 
   auto params = makeMinimalParams(mediaSrc, "rom.bin");
-  params.preferredCompression =
-      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
+  params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                 : KartFormat::Compression_Zlib;
 
   QTemporaryDir outDir;
   const QString kartPath = QDir(outDir.path()).filePath("test.kart");
@@ -92,6 +94,51 @@ void TestKartWriter::testWriteAndReadBackRoundTrip() {
   QCOMPARE(readBack.readAll(), rom);
 }
 
+void TestKartWriter::testRoundTripSurvivesPathVariants_data() {
+  // Kart archives carry user-named media files; the entry path is stored as
+  // length-prefixed UTF-8, so names with spaces, non-ASCII letters and
+  // multi-byte emoji must survive the write → extract round trip verbatim
+  // (Kartend-1yev5 — these rows were previously only covered for ASCII).
+  QTest::addColumn<QString>("fileName");
+
+  QTest::newRow("spaces") << QStringLiteral("file with spaces.bin");
+  QTest::newRow("leading-trailing-ish") << QStringLiteral("  padded name .bin");
+  QTest::newRow("diacritics") << QStringLiteral("vidéo préférée — Übung.bin");
+  QTest::newRow("cjk") << QStringLiteral("テスト動画.bin");
+  QTest::newRow("emoji") << QStringLiteral("clip 🎬🎞.bin");
+  QTest::newRow("mixed") << QStringLiteral("Bande-annonce nº1 — テスト 🎥.bin");
+}
+
+void TestKartWriter::testRoundTripSurvivesPathVariants() {
+  QFETCH(QString, fileName);
+
+  QTemporaryDir src;
+  const QByteArray payload("path-variant payload bytes");
+  const QString mediaSrc = writeFile(QDir(src.path()), fileName, payload);
+
+  auto params = makeMinimalParams(mediaSrc, fileName);
+
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("variant.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+
+  // The manifest must carry the exact relative path, and the extracted file
+  // must exist under it with identical bytes.
+  QCOMPARE(rd.value().manifest.items.size(), 1);
+  QCOMPARE(rd.value().manifest.items.first().mediaPath, QString("media/" + fileName));
+
+  QFile readBack(QDir(extractDir.path()).filePath("media/" + fileName));
+  QVERIFY2(readBack.open(QIODevice::ReadOnly), qPrintable(readBack.errorString()));
+  QCOMPARE(readBack.readAll(), payload);
+}
+
 void TestKartWriter::testRoundTripWithMultipleEntryKinds() {
   QTemporaryDir src;
   QDir d(src.path());
@@ -108,8 +155,8 @@ void TestKartWriter::testRoundTripWithMultipleEntryKinds() {
   p.uuid = "x";
   p.name = "Multi";
   p.collectionConfig.name = "Multi";
-  p.preferredCompression =
-      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
+  p.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                            : KartFormat::Compression_Zlib;
   KartWriter::ItemSource it;
   it.mediaAbs = romP;
   it.artworkAbs = artP;
@@ -162,8 +209,8 @@ void TestKartWriter::testWriterStoresUncompressedWhenCompressionGrowsPayload() {
   const QString mediaSrc = writeFile(QDir(src.path()), "tiny.bin", random);
 
   auto params = makeMinimalParams(mediaSrc, "tiny.bin");
-  params.preferredCompression =
-      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
+  params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                 : KartFormat::Compression_Zlib;
 
   QTemporaryDir outDir;
   const QString kartPath = QDir(outDir.path()).filePath("tiny.kart");
@@ -187,8 +234,8 @@ void TestKartWriter::testWriterEmitsProgress() {
   p.uuid = "x";
   p.name = "P";
   p.collectionConfig.name = "P";
-  p.preferredCompression =
-      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
+  p.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                            : KartFormat::Compression_Zlib;
   for (int i = 0; i < 3; ++i) {
     QByteArray data = QByteArray(512, static_cast<char>('a' + i));
     QString name = QString("rom%1.bin").arg(i);

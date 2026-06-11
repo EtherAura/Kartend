@@ -3,6 +3,7 @@
 #include "collection/enumstringhelpers.h"
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
+#include "extensionutils.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -246,7 +247,9 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.manualDirectory = o["manual_directory"].toString();
   c.placeholderArtwork = o["placeholder_artwork"].toString();
   c.collectionIcon = o["collection_icon"].toString();
-  c.extensions = jsonToStringList(o["extensions"]);
+  // Older .kart files carry the pre-Kartend-693zb glob form ("*.mp4");
+  // normalize on import so the in-memory canonical stays bare.
+  c.extensions = ExtensionUtils::normalizeStoredExtensions(jsonToStringList(o["extensions"]));
   c.customArtworkTypes = jsonToStringList(o["custom_artwork_types"]);
 
   c.gridLayout.gridWidth = o["grid_width"].toInt(4);

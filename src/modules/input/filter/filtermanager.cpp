@@ -5,7 +5,6 @@
 #include "collection/hierarchyhelpers.h"
 #include "filterhelpers.h"
 #include "idatabasemanager.h"
-#include <QDir>
 #include <QFileInfo>
 #include <QSet>
 
@@ -289,16 +288,22 @@ auto FilterManager::itemBelongsToTargetCollections(const QString &entry,
       return true;
     }
 
-    // Try alternate path resolution
+    // Try alternate path resolution.
+    // Kartend-ardm7: this used to linear-scan every m_fileNames key with
+    // endsWith — running inside applySubcollectionFilter's per-item loop that
+    // is O(items x map) = multi-second GUI-thread freezes on large flattened
+    // views. resolveRelativeFilePath answers the same question (which full
+    // path does this leaf/relative entry belong to?) from the FileMapCache
+    // reverse index in O(1). Like the old scan, it yields ONE candidate; an
+    // entry it cannot resolve stays filtered out, exactly as a scan miss did.
     if (collectionIndexForEntry < 0 && m_fileNames) {
-      for (auto it = m_fileNames->constBegin(); it != m_fileNames->constEnd(); ++it) {
-        const QString &key = it.key();
-        if (key.endsWith("/" + entry) || key.endsWith(QDir::separator() + entry) || key == entry) {
-          int altCollectionIndex = db->getCollectionIndexForFile(it.key());
-          if (altCollectionIndex >= 0 && targetCollections.contains(altCollectionIndex)) {
-            return true;
-          }
-          break;
+      const QString resolved = db->resolveRelativeFilePath(entry, *m_fileNames);
+      // resolved == entry means an exact m_fileNames hit — the primary
+      // getCollectionIndexForFile(entry) above already ruled that key out.
+      if (!resolved.isEmpty() && resolved != entry) {
+        int altCollectionIndex = db->getCollectionIndexForFile(resolved);
+        if (altCollectionIndex >= 0 && targetCollections.contains(altCollectionIndex)) {
+          return true;
         }
       }
     }

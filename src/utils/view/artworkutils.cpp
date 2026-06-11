@@ -7,9 +7,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
-#include <QMutexLocker>
 #include <QPainter>
 #include <QPainterPath>
+#include <QReadWriteLock>
 #include <QtConcurrent>
 #include <QThreadPool>
 
@@ -83,10 +83,10 @@ DirectoryCache &DirectoryCache::instance() {
 }
 
 void DirectoryCache::ensureDirectoryCached(const QString &directory) {
-  // NOTE: This is now called WITHOUT mutex held.
-  // Check if already cached first (with brief lock).
+  // NOTE: This is now called WITHOUT the lock held.
+  // Check if already cached first (with brief read lock).
   {
-    QMutexLocker locker(&m_mutex);
+    QReadLocker locker(&m_lock);
     if (m_cache.contains(directory)) {
       return;
     }
@@ -100,7 +100,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
   QDir dir(directory);
   if (!dir.exists()) {
     // Cache empty hash to avoid repeated checks
-    QMutexLocker locker(&m_mutex);
+    QWriteLocker locker(&m_lock);
     m_cache.insert(directory, QHash<QString, QString>());
     qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms=" << perfTimer.elapsed()
                          << "dir=" << directory;
@@ -125,7 +125,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
 
   // Now briefly lock to insert results
   {
-    QMutexLocker locker(&m_mutex);
+    QWriteLocker locker(&m_lock);
     // Double-check another thread didn't cache it while we were scanning
     if (!m_cache.contains(directory)) {
       m_cache.insert(directory, dirContents);
@@ -148,14 +148,36 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
     timer.start();
   }
 
-  QMutexLocker locker(&m_mutex);
+  const QString key = baseMatchKey(baseName);
+  bool dirCached = false;
+  bool keyKnown = false;
+  QString result;
+  {
+    // Shared read lock (Kartend-s723v): the hit path only reads, so
+    // concurrent per-tile lookups from the GUI + worker threads no longer
+    // serialise on one global mutex during scroll storms.
+    QReadLocker locker(&m_lock);
 
-  qint64 afterLock = lcPerfTrace().isDebugEnabled() ? timer.elapsed() : 0;
+    qint64 afterLock = lcPerfTrace().isDebugEnabled() ? timer.elapsed() : 0;
 
-  // Non-blocking: if not cached, queue for background scan and return empty
-  if (!m_cache.contains(artworkDirectory)) {
-    m_queuedDirectories.insert(artworkDirectory);
-    if (lcPerfTrace().isDebugEnabled()) {
+    const auto dirIt = m_cache.constFind(artworkDirectory);
+    dirCached = dirIt != m_cache.constEnd();
+    if (dirCached) {
+      const auto keyIt = dirIt->constFind(key);
+      // A present-but-empty value is a cached NEGATIVE result
+      // (Kartend-bjrw1): the stat sweep below already ran for this
+      // (dir, baseName) and found nothing — short-circuit without
+      // touching the filesystem again.
+      keyKnown = keyIt != dirIt->constEnd();
+      if (keyKnown) {
+        result = *keyIt;
+      }
+      if (lcPerfTrace().isDebugEnabled() && timer.elapsed() > 2) {
+        qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
+                             << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
+                             << "dirContentsSize=" << dirIt->size() << "dir=" << artworkDirectory;
+      }
+    } else if (lcPerfTrace().isDebugEnabled()) {
       static int queuedLogCount = 0;
       if (++queuedLogCount <= 10) {
         qCDebug(lcPerfTrace) << "findInDirectory: QUEUED lockMs=" << afterLock
@@ -164,32 +186,28 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
                              << "dir=" << artworkDirectory;
       }
     }
+  }
+
+  // Non-blocking: if not cached, queue for background scan and return empty.
+  // The queue insert needs the write lock, taken only on this cold path.
+  if (!dirCached) {
+    QWriteLocker locker(&m_lock);
+    m_queuedDirectories.insert(artworkDirectory);
     return {};
   }
-
-  const QHash<QString, QString> &dirContents = m_cache.value(artworkDirectory);
-  QString result = dirContents.value(baseMatchKey(baseName));
-
-  if (lcPerfTrace().isDebugEnabled() && timer.elapsed() > 2) {
-    qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
-                         << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
-                         << "dirContentsSize=" << dirContents.size() << "dir=" << artworkDirectory;
+  if (keyKnown) {
+    return result; // positive hit, or cached-negative empty
   }
 
-  if (!result.isEmpty()) {
-    return result;
-  }
-
-  // Cache miss for this basename. The cache only re-scans on
-  // collection switch — files dropped into the directory between
-  // switches (manual artwork drops, external editors, etc.) would
-  // stay invisible until the user navigated away and back. Probe
-  // the filesystem directly for the expected per-extension paths
-  // and patch the cache on a hit. Cost is bounded: one stat per
-  // image extension per miss, and only ONE such miss-probe round
-  // per (dir, baseName) since the patch makes subsequent lookups
-  // a pure cache hit.
-  locker.unlock();
+  // First-ever miss for this basename in a cached directory. The cache only
+  // re-scans on collection switch — files dropped into the directory between
+  // switches (manual artwork drops, external editors, etc.) would stay
+  // invisible until the user navigated away and back. Probe the filesystem
+  // directly for the expected per-extension paths and patch the cache with
+  // the outcome — POSITIVE OR NEGATIVE (Kartend-bjrw1) — so exactly ONE
+  // stat-sweep round runs per (dir, baseName) per cache generation. Before
+  // negatives were cached, every re-materialization of a sparsely-arted tile
+  // re-paid the full sweep on the GUI thread.
   const QStringList &exts = ExtensionUtils::imageBaseExtensions();
   for (const QString &ext : exts) {
     QString candidate = QDir(artworkDirectory).absoluteFilePath(baseName + "." + ext);
@@ -197,12 +215,16 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
       candidate = QDir(artworkDirectory).absoluteFilePath(baseName + "." + ext.toUpper());
       if (!QFile::exists(candidate)) continue;
     }
-    // Found a new file on disk. Patch the cache and return. Both
-    // locks (above + here) are short — the filesystem probe runs
-    // unlocked so other lookups aren't serialised behind it.
-    QMutexLocker patchLocker(&m_mutex);
-    m_cache[artworkDirectory].insert(baseMatchKey(baseName), candidate);
+    // Found a new file on disk. Patch the cache and return. Both lock
+    // scopes are short — the filesystem probe runs unlocked so other
+    // lookups aren't serialised behind it.
+    QWriteLocker patchLocker(&m_lock);
+    m_cache[artworkDirectory].insert(key, candidate);
     return candidate;
+  }
+  {
+    QWriteLocker patchLocker(&m_lock);
+    m_cache[artworkDirectory].insert(key, QString());
   }
   return {};
 }
@@ -234,7 +256,7 @@ void DirectoryCache::prewarmDirectories(const QStringList &directories) {
   // Filter out empty directories and already-cached ones
   QStringList toProcess;
   {
-    QMutexLocker locker(&m_mutex);
+    QReadLocker locker(&m_lock);
     for (const QString &dir : expanded) {
       if (!dir.isEmpty() && !m_cache.contains(dir)) {
         toProcess.append(dir);
@@ -252,7 +274,7 @@ void DirectoryCache::prewarmDirectories(const QStringList &directories) {
     ensureDirectoryCached(dir);
     // Brief lock to update queue
     {
-      QMutexLocker locker(&m_mutex);
+      QWriteLocker locker(&m_lock);
       m_queuedDirectories.remove(dir);
     }
   });
@@ -282,7 +304,7 @@ void DirectoryCache::processQueuedDirectories() {
   // Called from background thread - uses parallel processing for speed.
   QStringList toProcess;
   {
-    QMutexLocker locker(&m_mutex);
+    QReadLocker locker(&m_lock);
     toProcess = m_queuedDirectories.values();
   }
 
@@ -296,7 +318,7 @@ void DirectoryCache::processQueuedDirectories() {
     ensureDirectoryCached(dir);
     // Brief lock just to update queue
     {
-      QMutexLocker locker(&m_mutex);
+      QWriteLocker locker(&m_lock);
       m_queuedDirectories.remove(dir);
     }
   });
@@ -306,12 +328,20 @@ bool DirectoryCache::isDirectoryQueued(const QString &directory) const {
   if (directory.isEmpty()) {
     return false;
   }
-  QMutexLocker locker(&m_mutex);
+  QReadLocker locker(&m_lock);
   return m_queuedDirectories.contains(directory);
 }
 
+bool DirectoryCache::isDirectoryCached(const QString &directory) const {
+  if (directory.isEmpty()) {
+    return false;
+  }
+  QReadLocker locker(&m_lock);
+  return m_cache.contains(directory);
+}
+
 void DirectoryCache::clear() {
-  QMutexLocker locker(&m_mutex);
+  QWriteLocker locker(&m_lock);
   m_cache.clear();
   m_queuedDirectories.clear();
 }
@@ -464,9 +494,14 @@ QString findArtworkForFileCached(const QString &fileName, const QString &artwork
   // Fall back to the typed cover subdirs in priority order
   // (`front` → box → box-3d → … ) — scrapes write the cover there
   // rather than at the flat root. Each subdir goes through the same
-  // DirectoryCache so repeat hits stay cheap.
+  // DirectoryCache so repeat hits stay cheap — including cached NEGATIVES
+  // (Kartend-bjrw1), so a sparsely-arted tile's 9-subdir sweep collapses to
+  // hash lookups on re-materialization. The root QDir is resolved once per
+  // call instead of once per subdir (path normalization isn't free at
+  // per-tile-per-scroll frequency).
+  const QDir artRoot(artworkDirectory);
   for (const QString &subdir : coverSubdirPriority()) {
-    const QString coverDir = QDir(artworkDirectory).absoluteFilePath(subdir);
+    const QString coverDir = artRoot.absoluteFilePath(subdir);
     result = DirectoryCache::instance().findInDirectory(baseName, coverDir);
     if (!result.isEmpty()) {
       return result;

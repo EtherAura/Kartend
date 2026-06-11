@@ -5,9 +5,28 @@
 #include "extensionutils.h"
 #include "loggingcategories.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QMutexLocker>
 #include <QtConcurrent>
+
+ArtworkPathCatalog::~ArtworkPathCatalog() {
+  // Drain every in-flight build, not just the latest: a superseded build
+  // keeps running after the owner's watcher moved on, and its lambda locks
+  // m_mutex / reads m_buildGeneration (Kartend-lz1zp). Snapshot under the
+  // mutex but wait WITHOUT holding it — the build lambdas need the mutex to
+  // make progress and finish.
+  QList<QFuture<void>> pending;
+  {
+    QMutexLocker locker(&m_mutex);
+    pending = m_inFlightBuilds;
+    m_inFlightBuilds.clear();
+  }
+  for (QFuture<void> &future : pending) {
+    future.waitForFinished();
+  }
+}
 
 QStringList ArtworkPathCatalog::collectArtworkDirs(const QList<CollectionConfig> *collections,
                                                    int collectionIndex, bool includeDescendants) {
@@ -74,7 +93,7 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
   // it outlives this call. Appends are generation-guarded so a superseded
   // build (a newer collection switch) drops its stale results instead of
   // polluting the list the newer build cleared.
-  return QtConcurrent::run([this, generation, allDirs]() {
+  QFuture<void> future = QtConcurrent::run([this, generation, allDirs]() {
     const QStringList exts = ExtensionUtils::imageFilters();
     for (const QString &dirPath : allDirs) {
       QDir dir(dirPath);
@@ -92,10 +111,10 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
         fullPaths.append(dir.absoluteFilePath(file));
       }
       // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't see
-      // that ArtworkManager's destructor waitForFinished()s this build before
-      // m_pathCatalog is torn down, so the QtConcurrent lambda never outlives
-      // `this`. The captured pointer is safe. (Same pattern as CacheManager's
-      // disk-size walk.)
+      // that ~ArtworkPathCatalog drains every registered build future
+      // (m_inFlightBuilds, Kartend-lz1zp), so this lambda never outlives
+      // `this` — including when a newer build superseded it and the owner's
+      // QFutureWatcher is no longer watching. The captured pointer is safe.
       QMutexLocker locker(&m_mutex);
       if (generation != m_buildGeneration) {
         return; // a newer build superseded this one
@@ -104,6 +123,17 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
       // NOLINTEND(clang-analyzer-core.NullDereference)
     }
   });
+
+  // Register the build so the dtor can drain it even after a newer build
+  // supersedes it; prune finished entries so the list stays O(live builds).
+  {
+    QMutexLocker locker(&m_mutex);
+    m_inFlightBuilds.erase(std::remove_if(m_inFlightBuilds.begin(), m_inFlightBuilds.end(),
+                                          [](const QFuture<void> &f) { return f.isFinished(); }),
+                           m_inFlightBuilds.end());
+    m_inFlightBuilds.append(future);
+  }
+  return future;
 }
 
 int ArtworkPathCatalog::totalPaths() const {

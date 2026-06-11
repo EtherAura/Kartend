@@ -124,7 +124,37 @@ void QueryManagerInternal::appendFileMapsAndListCanonical(
   }
 }
 
-void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode) {
+void QueryManagerInternal::buildSortMetadata(const QString &mediaDir,
+                                             const QHash<QString, QDateTime> &relTimestamps,
+                                             const QHash<QString, qint64> &relSizes,
+                                             const QHash<QString, QString> *canonicalPathCache,
+                                             QHash<QString, qint64> &mtimeMsByPath,
+                                             QHash<QString, qint64> &sizeByPath) {
+  const QDir mediaQDir(mediaDir);
+  // Re-key exactly like appendFileMapsAndListCanonical keys allFilePaths:
+  // absolutize against the media dir, then map through the canonical-path
+  // cache when the load deduped via canonical paths. The cache holds every
+  // absPath the preceding append call saw, so value(abs, abs) only falls back
+  // for entries that never reached the file list (and thus never get looked
+  // up by sortFiles anyway).
+  const auto keyFor = [&](const QString &rel) -> QString {
+    const QString abs = mediaQDir.absoluteFilePath(rel);
+    return canonicalPathCache ? canonicalPathCache->value(abs, abs) : abs;
+  };
+
+  mtimeMsByPath.reserve(mtimeMsByPath.size() + relTimestamps.size());
+  for (auto it = relTimestamps.constBegin(); it != relTimestamps.constEnd(); ++it) {
+    insertIfAbsent(mtimeMsByPath, keyFor(it.key()), it.value().toMSecsSinceEpoch());
+  }
+  sizeByPath.reserve(sizeByPath.size() + relSizes.size());
+  for (auto it = relSizes.constBegin(); it != relSizes.constEnd(); ++it) {
+    insertIfAbsent(sizeByPath, keyFor(it.key()), it.value());
+  }
+}
+
+void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode,
+                                     const QHash<QString, qint64> *mtimeMsByPath,
+                                     const QHash<QString, qint64> *sizeByPath) {
   if (mode == SortMode::Random) {
     // Fisher-Yates shuffle
     auto seed = static_cast<unsigned>(QDateTime::currentMSecsSinceEpoch());
@@ -158,11 +188,27 @@ void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode) {
       sortKey = PathUtils::normalizeDisplayName(baseName.mid(1));
     }
 
+    // Kartend-m9r1s: prefer the caller-supplied metadata (already in hand
+    // from the scan / items table) over a per-file stat. The stat remains as
+    // the fallback for keys the maps don't cover, preserving the historical
+    // "missing file sorts as 0" behavior.
+    const auto lookupOrStat = [&](const QHash<QString, qint64> *map,
+                                  const auto &statFallback) -> qint64 {
+      if (map) {
+        const auto it = map->constFind(path);
+        if (it != map->constEnd()) {
+          return it.value();
+        }
+      }
+      return info.exists() ? statFallback() : 0;
+    };
+
     qint64 numericKey = 0;
     if (mode == SortMode::DateAscending || mode == SortMode::DateDescending) {
-      numericKey = info.exists() ? info.lastModified().toMSecsSinceEpoch() : 0;
+      numericKey =
+          lookupOrStat(mtimeMsByPath, [&] { return info.lastModified().toMSecsSinceEpoch(); });
     } else if (mode == SortMode::SizeAscending || mode == SortMode::SizeDescending) {
-      numericKey = info.exists() ? info.size() : 0;
+      numericKey = lookupOrStat(sizeByPath, [&] { return info.size(); });
     }
 
     entries.append(
@@ -191,6 +237,46 @@ void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode) {
   }
 }
 
+void QueryManagerInternal::seedCanonicalPathCache(
+    const QString &mediaDir, const QHash<QString, QDateTime> &relTimestamps,
+    const QHash<QString, QPair<qint64, QString>> &persistentCache,
+    QHash<QString, QString> &perLoadCache) {
+  if (persistentCache.isEmpty() || relTimestamps.isEmpty()) {
+    return;
+  }
+  const QDir mediaQDir(mediaDir);
+  perLoadCache.reserve(perLoadCache.size() + relTimestamps.size());
+  for (auto it = relTimestamps.constBegin(); it != relTimestamps.constEnd(); ++it) {
+    // Resolve to the absolute form EXACTLY like appendFileMapsAndListCanonical
+    // does — that is the key canonicalKeyPath will look up.
+    const QString abs = mediaQDir.absoluteFilePath(it.key());
+    const auto pit = persistentCache.constFind(abs);
+    if (pit != persistentCache.constEnd() && pit->first == it.value().toMSecsSinceEpoch()) {
+      perLoadCache.insert(abs, pit->second);
+    }
+  }
+}
+
+void QueryManagerInternal::harvestCanonicalPathCache(
+    const QString &mediaDir, const QHash<QString, QDateTime> &relTimestamps,
+    const QHash<QString, QString> &perLoadCache,
+    QHash<QString, QPair<qint64, QString>> &persistentCache) {
+  if (perLoadCache.isEmpty() || relTimestamps.isEmpty()) {
+    return;
+  }
+  const QDir mediaQDir(mediaDir);
+  persistentCache.reserve(persistentCache.size() + relTimestamps.size());
+  for (auto it = relTimestamps.constBegin(); it != relTimestamps.constEnd(); ++it) {
+    const QString abs = mediaQDir.absoluteFilePath(it.key());
+    const auto cit = perLoadCache.constFind(abs);
+    if (cit != perLoadCache.constEnd()) {
+      // Overwrites re-validated seeds with identical values — cheaper than
+      // tracking which entries were freshly resolved this load.
+      persistentCache.insert(abs, qMakePair(it.value().toMSecsSinceEpoch(), cit.value()));
+    }
+  }
+}
+
 void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
                                                              PreparedStatementCache &cache,
                                                              const QString &collectionUuid) {
@@ -208,8 +294,9 @@ void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
       QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
     }
 
-    if (!db.transaction()) {
-      continue; // Retry if can't start transaction
+    KartendDb::DbTransaction txn(db, "QueryManagerInternal::clearCollectionFromDatabaseByUuid");
+    if (!txn.active()) {
+      continue; // Retry if can't start transaction (guard is inert when BEGIN failed)
     }
 
     try {
@@ -225,10 +312,10 @@ void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
       delc.bindValue(0, collectionUuid);
       delc.exec();
 
-      db.commit();
+      (void)txn.commit();
       return; // Success - exit retry loop
     } catch (const std::exception &e) {
-      db.rollback();
+      // guard dtor rolls back at iteration end, before the next attempt
 
       QString errorText = ErrorUtils::exceptionMessage(e);
       bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
@@ -272,12 +359,9 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
     }
   }
 
-  if (!db.transaction()) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                     "Failed to start transaction to absolutize item paths",
-                                     "QueryManagerInternal::maybeAbsolutizeItemPaths")
-                   .withDetails(db.lastError().text());
-    ErrorUtils::logError(err);
+  KartendDb::DbTransaction txn(db, "QueryManagerInternal::maybeAbsolutizeItemPaths");
+  if (!txn.activeOrReport("Failed to start transaction to absolutize item paths",
+                          ErrorUtils::Severity::Warning)) {
     return;
   }
 
@@ -367,8 +451,7 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
   }
 
   if (reconcileFailed) {
-    db.rollback();
-    return;
+    return; // guard dtor rolls back
   }
 
   // Only flip the flag to '1' when EVERY non-playlist collection was
@@ -383,17 +466,10 @@ void QueryManagerInternal::maybeAbsolutizeItemPaths(QSqlDatabase &db,
                                        "QueryManagerInternal::maybeAbsolutizeItemPaths")
                      .withDetails(mark.lastError().text());
       ErrorUtils::logError(err);
-      db.rollback();
-      return;
+      return; // guard dtor rolls back
     }
   }
 
-  if (!db.commit()) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                     "Failed to commit item path absolutization",
-                                     "QueryManagerInternal::maybeAbsolutizeItemPaths")
-                   .withDetails(db.lastError().text());
-    ErrorUtils::logError(err);
-    db.rollback();
-  }
+  (void)txn.commitOrReport("Failed to commit item path absolutization",
+                           ErrorUtils::Severity::Warning);
 }

@@ -3,6 +3,7 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "dialogrunners.h"
 #include "errorutils.h"
 #include "isettingsdialog.h" // for SettingsPage + ISettingsDialog
 #include <functional>
@@ -48,6 +49,12 @@ struct SettingsDialogContext {
   /// when it opens. Default leaves the dialog at its standard first row.
   /// See SettingsPage for the curated set of public targets.
   SettingsPage initialPage = SettingsPage::Default;
+
+  /// Kartend-sqoq0: owner-supplied stock-Qt-modal runners. The data layer
+  /// uses info/warn for the async "Collection Added" scan-summary boxes
+  /// instead of constructing QMessageBox directly. Null runners fall back
+  /// to the direct construction, so headless callers are unaffected.
+  DialogRunners dialogs;
 };
 
 /**

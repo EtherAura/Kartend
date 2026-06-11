@@ -2,6 +2,8 @@ target_sources(kartend_input PRIVATE
   arrownavigationhandler.cpp
   interactionhelpers.cpp
   interactionmanager.cpp
+  itemmetadataactioncontroller.cpp
+  playlistmenucontroller.cpp
   interactionmanager_contextactions.cpp
   interactionmanager_contextmenu.cpp
   interactionmanager_enter.cpp
@@ -13,4 +15,6 @@ target_sources(kartend_input PRIVATE
   arrownavigationhandler.h
   interactionhelpers.h
   interactionmanager.h
+  itemmetadataactioncontroller.h
+  playlistmenucontroller.h
 )

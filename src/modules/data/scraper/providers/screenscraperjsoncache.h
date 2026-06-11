@@ -11,14 +11,15 @@
 
 #include "errorutils.h"
 
+#include <QByteArray>
 #include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1Char>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QString>
 
@@ -62,8 +63,12 @@ inline QJsonArray unwrapArray(const QJsonObject &root, const char *key) {
   return {};
 }
 
-// mkpath + truncate-write the JSON object as Compact. Logs and returns false on
-// any failure, mirroring the previous per-cache save() bodies exactly.
+// mkpath + atomically write the JSON object as Compact. Logs and returns false
+// on any failure. Kartend-fux2w: previously a plain QFile truncate-write with
+// an unchecked write() — a crash or ENOSPC mid-write left a truncated JSON
+// with a FRESH mtime, which isStale() then treated as valid for the whole TTL
+// (days of parse-fail-on-every-load). QSaveFile publishes the new content
+// only on a fully-successful commit; otherwise the old file survives intact.
 inline bool writeJsonCompact(const QString &filePath, const QJsonObject &root, const char *context,
                              const char *mkdirErrMsg, const char *writeErrMsg) {
   if (filePath.isEmpty()) {
@@ -76,15 +81,27 @@ inline bool writeJsonCompact(const QString &filePath, const QJsonObject &root, c
                              .withDetails(dir));
     return false;
   }
-  QFile f(filePath);
+  QSaveFile f(filePath);
   if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
     ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
                                                            writeErrMsg, context)
                              .withDetails(f.errorString()));
     return false;
   }
-  f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-  f.close();
+  const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
+  if (f.write(payload) != payload.size()) {
+    f.cancelWriting();
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                           writeErrMsg, context)
+                             .withDetails(f.errorString()));
+    return false;
+  }
+  if (!f.commit()) {
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                           writeErrMsg, context)
+                             .withDetails(f.errorString()));
+    return false;
+  }
   return true;
 }
 

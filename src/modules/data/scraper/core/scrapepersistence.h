@@ -1,6 +1,9 @@
 #ifndef SCRAPEPERSISTENCE_H
 #define SCRAPEPERSISTENCE_H
 
+#include <atomic>
+#include <memory>
+
 #include <QByteArray>
 #include <QList>
 #include <QPair>
@@ -141,11 +144,15 @@ struct MediaWriteResult {
 /// with `saveScrapedMetadata` back on the thread that owns the DB
 /// connection (the main thread for now). Empty `artworkDirectory` or
 /// `baseName` short-circuits the write loop and returns an empty
-/// result.
-[[nodiscard]] MediaWriteResult writeMediaFiles(const QString &artworkDirectory,
-                                               const QString &baseName,
-                                               const QList<PendingMediaWrite> &media,
-                                               RescrapeMode rescrapeMode = RescrapeMode::Overwrite);
+/// result. A set @p cancelToken (Kartend-vi76q) is polled between
+/// assets so a cancelled/destructing owner stops the write fan-out
+/// promptly instead of finishing every remaining multi-MB asset; the
+/// partial result reflects only what was written.
+[[nodiscard]] MediaWriteResult
+writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
+                const QList<PendingMediaWrite> &media,
+                RescrapeMode rescrapeMode = RescrapeMode::Overwrite,
+                const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
 /// Write a human-readable JSON metadata sidecar for the scraped item
 /// at `{artworkDirectory}/metadata/{baseName}.json` — the scraped

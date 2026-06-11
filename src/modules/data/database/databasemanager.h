@@ -222,7 +222,8 @@ signals:
   void requestEnsureScannedForContext(const CollectionContext &context,
                                       const QList<CollectionConfig> &allCollections);
 
-  // Internal signal to trigger lazy background FTS backfill on scan worker.
+  // Internal signal to trigger the one-shot FTS index rebuild on the scan
+  // worker (Kartend-4i5e4).
   void requestEnsureItemsFtsReady();
 
   // Queued-connection equivalent of m_worker->requestCancelScan() — see
@@ -259,7 +260,22 @@ private:
   /// worker. Only safe for writes with no synchronous read-back on the main
   /// connection — the per-item usage/history reads are cache-mediated and
   /// cosmetic, so brief staleness self-corrects.
-  void queueWorkerWrite(std::function<void(QSqlDatabase &)> op);
+  ///
+  /// @p onCompleted (optional) runs on the GUI thread AFTER the write landed
+  /// (Kartend-4tprf) — use it for cache invalidation that must not race the
+  /// write: an eager-only invalidation lets a read between invalidate and
+  /// write-completion re-populate the LRU with the PRE-write row, which then
+  /// sticks until eviction. The QPointer guard is evaluated on the GUI
+  /// thread, so a completion queued behind manager teardown is dropped.
+  ///
+  /// Kartend-cbtml: @p op returns true when settled (success, or a permanent
+  /// failure it already logged) and false on transient SQLITE_BUSY/LOCKED
+  /// contention (classify via KartendDb::isLockContentionError) — the worker
+  /// then retries with bounded backoff instead of dropping the write while a
+  /// scan transaction holds the lock. @p context labels the retry warnings.
+  void queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
+                        std::function<void()> onCompleted = {},
+                        const QString &context = QStringLiteral("DatabaseManager worker write"));
 
   // ctx is the single source of truth for sibling managers (SessionManager).
   const ApplicationContext *m_ctx = nullptr;

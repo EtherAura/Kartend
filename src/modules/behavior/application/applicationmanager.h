@@ -38,6 +38,12 @@ public:
   /// Constructs all managers and registers each into ctx as it is created so
   /// later managers (which read siblings through ctx) see a fully-populated
   /// context when their constructors run.
+  ///
+  /// Lifetime contract (Kartend-w06qp): ctx must outlive this
+  /// ApplicationManager. The destructor nulls each ctx->managers.* slot
+  /// immediately before destroying the corresponding manager, so the
+  /// pervasive `if (auto *m = ctx->x())` guards stay protective during the
+  /// destruction window instead of reading stale non-null pointers.
   void initialize(ApplicationContext *ctx);
   void shutdown(const QList<CollectionConfig> &collections);
 
@@ -78,9 +84,23 @@ public:
   static void setSettingsManagerFactory(SettingsManagerFactory factory);
 
 private:
+  /// Destroys all managers explicitly in reverse declaration order (the same
+  /// order implicit member destruction would use), nulling the matching
+  /// ctx->managers.* slot immediately BEFORE each reset so sibling reads
+  /// through ctx during the destruction window see null instead of a stale
+  /// pointer (Kartend-w06qp). Called from the destructor.
+  void destroyManagersAndClearContextSlots();
+
+  /// Context handed to initialize(); retained so the destructor can null the
+  /// ctx->managers.* slots as managers are destroyed. Must outlive this
+  /// object (MainWindow declares m_appContext before m_appManager).
+  ApplicationContext *m_ctx = nullptr;
+
   // Order of declaration determines order of destruction (reverse).
   // Dependencies must be declared BEFORE dependents so they are destroyed
-  // AFTER.
+  // AFTER. NOTE: destruction is now performed explicitly by
+  // destroyManagersAndClearContextSlots() — keep its reset() sequence in
+  // sync with this declaration order.
 
   std::unique_ptr<CacheManager> m_cacheManager;
   std::unique_ptr<SessionManager> m_sessionManager;

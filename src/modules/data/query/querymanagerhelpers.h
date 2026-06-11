@@ -18,6 +18,7 @@
 #include <QJsonValue>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPair>
 #include <QRegularExpression>
 #include <QRunnable>
 #include <QSet>
@@ -29,6 +30,7 @@
 #include <QWaitCondition>
 
 #include "collection/collectionconfig.h"
+#include "dbtxn.h"
 #include "queryhelpers.h"
 #include "uiconstants/database.h"
 
@@ -339,94 +341,15 @@ private:
   ScanCompletionQueue *m_queue = nullptr;
 };
 
-class SynchronousPragmaGuard {
-public:
-  explicit SynchronousPragmaGuard(QSqlDatabase &db) : m_db(db) {}
+// SynchronousPragmaGuard was deleted in Kartend-fux2w: after Kartend-y9if
+// changed the scan paths from synchronous=OFF to NORMAL, the guard "restored"
+// NORMAL to NORMAL — a pure no-op that implied a protection which no longer
+// existed (every connection already opens at NORMAL via ConnectionPragmas).
 
-  SynchronousPragmaGuard(const SynchronousPragmaGuard &) = delete;
-  auto operator=(const SynchronousPragmaGuard &) -> SynchronousPragmaGuard & = delete;
-
-  SynchronousPragmaGuard(SynchronousPragmaGuard &&) = delete;
-  auto operator=(SynchronousPragmaGuard &&) -> SynchronousPragmaGuard & = delete;
-
-  ~SynchronousPragmaGuard() {
-    if (!m_db.isOpen()) {
-      return;
-    }
-    QSqlQuery pragmaOn(m_db);
-    pragmaOn.exec("PRAGMA synchronous = NORMAL");
-  }
-
-private:
-  QSqlDatabase &m_db;
-};
-
-// Depth-tracking transaction guard for a single QSqlDatabase connection.
-// SQLite has no nested BEGIN: a second transaction() silently fails, and a
-// nested commit() would close the *outer* transaction early — so a cache build
-// that calls helper methods which each BEGIN/COMMIT on their own was silently
-// non-atomic, and a failed BEGIN/commit went unnoticed (Kartend-gv7f). Only the
-// outermost guard issues transaction()/commit()/rollback(); nested guards defer
-// to it. The depth counter is owned by the connection's manager and shared by
-// reference so every transaction site on that connection coordinates.
-//
-// Usage:
-//   DbTransaction txn(m_db, m_txnDepth);
-//   if (!txn.active()) return false;   // outermost BEGIN failed -> bail
-//   ... do work; on any error just `return false` (no manual rollback) ...
-//   return txn.commit();               // real commit when outermost, else no-op
-// A guard destroyed without a successful commit() rolls back (only when it owns
-// the transaction), so every early-return error path is covered automatically.
-class DbTransaction {
-public:
-  DbTransaction(QSqlDatabase &db, int &depth) : m_db(db), m_depth(depth) {
-    m_outermost = (m_depth == 0);
-    if (m_outermost) {
-      m_began = m_db.transaction();
-    }
-    ++m_depth;
-  }
-
-  DbTransaction(const DbTransaction &) = delete;
-  auto operator=(const DbTransaction &) -> DbTransaction & = delete;
-  DbTransaction(DbTransaction &&) = delete;
-  auto operator=(DbTransaction &&) -> DbTransaction & = delete;
-
-  ~DbTransaction() {
-    if (m_depth > 0) {
-      --m_depth;
-    }
-    if (m_outermost && m_began && !m_committed) {
-      m_db.rollback();
-    }
-  }
-
-  // False only when this guard owns the transaction and BEGIN failed; the
-  // caller should bail. Nested guards always return true (the outer guard owns
-  // the live transaction).
-  [[nodiscard]] bool active() const { return m_outermost ? m_began : true; }
-
-  // Commit the transaction. Only the outermost guard commits for real; nested
-  // guards defer to it and report success. Returns false if the real commit
-  // failed or the outermost BEGIN never succeeded.
-  bool commit() {
-    if (!m_outermost) {
-      return true;
-    }
-    if (!m_began) {
-      return false;
-    }
-    m_committed = m_db.commit();
-    return m_committed;
-  }
-
-private:
-  QSqlDatabase &m_db;
-  int &m_depth;
-  bool m_outermost = false;
-  bool m_began = false;
-  bool m_committed = false;
-};
+// Depth-tracking transaction guard — promoted to KartendDb::DbTransaction
+// (utils/db/dbtxn.h, Kartend-3ibqt) so every DB-writing file shares it; the
+// alias below keeps this namespace's existing use sites working unchanged.
+using KartendDb::DbTransaction;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Pure list/map post-processing — promoted out of the QueryManager class.
@@ -447,8 +370,53 @@ void appendFileMapsAndListCanonical(int collectionIndex, const CollectionConfig 
                                     QSet<QString> *seenCanonicalPaths = nullptr,
                                     QHash<QString, QString> *canonicalPathCache = nullptr);
 
+/// Folds one collection's relative-keyed scan/DB metadata (mtimes, sizes)
+/// into maps keyed by the same path form sortFiles receives: the absolute
+/// path under @p mediaDir, run through @p canonicalPathCache when the load
+/// deduped via canonical paths. First insertion wins, matching the
+/// first-occurrence-wins dedup in appendFileMapsAndListCanonical.
+/// (Kartend-m9r1s)
+void buildSortMetadata(const QString &mediaDir, const QHash<QString, QDateTime> &relTimestamps,
+                       const QHash<QString, qint64> &relSizes,
+                       const QHash<QString, QString> *canonicalPathCache,
+                       QHash<QString, qint64> &mtimeMsByPath, QHash<QString, qint64> &sizeByPath);
+
 /// Sorts file paths in place according to the given SortMode.
-void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
+///
+/// For the Date/Size modes the sort key for each path is looked up in
+/// @p mtimeMsByPath / @p sizeByPath first (values the caller already has from
+/// the scan or the items table — see buildSortMetadata); only paths missing
+/// from the map are statted. Passing nullptr preserves the historical
+/// stat-everything behavior (Kartend-m9r1s).
+void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending,
+               const QHash<QString, qint64> *mtimeMsByPath = nullptr,
+               const QHash<QString, qint64> *sizeByPath = nullptr);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Cross-load canonical-path cache plumbing (Kartend-4fmu1). The persistent
+// map lives on QueryManager (m_persistentCanonicalPaths: absolute path ->
+// (mtime ms, canonical path)); these helpers move entries between it and the
+// per-load cache canonicalKeyPath consults, with the mtime the load already
+// has in hand (scan- or items-table-sourced) as the validity stamp. Paths
+// without a known mtime simply never persist — they realpath each load,
+// exactly as before.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Pre-seeds @p perLoadCache with still-valid canonical resolutions from
+/// @p persistentCache, so canonicalKeyPath skips the realpath walk for them.
+/// An entry is valid when the persisted mtime equals the relative-keyed mtime
+/// in @p relTimestamps (resolved against @p mediaDir like the load itself).
+void seedCanonicalPathCache(const QString &mediaDir, const QHash<QString, QDateTime> &relTimestamps,
+                            const QHash<QString, QPair<qint64, QString>> &persistentCache,
+                            QHash<QString, QString> &perLoadCache);
+
+/// Stores this load's resolved canonical paths (fresh AND re-validated seeds)
+/// back into @p persistentCache, stamped with the same mtimes used by
+/// seedCanonicalPathCache.
+void harvestCanonicalPathCache(const QString &mediaDir,
+                               const QHash<QString, QDateTime> &relTimestamps,
+                               const QHash<QString, QString> &perLoadCache,
+                               QHash<QString, QPair<qint64, QString>> &persistentCache);
 
 // ───────────────────────────────────────────────────────────────────────────
 // Connection-level item operations shared by the load and scan paths.

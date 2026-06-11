@@ -8,6 +8,15 @@ name: Nightly TSan
 #
 # A failure here opens a GitHub Issue tagged `tsan-nightly` so it stays
 # visible even when nobody is watching the Actions tab.
+#
+# Also hosts the nightly benchmark job (Kartend-w9s8e): every other ctest
+# invocation across the workflows passes `-LE benchmark`, so the QBENCHMARK
+# suites compiled all along never executed in CI. The benchmarks job runs
+# them once per night on a plain gcc Release build (NOT under TSan — the
+# instrumentation overhead would swamp the numbers) and archives the
+# per-slot results to the run's step summary for trend visibility. No hard
+# thresholds: shared-runner wallclock is too noisy to gate on; the value is
+# the visible day-over-day series.
 
 on:
   schedule:
@@ -58,6 +67,8 @@ jobs:
         run: |
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
       - name: Configure CMake (Debug + TSan)
@@ -135,3 +146,101 @@ jobs:
                 labels: ['tsan-nightly'],
               });
             }
+
+  # Kartend-w9s8e: the only place in CI where `ctest -L benchmark` actually
+  # executes. gcc Release (matching the build users run), no sanitizer, and
+  # only the bench_* executables are built — the full test tree would triple
+  # the job for no benefit. Results land in the step summary; the raw ctest
+  # log is uploaded as an artifact so a regression hunt can diff exact
+  # iteration counts across nights.
+  benchmarks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-deps
+        with:
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+
+      - name: Start dummy pulseaudio
+        uses: ./.github/actions/setup-pulseaudio
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-bench-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-bench-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=2G
+          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+          ccache --set-config=sloppiness=pch_defines,time_macros
+          ccache --zero-stats
+
+      - name: Configure CMake (Release)
+        run: |
+          mkdir -p build/bench
+          cd build/bench
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build benchmark targets
+        # Derive the target list from the add_executable(bench_*) entries in
+        # tests/CMakeLists.txt so a newly-added benchmark is picked up here
+        # without anyone remembering to edit this workflow.
+        run: |
+          BENCH_TARGETS=$(grep -oP 'add_executable\(\Kbench_\w+' tests/CMakeLists.txt | sort -u)
+          echo "Benchmark targets: $BENCH_TARGETS"
+          test -n "$BENCH_TARGETS"
+          cd build/bench
+          cmake --build . --parallel "$(nproc)" --target $BENCH_TARGETS
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Run benchmarks
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cd build/bench
+          ctest -L benchmark --output-on-failure
+
+      - name: Publish results to step summary
+        # QBENCHMARK emits two-line "RESULT : <suite::slot>:" + walltime
+        # pairs; ctest stores every test's stdout in LastTest.log regardless
+        # of pass/fail verbosity settings, so harvest from there.
+        if: ${{ always() }}
+        run: |
+          LOG=build/bench/Testing/Temporary/LastTest.log
+          {
+            echo "## Nightly benchmark results"
+            echo
+            echo "Wallclock on a shared runner — compare the trend across runs, not absolutes."
+            echo
+            echo '```'
+            if [ -f "$LOG" ]; then
+              grep -A1 '^RESULT' "$LOG" || echo "No RESULT lines found in $LOG"
+            else
+              echo "Missing $LOG — did the ctest step run?"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload raw benchmark log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-benchmark-log-${{ github.run_id }}
+          path: build/bench/Testing/Temporary/LastTest.log
+          retention-days: 90

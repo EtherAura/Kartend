@@ -50,6 +50,7 @@ void TestCoverFlowController::publicMethods_noopWithoutSetup() {
   controller.applyVisibility();
   controller.rebuildCards();
   controller.rebuildCardsIfActive();
+  controller.updateCardsIfActive({0, 1, 2});
   controller.refreshForViewTypeChange();
   controller.onSelectionChanged(3);
   QCOMPARE(controller.widget(), nullptr);

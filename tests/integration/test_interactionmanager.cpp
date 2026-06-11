@@ -3,12 +3,15 @@
 #include "applicationmanager.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 
 #include <QTest>
 
 namespace {
-InteractionManager *interaction(KartendTest::MainWindowFixture &fixture) {
+InteractionManager *interaction(KartendTest::MockedMainWindowFixture &fixture) {
   return fixture.window()->getApplicationManager()->getInteractionManager();
 }
 } // namespace
@@ -17,7 +20,7 @@ void TestInteractionManager::testSubManagersAreWired() {
   // The construction contract: ApplicationManager builds InteractionManager and
   // every sub-manager it coordinates. A null here means a wiring regression
   // that the rest of the input stack would crash on at first interaction.
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
   QVERIFY(im->animationManager());
@@ -34,7 +37,7 @@ void TestInteractionManager::testClearSelectionYieldsNoSelection() {
   // No selection invariant: after clearSelection() the index is -1, no widget
   // is held, and the selected file path is empty. The whole input stack treats
   // index == -1 as "nothing selected", so this contract is load-bearing.
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
 
@@ -48,7 +51,7 @@ void TestInteractionManager::testClearSelectionAndFocusYieldsNoSelection() {
   // clearSelectionAndFocus() is the IInteraction override the navigation /
   // overlay code calls when leaving a view; it must land in the same
   // no-selection state as clearSelection().
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
 
@@ -60,7 +63,7 @@ void TestInteractionManager::testClearSelectionAndFocusYieldsNoSelection() {
 void TestInteractionManager::testSetSelectedMediaItemNullRoundTrips() {
   // Setting the selected widget to null clears the held pointer (the
   // recycle/teardown path relies on this to drop a dangling ItemWidget*).
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
 
@@ -72,7 +75,7 @@ void TestInteractionManager::testSetSelectedMediaItemNullRoundTrips() {
 void TestInteractionManager::testIsWheelScrollingInitiallyFalse() {
   // A freshly-built manager isn't mid wheel-scroll; the attract / idle paths
   // gate on this, so a stuck-true would suppress them forever.
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
   QVERIFY(!im->isWheelScrolling());

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QFuture>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -339,7 +340,10 @@ private:
   /// without a dangling worker thread.
   void ensureWriteWorkerStarted();
   /// Stop the worker thread (queued closeConnection + quit + bounded wait).
-  /// Called from cancel() and the destructor; idempotent.
+  /// Called ONLY from the destructor; cancel() deliberately leaves the
+  /// worker running so queued writes for already-completed items still land
+  /// (Kartend-8mx2q comment fix — the old wording invited "fixing" cancel
+  /// into tearing the worker down mid-drain). Idempotent.
   void shutdownWriteWorker();
   /// Slot — receives `writeCompleted` signals from the worker thread via
   /// a queued connection. Looks up the in-flight ItemState, invalidates
@@ -420,6 +424,23 @@ private:
   };
   QHash<quint64, PendingWrite> m_pendingWrites;
   quint64 m_nextWriteId = 0;
+
+  /// Cooperative cancel for the media-write tasks this runner launches on
+  /// the global QThreadPool (Kartend-vi76q). cancel() and the destructor
+  /// flip it; the write lambda's preamble and writeMediaFiles' per-asset
+  /// loop poll it, so a cancelled batch stops writing files promptly and
+  /// the destructor's drain returns fast instead of waiting out every
+  /// remaining multi-MB asset.
+  std::shared_ptr<std::atomic<bool>> m_mediaWriteCancel =
+      std::make_shared<std::atomic<bool>>(false);
+  /// In-flight media-write futures (global-pool QtConcurrent::run tasks,
+  /// value-captures only — no `this`). Pruned of finished entries at each
+  /// dispatch; the destructor flips m_mediaWriteCancel and drains the
+  /// remainder within a 2s budget (Kartend-8mx2q — the runner lives on the
+  /// GUI thread, so an unbounded wait hung the UI on wedged storage).
+  /// Tasks abandoned past the budget are safe: value-captures only, worst
+  /// case the current asset finishes writing to disk post-dtor.
+  QList<QFuture<Scraper::MediaWriteResult>> m_inFlightMediaWrites;
 
   // Worker thread + DB writer. Both are nullptr when m_db == nullptr
   // (test mode); the runner falls back to a synchronous "treat as

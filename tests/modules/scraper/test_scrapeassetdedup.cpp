@@ -65,19 +65,20 @@ void TestScrapeAssetDedup::sharedProbe_gameScopeYieldsNothing() {
 }
 
 void TestScrapeAssetDedup::sharedProbe_emptyInputsYieldNothing() {
-  QVERIFY(sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, ""), "/art").isEmpty());
   QVERIFY(
-      sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, "g1"), QString()).isEmpty());
+      sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, ""), "/art").isEmpty());
+  QVERIFY(sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, "g1"), QString())
+              .isEmpty());
 }
 
 void TestScrapeAssetDedup::sharedProbe_groupAndCompanyPrefixes() {
-  const QStringList group = sharedAssetProbePaths(
-      makeAsset("box", Scraper::MediaScope::Group, "g1"), "/art");
+  const QStringList group =
+      sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, "g1"), "/art");
   QCOMPARE(group.size(), 4); // png/jpg/jpeg/webp
   QVERIFY(group.first().contains("/art/_shared/box/group_g1.png"));
 
-  const QStringList company = sharedAssetProbePaths(
-      makeAsset("box", Scraper::MediaScope::Company, "c9"), "/art");
+  const QStringList company =
+      sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Company, "c9"), "/art");
   QVERIFY(company.first().contains("/art/_shared/box/company_c9.png"));
 }
 
@@ -164,8 +165,7 @@ void TestScrapeAssetDedup::withHashHints_appendsAndDoesNotDuplicate() {
   // An already-present md5 is not duplicated/overwritten.
   LocalHashes h2;
   h2.md5Hex = "new";
-  const QUrl out2 =
-      withHashHints(QUrl(QStringLiteral("https://example.test/m?md5=orig")), h2);
+  const QUrl out2 = withHashHints(QUrl(QStringLiteral("https://example.test/m?md5=orig")), h2);
   const QUrlQuery q2(out2);
   QCOMPARE(q2.allQueryItemValues("md5").size(), 1);
   QCOMPARE(q2.queryItemValue("md5"), QStringLiteral("orig"));

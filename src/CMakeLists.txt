@@ -51,6 +51,50 @@ set_target_properties(
 )
 
 # ---------------------------------------------------------------------------
+# Precompiled headers (Kartend-zhodi): every TU was re-parsing the Qt staples
+# (<QString>, <QObject>, <QWidget>, …) from scratch — the dominant cost of a
+# cold build (ccache only helps warm rebuilds, and a config change rolls the
+# key for all CI cells). PRIVATE per area OBJECT lib: nine bounded .gch files
+# covering the ~1000 src TUs.
+#
+# Deliberately NOT PUBLIC-propagated and NOT applied to the ~150 test
+# executables: PUBLIC PCH reaches every linking target, and each target
+# builds its OWN multi-hundred-MB PCH — measured 11 GB of test PCHs before
+# the first A/B build died on disk. A test target is one TU; a per-target
+# PCH there costs far more than the single parse it saves. (REUSE_FROM was
+# rejected too: the area libs carry different QT_*_LIB define sets, which
+# invalidates a shared PCH.)
+#
+# Gated OFF under KARTEND_MAINTENANCE — PCH interferes with clang-tidy / IWYU
+# include analysis (and the maintenance job is about analysis, not speed).
+#
+# ccache note: caching PCH-using compiles requires
+# `ccache --set-config=sloppiness=pch_defines,time_macros` (set by the CI
+# ccache-config steps and recommended locally); without it every compile is a
+# cache miss and warm rebuilds regress. Disable with -DKARTEND_ENABLE_PCH=OFF
+# if your local ccache can't be configured.
+option(KARTEND_ENABLE_PCH "Precompile the common Qt headers" ON)
+if(KARTEND_ENABLE_PCH AND NOT KARTEND_MAINTENANCE)
+  set(KARTEND_PCH_HEADERS
+    <QtCore/QDateTime>
+    <QtCore/QDir>
+    <QtCore/QFileInfo>
+    <QtCore/QHash>
+    <QtCore/QList>
+    <QtCore/QObject>
+    <QtCore/QString>
+    <QtCore/QStringList>
+    <QtCore/QVariant>
+    <QtWidgets/QWidget>
+  )
+  foreach(kartend_pch_target
+      kartend_utils kartend_api kartend_chrome kartend_data kartend_input
+      kartend_media kartend_behavior kartend_ui kartend_core)
+    target_precompile_headers(${kartend_pch_target} PRIVATE ${KARTEND_PCH_HEADERS})
+  endforeach()
+endif()
+
+# ---------------------------------------------------------------------------
 # kartend_utils (foundation): utils dirs + Qt + the uiconstants namespace.
 #
 # src/utils/ is on utils's PUBLIC include path so every layer can resolve

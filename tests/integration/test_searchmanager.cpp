@@ -4,7 +4,10 @@
 #include "collection/collectionconfig.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
+// (never on persisted rows/INI), so it runs against the mocked fixture —
+// no SQLite/QSettings setup per slot.
+#include "mocks/mockedmainwindowfixture.h"
 #include "searchmanager.h"
 #include "searchutils.h"
 #include "timerutils.h"
@@ -193,7 +196,7 @@ void TestSearchManager::testToggleSearchModeNoSignalWhenSingleElementCycleMatche
 }
 
 void TestSearchManager::testFixtureExposesSearchManagerInDefaultState() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   auto *interaction = win->getApplicationManager()->getInteractionManager();
   QVERIFY(interaction);

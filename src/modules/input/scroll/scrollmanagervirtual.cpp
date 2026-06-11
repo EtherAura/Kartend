@@ -4,6 +4,7 @@
 // on ScrollManager as the public/private API surface, but each one is now a
 // thin forwarder to the engine. The engine accesses ScrollManager state via
 // friendship; canonical state ownership stays here.
+#include "coverflowcontroller.h"
 #include "scrollmanager.h"
 #include "virtualscrollengine.h"
 
@@ -74,6 +75,14 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
 
 void ScrollManager::reconfigureArtworkForActiveWidgets() {
   m_engine->reconfigureArtworkForActiveWidgets();
+  // Kartend-x7bn8: receiveItemsRange now patches only the chunk's own card
+  // indices instead of rebuilding the whole carousel per chunk, so cards
+  // whose artwork directory wasn't in the DirectoryCache at patch time
+  // resolved to placeholder. This post-prewarm callback is the moment the
+  // cache is warm — do the one full rebuild here (bounded: once per prewarm
+  // completion, which is itself debounced upstream) so those cards pick up
+  // their artwork, mirroring what this slot already does for grid widgets.
+  m_coverFlow->rebuildCardsIfActive();
 }
 
 auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {

@@ -74,6 +74,13 @@ echo "$NEW_VERSION" > VERSION
 # 2. PKGBUILD pkgver=
 sed -i -E "s/^pkgver=.*/pkgver=${NEW_VERSION}/" packaging/PKGBUILD
 
+# 2b. vcpkg.json version-string (Kartend-szdbl — it had silently drifted to
+# 0.0.9 while everything else was at 0.0.12 because this script never
+# touched it; release.yml now enforces the match).
+if [ -f vcpkg.json ]; then
+  sed -i -E "s/\"version-string\": \"[^\"]*\"/\"version-string\": \"${NEW_VERSION}\"/" vcpkg.json
+fi
+
 # 3. ebuild rename (use git mv if tracked, plain mv otherwise)
 OLD_EBUILD="packaging/kartend-${OLD_VERSION}.ebuild"
 NEW_EBUILD="packaging/kartend-${NEW_VERSION}.ebuild"
@@ -137,6 +144,7 @@ cat <<EOF
 Files changed:
   VERSION
   packaging/PKGBUILD
+  vcpkg.json
   ${NEW_EBUILD}  (renamed from ${OLD_EBUILD})
   ${METAINFO}
 

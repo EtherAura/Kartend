@@ -38,6 +38,12 @@ class GamepadManager : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(GamepadManager)
 
+  // Test access (Kartend-npoh2): the manager's input-translation layer
+  // (updateDirectionFromInputs / applyActiveDirection /
+  // handleMappedButtonPress) is driven by backend callbacks that need real
+  // hardware; the test injects the same state/calls directly instead.
+  friend class TestGamepadManager;
+
 public:
   explicit GamepadManager(QObject *parent = nullptr);
   ~GamepadManager() override;

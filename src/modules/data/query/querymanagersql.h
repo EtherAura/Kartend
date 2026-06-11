@@ -25,9 +25,16 @@ constexpr const char *DELETE_COLLECTION_BY_UUID = "DELETE FROM collections WHERE
 // to path for any row not yet touched by the v13 reconcile.
 // appendFileMapsAndListCanonical re-absolutizes via QDir::absoluteFilePath, so
 // a relative value here resolves correctly.
+//
+// last_modified / file_size ride along so the Date/Size sort modes in
+// sortFiles can reuse the values already persisted by the scan instead of
+// re-statting every file on each collection load (Kartend-m9r1s). The former
+// single-column DISTINCT became a C++-side seen-set in
+// loadItemsFromDatabaseByUuid: DISTINCT over three columns would stop
+// collapsing rows that share a path but differ only in metadata.
 constexpr const char *LOAD_ITEMS_BY_UUID =
-    "SELECT DISTINCT COALESCE(rel_path, path) FROM items WHERE collection_uuid "
-    "= ? ORDER BY name COLLATE NOCASE";
+    "SELECT COALESCE(rel_path, path), last_modified, file_size FROM items "
+    "WHERE collection_uuid = ? ORDER BY name COLLATE NOCASE";
 constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
     "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";
 
@@ -37,7 +44,7 @@ constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
 constexpr const char *UPDATE_COLLECTION_EXT_SIGNATURE =
     "UPDATE collections SET ext_signature = ? WHERE uuid = ?";
 constexpr const char *SELECT_STAGED_SCAN_RESULTS =
-    "SELECT rowid, path, rel_path, name, last_modified FROM scanned_items "
+    "SELECT rowid, path, rel_path, name, last_modified, file_size FROM scanned_items "
     "WHERE rowid > ? ORDER BY rowid LIMIT ?";
 
 } // namespace QuerySQL

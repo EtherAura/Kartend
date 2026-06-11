@@ -12,8 +12,8 @@ using GamepadHelpers::axisToDirections;
 using GamepadHelpers::ButtonAction;
 using GamepadHelpers::combineToDirection;
 using GamepadHelpers::Direction;
-using GamepadHelpers::MovementIntent;
 using GamepadHelpers::movementFor;
+using GamepadHelpers::MovementIntent;
 using GamepadHelpers::normalizeSdlAxis;
 using GamepadHelpers::resolveButtonAction;
 
@@ -61,7 +61,7 @@ private slots:
 void TestGamepadHelpers::axisToDirections_belowOnThresholdIsInactive() {
   // axisX=0.4 < kOn=0.5 → no activation when not previously active.
   const auto s = axisToDirections(/*x=*/0.4, /*y=*/0.0, Direction::None, /*on=*/0.5,
-                                   /*off=*/0.3, /*useStick=*/true);
+                                  /*off=*/0.3, /*useStick=*/true);
   QVERIFY(!s.right);
   QVERIFY(!s.left);
 }
@@ -188,31 +188,31 @@ void TestGamepadHelpers::normalizeSdlAxis_asymmetricRangeHandledCorrectly() {
 
 void TestGamepadHelpers::resolveButtonAction_caseInsensitiveMatch() {
   QCOMPARE(resolveButtonAction(QStringLiteral("a"), QStringLiteral("A"), QStringLiteral("B"),
-                                QStringLiteral("Y")),
+                               QStringLiteral("Y")),
            ButtonAction::Confirm);
   QCOMPARE(resolveButtonAction(QStringLiteral("BACK"), QStringLiteral("A"), QStringLiteral("back"),
-                                QStringLiteral("Y")),
+                               QStringLiteral("Y")),
            ButtonAction::Back);
 }
 
 void TestGamepadHelpers::resolveButtonAction_confirmPriorityOverBack() {
   // Same physical button bound to both — confirm wins.
   QCOMPARE(resolveButtonAction(QStringLiteral("A"), QStringLiteral("A"), QStringLiteral("A"),
-                                QStringLiteral("Y")),
+                               QStringLiteral("Y")),
            ButtonAction::Confirm);
 }
 
 void TestGamepadHelpers::resolveButtonAction_backPriorityOverToggle() {
   // Same physical button bound to back and toggle — back wins.
   QCOMPARE(resolveButtonAction(QStringLiteral("B"), QStringLiteral("A"), QStringLiteral("B"),
-                                QStringLiteral("B")),
+                               QStringLiteral("B")),
            ButtonAction::Back);
 }
 
 void TestGamepadHelpers::resolveButtonAction_unboundButtonReturnsNone() {
   // No binding matches "Start" → silently ignored.
   QCOMPARE(resolveButtonAction(QStringLiteral("Start"), QStringLiteral("A"), QStringLiteral("B"),
-                                QStringLiteral("Y")),
+                               QStringLiteral("Y")),
            ButtonAction::None);
 }
 
@@ -226,7 +226,7 @@ void TestGamepadHelpers::resolveButtonAction_emptyConfiguredBindingsIgnored() {
 
 void TestGamepadHelpers::resolveButtonAction_whitespaceButtonNameIsNone() {
   QCOMPARE(resolveButtonAction(QStringLiteral("   "), QStringLiteral("A"), QStringLiteral("B"),
-                                QStringLiteral("Y")),
+                               QStringLiteral("Y")),
            ButtonAction::None);
 }
 

@@ -38,8 +38,7 @@ void TestMetadataProviderRegistry::builtIn_isNonEmptyAndAllIdsUnique() {
   QVERIFY(!providers.empty());
   QSet<QString> ids;
   for (const auto &p : providers) {
-    QVERIFY2(!ids.contains(p->id()),
-             qPrintable(QString("Duplicate provider id: %1").arg(p->id())));
+    QVERIFY2(!ids.contains(p->id()), qPrintable(QString("Duplicate provider id: %1").arg(p->id())));
     ids.insert(p->id());
     // Stable lowercase ids — used as ItemMetadata.source values; a
     // mixed-case or whitespace id would land in the DB and be hard to
@@ -109,8 +108,7 @@ void TestMetadataProviderRegistry::normaliseCategory_handlesCanonicalAndSynonyms
   QCOMPARE(MetadataProviderRegistry::normaliseCategory("music"), QStringLiteral("audio"));
   QCOMPARE(MetadataProviderRegistry::normaliseCategory("books"), QStringLiteral("reference"));
   // Whitespace trimmed.
-  QCOMPARE(MetadataProviderRegistry::normaliseCategory("  Games  "),
-           QStringLiteral("games"));
+  QCOMPARE(MetadataProviderRegistry::normaliseCategory("  Games  "), QStringLiteral("games"));
 }
 
 void TestMetadataProviderRegistry::normaliseCategory_returnsEmptyForBlankInput() {
@@ -124,8 +122,7 @@ void TestMetadataProviderRegistry::normaliseCategory_passesThroughUnknownLowerca
   // exact tag in their categories(). This keeps the door open for
   // user-defined collection types without forcing them into a canonical
   // bucket.
-  QCOMPARE(MetadataProviderRegistry::normaliseCategory("HomeBrew"),
-           QStringLiteral("homebrew"));
+  QCOMPARE(MetadataProviderRegistry::normaliseCategory("HomeBrew"), QStringLiteral("homebrew"));
 }
 
 void TestMetadataProviderRegistry::forCategory_emptyCategoryReturnsEverything() {
@@ -165,9 +162,9 @@ void TestMetadataProviderRegistry::forCategory_emptyCategoriesProviderAlwaysIncl
   // up in every filter call. Stage 1 has no such provider in the
   // curated list, so build a one-off and run forCategory directly.
   std::vector<std::unique_ptr<MetadataProvider>> all;
-  all.push_back(std::make_unique<WebSearchProvider>(
-      QStringLiteral("anywhere"), QStringLiteral("Anywhere"), QStringList{},
-      QStringLiteral("https://example.com/?q=%1")));
+  all.push_back(std::make_unique<WebSearchProvider>(QStringLiteral("anywhere"),
+                                                    QStringLiteral("Anywhere"), QStringList{},
+                                                    QStringLiteral("https://example.com/?q=%1")));
   const auto filtered = MetadataProviderRegistry::forCategory(all, QStringLiteral("games"));
   QCOMPARE(filtered.size(), 1);
   QCOMPARE(filtered.first()->id(), QStringLiteral("anywhere"));
@@ -206,8 +203,7 @@ void TestMetadataProviderRegistry::scrapingProviders_returnsOnlyLookupCapablePro
                  qPrintable(QString("scrapingProviders surfaced non-lookup id: %1").arg(c.id)));
       }
     }
-    QVERIFY2(found,
-             qPrintable(QString("scrapingProviders id not in builtIn: %1").arg(c.id)));
+    QVERIFY2(found, qPrintable(QString("scrapingProviders id not in builtIn: %1").arg(c.id)));
   }
 }
 
@@ -215,8 +211,7 @@ void TestMetadataProviderRegistry::defaultScraperForType_mapsStandardTypesToProv
   // The creation dialog uses these mappings to auto-associate a scraper
   // from the chosen media type.
   QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Video"), QStringLiteral("tmdb"));
-  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Audio"),
-           QStringLiteral("musicbrainz"));
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Audio"), QStringLiteral("musicbrainz"));
   QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Games"),
            QStringLiteral("screenscraper"));
   // "Documents" resolves through the synonym table to the reference

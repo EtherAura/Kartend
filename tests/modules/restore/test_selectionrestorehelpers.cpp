@@ -70,7 +70,7 @@ void TestSelectionRestoreHelpers::searchTextIsActive_trimmedSurroundingWhitespac
 
 void TestSelectionRestoreHelpers::shouldRestoreSelection_allConditionsTrueReturnsTrue() {
   QVERIFY(shouldRestoreSelection(/*remember=*/true, /*searchActive=*/false, /*hasScroll=*/true,
-                                  /*hasInteraction=*/true));
+                                 /*hasInteraction=*/true));
 }
 
 void TestSelectionRestoreHelpers::shouldRestoreSelection_rememberDisabledReturnsFalse() {
@@ -139,19 +139,19 @@ void TestSelectionRestoreHelpers::restoreStillValid_matchingCollectionAndTokenRe
 void TestSelectionRestoreHelpers::restoreStillValid_collectionMismatchReturnsFalse() {
   // User navigated away — any pending restore is stale.
   QVERIFY(!restoreStillValid(/*currentColl=*/4, /*scheduledColl=*/3, /*currentTok=*/7,
-                              /*expectedTok=*/7));
+                             /*expectedTok=*/7));
 }
 
 void TestSelectionRestoreHelpers::restoreStillValid_tokenMismatchReturnsFalse() {
   // A newer restore was scheduled; this one is stale even though the
   // collection still matches.
   QVERIFY(!restoreStillValid(/*currentColl=*/3, /*scheduledColl=*/3, /*currentTok=*/8,
-                              /*expectedTok=*/7));
+                             /*expectedTok=*/7));
 }
 
 void TestSelectionRestoreHelpers::restoreStillValid_bothMismatchReturnsFalse() {
   QVERIFY(!restoreStillValid(/*currentColl=*/4, /*scheduledColl=*/3, /*currentTok=*/8,
-                              /*expectedTok=*/7));
+                             /*expectedTok=*/7));
 }
 
 void TestSelectionRestoreHelpers::restoreStillValid_zeroTokensMatchEachOther() {

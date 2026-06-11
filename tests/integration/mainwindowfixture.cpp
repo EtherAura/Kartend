@@ -93,7 +93,9 @@ void assertNoRealUserWrites(const RealUserPathSnapshot &before) {
 
 } // namespace
 
-MainWindowFixture::MainWindowFixture() {
+MainWindowFixture::MainWindowFixture() : MainWindowFixture(std::function<void()>{}) {}
+
+MainWindowFixture::MainWindowFixture(const std::function<void()> &seedSandbox) {
   // Snapshot the developer's real per-app directories BEFORE flipping into
   // test mode. The dtor recaptures and compares so a regression that
   // bypasses QStandardPaths (e.g. an absolute INI path in a future code
@@ -141,6 +143,13 @@ MainWindowFixture::MainWindowFixture() {
     s.setValue(keys::kFirstRunComplete, true);
     s.endGroup();
     s.sync();
+  }
+
+  // Kartend-8h8e2: let the test persist sandbox state (typically a
+  // collection INI via SettingsManager::saveCollections) before MainWindow
+  // loads it — see the header comment on this constructor.
+  if (seedSandbox) {
+    seedSandbox();
   }
 
   m_window = std::make_unique<MainWindow>();

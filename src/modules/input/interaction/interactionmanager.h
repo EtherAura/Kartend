@@ -5,10 +5,12 @@
 #include "collection/collectionconfig.h"
 #include "collection/collectionhierarchycache.h"
 #include "collection/generalsettings.h"
+#include "dialogrunners.h"
 #include "iinteractionmanager.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
 #include "itemmetadata.h"
-#include "launchmanager.h" // LaunchPreview struct
+#include "launchpreview.h"          // LaunchPreview leaf header (Kartend-rq33v)
+#include "playlistmenucontroller.h" // PlaylistMenuController + SmartPlaylist* typedefs
 #include "setuputils.h"
 #include "smartfilter.h"
 #include <functional>
@@ -43,6 +45,7 @@ class SelectionManager;
 class ViewportManager;
 class ArrowNavigationHandler;
 class AlphabeticNavigationHandler;
+class ItemMetadataActionController;
 
 class ItemWidget;
 class IDatabaseManager;
@@ -61,26 +64,10 @@ class IDetailsPane;
  * Fields can be set individually, or common fields can be populated
  * from an ApplicationContext via the ctx pointer.
  */
-/// Result of a successful CreateSmartPlaylistDialog run. nullopt return
-/// from the runner means the user cancelled.
-struct SmartPlaylistEdit {
-  QString name;
-  SmartFilter::Filter filter;
-};
-
-/// Runs the modal CreateSmartPlaylistDialog with the given pre-population
-/// and returns the edited values, or nullopt on cancel. Kartend-n8kh: lets
-/// InteractionManager pop the dialog without #including its header — the
-/// UI layer supplies a closure that builds the dialog with the right
-/// parent and reads back the result.
-/// (displayName, uuid) pairs the smart-playlist dialog uses to populate
-/// the ByCollection picker. Built fresh at each invocation so it tracks
-/// the live collection list.
-using SmartPlaylistCollectionEntries = QList<QPair<QString, QString>>;
-
-using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
-    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter,
-    const SmartPlaylistCollectionEntries &collections)>;
+// SmartPlaylistEdit / SmartPlaylistCollectionEntries / SmartPlaylistDialogRunner
+// moved to playlistmenucontroller.h with the playlist actions (Kartend-5lmt7);
+// re-exported via the include above so DialogController / MainWindow wiring
+// keep compiling against this header.
 
 /// Runs the modal EditMetadataDialog seeded with the item's title and the
 /// current curation payload (notes, tags, rating, source URL, custom
@@ -127,6 +114,12 @@ struct InteractionManagerSetup {
   SmartPlaylistDialogRunner runSmartPlaylistDialog;
   EditMetadataDialogRunner runEditMetadataDialog;
   LaunchPreviewDialogRunner runLaunchPreviewDialog;
+  /// Kartend-sqoq0: generic stock-Qt-modal runners (confirm / warn / info /
+  /// getText / file pickers). Consumed here for the launcher-unavailable
+  /// warning and the manual-file picker, and forwarded to
+  /// PlaylistMenuController for the playlist menu's prompts. Null runners
+  /// fall back to the original direct Qt dialog construction.
+  DialogRunners dialogs;
 
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -250,7 +243,6 @@ public:
   // a smart filter on a playlist's synthetic uuid would yield a recursive
   // dependency. Built fresh on each open so collection renames / additions
   // are picked up.
-  [[nodiscard]] SmartPlaylistCollectionEntries collectSmartPlaylistCollectionEntries() const;
 
   // ─── Playlist context-menu handlers ────────────────────────
   // Prompts for a playlist name, creates the playlist, and adds the given
@@ -452,13 +444,26 @@ private:
   GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 
-  // Kartend-n8kh: owner-supplied dialog runners. Stored as the closure
-  // types defined above; the closures themselves live in the UI layer
-  // (MainWindow setup wiring), so the data-layer manager never #includes
-  // the dialog header for the symbols.
-  SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
-  EditMetadataDialogRunner m_runEditMetadataDialog;
+  // Kartend-n8kh: owner-supplied dialog runners. The closures live in the
+  // UI layer (MainWindow setup wiring), so the input layer never #includes
+  // the dialog headers. The edit-metadata and smart-playlist runners are NOT
+  // stored here — setupReferences forwards each straight into its only
+  // consumer (m_itemMetadataActions / m_playlistMenu, Kartend-5lmt7).
   LaunchPreviewDialogRunner m_runLaunchPreviewDialog;
+  // Kartend-sqoq0: generic stock-modal runners (warn for the
+  // launcher-unavailable gate, getOpenFileName for the manual-file picker).
+  // Null runners fall back to direct QMessageBox / QFileDialog construction.
+  DialogRunners m_dialogs;
+
+  // Item-metadata mutation handlers (edit dialog, manual path, launcher
+  // override, pin/hide/continue-later), extracted from this class's
+  // context-action partial (Kartend-5lmt7). The public methods of the same
+  // names on this class are one-line delegates so existing callers
+  // (context-menu lambdas, MainWindow's edit entry points) are unchanged.
+  std::unique_ptr<ItemMetadataActionController> m_itemMetadataActions;
+  // Playlist context-menu actions (create/add/rename/delete, smart-playlist
+  // dialogs, import/export), same extraction (Kartend-5lmt7).
+  std::unique_ptr<PlaylistMenuController> m_playlistMenu;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;

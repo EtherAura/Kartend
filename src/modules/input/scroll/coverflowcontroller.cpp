@@ -458,6 +458,40 @@ void CoverFlowController::resolveAndPushGallery(int visualIndex) {
   m_widget->setGalleryForIndex(visualIndex, entries);
 }
 
+CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManager *db) const {
+  CoverFlowCardData card;
+  if (actualIndex < 0 || !m_dataManager) {
+    return card;
+  }
+  if (m_dataManager->isSubcollectionIndex(actualIndex)) {
+    int sub = m_dataManager->subcollectionIndexFromActual(actualIndex);
+    if (m_collections && sub >= 0 && sub < m_collections->size()) {
+      const auto &subCfg = m_collections->at(sub);
+      card.title = subCfg.name;
+      card.artworkPath = subCfg.collectionIcon;
+    }
+  } else if (m_dataManager->isVirtualFolderIndex(actualIndex)) {
+    const QString folder = m_dataManager->virtualFolderFromActual(actualIndex);
+    card.title = QFileInfo(folder).fileName();
+    // Virtual folders fall back to placeholder artwork.
+  } else {
+    const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
+    const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
+    // Convert the raw entry (which may be a bare filename relative to the
+    // collection's media directory) into a full absolute path so the
+    // subfolder-mirroring artwork lookup has something to compute a
+    // relative directory from. Without this step, raw entries with
+    // subdirectories — and any collection whose artworkDir mirrors its
+    // mediaDir tree — drop straight to placeholder.
+    const QString fullPath = db ? db->resolveFilePath(rawEntry, *m_context) : rawEntry;
+    const QString fileName = QFileInfo(fullPath).fileName();
+    card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
+                                                  QFileInfo(fileName).completeBaseName());
+    card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db);
+  }
+  return card;
+}
+
 void CoverFlowController::rebuildCards() {
   if (!m_widget || !m_dataManager) {
     return;
@@ -475,39 +509,38 @@ void CoverFlowController::rebuildCards() {
 
   for (int visualIndex = 0; visualIndex < total; ++visualIndex) {
     const int actualIndex = filtered ? filterMgr()->getActualIndex(visualIndex) : visualIndex;
-    CoverFlowCardData card;
-    if (actualIndex < 0) {
-      cards.append(card);
-      continue;
-    }
-    if (m_dataManager->isSubcollectionIndex(actualIndex)) {
-      int sub = m_dataManager->subcollectionIndexFromActual(actualIndex);
-      if (m_collections && sub >= 0 && sub < m_collections->size()) {
-        const auto &subCfg = m_collections->at(sub);
-        card.title = subCfg.name;
-        card.artworkPath = subCfg.collectionIcon;
-      }
-    } else if (m_dataManager->isVirtualFolderIndex(actualIndex)) {
-      const QString folder = m_dataManager->virtualFolderFromActual(actualIndex);
-      card.title = QFileInfo(folder).fileName();
-      // Virtual folders fall back to placeholder artwork.
-    } else {
-      const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
-      const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
-      // Convert the raw entry (which may be a bare filename relative to the
-      // collection's media directory) into a full absolute path so the
-      // subfolder-mirroring artwork lookup has something to compute a
-      // relative directory from. Without this step, raw entries with
-      // subdirectories — and any collection whose artworkDir mirrors its
-      // mediaDir tree — drop straight to placeholder.
-      const QString fullPath = db ? db->resolveFilePath(rawEntry, *m_context) : rawEntry;
-      const QString fileName = QFileInfo(fullPath).fileName();
-      card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
-                                                    QFileInfo(fileName).completeBaseName());
-      card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db);
-    }
-    cards.append(card);
+    cards.append(buildCard(actualIndex, db));
   }
 
   m_widget->setCards(cards);
+}
+
+void CoverFlowController::updateCardsIfActive(const QList<int> &updatedIndices) {
+  if (!m_widget || !m_dataManager || !isActive()) {
+    return;
+  }
+  if (updatedIndices.isEmpty()) {
+    return;
+  }
+  // Two cases force the full O(N) rebuild:
+  //  - a filter is active: the chunk's indices are actual-space while the
+  //    carousel slots live in filtered-visual space, and IFilterManager
+  //    exposes no actual→visual reverse mapping;
+  //  - the store's count diverged from the widget's card list (collection
+  //    reload, storage resize): every slot may have shifted, so patching
+  //    individual indices would bind data to the wrong cards.
+  const bool filtered = filterMgr() && filterMgr()->isFiltered();
+  const int total = m_dataManager->totalItemCount();
+  if (filtered || m_widget->cardCount() != total) {
+    rebuildCards();
+    return;
+  }
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  for (int visualIndex : updatedIndices) {
+    if (visualIndex < 0 || visualIndex >= total) {
+      continue;
+    }
+    // Unfiltered: visual index == actual index.
+    m_widget->updateCard(visualIndex, buildCard(visualIndex, db));
+  }
 }

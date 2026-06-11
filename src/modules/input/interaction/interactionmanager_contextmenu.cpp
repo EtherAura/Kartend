@@ -3,15 +3,15 @@
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
 
+// Kartend-sqoq0: QInputDialog / QMessageBox / QProgressDialog includes were
+// dead (no remaining uses in this TU) — only the QFileDialog fallback for the
+// manual-file picker stays.
 #include <QApplication>
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QInputDialog>
 #include <QMenu>
-#include <QMessageBox>
 #include <QPointer>
-#include <QProgressDialog>
 #include <QUrl>
 
 #include "artworkutils.h"
@@ -261,10 +261,16 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     // mirroring how custom fields silently no-op when none exist.
     QAction *setManualAction = menu.addAction(tr("Set manual file..."));
     QObject::connect(setManualAction, &QAction::triggered, this, [this, filePath]() {
-      const QString picked = QFileDialog::getOpenFileName(
-          QApplication::activeWindow(), tr("Select Manual File"), QString(),
+      const QString caption = tr("Select Manual File");
+      const QString filter =
           tr("Manual Files (*.pdf *.epub *.cbr *.cbz *.djvu *.txt *.md *.html *.htm "
-             "*.rtf *.doc *.docx *.odt *.png *.jpg *.jpeg);;All Files (*)"));
+             "*.rtf *.doc *.docx *.odt *.png *.jpg *.jpeg);;All Files (*)");
+      // Kartend-sqoq0: owner-supplied runner when wired; stock QFileDialog
+      // fallback otherwise (headless tests stub the runner instead).
+      const QString picked = m_dialogs.getOpenFileName
+                                 ? m_dialogs.getOpenFileName(caption, QString(), filter)
+                                 : QFileDialog::getOpenFileName(QApplication::activeWindow(),
+                                                                caption, QString(), filter);
       if (picked.isEmpty()) {
         return;
       }

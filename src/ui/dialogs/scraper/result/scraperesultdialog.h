@@ -20,6 +20,7 @@
 
 QT_BEGIN_NAMESPACE
 class QCheckBox;
+class QDialogButtonBox;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -281,6 +282,10 @@ private:
 
   QPushButton *m_applyButton = nullptr;
   QPushButton *m_scrapeButton = nullptr;
+  /// Kartend-l06g6: direct handle to the dialog button box. The unified
+  /// controller used to re-derive it via m_applyButton->parent(), which
+  /// breaks silently if the button is ever wrapped in a container.
+  QDialogButtonBox *m_buttonBox = nullptr;
   /// Outer mode-swap: page 0 hosts the existing single-item splitter
   /// (candidate / detail / media); page 1 hosts the batch-progress
   /// panel; page 2 hosts the unified-setup panel.

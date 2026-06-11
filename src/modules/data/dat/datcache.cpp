@@ -6,6 +6,8 @@
 // mtime change so an edited DAT reloads automatically.
 #include "datcache.h"
 
+#include "dbtxn.h"
+
 #include <QAtomicInteger>
 #include <QDateTime>
 #include <QDir>
@@ -50,7 +52,8 @@ bool execSimple(QSqlDatabase &db, const QString &sql) {
 bool createSchema(QSqlDatabase &db) {
   // Manual transaction here even though most callers begin their own:
   // schema setup runs at open time before any caller has a handle.
-  if (!db.transaction()) {
+  KartendDb::DbTransaction txn(db, "DatCache::createSchema");
+  if (!txn.active()) {
     qWarning("DatCache: BEGIN failed: %s", qPrintable(db.lastError().text()));
     return false;
   }
@@ -80,10 +83,9 @@ bool createSchema(QSqlDatabase &db) {
                                     "ON dat_records(source_id, crc)")) &&
       execSimple(db, QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion));
   if (!ok) {
-    db.rollback();
-    return false;
+    return false; // guard dtor rolls back
   }
-  return db.commit();
+  return txn.commit();
 }
 
 /// Read the on-disk schema version. Returns 0 for a fresh DB (no
@@ -224,11 +226,10 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   // Bulk insert under a single transaction. Without batching, ingesting
   // 250k MAME rows would take tens of seconds (one fsync per row);
   // wrapped in a transaction it's well under a second.
-  if (!m_db.transaction()) {
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed,
-                               "Failed to begin ingest transaction",
-                               "DatCache::Store::openOrIngest")
-        .withDetails(m_db.lastError().text());
+  KartendDb::DbTransaction txn(m_db, "DatCache::Store::openOrIngest");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin ingest transaction", nullptr,
+                          ErrorUtils::Severity::Error);
   }
 
   qint64 newId = -1;
@@ -243,7 +244,6 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
     ins.addBindValue(QDateTime::currentMSecsSinceEpoch());
     if (!ins.exec()) {
       const QString err = ins.lastError().text();
-      m_db.rollback();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert DAT source row",
                                  "DatCache::Store::openOrIngest")
           .withDetails(err);
@@ -268,7 +268,6 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
       ins.bindValue(6, r.sha1.isEmpty() ? QVariant() : QVariant(r.sha1));
       if (!ins.exec()) {
         const QString err = ins.lastError().text();
-        m_db.rollback();
         return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert DAT record",
                                    "DatCache::Store::openOrIngest")
             .withDetails(err);
@@ -276,11 +275,9 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
     }
   }
 
-  if (!m_db.commit()) {
-    return ErrorContext::error(ErrorCode::DatabaseTransactionFailed,
-                               "Failed to commit ingest transaction",
-                               "DatCache::Store::openOrIngest")
-        .withDetails(m_db.lastError().text());
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit ingest transaction", nullptr,
+                           ErrorUtils::Severity::Error);
   }
 
   return CachedSource{newId, mtimeMs, dialect, static_cast<int>(records.size())};

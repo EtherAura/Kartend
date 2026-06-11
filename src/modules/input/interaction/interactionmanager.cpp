@@ -24,6 +24,7 @@
 #include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
+#include "itemmetadataactioncontroller.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "mousemanager.h"
@@ -78,6 +79,15 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
 
 // Destructor: stop timers/animations and clear selection
 InteractionManager::~InteractionManager() {
+  // Mark teardown FIRST (Kartend-gutqx) so eventFilter() and slots like
+  // onKeyboardStopRepeat short-circuit from this point on — sub-manager
+  // destruction emits late stopRepeat / cleanup signals (e.g.
+  // ~GamepadManager → KeyboardManager::stopRepeat fires after the arrow
+  // handler unique_ptr has already been freed by member destruction), and
+  // nested event processing during teardown must not re-enter
+  // m_eventManager->filterEvent() on a partially-destroyed object.
+  m_destroying = true;
+
   // Detach the application-wide event filter installed in
   // installEventFilters() before any owned sub-manager (notably
   // m_eventManager, which the filter delegates to) starts being
@@ -88,11 +98,25 @@ InteractionManager::~InteractionManager() {
   if (qApp) {
     qApp->removeEventFilter(this);
   }
-  // Mark teardown so slots like onKeyboardStopRepeat can short-circuit
-  // when sub-manager destruction emits late stopRepeat / cleanup signals
-  // (e.g. ~GamepadManager → KeyboardManager::stopRepeat fires after the
-  // arrow handler unique_ptr has already been freed by member destruction).
-  m_destroying = true;
+  // Kartend-gutqx: installEventFilters() also installed `this` on four
+  // widgets; the qApp removal above does not cover them, and events
+  // delivered through those installations during member teardown were the
+  // same UB class the qApp removal fixed — through a different door. The
+  // members are QPointer-guarded, so removal is safe even if MainWindow
+  // already tore the widgets down.
+  if (m_itemsPage) {
+    m_itemsPage->removeEventFilter(this);
+  }
+  if (m_itemScrollArea) {
+    m_itemScrollArea->removeEventFilter(this);
+    if (QWidget *viewport = m_itemScrollArea->viewport()) {
+      viewport->removeEventFilter(this);
+    }
+  }
+  if (m_gridContainer) {
+    m_gridContainer->removeEventFilter(this);
+  }
+
   stopRepeat();
   clearSelection();
 }
@@ -153,10 +177,8 @@ auto InteractionManager::getFallbackCollectionIndex() const -> int {
 // Launches on double‑click without altering or interrupting any scroll state
 void InteractionManager::handleWidgetDoubleClickedWithCollection(const QString &filePath,
                                                                  int collectionIndex) {
-  // Delegate debounce check to LaunchManager
-  if (m_launchManager && !filePath.isEmpty() && !m_launchManager->canLaunch(filePath)) {
-    return;
-  }
+  // Launch debounce now lives in launchItemWithCollection (Kartend-l06g6),
+  // which every launch surface funnels through — no per-surface check here.
 
   // Reset click state on double-click launch
   m_state.click().rowChangeFirstClickIndex = -1;
@@ -204,7 +226,10 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(const QString &
 // Global event filter handling input, mouse/scroll, selection, and viewport
 // scrolling
 auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
-  if (QApplication::closingDown() || !event) {
+  // m_destroying: nested event processing during ~InteractionManager must
+  // not delegate into m_eventManager — reading a unique_ptr member is UB
+  // once its own destruction has begun (Kartend-gutqx).
+  if (QApplication::closingDown() || m_destroying || !event) {
     return QObject::eventFilter(obj, event);
   }
 

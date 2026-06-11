@@ -4,6 +4,8 @@
 // live grid's lazy fallback — no second rendering pipeline to keep in sync.
 #include "placeholderwarmer.h"
 
+#include "extensionutils.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
@@ -45,12 +47,11 @@ QSet<QString> normalizedExtensionSet(const QStringList &raw) {
   QSet<QString> out;
   out.reserve(raw.size());
   for (const QString &ext : raw) {
-    QString trimmed = ext.trimmed().toLower();
-    if (trimmed.startsWith('.')) {
-      trimmed.remove(0, 1);
-    }
-    if (!trimmed.isEmpty()) {
-      out.insert(trimmed);
+    // Canonical stored form is bare ("mp4"); bareExtension also tolerates
+    // the legacy "*.mp4" / ".mp4" forms (Kartend-693zb).
+    const QString bare = ExtensionUtils::bareExtension(ext);
+    if (!bare.isEmpty()) {
+      out.insert(bare);
     }
   }
   return out;

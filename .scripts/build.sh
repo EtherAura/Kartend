@@ -137,17 +137,33 @@ if $run_tests && ! $build_tests; then
   exit 1
 fi
 
+# Kartend-z4ev0: KARTEND_TIDY_ONLY_FILES (optional env) scopes the
+# --maintenance clang-tidy pass to a newline-delimited list of .cpp paths
+# (see do_clang_tidy in lib/quality.sh). Validate it up front so a typo'd
+# path fails in seconds instead of after the ~10-min maintenance build.
+if [ -n "${KARTEND_TIDY_ONLY_FILES:-}" ]; then
+  if ! $maintenance_build; then
+    echo "Error: KARTEND_TIDY_ONLY_FILES is only honored with --maintenance." >&2
+    exit 1
+  fi
+  if [ ! -f "$KARTEND_TIDY_ONLY_FILES" ]; then
+    echo "Error: KARTEND_TIDY_ONLY_FILES points to a missing file: $KARTEND_TIDY_ONLY_FILES" >&2
+    exit 1
+  fi
+fi
+
 # Paths
 root_dir="$(cd "$script_dir/.." && pwd)"
 cd "$root_dir"
 mkdir -p build
 parent_dir="$(dirname "$root_dir")"
 backups_dir="$parent_dir/.backups"
-# Defer creation until --archive / --reports actually needs it. Eager
-# creation breaks bind-mounted environments (e.g. nektos/act) where the
-# parent directory of the repo is owned by root and the script runs as
-# the runner user.
-mkdir -p "$backups_dir" 2>/dev/null || true
+# Created on demand: the reports assembly mkdir -p's $reports_dir itself, and
+# each --archive staging step mkdir -p's $backups_dir with a REAL error.
+# Eager creation here used to break bind-mounted environments (e.g.
+# nektos/act) where the parent directory of the repo is owned by root and the
+# script runs as the runner user — and the old swallowed `|| true` meant the
+# failure surfaced much later as a confusing tar error (Kartend-oizkj).
 reports_dir="$backups_dir/reports"
 
 setup_colors
@@ -413,10 +429,10 @@ EOF
 
   # clang-format operations
   if $format_apply; then
-    run_optional "clang-format (apply fixes)" "$logs_dir/clang-format-apply.log" do_clang_format_apply "$root_dir/src"
+    run_optional "clang-format (apply fixes)" "$logs_dir/clang-format-apply.log" do_clang_format_apply "$root_dir/src" "$root_dir/tests"
   fi
   if $format_check || ! $format_apply; then
-    run_quality_check "clang-format check" "$logs_dir/clang-format.log" do_clang_format "$root_dir/src"
+    run_quality_check "clang-format check" "$logs_dir/clang-format.log" do_clang_format "$root_dir/src" "$root_dir/tests"
     # Check for clang-format issues
     if [ -s "$logs_dir/clang-format.log" ]; then
       if grep -qE 'Format issue:|Found [0-9]+ files with formatting issues' "$logs_dir/clang-format.log"; then
@@ -433,6 +449,9 @@ EOF
 
   checks="-*,clang-analyzer-*,modernize-*,performance-*,readability-*,-readability-static-accessed-through-instance,google-*"
   TIDY_PROMOTED_FAILED=false
+  # Kartend-z4ev0: do_clang_tidy honors KARTEND_TIDY_ONLY_FILES (validated at
+  # startup) — CI sets it on pull_request events to tidy only the changed TUs;
+  # unset (local runs, push-to-main) means the full src/ sweep.
   if ! run_quality_check "clang-tidy analysis" "$logs_dir/clang-tidy.log" do_clang_tidy "$COMPDB_FILE" "$root_dir/src" "$checks"; then
     # do_clang_tidy returns non-zero only when WarningsAsErrors-promoted
     # checks (.clang-tidy:WarningsAsErrors) trigger. The remaining advisory
@@ -451,7 +470,7 @@ EOF
     fi
   fi
   
-  run_quality_check "cppcheck analysis" "$logs_dir/cppcheck.log" do_cppcheck "$root_dir/src"
+  run_quality_check "cppcheck analysis" "$logs_dir/cppcheck.log" do_cppcheck "$root_dir/src" "$root_dir/tests"
   # Check for cppcheck warnings
   if [ -s "$logs_dir/cppcheck.log" ]; then
     if grep -qE ': (error|warning|style|performance|portability):' "$logs_dir/cppcheck.log"; then
@@ -489,6 +508,7 @@ EOF
     archive_dir="${parent_dir}/${archive_name}"
 
     run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      mkdir -p \"$backups_dir\" &&
       rm -rf \"$archive_dir\" &&
       mkdir -p \"$archive_dir\" &&
       cp -a \"$root_dir/src\" \"$archive_dir/\" &&
@@ -762,6 +782,18 @@ if $pgo_build; then
   if ! $use_ccache; then
     cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
+  # Kartend-oizkj: PGO needs an interactive pause between the generate and
+  # use passes. Detect a no-TTY environment UP FRONT and fail with a clear
+  # message, instead of burning the full generate build and then aborting at
+  # the bare `read -r` under set -e. A real open attempt on /dev/tty — not
+  # [ -r ], which only checks permission bits on a node that exists even
+  # without a controlling terminal.
+  if [ ! -t 0 ] && ! { exec 3</dev/tty; } 2>/dev/null; then
+    echo "Error: --pgo requires an interactive terminal (the mid-PGO pause reads from stdin or /dev/tty)." >&2
+    exit 1
+  fi
+  exec 3<&- 2>/dev/null || true
+
   # Wipe any stale .profraw files from a prior --pgo run so the user's
   # instrumented exercise produces a fresh profile set. Without this, an
   # incremental rebuild keeps the previous run's .profraw files alongside
@@ -769,7 +801,9 @@ if $pgo_build; then
   # optimised build.
   rm -rf "$build_dir/pgo_profiles"
   run_step "Configure PGO generate" "$logs_dir/configure.log" cmake "${cmake_args[@]}"
-  run_step "Build PGO generate" "$logs_dir/build.log" cmake --build "$build_dir"
+  # Kartend-oizkj: honor --jobs like every other build mode (matters on hosts
+  # that must keep cores free, e.g. while streaming).
+  run_step "Build PGO generate" "$logs_dir/build.log" cmake --build "$build_dir" -j"$build_jobs"
 
   # Prompt for manual run (force read from TTY for VS Code tasks/non-interactive shells)
   echo "Run \"${build_dir}/${target_name}\" now, exercise the app, then exit it."
@@ -817,7 +851,7 @@ if $pgo_build; then
     cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
   run_step "Configure PGO use" "$logs_dir/configure2.log" cmake "${cmake_args[@]}"
-  run_step "Build PGO use" "$logs_dir/build2.log" cmake --build "$build_dir"
+  run_step "Build PGO use" "$logs_dir/build2.log" cmake --build "$build_dir" -j"$build_jobs"
 
   # Rename build directory
   new_build_dir="$root_dir/build/$(generator_tag)-release-pgo"
@@ -854,6 +888,7 @@ if $pgo_build; then
     fname="${archive_name}.tar.gz"
     archive_dir="${parent_dir}/${archive_name}"
     run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      mkdir -p \"$backups_dir\" &&
       mkdir -p \"$archive_dir\"
       cp -r \"$root_dir\"/* \"$archive_dir\"/ 2>/dev/null || true
       rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.git \"$archive_dir\"/.github
@@ -980,13 +1015,18 @@ if ! $pgo_build; then
     archive_dir="${parent_dir}/${archive_name}"
 
     run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      mkdir -p \"$backups_dir\" &&
       rm -rf \"$archive_dir\" &&
       mkdir -p \"$archive_dir\" &&
       if command -v rsync >/dev/null 2>&1; then
         rsync -a --delete --itemize-changes --exclude='.git' --exclude='build' --exclude='reports' --exclude='.*' ./ \"$archive_dir\"/
       else
+        # Kartend-oizkj: the old rm -rf \"\$dir\"/.* glob expanded to . and ..,
+        # which GNU rm refuses (non-zero exit), aborting the whole build via
+        # run_step on exactly the rsync-less systems this fallback exists for.
         cp -av . \"$archive_dir\"/ &&
-        rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.*
+        rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports &&
+        find \"$archive_dir\" -maxdepth 1 -name '.*' ! -name '.' ! -name '..' -exec rm -rf {} +
       fi
     "
     run_step "Create archive" "$logs_dir/archive-tar.log" tar -v --exclude='build' --exclude='reports' --exclude='.*' -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"

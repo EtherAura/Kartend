@@ -13,6 +13,7 @@
 #include <QString>
 #include <QTest>
 
+#include "../../support/testsandbox.h"
 #include "scrapelogger.h"
 
 // A scrape-prefixed category (teed) and a sibling that is not.
@@ -34,9 +35,7 @@ private:
 
 void TestScrapeLogger::initTestCase() {
   // Test-scoped config dir so we never touch the real scrape.log.
-  QStandardPaths::setTestModeEnabled(true);
-  QCoreApplication::setOrganizationName(QStringLiteral("Kartend"));
-  QCoreApplication::setApplicationName(QStringLiteral("kartend-test-scrapelogger"));
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-scrapelogger"));
 }
 
 void TestScrapeLogger::cleanup() {

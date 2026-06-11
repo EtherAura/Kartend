@@ -78,6 +78,18 @@ public:
 
   void setCards(const QList<CoverFlowCardData> &cards);
   [[nodiscard]] int cardCount() const { return m_cards.size(); }
+  /// Value-copy of the card at @p index; default-constructed when out of
+  /// range. Lets callers (and tests) observe per-slot state without exposing
+  /// the backing list.
+  [[nodiscard]] CoverFlowCardData cardAt(int index) const { return m_cards.value(index); }
+
+  /// Patch a single card in place (Kartend-x7bn8). Incremental alternative to
+  /// setCards() for range-chunk arrivals: replaces only title + artworkPath,
+  /// preserves the slot's lazily-resolved videoPath, keeps selection / glide /
+  /// gallery state untouched, and invalidates only the scaled-pixmap entries
+  /// belonging to the replaced artwork instead of dropping the whole cache.
+  /// No-op when @p index is out of range or the slot already matches.
+  void updateCard(int index, const CoverFlowCardData &card);
 
   void setSelectedIndex(int index, bool animate);
   [[nodiscard]] int selectedIndex() const { return m_selectedIndex; }
