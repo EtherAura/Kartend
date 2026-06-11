@@ -153,6 +153,26 @@ clusters, each tracked by a closed-as-suppressed bd:
   These libraries use their own sync primitives TSan can't observe.
   Re-evaluate on third-party version bumps or when Qt Multimedia
   switches off the GStreamer + PulseAudio backends.
+- **Kartend-ie89x (Group E, 2026-06-11)** — first-TSan-exposure entries
+  from the Kartend-6x8tn / Kartend-0eeuk test waves (4 entries, all the
+  Group A/B futex-invisible-edge classes reached through new code):
+  `QReadWriteLock`'s atomic write-lock fast path vs its contended
+  `pthread_mutex_unlock` fallback ("unlock of an unlocked mutex" in
+  `DirectoryCache::processQueuedDirectories`); the `schedulePrewarm` →
+  `QThreadPool::start` std::function hand-off; the `~QFutureInterface`
+  teardown family (watcher destruction vs `reportAndMoveResult`); and
+  `ArtworkWizardDialog::renderCurrent`'s `QtConcurrent::run` hand-off
+  (QString COW capture copy / task first-read / task free — enumerated
+  exhaustively with `halt_on_error=0`: 15 reports, 3 shapes, one call
+  site). Methodology notes: `halt_on_error=1` in the CI leg shows only
+  the FIRST unsuppressed report per binary, so triage one report per
+  run converges slowly — run the binary in the kartend-ci container
+  with `halt_on_error=0` to enumerate every remaining shape at once. A
+  test-side `waitForDone()` drain does NOT fix these: on an
+  already-idle pool it returns through the futex fast path without a
+  condvar wait, creating no TSan-visible edge. Re-evaluate with Groups
+  A/B on a Qt bump. Group letter D is reserved by the in-flight
+  Kartend-t9u0o branch.
 
 Same code-review-only methodology as the LSan audit applied — the
 `--sanitize --tests` build needs Kartend-hx6l fixed before LSan/TSan
@@ -168,12 +188,15 @@ Each entry in `tests/suppressions/lsan.txt` now carries:
   others have an explicit "remove if X becomes possible" trigger).
 
 The 2026-05-27 audit was **code-review only** — the `--sanitize --tests`
-build currently fails to link several test exes because of a pre-existing
-CMake layering issue where `settingsdialogcontroller.cpp` calls into
-`kartend_ui` symbols (`ErrorPresentation::showError`) that the test link
-command doesn't include. Resolving that is a separate sanitizer-CI
-follow-up. Once that builds again, re-run LSan and confirm each
-suppression entry still fires (else delete and remove the bd ID).
+build at the time failed to link several test exes because of a CMake
+layering issue where the then-data-layer `settingsdialogcontroller.cpp`
+called into `kartend_ui` symbols (`ErrorPresentation::showError`) that the
+test link command didn't include. The `ErrorPresentation` default impl has
+since moved to `kartend_utils` (Kartend-hx6l), and the dialog orchestration
+itself now lives at the ui layer as
+`src/ui/controllers/settingsdialogcontroller/` (Kartend-q8p29). Once the
+sanitizer build is re-verified, re-run LSan and confirm each suppression
+entry still fires (else delete and remove the bd ID).
 
 ## Don't
 

@@ -10,7 +10,7 @@ class QGroupBox;
 class QWidget;
 
 /// Builds the "What to scrape" group box for ScrapeResultDialog's
-/// unified panel: a 33-entry checkbox grid covering every SS media
+/// unified panel: a 32-entry checkbox grid covering every SS media
 /// type plus a synthetic `_metadata` key that gates textual fields.
 ///
 /// The curated table is the source of truth for which SS tags surface

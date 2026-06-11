@@ -325,3 +325,51 @@ called_from_lib:libpulsecommon
 # and frees on pipeline tear-down from a worker thread that TSan can't
 # reason about.
 called_from_lib:libgstreamer-1.0.so
+
+# ─── Group E: 2026-06-11 test-wave first-TSan-exposure (Kartend-ie89x) ──
+# (D is reserved by the module-scoped group on the Kartend-t9u0o branch.)
+# New test binaries from the Kartend-6x8tn and Kartend-0eeuk waves put two
+# more Qt-internal sync patterns in front of TSan for the first time. Both
+# are instances of the Group A futex-fast-path class, anchored here on the
+# Kartend frames that reach them.
+
+# DirectoryCache::processQueuedDirectories holds a QWriteLocker inside a
+# QtConcurrent::blockingMap worker (uninstrumented libQt6Concurrent
+# ThreadEngineBase::run). Qt 6's QReadWriteLock acquires its write lock on
+# an atomic fast path TSan cannot intercept, but a contended unlock falls
+# back to pthread_mutex_unlock on the internal d->mutex — TSan then reports
+# "unlock of an unlocked mutex" because it never saw the matching lock.
+# The locker is scope-correct (RAII pair in the same lambda body,
+# artworkutils.cpp processQueuedDirectories).
+mutex:*processQueuedDirectories*
+
+# DirectoryCache::schedulePrewarm hands its lambda (std::function) to
+# QThreadPool::start: the GUI thread's allocation-write of the captured
+# state appears to race the pool worker's first read at invocation,
+# because the hand-off edge is the pool queue's QMutex futex fast path.
+# Same class as Group B's StoredFunctionCall entry, anchored on this
+# code path's frames.
+race:*DirectoryCache::schedulePrewarm*
+
+# QFutureWatcher/QFuture destruction on the GUI thread (QObject child
+# teardown in dialog dtors, e.g. ArtworkWizardDialog's per-candidate
+# thumbnail decodes) vs the QtConcurrent worker's reportAndMoveResult.
+# Both sides are serialized by QFutureInterfaceBase's internal QMutex,
+# whose futex fast path provides no TSan-visible edge. The report family
+# has two shapes — ResultStore clear-vs-moveResult, and the d-block
+# free-vs-QMutexPrivate load — both anchored inside ~QFutureInterface.
+# A test-side QThreadPool::waitForDone drain does NOT fix this: on an
+# already-idle pool it returns through the same futex fast path without
+# a condvar wait, so no happens-before edge is established.
+race:*~QFutureInterface*
+
+# ArtworkWizardDialog::renderCurrent's per-candidate QtConcurrent::run
+# hand-off — the remaining shapes of the same futex-invisible pool-queue
+# edge, enumerated exhaustively with halt_on_error=0 (15 reports, 3
+# shapes): the QString COW copy of the captured thumbPath
+# (QArrayDataPointer<char16_t> copy-ctor), the worker's first read at
+# RunFunctionTaskBase<QImage>::run() entry vs the main-thread task
+# allocation (Group B StoredFunctionCall pattern), and the task-object
+# free. Anchored on the call site; safe because the decode lambda is
+# pure-local (by-value path, local QImage — no shared state to mask).
+race:*ArtworkWizardDialog::renderCurrent*

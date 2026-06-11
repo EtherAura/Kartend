@@ -628,11 +628,12 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
         // And reclaim the extracted dir if the child never ran — the guard
         // above was already dismissed, so FailedToStart used to leak it.
         if (!extractedDir.isEmpty()) {
-          const QString dirToRemove = extractedDir;
+          // By-value capture detaches the QString from the reference param,
+          // which dies with this frame while the lambda outlives it.
           connect(child, &QProcess::errorOccurred, this,
-                  [dirToRemove](QProcess::ProcessError error) {
+                  [extractedDir](QProcess::ProcessError error) {
                     if (error == QProcess::FailedToStart) {
-                      QDir(dirToRemove).removeRecursively();
+                      QDir(extractedDir).removeRecursively();
                     }
                   });
         }
