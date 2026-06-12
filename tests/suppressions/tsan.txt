@@ -471,6 +471,17 @@ race:strdup
 # "double lock of a mutex" maps to TSan's mutex: suppression type (a
 # deadlock:-type entry tried first never matched and was removed).
 mutex:test_querymanager_abspath
+# Flaky companion of the entry above (first hit: main run 27396059536,
+# after three green runs): DirectoryScanTask's pushChunk backpressure
+# lambda waits on QWaitCondition::wait(&mutex, 50) and TSan loses the
+# lock epoch across the annotated release/reacquire — the report then
+# pairs ready.size() (T4) against ready.append() (T3) even though BOTH
+# stacks are flagged "(mutexes: write M0)", i.e. TSan itself records
+# the accesses as serialized by the same write-held mutex, which cannot
+# race. Verified against querymanagerhelpers.h: every m_queue->ready
+# access is under QMutexLocker. Anchored on the pushChunk lambda frames
+# so genuine scan races elsewhere in DirectoryScanTask stay visible.
+race:DirectoryScanTask::run*lambda*
 
 # ─── Group E: 2026-06-11 test-wave first-TSan-exposure (Kartend-ie89x) ──
 # New test binaries from the Kartend-6x8tn and Kartend-0eeuk waves put
