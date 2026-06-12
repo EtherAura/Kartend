@@ -13,6 +13,12 @@ namespace {
 
 KartWriter::WriterParams makeMinimalParams(const QString &mediaSrc, const QString &mediaName) {
   KartWriter::WriterParams p;
+  // WriterParams defaults to zstd; gate on the build's actual support so
+  // every test using this helper passes on the no-zstd CI leg (writeKart
+  // hard-fails on "zstd requested but build lacks zstd" — caught on main
+  // run 27384636695 via the path-variants rows, Kartend-1yev5).
+  p.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                            : KartFormat::Compression_Zlib;
   p.uuid = "writer-uuid";
   p.name = "Writer Test";
   p.version = "1.0";

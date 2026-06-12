@@ -642,6 +642,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
+      # The manifest pins builtin-baseline (supply-chain audit); the
+      # preinstalled C:\vcpkg clone on the runner image is often older
+      # than that commit, and vcpkg then fails with "failed to git show
+      # versions/baseline.json". Baselines are always master commits, so
+      # a sha-agnostic fetch of master keeps this step valid across
+      # future baseline bumps.
+      - name: Sync vcpkg clone to the manifest baseline
+        run: git -C C:\vcpkg fetch origin master
+
       - name: Configure CMake (MSVC + Ninja + vcpkg)
         # -G Ninja over the Visual Studio generator: msbuild's
         # parallelism doesn't reliably wait for AUTOUIC to emit ui_*.h
