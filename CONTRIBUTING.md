@@ -178,6 +178,12 @@ strings into every `.ts` without dropping existing translations, and
 
 ## Cutting a Release
 
+Run `.scripts/bump-version.sh <X.Y.Z>` — it updates every synced file in
+one shot and is the only supported way to prep a release. Do **not** bump
+the files by hand from this list; the list exists so reviewers know what
+the script touches, and it has drifted before (the v0.0.13 prep missed
+`vcpkg.json` by following an older copy of this section).
+
 Before pushing a `v<X.Y.Z>` tag, every file below must agree on the new
 version. The release workflow (`.github/workflows/release.yml`) fails the
 tag build if any are out of sync.
@@ -191,9 +197,13 @@ tag build if any are out of sync.
    `<description>` block** at the top of `<releases>`. The CI check only
    compares the most-recent `<release>` version; a missing description
    passes CI but ships a release-notes-less entry to GNOME Software,
-   KDE Discover, and Flathub.
-5. `CHANGELOG.md` — promote `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD` and
-   open a fresh `[Unreleased]` section.
+   KDE Discover, and Flathub. (The script inserts a bare entry — fill in
+   the description before tagging.)
+5. `vcpkg.json` — `version-string` (Kartend-szdbl keeps the Windows
+   dependency manifest's version honest).
+6. `CHANGELOG.md` — promote `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD` and
+   open a fresh `[Unreleased]` section (manual — the script does not
+   edit the changelog).
 
 After tagging, the release workflow updates `PKGBUILD` `sha256sums=` on
 `main` automatically — do not pre-commit a placeholder hash.
