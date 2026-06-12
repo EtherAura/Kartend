@@ -99,24 +99,6 @@ void TestBatchScrapeRunnerIntegration::initTestCase() {
 }
 
 void TestBatchScrapeRunnerIntegration::writesLandInDatabaseAndCacheGetsInvalidated() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  // The runner dispatches each match to QtConcurrent::run for the
-  // file-write phase. The pool threads' captured QString / QList<
-  // PendingMediaWrite> COW buffers trip a pool-reuse false positive:
-  // TSan sees consecutive tasks on the same recycled pool thread as
-  // racing on the same heap slot, but the libQt6Core frames between
-  // QArrayDataPointer::detach and the memmove that does the copy are
-  // stripped in Ubuntu 24.04's qt6-base packages, so no race: pattern
-  // in tests/suppressions/tsan.txt can target the actual offending frames.
-  // The correctness property this test asserts (cache invalidation
-  // after the worker-thread DB write) is also covered under the
-  // regular build matrix, so skipping the TSan run here doesn't lose
-  // coverage of the invariant — only of the parallel-dispatch path
-  // under the sanitizer.
-  QSKIP("QtConcurrent pool-reuse false positives with stripped libQt6Core "
-        "frames make this test un-suppressable under TSan; coverage of "
-        "the cache-invalidation invariant lives in the non-TSan builds");
-#endif
   const QString uuid = QStringLiteral("u-integration");
   const QString sourcePath = QStringLiteral("/m/song.flac");
   const QString baseName = QStringLiteral("song"); // matches sourcePath's
@@ -187,13 +169,6 @@ void TestBatchScrapeRunnerIntegration::writesLandInDatabaseAndCacheGetsInvalidat
 }
 
 void TestBatchScrapeRunnerIntegration::cancelMidBatchAtHighConcurrencyDrainsCleanly() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  // Same TSan pool-reuse limitation as the sibling test above. This one
-  // is even more aggressive (kQueueSize=100 × kConcurrency=8) and would
-  // fire the unsuppressable memmove race within a few iterations.
-  QSKIP("BatchScrapeRunner's QtConcurrent dispatch pattern is "
-        "un-suppressable under TSan — see sibling test for details");
-#endif
   // Stress test for the cancellation race that gnkb's write-worker
   // architecture introduces: with itemConcurrency=8 multiple items are
   // simultaneously hopping between the QtConcurrent file-write pool, the

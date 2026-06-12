@@ -26,23 +26,13 @@ using DatAudit::ScannedFile;
 using DatAudit::Status;
 using DatLookup::DatRecord;
 
-// DatAudit::run()'s QtConcurrent hash fan-out spins up the global QThreadPool.
-// Under ThreadSanitizer that trips a shifting, nondeterministic set of
-// Qt-internal pool-lifecycle races (QThreadPool / QWaitCondition / QtConcurrent
-// ThreadEngine setup+teardown, plus the result-store memmove) — all stripped Qt
-// frames, none anchorable on a Kartend symbol, none touching Kartend data. The
-// worker lambda is shareless (each task hashes a distinct file; the only shared
-// reads are the atomic cancel token and disjoint list elements), so there is no
-// Kartend race for TSan to find on this path; correctness is fully covered by
-// the non-TSan build matrix. So skip just the run()-driving cases under TSan,
-// the same way test_httpclient skips its QNAM-init cases. See Kartend-x9mkif.1.
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-#define SKIP_CONCURRENT_RUN_UNDER_TSAN()                                                           \
-  QSKIP("DatAudit::run QThreadPool fan-out trips Qt-internal pool races under TSan; worker is "    \
-        "shareless, correctness covered off-TSan — Kartend-x9mkif.1")
-#else
-#define SKIP_CONCURRENT_RUN_UNDER_TSAN() ((void)0)
-#endif
+// Kartend-t9u0o: the run()-driving cases used to QSKIP under TSan
+// (Kartend-x9mkif.1) because DatAudit::run's QtConcurrent fan-out trips
+// Qt-internal pool-lifecycle reports with all-stripped libQt6Core frames.
+// Those are now muted module-wide by tests/suppressions/tsan.txt Group D
+// (called_from_lib:libQt6Core.so.6), so the worker lambda runs INSTRUMENTED
+// under the nightly TSan job — a racy change to it (shared mutable state, a
+// non-atomic cancel check) fires again instead of being skipped wholesale.
 
 namespace {
 
@@ -275,7 +265,6 @@ void TestDatAuditRunner::classifySummaryCounts() {
 }
 
 void TestDatAuditRunner::runEndToEndOverTempFiles() {
-  SKIP_CONCURRENT_RUN_UNDER_TSAN();
   QTemporaryDir dir;
   QVERIFY(dir.isValid());
   // Bootstrap a catalogue from the real hashes of files we write, so run()'s
@@ -310,7 +299,6 @@ void TestDatAuditRunner::runEndToEndOverTempFiles() {
 }
 
 void TestDatAuditRunner::runHonoursIgnoreGlobs() {
-  SKIP_CONCURRENT_RUN_UNDER_TSAN();
   QTemporaryDir dir;
   QVERIFY(dir.isValid());
   writeFile(dir, QStringLiteral("keep.bin"), QByteArrayLiteral("data"));
@@ -339,7 +327,6 @@ void TestDatAuditRunner::runCancelledBeforeScanReturnsCancelled() {
 }
 
 void TestDatAuditRunner::runPopulatesHashCache() {
-  SKIP_CONCURRENT_RUN_UNDER_TSAN();
   QTemporaryDir dir;
   QVERIFY(dir.isValid());
   writeFile(dir, QStringLiteral("a.bin"), QByteArrayLiteral("cache me"));

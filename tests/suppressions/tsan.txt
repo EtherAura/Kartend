@@ -326,12 +326,158 @@ called_from_lib:libpulsecommon
 # reason about.
 called_from_lib:libgstreamer-1.0.so
 
+# ─── Group D: Qt shared libraries, module-scoped (Kartend-t9u0o) ────────
+# CI's Qt (Ubuntu qt6-base, stripped, NOT TSan-instrumented) can only ever
+# surface races through intercepted calls (malloc/free, memcpy/memmove,
+# pthread_*) made FROM its own code: its plain loads/stores are invisible
+# to TSan, and its sync primitives' futex/atomic fast paths provide no
+# happens-before edge TSan can observe. Such reports are therefore
+# inherently un-orderable half-edges — Qt-internal pool-lifecycle churn
+# (QThreadPool / QWaitCondition / QtConcurrent ThreadEngine setup +
+# teardown), pooled-thread COW-buffer recycling, QNAM's lazy worker-thread
+# start-up, QScrollArea's reserved render threads — with every frame
+# stripped, so no race: symbol pattern can target them (the CI image has
+# no llvm-symbolizer; Qt frames render <null>).
+#
+# called_from_lib matches by MODULE, not symbol, so it works on stripped
+# libraries. It suppresses only interceptor events whose caller is inside
+# the named .so — Kartend's instrumented code stays fully visible,
+# INCLUDING Qt container/template code inlined into Kartend TUs from
+# headers (that code compiles into the test binary, not libQt6*). This is
+# what lets the previously QSKIP'd concurrency tests (DatAudit::run
+# fan-out, the parallel recursive scan, BatchScrapeRunner dispatch,
+# TitleFilter lock hammering, HttpClient/QNAM, ScrapeWriteWorker
+# teardown) run instrumented under TSan instead of being skipped
+# wholesale: a racy worker lambda touching Kartend data still fires.
+#
+# Tradeoff, accepted deliberately: a genuine race where the Qt side of the
+# pair performs its access via an out-of-line interceptor call inside
+# libQt6* is muted — but those reports were already undiagnosable
+# (half-edge, all-stripped frames) and previously cost us the entire test
+# under QSKIP. The narrower race: entries in Groups A–B are kept even
+# where this overlaps: they anchor on Kartend-visible symbols, cost
+# nothing, and document the known shapes individually.
+called_from_lib:libQt6Core.so.6
+# QScrollArea::show() reserved render-thread teardown (see
+# test_viewportschedulermath's former skip rationale).
+called_from_lib:libQt6Gui.so.6
+# QNetworkAccessManager lazy worker-thread start-up window (see
+# test_httpclient's former skip rationale).
+called_from_lib:libQt6Network.so.6
+
+# ─── Group D2: Qt template internals inlined into instrumented binaries ──
+# (Kartend-t9u0o, round 2 — dispatch run 27278690648.) QtConcurrent's kernel
+# machinery is header-only, so it compiles INTO the test binaries where
+# called_from_lib cannot reach. Its task hand-off (QThreadPool queue) and
+# result plumbing are futex-ordered — invisible to TSan — yielding two
+# false-positive shapes. CAUTION for future entries: TSan matches a race
+# suppression against EVERY frame of BOTH racing stacks, and worker-lambda
+# execution stacks always contain RunFunctionTaskBase::run() /
+# threadFunction() / forThreadFunction() — anchoring on any of those (or on
+# the header file names) would mute REAL races in Kartend worker code, which
+# is exactly the coverage this exercise restores. Anchor ONLY on frames that
+# never appear during user-code execution:
+#
+# Task creation vs first virtual call (ctor-write vs vptr-read in
+# RunFunctionTaskBase<T>::run()): the launching thread's operator-new/ctor
+# is futex-ordered against the pool thread's first use. Anchored on the
+# CREATION-side resolver frame (qtconcurrentstoredfunctioncall.h), which has
+# returned before the functor ever runs.
+race:NonPromiseTaskResolver
+# Kernel teardown vs worker wind-down (~MappedEachKernel / ~SequenceHolder1
+# vptr write vs forThreadFunction read; reached only via ThreadEngine::
+# asynchronousFinish after every iteration has completed). Iteration-time
+# frames are deliberately NOT suppressed.
+race:asynchronousFinish
+race:~MappedEachKernel
+race:~SequenceHolder1
+# Pool-reuse COW deref — further specializations of the Group B
+# QArrayDataPointer entries (same rationale; kept template-narrow on
+# purpose: the deref frame is also the top frame of a REAL shared-container
+# race, so each specialization is admitted only after manual triage).
+race:QArrayDataPointer<std::pair<QString, QString>>::deref
+race:QArrayDataPointer<Scraper::MediaAsset>::deref
+# Qt 6.4's QMutex/QReadWriteLock ship __tsan_mutex_* annotations whose
+# recursive/futex semantics confuse TSan's lock modeling: TitleFilter's
+# QReadWriteLock hammering reports "unlock of an unlocked mutex" and the
+# parallel-scan QMutex reports a "double lock" through the deadlock
+# detector (__tsan_mutex_post_lock frame). Scoped to the binaries where
+# they fire — module-name matching works without symbols — instead of
+# disabling report_mutex_bugs / detect_deadlocks suite-wide.
+mutex:test_titlefilter
+
+# ─── Group D3: round-3 anchors (Kartend-t9u0o, dispatch 27279274589) ─────
+# CacheManager construction (make_unique on the main thread,
+# applicationmanager.cpp:72) vs the cache-init lambda's first use on the
+# QtConcurrent pool thread (applicationmanager.cpp:92) — ordering flows
+# through QtConcurrent::run's futex-based queue hand-off, invisible to
+# TSan. Same family as the Group B CacheManager::initialize/~CacheManager
+# entries; the racing frames on BOTH stacks are ApplicationManager::
+# initialize itself, so the anchor lives there.
+race:ApplicationManager::initialize
+# TitleFilter's QReadWriteLock serialises rebuildFromCollections (write
+# lock, QHash swap) against apply (read lock, constFind), but the rwlock's
+# futex/atomic fast path is invisible to TSan — EVERY data-race report
+# between this TU's frames is false by lock-correctness, so race detection
+# in titlefilter.cpp is structurally impossible under TSan (the former
+# QSKIP's rationale, kept as a file-scoped suppression so the suite still
+# RUNS: crashes, asserts and the annotated-mutex modeling stay active).
+race:titlefilter.cpp
+# QtConcurrent kernel iteration-control state (shouldStartThread) and
+# QFuture result-store plumbing (ResultStoreBase::clear inside
+# ~QFutureInterface racing the worker's result store/teardown — also the
+# stack under the QString/char16_t/MediaWriteResult deref variants).
+# Kernel/store-internal frames never appear in a worker lambda's racing
+# stacks, so real worker-code races stay reportable.
+race:shouldStartThread
+race:QtPrivate::ResultStoreBase
+
+# ─── Group D4: round-4 anchors (Kartend-t9u0o, dispatch 27280536991) ─────
+# Queued-connection argument payloads, inline variant of the Group A
+# QMetaType::create entry: Q_ARG copies construct the payload on the
+# posting thread (QMetaTypeForType<T>::getCopyCtr lambda) and the consuming
+# thread destroys it (getDtor lambda) after slot dispatch — ordered by the
+# event-queue mutex TSan can't see. The QMetaTypeForType helper lambdas
+# exist ONLY in this metatype machinery, never in user worker code.
+race:QMetaTypeForType
+# Mapped/filtered-kernel creation vs first worker use — the
+# QtConcurrent::mapped sibling of the Group D2 NonPromiseTaskResolver
+# (QtConcurrent::run) entry: operator-new/ctor inside startMapped on the
+# launching thread vs the kernel's first state read in forThreadFunction.
+# startMapped has returned before any user functor runs.
+race:startMapped
+# QFuture teardown vs the worker's last unlock of the future's internal
+# mutex: ~QFutureWatcher → ~QFutureInterface frees the d-pointer while the
+# worker's QMutexLocker dtor does its relaxed unlock load — refcount-ordered
+# inside Qt, invisible to TSan. ~QFutureInterface appears only during
+# future teardown, never in worker-code racing stacks. Also covers the
+# dialog-dtor shape (watcher teardown vs the decode worker's
+# reportAndMoveResult, Kartend-ie89x). A test-side
+# QThreadPool::waitForDone drain does NOT fix that shape: on an
+# already-idle pool it returns through the futex fast path without a
+# condvar wait, so no happens-before edge is established.
+race:~QFutureInterface
+# DatAuditRunner's pending-hash list: main-thread emplaceBack move-ctor
+# (list construction) vs the mapped() worker's first element read —
+# ordered by the kernel's futex hand-off. MUST stay ctor-qualified: a
+# bare "PendingHash" substring-matches the kernel frames' template args
+# and would mute every genuine DatAudit worker race (Kartend-t9u0o r5).
+race:PendingHash::PendingHash
+# Pool-thread heap recycling: strdup/malloc on one worker vs free on
+# another, every frame stripped libc/libQt6Core — no Kartend frames, and
+# called_from_lib:libQt6Core cannot match because the interceptor caller
+# is libc. No Kartend symbol contains strdup (Kartend-t9u0o r5).
+race:strdup
+# "double lock of a mutex" maps to TSan's mutex: suppression type (a
+# deadlock:-type entry tried first never matched and was removed).
+mutex:test_querymanager_abspath
+
 # ─── Group E: 2026-06-11 test-wave first-TSan-exposure (Kartend-ie89x) ──
-# (D is reserved by the module-scoped group on the Kartend-t9u0o branch.)
-# New test binaries from the Kartend-6x8tn and Kartend-0eeuk waves put two
-# more Qt-internal sync patterns in front of TSan for the first time. Both
-# are instances of the Group A futex-fast-path class, anchored here on the
-# Kartend frames that reach them.
+# New test binaries from the Kartend-6x8tn and Kartend-0eeuk waves put
+# more Qt-internal sync patterns in front of TSan for the first time. All
+# are instances of the Group A futex-fast-path class, anchored on the
+# Kartend frames that reach them (inlined-into-Kartend-TU code compiles
+# into the test binary, so Group D's called_from_lib cannot cover these).
 
 # DirectoryCache::processQueuedDirectories holds a QWriteLocker inside a
 # QtConcurrent::blockingMap worker (uninstrumented libQt6Concurrent
@@ -342,6 +488,14 @@ called_from_lib:libgstreamer-1.0.so
 # The locker is scope-correct (RAII pair in the same lambda body,
 # artworkutils.cpp processQueuedDirectories).
 mutex:*processQueuedDirectories*
+# Module-scoped twin of the entry above for the GitHub runner, where no
+# llvm-symbolizer is installed: frames render as raw offsets, so the
+# symbol pattern above cannot match there (it does match in the
+# symbolized kartend-ci container). Same precedent as
+# mutex:test_titlefilter / mutex:test_querymanager_abspath in Group D —
+# module-name matching works without symbols (nightly-tsan run
+# 27384881162, the only report type firing in this binary).
+mutex:test_coverflowcontroller
 
 # DirectoryCache::schedulePrewarm hands its lambda (std::function) to
 # QThreadPool::start: the GUI thread's allocation-write of the captured
@@ -351,17 +505,8 @@ mutex:*processQueuedDirectories*
 # code path's frames.
 race:*DirectoryCache::schedulePrewarm*
 
-# QFutureWatcher/QFuture destruction on the GUI thread (QObject child
-# teardown in dialog dtors, e.g. ArtworkWizardDialog's per-candidate
-# thumbnail decodes) vs the QtConcurrent worker's reportAndMoveResult.
-# Both sides are serialized by QFutureInterfaceBase's internal QMutex,
-# whose futex fast path provides no TSan-visible edge. The report family
-# has two shapes — ResultStore clear-vs-moveResult, and the d-block
-# free-vs-QMutexPrivate load — both anchored inside ~QFutureInterface.
-# A test-side QThreadPool::waitForDone drain does NOT fix this: on an
-# already-idle pool it returns through the same futex fast path without
-# a condvar wait, so no happens-before edge is established.
-race:*~QFutureInterface*
+# (The dialog-dtor QFutureWatcher teardown family is covered by Group
+# D4's race:~QFutureInterface entry, which carries its rationale.)
 
 # ArtworkWizardDialog::renderCurrent's per-candidate QtConcurrent::run
 # hand-off — the remaining shapes of the same futex-invisible pool-queue

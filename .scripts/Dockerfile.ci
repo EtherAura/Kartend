@@ -14,7 +14,13 @@
 #   # maintenance-check job:
 #   docker run --rm -v "$PWD":/src kartend-ci \
 #     bash -c 'cd /src && .scripts/build.sh --maintenance --format-check'
-#   # thread-sanitizer job (pulseaudio is needed or QtMultimedia tests SIGILL):
+#   # thread-sanitizer job (pulseaudio is needed or QtMultimedia tests SIGILL).
+#   # CAVEAT: containers share the HOST kernel, and TSan's runtime is
+#   # kernel-sensitive — on a bleeding-edge host kernel (observed on 7.0,
+#   # Kartend-t9u0o) every binary reports an instant bogus vptr race at
+#   # startup, with or without ASLR. If a known-green commit fails like that
+#   # here, distrust the host: verify via `gh workflow run nightly-tsan.yml
+#   # --ref <branch>` on the real runner instead.
 #   docker run --rm -v "$PWD":/src kartend-ci bash -c 'cd /src \
 #     && pulseaudio --start --exit-idle-time=-1 && rm -rf build/TSan \
 #     && cmake -S . -B build/TSan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -25,9 +31,12 @@
 #        ctest --test-dir build/TSan --output-on-failure'
 FROM ubuntu:24.04
 
+# libclang-rt-18-dev: clang's static sanitizer runtimes
+# (libclang_rt.tsan-x86_64.a etc.) — without it the thread-sanitizer repro
+# fails at link; libtsan2/libasan8 only cover gcc's shared runtimes.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      clang g++ libtsan2 libasan8 libubsan1 \
+      clang g++ libtsan2 libasan8 libubsan1 libclang-rt-18-dev \
       cmake ninja-build lld ccache git python3 pulseaudio \
       unzip p7zip-full \
       qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \

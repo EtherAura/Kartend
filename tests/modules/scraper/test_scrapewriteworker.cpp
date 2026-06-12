@@ -327,14 +327,6 @@ void TestScrapeWriteWorker::failedWriteLeavesNoMetadataRow() {
 // thread. The property under test is unchanged — destruction alone, with no
 // queued closeConnection, must still remove the connection name.
 void TestScrapeWriteWorker::connectionRemovedOnWorkerDestruction() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Worker self-deletes on its own thread via QThread::finished -> "
-        "deleteLater; QThread::wait() orders that teardown before this thread "
-        "reads connectionNames(), but TSan can't see the happens-before through "
-        "libQt6Core's stripped frames and flags the deferred-delete free as a "
-        "race (the Qt-thread-lifecycle false-positive class documented in "
-        "tests/suppressions/tsan.txt Group B). Runs fully on every non-TSan build.");
-#endif
   const QString connName = QStringLiteral("test_writeworker_lifecycle");
   QVERIFY2(!QSqlDatabase::connectionNames().contains(connName),
            "connection name leaked from a previous run");

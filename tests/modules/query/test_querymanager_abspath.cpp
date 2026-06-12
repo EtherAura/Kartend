@@ -47,24 +47,6 @@ void TestQueryManagerAbsPath::initTestCase() {
 }
 
 void TestQueryManagerAbsPath::scanStoresAbsolutePathAndRelPath() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  // This test enables includeContentSubfolders, so the scan takes the
-  // parallel recursive path (QueryManager::stageFilesystemScan dispatches
-  // DirectoryScanTask runnables onto a QThreadPool). The pool threads'
-  // recycled QString / QStringList COW buffers trip the same pool-reuse
-  // false positive documented for the batch-scraper integration tests:
-  // TSan sees consecutive tasks on a recycled pool thread as racing on
-  // the same heap slot, and the libQt6Core frames around the COW
-  // detach/copy are stripped in Ubuntu 24.04's qt6-base, so no race:
-  // pattern in tests/suppressions/tsan.txt can target them. The abspath /
-  // rel_path invariant this test asserts is also exercised in the
-  // regular build matrix, so gating it under TSan loses no coverage of
-  // the invariant — only of the parallel-dispatch path under the
-  // sanitizer.
-  QSKIP("QtConcurrent pool-reuse false positives with stripped libQt6Core "
-        "frames make the parallel recursive scan un-suppressable under TSan; "
-        "the abspath invariant is covered by the non-TSan builds");
-#endif
   QTemporaryDir mediaDir;
   QVERIFY2(mediaDir.isValid(), "Failed to create temporary media directory");
 

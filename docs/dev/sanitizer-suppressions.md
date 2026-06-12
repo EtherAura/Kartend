@@ -153,6 +153,22 @@ clusters, each tracked by a closed-as-suppressed bd:
   These libraries use their own sync primitives TSan can't observe.
   Re-evaluate on third-party version bumps or when Qt Multimedia
   switches off the GStreamer + PulseAudio backends.
+- **Kartend-t9u0o (Group D + D2–D4, 2026-06-10/11)** — module-scoped
+  entries that re-enabled the 19 QSKIP'd concurrency tests (DatAudit
+  fan-out, parallel scan, BatchScrapeRunner dispatch, HTTP client,
+  ROM hasher and friends) under TSan. `called_from_lib:libQt6Core/
+  libQt6Concurrent/libQt6Network` mutes interceptor events whose caller
+  is inside stripped, uninstrumented Qt (plain loads/stores there are
+  invisible anyway), while Kartend worker bodies — including Qt template
+  code inlined into Kartend TUs — stay fully instrumented. D2–D4 anchor
+  the inline-kernel hand-off shapes (`NonPromiseTaskResolver`,
+  `startMapped`, `QMetaTypeForType`, `~QFutureInterface`) plus
+  binary-scoped `mutex:` entries for Qt 6.4's confusing
+  `__tsan_mutex_*` annotations; round 5 added the ctor-qualified
+  `PendingHash::PendingHash` (a bare name would substring-match kernel
+  template args and mute genuine DatAudit races) and `race:strdup`
+  (pool-thread heap recycling, all frames stripped libc). Re-evaluate
+  on a Qt bump or when CI's Qt ships TSan-instrumented.
 - **Kartend-ie89x (Group E, 2026-06-11)** — first-TSan-exposure entries
   from the Kartend-6x8tn / Kartend-0eeuk test waves (4 entries, all the
   Group A/B futex-invisible-edge classes reached through new code):

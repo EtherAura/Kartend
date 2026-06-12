@@ -440,10 +440,6 @@ void TestHttpClient::hostOutsideAllowlist_isRefusedSynchronously() {
 // path switches on) doesn't stall an ordinary, non-redirecting response.
 void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
-        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
-#endif
   constexpr qint64 kServerTotal = 256;
   FloodingServer server(kServerTotal, /*chunkSize=*/256);
   QVERIFY(server.start());
@@ -481,10 +477,6 @@ void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
 // than merely failed to connect.
 void TestHttpClient::redirectOutsideAllowlist_isRefused() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
-        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
-#endif
   RedirectingServer server;
   QVERIFY(server.start());
   server.setLocation("https://evil.example/pwned");
@@ -520,10 +512,6 @@ void TestHttpClient::redirectOutsideAllowlist_isRefused() {
 // regression that aborted every redirect would fail here, not silently pass.
 void TestHttpClient::redirectToAllowlistedHost_isFollowed() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests below — the lazy "
-        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
-#endif
   RedirectingServer server;
   QVERIFY(server.start());
   // Redirect back to this same server (host 127.0.0.1 is allowlisted) on a
@@ -557,16 +545,6 @@ void TestHttpClient::redirectToAllowlistedHost_isFollowed() {
 
 void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("HttpClient::get spins up QNetworkAccessManager's internal QThread on first call, "
-        "and the QNAM thread start-up window mallocs/frees Qt-internal heap buffers (QByteArray "
-        "/ QArrayData) on the worker while the main thread is still inside drainHost. Qt's "
-        "QThread::start / event-queue mutex synchronisation isn't observable through the "
-        "stripped libQt6Core frames, so TSan flags it as a heap race on each new test process. "
-        "Pre-existing — same pattern tests/suppressions/tsan.txt already documents for other Qt "
-        "queued-connection arg flows. Re-enable once tests/suppressions/tsan.txt grows a "
-        "called_from_lib:libQt6Core-scoped pattern that can match the stripped frames.");
-#endif
   // Cap at 4 KiB. Server will *try* to stream 1 MiB; we expect the
   // abort to fire well before that and the callback to surface
   // ResponseTooLarge.
@@ -605,11 +583,6 @@ void TestHttpClient::responseExceedingCap_returnsResponseTooLargeError() {
 
 void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Same QNetworkAccessManager start-up TSan race as "
-        "responseExceedingCap_returnsResponseTooLargeError above — both tests trip the lazy "
-        "QNAM-thread init in HttpClient::drainHost.");
-#endif
   // Server writes exactly 512 bytes (well under the 64 KiB cap), then
   // closes — the callback should fire with the full body.
   constexpr qint64 kCap = 64 * 1024;
@@ -650,10 +623,6 @@ void TestHttpClient::responseUnderCap_returnsBodySuccessfully() {
 // the token out of the URL line.
 void TestHttpClient::requestHeaders_rideInHeaderBlockNotUrl() {
   SKIP_LOCAL_TLS_SERVER_ON_MACOS();
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("Same QNetworkAccessManager start-up TSan race as the size-cap tests above — the lazy "
-        "QNAM-thread init in HttpClient::drainHost trips it on each new test process.");
-#endif
   CapturingServer server;
   QVERIFY(server.start());
 
