@@ -317,6 +317,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
+      # Same fix as build.yml's windows-build-test job: the manifest pins
+      # builtin-baseline and the runner image's preinstalled C:\vcpkg clone
+      # is often older than that commit (GH006-era v0.0.13 retag failed
+      # here). Baselines are always master commits, so fetching master is
+      # sha-agnostic across future baseline bumps.
+      - name: Sync vcpkg clone to the manifest baseline
+        run: git -C C:\vcpkg fetch origin master
+
       - name: Configure CMake (MSVC + Ninja + vcpkg)
         # KARTEND_BUILD_TESTS=OFF — the release job doesn't gate on tests
         # (build.yml's windows-build-test already gated this commit). Drops
