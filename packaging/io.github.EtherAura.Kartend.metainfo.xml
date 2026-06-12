@@ -37,6 +37,20 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.13" date="2026-06-11">
+      <description>
+        <p>Stability and performance release from a full-codebase audit:</p>
+        <ul>
+          <li>Smoother scrolling and cover flow on very large collections; cover artwork now reliably fills in</li>
+          <li>Scan and database operations retry cleanly under concurrent load; cancelling a scan no longer blocks rescanning</li>
+          <li>Search fixes: literal underscore/percent matching, no more snap-back when clearing a search quickly</li>
+          <li>Gamepad input recovers automatically after a controller disconnects or sleeps</li>
+          <li>Archive-backed items extract off-thread with a progress overlay and a decompression size cap</li>
+          <li>A persistent warning banner appears if credentials ever fall back to unencrypted storage</li>
+          <li>Play statistics are no longer lost when quitting right after launching an item</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.12" date="2026-05-30"/>
     <release version="0.0.11" date="2026-05-26"/>
     <release version="0.0.10" date="2026-05-25"/>
