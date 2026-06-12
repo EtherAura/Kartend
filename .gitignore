@@ -103,3 +103,8 @@ venv/
 # graphify knowledge graph artifacts (generated)
 graphify-out/
 .graphify/
+
+# bd (beads) issue tracker: local-only — full-fidelity data lives in the
+# Dolt DB with its own sync; issue metadata and timestamps must not be
+# mirrored to the public repo (owner decision, 2026-06-12).
+.beads/
