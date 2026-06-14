@@ -129,6 +129,9 @@ private slots:
   void corePathOnlyAppliesToLibretroLaunchers();
   void acceptRejectsShellMetacharacterPaths();
   void gettersTrimWhitespace();
+  void parentPickerDisabledByDefault();
+  void parentPickerOffersNoneAndReturnsSelection();
+  void parentPickerPreselects();
 };
 
 void TestCreateCollectionDialog::initTestCase() {
@@ -271,6 +274,37 @@ void TestCreateCollectionDialog::gettersTrimWhitespace() {
   QCOMPARE(dlg.collectionName(), QStringLiteral("Concerts"));
   QCOMPARE(dlg.contentPath(), QStringLiteral("/media/concerts"));
   QCOMPARE(dlg.collectionType(), QStringLiteral("Video"));
+}
+
+void TestCreateCollectionDialog::parentPickerDisabledByDefault() {
+  // The Settings add-collection flow never enables the picker; the field is
+  // hidden and reports no parent (Kartend-m6qsb.19).
+  CreateCollectionDialog dlg;
+  auto *parent = dlg.findChild<QComboBox *>(QStringLiteral("parentCollectionCombo"));
+  QVERIFY(parent);
+  QVERIFY(dlg.parentCollectionUuid().isEmpty());
+}
+
+void TestCreateCollectionDialog::parentPickerOffersNoneAndReturnsSelection() {
+  CreateCollectionDialog dlg;
+  dlg.setParentCollectionOptions({{QStringLiteral("Concerts"), QStringLiteral("uuid-c")},
+                                  {QStringLiteral("Lectures"), QStringLiteral("uuid-l")}});
+  auto *parent = dlg.findChild<QComboBox *>(QStringLiteral("parentCollectionCombo"));
+  QVERIFY(parent);
+  // Leading "(none)" carries an empty uuid and is the default → no parent.
+  QCOMPARE(parent->itemData(0).toString(), QString());
+  QVERIFY(dlg.parentCollectionUuid().isEmpty());
+  // Picking a real option round-trips its uuid.
+  parent->setCurrentIndex(parent->findData(QStringLiteral("uuid-l")));
+  QCOMPARE(dlg.parentCollectionUuid(), QStringLiteral("uuid-l"));
+}
+
+void TestCreateCollectionDialog::parentPickerPreselects() {
+  CreateCollectionDialog dlg;
+  dlg.setParentCollectionOptions({{QStringLiteral("Concerts"), QStringLiteral("uuid-c")},
+                                  {QStringLiteral("Lectures"), QStringLiteral("uuid-l")}},
+                                 QStringLiteral("uuid-c"));
+  QCOMPARE(dlg.parentCollectionUuid(), QStringLiteral("uuid-c"));
 }
 
 QTEST_MAIN(TestCreateCollectionDialog)

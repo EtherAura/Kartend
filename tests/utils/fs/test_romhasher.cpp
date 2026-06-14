@@ -49,6 +49,8 @@ private slots:
   void hashesInnerRomLargestFile();
   void hashInnerRomAmbiguousMultiDumpReturnsError();
   void archiveMissingPathReturnsError();
+  void hashArchiveMembersHashesEveryFile();
+  void hashArchiveMembersMissingPathReturnsError();
   void hashesSymlinkTargetSameAsDirect();
   void brokenSymlinkReturnsError();
   void extractorCandidates_unzipOnlyOfferedForZip();
@@ -302,6 +304,72 @@ void TestRomHasher::archiveMissingPathReturnsError() {
   auto result = RomHasher::hashArchiveInnerRom(m_dir.filePath("absent.zip"));
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+}
+
+void TestRomHasher::hashArchiveMembersHashesEveryFile() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
+  }
+  if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
+  }
+
+  // Two comparably-sized members + a nested one: exactly the shape
+  // hashArchiveInnerRom refuses (ambiguous multi-dump) and the
+  // archive-per-item audit needs whole (Kartend-m6qsb.7).
+  const QByteArray bytesA = QByteArrayLiteral("AAAAAAAAAAAAAAAA");
+  const QByteArray bytesB = QByteArrayLiteral("BBBBBBBBBBBBBBB");
+  const QByteArray bytesC = QByteArrayLiteral("CCCC");
+  const QString workDir = m_dir.filePath("memberssrc");
+  QVERIFY(QDir().mkpath(workDir + "/extras"));
+  writeFile(workDir + "/part-one.bin", bytesA);
+  writeFile(workDir + "/part-two.bin", bytesB);
+  writeFile(workDir + "/extras/notes.txt", bytesC);
+
+  const QString archivePath = m_dir.filePath("members.zip");
+  QProcess zipProc;
+  zipProc.setWorkingDirectory(workDir);
+  zipProc.start(QStringLiteral("zip"),
+                {QStringLiteral("-q"), QStringLiteral("-r"), archivePath, QStringLiteral(".")});
+  QVERIFY(zipProc.waitForFinished(5000));
+  QCOMPARE(zipProc.exitCode(), 0);
+
+  auto result = RomHasher::hashArchiveMembers(archivePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  const auto members = result.value();
+  QCOMPARE(members.size(), 3);
+
+  bool sawA = false, sawNested = false;
+  for (const RomHasher::MemberResult &m : members) {
+    QVERIFY(!m.memberPath.startsWith(QLatin1Char('/')));
+    if (m.memberPath == QStringLiteral("part-one.bin")) {
+      sawA = true;
+      QCOMPARE(m.hashes.size, qint64(bytesA.size()));
+      QCOMPARE(
+          m.hashes.md5,
+          QString::fromLatin1(QCryptographicHash::hash(bytesA, QCryptographicHash::Md5).toHex()));
+      QCOMPARE(m.hashes.crc, referenceCrc32Hex(bytesA));
+    } else if (m.memberPath == QStringLiteral("extras/notes.txt")) {
+      sawNested = true; // subfolder structure preserved in memberPath
+      QCOMPARE(m.hashes.size, qint64(bytesC.size()));
+    }
+  }
+  QVERIFY(sawA);
+  QVERIFY(sawNested);
+}
+
+void TestRomHasher::hashArchiveMembersMissingPathReturnsError() {
+  auto result = RomHasher::hashArchiveMembers(m_dir.filePath("absent.zip"));
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+  auto empty = RomHasher::hashArchiveMembers(QString());
+  QVERIFY(empty.isError());
+  QCOMPARE(empty.error().code, ErrorUtils::ErrorCode::InvalidArgument);
 }
 
 void TestRomHasher::hashesSymlinkTargetSameAsDirect() {

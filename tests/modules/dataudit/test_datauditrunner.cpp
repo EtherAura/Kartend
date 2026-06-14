@@ -4,9 +4,11 @@
 
 #include <QDir>
 #include <QFile>
+#include <QProcess>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -120,11 +122,16 @@ private slots:
   // run()
   void runEndToEndOverTempFiles();
   void runHonoursIgnoreGlobs();
+  void runFlatLayoutSkipsSubfolders();
+  void runArchivePerItemAuditsMembers();
   void runCancelledBeforeScanReturnsCancelled();
   void runPopulatesHashCache();
 
   // buildCatalogue()
   void buildCatalogueIngestsDat();
+
+  // persistence contract (Kartend-m6qsb.8)
+  void statusIntValuesArePinnedForPersistence();
 
 private:
   static Catalogue twoEntryCatalogue();
@@ -314,6 +321,113 @@ void TestDatAuditRunner::runHonoursIgnoreGlobs() {
   QCOMPARE(out.summary.unknown, 1);
 }
 
+void TestDatAuditRunner::runFlatLayoutSkipsSubfolders() {
+  // Kartend-m6qsb.6: a user-confirmed Flat layout means subfolders are noise
+  // — the walk must not descend. Unknown (the default) keeps the historical
+  // fully-recursive behavior.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  writeFile(dir, QStringLiteral("top.bin"), QByteArrayLiteral("top"));
+  QVERIFY(QDir(dir.path()).mkpath(QStringLiteral("sub")));
+  {
+    QFile nested(dir.filePath(QStringLiteral("sub/nested.bin")));
+    QVERIFY(nested.open(QIODevice::WriteOnly));
+    nested.write("nested");
+  }
+
+  Catalogue c; // empty: every scanned file is Unknown, so totalFiles tells all
+  AuditOptions opts;
+  opts.scanRoots = {dir.path()};
+  const AuditOutput recursive = DatAudit::run(c, opts, nullptr, nullptr, nullptr);
+  QCOMPARE(recursive.summary.totalFiles, 2);
+
+  opts.layout = DatAudit::Layout::Flat;
+  const AuditOutput flat = DatAudit::run(c, opts, nullptr, nullptr, nullptr);
+  QCOMPARE(flat.summary.totalFiles, 1);
+}
+
+void TestDatAuditRunner::runArchivePerItemAuditsMembers() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  // Needs zip to build the fixture and an extractor for RomHasher to read it.
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
+    QSKIP("zip not available — cannot build the archive fixture");
+  }
+  if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    QSKIP("no archive extractor on PATH — RomHasher would error out");
+  }
+
+  // One archive holding the catalogue entry's content (Kartend-m6qsb.7):
+  // under the outer-bytes audit this reported Unknown container + Missing
+  // entry; with layout=ArchivePerItem the MEMBER is the audit unit.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QByteArray content = QByteArrayLiteral("MEMBER-CONTENT-0123456789");
+  const QString srcDir = dir.path() + QStringLiteral("/src");
+  QVERIFY(QDir().mkpath(srcDir));
+  {
+    QFile f(srcDir + QStringLiteral("/Clip One.mkv"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(content);
+  }
+  auto memberHash = RomHasher::hashFile(srcDir + QStringLiteral("/Clip One.mkv"));
+  QVERIFY(memberHash.isOk());
+
+  QProcess zipProc;
+  zipProc.setWorkingDirectory(srcDir);
+  zipProc.start(QStringLiteral("zip"), {QStringLiteral("-q"), dir.path() + "/Clip One.zip",
+                                        QStringLiteral("Clip One.mkv")});
+  QVERIFY(zipProc.waitForFinished(5000));
+  QCOMPARE(zipProc.exitCode(), 0);
+  QVERIFY(QDir(srcDir).removeRecursively()); // only the archive remains
+
+  Catalogue c;
+  c.addRecord(makeRecord(QStringLiteral("Clip One"), QStringLiteral("Clip One.mkv"),
+                         memberHash.value().crc, memberHash.value().md5, memberHash.value().sha1,
+                         memberHash.value().size));
+
+  // Member-cache plumbing needs a migrated DB connection (same in-memory
+  // bootstrap as runPopulatesHashCache).
+  const QString conn = QStringLiteral("test_runner_member_cache");
+  QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+  db.setDatabaseName(QStringLiteral(":memory:"));
+  QVERIFY(db.open());
+  {
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT)")));
+    QVERIFY(q.exec(QStringLiteral("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, "
+                                  "path TEXT, last_modified TEXT)")));
+  }
+  DbMigrations::applySchemaMigrations(db, QStringLiteral("test_runner_member_cache"));
+
+  AuditOptions opts;
+  opts.scanRoots = {dir.path()};
+  opts.layout = DatAudit::Layout::ArchivePerItem;
+  const AuditOutput out = DatAudit::run(c, opts, &db, nullptr, nullptr);
+  QVERIFY(!out.cancelled);
+  QCOMPARE(out.summary.have, 1);    // the member satisfies the entry
+  QCOMPARE(out.summary.missing, 0); // outer-bytes audit reported 1 here
+  QCOMPARE(out.summary.unknown, 0); // and 1 here (the container)
+
+  // The member cache was populated, and a second run is served from it with
+  // identical classification (no re-extraction needed for correctness).
+  {
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("SELECT COUNT(*) FROM archive_member_hash_cache")));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toInt(), 1);
+  }
+  const AuditOutput again = DatAudit::run(c, opts, &db, nullptr, nullptr);
+  QCOMPARE(again.summary.have, 1);
+
+  db.close();
+  db = QSqlDatabase();
+  QSqlDatabase::removeDatabase(conn);
+}
+
 void TestDatAuditRunner::runCancelledBeforeScanReturnsCancelled() {
   QTemporaryDir dir;
   QVERIFY(dir.isValid());
@@ -500,6 +614,21 @@ void TestDatAuditRunner::classify1G1R_keepsMultiDiscSeparate() {
       QCOMPARE(r.gameName, QStringLiteral("FF7 (USA) (Disc 2)"));
     }
   }
+}
+
+void TestDatAuditRunner::statusIntValuesArePinnedForPersistence() {
+  // dat_audit_result.status persists these as plain ints (the profile store
+  // sits below this module in the layering DAG and can't see the enum), so
+  // reordering Status silently re-labels every stored snapshot. If this test
+  // fails you are changing the on-disk meaning — add a DB migration or map
+  // explicitly instead.
+  QCOMPARE(static_cast<int>(Status::Have), 0);
+  QCOMPARE(static_cast<int>(Status::WrongName), 1);
+  QCOMPARE(static_cast<int>(Status::WrongHash), 2);
+  QCOMPARE(static_cast<int>(Status::Duplicate), 3);
+  QCOMPARE(static_cast<int>(Status::Unknown), 4);
+  QCOMPARE(static_cast<int>(Status::Corrupt), 5);
+  QCOMPARE(static_cast<int>(Status::Missing), 6);
 }
 
 QTEST_MAIN(TestDatAuditRunner)

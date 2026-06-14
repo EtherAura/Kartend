@@ -319,6 +319,18 @@ kartend_add_test(NAME DatAuditProfileDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-m6qsb.18: DAT-library review optional-association combo
+kartend_add_test(NAME DatLibraryReviewDialog
+  SOURCES ui/dialogs/test_datlibraryreviewdialog.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# Kartend-m6qsb.20: audit-result status tint mapping
+kartend_add_test(NAME DatAuditResultDelegate
+  SOURCES ui/dialogs/test_datauditresultdelegate.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-4mqkof: ConfigurationPanel DAT-audit wiring — the "last audited" label
 # computes the canonical collection UUID + renders relative time, and the "Open
 # DAT Audit…" button routes through the SettingsModel hook with the current
@@ -922,6 +934,12 @@ kartend_add_test(NAME DatAuditProfile
   LINK kartend_utils
 )
 
+# DatLibraryState tests (dismissal persistence, Kartend-m6qsb.5)
+kartend_add_test(NAME DatLibraryState
+  SOURCES utils/db/test_datlibrarystate.cpp
+  LINK kartend_utils
+)
+
 # ItemMetadata storage round-trip tests
 kartend_add_test(NAME ItemMetadata
   SOURCES utils/db/test_itemmetadata.cpp
@@ -1155,9 +1173,51 @@ kartend_add_test(NAME DatCache
   LINK kartend_data kartend_api kartend_utils
 )
 
+# DatCollectionMatch tests (pure DAT-to-collection match scoring)
+kartend_add_test(NAME DatCollectionMatch
+  SOURCES modules/dat/test_datcollectionmatch.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# DatLibraryScan tests (watched-folder proposals, Kartend-m6qsb.5)
+kartend_add_test(NAME DatLibraryScan
+  SOURCES modules/dat/test_datlibraryscan.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# NoIntroParse tests (DAT-o-MATIC page parsing, Kartend-m6qsb.16)
+kartend_add_test(NAME NoIntroParse
+  SOURCES modules/dat/test_nointroparse.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# NoIntroDownloader tests (pack extraction; network flow is runtime-gated)
+kartend_add_test(NAME NoIntroDownloader
+  SOURCES modules/dat/test_nointrodownloader.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# DatPackImport tests (source-agnostic import, Kartend-m6qsb.22)
+kartend_add_test(NAME DatPackImport
+  SOURCES modules/dat/test_datpackimport.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# RedumpParse tests (redump.org systems-index parsing, Kartend-m6qsb.23)
+kartend_add_test(NAME RedumpParse
+  SOURCES modules/dat/test_redumpparse.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatAudit engine tests (Catalogue + classify + run + buildCatalogue)
 kartend_add_test(NAME DatAuditRunner
   SOURCES modules/dataudit/test_datauditrunner.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# DatAudit layout probe tests (folder-structure detection, Kartend-m6qsb.6)
+kartend_add_test(NAME DatAuditLayout
+  SOURCES modules/dataudit/test_datauditlayout.cpp
   LINK kartend_data kartend_api kartend_utils
 )
 

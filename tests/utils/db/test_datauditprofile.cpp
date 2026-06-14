@@ -53,6 +53,13 @@ private slots:
   void touchLastScanStampsTime();
   void insertRejectsEmptyName();
   void enumStringMappingsRoundTrip();
+  void loadByCollectionUuidPicksMostRecentlyUpdated();
+  void loadByCollectionUuidTieBreaksOnId();
+  void loadByCollectionUuidEmptyWhenNoneLinked();
+  void loadByCollectionUuidRejectsEmptyUuid();
+  void replaceResultsWritesAndRewritesSnapshot();
+  void loadResultSummaryCountsByStatus();
+  void loadResultSummaryDistinguishesNeverFromEmpty();
 
 private:
   QSqlDatabase m_db;
@@ -75,6 +82,8 @@ Profile TestDatAuditProfile::sampleProfile() {
   p.ignoreRules = {QStringLiteral("*.txt")};
   p.fixMode = FixMode::ManagedOutput;
   p.managedOutputRoot = QStringLiteral("/sorted");
+  p.detectedLayout = QStringLiteral("archive_per_item");
+  p.layoutConfirmed = true;
   DatRef d1;
   d1.path = QStringLiteral("/dats/nointro.dat");
   d1.mtimeMs = 111;
@@ -125,6 +134,8 @@ void TestDatAuditProfile::insertAndLoadRoundTrip() {
   QCOMPARE(out.ignoreRules, in.ignoreRules);
   QCOMPARE(out.fixMode, in.fixMode);
   QCOMPARE(out.managedOutputRoot, in.managedOutputRoot);
+  QCOMPARE(out.detectedLayout, in.detectedLayout);
+  QCOMPARE(out.layoutConfirmed, in.layoutConfirmed);
   QCOMPARE(out.dats.size(), 2);
   // Order preserved by the position column.
   QCOMPARE(out.dats.at(0).path, in.dats.at(0).path);
@@ -243,6 +254,164 @@ void TestDatAuditProfile::enumStringMappingsRoundTrip() {
   // Unknown strings fall back to the safe defaults.
   QCOMPARE(DatAuditProfile::fixModeFromString(QStringLiteral("garbage")), FixMode::InPlace);
   QCOMPARE(DatAuditProfile::mergeModeFromString(QStringLiteral("garbage")), MergeMode::Split);
+}
+
+void TestDatAuditProfile::loadByCollectionUuidPicksMostRecentlyUpdated() {
+  Profile a = sampleProfile();
+  a.name = QStringLiteral("Older");
+  Profile b = sampleProfile();
+  b.name = QStringLiteral("Newer");
+  auto insA = DatAuditProfile::insert(m_db, a);
+  auto insB = DatAuditProfile::insert(m_db, b);
+  QVERIFY(insA.isOk());
+  QVERIFY(insB.isOk());
+
+  // Pin updated_at directly — both inserts land within the same millisecond
+  // on a fast machine, so stamping through the public API would be flaky.
+  QSqlQuery q(m_db);
+  q.prepare(QStringLiteral("UPDATE dat_audit_profile SET updated_at_unix_ms = ? WHERE id = ?"));
+  q.bindValue(0, qint64(1000));
+  q.bindValue(1, insB.value());
+  QVERIFY(q.exec());
+  q.bindValue(0, qint64(2000));
+  q.bindValue(1, insA.value());
+  QVERIFY(q.exec());
+
+  auto linked = DatAuditProfile::loadByCollectionUuid(m_db, QStringLiteral("uuid-123"));
+  QVERIFY(linked.isOk());
+  QVERIFY(linked.value().has_value());
+  QCOMPARE(linked.value()->id, insA.value());
+  QCOMPARE(linked.value()->name, QStringLiteral("Older"));
+  // DAT child rows come along, same as load().
+  QCOMPARE(linked.value()->dats.size(), 2);
+}
+
+void TestDatAuditProfile::loadByCollectionUuidTieBreaksOnId() {
+  auto insA = DatAuditProfile::insert(m_db, sampleProfile());
+  auto insB = DatAuditProfile::insert(m_db, sampleProfile());
+  QVERIFY(insA.isOk());
+  QVERIFY(insB.isOk());
+
+  QSqlQuery q(m_db);
+  QVERIFY(q.exec(QStringLiteral("UPDATE dat_audit_profile SET updated_at_unix_ms = 5000")));
+
+  auto linked = DatAuditProfile::loadByCollectionUuid(m_db, QStringLiteral("uuid-123"));
+  QVERIFY(linked.isOk());
+  QVERIFY(linked.value().has_value());
+  QCOMPARE(linked.value()->id, insB.value());
+}
+
+void TestDatAuditProfile::loadByCollectionUuidEmptyWhenNoneLinked() {
+  QVERIFY(DatAuditProfile::insert(m_db, sampleProfile()).isOk());
+  auto linked = DatAuditProfile::loadByCollectionUuid(m_db, QStringLiteral("no-such-uuid"));
+  QVERIFY(linked.isOk());
+  QVERIFY(!linked.value().has_value());
+}
+
+void TestDatAuditProfile::loadByCollectionUuidRejectsEmptyUuid() {
+  // '' means "not linked" in the schema — matching it would return an
+  // arbitrary unlinked profile, so the store rejects it outright.
+  Profile unlinked = sampleProfile();
+  unlinked.collectionUuid.clear();
+  QVERIFY(DatAuditProfile::insert(m_db, unlinked).isOk());
+  auto linked = DatAuditProfile::loadByCollectionUuid(m_db, QString());
+  QVERIFY(linked.isError());
+  QVERIFY(linked.hasErrorCode(ErrorUtils::ErrorCode::InvalidArgument));
+}
+
+void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
+  auto ins = DatAuditProfile::insert(m_db, sampleProfile());
+  QVERIFY(ins.isOk());
+  const qint64 id = ins.value();
+
+  QList<DatAuditProfile::ResultRow> first;
+  DatAuditProfile::ResultRow a;
+  a.entryKey = QStringLiteral("file:/media/clip-one.mkv");
+  a.status = 0; // Have
+  a.filePath = QStringLiteral("/media/clip-one.mkv");
+  a.detail = QStringLiteral("Clip One.mkv");
+  DatAuditProfile::ResultRow b;
+  b.entryKey = QStringLiteral("entry:Clip Two.mkv");
+  b.status = 6; // Missing
+  first << a << b;
+  QVERIFY(DatAuditProfile::replaceResults(m_db, id, first).isOk());
+
+  QSqlQuery q(m_db);
+  q.prepare(QStringLiteral("SELECT COUNT(*) FROM dat_audit_result WHERE profile_id = ?"));
+  q.addBindValue(id);
+  QVERIFY(q.exec() && q.next());
+  QCOMPARE(q.value(0).toInt(), 2);
+
+  // A re-run is a full re-statement: the old snapshot must vanish wholesale,
+  // not merge with the new rows.
+  QList<DatAuditProfile::ResultRow> second{a};
+  QVERIFY(DatAuditProfile::replaceResults(m_db, id, second).isOk());
+  QVERIFY(q.exec() && q.next());
+  QCOMPARE(q.value(0).toInt(), 1);
+
+  // Duplicate entry keys within one snapshot collapse (INSERT OR REPLACE)
+  // instead of failing the whole write on the primary key.
+  QList<DatAuditProfile::ResultRow> dup{a, a};
+  QVERIFY(DatAuditProfile::replaceResults(m_db, id, dup).isOk());
+  QVERIFY(q.exec() && q.next());
+  QCOMPARE(q.value(0).toInt(), 1);
+
+  // Invalid profile id is rejected.
+  QVERIFY(DatAuditProfile::replaceResults(m_db, -1, first).isError());
+}
+
+void TestDatAuditProfile::loadResultSummaryCountsByStatus() {
+  auto ins = DatAuditProfile::insert(m_db, sampleProfile());
+  QVERIFY(ins.isOk());
+  const qint64 id = ins.value();
+
+  QList<DatAuditProfile::ResultRow> rows;
+  for (int i = 0; i < 3; ++i) {
+    DatAuditProfile::ResultRow r;
+    r.entryKey = QStringLiteral("file:/media/have-%1.mkv").arg(i);
+    r.status = 0; // Have
+    rows << r;
+  }
+  DatAuditProfile::ResultRow miss;
+  miss.entryKey = QStringLiteral("entry:Clip Gone.mkv");
+  miss.status = 6; // Missing
+  rows << miss;
+  QVERIFY(DatAuditProfile::replaceResults(m_db, id, rows).isOk());
+  QVERIFY(DatAuditProfile::touchLastScan(m_db, id, 777).isOk());
+
+  auto summary = DatAuditProfile::loadResultSummary(m_db, id);
+  QVERIFY(summary.isOk());
+  QVERIFY(summary.value().has_value());
+  QCOMPARE(summary.value()->lastScanAtMs, qint64(777));
+  QVERIFY(summary.value()->hasResults);
+  QCOMPARE(summary.value()->count(0), 3);
+  QCOMPARE(summary.value()->count(6), 1);
+  QCOMPARE(summary.value()->count(4), 0); // status never written → 0, not error
+}
+
+void TestDatAuditProfile::loadResultSummaryDistinguishesNeverFromEmpty() {
+  auto ins = DatAuditProfile::insert(m_db, sampleProfile());
+  QVERIFY(ins.isOk());
+  const qint64 id = ins.value();
+
+  // Never audited: profile exists, no stamp, no rows.
+  auto never = DatAuditProfile::loadResultSummary(m_db, id);
+  QVERIFY(never.isOk());
+  QVERIFY(never.value().has_value());
+  QVERIFY(!never.value()->hasResults);
+  QCOMPARE(never.value()->lastScanAtMs, qint64(0));
+
+  // Audited-but-empty: a stamp with zero rows still reads as "has results"
+  // (auditing an empty folder is a legitimate completed audit).
+  QVERIFY(DatAuditProfile::touchLastScan(m_db, id, 123).isOk());
+  auto empty = DatAuditProfile::loadResultSummary(m_db, id);
+  QVERIFY(empty.isOk());
+  QVERIFY(empty.value()->hasResults);
+
+  // Absent profile: empty optional, not an error.
+  auto absent = DatAuditProfile::loadResultSummary(m_db, 999999);
+  QVERIFY(absent.isOk());
+  QVERIFY(!absent.value().has_value());
 }
 
 QTEST_MAIN(TestDatAuditProfile)

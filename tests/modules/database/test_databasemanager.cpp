@@ -359,7 +359,7 @@ void TestDatabaseManager::testMigrateCollectionUuid_mergesConflictsAndChildTable
   QSqlDatabase insp = openInspector();
   QVERIFY(insp.isValid() && insp.isOpen());
   for (const char *t : {"items", "collections", "item_metadata", "item_artwork", "launch_history",
-                        "playlist_items", "playlists"}) {
+                        "playlist_items", "playlists", "dat_audit_profile"}) {
     QVERIFY(runSql(insp, QStringLiteral("DELETE FROM %1").arg(t)));
   }
 
@@ -386,11 +386,16 @@ void TestDatabaseManager::testMigrateCollectionUuid_mergesConflictsAndChildTable
                        "VALUES ('p1', 'PL', 'old-uuid')"));
   QVERIFY(runSql(insp, "INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
                        "source_path, added_at) VALUES ('p1', 0, 'old-uuid', '/m/a.bin', 'x')"));
+  // A linked DAT-audit profile must ride along too — omitting it from the
+  // re-key list silently severed the link on every rename (Kartend-m6qsb.1).
+  QVERIFY(runSql(insp, "INSERT INTO dat_audit_profile (name, collection_uuid) "
+                       "VALUES ('Audit', 'old-uuid')"));
 
   db.migrateCollectionUuid(QStringLiteral("old-uuid"), QStringLiteral("new-uuid"));
 
   // Nothing left under the old uuid anywhere.
-  for (const char *t : {"items", "item_metadata", "item_artwork", "launch_history"}) {
+  for (const char *t :
+       {"items", "item_metadata", "item_artwork", "launch_history", "dat_audit_profile"}) {
     QCOMPARE(
         scalar(insp,
                QStringLiteral("SELECT COUNT(*) FROM %1 WHERE collection_uuid='old-uuid'").arg(t)),
@@ -416,6 +421,8 @@ void TestDatabaseManager::testMigrateCollectionUuid_mergesConflictsAndChildTable
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM item_metadata WHERE collection_uuid='new-uuid'"), 1);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM item_artwork WHERE collection_uuid='new-uuid'"), 1);
   QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM launch_history WHERE collection_uuid='new-uuid'"), 1);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM dat_audit_profile WHERE collection_uuid='new-uuid'"),
+           1);
   QCOMPARE(
       scalar(insp, "SELECT COUNT(*) FROM playlist_items WHERE source_collection_uuid='new-uuid'"),
       1);

@@ -12,6 +12,7 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
+#include "imainwindow.h"
 #include "pathutils.h"
 
 #include <QApplication>
@@ -59,7 +60,7 @@ void TestConfigurationPanel::lastAuditedLabel_neverWhenNoHook() {
   SettingsModel model;
   model.workingCollections = &cols;
   model.currentIndex = &idx;
-  // No lastDatAuditMs hook (tests / standalone) → the label degrades to "never".
+  // No datAuditStatus hook (tests / standalone) → the label degrades to "never".
   panel.setModel(&model);
   panel.load();
 
@@ -75,7 +76,9 @@ void TestConfigurationPanel::lastAuditedLabel_neverWhenHookReturnsZero() {
   SettingsModel model;
   model.workingCollections = &cols;
   model.currentIndex = &idx;
-  model.lastDatAuditMs = [](const QString &) -> qint64 { return 0; }; // never audited
+  model.datAuditStatus = [](const QString &) {
+    return IMainWindow::DatAuditStatus{}; // never audited
+  };
   panel.setModel(&model);
   panel.load();
 
@@ -95,9 +98,14 @@ void TestConfigurationPanel::lastAuditedLabel_usesCanonicalUuidAndShowsRelative(
   SettingsModel model;
   model.workingCollections = &cols;
   model.currentIndex = &idx;
-  model.lastDatAuditMs = [&seenUuid](const QString &uuid) -> qint64 {
+  model.datAuditStatus = [&seenUuid](const QString &uuid) {
     seenUuid = uuid;
-    return QDateTime::currentMSecsSinceEpoch() - 3LL * 60 * 60 * 1000; // ~3 hours ago
+    IMainWindow::DatAuditStatus s;
+    s.lastScanMs = QDateTime::currentMSecsSinceEpoch() - 3LL * 60 * 60 * 1000; // ~3 hours ago
+    s.hasResults = true;
+    s.present = 12;
+    s.missing = 3;
+    return s;
   };
   panel.setModel(&model);
   panel.load();
@@ -110,6 +118,9 @@ void TestConfigurationPanel::lastAuditedLabel_usesCanonicalUuidAndShowsRelative(
   QVERIFY(label);
   QVERIFY(label->text() != QStringLiteral("never")); // a real timestamp → a relative string
   QVERIFY(label->text().contains(QStringLiteral("ago")));
+  // Persisted snapshot counts ride along (Kartend-m6qsb.8).
+  QVERIFY(label->text().contains(QStringLiteral("12 present")));
+  QVERIFY(label->text().contains(QStringLiteral("3 missing")));
 }
 
 void TestConfigurationPanel::openAuditButton_passesWorkingCopyWithUnsavedEdits() {

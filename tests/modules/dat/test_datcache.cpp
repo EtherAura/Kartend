@@ -16,6 +16,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QList>
+#include <QSqlQuery>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
@@ -93,6 +94,10 @@ private slots:
   void clearAllWipesEverything();
   void invalidSourceHandleSkipsLookup();
   void multipleSourcesCoexistInOneCache();
+  void peekReturnsCachedRowWithoutIngesting();
+  void peekMissesUningestedAndStaysCheap();
+  void headerMetadataRoundTripsThroughCache();
+  void schemaBumpWipesOldCache();
   void forEachRecordStreamsAllRecords();
   void forEachRecordInvalidSourceReturnsFalse();
 
@@ -335,6 +340,128 @@ void TestDatCache::multipleSourcesCoexistInOneCache() {
   const QString bSha1 = QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181");
   QVERIFY(store.lookup(sourceB.value(), QString(), bSha1, QString()).has_value());
   QVERIFY(!store.lookup(sourceA.value(), QString(), bSha1, QString()).has_value());
+}
+
+void TestDatCache::peekReturnsCachedRowWithoutIngesting() {
+  writeDat(datPath(), kLogiqxDat);
+  DatCache::Store store(cachePath());
+
+  auto ingested = store.openOrIngest(datPath());
+  QVERIFY(ingested.isOk());
+
+  // Once ingested, peek serves the same row read-only.
+  auto peeked = store.peek(datPath());
+  QVERIFY(peeked.has_value());
+  QCOMPARE(peeked->id, ingested.value().id);
+  QCOMPARE(peeked->dialect, DatLookup::Dialect::Logiqx);
+  QCOMPARE(peeked->recordCount, 2);
+
+  // peek reports the row even when the file has changed on disk since
+  // ingest — the caller reads the mtime delta as staleness, and only
+  // openOrIngest re-ingests.
+  const QDateTime originalMtime = QFileInfo(datPath()).lastModified();
+  auto stampAdvanced = [&]() -> bool {
+    writeDat(datPath(), kLogiqxDatEdited);
+    return QFileInfo(datPath()).lastModified() != originalMtime;
+  };
+  QTRY_VERIFY_WITH_TIMEOUT(stampAdvanced(), 5000);
+  auto stale = store.peek(datPath());
+  QVERIFY(stale.has_value());
+  QCOMPARE(stale->id, ingested.value().id);
+  QCOMPARE(stale->recordCount, 2); // still the pre-edit count: nothing re-ingested
+  QVERIFY(stale->mtimeUnixMs != QFileInfo(datPath()).lastModified().toMSecsSinceEpoch());
+}
+
+void TestDatCache::peekMissesUningestedAndStaysCheap() {
+  writeDat(datPath(), kLogiqxDat);
+  DatCache::Store store(cachePath());
+
+  // Never ingested → nullopt, and — the whole point of peek — the DAT
+  // must NOT get parsed/ingested as a side effect.
+  QVERIFY(!store.peek(datPath()).has_value());
+  QVERIFY(!store.peek(datPath()).has_value()); // still a miss: no ingest happened
+
+  // Defensive paths: empty and missing files are misses, not errors.
+  QVERIFY(!store.peek(QString()).has_value());
+  QVERIFY(!store.peek(m_dir.filePath("does-not-exist.dat")).has_value());
+}
+
+void TestDatCache::headerMetadataRoundTripsThroughCache() {
+  constexpr const char *withHeader = R"xml(<?xml version="1.0"?>
+<datafile>
+  <header>
+    <name>Reference Video Set</name>
+    <description>Reference Video Set - curated</description>
+    <version>3.1</version>
+  </header>
+  <game name="Clip One">
+    <rom name="Clip One.mkv" size="1" crc="deadbeef"/>
+  </game>
+</datafile>
+)xml";
+  writeDat(datPath(), withHeader);
+  DatCache::Store store(cachePath());
+
+  // Populated at ingest…
+  auto ingested = store.openOrIngest(datPath());
+  QVERIFY(ingested.isOk());
+  QCOMPARE(ingested.value().headerName, QStringLiteral("Reference Video Set"));
+  QCOMPARE(ingested.value().headerDescription, QStringLiteral("Reference Video Set - curated"));
+  QCOMPARE(ingested.value().headerVersion, QStringLiteral("3.1"));
+
+  // …served on the cache-hit path…
+  auto hit = store.openOrIngest(datPath());
+  QVERIFY(hit.isOk());
+  QCOMPARE(hit.value().headerName, QStringLiteral("Reference Video Set"));
+
+  // …and on the read-only peek. The header is what the DAT-library
+  // matcher identifies catalogues by, so all three access paths agree.
+  auto peeked = store.peek(datPath());
+  QVERIFY(peeked.has_value());
+  QCOMPARE(peeked->headerName, QStringLiteral("Reference Video Set"));
+  QCOMPARE(peeked->headerVersion, QStringLiteral("3.1"));
+
+  // A headerless DAT round-trips as empty strings, not NULLs/errors. Use a
+  // DISTINCT path so the (path, mtime) cache key can't serve the Logiqx row
+  // above when the rewrite lands in the same millisecond (the cache keys on
+  // path+mtime, not contents).
+  const QString mamePath = m_dir.filePath(QStringLiteral("mame.dat"));
+  writeDat(mamePath, kMameDat); // no <header> — synthesised name + build version
+  auto mame = store.openOrIngest(mamePath);
+  QVERIFY(mame.isOk());
+  QCOMPARE(mame.value().headerName, QStringLiteral("MAME"));
+  QCOMPARE(mame.value().headerVersion, QStringLiteral("0.250"));
+  QVERIFY(mame.value().headerDescription.isEmpty());
+}
+
+void TestDatCache::schemaBumpWipesOldCache() {
+  // The cache is throwaway: a user_version mismatch (older build's file)
+  // must drop the tables and rebuild, never attempt per-version migration.
+  writeDat(datPath(), kLogiqxDat);
+  {
+    DatCache::Store store(cachePath());
+    QVERIFY(store.openOrIngest(datPath()).isOk());
+    QVERIFY(store.peek(datPath()).has_value());
+  }
+  {
+    // Simulate a previous-version cache file by rewinding user_version.
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
+                                                QStringLiteral("test_datcache_rewind"));
+    db.setDatabaseName(cachePath());
+    QVERIFY(db.open());
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("PRAGMA user_version = 1")));
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(QStringLiteral("test_datcache_rewind"));
+
+  DatCache::Store reopened(cachePath());
+  QVERIFY(reopened.isOpen());
+  // The old ingest is gone (tables were wiped on the version mismatch)…
+  QVERIFY(!reopened.peek(datPath()).has_value());
+  // …and a fresh ingest works against the rebuilt schema.
+  QVERIFY(reopened.openOrIngest(datPath()).isOk());
+  QVERIFY(reopened.peek(datPath()).has_value());
 }
 
 void TestDatCache::invalidSourceHandleSkipsLookup() {

@@ -40,6 +40,10 @@ private slots:
   void parseDatDispatchesByRoot();
   void parseDatErrorsOnUnknownRoot();
   void loadStoreFromFileTagsDialect();
+  void probeHeaderReadsLogiqxHeaderFields();
+  void probeHeaderHandlesHeaderlessAndUnknown();
+  void probeHeaderSynthesisesMameMetadata();
+  void probeHeaderFromFileReadsBoundedPrefix();
 
 private:
   QTemporaryDir m_dir;
@@ -360,6 +364,97 @@ void TestDatLookup::loadStoreFromFileTagsDialect() {
   QCOMPARE(mame.value().detectedDialect(), DatLookup::Dialect::Mame);
   QVERIFY(mame.value().lookupBySha1(QStringLiteral("e87e059c5be45753f7e9f33dff851f16d6751181")) !=
           nullptr);
+}
+
+void TestDatLookup::probeHeaderReadsLogiqxHeaderFields() {
+  constexpr const char *withHeader = R"xml(<?xml version="1.0"?>
+<datafile>
+  <header>
+    <name>Reference Audio Masters</name>
+    <description>Reference Audio Masters - lossless set</description>
+    <version>2026-05-01</version>
+    <author>somebody</author>
+  </header>
+  <game name="Recording Alpha">
+    <rom name="Recording Alpha.flac" size="1" crc="deadbeef"/>
+  </game>
+</datafile>
+)xml";
+  const auto h = DatLookup::probeHeader(QByteArray(withHeader));
+  QCOMPARE(h.dialect, DatLookup::Dialect::Logiqx);
+  QCOMPARE(h.name, QStringLiteral("Reference Audio Masters"));
+  QCOMPARE(h.description, QStringLiteral("Reference Audio Masters - lossless set"));
+  QCOMPARE(h.version, QStringLiteral("2026-05-01"));
+}
+
+void TestDatLookup::probeHeaderHandlesHeaderlessAndUnknown() {
+  // <header> is optional in Logiqx — the probe must stop at the first
+  // <game> with empty fields, not scan the record list hoping for one.
+  constexpr const char *headerless = R"xml(<?xml version="1.0"?>
+<datafile>
+  <game name="Recording Alpha">
+    <rom name="Recording Alpha.flac" size="1" crc="deadbeef"/>
+  </game>
+</datafile>
+)xml";
+  const auto h = DatLookup::probeHeader(QByteArray(headerless));
+  QCOMPARE(h.dialect, DatLookup::Dialect::Logiqx);
+  QVERIFY(h.name.isEmpty());
+  QVERIFY(h.description.isEmpty());
+  QVERIFY(h.version.isEmpty());
+
+  // Unrecognised / non-XML bytes are an answer ("not a DAT"), not an error.
+  const auto unknown = DatLookup::probeHeader(QByteArrayLiteral("not xml at all"));
+  QCOMPARE(unknown.dialect, DatLookup::Dialect::Unknown);
+  QVERIFY(unknown.name.isEmpty());
+  const auto wrongRoot = DatLookup::probeHeader(QByteArrayLiteral("<html><body/></html>"));
+  QCOMPARE(wrongRoot.dialect, DatLookup::Dialect::Unknown);
+}
+
+void TestDatLookup::probeHeaderSynthesisesMameMetadata() {
+  constexpr const char *mame = R"xml(<?xml version="1.0"?>
+<mame build="0.250 (mame0250)">
+  <machine name="alpha"><rom name="a.bin" size="1" crc="deadbeef"/></machine>
+</mame>
+)xml";
+  const auto h = DatLookup::probeHeader(QByteArray(mame));
+  QCOMPARE(h.dialect, DatLookup::Dialect::Mame);
+  QCOMPARE(h.name, QStringLiteral("MAME"));
+  QCOMPARE(h.version, QStringLiteral("0.250 (mame0250)"));
+  QVERIFY(h.description.isEmpty());
+}
+
+void TestDatLookup::probeHeaderFromFileReadsBoundedPrefix() {
+  // A file whose header sits at the top followed by a record body far
+  // larger than the 256 KiB probe window: the header must come back intact
+  // even though the file is never read in full (a truncated record list is
+  // invisible to a header-only probe).
+  const QString path = m_dir.filePath("big.dat");
+  {
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(R"xml(<?xml version="1.0"?>
+<datafile>
+  <header><name>Big Video Catalogue</name><version>7</version></header>
+)xml");
+    for (int i = 0; i < 20000; ++i) {
+      f.write(QStringLiteral("  <game name=\"Clip %1\"><rom name=\"Clip %1.mkv\" size=\"1\" "
+                             "crc=\"deadbeef\"/></game>\n")
+                  .arg(i)
+                  .toUtf8());
+    }
+    f.write("</datafile>\n");
+    QVERIFY(f.size() > 512 * 1024); // body comfortably exceeds the probe window
+  }
+  const auto h = DatLookup::probeHeaderFromFile(path);
+  QCOMPARE(h.dialect, DatLookup::Dialect::Logiqx);
+  QCOMPARE(h.name, QStringLiteral("Big Video Catalogue"));
+  QCOMPARE(h.version, QStringLiteral("7"));
+
+  // Error paths: missing file / empty path probe as Unknown.
+  QCOMPARE(DatLookup::probeHeaderFromFile(m_dir.filePath("absent.dat")).dialect,
+           DatLookup::Dialect::Unknown);
+  QCOMPARE(DatLookup::probeHeaderFromFile(QString()).dialect, DatLookup::Dialect::Unknown);
 }
 
 QTEST_MAIN(TestDatLookup)

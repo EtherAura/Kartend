@@ -444,6 +444,7 @@ void TestSettingsPersistenceRoundtrip::scraperOptions() {
   in.hashMode = ScraperOptions::ScraperHashMode::SizeGated;
   in.maxHashableSizeMB += 1;
   in.regionSource = ScraperOptions::ScraperRegionSource::FilenameWhenAvailable;
+  in.datLibraryPath = QStringLiteral("/library/catalogues"); // load trims
   verifyRoundTrip("ScraperOptions", in, ScraperSettingsPersistence::saveOptions,
                   ScraperSettingsPersistence::loadOptions);
 }

@@ -21,6 +21,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QList>
+#include <QPushButton>
 #include <QTest>
 
 class TestDatAuditProfileDialog : public QObject {
@@ -33,6 +34,9 @@ private slots:
   void preservesLinkWhenNoCollectionsSupplied();
   void selectingACollectionStoresItsUuid();
   void selectingNoneClearsLink();
+  void linkingDerivesListsAndLocksEditors();
+  void unlinkingUnlocksEditors();
+  void orphanLinkKeepsSeedListsLocked();
 };
 
 namespace {
@@ -56,6 +60,17 @@ QComboBox *linkedCombo(const QWidget &dlg) {
   for (QComboBox *c : combos) {
     if (c->count() > 0 && c->itemText(0) == QStringLiteral("(none)")) {
       return c;
+    }
+  }
+  return nullptr;
+}
+
+// The Add-button of a path group, found by its label text.
+QPushButton *buttonByText(const QWidget &dlg, const QString &text) {
+  const auto buttons = dlg.findChildren<QPushButton *>();
+  for (QPushButton *b : buttons) {
+    if (b->text() == text) {
+      return b;
     }
   }
   return nullptr;
@@ -139,6 +154,80 @@ void TestDatAuditProfileDialog::selectingNoneClearsLink() {
   QVERIFY(combo);
   combo->setCurrentIndex(0); // "(none)"
   QVERIFY(dlg.profile().collectionUuid.isEmpty());
+}
+
+void TestDatAuditProfileDialog::linkingDerivesListsAndLocksEditors() {
+  // Kartend-m6qsb.2: linking a collection makes the collection's settings
+  // canonical — the editor's lists repopulate from it and lock.
+  CollectionConfig c = makeCollection(QStringLiteral("Concerts"), QStringLiteral("/m/concerts"));
+  c.scraperOverrides.datFilePaths = {QStringLiteral("/dats/concerts.dat")};
+  const QList<CollectionConfig> cols{c};
+
+  DatAuditProfile::Profile seed; // unlinked, with hand-picked lists
+  DatAuditProfile::DatRef handPicked;
+  handPicked.path = QStringLiteral("/dats/manual.dat");
+  seed.dats = {handPicked};
+  seed.scanRoots = {QStringLiteral("/somewhere/else")};
+
+  DatAuditProfileDialog dlg(seed, &cols);
+  QComboBox *combo = linkedCombo(dlg);
+  QVERIFY(combo);
+  combo->setCurrentIndex(combo->findData(expectedUuid(c)));
+
+  const DatAuditProfile::Profile out = dlg.profile();
+  QCOMPARE(out.dats.size(), 1);
+  QCOMPARE(out.dats.at(0).path, QStringLiteral("/dats/concerts.dat"));
+  QCOMPARE(out.scanRoots,
+           QStringList{PathUtils::expandPathWithoutExistenceCheck(c.mediaDirectory, c.name)});
+
+  QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
+  QPushButton *addRoot = buttonByText(dlg, QStringLiteral("Add folder…"));
+  QVERIFY(addDat && addRoot);
+  QVERIFY(!addDat->isEnabled());
+  QVERIFY(!addRoot->isEnabled());
+}
+
+void TestDatAuditProfileDialog::unlinkingUnlocksEditors() {
+  CollectionConfig c = makeCollection(QStringLiteral("Concerts"), QStringLiteral("/m/concerts"));
+  c.scraperOverrides.datFilePaths = {QStringLiteral("/dats/concerts.dat")};
+  const QList<CollectionConfig> cols{c};
+  DatAuditProfile::Profile seed;
+  seed.collectionUuid = expectedUuid(c); // starts linked → locked
+
+  DatAuditProfileDialog dlg(seed, &cols);
+  QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
+  QVERIFY(addDat);
+  QVERIFY(!addDat->isEnabled());
+
+  QComboBox *combo = linkedCombo(dlg);
+  QVERIFY(combo);
+  combo->setCurrentIndex(0); // "(none)" — local editing resumes
+  QVERIFY(addDat->isEnabled());
+  QVERIFY(dlg.profile().collectionUuid.isEmpty());
+}
+
+void TestDatAuditProfileDialog::orphanLinkKeepsSeedListsLocked() {
+  // An unresolvable stored link must not clobber the cached lists — they are
+  // the only record of what the profile audits — but editing stays locked
+  // (the lists are still semantically derived, just from a missing source).
+  const CollectionConfig c = makeCollection(QStringLiteral("Movies"), QStringLiteral("/m/movies"));
+  const QList<CollectionConfig> cols{c};
+  DatAuditProfile::Profile seed;
+  seed.collectionUuid = QStringLiteral("orphaned-uuid-not-in-list");
+  DatAuditProfile::DatRef cached;
+  cached.path = QStringLiteral("/dats/cached.dat");
+  seed.dats = {cached};
+  seed.scanRoots = {QStringLiteral("/m/cached-root")};
+
+  DatAuditProfileDialog dlg(seed, &cols);
+  const DatAuditProfile::Profile out = dlg.profile();
+  QCOMPARE(out.dats.size(), 1);
+  QCOMPARE(out.dats.at(0).path, QStringLiteral("/dats/cached.dat"));
+  QCOMPARE(out.scanRoots, QStringList{QStringLiteral("/m/cached-root")});
+
+  QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
+  QVERIFY(addDat);
+  QVERIFY(!addDat->isEnabled());
 }
 
 QTEST_MAIN(TestDatAuditProfileDialog)

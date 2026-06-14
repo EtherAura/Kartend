@@ -65,6 +65,10 @@ private slots:
   void hashFileCachedComputesThenServesFromCache();
   void hashFileCachedReHashesWhenFileChanges();
   void clearAllEmptiesTable();
+  void memberStoreThenLookupRoundTrips();
+  void memberLookupMissOnStaleContainer();
+  void memberStoreReplacesWholeContainer();
+  void clearAllAlsoEmptiesMemberTable();
 
 private:
   QSqlDatabase m_db;
@@ -212,6 +216,70 @@ void TestFileHashCache::clearAllEmptiesTable() {
               .isOk());
   FileHashCache::clearAll(m_db);
   QCOMPARE(rowCount(m_db), 0);
+}
+
+namespace {
+
+QList<FileHashCache::MemberEntry> twoMembers() {
+  FileHashCache::MemberEntry a;
+  a.memberPath = QStringLiteral("clip-one.mkv");
+  a.crc = QStringLiteral("aabbccdd");
+  a.md5 = QStringLiteral("md5a");
+  a.sha1 = QStringLiteral("sha1a");
+  a.size = 100;
+  FileHashCache::MemberEntry b;
+  b.memberPath = QStringLiteral("extras/clip-two.mkv");
+  b.crc = QStringLiteral("eeff0011");
+  b.md5 = QStringLiteral("md5b");
+  b.sha1 = QStringLiteral("sha1b");
+  b.size = 200;
+  return {a, b};
+}
+
+} // namespace
+
+void TestFileHashCache::memberStoreThenLookupRoundTrips() {
+  const QString container = QStringLiteral("/media/set.zip");
+  QVERIFY(FileHashCache::storeMembers(m_db, container, 5000, 6000, twoMembers()).isOk());
+
+  auto hit = FileHashCache::lookupMembers(m_db, container, 5000, 6000);
+  QVERIFY(hit.has_value());
+  QCOMPARE(hit->size(), 2);
+  // ORDER BY member_path: "clip-one.mkv" < "extras/clip-two.mkv".
+  QCOMPARE(hit->at(0).memberPath, QStringLiteral("clip-one.mkv"));
+  QCOMPARE(hit->at(0).crc, QStringLiteral("aabbccdd"));
+  QCOMPARE(hit->at(0).size, qint64(100));
+  QCOMPARE(hit->at(1).memberPath, QStringLiteral("extras/clip-two.mkv"));
+  QCOMPARE(hit->at(1).sha1, QStringLiteral("sha1b"));
+}
+
+void TestFileHashCache::memberLookupMissOnStaleContainer() {
+  const QString container = QStringLiteral("/media/set.zip");
+  QVERIFY(FileHashCache::storeMembers(m_db, container, 5000, 6000, twoMembers()).isOk());
+
+  // A changed container invalidates EVERY member at once.
+  QVERIFY(!FileHashCache::lookupMembers(m_db, container, 5001, 6000).has_value());
+  QVERIFY(!FileHashCache::lookupMembers(m_db, container, 5000, 6001).has_value());
+  QVERIFY(
+      !FileHashCache::lookupMembers(m_db, QStringLiteral("/other.zip"), 5000, 6000).has_value());
+}
+
+void TestFileHashCache::memberStoreReplacesWholeContainer() {
+  const QString container = QStringLiteral("/media/set.zip");
+  QVERIFY(FileHashCache::storeMembers(m_db, container, 5000, 6000, twoMembers()).isOk());
+
+  // Re-store with one member (re-packed archive): the old second row must go.
+  QVERIFY(FileHashCache::storeMembers(m_db, container, 5500, 6500, {twoMembers().first()}).isOk());
+  auto hit = FileHashCache::lookupMembers(m_db, container, 5500, 6500);
+  QVERIFY(hit.has_value());
+  QCOMPARE(hit->size(), 1);
+}
+
+void TestFileHashCache::clearAllAlsoEmptiesMemberTable() {
+  QVERIFY(FileHashCache::storeMembers(m_db, QStringLiteral("/media/set.zip"), 1, 2, twoMembers())
+              .isOk());
+  FileHashCache::clearAll(m_db);
+  QVERIFY(!FileHashCache::lookupMembers(m_db, QStringLiteral("/media/set.zip"), 1, 2).has_value());
 }
 
 QTEST_MAIN(TestFileHashCache)
