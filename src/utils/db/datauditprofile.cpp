@@ -18,6 +18,14 @@ namespace DatAuditProfile {
 
 namespace {
 
+// A null QString binds as SQL NULL under QSQLITE, which the TEXT NOT NULL
+// columns reject — and "no value" strings arrive null routinely (a cleared
+// field, the "(none)" combo entry's QString() item data). Normalise to the
+// empty string the schema's DEFAULT '' expects.
+QString nonNull(const QString &s) {
+  return s.isNull() ? QStringLiteral("") : s;
+}
+
 QString stringListToJson(const QStringList &list) {
   QJsonArray arr;
   for (const QString &s : list) {
@@ -60,16 +68,18 @@ Profile readProfileRow(const QSqlQuery &q) {
   p.ignoreRules = jsonToStringList(q.value(7).toString());
   p.fixMode = fixModeFromString(q.value(8).toString());
   p.managedOutputRoot = q.value(9).toString();
-  p.lastScanAtMs = q.value(10).toLongLong();
-  p.createdAtMs = q.value(11).toLongLong();
-  p.updatedAtMs = q.value(12).toLongLong();
+  p.detectedLayout = q.value(10).toString();
+  p.layoutConfirmed = q.value(11).toInt() != 0;
+  p.lastScanAtMs = q.value(12).toLongLong();
+  p.createdAtMs = q.value(13).toLongLong();
+  p.updatedAtMs = q.value(14).toLongLong();
   return p;
 }
 
 constexpr char kSelectColumns[] =
     "id, name, collection_uuid, scan_roots, merge_mode, region_prefs, one_per_game, "
-    "ignore_rules, fix_mode, managed_output_root, last_scan_at_unix_ms, created_at_unix_ms, "
-    "updated_at_unix_ms";
+    "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
+    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms";
 
 // Load the ordered DAT child rows for one profile into p.dats.
 bool loadDats(QSqlDatabase &db, Profile &p) {
@@ -177,17 +187,20 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     q.prepare(QStringLiteral(
         "INSERT INTO dat_audit_profile "
         "(name, collection_uuid, scan_roots, merge_mode, region_prefs, one_per_game, "
-        "ignore_rules, fix_mode, managed_output_root, last_scan_at_unix_ms, created_at_unix_ms, "
-        "updated_at_unix_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
+        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(p.name);
-    q.addBindValue(p.collectionUuid);
+    q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
     q.addBindValue(mergeModeToString(p.mergeMode));
     q.addBindValue(stringListToJson(p.regionPrefs));
     q.addBindValue(p.onePerGame ? 1 : 0);
     q.addBindValue(stringListToJson(p.ignoreRules));
     q.addBindValue(fixModeToString(p.fixMode));
-    q.addBindValue(p.managedOutputRoot);
+    q.addBindValue(nonNull(p.managedOutputRoot));
+    q.addBindValue(nonNull(p.detectedLayout));
+    q.addBindValue(p.layoutConfirmed ? 1 : 0);
     q.addBindValue(p.lastScanAtMs);
     q.addBindValue(now);
     q.addBindValue(now);
@@ -234,16 +247,19 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
         "UPDATE dat_audit_profile SET "
         "name = ?, collection_uuid = ?, scan_roots = ?, merge_mode = ?, region_prefs = ?, "
         "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
+        "detected_layout = ?, layout_confirmed = ?, "
         "last_scan_at_unix_ms = ?, updated_at_unix_ms = ? WHERE id = ?"));
     q.addBindValue(p.name);
-    q.addBindValue(p.collectionUuid);
+    q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
     q.addBindValue(mergeModeToString(p.mergeMode));
     q.addBindValue(stringListToJson(p.regionPrefs));
     q.addBindValue(p.onePerGame ? 1 : 0);
     q.addBindValue(stringListToJson(p.ignoreRules));
     q.addBindValue(fixModeToString(p.fixMode));
-    q.addBindValue(p.managedOutputRoot);
+    q.addBindValue(nonNull(p.managedOutputRoot));
+    q.addBindValue(nonNull(p.detectedLayout));
+    q.addBindValue(p.layoutConfirmed ? 1 : 0);
     q.addBindValue(p.lastScanAtMs);
     q.addBindValue(QDateTime::currentMSecsSinceEpoch());
     q.addBindValue(p.id);
@@ -362,6 +378,39 @@ ErrorUtils::Result<QList<Profile>> listAll(QSqlDatabase &db) {
   return out;
 }
 
+ErrorUtils::Result<std::optional<Profile>> loadByCollectionUuid(QSqlDatabase &db,
+                                                                const QString &collectionUuid) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadByCollectionUuid");
+  }
+  if (collectionUuid.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Collection uuid is required",
+                               "DatAuditProfile::loadByCollectionUuid");
+  }
+  QSqlQuery q(db);
+  // id DESC tiebreak: two profiles saved in the same millisecond still
+  // resolve the same way on every launch.
+  q.prepare(QStringLiteral("SELECT %1 FROM dat_audit_profile WHERE collection_uuid = ? "
+                           "ORDER BY updated_at_unix_ms DESC, id DESC LIMIT 1")
+                .arg(QLatin1String(kSelectColumns)));
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to query linked profile",
+                               "DatAuditProfile::loadByCollectionUuid")
+        .withDetails(q.lastError().text());
+  }
+  if (!q.next()) {
+    return std::optional<Profile>(std::nullopt);
+  }
+  Profile p = readProfileRow(q);
+  if (!loadDats(db, p)) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load profile DAT rows",
+                               "DatAuditProfile::loadByCollectionUuid");
+  }
+  return std::optional<Profile>(std::move(p));
+}
+
 ErrorUtils::Result<bool> touchLastScan(QSqlDatabase &db, qint64 id, qint64 whenMs) {
   if (!db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
@@ -379,6 +428,97 @@ ErrorUtils::Result<bool> touchLastScan(QSqlDatabase &db, qint64 id, qint64 whenM
         .withDetails(q.lastError().text());
   }
   return true;
+}
+
+ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList<ResultRow> &rows) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::replaceResults");
+  }
+  if (id < 0) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Profile id is invalid",
+                               "DatAuditProfile::replaceResults");
+  }
+  KartendDb::DbTransaction txn(db, "DatAuditProfile::replaceResults");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin transaction", nullptr, ErrorUtils::Severity::Error);
+  }
+  {
+    QSqlQuery del(db);
+    del.prepare(QStringLiteral("DELETE FROM dat_audit_result WHERE profile_id = ?"));
+    del.addBindValue(id);
+    if (!del.exec()) {
+      const QString err = del.lastError().text();
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                 "Failed to clear previous result snapshot",
+                                 "DatAuditProfile::replaceResults")
+          .withDetails(err);
+    }
+  }
+  QSqlQuery ins(db);
+  ins.prepare(QStringLiteral("INSERT OR REPLACE INTO dat_audit_result "
+                             "(profile_id, entry_key, status, file_path, detail) "
+                             "VALUES (?, ?, ?, ?, ?)"));
+  for (const ResultRow &r : rows) {
+    ins.bindValue(0, id);
+    ins.bindValue(1, nonNull(r.entryKey));
+    ins.bindValue(2, r.status);
+    ins.bindValue(3, nonNull(r.filePath));
+    ins.bindValue(4, nonNull(r.detail));
+    if (!ins.exec()) {
+      const QString err = ins.lastError().text();
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert result row",
+                                 "DatAuditProfile::replaceResults")
+          .withDetails(err);
+    }
+  }
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit result snapshot", nullptr,
+                           ErrorUtils::Severity::Error);
+  }
+  return true;
+}
+
+ErrorUtils::Result<std::optional<ResultSummary>> loadResultSummary(QSqlDatabase &db, qint64 id) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadResultSummary");
+  }
+  ResultSummary out;
+  {
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral("SELECT last_scan_at_unix_ms FROM dat_audit_profile WHERE id = ?"));
+    q.addBindValue(id);
+    if (!q.exec()) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to query profile",
+                                 "DatAuditProfile::loadResultSummary")
+          .withDetails(q.lastError().text());
+    }
+    if (!q.next()) {
+      return std::optional<ResultSummary>(std::nullopt);
+    }
+    out.lastScanAtMs = q.value(0).toLongLong();
+  }
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral(
+      "SELECT status, COUNT(*) FROM dat_audit_result WHERE profile_id = ? GROUP BY status"));
+  q.addBindValue(id);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to summarise results",
+                               "DatAuditProfile::loadResultSummary")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    out.countsByStatus.insert(q.value(0).toInt(), q.value(1).toInt());
+    out.hasResults = true;
+  }
+  // "Audited but empty snapshot" still counts as having results when the
+  // profile carries a last-scan stamp — zero rows is a legitimate outcome
+  // of auditing an empty folder against an empty catalogue.
+  if (out.lastScanAtMs > 0) {
+    out.hasResults = true;
+  }
+  return std::optional<ResultSummary>(std::move(out));
 }
 
 } // namespace DatAuditProfile

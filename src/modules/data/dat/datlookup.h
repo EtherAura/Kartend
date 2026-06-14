@@ -71,6 +71,32 @@ struct DatRecord {
 /// non-DAT XML file). Cheap — stops at the first start element.
 [[nodiscard]] Dialect detectDialect(const QByteArray &xml);
 
+/// Identifying metadata from a DAT's head, independent of its record list.
+/// Logiqx: the `<header>` child's `<name>` / `<description>` / `<version>`
+/// text elements ("what does this catalogue cover" — the signal the
+/// DAT-to-collection matcher scores against). MAME listxml has no header
+/// element; name is synthesised and version carries the `build` attribute.
+/// Every field may be empty — `<header>` is optional in Logiqx.
+struct DatHeader {
+  Dialect dialect = Dialect::Unknown;
+  QString name;
+  QString description;
+  QString version;
+};
+
+/// Header-only probe: parse just far enough to read the dialect + header,
+/// then stop — never walks the record list, so calling it on a folder of
+/// large DATs in a row stays cheap. Unparseable / unrecognised bytes yield
+/// `{Dialect::Unknown, …empty}` rather than an error: a probe answers
+/// "what is this?", and "nothing usable" is an answer, not a failure.
+[[nodiscard]] DatHeader probeHeader(const QByteArray &xml);
+
+/// File convenience for `probeHeader`. Reads a bounded prefix of the file
+/// (both dialects put the metadata at the document head) so probing a
+/// 100MB listxml doesn't read 100MB. Missing/unreadable file yields the
+/// Unknown-dialect header.
+[[nodiscard]] DatHeader probeHeaderFromFile(const QString &path);
+
 /// Parse a Logiqx-shaped DAT (UTF-8 XML bytes) — `<datafile>` root
 /// with `<game>` children carrying `<rom>` hashes. Covers No-Intro,
 /// Redump, and TOSEC since the three cataloguers share this schema.

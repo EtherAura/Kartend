@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 
+#include <QList>
 #include <QString>
 
 #include "errorutils.h"
@@ -67,8 +68,36 @@ struct Entry {
 hashFileCached(QSqlDatabase &db, const QString &path,
                const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
-/// Drop every cached row. Wired into the same "clear caches" UI as the DAT
-/// cache; regenerable data, so this only costs a re-hash on the next audit.
+/// One cached archive member (archive-per-item auditing, Kartend-m6qsb.7).
+/// `memberPath` is the member's '/'-separated path inside its container.
+struct MemberEntry {
+  QString memberPath;
+  QString crc;
+  QString md5;
+  QString sha1;
+  qint64 size = -1;
+};
+
+/// All cached members for `containerPath` (schema v19 table
+/// `archive_member_hash_cache`), but only when the stored container
+/// `(size, mtime)` still match — an edited/replaced archive invalidates
+/// every member row at once, mirroring the outer cache's invalidation key.
+/// nullopt on miss/stale/closed DB; the caller re-extracts and calls
+/// storeMembers. An empty (but valid) member list is a legal hit.
+[[nodiscard]] std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db,
+                                                              const QString &containerPath,
+                                                              qint64 currentSize,
+                                                              qint64 currentMtimeMs);
+
+/// Replace `containerPath`'s member rows with `members` in one transaction,
+/// stamped against the container's `(size, mtime)`.
+[[nodiscard]] ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &containerPath,
+                                                    qint64 size, qint64 mtimeMs,
+                                                    const QList<MemberEntry> &members);
+
+/// Drop every cached row (outer files AND archive members). Wired into the
+/// same "clear caches" UI as the DAT cache; regenerable data, so this only
+/// costs a re-hash on the next audit.
 void clearAll(QSqlDatabase &db);
 
 } // namespace FileHashCache

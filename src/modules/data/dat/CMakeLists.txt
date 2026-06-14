@@ -3,4 +3,18 @@ target_sources(kartend_data PRIVATE
   datlookup.h
   datcache.cpp
   datcache.h
+  datcollectionmatch.cpp
+  datcollectionmatch.h
+  datlibraryscan.cpp
+  datlibraryscan.h
+  nointroparse.cpp
+  nointroparse.h
+  nointrodownloader.cpp
+  nointrodownloader.h
+  datpackimport.cpp
+  datpackimport.h
+  redumpparse.cpp
+  redumpparse.h
+  redumpdownload.cpp
+  redumpdownload.h
 )

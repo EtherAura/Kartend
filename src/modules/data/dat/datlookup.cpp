@@ -83,6 +83,83 @@ Dialect detectDialect(const QByteArray &xml) {
   return Dialect::Unknown;
 }
 
+DatHeader probeHeader(const QByteArray &xml) {
+  DatHeader out;
+  QXmlStreamReader reader(xml);
+  bool sawRoot = false;
+  bool inHeader = false;
+  // Accumulates the current captured text element; nullptr between them.
+  QString *capture = nullptr;
+
+  while (!reader.atEnd()) {
+    const auto token = reader.readNext();
+    if (reader.hasError()) break; // keep whatever was captured before the error
+    if (token == QXmlStreamReader::StartElement) {
+      const QStringView name = reader.name();
+      if (!sawRoot) {
+        sawRoot = true;
+        if (name == QLatin1String("mame")) {
+          // MAME listxml carries no <header>; the build attribute is the
+          // only identifying metadata it has.
+          out.dialect = Dialect::Mame;
+          out.name = QStringLiteral("MAME");
+          out.version = reader.attributes().value(QLatin1String("build")).toString().trimmed();
+          return out;
+        }
+        if (name != QLatin1String("datafile")) {
+          return out; // Unknown dialect — nothing to probe
+        }
+        out.dialect = Dialect::Logiqx;
+        continue;
+      }
+      if (name == QLatin1String("header")) {
+        inHeader = true;
+      } else if (!inHeader) {
+        // First non-header child of <datafile> (a <game>) — this DAT has
+        // no header, and one can't appear later. Stop before the records.
+        break;
+      } else if (name == QLatin1String("name")) {
+        capture = &out.name;
+      } else if (name == QLatin1String("description")) {
+        capture = &out.description;
+      } else if (name == QLatin1String("version")) {
+        capture = &out.version;
+      } else {
+        capture = nullptr; // header child we don't keep (author, url, …)
+      }
+    } else if (token == QXmlStreamReader::Characters && capture != nullptr) {
+      *capture += reader.text().toString();
+    } else if (token == QXmlStreamReader::EndElement) {
+      const QStringView name = reader.name();
+      if (name == QLatin1String("header")) {
+        break; // got everything the header holds
+      }
+      capture = nullptr;
+    }
+  }
+
+  out.name = out.name.trimmed();
+  out.description = out.description.trimmed();
+  out.version = out.version.trimmed();
+  return out;
+}
+
+DatHeader probeHeaderFromFile(const QString &path) {
+  if (path.isEmpty() || !QFileInfo(path).isFile()) {
+    return DatHeader{};
+  }
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    return DatHeader{};
+  }
+  // 256 KiB is orders of magnitude beyond any real Logiqx <header> (a few
+  // hundred bytes) while keeping a probe over a folder of 100MB listxmls
+  // cheap. A header truncated mid-element just yields the fields captured
+  // up to the cut — fine for a suggestion signal.
+  const QByteArray head = f.read(256 * 1024);
+  return probeHeader(head);
+}
+
 ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   QXmlStreamReader reader(xml);
   QList<DatRecord> out;

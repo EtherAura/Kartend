@@ -36,12 +36,18 @@ namespace DatCache {
 /// Handle to a cached DAT source. Returned by `openOrIngest` and
 /// consumed by `lookup`. Treat as opaque — the `id` field keys all
 /// SQL queries; the other fields are exposed for UI labels
-/// ("Loaded N entries from MAME listxml").
+/// ("Loaded N entries from MAME listxml") and for the DAT-to-collection
+/// matcher (headerName/headerDescription identify what the catalogue
+/// covers; all three header fields may be empty — `<header>` is
+/// optional in Logiqx and MAME listxml only carries a build version).
 struct CachedSource {
   qint64 id = -1;
   qint64 mtimeUnixMs = 0;
   DatLookup::Dialect dialect = DatLookup::Dialect::Unknown;
   int recordCount = 0;
+  QString headerName;
+  QString headerDescription;
+  QString headerVersion;
 
   [[nodiscard]] bool isValid() const { return id >= 0; }
 };
@@ -81,6 +87,13 @@ public:
   ///   - Empty / missing / unparseable DAT: returns an error result
   ///     with the diagnosis (matches DatLookup's failure modes).
   [[nodiscard]] ErrorUtils::Result<CachedSource> openOrIngest(const QString &datPath);
+
+  /// Read-only probe: the cached row for `datPath`, or nullopt when the
+  /// cache has never ingested it (or the store isn't open). Never parses —
+  /// stays cheap on a 100MB listxml — so unlike `openOrIngest` it can sit on
+  /// a UI-thread attach path. The row is returned even when the file's mtime
+  /// has moved on; `mtimeUnixMs` lets the caller present that as staleness.
+  [[nodiscard]] std::optional<CachedSource> peek(const QString &datPath) const;
 
   /// Hash lookup against a cached source. Tries sha1 → md5 → crc in
   /// that order (most-to-least reliable), matching DatLookup::Store

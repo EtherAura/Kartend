@@ -231,12 +231,17 @@ QStringList extractorCandidates(const QString &archivePath) {
   return candidates;
 }
 
-ErrorUtils::Result<Result>
-hashArchiveInnerRom(const QString &archivePath,
-                    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+/// Shared extraction harness for the archive hashers: validate + symlink-
+/// resolve the path, pick a format-capable extractor, extract into the
+/// caller's `tmp` under the disk-ceiling / timeout / cancellation guards,
+/// and return the extraction root's canonical path. `origin` keeps every
+/// error context naming the public entry point that failed.
+static ErrorUtils::Result<QString>
+extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
+                         const std::shared_ptr<std::atomic<bool>> &cancelToken,
+                         const char *origin) {
   if (archivePath.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path",
-                               "RomHasher::hashArchiveInnerRom");
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path", origin);
   }
   // Symlink-safe (Kartend-ou0a): canonicalize before invoking the
   // extractor so a symlinked .zip / .7z resolves to its target — matches
@@ -248,15 +253,14 @@ hashArchiveInnerRom(const QString &archivePath,
     const QString canonical = info.canonicalFilePath();
     if (canonical.isEmpty()) {
       return ErrorContext::error(ErrorCode::FileNotFound, "Archive symlink target does not resolve",
-                                 "RomHasher::hashArchiveInnerRom")
+                                 origin)
           .withDetails(archivePath);
     }
     info = QFileInfo(canonical);
   }
   if (!info.isFile()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
-                               "Archive does not exist or is not a regular file",
-                               "RomHasher::hashArchiveInnerRom")
+                               "Archive does not exist or is not a regular file", origin)
         .withDetails(archivePath);
   }
   // absoluteFilePath() guarantees a leading '/', so when this is appended as a
@@ -277,21 +281,18 @@ hashArchiveInnerRom(const QString &archivePath,
     }
   }
   if (extractor.isEmpty()) {
-    return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found",
-                               "RomHasher::hashArchiveInnerRom")
+    return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found", origin)
         .withDetails("Install 7z or bsdtar to hash inner ROMs (unzip handles only .zip)");
   }
 
-  // QTemporaryDir auto-cleans on destruction so we don't accumulate
-  // hash leftovers in /tmp the way LaunchManager's persistent cache
-  // does. The hash workflow doesn't need cross-call caching — repeat
+  // The caller's QTemporaryDir auto-cleans on destruction so we don't
+  // accumulate hash leftovers in /tmp the way LaunchManager's persistent
+  // cache does. The hash workflow doesn't need cross-call caching — repeat
   // scrapes of the same item are uncommon and re-extracting is cheap
   // for typical ROM-archive sizes.
-  QTemporaryDir tmp;
   if (!tmp.isValid()) {
     return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create temporary extraction directory",
-                               "RomHasher::hashArchiveInnerRom");
+                               "Failed to create temporary extraction directory", origin);
   }
 
   if (extractor == QStringLiteral("7z")) {
@@ -345,24 +346,42 @@ hashArchiveInnerRom(const QString &archivePath,
     proc.waitForFinished(1000);
     if (cancelled) {
       return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
-                                 "RomHasher::hashArchiveInnerRom")
+                                 origin)
           .withDetails(archivePath);
     }
     if (overSize) {
       return ErrorContext::error(ErrorCode::InvalidArgument,
-                                 "Archive extraction exceeded the size limit",
-                                 "RomHasher::hashArchiveInnerRom")
+                                 "Archive extraction exceeded the size limit", origin)
           .withDetails(archivePath);
     }
     return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
-                               "RomHasher::hashArchiveInnerRom")
+                               origin)
         .withDetails(archivePath);
   }
   if (proc.exitCode() != 0) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed",
-                               "RomHasher::hashArchiveInnerRom")
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed", origin)
         .withDetails(QString::fromUtf8(proc.readAllStandardError()).left(200));
   }
+
+  const QString rootCanonical = QFileInfo(tmp.path()).canonicalFilePath();
+  if (rootCanonical.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Failed to canonicalise extraction directory", origin);
+  }
+  return rootCanonical;
+}
+
+ErrorUtils::Result<Result>
+hashArchiveInnerRom(const QString &archivePath,
+                    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+  QTemporaryDir tmp;
+  auto extracted =
+      extractArchiveForHashing(archivePath, tmp, cancelToken, "RomHasher::hashArchiveInnerRom");
+  if (extracted.isError()) {
+    return extracted.error();
+  }
+  const QString rootCanonical = extracted.value();
+  const QString rootPrefix = rootCanonical + QLatin1Char('/');
 
   // Walk the extracted tree, picking the largest non-symlink regular
   // file. ROM archives are nearly always one dump file plus optional
@@ -370,13 +389,6 @@ hashArchiveInnerRom(const QString &archivePath,
   // simplest heuristic that lands on the right file without us having
   // to learn any per-platform extension list (which the project's
   // no-platform-names rule forbids anyway).
-  const QString rootCanonical = QFileInfo(tmp.path()).canonicalFilePath();
-  if (rootCanonical.isEmpty()) {
-    return ErrorContext::error(ErrorCode::FileNotFound,
-                               "Failed to canonicalise extraction directory",
-                               "RomHasher::hashArchiveInnerRom");
-  }
-  const QString rootPrefix = rootCanonical + QLatin1Char('/');
 
   QDirIterator it(tmp.path(), QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
                   QDirIterator::Subdirectories);
@@ -426,6 +438,58 @@ hashArchiveInnerRom(const QString &archivePath,
         .withDetails(archivePath);
   }
   return hashFile(largestPath, cancelToken);
+}
+
+ErrorUtils::Result<QList<MemberResult>>
+hashArchiveMembers(const QString &archivePath,
+                   const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+  QTemporaryDir tmp;
+  auto extracted =
+      extractArchiveForHashing(archivePath, tmp, cancelToken, "RomHasher::hashArchiveMembers");
+  if (extracted.isError()) {
+    return extracted.error();
+  }
+  const QString rootCanonical = extracted.value();
+  const QString rootPrefix = rootCanonical + QLatin1Char('/');
+
+  // Hash EVERY regular member — the archive-per-item audit needs the full
+  // contents, unlike the scraper's pick-one-dump heuristic above. The same
+  // symlink defence and inspection cap apply; an unreadable member becomes
+  // an entry with empty hashes (size -1) so one bad member doesn't void the
+  // rest of the archive, while a cancellation aborts the whole call.
+  QList<MemberResult> members;
+  QDirIterator it(tmp.path(), QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  int inspected = 0;
+  while (it.hasNext()) {
+    const QString candidate = it.next();
+    if (++inspected > MAX_INNER_FILES_INSPECTED) break;
+    const QFileInfo entryInfo(candidate);
+    if (entryInfo.isSymLink()) continue;
+    const QString canon = entryInfo.canonicalFilePath();
+    if (canon.isEmpty() || !canon.startsWith(rootPrefix)) {
+      continue; // smuggled symlink / escape — same defence as the picker above
+    }
+    MemberResult m;
+    m.memberPath = canon.mid(rootPrefix.size());
+    auto hashed = hashFile(canon, cancelToken);
+    if (hashed.isError()) {
+      if (hashed.hasErrorCode(ErrorCode::OperationCancelled)) {
+        return hashed.error();
+      }
+      m.hashes = Result{}; // unreadable member: empty hashes, size -1
+    } else {
+      m.hashes = hashed.value();
+    }
+    members.append(m);
+  }
+  if (members.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Archive contained no regular files to hash",
+                               "RomHasher::hashArchiveMembers")
+        .withDetails(archivePath);
+  }
+  return members;
 }
 
 } // namespace RomHasher

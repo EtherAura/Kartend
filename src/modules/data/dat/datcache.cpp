@@ -28,7 +28,9 @@ namespace {
 // Bump when the schema changes. The on-disk DB is throwaway (a cache,
 // not user data) so the migration story is "wipe + rebuild" — handled
 // by `migrateOrReset` below.
-constexpr int kSchemaVersion = 1;
+// v2: header_name/header_description/header_version on dat_sources
+//     (Kartend-m6qsb.3) — the wipe forces a re-ingest that populates them.
+constexpr int kSchemaVersion = 2;
 
 // Process-unique connection-name suffix so multiple Store instances
 // (tests + production) don't collide in QSqlDatabase's global
@@ -64,6 +66,9 @@ bool createSchema(QSqlDatabase &db) {
                                     "  mtime_unix_ms INTEGER NOT NULL,"
                                     "  dialect INTEGER NOT NULL,"
                                     "  record_count INTEGER NOT NULL,"
+                                    "  header_name TEXT NOT NULL DEFAULT '',"
+                                    "  header_description TEXT NOT NULL DEFAULT '',"
+                                    "  header_version TEXT NOT NULL DEFAULT '',"
                                     "  ingested_at_unix_ms INTEGER NOT NULL)")) &&
       execSimple(db, QStringLiteral("CREATE TABLE IF NOT EXISTS dat_records ("
                                     "  source_id INTEGER NOT NULL,"
@@ -164,42 +169,42 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   const QString canonicalPath = fi.canonicalFilePath();
   const qint64 mtimeMs = fi.lastModified().toMSecsSinceEpoch();
 
-  // Look up the existing source row, if any. Note: we read mtime +
-  // record_count + dialect together so a cache-hit path doesn't need
+  // Look up the existing source row, if any. Note: we read the whole
+  // handle's worth of columns together so a cache-hit path doesn't need
   // a second SELECT.
-  qint64 existingId = -1;
-  qint64 existingMtime = 0;
-  int existingDialect = static_cast<int>(DatLookup::Dialect::Unknown);
-  int existingCount = 0;
+  CachedSource existing;
   {
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral("SELECT id, mtime_unix_ms, dialect, record_count "
+    q.prepare(QStringLiteral("SELECT id, mtime_unix_ms, dialect, record_count, "
+                             "header_name, header_description, header_version "
                              "FROM dat_sources WHERE path = ?"));
     q.addBindValue(canonicalPath);
     if (q.exec() && q.next()) {
-      existingId = q.value(0).toLongLong();
-      existingMtime = q.value(1).toLongLong();
-      existingDialect = q.value(2).toInt();
-      existingCount = q.value(3).toInt();
+      existing.id = q.value(0).toLongLong();
+      existing.mtimeUnixMs = q.value(1).toLongLong();
+      existing.dialect = static_cast<DatLookup::Dialect>(q.value(2).toInt());
+      existing.recordCount = q.value(3).toInt();
+      existing.headerName = q.value(4).toString();
+      existing.headerDescription = q.value(5).toString();
+      existing.headerVersion = q.value(6).toString();
     }
   }
 
-  if (existingId >= 0 && existingMtime == mtimeMs) {
+  if (existing.id >= 0 && existing.mtimeUnixMs == mtimeMs) {
     // Cache hit — the file hasn't changed since we ingested it.
-    return CachedSource{existingId, existingMtime, static_cast<DatLookup::Dialect>(existingDialect),
-                        existingCount};
+    return existing;
   }
 
   // Either cache miss (no row) or stale (mtime mismatch). For the
   // stale case, drop the old records first — the ON DELETE CASCADE
   // on dat_records.source_id handles the row sweep when we delete
   // the dat_sources row.
-  if (existingId >= 0) {
+  if (existing.id >= 0) {
     QSqlQuery del(m_db);
     del.prepare(QStringLiteral("DELETE FROM dat_sources WHERE id = ?"));
-    del.addBindValue(existingId);
+    del.addBindValue(existing.id);
     if (!del.exec()) {
-      qWarning("DatCache: failed to evict stale source %lld: %s", existingId,
+      qWarning("DatCache: failed to evict stale source %lld: %s", existing.id,
                qPrintable(del.lastError().text()));
     }
   }
@@ -217,6 +222,9 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   const QByteArray bytes = f.readAll();
   f.close();
   const DatLookup::Dialect dialect = DatLookup::detectDialect(bytes);
+  // Header metadata rides along with the ingest so the matcher / UI can
+  // identify the catalogue without re-touching the XML (Kartend-m6qsb.3).
+  const DatLookup::DatHeader header = DatLookup::probeHeader(bytes);
   auto parsed = DatLookup::parseDat(bytes);
   if (parsed.isError()) {
     return parsed.error();
@@ -236,11 +244,17 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   {
     QSqlQuery ins(m_db);
     ins.prepare(QStringLiteral("INSERT INTO dat_sources (path, mtime_unix_ms, dialect, "
-                               "record_count, ingested_at_unix_ms) VALUES (?, ?, ?, ?, ?)"));
+                               "record_count, header_name, header_description, header_version, "
+                               "ingested_at_unix_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
     ins.addBindValue(canonicalPath);
     ins.addBindValue(mtimeMs);
     ins.addBindValue(static_cast<int>(dialect));
     ins.addBindValue(static_cast<int>(records.size()));
+    // Null QStrings bind as SQL NULL which the NOT NULL columns reject —
+    // absent header fields are routinely null (headerless Logiqx DATs).
+    ins.addBindValue(header.name.isNull() ? QStringLiteral("") : header.name);
+    ins.addBindValue(header.description.isNull() ? QStringLiteral("") : header.description);
+    ins.addBindValue(header.version.isNull() ? QStringLiteral("") : header.version);
     ins.addBindValue(QDateTime::currentMSecsSinceEpoch());
     if (!ins.exec()) {
       const QString err = ins.lastError().text();
@@ -280,7 +294,40 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
                            ErrorUtils::Severity::Error);
   }
 
-  return CachedSource{newId, mtimeMs, dialect, static_cast<int>(records.size())};
+  return CachedSource{newId,         mtimeMs,
+                      dialect,       static_cast<int>(records.size()),
+                      header.name,   header.description,
+                      header.version};
+}
+
+std::optional<CachedSource> Store::peek(const QString &datPath) const {
+  if (!isOpen() || datPath.isEmpty()) {
+    return std::nullopt;
+  }
+  // Same canonical-path key as openOrIngest so relative / symlinked
+  // variants of an ingested path still hit. canonicalFilePath() is empty
+  // for a missing file; fall back to the raw path so a row ingested before
+  // the file vanished can still be peeked.
+  const QFileInfo fi(datPath);
+  const QString canonical = fi.canonicalFilePath();
+  // Read-only despite the non-const QSqlDatabase QSqlQuery demands —
+  // same const_cast shape as lookup().
+  QSqlDatabase &db = const_cast<Store *>(this)->m_db;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT id, mtime_unix_ms, dialect, record_count, "
+                           "header_name, header_description, header_version "
+                           "FROM dat_sources WHERE path = ?"));
+  q.addBindValue(canonical.isEmpty() ? datPath : canonical);
+  if (!q.exec() || !q.next()) {
+    return std::nullopt;
+  }
+  return CachedSource{q.value(0).toLongLong(),
+                      q.value(1).toLongLong(),
+                      static_cast<DatLookup::Dialect>(q.value(2).toInt()),
+                      q.value(3).toInt(),
+                      q.value(4).toString(),
+                      q.value(5).toString(),
+                      q.value(6).toString()};
 }
 
 namespace {

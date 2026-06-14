@@ -56,8 +56,10 @@ bool matchesAnyGlob(const QString &name, const QList<QRegularExpression> &globs)
   return false;
 }
 
-// Recursively enumerate regular files under `roots`, skipping basenames that
-// match an ignore glob and any path that is one of the audited DAT files.
+// Enumerate regular files under `roots` — recursively, unless the user
+// confirmed a Flat layout (then subfolders are noise by definition,
+// Kartend-m6qsb.6) — skipping basenames that match an ignore glob and any
+// path that is one of the audited DAT files.
 QStringList enumerateFiles(const AuditOptions &opts) {
   const QList<QRegularExpression> globs = compileGlobs(opts.ignoreGlobs);
   QSet<QString> datCanonical;
@@ -73,7 +75,9 @@ QStringList enumerateFiles(const AuditOptions &opts) {
     if (root.trimmed().isEmpty()) {
       continue;
     }
-    QDirIterator it(root, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+    const QDirIterator::IteratorFlags flags =
+        opts.layout == Layout::Flat ? QDirIterator::NoIteratorFlags : QDirIterator::Subdirectories;
+    QDirIterator it(root, QDir::Files | QDir::NoSymLinks, flags);
     while (it.hasNext()) {
       const QString path = it.next();
       const QFileInfo fi = it.fileInfo();
@@ -265,9 +269,13 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
 
   // Phase 1: cache reads (serial — QSqlDatabase is single-thread). Files with a
   // valid (size,mtime) cache hit are resolved here; the rest queue for hashing.
+  // Under a confirmed archive-per-item layout (Kartend-m6qsb.7), an archive's
+  // audit units are its MEMBERS: a member-cache hit expands here, a miss
+  // queues the container for the serial extraction phase below.
   QList<ScannedFile> results;
   results.reserve(total);
   QList<PendingHash> pending;
+  QList<PendingHash> pendingArchives;
   for (const QString &path : files) {
     if (cancelled(cancel)) {
       out.cancelled = true;
@@ -277,6 +285,31 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     const QString canonical = fi.canonicalFilePath();
     const qint64 size = fi.size();
     const qint64 mtimeMs = fi.lastModified().toMSecsSinceEpoch();
+    if (opts.layout == Layout::ArchivePerItem && RomHasher::isArchivePath(path)) {
+      if (cacheDb != nullptr) {
+        if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs)) {
+          for (const FileHashCache::MemberEntry &m : *hit) {
+            ScannedFile sf;
+            // Virtual member path: container + '/' + member, so the result
+            // table shows provenance and basename matching sees the member's
+            // own filename. Never a real on-disk path — the fix engine skips
+            // rows whose parent is not a directory.
+            sf.path = path + QLatin1Char('/') + m.memberPath;
+            sf.crc = m.crc;
+            sf.md5 = m.md5;
+            sf.sha1 = m.sha1;
+            sf.size = m.size;
+            sf.readOk = m.size >= 0;
+            results.append(sf);
+          }
+          ++done;
+          tick(path);
+          continue;
+        }
+      }
+      pendingArchives.append(PendingHash{path, canonical, size, mtimeMs});
+      continue;
+    }
     if (cacheDb != nullptr) {
       if (auto hit = FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs)) {
         ScannedFile sf;
@@ -330,6 +363,62 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
       fut.cancel();
     }
     fut.waitForFinished();
+  }
+
+  // Phase 3: archive members (archive-per-item layout). ONE archive at a
+  // time — extraction is QProcess + temp-disk bound, and fanning it out like
+  // the hash pool above would make the extractions fight each other for the
+  // same disk. The per-file hashing inside each archive is already the cheap
+  // part once the bytes are on local disk.
+  if (!out.cancelled) {
+    for (const PendingHash &a : pendingArchives) {
+      if (cancelled(cancel)) {
+        out.cancelled = true;
+        break;
+      }
+      auto members = RomHasher::hashArchiveMembers(a.path, cancel);
+      if (members.isError()) {
+        if (members.hasErrorCode(ErrorUtils::ErrorCode::OperationCancelled)) {
+          out.cancelled = true;
+          break;
+        }
+        // Unextractable / empty archive: one Corrupt row for the container
+        // keeps the problem visible instead of silently skipping it.
+        ScannedFile sf;
+        sf.path = a.path;
+        sf.readOk = false;
+        results.append(sf);
+      } else {
+        QList<FileHashCache::MemberEntry> entries;
+        entries.reserve(members.value().size());
+        for (const RomHasher::MemberResult &m : members.value()) {
+          ScannedFile sf;
+          sf.path = a.path + QLatin1Char('/') + m.memberPath;
+          sf.crc = m.hashes.crc;
+          sf.md5 = m.hashes.md5;
+          sf.sha1 = m.hashes.sha1;
+          sf.size = m.hashes.size;
+          sf.readOk = m.hashes.size >= 0;
+          results.append(sf);
+          FileHashCache::MemberEntry e;
+          e.memberPath = m.memberPath;
+          e.crc = m.hashes.crc;
+          e.md5 = m.hashes.md5;
+          e.sha1 = m.hashes.sha1;
+          e.size = m.hashes.size;
+          entries.append(e);
+        }
+        if (cacheDb != nullptr) {
+          auto saved =
+              FileHashCache::storeMembers(*cacheDb, a.canonical, a.size, a.mtimeMs, entries);
+          if (saved.isError()) {
+            ErrorUtils::logError(saved.error());
+          }
+        }
+      }
+      ++done;
+      tick(a.path);
+    }
   }
 
   AuditOutput classified = classify(catalogue, results, opts.regionPrefs, opts.onePerGame);

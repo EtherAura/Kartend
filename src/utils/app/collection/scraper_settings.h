@@ -127,6 +127,14 @@ struct ScraperOptions {
   };
   ScraperRegionSource regionSource = ScraperRegionSource::TrustScraperFirst;
 
+  // DAT-library folder (Kartend-m6qsb.5): a folder of catalogue files that
+  // Kartend probes at startup to propose collection matches (confirm-only;
+  // see DatAuditController). Empty = feature off. Lives in this domain
+  // because the DAT tooling already does (datFilePaths feed scraper and
+  // audit alike); riding the hot-reload signal is harmless — no consumer
+  // caches it.
+  QString datLibraryPath;
+
   // Value-equality for the per-domain hot-reload signal: the change
   // emit in SettingsManager::saveGeneralSettings only fires when this
   // returns false, so a Save that didn't actually touch ScraperOptions
@@ -140,7 +148,8 @@ struct ScraperOptions {
            preferJpgOutput == other.preferJpgOutput && scrapeAutoResume == other.scrapeAutoResume &&
            scrapeLogging == other.scrapeLogging &&
            preferredScraperRegion == other.preferredScraperRegion && hashMode == other.hashMode &&
-           maxHashableSizeMB == other.maxHashableSizeMB && regionSource == other.regionSource;
+           maxHashableSizeMB == other.maxHashableSizeMB && regionSource == other.regionSource &&
+           datLibraryPath == other.datLibraryPath;
   }
   bool operator!=(const ScraperOptions &other) const { return !(*this == other); }
 };

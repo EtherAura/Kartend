@@ -51,11 +51,24 @@ public:
   /// need not #include the concrete MainWindow.
   virtual void openDatAuditForCollection(const CollectionConfig &collection) = 0;
 
-  /// Unix-ms timestamp of the most recent completed audit for the profile
-  /// linked to @p collectionUuid, or 0 when none is linked / it never ran. Lets
-  /// the collection-settings panel show a "last audited N ago" hint without DB
-  /// access of its own (Kartend-4mqkof).
-  [[nodiscard]] virtual qint64 lastDatAuditMsForCollection(const QString &collectionUuid) = 0;
+  /// Persisted outcome of the most recent completed audit for the profile
+  /// linked to a collection. Default-constructed = "never audited / nothing
+  /// linked". `present` counts catalogue entries whose content exists on disk
+  /// (Have + WrongName). Lives here (not utils/db) so panel code consumes one
+  /// interface type instead of the profile store's status-int hash.
+  struct DatAuditStatus {
+    qint64 lastScanMs = 0;
+    int present = 0;
+    int missing = 0;
+    bool hasResults = false;
+  };
+
+  /// Status of the audit profile linked to @p collectionUuid (most recently
+  /// updated profile wins, matching the audit dialog's own selection). Lets
+  /// the collection-settings panel show "last audited N ago · X present · Y
+  /// missing" without DB access of its own (Kartend-4mqkof, Kartend-m6qsb.8).
+  [[nodiscard]] virtual DatAuditStatus
+  datAuditStatusForCollection(const QString &collectionUuid) = 0;
 
   /// Mutable / const access to the main window's live GeneralSettings.
   /// SettingsDialog panels mirror their working copy onto the main window

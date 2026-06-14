@@ -225,6 +225,14 @@ void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QStrin
     run("UPDATE playlist_items SET source_collection_uuid=? WHERE source_collection_uuid=?",
         {newUuid, oldUuid});
 
+    // DAT-audit profiles link to collections by the same uuid (soft link,
+    // '' = none — no unique constraint, so a plain re-key suffices). Omitting
+    // this orphaned every linked profile on rename/move (Kartend-m6qsb.1);
+    // purgeOrphanCollectionData still deliberately leaves profiles alone, so
+    // the deliberate-rename path here is their only repair.
+    run("UPDATE dat_audit_profile SET collection_uuid=? WHERE collection_uuid=?",
+        {newUuid, oldUuid});
+
     // collections: drop any stale stub already sitting at newUuid, then re-key
     // the real row (replacing the old OR REPLACE, which would silently delete).
     run("DELETE FROM collections WHERE uuid=?", {newUuid});

@@ -52,6 +52,7 @@ inline constexpr auto kCustomArtworkTypes = "customArtworkTypes";
 inline constexpr auto kCustomFontFamily = "customFontFamily";
 inline constexpr auto kDatFilePath = "datFilePath";
 inline constexpr auto kDatFilePaths = "datFilePaths";
+inline constexpr auto kDatLibraryPath = "datLibraryPath";
 inline constexpr auto kDefaultLauncherIndex = "defaultLauncherIndex";
 inline constexpr auto kExcludeSubfoldersFromSort = "excludeSubfoldersFromSort";
 inline constexpr auto kExpandMode = "expandMode";

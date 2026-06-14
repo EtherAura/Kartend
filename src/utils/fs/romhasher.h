@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -79,6 +80,24 @@ hashFile(const QString &filePath, const std::shared_ptr<std::atomic<bool>> &canc
 [[nodiscard]] ErrorUtils::Result<Result>
 hashArchiveInnerRom(const QString &archivePath,
                     const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
+
+/// One archive member's hashes. `memberPath` is the member's path inside the
+/// archive, '/'-separated with no leading slash (subfolders preserved).
+struct MemberResult {
+  QString memberPath;
+  Result hashes;
+};
+
+/// Extract `archivePath` once and hash EVERY regular file inside. The
+/// archive-per-item audit (Kartend-m6qsb.7) needs all members — unlike the
+/// scraper's hashArchiveInnerRom, which must identify exactly one dump.
+/// Shares hashArchiveInnerRom's extractor selection, size-ceiling, timeout,
+/// cancellation, and smuggled-symlink defences. An unreadable member yields
+/// an entry with empty hashes (size -1) rather than failing the archive;
+/// cancellation aborts the whole call with OperationCancelled.
+[[nodiscard]] ErrorUtils::Result<QList<MemberResult>>
+hashArchiveMembers(const QString &archivePath,
+                   const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
 } // namespace RomHasher
 

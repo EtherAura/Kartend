@@ -192,7 +192,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 18;
+  constexpr int CURRENT_SCHEMA_VERSION = 19;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -773,9 +773,70 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 18;
+  }
+
+  if (mutableVersion < 19) {
+    // v19 (Kartend-m6qsb.1 / .6): two DAT-audit profile extensions.
+    //
+    // 1. Index dat_audit_profile.collection_uuid. The collection-seeded audit
+    //    launch resolves "which profile is linked to this collection" — until
+    //    now via a listAll() linear scan whose first name-order match was
+    //    arbitrary when several profiles claimed one collection.
+    //    DatAuditProfile::loadByCollectionUuid makes the choice deterministic
+    //    (most-recently-updated wins) and this index backs it. Not UNIQUE:
+    //    '' means "not linked" and may repeat freely, and pre-existing
+    //    databases may legitimately hold several profiles for one collection.
+    // 2. detected_layout / layout_confirmed: the folder-structure probe's
+    //    persisted suggestion ('' = never detected; DatAudit::layoutToken
+    //    values otherwise) and whether the user confirmed it — only a
+    //    confirmed layout changes scan semantics (Kartend-m6qsb.6).
+    // 3. archive_member_hash_cache: per-member hashes for archive-per-item
+    //    auditing (Kartend-m6qsb.7). file_hash_cache's (path, size, mtime)
+    //    key cannot represent members, so they get their own table keyed
+    //    (container_path, member_path) and invalidated wholesale by the
+    //    container's stamped (size, mtime). Regenerable, but lives in the
+    //    main DB beside file_hash_cache so audit + scraper workers share it.
+    if (!runBlock(db, 19, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE INDEX IF NOT EXISTS idx_dat_audit_profile_collection "
+                             "ON dat_audit_profile(collection_uuid)",
+                             origin, "idx_dat_audit_profile_collection") &&
+                 ensureColumn(db, "dat_audit_profile", "detected_layout",
+                              "TEXT NOT NULL DEFAULT ''", origin) &&
+                 ensureColumn(db, "dat_audit_profile", "layout_confirmed",
+                              "INTEGER NOT NULL DEFAULT 0", origin) &&
+                 ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS archive_member_hash_cache ("
+                             "container_path TEXT NOT NULL, "
+                             "member_path TEXT NOT NULL, "
+                             "container_size INTEGER NOT NULL, "
+                             "container_mtime_unix_ms INTEGER NOT NULL, "
+                             "crc TEXT, "
+                             "md5 TEXT, "
+                             "sha1 TEXT, "
+                             "member_size INTEGER NOT NULL DEFAULT -1, "
+                             "computed_at_unix_ms INTEGER NOT NULL DEFAULT 0, "
+                             "PRIMARY KEY (container_path, member_path)"
+                             ")",
+                             origin, "archive_member_hash_cache") &&
+                 // 4. dat_library_dismissal: "don't ask again" state for the
+                 //    DAT-library scan's proposals (Kartend-m6qsb.5), keyed by
+                 //    canonical path + the dismissed revision's mtime so an
+                 //    updated catalogue becomes proposable again.
+                 ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS dat_library_dismissal ("
+                             "path TEXT PRIMARY KEY, "
+                             "mtime_unix_ms INTEGER NOT NULL DEFAULT 0, "
+                             "dismissed_at_unix_ms INTEGER NOT NULL DEFAULT 0"
+                             ")",
+                             origin, "dat_library_dismissal");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v19 block stays a pure copy-paste.
-    mutableVersion = 18; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v20 block stays a pure copy-paste.
+    mutableVersion = 19; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

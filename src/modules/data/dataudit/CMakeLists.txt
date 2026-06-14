@@ -5,6 +5,8 @@ target_sources(kartend_data PRIVATE
   datauditexport.h
   datauditfix.cpp
   datauditfix.h
+  datauditlayout.cpp
+  datauditlayout.h
   datauditmodel.cpp
   datauditmodel.h
   datauditregion.cpp

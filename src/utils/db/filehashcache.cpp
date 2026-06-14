@@ -1,5 +1,7 @@
 #include "filehashcache.h"
 
+#include "dbtxn.h"
+
 #include <QDateTime>
 #include <QFileInfo>
 #include <QSqlDatabase>
@@ -107,6 +109,94 @@ hashFileCached(QSqlDatabase &db, const QString &path,
   return r;
 }
 
+std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db, const QString &containerPath,
+                                                qint64 currentSize, qint64 currentMtimeMs) {
+  if (!db.isOpen() || containerPath.isEmpty()) {
+    return std::nullopt;
+  }
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT member_path, container_size, container_mtime_unix_ms, "
+                           "crc, md5, sha1, member_size "
+                           "FROM archive_member_hash_cache WHERE container_path = ? "
+                           "ORDER BY member_path"));
+  q.addBindValue(containerPath);
+  if (!q.exec()) {
+    return std::nullopt;
+  }
+  QList<MemberEntry> members;
+  while (q.next()) {
+    // All rows of one container carry the same stamped (size, mtime); a
+    // mismatch on any row means the whole container is stale.
+    if (q.value(1).toLongLong() != currentSize || q.value(2).toLongLong() != currentMtimeMs) {
+      return std::nullopt;
+    }
+    MemberEntry m;
+    m.memberPath = q.value(0).toString();
+    m.crc = q.value(3).toString();
+    m.md5 = q.value(4).toString();
+    m.sha1 = q.value(5).toString();
+    m.size = q.value(6).toLongLong();
+    members.append(m);
+  }
+  if (members.isEmpty()) {
+    return std::nullopt; // never cached (an empty archive is never stored)
+  }
+  return members;
+}
+
+ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &containerPath, qint64 size,
+                                      qint64 mtimeMs, const QList<MemberEntry> &members) {
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "FileHashCache::storeMembers");
+  }
+  if (containerPath.isEmpty()) {
+    return ErrorContext::warning(ErrorCode::InvalidArgument, "Empty container path",
+                                 "FileHashCache::storeMembers");
+  }
+  KartendDb::DbTransaction txn(db, "FileHashCache::storeMembers");
+  if (!txn.active()) {
+    return txn.beginError("Failed to begin transaction", nullptr, ErrorUtils::Severity::Error);
+  }
+  {
+    QSqlQuery del(db);
+    del.prepare(QStringLiteral("DELETE FROM archive_member_hash_cache WHERE container_path = ?"));
+    del.addBindValue(containerPath);
+    if (!del.exec()) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                 "Failed to clear stale member hashes",
+                                 "FileHashCache::storeMembers")
+          .withDetails(del.lastError().text());
+    }
+  }
+  QSqlQuery ins(db);
+  ins.prepare(QStringLiteral(
+      "INSERT OR REPLACE INTO archive_member_hash_cache "
+      "(container_path, member_path, container_size, container_mtime_unix_ms, "
+      "crc, md5, sha1, member_size, computed_at_unix_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  for (const MemberEntry &m : members) {
+    ins.bindValue(0, containerPath);
+    ins.bindValue(1, m.memberPath);
+    ins.bindValue(2, size);
+    ins.bindValue(3, mtimeMs);
+    ins.bindValue(4, m.crc.isEmpty() ? QVariant() : QVariant(m.crc));
+    ins.bindValue(5, m.md5.isEmpty() ? QVariant() : QVariant(m.md5));
+    ins.bindValue(6, m.sha1.isEmpty() ? QVariant() : QVariant(m.sha1));
+    ins.bindValue(7, m.size);
+    ins.bindValue(8, now);
+    if (!ins.exec()) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to store member hash",
+                                 "FileHashCache::storeMembers")
+          .withDetails(ins.lastError().text());
+    }
+  }
+  if (!txn.commit()) {
+    return txn.commitError("Failed to commit member hashes", nullptr, ErrorUtils::Severity::Error);
+  }
+  return true;
+}
+
 void clearAll(QSqlDatabase &db) {
   if (!db.isOpen()) {
     return;
@@ -114,6 +204,9 @@ void clearAll(QSqlDatabase &db) {
   QSqlQuery q(db);
   if (!q.exec(QStringLiteral("DELETE FROM file_hash_cache"))) {
     qWarning("FileHashCache: clearAll failed: %s", qPrintable(q.lastError().text()));
+  }
+  if (!q.exec(QStringLiteral("DELETE FROM archive_member_hash_cache"))) {
+    qWarning("FileHashCache: clearAll (members) failed: %s", qPrintable(q.lastError().text()));
   }
 }
 

@@ -2,6 +2,7 @@ target_sources(kartend_utils PRIVATE
   bulkedit.cpp
   collectionhealth.cpp
   datauditprofile.cpp
+  datlibrarystate.cpp
   dbmigrations.cpp
   filehashcache.cpp
   historystore.cpp
@@ -18,6 +19,7 @@ target_sources(kartend_utils PRIVATE
   bulkedit.h
   collectionhealth.h
   datauditprofile.h
+  datlibrarystate.h
   dbtxn.h
   dbmigrations.h
   filehashcache.h
