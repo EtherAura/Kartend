@@ -3,6 +3,7 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "imainwindow.h"
 #include <functional>
 #include <QList>
 #include <QString>
@@ -33,11 +34,12 @@ struct SettingsModel {
   /// Optional bridges to the DAT-audit feature, wired by SettingsDialog from its
   /// IMainWindow parent (null in tests / when there is no main window). The
   /// configuration panel uses them to launch an audit for the current
-  /// collection and to show a "last audited N ago" hint (Kartend-4mqkof). The
-  /// launch takes a CollectionConfig (not an index) so the panel can pass its
-  /// working copy with unsaved edits applied (Kartend-6wn0p).
+  /// collection and to show a "last audited N ago · X present · Y missing"
+  /// hint (Kartend-4mqkof, Kartend-m6qsb.8). The launch takes a
+  /// CollectionConfig (not an index) so the panel can pass its working copy
+  /// with unsaved edits applied (Kartend-6wn0p).
   std::function<void(const CollectionConfig &collection)> openDatAudit;
-  std::function<qint64(const QString &collectionUuid)> lastDatAuditMs;
+  std::function<IMainWindow::DatAuditStatus(const QString &collectionUuid)> datAuditStatus;
 };
 
 #endif // SETTINGSMODEL_H

@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QList>
+#include <QPair>
 #include <QString>
 
 #include "screenscrapersystems.h"
@@ -41,6 +42,19 @@ public:
   /// collections exist yet" prompt. The label stays hidden when this is
   /// never called.
   void setIntroText(const QString &text);
+
+  /// Reveal an optional "Parent collection" picker seeded with `options`
+  /// (each a {display name, uuid} pair) plus a leading "(none)" entry, and
+  /// preselect `preselectUuid` when given. Off by default: the Settings
+  /// add-collection flow derives the parent from the tree selection and
+  /// never calls this, so its dialog is unchanged. Used by the DAT-library
+  /// "Add to new collection…" path (Kartend-m6qsb.19).
+  void setParentCollectionOptions(const QList<QPair<QString, QString>> &options,
+                                  const QString &preselectUuid = QString());
+
+  /// The chosen parent collection's uuid, or empty for "(none)" / when the
+  /// picker was never enabled.
+  [[nodiscard]] QString parentCollectionUuid() const;
 
   [[nodiscard]] QString collectionName() const;
   [[nodiscard]] QString contentPath() const;
@@ -95,6 +109,10 @@ private:
   QFormLayout *m_form = nullptr;
   QLabel *m_introLabel = nullptr;
   QLineEdit *m_nameEdit = nullptr;
+  /// Optional parent picker; hidden unless setParentCollectionOptions runs.
+  /// item data carries the parent uuid ('' for the "(none)" entry).
+  QComboBox *m_parentCombo = nullptr;
+  bool m_parentPickerEnabled = false;
   QLineEdit *m_contentEdit = nullptr;
   QLineEdit *m_artworkEdit = nullptr;
   QLineEdit *m_launcherEdit = nullptr;

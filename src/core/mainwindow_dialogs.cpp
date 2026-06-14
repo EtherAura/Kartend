@@ -37,6 +37,7 @@
 #include "collectionhealth.h"
 #include "collectionhealthdialog.h"
 #include "commandpalettedialog.h"
+#include "createcollectiondialog.h"
 #include "detailpagemanager.h"
 #include "dialogcontroller.h"
 #include "dialogrunners.h"
@@ -63,8 +64,13 @@
 #include "selectionmanager.h"
 #include "settingsdialogcontroller.h"
 #include "toolbarcontroller.h"
+#include "uiconstants/grid.h"
+#include "uiconstants/item.h"
 #include "variantgrouping.h"
 #include "variantgroupingdialog.h"
+#include <QFileInfo>
+#include <QHash>
+#include <QPair>
 
 #include "isettingsmanager.h"
 #include "sessionmanager.h"
@@ -785,6 +791,82 @@ void MainWindow::runNewLibraryWizard() {
     currentCollectionIndex = m_collections.size() - 1;
     m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
   }
+}
+
+QString MainWindow::createCollectionForDat(const QString &datPath) {
+  CreateCollectionDialog dialog(this);
+  dialog.setRetroarchConfigOverride(m_generalSettings.launchers.retroarchConfigPath);
+  dialog.setIntroText(
+      tr("Create a collection for the catalogue \"%1\". It will be attached to the new "
+         "collection; point it at the folder holding the matching files.")
+          .arg(QFileInfo(datPath).fileName()));
+  // Offer the existing (non-playlist) collections as possible parents so a
+  // DAT-seeded collection can be nested (Kartend-m6qsb.19). uuid → index map
+  // resolves the pick back to a parentCollectionIndex below.
+  QList<QPair<QString, QString>> parentOptions;
+  QHash<QString, int> uuidToIndex;
+  for (int i = 0; i < m_collections.size(); ++i) {
+    const CollectionConfig &existing = m_collections.at(i);
+    if (existing.isPlaylist) {
+      continue;
+    }
+    const QString expandedExisting =
+        PathUtils::validateAndExpandPath(existing.mediaDirectory, existing.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(existing.name, expandedExisting);
+    parentOptions.append({existing.name, uuid});
+    uuidToIndex.insert(uuid, i);
+  }
+  dialog.setParentCollectionOptions(parentOptions);
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return QString();
+  }
+
+  // Mirror SettingsDialog::addCollection's field set so a DAT-seeded
+  // collection is indistinguishable from a hand-made one, then pre-attach the
+  // catalogue (linked audit profiles derive their DAT list from this).
+  CollectionConfig c;
+  c.name = dialog.collectionName();
+  c.type = dialog.collectionType();
+  c.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
+  c.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
+  c.launcher.launcherPath = dialog.launcherPath();
+  c.launcher.corePath = dialog.corePath();
+  c.mediaDirectory = dialog.contentPath();
+  c.artworkDirectory = dialog.artworkDirectory();
+  c.extensions = QStringList();
+  c.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+  c.gridLayout.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  c.scraperOverrides.datFilePaths = QStringList{datPath};
+
+  // Apply the chosen parent, inheriting the layout/sidebar fields a
+  // subcollection takes from its parent — same set SettingsDialog::addCollection
+  // copies so a DAT-seeded subcollection looks consistent (Kartend-m6qsb.19).
+  const int parentIdx = uuidToIndex.value(dialog.parentCollectionUuid(), -1);
+  if (parentIdx >= 0) {
+    const CollectionConfig &parent = m_collections.at(parentIdx);
+    c.parentCollectionIndex = parentIdx;
+    c.isSubcollection = true;
+    c.gridLayout = parent.gridLayout;
+    c.sidebar.sidebarMode = parent.sidebar.sidebarMode;
+    c.viewType = parent.viewType;
+    c.showAllSubcollectionItems = parent.showAllSubcollectionItems;
+    c.horizontalAlignment = parent.horizontalAlignment;
+    c.hideTitles = parent.hideTitles;
+    c.hideSubcollectionTitles = parent.hideSubcollectionTitles;
+  }
+
+  // append → save → rebuild, the same persist sequence runNewLibraryWizard
+  // uses. No navigate: the user is mid DAT-library review.
+  m_collections.append(c);
+  if (m_appManager->getSettingsManager()) {
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
+  }
+  rebuildHierarchyCache();
+
+  const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+  return CollectionUtils::computeCollectionUuid(c.name, expanded);
 }
 
 void MainWindow::managePresentationProfilesInteractive() {

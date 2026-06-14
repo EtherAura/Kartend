@@ -171,6 +171,15 @@ void MainWindow::showStartupSplash() {
   // file is checked here; if one exists, the user is prompted to
   // resume or discard.
   QTimer::singleShot(0, this, [this]() { promptResumePendingScrapeIfAny(); });
+  // DAT-library startup scan (Kartend-m6qsb.5): header-probe the watched
+  // folder for new catalogues off-thread; surfaces only a status-bar hint
+  // when something matched. Deferred a few seconds so first paint, splash,
+  // and the initial collection scan keep the disk to themselves.
+  QTimer::singleShot(5000, this, [this]() {
+    if (m_datAuditController) {
+      m_datAuditController->startupLibraryScan();
+    }
+  });
   // startup video plays first when enabled. The splash is
   // chained onto the video's dismissed signal so it still appears after
   // the user skips or the clip ends — keeping users with both features

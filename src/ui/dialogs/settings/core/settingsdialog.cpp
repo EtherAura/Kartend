@@ -107,8 +107,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     m_model.openDatAudit = [mainWindow](const CollectionConfig &collection) {
       mainWindow->openDatAuditForCollection(collection);
     };
-    m_model.lastDatAuditMs = [mainWindow](const QString &collectionUuid) {
-      return mainWindow->lastDatAuditMsForCollection(collectionUuid);
+    m_model.datAuditStatus = [mainWindow](const QString &collectionUuid) {
+      return mainWindow->datAuditStatusForCollection(collectionUuid);
     };
   }
 

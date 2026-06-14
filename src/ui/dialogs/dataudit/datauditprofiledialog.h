@@ -7,6 +7,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPlainTextEdit;
@@ -40,17 +41,29 @@ private slots:
   void onMoveRegionDown();
   void onBrowseManagedRoot();
   void onFixModeChanged();
+  /// React to the Linked-collection picker: a linked profile's DAT list and
+  /// scan root are DERIVED from the collection's settings (Kartend-m6qsb.2),
+  /// so linking repopulates both lists from the collection and locks their
+  /// editors; "(none)" unlocks them again. An unresolvable stored link keeps
+  /// the seed's cached lists, locked (read-only fallback).
+  void onLinkedCollectionChanged();
   void accept() override;
 
 private:
   static void removeSelected(QListWidget *list);
 
-  DatAuditProfile::Profile m_seed; // preserves id / timestamps
+  DatAuditProfile::Profile m_seed;                        // preserves id / timestamps
+  const QList<CollectionConfig> *m_collections = nullptr; // borrowed; may be null
 
   QLineEdit *m_name = nullptr;
   QComboBox *m_collection = nullptr; // optional collection link; data() holds the UUID
   QListWidget *m_datList = nullptr;
   QListWidget *m_rootList = nullptr;
+  QPushButton *m_addDatButton = nullptr;
+  QPushButton *m_removeDatButton = nullptr;
+  QPushButton *m_addRootButton = nullptr;
+  QPushButton *m_removeRootButton = nullptr;
+  QLabel *m_linkedHint = nullptr;
   QComboBox *m_mergeMode = nullptr;
   QCheckBox *m_onePerGame = nullptr;
   QListWidget *m_regionList = nullptr; // priority order, top = most preferred

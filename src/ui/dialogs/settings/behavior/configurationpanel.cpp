@@ -2,6 +2,7 @@
 
 #include "collection/typehelpers.h"
 #include "extensionutils.h"
+#include "imainwindow.h"
 #include "metadataproviderregistry.h"
 #include "pathutils.h"
 #include "screenscrapersystemcache.h"
@@ -249,19 +250,25 @@ void ConfigurationPanel::load() {
   ui->datFilesListWidget->clear();
   ui->datFilesListWidget->addItems(config.scraperOverrides.datFilePaths);
 
-  // Last-audited hint: ask the host for the linked profile's last-scan time
-  // (null callback in tests → 0 → "never"). The collection UUID is computed the
-  // same way the audit profile editor's "Linked collection" picker does so the
-  // lookup matches.
-  qint64 lastAuditMs = 0;
-  if (m_model->lastDatAuditMs) {
+  // Last-audited hint: ask the host for the linked profile's persisted status
+  // (null callback in tests → default status → "never"). The collection UUID
+  // is computed the same way the audit profile editor's "Linked collection"
+  // picker does so the lookup matches.
+  IMainWindow::DatAuditStatus auditStatus;
+  if (m_model->datAuditStatus) {
     const QString expandedMediaDir =
         PathUtils::validateAndExpandPath(config.mediaDirectory, config.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(config.name, expandedMediaDir);
-    lastAuditMs = m_model->lastDatAuditMs(uuid);
+    auditStatus = m_model->datAuditStatus(uuid);
   }
-  ui->lastAuditedValueLabel->setText(
-      StringUtils::relativePastTime(lastAuditMs, QDateTime::currentMSecsSinceEpoch()));
+  QString auditText =
+      StringUtils::relativePastTime(auditStatus.lastScanMs, QDateTime::currentMSecsSinceEpoch());
+  if (auditStatus.hasResults) {
+    // The persisted snapshot turns the bare timestamp into an at-a-glance
+    // completeness readout (Kartend-m6qsb.8).
+    auditText += tr(" · %1 present · %2 missing").arg(auditStatus.present).arg(auditStatus.missing);
+  }
+  ui->lastAuditedValueLabel->setText(auditText);
 }
 
 void ConfigurationPanel::autodetectScreenscraperSystem() {

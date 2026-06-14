@@ -187,10 +187,17 @@ public:
   /// (Kartend-6wn0p).
   void openDatAuditForCollection(const CollectionConfig &collection) override;
 
-  /// Unix-ms of the most recent completed audit for the profile linked to
-  /// @p collectionUuid, or 0 when none / never (Kartend-4mqkof). Reads the
-  /// dat_audit_profile store on a short-lived connection.
-  [[nodiscard]] qint64 lastDatAuditMsForCollection(const QString &collectionUuid) override;
+  /// Persisted audit status (last-scan stamp + present/missing counts) for
+  /// the profile linked to @p collectionUuid (Kartend-4mqkof,
+  /// Kartend-m6qsb.8). Reads the dat_audit_profile store on a short-lived
+  /// connection.
+  [[nodiscard]] DatAuditStatus datAuditStatusForCollection(const QString &collectionUuid) override;
+
+  /// Create a new collection for @p datPath via CreateCollectionDialog with the
+  /// DAT pre-attached; append + save + rebuild like the other add-collection
+  /// paths. Returns the new collection's uuid, or empty when the user cancels.
+  /// Drives the DAT-library review's "Add to new collection…" (Kartend-m6qsb.18).
+  [[nodiscard]] QString createCollectionForDat(const QString &datPath);
 
   /// Open the settings dialog with the standard MainWindow-rooted context
   /// (collections list, current index, manager handles, dialog factory).

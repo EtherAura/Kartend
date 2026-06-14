@@ -3,9 +3,13 @@
 
 #include <functional>
 
+#include <QFutureWatcher>
 #include <QObject>
 #include <QString>
 #include <QStringList>
+
+#include "datcollectionmatch.h"
+#include "datlibraryscan.h"
 
 QT_BEGIN_NAMESPACE
 class QWidget;
@@ -33,6 +37,25 @@ struct DatAuditControllerContext {
   /// + media dir), borrowed from MainWindow. Null/empty is fine — the picker
   /// then offers only "(none)".
   std::function<QList<CollectionConfig> *()> getCollections;
+
+  /// DAT-library hooks (Kartend-m6qsb.5). All optional; unset = library off.
+  std::function<QString()> getDatLibraryPath;
+  std::function<void(const QString &root)> saveDatLibraryPath;
+  /// Append a DAT to the collection's datFilePaths and persist the INI —
+  /// linked audit profiles pick the change up automatically because their
+  /// lists are derived (Kartend-m6qsb.2).
+  std::function<void(const QString &collectionUuid, const QString &datPath)> attachDatToCollection;
+  /// Create a new collection for `datPath` (prompting the user) with the DAT
+  /// attached; returns the new collection's uuid, or empty when cancelled.
+  /// Powers the review dialog's "Add to new collection…" choice
+  /// (Kartend-m6qsb.18). get-prefixed per the controller-ctx accessor rule
+  /// (non-void thunk) even though it also creates.
+  std::function<QString(const QString &datPath)> getNewCollectionForDat;
+  /// Open the scraper scoped to the collection with this uuid — used after a
+  /// Fix renames files to canonical names, to re-scrape them (Kartend-m6qsb.27).
+  std::function<void(const QString &collectionUuid)> openScraperForCollection;
+  /// Non-modal surfacing for "new catalogues matched" (status bar).
+  std::function<void(const QString &message)> showStatusMessage;
 };
 
 class DatAuditController : public QObject {
@@ -55,13 +78,36 @@ public slots:
   void openForCollection(const QString &collectionUuid, const QString &collectionName,
                          const QString &mediaDir, const QStringList &datPaths);
 
+  /// Async startup pass over the DAT-library folder (Kartend-m6qsb.5): probe
+  /// headers, rank collection matches, and surface a status-bar hint when
+  /// proposals exist. No-op when no library folder is configured. Runs the
+  /// scan on the global pool — it is a bounded header-probe walk, never an
+  /// ingest — and never applies anything (confirm-only).
+  void startupLibraryScan();
+
+  /// Open the modal review dialog over the latest proposals (rescanning
+  /// fresh when the startup scan found none or hasn't run).
+  void openLibraryReview();
+
+  /// Import a DAT zip / folder / file into the library (prompting for a
+  /// library folder if none is set) and open the review (Kartend-m6qsb.22).
+  void importDatPack(const QString &sourcePath);
+
 private:
   /// Build the dialog on first use and refresh its borrowed collection list.
   /// Does not show — callers raise it after any per-open setup.
   DatAuditDialog *ensureDialog();
+  /// CollectionInfo projections of the live collection list (uuid computed
+  /// the same way every other consumer keys on).
+  [[nodiscard]] QList<DatCollectionMatch::CollectionInfo> collectionInfos() const;
+  /// Synchronous scan of `root` against the live collections, dismissals
+  /// filtered via a short-lived app-DB connection.
+  [[nodiscard]] DatLibraryScan::ScanResult scanLibrary(const QString &root) const;
 
   DatAuditControllerContext m_ctx;
   DatAuditDialog *m_dialog = nullptr;
+  QFutureWatcher<DatLibraryScan::ScanResult> m_libraryWatcher;
+  DatLibraryScan::ScanResult m_startupProposals;
 };
 
 #endif // DATAUDITCONTROLLER_H

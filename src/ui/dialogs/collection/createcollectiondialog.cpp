@@ -87,6 +87,16 @@ void CreateCollectionDialog::buildUi() {
   m_nameEdit->setToolTip(tr("Display name for the collection. Required."));
   m_form->addRow(tr("Name:"), m_nameEdit);
 
+  // Optional parent picker — hidden until a caller supplies options via
+  // setParentCollectionOptions (Kartend-m6qsb.19). The Settings add-collection
+  // flow leaves it hidden and derives the parent from the tree selection.
+  m_parentCombo = new QComboBox(this);
+  m_parentCombo->setObjectName(QStringLiteral("parentCollectionCombo"));
+  m_parentCombo->setToolTip(tr("Nest this collection under an existing one. "
+                               "Optional — leave as (none) for a top-level collection."));
+  m_form->addRow(tr("Parent Collection:"), m_parentCombo);
+  m_form->setRowVisible(m_parentCombo, false);
+
   // Builds a "<line edit> [Browse]" row. Browse opens a folder picker when
   // pickDirectory is set, otherwise a file picker; either way it is seeded
   // from the field's current value.
@@ -328,6 +338,28 @@ void CreateCollectionDialog::updateConditionalRows() {
 void CreateCollectionDialog::setIntroText(const QString &text) {
   m_introLabel->setText(text);
   m_introLabel->setVisible(!text.isEmpty());
+}
+
+void CreateCollectionDialog::setParentCollectionOptions(
+    const QList<QPair<QString, QString>> &options, const QString &preselectUuid) {
+  m_parentCombo->clear();
+  m_parentCombo->addItem(tr("(none)"), QString());
+  for (const auto &opt : options) {
+    m_parentCombo->addItem(opt.first, opt.second);
+  }
+  if (!preselectUuid.isEmpty()) {
+    const int idx = m_parentCombo->findData(preselectUuid);
+    if (idx >= 0) {
+      m_parentCombo->setCurrentIndex(idx);
+    }
+  }
+  m_parentPickerEnabled = true;
+  m_form->setRowVisible(m_parentCombo, true);
+  adjustSize();
+}
+
+QString CreateCollectionDialog::parentCollectionUuid() const {
+  return m_parentPickerEnabled ? m_parentCombo->currentData().toString() : QString();
 }
 
 void CreateCollectionDialog::accept() {

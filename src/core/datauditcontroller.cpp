@@ -1,13 +1,60 @@
 #include "datauditcontroller.h"
 
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QSqlDatabase>
+#include <QStandardPaths>
 #include <Qt>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QWidget>
 
+#include "collection/collectionconfig.h"
+#include "collection/typehelpers.h"
+#include "databaseschema.h"
 #include "datauditdialog.h"
+#include "datlibraryreviewdialog.h"
+#include "datlibrarystate.h"
+#include "datpackimport.h"
+#include "pathutils.h"
 
-DatAuditController::DatAuditController(QObject *parent) : QObject(parent) {}
+namespace {
 
-DatAuditController::~DatAuditController() = default;
+// Run `fn` with a transient connection to the main app DB (dismissal state
+// lives beside the dat_audit_profile tables). Same throwaway-connection shape
+// as the audit dialog's withProfileDb — light, occasional access.
+template <typename Fn> void withAppDb(Fn &&fn) {
+  static int counter = 0; // UI thread only
+  const QString conn = QStringLiteral("dataudit_library_%1").arg(counter++);
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (DatabaseSchema::openConnection(db, dir)) {
+      DatabaseSchema::applyConnectionPragmas(db);
+      fn(db);
+    }
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(conn);
+}
+
+} // namespace
+
+DatAuditController::DatAuditController(QObject *parent) : QObject(parent) {
+  connect(&m_libraryWatcher, &QFutureWatcher<DatLibraryScan::ScanResult>::finished, this, [this] {
+    m_startupProposals = m_libraryWatcher.result();
+    if (!m_startupProposals.proposals.isEmpty() && m_ctx.showStatusMessage) {
+      m_ctx.showStatusMessage(
+          tr("%n new DAT catalogue(s) match your collections — File → DAT Audit → Library…",
+             nullptr, static_cast<int>(m_startupProposals.proposals.size())));
+    }
+  });
+}
+
+DatAuditController::~DatAuditController() {
+  // Don't let a startup scan outlive the controller mid-teardown.
+  m_libraryWatcher.cancel();
+  m_libraryWatcher.waitForFinished();
+}
 
 void DatAuditController::setContext(const DatAuditControllerContext &context) {
   m_ctx = context;
@@ -23,7 +70,44 @@ DatAuditDialog *DatAuditController::ensureDialog() {
   // Refresh the borrowed collection list on every open so the profile editor's
   // "Linked collection" picker reflects collections added/removed since.
   m_dialog->setCollections(m_ctx.getCollections ? m_ctx.getCollections() : nullptr);
+  m_dialog->setLibraryOpener([this] { openLibraryReview(); });
+  // Library-folder accessors power both the Library page display and the
+  // Download page's import destination (Kartend-m6qsb.16). Only wired when the
+  // host provided them.
+  if (m_ctx.getDatLibraryPath) {
+    m_dialog->setLibraryPathAccessors(m_ctx.getDatLibraryPath, m_ctx.saveDatLibraryPath);
+    m_dialog->setImportHandler([this](const QString &path) { importDatPack(path); });
+  }
+  // Pass through the scraper opener (Kartend-m6qsb.27) — null when the host
+  // didn't provide one, which the dialog treats as "no re-scrape offer".
+  m_dialog->setScraperOpener(m_ctx.openScraperForCollection);
   return m_dialog;
+}
+
+void DatAuditController::importDatPack(const QString &sourcePath) {
+  QWidget *parent = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
+  QString lib = m_ctx.getDatLibraryPath ? m_ctx.getDatLibraryPath().trimmed() : QString();
+  if (lib.isEmpty()) {
+    // No library yet — ask once and remember it, so imports have a home.
+    lib = QFileDialog::getExistingDirectory(parent, tr("Choose a DAT library folder"));
+    if (lib.isEmpty()) {
+      return;
+    }
+    if (m_ctx.saveDatLibraryPath) {
+      m_ctx.saveDatLibraryPath(lib);
+    }
+  }
+  auto res = DatPackImport::importInto(sourcePath, lib);
+  if (res.isError()) {
+    QMessageBox::warning(parent, tr("Import DATs"), res.error().message);
+    return;
+  }
+  if (m_ctx.showStatusMessage) {
+    m_ctx.showStatusMessage(tr("Imported %n DAT file(s) into the library.", nullptr,
+                               static_cast<int>(res.value().size())));
+  }
+  // Surface matches for the freshly-imported catalogues.
+  openLibraryReview();
 }
 
 void DatAuditController::openDialog() {
@@ -41,4 +125,81 @@ void DatAuditController::openForCollection(const QString &collectionUuid,
   dialog->show();
   dialog->raise();
   dialog->activateWindow();
+}
+
+QList<DatCollectionMatch::CollectionInfo> DatAuditController::collectionInfos() const {
+  QList<DatCollectionMatch::CollectionInfo> out;
+  QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+  if (collections == nullptr) {
+    return out;
+  }
+  out.reserve(collections->size());
+  for (const CollectionConfig &c : *collections) {
+    DatCollectionMatch::CollectionInfo info;
+    const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+    info.uuid = CollectionUtils::computeCollectionUuid(c.name, expanded);
+    info.name = c.name;
+    info.extensions = c.extensions;
+    info.attachedDatPaths = c.scraperOverrides.datFilePaths;
+    out.append(info);
+  }
+  return out;
+}
+
+DatLibraryScan::ScanResult DatAuditController::scanLibrary(const QString &root) const {
+  QSet<QString> dismissed;
+  withAppDb([&dismissed](QSqlDatabase &db) {
+    if (auto keys = DatLibraryState::loadDismissalKeys(db); keys.isOk()) {
+      dismissed = keys.value();
+    }
+  });
+  return DatLibraryScan::scan(root, collectionInfos(), dismissed);
+}
+
+void DatAuditController::startupLibraryScan() {
+  const QString root = m_ctx.getDatLibraryPath ? m_ctx.getDatLibraryPath() : QString();
+  if (root.trimmed().isEmpty() || m_libraryWatcher.isRunning()) {
+    return;
+  }
+  // Snapshot the inputs on the UI thread — the worker must not touch the
+  // live collection list or open UI-thread DB connections.
+  const QList<DatCollectionMatch::CollectionInfo> collections = collectionInfos();
+  QSet<QString> dismissed;
+  withAppDb([&dismissed](QSqlDatabase &db) {
+    if (auto keys = DatLibraryState::loadDismissalKeys(db); keys.isOk()) {
+      dismissed = keys.value();
+    }
+  });
+  m_libraryWatcher.setFuture(QtConcurrent::run([root, collections, dismissed] {
+    return DatLibraryScan::scan(root, collections, dismissed);
+  }));
+}
+
+void DatAuditController::openLibraryReview() {
+  const QString root = m_ctx.getDatLibraryPath ? m_ctx.getDatLibraryPath() : QString();
+  // Use the startup scan's proposals when fresh ones exist; otherwise scan
+  // now (cheap header probes) so the dialog always opens with live data.
+  DatLibraryScan::ScanResult initial = m_startupProposals;
+  if (initial.proposals.isEmpty() && !root.trimmed().isEmpty()) {
+    initial = scanLibrary(root);
+  }
+  m_startupProposals = DatLibraryScan::ScanResult{}; // consumed
+
+  DatLibraryReviewDialog::Hooks hooks;
+  hooks.attach = m_ctx.attachDatToCollection;
+  hooks.dismiss = [](const QString &canonicalPath, qint64 mtimeMs) {
+    withAppDb([&](QSqlDatabase &db) {
+      if (auto res = DatLibraryState::addDismissal(db, canonicalPath, mtimeMs); res.isError()) {
+        ErrorUtils::logError(res.error());
+      }
+    });
+  };
+  hooks.rescan = [this](const QString &r) { return scanLibrary(r); };
+  hooks.saveLibraryPath = m_ctx.saveDatLibraryPath;
+  hooks.addToNewCollection = m_ctx.getNewCollectionForDat;
+
+  QWidget *parent = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
+  DatLibraryReviewDialog dlg(root, collectionInfos(), initial, hooks,
+                             m_dialog != nullptr ? static_cast<QWidget *>(m_dialog) : parent);
+  dlg.exec();
 }

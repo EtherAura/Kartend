@@ -28,6 +28,12 @@ public:
   /// audit to refresh the table.
   [[nodiscard]] bool didApply() const { return m_applied; }
 
+  /// How many in-place RENAMEs were applied. Renamed files carry their
+  /// canonical names now, so the caller can offer to re-scrape them — canonical
+  /// names match much better (Kartend-m6qsb.27). 0 when nothing was renamed
+  /// (only relocate/quarantine, or no apply).
+  [[nodiscard]] int renamedCount() const { return m_renamedCount; }
+
 private slots:
   void recomputePlan();
   void onBrowseQuarantine();
@@ -42,6 +48,7 @@ private:
   DatAudit::FixPlan m_plan;
   QList<DatAudit::UndoEntry> m_undo;
   bool m_applied = false;
+  int m_renamedCount = 0;
 
   QCheckBox *m_rename = nullptr;
   QCheckBox *m_quarantine = nullptr;

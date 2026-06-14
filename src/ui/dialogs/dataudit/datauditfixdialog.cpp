@@ -143,9 +143,19 @@ void DatAuditFixDialog::onApply() {
   if (m_plan.isEmpty()) {
     return;
   }
+  // Count planned renames before applying — renamed files get their canonical
+  // names, the trigger for the re-scrape offer (Kartend-m6qsb.27). Counting the
+  // plan (not per-action success) is fine for an offer prompt.
+  int renames = 0;
+  for (const DatAudit::FixAction &a : m_plan.actions) {
+    if (a.kind == DatAudit::FixActionKind::Rename) {
+      ++renames;
+    }
+  }
   auto res = DatAudit::applyFixPlan(m_plan, /*dryRun=*/false);
   if (res.applied > 0) {
     m_applied = true;
+    m_renamedCount += renames;
   }
   m_undo = res.undo;
   m_undoButton->setEnabled(!m_undo.isEmpty());

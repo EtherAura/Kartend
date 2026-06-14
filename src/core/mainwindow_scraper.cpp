@@ -19,6 +19,7 @@
 #include "databaseschema.h"
 #include "datauditcontroller.h"
 #include "datauditprofile.h"
+#include "dataudittypes.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "pathutils.h"
@@ -66,34 +67,40 @@ void MainWindow::openDatAuditForCollection(const CollectionConfig &collection) {
                                           collection.scraperOverrides.datFilePaths);
 }
 
-qint64 MainWindow::lastDatAuditMsForCollection(const QString &collectionUuid) {
+IMainWindow::DatAuditStatus MainWindow::datAuditStatusForCollection(const QString &collectionUuid) {
+  IMainWindow::DatAuditStatus out;
   if (collectionUuid.isEmpty()) {
-    return 0;
+    return out;
   }
   // Short-lived UI-thread connection to the app DB (same pattern as the audit
-  // dialog's withProfileDb); the table is tiny and this is read on settings
+  // dialog's withProfileDb); the tables are tiny and this is read on settings
   // open / collection switch, not in a hot path.
   static int counter = 0; // UI thread only
   const QString conn = QStringLiteral("mw_lastaudit_%1").arg(counter++);
-  qint64 latestMs = 0;
   {
     QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (DatabaseSchema::openConnection(db, dir)) {
       DatabaseSchema::applyConnectionPragmas(db);
-      auto all = DatAuditProfile::listAll(db);
-      if (all.isOk()) {
-        for (const DatAuditProfile::Profile &p : all.value()) {
-          if (p.collectionUuid == collectionUuid && p.lastScanAtMs > latestMs) {
-            latestMs = p.lastScanAtMs; // newest across all profiles linked to this collection
-          }
+      // Same most-recently-updated selection the audit dialog itself uses, so
+      // the hint describes the profile a collection-seeded launch would open.
+      auto linked = DatAuditProfile::loadByCollectionUuid(db, collectionUuid);
+      if (linked.isOk() && linked.value().has_value()) {
+        auto summary = DatAuditProfile::loadResultSummary(db, linked.value()->id);
+        if (summary.isOk() && summary.value().has_value()) {
+          const DatAuditProfile::ResultSummary &s = *summary.value();
+          out.lastScanMs = s.lastScanAtMs;
+          out.hasResults = s.hasResults;
+          out.present = s.count(static_cast<int>(DatAudit::Status::Have)) +
+                        s.count(static_cast<int>(DatAudit::Status::WrongName));
+          out.missing = s.count(static_cast<int>(DatAudit::Status::Missing));
         }
       }
     }
     db.close();
   }
   QSqlDatabase::removeDatabase(conn);
-  return latestMs;
+  return out;
 }
 
 void MainWindow::promptResumePendingScrapeIfAny() {

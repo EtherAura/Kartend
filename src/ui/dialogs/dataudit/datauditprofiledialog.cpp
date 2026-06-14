@@ -49,7 +49,7 @@ QGroupBox *pathGroup(const QString &title, const QString &addText, QListWidget *
 DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &seed,
                                              const QList<CollectionConfig> *collections,
                                              QWidget *parent)
-    : QDialog(parent), m_seed(seed) {
+    : QDialog(parent), m_seed(seed), m_collections(collections) {
   setWindowTitle(m_seed.id < 0 ? tr("New DAT profile") : tr("Edit DAT profile"));
   resize(660, 680);
 
@@ -86,12 +86,17 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   form->addRow(tr("Linked collection:"), m_collection);
   root->addLayout(form);
 
-  // DAT files + scan folders.
-  QPushButton *addDat = nullptr, *removeDat = nullptr, *addRoot = nullptr, *removeRoot = nullptr;
+  // DAT files + scan folders. Locked + derived while a collection is linked
+  // (Kartend-m6qsb.2) — see onLinkedCollectionChanged.
+  m_linkedHint = new QLabel(
+      tr("DAT files and scan folder are managed by the linked collection's settings."), this);
+  m_linkedHint->setVisible(false);
+  root->addWidget(m_linkedHint);
   auto *inputs = new QHBoxLayout();
-  inputs->addWidget(pathGroup(tr("DAT files"), tr("Add DAT…"), m_datList, addDat, removeDat, this));
-  inputs->addWidget(
-      pathGroup(tr("Scan folders"), tr("Add folder…"), m_rootList, addRoot, removeRoot, this));
+  inputs->addWidget(pathGroup(tr("DAT files"), tr("Add DAT…"), m_datList, m_addDatButton,
+                              m_removeDatButton, this));
+  inputs->addWidget(pathGroup(tr("Scan folders"), tr("Add folder…"), m_rootList, m_addRootButton,
+                              m_removeRootButton, this));
   root->addLayout(inputs);
   for (const DatAuditProfile::DatRef &d : m_seed.dats) {
     m_datList->addItem(d.path);
@@ -172,10 +177,12 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
   root->addWidget(buttons);
 
-  connect(addDat, &QPushButton::clicked, this, &DatAuditProfileDialog::onAddDat);
-  connect(removeDat, &QPushButton::clicked, this, [this] { removeSelected(m_datList); });
-  connect(addRoot, &QPushButton::clicked, this, &DatAuditProfileDialog::onAddRoot);
-  connect(removeRoot, &QPushButton::clicked, this, [this] { removeSelected(m_rootList); });
+  connect(m_addDatButton, &QPushButton::clicked, this, &DatAuditProfileDialog::onAddDat);
+  connect(m_removeDatButton, &QPushButton::clicked, this, [this] { removeSelected(m_datList); });
+  connect(m_addRootButton, &QPushButton::clicked, this, &DatAuditProfileDialog::onAddRoot);
+  connect(m_removeRootButton, &QPushButton::clicked, this, [this] { removeSelected(m_rootList); });
+  connect(m_collection, &QComboBox::currentIndexChanged, this,
+          &DatAuditProfileDialog::onLinkedCollectionChanged);
   connect(addReg, &QPushButton::clicked, this, &DatAuditProfileDialog::onAddRegion);
   connect(removeReg, &QPushButton::clicked, this, [this] { removeSelected(m_regionList); });
   connect(upReg, &QPushButton::clicked, this, &DatAuditProfileDialog::onMoveRegionUp);
@@ -187,6 +194,52 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   onFixModeChanged(); // initial enabled state of the managed-output row
+
+  // Initial lock state for the seed's link. Deliberately NOT a repopulation:
+  // the seed's lists were just loaded above and already reflect either the
+  // derived state (linked, resolved upstream) or the cached fallback (link
+  // unavailable) — re-deriving here would clobber the fallback.
+  const bool linked = !(m_collection->currentData().toString().isEmpty());
+  m_addDatButton->setEnabled(!linked);
+  m_removeDatButton->setEnabled(!linked);
+  m_addRootButton->setEnabled(!linked);
+  m_removeRootButton->setEnabled(!linked);
+  m_linkedHint->setVisible(linked);
+}
+
+void DatAuditProfileDialog::onLinkedCollectionChanged() {
+  const QString uuid = m_collection->currentData().toString();
+  const bool linked = !uuid.isEmpty();
+
+  // Re-derive the lists for a resolvable link; an unresolvable one (the
+  // "(linked collection unavailable)" entry) keeps whatever is showing as a
+  // read-only fallback, and "(none)" keeps the lists for the user to edit.
+  if (linked && m_collections != nullptr) {
+    for (const CollectionConfig &c : *m_collections) {
+      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      if (CollectionUtils::computeCollectionUuid(c.name, expanded) != uuid) {
+        continue;
+      }
+      m_datList->clear();
+      for (const QString &d : c.scraperOverrides.datFilePaths) {
+        if (!d.isEmpty()) {
+          m_datList->addItem(d);
+        }
+      }
+      m_rootList->clear();
+      const QString scanRoot = PathUtils::expandPathWithoutExistenceCheck(c.mediaDirectory, c.name);
+      if (!scanRoot.isEmpty()) {
+        m_rootList->addItem(scanRoot);
+      }
+      break;
+    }
+  }
+
+  m_addDatButton->setEnabled(!linked);
+  m_removeDatButton->setEnabled(!linked);
+  m_addRootButton->setEnabled(!linked);
+  m_removeRootButton->setEnabled(!linked);
+  m_linkedHint->setVisible(linked);
 }
 
 void DatAuditProfileDialog::removeSelected(QListWidget *list) {

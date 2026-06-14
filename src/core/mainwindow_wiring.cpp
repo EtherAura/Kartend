@@ -144,6 +144,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QScrollBar>
+#include <QStatusBar>
 #include <QTimer>
 
 #include "applicationmanager.h"
@@ -156,6 +157,7 @@
 #include "dbeventscontroller.h"
 #include "detailspanemanager.h"
 #include "errorpresentation.h"
+#include "errorutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -413,6 +415,54 @@ void MainWindow::connectDatabaseManager() {
     DatAuditControllerContext dc;
     dc.getParentWindow = [this]() -> QWidget * { return this; };
     dc.getCollections = [this]() { return &m_collections; };
+    // DAT-library hooks (Kartend-m6qsb.5). Attach writes through to the
+    // collections INI; linked audit profiles see the change automatically
+    // because their DAT lists are derived (Kartend-m6qsb.2).
+    dc.getDatLibraryPath = [this]() { return m_generalSettings.scraper.options.datLibraryPath; };
+    dc.saveDatLibraryPath = [this](const QString &root) {
+      if (m_generalSettings.scraper.options.datLibraryPath == root) {
+        return;
+      }
+      m_generalSettings.scraper.options.datLibraryPath = root;
+      if (auto saved = m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings);
+          saved.isError()) {
+        ErrorUtils::logError(saved.error());
+      }
+    };
+    dc.attachDatToCollection = [this](const QString &collectionUuid, const QString &datPath) {
+      for (CollectionConfig &c : m_collections) {
+        const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+        if (CollectionUtils::computeCollectionUuid(c.name, expanded) != collectionUuid) {
+          continue;
+        }
+        if (!c.scraperOverrides.datFilePaths.contains(datPath)) {
+          c.scraperOverrides.datFilePaths.append(datPath);
+          if (auto saved = m_appManager->getSettingsManager()->saveCollections(m_collections);
+              saved.isError()) {
+            ErrorUtils::logError(saved.error());
+          }
+        }
+        return;
+      }
+    };
+    dc.getNewCollectionForDat = [this](const QString &datPath) {
+      return createCollectionForDat(datPath);
+    };
+    // Re-scrape after a Fix renamed files (Kartend-m6qsb.27): map the audit's
+    // collection uuid back to its index and open the scraper scoped to it.
+    dc.openScraperForCollection = [this](const QString &collectionUuid) {
+      for (int i = 0; i < m_collections.size(); ++i) {
+        const CollectionConfig &c = m_collections.at(i);
+        const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+        if (CollectionUtils::computeCollectionUuid(c.name, expanded) == collectionUuid) {
+          openScraperDialog(i);
+          return;
+        }
+      }
+    };
+    dc.showStatusMessage = [this](const QString &message) {
+      statusBar()->showMessage(message, 10000);
+    };
     m_datAuditController->setContext(dc);
   }
 }
