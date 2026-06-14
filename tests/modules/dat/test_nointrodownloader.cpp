@@ -26,6 +26,9 @@ private slots:
 };
 
 void TestNoIntroDownloader::extractDatsToPullsDatsFlattened() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
     QSKIP("zip not available — cannot build the pack fixture");
   }

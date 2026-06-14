@@ -94,6 +94,9 @@ void TestDatPackImport::errorsOnMissingSourceAndEmptyFolder() {
 }
 
 void TestDatPackImport::importsZipWhenToolPresent() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty() ||
       (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
        QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
