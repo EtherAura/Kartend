@@ -21,6 +21,9 @@ private slots:
   void dismissalRoundTripsThroughKeys();
   void reDismissalMovesTheRevisionForward();
   void rejectsEmptyPathAndClosedDb();
+  void provenanceRoundTripsAndReplaces();
+  void loadAllProvenanceReturnsEveryRow();
+  void isUpdateAvailableComparesVersions();
 
 private:
   QSqlDatabase m_db;
@@ -79,6 +82,66 @@ void TestDatLibraryState::rejectsEmptyPathAndClosedDb() {
   QSqlDatabase closed;
   QVERIFY(DatLibraryState::addDismissal(closed, QStringLiteral("/x"), 1).isError());
   QVERIFY(DatLibraryState::loadDismissalKeys(closed).isError());
+}
+
+void TestDatLibraryState::provenanceRoundTripsAndReplaces() {
+  DatLibraryState::Provenance p;
+  p.canonicalPath = QStringLiteral("/lib/Sample (USA).dat");
+  p.source = QStringLiteral("nointro");
+  p.systemId = 64;
+  p.version = QStringLiteral("2026-05-30");
+  QVERIFY(DatLibraryState::recordProvenance(m_db, p).isOk());
+
+  auto loaded = DatLibraryState::loadProvenance(m_db, p.canonicalPath);
+  QVERIFY(loaded.isOk());
+  QVERIFY(loaded.value().has_value());
+  QCOMPARE(loaded.value()->source, QStringLiteral("nointro"));
+  QCOMPARE(loaded.value()->systemId, 64);
+  QCOMPARE(loaded.value()->version, QStringLiteral("2026-05-30"));
+
+  // OR REPLACE: re-recording the same path updates the stored version.
+  p.version = QStringLiteral("2026-06-14");
+  QVERIFY(DatLibraryState::recordProvenance(m_db, p).isOk());
+  auto reloaded = DatLibraryState::loadProvenance(m_db, p.canonicalPath);
+  QCOMPARE(reloaded.value()->version, QStringLiteral("2026-06-14"));
+
+  // Unknown path -> nullopt, not an error.
+  auto missing = DatLibraryState::loadProvenance(m_db, QStringLiteral("/lib/nope.dat"));
+  QVERIFY(missing.isOk());
+  QVERIFY(!missing.value().has_value());
+
+  // Empty path / closed DB are errors.
+  QVERIFY(DatLibraryState::recordProvenance(m_db, DatLibraryState::Provenance{}).isError());
+}
+
+void TestDatLibraryState::loadAllProvenanceReturnsEveryRow() {
+  DatLibraryState::Provenance a;
+  a.canonicalPath = QStringLiteral("/lib/a.dat");
+  a.source = QStringLiteral("redump");
+  a.slug = QStringLiteral("psx");
+  a.version = QStringLiteral("v1");
+  DatLibraryState::Provenance b;
+  b.canonicalPath = QStringLiteral("/lib/b.dat");
+  b.source = QStringLiteral("nointro");
+  b.systemId = 1;
+  b.version = QStringLiteral("2026-01-01");
+  QVERIFY(DatLibraryState::recordProvenance(m_db, a).isOk());
+  QVERIFY(DatLibraryState::recordProvenance(m_db, b).isOk());
+
+  auto all = DatLibraryState::loadAllProvenance(m_db);
+  QVERIFY(all.isOk());
+  QCOMPARE(all.value().size(), 2);
+}
+
+void TestDatLibraryState::isUpdateAvailableComparesVersions() {
+  QVERIFY(DatLibraryState::isUpdateAvailable(QStringLiteral("2026-05-30"),
+                                             QStringLiteral("2026-06-14")));
+  QVERIFY(!DatLibraryState::isUpdateAvailable(QStringLiteral("2026-05-30"),
+                                              QStringLiteral("2026-05-30")));
+  QVERIFY(!DatLibraryState::isUpdateAvailable(QStringLiteral(" v1 "), QStringLiteral("v1")));
+  // Can't tell without both revisions.
+  QVERIFY(!DatLibraryState::isUpdateAvailable(QString(), QStringLiteral("v2")));
+  QVERIFY(!DatLibraryState::isUpdateAvailable(QStringLiteral("v1"), QString()));
 }
 
 QTEST_MAIN(TestDatLibraryState)

@@ -25,6 +25,7 @@ using DatAudit::AuditOutput;
 using DatAudit::AuditRow;
 using DatAudit::Catalogue;
 using DatAudit::ScannedFile;
+using DatAudit::SourceCompleteness;
 using DatAudit::Status;
 using DatLookup::DatRecord;
 
@@ -129,6 +130,11 @@ private slots:
 
   // buildCatalogue()
   void buildCatalogueIngestsDat();
+
+  // catalogue provenance / per-DAT completeness (Kartend-m6qsb.15)
+  void catalogueTracksSourceProvenance();
+  void classifyReportsPerSourceCompleteness();
+  void buildCatalogueAttributesSourceByFilename();
 
   // persistence contract (Kartend-m6qsb.8)
   void statusIntValuesArePinnedForPersistence();
@@ -499,6 +505,99 @@ void TestDatAuditRunner::buildCatalogueIngestsDat() {
       DatAudit::buildCatalogue(cache, {dir.filePath(QStringLiteral("nope.dat"))}, &failed2);
   QCOMPARE(empty.size(), 0);
   QCOMPARE(failed2.size(), 1);
+}
+
+void TestDatAuditRunner::catalogueTracksSourceProvenance() {
+  Catalogue c;
+  const int datA = c.addSource(QStringLiteral("A.dat"));
+  c.addRecord(makeRecord(QStringLiteral("Alpha"), QStringLiteral("Alpha.bin"),
+                         QStringLiteral("deadbeef"), QString(), QString(), 5),
+              datA);
+  const int datB = c.addSource(QStringLiteral("B.dat"));
+  c.addRecord(makeRecord(QStringLiteral("Beta"), QStringLiteral("Beta.bin"),
+                         QStringLiteral("cafebabe"), QString(), QString(), 5),
+              datB);
+  // A hand-added record with no source stays attributable to nothing.
+  c.addRecord(makeRecord(QStringLiteral("Orphan"), QStringLiteral("Orphan.bin"),
+                         QStringLiteral("0badf00d"), QString(), QString(), 5));
+
+  QCOMPARE(c.sourceCount(), 2);
+  QCOMPARE(c.sourceName(datA), QStringLiteral("A.dat"));
+  QCOMPARE(c.sourceName(datB), QStringLiteral("B.dat"));
+  QCOMPARE(c.recordSource(0), datA);
+  QCOMPARE(c.recordSource(1), datB);
+  QCOMPARE(c.recordSource(2), -1);
+  QVERIFY(c.sourceName(-1).isEmpty()); // orphan record's source
+  QVERIFY(c.sourceName(99).isEmpty()); // out of range
+}
+
+void TestDatAuditRunner::classifyReportsPerSourceCompleteness() {
+  // Two DATs: A has 2 entries (one present), B has 1 (present). Per-source
+  // breakdown should attribute have/missing back to each DAT.
+  Catalogue c;
+  const int datA = c.addSource(QStringLiteral("A.dat"));
+  c.addRecord(makeRecord(QStringLiteral("Alpha"), QStringLiteral("Alpha.bin"),
+                         QStringLiteral("deadbeef"), QString(), QString(), 5),
+              datA);
+  c.addRecord(makeRecord(QStringLiteral("Beta"), QStringLiteral("Beta.bin"),
+                         QStringLiteral("cafebabe"), QString(), QString(), 5),
+              datA);
+  const int datB = c.addSource(QStringLiteral("B.dat"));
+  c.addRecord(makeRecord(QStringLiteral("Gamma"), QStringLiteral("Gamma.bin"),
+                         QStringLiteral("0badf00d"), QString(), QString(), 5),
+              datB);
+
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/Alpha.bin"), QStringLiteral("deadbeef"), QString(), QString(), 5),
+      makeFile(QStringLiteral("/x/Gamma.bin"), QStringLiteral("0badf00d"), QString(), QString(),
+               5)};
+  const AuditOutput out = DatAudit::classify(c, files);
+
+  QCOMPARE(out.summary.perSource.size(), 2);
+  const SourceCompleteness &a = out.summary.perSource.at(0);
+  QCOMPARE(a.name, QStringLiteral("A.dat"));
+  QCOMPARE(a.total, 2);
+  QCOMPARE(a.present, 1); // Alpha present, Beta missing
+  QCOMPARE(a.missing, 1);
+  const SourceCompleteness &b = out.summary.perSource.at(1);
+  QCOMPARE(b.name, QStringLiteral("B.dat"));
+  QCOMPARE(b.total, 1);
+  QCOMPARE(b.present, 1);
+  QCOMPARE(b.missing, 0);
+
+  // Rows carry the provenance of their catalogue entry.
+  for (const AuditRow &r : out.rows) {
+    if (r.gameName == QStringLiteral("Alpha") || r.gameName == QStringLiteral("Beta")) {
+      QCOMPARE(r.sourceName, QStringLiteral("A.dat"));
+    } else if (r.gameName == QStringLiteral("Gamma")) {
+      QCOMPARE(r.sourceName, QStringLiteral("B.dat"));
+    }
+  }
+
+  // A hand-built catalogue with no sources leaves the breakdown empty.
+  const AuditOutput plain = DatAudit::classify(twoEntryCatalogue(), {});
+  QVERIFY(plain.summary.perSource.isEmpty());
+}
+
+void TestDatAuditRunner::buildCatalogueAttributesSourceByFilename() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString datPath = dir.filePath(QStringLiteral("My Catalogue.dat"));
+  {
+    QFile f(datPath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(kLogiqxDat);
+    f.close();
+  }
+  DatCache::Store cache(dir.filePath(QStringLiteral("cache.sqlite")));
+  QVERIFY(cache.isOpen());
+
+  const Catalogue c = DatAudit::buildCatalogue(cache, {datPath});
+  QCOMPARE(c.sourceCount(), 1);
+  QCOMPARE(c.sourceName(0), QStringLiteral("My Catalogue.dat")); // filename, not full path
+  QCOMPARE(c.size(), 2);
+  QCOMPARE(c.recordSource(0), 0);
+  QCOMPARE(c.recordSource(1), 0);
 }
 
 void TestDatAuditRunner::region_baseNameRegionAndRank() {

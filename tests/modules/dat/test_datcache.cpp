@@ -100,6 +100,7 @@ private slots:
   void schemaBumpWipesOldCache();
   void forEachRecordStreamsAllRecords();
   void forEachRecordInvalidSourceReturnsFalse();
+  void cloneOfRoundTripsThroughCache();
 
 private:
   QString cachePath() const { return m_dir.filePath("datcache.sqlite"); }
@@ -518,6 +519,34 @@ void TestDatCache::forEachRecordInvalidSourceReturnsFalse() {
   const bool ok = store.forEachRecord(invalid, [&](const DatLookup::DatRecord &) { ++calls; });
   QVERIFY(!ok);
   QCOMPARE(calls, 0);
+}
+
+void TestDatCache::cloneOfRoundTripsThroughCache() {
+  // cloneof (Kartend-m6qsb.13) must survive ingest -> sqlite -> read back, both
+  // via lookup() and forEachRecord(), so clone provenance reaches the catalogue.
+  writeDat(datPath(), R"xml(<?xml version="1.0"?>
+<mame>
+  <machine name="parent"><description>Parent</description>
+    <rom name="p.rom" size="1" crc="aaaaaaaa"/></machine>
+  <machine name="clone" cloneof="parent"><description>Clone</description>
+    <rom name="c.rom" size="1" crc="bbbbbbbb"/></machine>
+</mame>)xml");
+  DatCache::Store store(cachePath());
+  auto source = store.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+
+  auto clone = store.lookup(source.value(), QString(), QString(), QStringLiteral("bbbbbbbb"));
+  QVERIFY(clone.has_value());
+  QCOMPARE(clone->cloneOf, QStringLiteral("parent"));
+  auto parent = store.lookup(source.value(), QString(), QString(), QStringLiteral("aaaaaaaa"));
+  QVERIFY(parent.has_value());
+  QVERIFY(parent->cloneOf.isEmpty());
+
+  QHash<QString, QString> cloneByCrc; // crc -> cloneOf, gathered via the stream
+  store.forEachRecord(source.value(),
+                      [&](const DatLookup::DatRecord &r) { cloneByCrc.insert(r.crc, r.cloneOf); });
+  QCOMPARE(cloneByCrc.value(QStringLiteral("bbbbbbbb")), QStringLiteral("parent"));
+  QVERIFY(cloneByCrc.value(QStringLiteral("aaaaaaaa")).isEmpty());
 }
 
 QTEST_MAIN(TestDatCache)

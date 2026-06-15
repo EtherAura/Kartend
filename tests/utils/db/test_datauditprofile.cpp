@@ -15,7 +15,6 @@
 
 using DatAuditProfile::DatRef;
 using DatAuditProfile::FixMode;
-using DatAuditProfile::MergeMode;
 using DatAuditProfile::Profile;
 
 namespace {
@@ -76,7 +75,6 @@ Profile TestDatAuditProfile::sampleProfile() {
   p.name = QStringLiteral("My Audit");
   p.collectionUuid = QStringLiteral("uuid-123");
   p.scanRoots = {QStringLiteral("/roms/a"), QStringLiteral("/roms/b")};
-  p.mergeMode = MergeMode::NonMerged;
   p.regionPrefs = {QStringLiteral("USA"), QStringLiteral("World")};
   p.onePerGame = true;
   p.ignoreRules = {QStringLiteral("*.txt")};
@@ -128,7 +126,6 @@ void TestDatAuditProfile::insertAndLoadRoundTrip() {
   QCOMPARE(out.name, in.name);
   QCOMPARE(out.collectionUuid, in.collectionUuid);
   QCOMPARE(out.scanRoots, in.scanRoots);
-  QCOMPARE(out.mergeMode, in.mergeMode);
   QCOMPARE(out.regionPrefs, in.regionPrefs);
   QCOMPARE(out.onePerGame, in.onePerGame);
   QCOMPARE(out.ignoreRules, in.ignoreRules);
@@ -242,18 +239,8 @@ void TestDatAuditProfile::enumStringMappingsRoundTrip() {
   QCOMPARE(
       DatAuditProfile::fixModeFromString(DatAuditProfile::fixModeToString(FixMode::ManagedOutput)),
       FixMode::ManagedOutput);
-  QCOMPARE(
-      DatAuditProfile::mergeModeFromString(DatAuditProfile::mergeModeToString(MergeMode::Split)),
-      MergeMode::Split);
-  QCOMPARE(
-      DatAuditProfile::mergeModeFromString(DatAuditProfile::mergeModeToString(MergeMode::Merged)),
-      MergeMode::Merged);
-  QCOMPARE(DatAuditProfile::mergeModeFromString(
-               DatAuditProfile::mergeModeToString(MergeMode::NonMerged)),
-           MergeMode::NonMerged);
-  // Unknown strings fall back to the safe defaults.
+  // Unknown strings fall back to the safe default.
   QCOMPARE(DatAuditProfile::fixModeFromString(QStringLiteral("garbage")), FixMode::InPlace);
-  QCOMPARE(DatAuditProfile::mergeModeFromString(QStringLiteral("garbage")), MergeMode::Split);
 }
 
 void TestDatAuditProfile::loadByCollectionUuidPicksMostRecentlyUpdated() {

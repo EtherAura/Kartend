@@ -44,6 +44,12 @@ private slots:
   void probeHeaderHandlesHeaderlessAndUnknown();
   void probeHeaderSynthesisesMameMetadata();
   void probeHeaderFromFileReadsBoundedPrefix();
+  void detectsClrMameProText();
+  void parsesClrMameProDat();
+  void parseClrMameProSkipsNodumpAndHashless();
+  void parseDatDispatchesToClrMamePro();
+  void probeHeaderReadsClrMameProFields();
+  void parsesCloneOfAcrossDialects();
 
 private:
   QTemporaryDir m_dir;
@@ -455,6 +461,131 @@ void TestDatLookup::probeHeaderFromFileReadsBoundedPrefix() {
   QCOMPARE(DatLookup::probeHeaderFromFile(m_dir.filePath("absent.dat")).dialect,
            DatLookup::Dialect::Unknown);
   QCOMPARE(DatLookup::probeHeaderFromFile(QString()).dialect, DatLookup::Dialect::Unknown);
+}
+
+namespace {
+// A faithful clrmamepro text DAT: header block, two games (the second
+// multi-rom), a quoted filename with spaces, mixed-case + bare hashes, a
+// nodump rom, a hashless rom, and a nested block (sample) the parser ignores.
+constexpr const char *kClrMameProDat = R"cmp(clrmamepro (
+	name "Sample Console"
+	description "Sample Console (Parent-Clone)"
+	version 20230115
+	author "someone"
+)
+
+game (
+	name "Game Alpha (USA)"
+	description "Game Alpha (USA)"
+	rom ( name "Game Alpha (USA).bin" size 32768 crc DEADBEEF md5 11111111111111111111111111111111 sha1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa )
+)
+
+game (
+	name "Game Beta (Japan)"
+	description "Game Beta (Japan)"
+	sample ( name beep )
+	rom ( name "Beta Disc 1.bin" size 65536 crc cafebabe sha1 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb )
+	rom ( name "Beta Disc 2.bin" size 65536 crc 0badf00d )
+)
+)cmp";
+} // namespace
+
+void TestDatLookup::detectsClrMameProText() {
+  QCOMPARE(DatLookup::detectDialect(QByteArray(kClrMameProDat)), DatLookup::Dialect::ClrMamePro);
+  // Leading whitespace + the headerless `game (` opener still sniffs.
+  QCOMPARE(DatLookup::detectDialect(QByteArrayLiteral("\n  game ( name x )")),
+           DatLookup::Dialect::ClrMamePro);
+  // Not clrmamepro: a bare word with no '(' must stay Unknown, not misfire.
+  QCOMPARE(DatLookup::detectDialect(QByteArrayLiteral("game over")), DatLookup::Dialect::Unknown);
+}
+
+void TestDatLookup::parsesClrMameProDat() {
+  auto result = DatLookup::parseClrMameProDat(QByteArray(kClrMameProDat));
+  QVERIFY(result.isOk());
+  const auto records = result.value();
+  QCOMPARE(records.size(), 3); // 1 (alpha) + 2 (beta discs)
+  QCOMPARE(records[0].gameName, QStringLiteral("Game Alpha (USA)"));
+  QCOMPARE(records[0].romName, QStringLiteral("Game Alpha (USA).bin"));
+  QCOMPARE(records[0].size, qint64{32768});
+  QCOMPARE(records[0].crc, QStringLiteral("deadbeef")); // lowercased
+  QCOMPARE(records[0].sha1, QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+  // Multi-rom game: both discs carry the game's name; the sample block is
+  // ignored; the crc-only disc is still indexed.
+  QCOMPARE(records[1].gameName, QStringLiteral("Game Beta (Japan)"));
+  QCOMPARE(records[1].romName, QStringLiteral("Beta Disc 1.bin"));
+  QCOMPARE(records[2].gameName, QStringLiteral("Game Beta (Japan)"));
+  QCOMPARE(records[2].crc, QStringLiteral("0badf00d"));
+  QVERIFY(records[2].sha1.isEmpty());
+}
+
+void TestDatLookup::parseClrMameProSkipsNodumpAndHashless() {
+  constexpr const char *dat = R"cmp(game (
+	name "Edge Cases"
+	rom ( name good.bin size 4 crc 12345678 )
+	rom ( name undumped.bin size 4 status nodump )
+	rom ( name nohash.bin size 4 )
+)
+)cmp";
+  auto result = DatLookup::parseClrMameProDat(QByteArray(dat));
+  QVERIFY(result.isOk());
+  const auto records = result.value();
+  QCOMPARE(records.size(), 1); // nodump + hashless dropped, same as the XML dialects
+  QCOMPARE(records[0].romName, QStringLiteral("good.bin"));
+}
+
+void TestDatLookup::parseDatDispatchesToClrMamePro() {
+  auto result = DatLookup::parseDat(QByteArray(kClrMameProDat));
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 3);
+}
+
+void TestDatLookup::probeHeaderReadsClrMameProFields() {
+  const auto h = DatLookup::probeHeader(QByteArray(kClrMameProDat));
+  QCOMPARE(h.dialect, DatLookup::Dialect::ClrMamePro);
+  QCOMPARE(h.name, QStringLiteral("Sample Console"));
+  QCOMPARE(h.description, QStringLiteral("Sample Console (Parent-Clone)"));
+  QCOMPARE(h.version, QStringLiteral("20230115"));
+}
+
+void TestDatLookup::parsesCloneOfAcrossDialects() {
+  // MAME listxml: cloneof on <machine>; romof is the fallback when cloneof is
+  // absent (Kartend-m6qsb.13).
+  const QByteArray mame = QByteArrayLiteral(R"xml(<?xml version="1.0"?>
+<mame>
+  <machine name="parent"><description>Parent</description>
+    <rom name="p.rom" size="1" crc="aaaaaaaa"/></machine>
+  <machine name="clone" cloneof="parent" romof="parent"><description>Clone</description>
+    <rom name="c.rom" size="1" crc="bbbbbbbb"/></machine>
+  <machine name="bioskid" romof="bios"><description>Kid</description>
+    <rom name="k.rom" size="1" crc="cccccccc"/></machine>
+</mame>)xml");
+  const auto m = DatLookup::parseMameListXml(mame);
+  QVERIFY(m.isOk());
+  const auto mr = m.value();
+  QCOMPARE(mr.size(), 3);
+  QVERIFY(mr[0].cloneOf.isEmpty());                  // parent
+  QCOMPARE(mr[1].cloneOf, QStringLiteral("parent")); // clone via cloneof
+  QCOMPARE(mr[2].cloneOf, QStringLiteral("bios"));   // falls back to romof
+
+  // Logiqx export carrying cloneof on <game>.
+  const QByteArray logiqx = QByteArrayLiteral(R"xml(<?xml version="1.0"?>
+<datafile>
+  <game name="Base"><rom name="b.rom" size="1" crc="11111111"/></game>
+  <game name="Variant" cloneof="Base"><rom name="v.rom" size="1" crc="22222222"/></game>
+</datafile>)xml");
+  const auto l = DatLookup::parseLogiqxDat(logiqx);
+  QVERIFY(l.isOk());
+  QCOMPARE(l.value().size(), 2);
+  QVERIFY(l.value()[0].cloneOf.isEmpty());
+  QCOMPARE(l.value()[1].cloneOf, QStringLiteral("Base"));
+
+  // clrmamepro: cloneof key inside the game block.
+  const QByteArray cmp = QByteArrayLiteral("game ( name \"Clone Set\" cloneof \"Parent Set\" "
+                                           "rom ( name x.bin size 1 crc deadbeef ) )");
+  const auto c = DatLookup::parseClrMameProDat(cmp);
+  QVERIFY(c.isOk());
+  QCOMPARE(c.value().size(), 1);
+  QCOMPARE(c.value()[0].cloneOf, QStringLiteral("Parent Set"));
 }
 
 QTEST_MAIN(TestDatLookup)

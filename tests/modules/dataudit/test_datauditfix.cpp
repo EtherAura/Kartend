@@ -48,6 +48,7 @@ private slots:
   void planRenameOnlyByDefault();
   void planSkipsNoopRename();
   void planRelocateAndQuarantineWhenEnabled();
+  void planRelocatePerItemSubfolderUsesGameName();
   void applyRenameInPlaceAndUndo();
   void applyRelocateCopiesLeavesOriginalAndUndoDeletes();
   void applyQuarantineMovesAndUndoRestores();
@@ -104,6 +105,41 @@ void TestDatAuditFix::planRelocateAndQuarantineWhenEnabled() {
   }
   QCOMPARE(relocate, 2);   // Have + WrongName are both "present"
   QCOMPARE(quarantine, 1); // the Unknown
+}
+
+void TestDatAuditFix::planRelocatePerItemSubfolderUsesGameName() {
+  // Structured managed output (Kartend-m6qsb.14): present files go under a
+  // per-item subfolder named for their game; rows without a game name fall back
+  // to a flat destination, and the game name is filesystem-sanitised.
+  auto present = [](const QString &path, const QString &expected, const QString &game) {
+    AuditRow r = row(Status::Have, path, expected);
+    r.gameName = game;
+    return r;
+  };
+  const QList<AuditRow> rows{
+      present(QStringLiteral("/roms/disc1.bin"), QStringLiteral("disc1.bin"),
+              QStringLiteral("Game: Alpha (USA)")), // ':' is illegal -> sanitised
+      present(QStringLiteral("/roms/disc2.bin"), QStringLiteral("disc2.bin"),
+              QStringLiteral("Game: Alpha (USA)")),
+      present(QStringLiteral("/roms/loose.bin"), QStringLiteral("loose.bin"), QString())};
+
+  FixSettings s;
+  s.rename = false;
+  s.relocateToManagedOutput = true;
+  s.managedOutputRoot = QStringLiteral("/out");
+  s.managedOutputPerItemSubfolder = true;
+  const FixPlan plan = DatAudit::computeFixPlan(rows, s);
+  QCOMPARE(plan.actions.size(), 3);
+  // The two discs group under one sanitised game folder (':' -> '_').
+  QCOMPARE(plan.actions[0].toPath, QStringLiteral("/out/Game_ Alpha (USA)/disc1.bin"));
+  QCOMPARE(plan.actions[1].toPath, QStringLiteral("/out/Game_ Alpha (USA)/disc2.bin"));
+  // No game name -> flat under the root.
+  QCOMPARE(plan.actions[2].toPath, QStringLiteral("/out/loose.bin"));
+
+  // Flag off -> everything flat (unchanged behaviour).
+  s.managedOutputPerItemSubfolder = false;
+  const FixPlan flat = DatAudit::computeFixPlan(rows, s);
+  QCOMPARE(flat.actions[0].toPath, QStringLiteral("/out/disc1.bin"));
 }
 
 void TestDatAuditFix::applyRenameInPlaceAndUndo() {

@@ -35,6 +35,9 @@ class TestDatAuditLayout : public QObject {
 private slots:
   void flatFolderDetectsFlat();
   void nestedTreeDetectsNested();
+  void subfolderPerItemDetectsMultiFileSets();
+  void oneFilePerSubfolderStaysNested();
+  void deepTreeStaysNested();
   void archiveFolderDetectsArchivePerItem();
   void mixedArchivesDetectMixed();
   void rootSplitBetweenTopAndSubfoldersDetectsMixed();
@@ -83,6 +86,46 @@ void TestDatAuditLayout::nestedTreeDetectsNested() {
   const LayoutDetection d = DatAudit::detectLayout(root);
   QCOMPARE(d.layout, Layout::Nested);
   QVERIFY(d.confidence >= 0.8);
+}
+
+void TestDatAuditLayout::subfolderPerItemDetectsMultiFileSets() {
+  // One folder per item, each holding a multi-file set (disc pairs) — the
+  // subfolder-per-item shape (Kartend-m6qsb.12). Root stays empty.
+  const QString root = freshRoot();
+  for (int i = 0; i < 6; ++i) {
+    const QString item = QStringLiteral("%1/Game %2").arg(root).arg(i);
+    QDir().mkpath(item);
+    touch(item + QStringLiteral("/disc1.bin"));
+    touch(item + QStringLiteral("/disc2.bin"));
+    touch(item + QStringLiteral("/disc3.bin"));
+  }
+  const LayoutDetection d = DatAudit::detectLayout(root);
+  QCOMPARE(d.layout, Layout::SubfolderPerItem);
+  QVERIFY(d.confidence >= 0.8);
+}
+
+void TestDatAuditLayout::oneFilePerSubfolderStaysNested() {
+  // One file per folder is NOT a multi-file set — it stays Nested even though
+  // the root is empty and files sit one level deep.
+  const QString root = freshRoot();
+  for (int i = 0; i < 6; ++i) {
+    const QString item = QStringLiteral("%1/Item %2").arg(root).arg(i);
+    QDir().mkpath(item);
+    touch(item + QStringLiteral("/only.bin"));
+  }
+  QCOMPARE(DatAudit::detectLayout(root).layout, Layout::Nested);
+}
+
+void TestDatAuditLayout::deepTreeStaysNested() {
+  // Multi-file but buried two levels deep — a deep tree, not subfolder-per-item.
+  const QString root = freshRoot();
+  for (int i = 0; i < 4; ++i) {
+    const QString deep = QStringLiteral("%1/group-%2/inner").arg(root).arg(i);
+    QDir().mkpath(deep);
+    touch(deep + QStringLiteral("/a.bin"));
+    touch(deep + QStringLiteral("/b.bin"));
+  }
+  QCOMPARE(DatAudit::detectLayout(root).layout, Layout::Nested);
 }
 
 void TestDatAuditLayout::archiveFolderDetectsArchivePerItem() {
@@ -160,8 +203,8 @@ void TestDatAuditLayout::emptyAndMissingRootsDetectUnknown() {
 }
 
 void TestDatAuditLayout::tokenRoundTrip() {
-  const Layout all[] = {Layout::Unknown, Layout::Flat, Layout::Nested, Layout::ArchivePerItem,
-                        Layout::Mixed};
+  const Layout all[] = {Layout::Unknown,        Layout::Flat,  Layout::Nested,
+                        Layout::ArchivePerItem, Layout::Mixed, Layout::SubfolderPerItem};
   for (Layout l : all) {
     QCOMPARE(DatAudit::layoutFromToken(DatAudit::layoutToken(l)), l);
   }
