@@ -65,6 +65,13 @@ DatAuditFixDialog::DatAuditFixDialog(QList<DatAudit::AuditRow> rows, QWidget *pa
   managedRow->addWidget(m_managedDir, 1);
   managedRow->addWidget(m_browseManaged);
   form->addRow(m_relocate, managedRow);
+
+  // Structured output: group the sorted copy into per-item subfolders
+  // (Kartend-m6qsb.14). Only meaningful alongside the relocate option.
+  m_perItemSubfolder =
+      new QCheckBox(tr("…into a subfolder per item (group multi-file sets)"), this);
+  m_perItemSubfolder->setEnabled(false);
+  form->addRow(QString(), m_perItemSubfolder);
   root->addLayout(form);
 
   root->addWidget(new QLabel(tr("Planned actions (nothing changes until you click Apply):"), this));
@@ -88,6 +95,8 @@ DatAuditFixDialog::DatAuditFixDialog(QList<DatAudit::AuditRow> rows, QWidget *pa
   connect(m_rename, &QCheckBox::toggled, this, &DatAuditFixDialog::recomputePlan);
   connect(m_quarantine, &QCheckBox::toggled, this, &DatAuditFixDialog::recomputePlan);
   connect(m_relocate, &QCheckBox::toggled, this, &DatAuditFixDialog::recomputePlan);
+  connect(m_relocate, &QCheckBox::toggled, m_perItemSubfolder, &QWidget::setEnabled);
+  connect(m_perItemSubfolder, &QCheckBox::toggled, this, &DatAuditFixDialog::recomputePlan);
   connect(m_quarantineDir, &QLineEdit::textChanged, this, &DatAuditFixDialog::recomputePlan);
   connect(m_managedDir, &QLineEdit::textChanged, this, &DatAuditFixDialog::recomputePlan);
   connect(m_browseQuarantine, &QPushButton::clicked, this, &DatAuditFixDialog::onBrowseQuarantine);
@@ -108,7 +117,21 @@ FixSettings DatAuditFixDialog::settings() const {
   s.quarantineDir = m_quarantineDir->text().trimmed();
   s.relocateToManagedOutput = m_relocate->isChecked();
   s.managedOutputRoot = m_managedDir->text().trimmed();
+  s.managedOutputPerItemSubfolder = m_perItemSubfolder->isChecked();
   return s;
+}
+
+void DatAuditFixDialog::setManagedOutputDefaults(bool relocateToManagedOutput,
+                                                 const QString &managedOutputRoot) {
+  // Seed the relocate option from the profile's persisted fix mode + root
+  // (Kartend-m6qsb.14); the per-item-subfolder choice stays a per-session
+  // option (not persisted on the profile).
+  if (!managedOutputRoot.isEmpty()) {
+    m_managedDir->setText(managedOutputRoot);
+  }
+  m_relocate->setChecked(relocateToManagedOutput);
+  m_perItemSubfolder->setEnabled(relocateToManagedOutput);
+  recomputePlan();
 }
 
 void DatAuditFixDialog::recomputePlan() {

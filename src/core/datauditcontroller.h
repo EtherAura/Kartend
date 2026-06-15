@@ -5,6 +5,7 @@
 
 #include <QFutureWatcher>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -13,6 +14,8 @@
 
 QT_BEGIN_NAMESPACE
 class QWidget;
+class QFileSystemWatcher;
+class QTimer;
 QT_END_NAMESPACE
 
 class DatAuditDialog;
@@ -104,10 +107,27 @@ private:
   /// filtered via a short-lived app-DB connection.
   [[nodiscard]] DatLibraryScan::ScanResult scanLibrary(const QString &root) const;
 
+  /// Persist a new library root through the host, then retarget the live
+  /// filesystem watch at it. Used wherever the path changes so watching follows.
+  void persistLibraryPath(const QString &root);
+  /// Point the QFileSystemWatcher at the current library folder (Kartend-m6qsb.10):
+  /// drop the old paths, watch the root + its immediate subfolders if it exists.
+  /// Resets the notified-proposal set when the root changes so a new library
+  /// notifies fresh. No-op when no library is configured.
+  void updateLibraryWatch();
+
   DatAuditControllerContext m_ctx;
   DatAuditDialog *m_dialog = nullptr;
   QFutureWatcher<DatLibraryScan::ScanResult> m_libraryWatcher;
   DatLibraryScan::ScanResult m_startupProposals;
+
+  // Live filesystem watching of the DAT-library folder (Kartend-m6qsb.10).
+  QFileSystemWatcher *m_libraryFsWatcher = nullptr;
+  QTimer *m_libraryDebounce = nullptr; ///< Coalesces bursts (multi-file copies) into one rescan.
+  QString m_watchedRoot;               ///< Currently-watched library root ('' = none).
+  /// canonicalPath+mtime of proposals already surfaced this session, so a live
+  /// rescan only notifies about genuinely-new/changed catalogues ("doesn't nag").
+  QSet<QString> m_notifiedKeys;
 };
 
 #endif // DATAUDITCONTROLLER_H

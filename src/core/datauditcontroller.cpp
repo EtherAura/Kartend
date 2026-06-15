@@ -1,11 +1,16 @@
 #include "datauditcontroller.h"
 
+#include <QDir>
+#include <QDirIterator>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QMessageBox>
 #include <QSqlDatabase>
 #include <QStandardPaths>
 #include <Qt>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QTimer>
 #include <QWidget>
 
 #include "collection/collectionconfig.h"
@@ -42,12 +47,36 @@ template <typename Fn> void withAppDb(Fn &&fn) {
 DatAuditController::DatAuditController(QObject *parent) : QObject(parent) {
   connect(&m_libraryWatcher, &QFutureWatcher<DatLibraryScan::ScanResult>::finished, this, [this] {
     m_startupProposals = m_libraryWatcher.result();
-    if (!m_startupProposals.proposals.isEmpty() && m_ctx.showStatusMessage) {
+    // Non-nagging (Kartend-m6qsb.10): only announce proposals not already
+    // surfaced this session — a live rescan after an unrelated folder change
+    // must not re-pop the same hint. Keys on canonicalPath+mtime so a genuinely
+    // updated catalogue (new mtime) does re-announce.
+    int fresh = 0;
+    for (const DatLibraryScan::Proposal &p : m_startupProposals.proposals) {
+      const QString key = p.canonicalPath + QLatin1Char('@') + QString::number(p.mtimeMs);
+      if (!m_notifiedKeys.contains(key)) {
+        ++fresh;
+        m_notifiedKeys.insert(key);
+      }
+    }
+    if (fresh > 0 && m_ctx.showStatusMessage) {
       m_ctx.showStatusMessage(
           tr("%n new DAT catalogue(s) match your collections — File → DAT Audit → Library…",
-             nullptr, static_cast<int>(m_startupProposals.proposals.size())));
+             nullptr, fresh));
     }
   });
+
+  // Live filesystem watching of the DAT-library folder (Kartend-m6qsb.10):
+  // mirror the collection watcher's debounced pattern — a directory change
+  // restarts a short timer, and only the quiet point after a burst (e.g. a
+  // multi-file copy) triggers one off-thread rescan.
+  m_libraryFsWatcher = new QFileSystemWatcher(this);
+  m_libraryDebounce = new QTimer(this);
+  m_libraryDebounce->setSingleShot(true);
+  m_libraryDebounce->setInterval(1500);
+  connect(m_libraryFsWatcher, &QFileSystemWatcher::directoryChanged, this,
+          [this] { m_libraryDebounce->start(); });
+  connect(m_libraryDebounce, &QTimer::timeout, this, &DatAuditController::startupLibraryScan);
 }
 
 DatAuditController::~DatAuditController() {
@@ -75,7 +104,10 @@ DatAuditDialog *DatAuditController::ensureDialog() {
   // Download page's import destination (Kartend-m6qsb.16). Only wired when the
   // host provided them.
   if (m_ctx.getDatLibraryPath) {
-    m_dialog->setLibraryPathAccessors(m_ctx.getDatLibraryPath, m_ctx.saveDatLibraryPath);
+    // Route saves through persistLibraryPath so the live watch follows the
+    // folder when the user changes it (Kartend-m6qsb.10).
+    m_dialog->setLibraryPathAccessors(m_ctx.getDatLibraryPath,
+                                      [this](const QString &root) { persistLibraryPath(root); });
     m_dialog->setImportHandler([this](const QString &path) { importDatPack(path); });
   }
   // Pass through the scraper opener (Kartend-m6qsb.27) — null when the host
@@ -93,9 +125,7 @@ void DatAuditController::importDatPack(const QString &sourcePath) {
     if (lib.isEmpty()) {
       return;
     }
-    if (m_ctx.saveDatLibraryPath) {
-      m_ctx.saveDatLibraryPath(lib);
-    }
+    persistLibraryPath(lib); // saves + starts watching the new library
   }
   auto res = DatPackImport::importInto(sourcePath, lib);
   if (res.isError()) {
@@ -156,7 +186,39 @@ DatLibraryScan::ScanResult DatAuditController::scanLibrary(const QString &root) 
   return DatLibraryScan::scan(root, collectionInfos(), dismissed);
 }
 
+void DatAuditController::persistLibraryPath(const QString &root) {
+  if (m_ctx.saveDatLibraryPath) {
+    m_ctx.saveDatLibraryPath(root);
+  }
+  updateLibraryWatch(); // follow the library wherever the user points it
+}
+
+void DatAuditController::updateLibraryWatch() {
+  const QString root = m_ctx.getDatLibraryPath ? m_ctx.getDatLibraryPath().trimmed() : QString();
+  if (root == m_watchedRoot) {
+    return; // already watching the right place
+  }
+  if (!m_libraryFsWatcher->directories().isEmpty()) {
+    m_libraryFsWatcher->removePaths(m_libraryFsWatcher->directories());
+  }
+  m_watchedRoot = root;
+  m_notifiedKeys.clear(); // a different library announces its matches fresh
+  if (root.isEmpty() || !QFileInfo(root).isDir()) {
+    return;
+  }
+  // Watch the root and one level of subfolders. QFileSystemWatcher isn't
+  // recursive; DAT libraries are conventionally flat or shallow, and the
+  // startup / manual rescan still covers anything deeper.
+  QStringList toWatch{root};
+  QDirIterator it(root, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::NoIteratorFlags);
+  while (it.hasNext()) {
+    toWatch.append(it.next());
+  }
+  m_libraryFsWatcher->addPaths(toWatch);
+}
+
 void DatAuditController::startupLibraryScan() {
+  updateLibraryWatch(); // begin (or keep) watching whenever a scan is kicked off
   const QString root = m_ctx.getDatLibraryPath ? m_ctx.getDatLibraryPath() : QString();
   if (root.trimmed().isEmpty() || m_libraryWatcher.isRunning()) {
     return;

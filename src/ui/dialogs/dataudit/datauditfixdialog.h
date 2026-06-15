@@ -34,6 +34,11 @@ public:
   /// (only relocate/quarantine, or no apply).
   [[nodiscard]] int renamedCount() const { return m_renamedCount; }
 
+  /// Pre-fill the managed-output (relocate) option from a profile's persisted
+  /// fix mode + root (Kartend-m6qsb.14). Call before exec(); the
+  /// per-item-subfolder structuring stays a per-session choice (off by default).
+  void setManagedOutputDefaults(bool relocateToManagedOutput, const QString &managedOutputRoot);
+
 private slots:
   void recomputePlan();
   void onBrowseQuarantine();
@@ -55,6 +60,7 @@ private:
   QLineEdit *m_quarantineDir = nullptr;
   QPushButton *m_browseQuarantine = nullptr;
   QCheckBox *m_relocate = nullptr;
+  QCheckBox *m_perItemSubfolder = nullptr;
   QLineEdit *m_managedDir = nullptr;
   QPushButton *m_browseManaged = nullptr;
   QListWidget *m_planList = nullptr;

@@ -146,6 +146,13 @@ private:
     QString error;
     QString packName;
     int datCount = 0;
+    // Provenance for the extracted DATs (Kartend-m6qsb.26), recorded so a later
+    // "check for updates" can ask the source for a newer revision.
+    QStringList datPaths; ///< Extracted DAT file paths.
+    QString source;       ///< "nointro" / "redump".
+    QString slug;         ///< Redump system slug (empty for No-Intro).
+    int systemId = 0;     ///< No-Intro system id (0 for Redump).
+    QString version;      ///< No-Intro pack date / Redump header version at fetch time.
   };
 
   /// Off-thread outcome of the redump.org systems-list fetch.

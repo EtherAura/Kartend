@@ -64,7 +64,6 @@ private:
   QPushButton *m_addRootButton = nullptr;
   QPushButton *m_removeRootButton = nullptr;
   QLabel *m_linkedHint = nullptr;
-  QComboBox *m_mergeMode = nullptr;
   QCheckBox *m_onePerGame = nullptr;
   QListWidget *m_regionList = nullptr; // priority order, top = most preferred
   QComboBox *m_regionToAdd = nullptr;

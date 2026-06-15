@@ -22,7 +22,6 @@
 #include "pathutils.h"
 
 using DatAuditProfile::FixMode;
-using DatAuditProfile::MergeMode;
 
 namespace {
 
@@ -103,20 +102,9 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   }
   m_rootList->addItems(m_seed.scanRoots);
 
-  // Catalogue options: merge mode + 1G1R region priority.
+  // Catalogue options: 1G1R region priority.
   auto *cat = new QGroupBox(tr("Catalogue options"), this);
   auto *catV = new QVBoxLayout(cat);
-
-  auto *mergeRow = new QHBoxLayout();
-  mergeRow->addWidget(new QLabel(tr("Merge mode:"), cat));
-  m_mergeMode = new QComboBox(cat);
-  m_mergeMode->addItem(tr("Split"), int(MergeMode::Split));
-  m_mergeMode->addItem(tr("Merged"), int(MergeMode::Merged));
-  m_mergeMode->addItem(tr("Non-merged"), int(MergeMode::NonMerged));
-  m_mergeMode->setCurrentIndex(qMax(0, m_mergeMode->findData(int(m_seed.mergeMode))));
-  mergeRow->addWidget(m_mergeMode);
-  mergeRow->addStretch();
-  catV->addLayout(mergeRow);
 
   m_onePerGame = new QCheckBox(tr("One ROM per game (1G1R) — keep only the preferred region"), cat);
   m_onePerGame->setChecked(m_seed.onePerGame);
@@ -334,7 +322,6 @@ DatAuditProfile::Profile DatAuditProfileDialog::profile() const {
     p.scanRoots.append(m_rootList->item(i)->text());
   }
 
-  p.mergeMode = MergeMode(m_mergeMode->currentData().toInt());
   p.onePerGame = m_onePerGame->isChecked();
   p.regionPrefs.clear();
   for (int i = 0; i < m_regionList->count(); ++i) {

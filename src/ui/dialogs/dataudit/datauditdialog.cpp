@@ -48,6 +48,9 @@
 #include "datauditprofiledialog.h"
 #include "datauditresultdelegate.h"
 #include "datcache.h"
+#include "datlibrarystate.h"
+#include "datlookup.h"
+#include "errorutils.h"
 #include "nointrodownloader.h"
 #include "pathutils.h"
 #include "redumpdownload.h"
@@ -726,6 +729,9 @@ void DatAuditDialog::runLayoutDetection(bool autoTriggered) {
   case DatAudit::Layout::ArchivePerItem:
     text = tr("Archive-per-item layout detected — audit archive contents.");
     break;
+  case DatAudit::Layout::SubfolderPerItem:
+    text = tr("Subfolder-per-item layout detected — subfolders will be scanned.");
+    break;
   case DatAudit::Layout::Mixed:
     text = tr("Mixed layout detected — full recursive scan recommended.");
     break;
@@ -1247,8 +1253,15 @@ void DatAuditDialog::updateSummary(const AuditSummary &s) {
   if (s.totalCatalogue > 0) {
     m_completionBar->setRange(0, s.totalCatalogue);
     m_completionBar->setValue(present);
-    m_completionBar->setToolTip(
-        tr("%1 of %2 catalogue entries present").arg(present).arg(s.totalCatalogue));
+    QString tip = tr("%1 of %2 catalogue entries present").arg(present).arg(s.totalCatalogue);
+    // Per-DAT breakdown (Kartend-m6qsb.15) — only when more than one DAT feeds
+    // the catalogue, since a single source just restates the overall total.
+    if (s.perSource.size() > 1) {
+      for (const DatAudit::SourceCompleteness &sc : s.perSource) {
+        tip += tr("\n%1: %2 / %3 present").arg(sc.name).arg(sc.present).arg(sc.total);
+      }
+    }
+    m_completionBar->setToolTip(tip);
     m_completionBar->setVisible(true);
   } else {
     m_completionBar->setVisible(false);
@@ -1323,6 +1336,10 @@ void DatAuditDialog::onFix() {
     return;
   }
   DatAuditFixDialog dlg(m_model->allRows(), this);
+  // Seed the managed-output option from the profile's persisted fix mode + root
+  // (Kartend-m6qsb.14) instead of always starting blank.
+  dlg.setManagedOutputDefaults(m_currentProfile.fixMode == DatAuditProfile::FixMode::ManagedOutput,
+                               m_currentProfile.managedOutputRoot);
   dlg.exec();
   if (!dlg.didApply()) {
     return;
@@ -1594,10 +1611,13 @@ void DatAuditDialog::onStartDownload() {
         Qt::QueuedConnection);
   };
 
+  // No-Intro's revision is the daily pack date, known here on the UI thread;
+  // Redump's is read from the downloaded DAT header in the worker below.
+  const QString packDate = redump ? QString() : m_dailyForm.packDate;
   // Both sources share the "download to a temp dir → extract DATs into the
   // library" shape so a failed/cancelled run never leaves a partial zip behind.
-  m_dlWatcher.setFuture(
-      QtConcurrent::run([redump, niOpts, redumpSlug, lib, cancel, progressFn]() -> DownloadOutcome {
+  m_dlWatcher.setFuture(QtConcurrent::run(
+      [redump, niOpts, redumpSlug, lib, packDate, cancel, progressFn]() -> DownloadOutcome {
         QTemporaryDir tmp;
         const QString dest = tmp.isValid() ? tmp.path() : lib;
         ErrorUtils::Result<NoIntroDownload::DownloadResult> dl =
@@ -1613,8 +1633,22 @@ void DatAuditDialog::onStartDownload() {
         if (ex.isError()) {
           return DownloadOutcome{false, ex.error().message, dl.value().packName, 0};
         }
-        return DownloadOutcome{true, QString(), dl.value().packName,
-                               static_cast<int>(ex.value().size())};
+        DownloadOutcome out;
+        out.ok = true;
+        out.packName = dl.value().packName;
+        out.datPaths = ex.value();
+        out.datCount = static_cast<int>(out.datPaths.size());
+        out.source = redump ? QStringLiteral("redump") : QStringLiteral("nointro");
+        out.slug = redump ? redumpSlug : QString();
+        out.systemId = redump ? 0 : niOpts.systemId;
+        // Redump has no cheap version endpoint — its revision is the DAT header
+        // version, read from the freshly-extracted file; No-Intro uses the pack
+        // date (Kartend-m6qsb.26).
+        out.version = redump ? (out.datPaths.isEmpty()
+                                    ? QString()
+                                    : DatLookup::probeHeaderFromFile(out.datPaths.first()).version)
+                             : packDate;
+        return out;
       }));
 }
 
@@ -1626,6 +1660,24 @@ void DatAuditDialog::onDownloadFinished() {
     return;
   }
   m_dlStatus->setText(tr("Imported %n DAT file(s) into the library.", nullptr, o.datCount));
+  // Record where each DAT came from so "check for updates" can later ask the
+  // source for a newer revision (Kartend-m6qsb.26).
+  if (!o.datPaths.isEmpty()) {
+    withProfileDb([&o](QSqlDatabase &db) {
+      for (const QString &path : o.datPaths) {
+        DatLibraryState::Provenance pr;
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        pr.canonicalPath = canonical.isEmpty() ? path : canonical;
+        pr.source = o.source;
+        pr.slug = o.slug;
+        pr.systemId = o.systemId;
+        pr.version = o.version;
+        if (auto res = DatLibraryState::recordProvenance(db, pr); res.isError()) {
+          ErrorUtils::logError(res.error());
+        }
+      }
+    });
+  }
   // Surface matches immediately via the library review.
   if (m_libraryOpener) {
     m_libraryOpener();
