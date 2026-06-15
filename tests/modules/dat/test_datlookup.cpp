@@ -12,7 +12,10 @@
 
 #include "datlookup.h"
 
+#include <QDir>
 #include <QFile>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -50,6 +53,8 @@ private slots:
   void parseDatDispatchesToClrMamePro();
   void probeHeaderReadsClrMameProFields();
   void parsesCloneOfAcrossDialects();
+  void readDatFilePlainAndPrefix();
+  void readDatFileUnpacksZip();
 
 private:
   QTemporaryDir m_dir;
@@ -586,6 +591,62 @@ void TestDatLookup::parsesCloneOfAcrossDialects() {
   QVERIFY(c.isOk());
   QCOMPARE(c.value().size(), 1);
   QCOMPARE(c.value()[0].cloneOf, QStringLiteral("Parent Set"));
+}
+
+void TestDatLookup::readDatFilePlainAndPrefix() {
+  // Plain (non-zip) DAT: returned verbatim; maxBytes caps the raw read; a
+  // missing path yields empty. No archive tool involved (Kartend-m6qsb.28).
+  const QString path = m_dir.filePath(QStringLiteral("plain.dat"));
+  {
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<datafile><game name=\"x\"/></datafile>");
+  }
+  QCOMPARE(DatLookup::readDatFile(path), QByteArray("<datafile><game name=\"x\"/></datafile>"));
+  QCOMPARE(DatLookup::readDatFile(path, 9), QByteArray("<datafile"));
+  QVERIFY(DatLookup::readDatFile(m_dir.filePath(QStringLiteral("absent.dat"))).isEmpty());
+  QVERIFY(DatLookup::readDatFile(QString()).isEmpty());
+}
+
+void TestDatLookup::readDatFileUnpacksZip() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty() ||
+      (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+       QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty())) {
+    QSKIP("zip/extractor not available");
+  }
+  // A real-world packed catalogue: one .dat inside a .zip.
+  const QString srcDir = m_dir.filePath(QStringLiteral("ziproot"));
+  QDir().mkpath(srcDir);
+  const QByteArray dat =
+      QByteArrayLiteral("<?xml version=\"1.0\"?>\n<datafile><header><name>Packed</name>"
+                        "<version>9</version></header>"
+                        "<game name=\"Solo\"><rom name=\"Solo.bin\" size=\"4\" crc=\"deadbeef\"/>"
+                        "</game></datafile>");
+  {
+    QFile f(srcDir + QStringLiteral("/Packed.dat"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(dat);
+  }
+  const QString zip = m_dir.filePath(QStringLiteral("packed.zip"));
+  QProcess p;
+  p.setWorkingDirectory(srcDir);
+  p.start(QStringLiteral("zip"), {QStringLiteral("-q"), zip, QStringLiteral("Packed.dat")});
+  QVERIFY(p.waitForFinished(5000));
+  QCOMPARE(p.exitCode(), 0);
+
+  // readDatFile transparently unpacks the inner .dat.
+  QCOMPARE(DatLookup::readDatFile(zip), dat);
+  // …and the higher-level convenience + probe see through the zip too.
+  auto store = DatLookup::loadStoreFromFile(zip);
+  QVERIFY2(store.isOk(), qPrintable(store.isError() ? store.error().message : QString()));
+  QVERIFY(store.value().lookupByCrc(QStringLiteral("deadbeef")) != nullptr);
+  const auto header = DatLookup::probeHeaderFromFile(zip);
+  QCOMPARE(header.name, QStringLiteral("Packed"));
+  QCOMPARE(header.version, QStringLiteral("9"));
 }
 
 QTEST_MAIN(TestDatLookup)

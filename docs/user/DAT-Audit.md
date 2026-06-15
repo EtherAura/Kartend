@@ -21,7 +21,9 @@ matching the rest of the app's look.
 
 1. **Add DAT files** — click *Add DAT…* and pick one or more `.dat` / `.xml`
    catalogues. Hover an entry to see what the catalogue calls itself and how
-   many entries it carries.
+   many entries it carries. A catalogue shipped as a single `.dat` zipped inside
+   a `.zip` is read transparently — point Kartend straight at the `.zip` (an
+   archive tool such as `unzip`/`7z` must be on your PATH).
 2. **Add scan folders** — click *Add folder…* and pick the folder(s) holding the
    files to check.
 3. Click **Run audit**. Hashing runs in the background with a live progress

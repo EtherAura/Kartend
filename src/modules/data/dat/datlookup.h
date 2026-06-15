@@ -201,9 +201,20 @@ private:
   Dialect m_dialect = Dialect::Unknown;
 };
 
-/// Convenience: parse the file at `path` and return the Store.
-/// Returns an error result with the file/parse error context when
-/// the file can't be read or the XML is malformed.
+/// Read a DAT file's bytes, transparently unpacking a `.zip`-packed DAT
+/// (Kartend-m6qsb.28): when the file opens with the PK zip magic its first
+/// `.dat` member is extracted (needs an archive tool on PATH) and returned;
+/// otherwise the file is read directly. `maxBytes > 0` caps the *raw* read (the
+/// header probe uses this over huge listxmls) — a zip member is always returned
+/// whole, since zipped catalogues are small. Returns empty for a missing /
+/// unreadable file, or a zip with no extractable `.dat` member. Parsing itself
+/// stays byte-pure; only this file-reading convenience knows about archives.
+[[nodiscard]] QByteArray readDatFile(const QString &path, qint64 maxBytes = -1);
+
+/// Convenience: parse the file at `path` and return the Store. Reads via
+/// readDatFile, so a `.zip`-packed DAT is loaded transparently. Returns an
+/// error result with the file/parse error context when the file can't be read
+/// or the content is malformed.
 [[nodiscard]] ErrorUtils::Result<Store> loadStoreFromFile(const QString &path);
 
 } // namespace DatLookup

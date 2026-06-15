@@ -7,7 +7,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStringView>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
+
+#include "nointrodownloader.h" // extractDatsTo, for transparent .zip-packed DATs (Kartend-m6qsb.28)
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -384,18 +387,15 @@ DatHeader probeHeader(const QByteArray &xml) {
 }
 
 DatHeader probeHeaderFromFile(const QString &path) {
-  if (path.isEmpty() || !QFileInfo(path).isFile()) {
-    return DatHeader{};
-  }
-  QFile f(path);
-  if (!f.open(QIODevice::ReadOnly)) {
-    return DatHeader{};
-  }
   // 256 KiB is orders of magnitude beyond any real Logiqx <header> (a few
   // hundred bytes) while keeping a probe over a folder of 100MB listxmls
-  // cheap. A header truncated mid-element just yields the fields captured
-  // up to the cut — fine for a suggestion signal.
-  const QByteArray head = f.read(256 * 1024);
+  // cheap. A header truncated mid-element just yields the fields captured up to
+  // the cut — fine for a suggestion signal. A .zip-packed DAT is unpacked whole
+  // (small) by readDatFile regardless of the cap (Kartend-m6qsb.28).
+  const QByteArray head = readDatFile(path, 256 * 1024);
+  if (head.isEmpty()) {
+    return DatHeader{};
+  }
   return probeHeader(head);
 }
 
@@ -602,6 +602,37 @@ const DatRecord *Store::lookupByCrc(const QString &crc) const {
   return &m_records[it.value()];
 }
 
+QByteArray readDatFile(const QString &path, qint64 maxBytes) {
+  if (path.isEmpty() || !QFileInfo(path).isFile()) {
+    return {};
+  }
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    return {};
+  }
+  // PK\x03\x04 (zip local-file-header magic) → a zip-packed DAT. Extract its
+  // first .dat member into a temp dir and read that instead. Needs an archive
+  // tool on PATH (via NoIntroDownload::extractDatsTo); without one, or with no
+  // .dat inside, we return empty and the caller reports it as unreadable.
+  if (f.peek(4) == QByteArrayLiteral("PK\x03\x04")) {
+    f.close();
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) {
+      return {};
+    }
+    auto ex = NoIntroDownload::extractDatsTo(path, tmp.path(), {});
+    if (ex.isError() || ex.value().isEmpty()) {
+      return {};
+    }
+    QFile member(ex.value().constFirst());
+    if (!member.open(QIODevice::ReadOnly)) {
+      return {};
+    }
+    return member.readAll();
+  }
+  return maxBytes > 0 ? f.read(maxBytes) : f.readAll();
+}
+
 ErrorUtils::Result<Store> loadStoreFromFile(const QString &path) {
   if (path.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Empty DAT path",
@@ -612,14 +643,14 @@ ErrorUtils::Result<Store> loadStoreFromFile(const QString &path) {
                                "DatLookup::loadStoreFromFile")
         .withDetails(path);
   }
-  QFile f(path);
-  if (!f.open(QIODevice::ReadOnly)) {
-    return ErrorContext::error(ErrorCode::FileNotFound, "Failed to open DAT file",
+  const QByteArray bytes = readDatFile(path);
+  if (bytes.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Failed to read DAT file (unreadable, empty, or a .zip with no "
+                               ".dat member / no archive tool)",
                                "DatLookup::loadStoreFromFile")
-        .withDetails(f.errorString());
+        .withDetails(path);
   }
-  const QByteArray bytes = f.readAll();
-  f.close();
   const Dialect dialect = detectDialect(bytes);
   auto parsed = parseDat(bytes);
   if (parsed.isError()) return parsed.error();

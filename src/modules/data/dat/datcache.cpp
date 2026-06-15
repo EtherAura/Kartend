@@ -214,14 +214,16 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   // multi-second on a 100MB MAME XML, sub-second on a 5MB No-Intro.
   // The whole point of this cache is to do this once per (path,
   // mtime) and serve subsequent lookups from sqlite.
-  QFile f(datPath);
-  if (!f.open(QIODevice::ReadOnly)) {
-    return ErrorContext::error(ErrorCode::FileNotFound, "Failed to open DAT file for ingest",
+  // readDatFile transparently unpacks a .zip-packed DAT (Kartend-m6qsb.28);
+  // a plain DAT is read directly.
+  const QByteArray bytes = DatLookup::readDatFile(datPath);
+  if (bytes.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Failed to read DAT file for ingest (unreadable, empty, or a .zip "
+                               "with no .dat member / no archive tool)",
                                "DatCache::Store::openOrIngest")
-        .withDetails(f.errorString());
+        .withDetails(datPath);
   }
-  const QByteArray bytes = f.readAll();
-  f.close();
   const DatLookup::Dialect dialect = DatLookup::detectDialect(bytes);
   // Header metadata rides along with the ingest so the matcher / UI can
   // identify the catalogue without re-touching the XML (Kartend-m6qsb.3).
