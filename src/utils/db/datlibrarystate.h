@@ -1,6 +1,9 @@
 #ifndef DATLIBRARYSTATE_H
 #define DATLIBRARYSTATE_H
 
+#include <optional>
+
+#include <QList>
 #include <QSet>
 #include <QString>
 
@@ -31,6 +34,37 @@ namespace DatLibraryState {
 [[nodiscard]] inline QString dismissalKey(const QString &canonicalPath, qint64 mtimeMs) {
   return canonicalPath + QLatin1Char('|') + QString::number(mtimeMs);
 }
+
+/// Where a library DAT came from (Kartend-m6qsb.26), recorded at download/import
+/// time so a later "check for updates" pass can ask the source for a newer
+/// revision. Schema v21 table `dat_library_provenance`, keyed by canonical path.
+struct Provenance {
+  QString canonicalPath;
+  QString source;   ///< "nointro" / "redump" / "" (unknown — e.g. generic import).
+  QString slug;     ///< Redump system slug; empty for No-Intro.
+  int systemId = 0; ///< No-Intro system id; 0 for Redump.
+  QString version;  ///< Revision at fetch time (No-Intro pack date / Redump header version).
+  qint64 updatedAtMs = 0;
+};
+
+/// Record (or replace) the provenance of the DAT at `p.canonicalPath`.
+[[nodiscard]] ErrorUtils::Result<bool> recordProvenance(QSqlDatabase &db, const Provenance &p);
+
+/// Load the provenance for one DAT, or nullopt when none was recorded (e.g. a
+/// DAT that predates provenance tracking, or a hand-copied file).
+[[nodiscard]] ErrorUtils::Result<std::optional<Provenance>> loadProvenance(QSqlDatabase &db,
+                                                                           const QString &path);
+
+/// All recorded provenance rows — the input to a "check for updates" pass.
+[[nodiscard]] ErrorUtils::Result<QList<Provenance>> loadAllProvenance(QSqlDatabase &db);
+
+/// True when `latestVersion` differs from `storedVersion` (and both are
+/// non-empty): a different revision at the source means an update is available.
+/// Deliberately "different", not "strictly newer" — these sources don't
+/// publish downgrades, and version strings (No-Intro pack dates, Redump header
+/// versions) aren't a uniform orderable format. Empty on either side = "can't
+/// tell" = no update flagged.
+[[nodiscard]] bool isUpdateAvailable(const QString &storedVersion, const QString &latestVersion);
 
 } // namespace DatLibraryState
 

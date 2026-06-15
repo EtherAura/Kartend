@@ -62,22 +62,21 @@ Profile readProfileRow(const QSqlQuery &q) {
   p.name = q.value(1).toString();
   p.collectionUuid = q.value(2).toString();
   p.scanRoots = jsonToStringList(q.value(3).toString());
-  p.mergeMode = mergeModeFromString(q.value(4).toString());
-  p.regionPrefs = jsonToStringList(q.value(5).toString());
-  p.onePerGame = q.value(6).toInt() != 0;
-  p.ignoreRules = jsonToStringList(q.value(7).toString());
-  p.fixMode = fixModeFromString(q.value(8).toString());
-  p.managedOutputRoot = q.value(9).toString();
-  p.detectedLayout = q.value(10).toString();
-  p.layoutConfirmed = q.value(11).toInt() != 0;
-  p.lastScanAtMs = q.value(12).toLongLong();
-  p.createdAtMs = q.value(13).toLongLong();
-  p.updatedAtMs = q.value(14).toLongLong();
+  p.regionPrefs = jsonToStringList(q.value(4).toString());
+  p.onePerGame = q.value(5).toInt() != 0;
+  p.ignoreRules = jsonToStringList(q.value(6).toString());
+  p.fixMode = fixModeFromString(q.value(7).toString());
+  p.managedOutputRoot = q.value(8).toString();
+  p.detectedLayout = q.value(9).toString();
+  p.layoutConfirmed = q.value(10).toInt() != 0;
+  p.lastScanAtMs = q.value(11).toLongLong();
+  p.createdAtMs = q.value(12).toLongLong();
+  p.updatedAtMs = q.value(13).toLongLong();
   return p;
 }
 
 constexpr char kSelectColumns[] =
-    "id, name, collection_uuid, scan_roots, merge_mode, region_prefs, one_per_game, "
+    "id, name, collection_uuid, scan_roots, region_prefs, one_per_game, "
     "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
     "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms";
 
@@ -145,28 +144,6 @@ FixMode fixModeFromString(const QString &s) {
   return s == QLatin1String("managed_output") ? FixMode::ManagedOutput : FixMode::InPlace;
 }
 
-QString mergeModeToString(MergeMode m) {
-  switch (m) {
-  case MergeMode::Merged:
-    return QStringLiteral("merged");
-  case MergeMode::NonMerged:
-    return QStringLiteral("nonmerged");
-  case MergeMode::Split:
-    break;
-  }
-  return QStringLiteral("split");
-}
-
-MergeMode mergeModeFromString(const QString &s) {
-  if (s == QLatin1String("merged")) {
-    return MergeMode::Merged;
-  }
-  if (s == QLatin1String("nonmerged")) {
-    return MergeMode::NonMerged;
-  }
-  return MergeMode::Split;
-}
-
 ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
   if (!db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
@@ -186,14 +163,13 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     QSqlQuery q(db);
     q.prepare(QStringLiteral(
         "INSERT INTO dat_audit_profile "
-        "(name, collection_uuid, scan_roots, merge_mode, region_prefs, one_per_game, "
+        "(name, collection_uuid, scan_roots, region_prefs, one_per_game, "
         "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
         "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
-    q.addBindValue(mergeModeToString(p.mergeMode));
     q.addBindValue(stringListToJson(p.regionPrefs));
     q.addBindValue(p.onePerGame ? 1 : 0);
     q.addBindValue(stringListToJson(p.ignoreRules));
@@ -243,16 +219,15 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
   }
   {
     QSqlQuery q(db);
-    q.prepare(QStringLiteral(
-        "UPDATE dat_audit_profile SET "
-        "name = ?, collection_uuid = ?, scan_roots = ?, merge_mode = ?, region_prefs = ?, "
-        "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
-        "detected_layout = ?, layout_confirmed = ?, "
-        "last_scan_at_unix_ms = ?, updated_at_unix_ms = ? WHERE id = ?"));
+    q.prepare(
+        QStringLiteral("UPDATE dat_audit_profile SET "
+                       "name = ?, collection_uuid = ?, scan_roots = ?, region_prefs = ?, "
+                       "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
+                       "detected_layout = ?, layout_confirmed = ?, "
+                       "last_scan_at_unix_ms = ?, updated_at_unix_ms = ? WHERE id = ?"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
-    q.addBindValue(mergeModeToString(p.mergeMode));
     q.addBindValue(stringListToJson(p.regionPrefs));
     q.addBindValue(p.onePerGame ? 1 : 0);
     q.addBindValue(stringListToJson(p.ignoreRules));

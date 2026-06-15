@@ -43,6 +43,12 @@ struct FixSettings {
   bool quarantineUnknown = false;       ///< Move Unknown files into quarantineDir.
   QString managedOutputRoot;            ///< Required when relocateToManagedOutput.
   QString quarantineDir;                ///< Required when quarantineUnknown.
+  /// Structured managed output (Kartend-m6qsb.14): place each relocated file in
+  /// a per-item subfolder named after its DAT game (managedOutputRoot/<game>/
+  /// <canonical>) instead of a flat managedOutputRoot/<canonical>. Groups
+  /// multi-file sets under one folder. Rows without a game name fall back to the
+  /// flat destination.
+  bool managedOutputPerItemSubfolder = false;
 };
 
 /// Compute the previewable fix plan from audit rows. Pure — no filesystem touch

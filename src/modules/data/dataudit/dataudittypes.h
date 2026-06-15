@@ -51,6 +51,21 @@ struct AuditRow {
   QString crc;          ///< Lowercase hex digests of the on-disk file, when hashed.
   QString md5;
   QString sha1;
+  /// Source DAT this row's catalogue entry came from (Kartend-m6qsb.15), when
+  /// the row maps to one (Have / WrongName / WrongHash / Duplicate / Missing).
+  /// Empty for catalogue-less rows (Unknown / Corrupt).
+  QString sourceName;
+};
+
+/// Per-source (per-DAT) completeness attribution (Kartend-m6qsb.15). One entry
+/// per DAT that contributed to the catalogue: how many of its entries have
+/// matching content on disk vs are missing. Independent of the 1G1R collapse —
+/// every catalogue entry counts toward its source.
+struct SourceCompleteness {
+  QString name;    ///< Source DAT display name (typically its filename).
+  int total = 0;   ///< Catalogue entries contributed by this source.
+  int present = 0; ///< Of those, how many have matching content on disk.
+  int missing = 0; ///< total - present.
 };
 
 /// Rollup counts for the summary bar. `matched` and `total*` are derived.
@@ -64,6 +79,11 @@ struct AuditSummary {
   int missing = 0;
   int totalCatalogue = 0; ///< Distinct catalogue entries considered.
   int totalFiles = 0;     ///< Files scanned (across all roots).
+  /// Per-DAT completeness breakdown (Kartend-m6qsb.15), one entry per source
+  /// DAT, in registration order. Empty when the catalogue carried no source
+  /// attribution (e.g. a hand-built test catalogue). Filled by classify(), not
+  /// summarize() — it needs the catalogue, which rows alone don't carry.
+  QList<SourceCompleteness> perSource;
 
   /// Catalogue entries whose content is present (Have + WrongName).
   [[nodiscard]] int present() const { return have + wrongName; }

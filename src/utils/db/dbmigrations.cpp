@@ -63,6 +63,27 @@ static auto ensureColumn(QSqlDatabase &db, const QString &table, const QString &
   return true;
 }
 
+// Returns true if the column is absent after the call (already gone, or
+// successfully dropped). SQLite supports ALTER TABLE DROP COLUMN (3.35+); the
+// column must not be indexed or part of a constraint — used here only for plain
+// unindexed columns. Returns false (aborting the block) if the drop failed, so
+// user_version is not advanced past a column that still exists.
+static auto dropColumn(QSqlDatabase &db, const QString &table, const QString &column,
+                       const QString &origin) -> bool {
+  if (!tableHasColumn(db, table, column)) {
+    return true;
+  }
+  QSqlQuery q(db);
+  if (!q.exec(QString("ALTER TABLE %1 DROP COLUMN %2").arg(table, column))) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to drop database column", origin)
+                   .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+    return false;
+  }
+  return true;
+}
+
 // Creates the unique (collection_uuid, path) index, de-duplicating existing
 // rows first if a uniqueness conflict blocks creation. Returns false only if
 // the index still could not be created (the caller's transaction then rolls the
@@ -192,7 +213,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 19;
+  constexpr int CURRENT_SCHEMA_VERSION = 21;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -834,9 +855,48 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 19;
+  }
+
+  if (mutableVersion < 20) {
+    // v20 (Kartend-m6qsb.13): drop the inert merge_mode column. MergeMode
+    // (split/merged/non-merged) was persisted on every profile (v17) but never
+    // read by the audit module — its UI control and the Profile struct field
+    // are now removed, leaving the column with no reader. It's a plain
+    // unindexed TEXT column, so ALTER TABLE DROP COLUMN succeeds outright.
+    if (!runBlock(db, 20, origin, [&]() -> bool {
+          return dropColumn(db, "dat_audit_profile", "merge_mode", origin);
+        })) {
+      return;
+    }
+    mutableVersion = 20;
+  }
+
+  if (mutableVersion < 21) {
+    // v21 (Kartend-m6qsb.26): dat_library_provenance — where each library DAT
+    // came from, recorded at download/import time, so a later "check for
+    // updates" pass can ask the source whether a newer revision exists. Keyed
+    // by canonical path (like dat_library_dismissal); 'source' is '', 'nointro'
+    // or 'redump'; 'slug'/'system_id' identify it within the source; 'version'
+    // is the revision stored at fetch time (No-Intro pack date / Redump header
+    // version) that the update check compares against.
+    if (!runBlock(db, 21, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS dat_library_provenance ("
+                             "canonical_path TEXT PRIMARY KEY, "
+                             "source TEXT NOT NULL DEFAULT '', "
+                             "slug TEXT NOT NULL DEFAULT '', "
+                             "system_id INTEGER NOT NULL DEFAULT 0, "
+                             "version TEXT NOT NULL DEFAULT '', "
+                             "updated_at_unix_ms INTEGER NOT NULL DEFAULT 0"
+                             ")",
+                             origin, "dat_library_provenance");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v20 block stays a pure copy-paste.
-    mutableVersion = 19; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v22 block stays a pure copy-paste.
+    mutableVersion = 21; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

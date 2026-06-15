@@ -38,10 +38,6 @@ enum class FixMode {
   ManagedOutput, ///< Build a clean sorted set into managedOutputRoot; originals untouched.
 };
 
-/// Set-merge interpretation for DATs that carry parent/clone relations (MAME
-/// listxml). Inert for flat No-Intro/Redump catalogues.
-enum class MergeMode { Split, Merged, NonMerged };
-
 /// One DAT catalogue referenced by a profile. mtime/dialect/recordCount are
 /// cached at attach time for UI labels and staleness hints; the auditor
 /// re-reads each DAT through DatCache regardless. `dialect` is the
@@ -62,7 +58,6 @@ struct Profile {
   QString collectionUuid; ///< '' = not linked to a collection.
   QStringList scanRoots;
   QList<DatRef> dats;
-  MergeMode mergeMode = MergeMode::Split;
   QStringList regionPrefs; ///< 1G1R region priority order, e.g. {"USA", "World"}.
   bool onePerGame = false; ///< 1G1R toggle.
   QStringList ignoreRules; ///< Glob patterns excluded from scan/audit.
@@ -151,11 +146,9 @@ struct ResultSummary {
                                                                                  qint64 id);
 
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
-/// unknown string falls back to the safe default (InPlace / Split).
+/// unknown string falls back to the safe default (InPlace).
 [[nodiscard]] QString fixModeToString(FixMode m);
 [[nodiscard]] FixMode fixModeFromString(const QString &s);
-[[nodiscard]] QString mergeModeToString(MergeMode m);
-[[nodiscard]] MergeMode mergeModeFromString(const QString &s);
 
 } // namespace DatAuditProfile
 

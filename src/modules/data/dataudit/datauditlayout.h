@@ -16,14 +16,19 @@
 /// (folderBrowsing.includeContentSubfolders) is deliberately untouched.
 namespace DatAudit {
 
-/// The layout classes v1 distinguishes. Subfolder-per-item (multi-file sets)
-/// and split/merged set semantics are tracked as follow-ups.
+/// The layout classes the probe distinguishes. Split/merged set semantics are
+/// tracked as a follow-up.
 enum class Layout {
   Unknown,        ///< Not detected / nothing sampled / user never confirmed.
   Flat,           ///< Items sit directly in the root; subfolders are noise.
   Nested,         ///< Items spread across subfolders; recursive walk needed.
   ArchivePerItem, ///< One archive per item; audit must hash archive members.
-  Mixed,          ///< No dominant shape — treated like Nested, flagged to the user.
+  /// One subfolder per item, each holding a multi-file set (e.g. disc-image
+  /// pairs, multi-part masters). Scanned recursively like Nested — the
+  /// distinction is informational + a foundation for folder-as-item grouping
+  /// (Kartend-m6qsb.12).
+  SubfolderPerItem,
+  Mixed, ///< No dominant shape — treated like Nested, flagged to the user.
 };
 
 /// Stable lowercase token for persistence (dat_audit_profile.detected_layout).

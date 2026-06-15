@@ -6,6 +6,31 @@
 
 namespace DatAudit {
 
+namespace {
+
+/// Make a DAT game name safe to use as a single folder component: replace the
+/// characters illegal on Windows/cross-platform filesystems with '_' and trim
+/// trailing dots/spaces (also illegal on Windows). Game names are usually
+/// already clean ("Title (USA) (Rev 1)"); this only guards the odd ':' etc.
+QString sanitizeFolderName(const QString &name) {
+  QString out;
+  out.reserve(name.size());
+  for (const QChar c : name) {
+    if (c == u'<' || c == u'>' || c == u':' || c == u'"' || c == u'/' || c == u'\\' || c == u'|' ||
+        c == u'?' || c == u'*' || c.unicode() < 0x20) {
+      out += u'_';
+    } else {
+      out += c;
+    }
+  }
+  while (out.endsWith(u'.') || out.endsWith(u' ')) {
+    out.chop(1);
+  }
+  return out;
+}
+
+} // namespace
+
 QString fixActionKindToken(FixActionKind k) {
   switch (k) {
   case FixActionKind::Rename:
@@ -37,7 +62,17 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
     // set; originals are left untouched — this is a copy).
     if (settings.relocateToManagedOutput && !settings.managedOutputRoot.isEmpty() &&
         isPresent(r.status) && !r.filePath.isEmpty() && !r.expectedName.isEmpty()) {
-      const QString to = settings.managedOutputRoot + QLatin1Char('/') + r.expectedName;
+      // Structured output: group each file under a per-item subfolder named for
+      // its game (Kartend-m6qsb.14); fall back to a flat destination when the
+      // row carries no usable game name.
+      QString destDir = settings.managedOutputRoot;
+      if (settings.managedOutputPerItemSubfolder) {
+        const QString folder = sanitizeFolderName(r.gameName);
+        if (!folder.isEmpty()) {
+          destDir += QLatin1Char('/') + folder;
+        }
+      }
+      const QString to = destDir + QLatin1Char('/') + r.expectedName;
       plan.actions.append(FixAction{FixActionKind::Relocate, r.filePath, to, r.status});
     }
     // Quarantine unknown files (move, never delete).

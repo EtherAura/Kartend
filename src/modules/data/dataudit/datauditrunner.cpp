@@ -133,7 +133,14 @@ Catalogue buildCatalogue(DatCache::Store &cache, const QStringList &datPaths,
       }
       continue;
     }
-    cache.forEachRecord(src.value(), [&cat](const DatLookup::DatRecord &r) { cat.addRecord(r); });
+    // Attribute every record from this DAT to a source id so per-DAT
+    // completeness can be reported (Kartend-m6qsb.15). The filename is the
+    // provenance label the UI shows; the full path is the disambiguator only
+    // when two DATs share a basename, which is rare enough not to special-case.
+    const int sourceId = cat.addSource(QFileInfo(dat).fileName());
+    cache.forEachRecord(src.value(), [&cat, sourceId](const DatLookup::DatRecord &r) {
+      cat.addRecord(r, sourceId);
+    });
   }
   return cat;
 }
@@ -164,6 +171,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       const DatLookup::DatRecord &rec = catalogue.record(idx);
       row.gameName = rec.gameName;
       row.expectedName = rec.romName;
+      row.sourceName = catalogue.sourceName(catalogue.recordSource(idx));
       if (satisfied.contains(idx)) {
         row.status = Status::Duplicate;
       } else {
@@ -178,6 +186,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
         const DatLookup::DatRecord &rec = catalogue.record(nameIdx);
         row.gameName = rec.gameName;
         row.expectedName = rec.romName;
+        row.sourceName = catalogue.sourceName(catalogue.recordSource(nameIdx));
         row.status = Status::WrongHash;
       } else {
         row.status = Status::Unknown;
@@ -197,6 +206,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     row.crc = rec.crc;
     row.md5 = rec.md5;
     row.sha1 = rec.sha1;
+    row.sourceName = catalogue.sourceName(catalogue.recordSource(i));
     out.rows.append(row);
   };
 
@@ -252,6 +262,31 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
   out.summary = summarize(out.rows);
   out.summary.totalCatalogue = catalogue.size();
   out.summary.totalFiles = static_cast<int>(files.size());
+
+  // Per-DAT completeness (Kartend-m6qsb.15): every catalogue entry counts
+  // toward its source, present when its content was matched. Deliberately
+  // computed on the raw entry set, not the (possibly 1G1R-collapsed) Missing
+  // rows, so "of DAT X's N entries, M are present" stays well-defined.
+  if (catalogue.sourceCount() > 0) {
+    out.summary.perSource.reserve(catalogue.sourceCount());
+    for (int s = 0; s < catalogue.sourceCount(); ++s) {
+      out.summary.perSource.append(SourceCompleteness{catalogue.sourceName(s), 0, 0, 0});
+    }
+    for (int i = 0; i < catalogue.size(); ++i) {
+      const int s = catalogue.recordSource(i);
+      if (s < 0 || s >= out.summary.perSource.size()) {
+        continue;
+      }
+      SourceCompleteness &sc = out.summary.perSource[s];
+      sc.total += 1;
+      if (satisfied.contains(i)) {
+        sc.present += 1;
+      }
+    }
+    for (SourceCompleteness &sc : out.summary.perSource) {
+      sc.missing = sc.total - sc.present;
+    }
+  }
   return out;
 }
 

@@ -6,6 +6,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QObject>
+#include <QSet>
 
 #include "romhasher.h"
 
@@ -29,6 +30,18 @@ constexpr double kArchiveMinority = 0.3;
 constexpr double kTopLevelMajority = 0.8;
 constexpr double kTopLevelMinority = 0.2;
 
+// Subfolder-per-item refinement (Kartend-m6qsb.12) of the subfolder-dominant
+// case. Distinguished from generic Nested by three signals: the root is nearly
+// empty (kSubfolderTopMax — keeps a flat set with sidecar folders out, since
+// its content still sits in the root), files sit one level deep rather than in
+// a deep tree (kSubfolderShallowMajority), and each item folder holds a
+// multi-file set rather than a single file (kMultiFilePerFolder). Need at least
+// a couple of item folders before it's a "pattern".
+constexpr double kSubfolderTopMax = 0.1;
+constexpr double kSubfolderShallowMajority = 0.8;
+constexpr double kMultiFilePerFolder = 1.5;
+constexpr int kMinItemFolders = 2;
+
 } // namespace
 
 QString layoutToken(Layout l) {
@@ -39,6 +52,8 @@ QString layoutToken(Layout l) {
     return QStringLiteral("nested");
   case Layout::ArchivePerItem:
     return QStringLiteral("archive_per_item");
+  case Layout::SubfolderPerItem:
+    return QStringLiteral("subfolder_per_item");
   case Layout::Mixed:
     return QStringLiteral("mixed");
   case Layout::Unknown:
@@ -56,6 +71,9 @@ Layout layoutFromToken(const QString &token) {
   }
   if (token == QLatin1String("archive_per_item")) {
     return Layout::ArchivePerItem;
+  }
+  if (token == QLatin1String("subfolder_per_item")) {
+    return Layout::SubfolderPerItem;
   }
   if (token == QLatin1String("mixed")) {
     return Layout::Mixed;
@@ -88,6 +106,9 @@ LayoutDetection detectLayout(const QString &root, const QStringList &relevantExt
   int sampled = 0;
   int topLevel = 0;
   int archives = 0;
+  int depth1Files = 0;       // file's parent is an immediate child of root
+  int deeperFiles = 0;       // file nested two or more levels down
+  QSet<QString> itemFolders; // distinct immediate subfolders that hold sampled files
   QDirIterator it(trimmedRoot, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
   while (it.hasNext() && sampled < kMaxSample) {
     it.next();
@@ -103,8 +124,20 @@ LayoutDetection detectLayout(const QString &root, const QStringList &relevantExt
     if (isArchive) {
       ++archives;
     }
-    if (fi.absoluteDir().canonicalPath() == canonicalRoot) {
+    const QString parentCanonical = fi.absoluteDir().canonicalPath();
+    if (parentCanonical == canonicalRoot) {
       ++topLevel;
+    } else {
+      // In a subfolder: separate depth-1 (immediate child of root) from deeper
+      // nesting, and remember the immediate folder so multi-file sets can be
+      // told apart from a deep tree (Kartend-m6qsb.12).
+      const QString rel = QDir(canonicalRoot).relativeFilePath(parentCanonical);
+      itemFolders.insert(rel.section(QLatin1Char('/'), 0, 0));
+      if (rel.contains(QLatin1Char('/'))) {
+        ++deeperFiles;
+      } else {
+        ++depth1Files;
+      }
     }
   }
 
@@ -142,6 +175,24 @@ LayoutDetection detectLayout(const QString &root, const QStringList &relevantExt
     return out;
   }
   if (topFrac <= kTopLevelMinority) {
+    // Refine the subfolder-dominant case: a true subfolder-per-item layout
+    // (root nearly empty, files one level deep, multi-file sets per folder) vs
+    // a generic Nested tree (Kartend-m6qsb.12).
+    const int subdirFiles = depth1Files + deeperFiles;
+    const int itemFolderCount = itemFolders.size();
+    const double shallowFrac = subdirFiles > 0 ? double(depth1Files) / double(subdirFiles) : 0.0;
+    const double filesPerFolder =
+        itemFolderCount > 0 ? double(depth1Files) / double(itemFolderCount) : 0.0;
+    if (topFrac <= kSubfolderTopMax && itemFolderCount >= kMinItemFolders &&
+        shallowFrac >= kSubfolderShallowMajority && filesPerFolder >= kMultiFilePerFolder) {
+      out.layout = Layout::SubfolderPerItem;
+      out.confidence = shallowFrac;
+      out.evidence = QObject::tr("%1 item folders, ~%2 files each (of %3 sampled)")
+                         .arg(itemFolderCount)
+                         .arg(QString::number(filesPerFolder, 'f', 1))
+                         .arg(sampled);
+      return out;
+    }
     out.layout = Layout::Nested;
     out.confidence = 1.0 - topFrac;
     out.evidence = QObject::tr("%1% of %2 sampled files sit in subfolders")

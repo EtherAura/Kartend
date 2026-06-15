@@ -2,9 +2,15 @@
 
 namespace DatAudit {
 
-void Catalogue::addRecord(const DatLookup::DatRecord &r) {
+int Catalogue::addSource(const QString &name) {
+  m_sourceNames.append(name);
+  return static_cast<int>(m_sourceNames.size()) - 1;
+}
+
+void Catalogue::addRecord(const DatLookup::DatRecord &r, int sourceId) {
   const int idx = static_cast<int>(m_records.size());
   m_records.append(r);
+  m_recordSource.append(sourceId);
   // First-seen wins (QHash::insert overwrites, so guard with contains()).
   if (!r.sha1.isEmpty() && !m_bySha1.contains(r.sha1)) {
     m_bySha1.insert(r.sha1, idx);

@@ -27,6 +27,12 @@
 ///     the cryptic `name=` set-id when present. `<rom status="nodump">`
 ///     entries (placeholder for an undumped chip) are skipped since
 ///     their hashes are zero/empty.
+/// - One non-XML dialect, sniffed when the bytes don't open as XML:
+///   * **clrmamepro text** — the older `clrmamepro (` / `emulator (`
+///     header block followed by `game (` / `resource (` blocks whose
+///     `rom ( name … crc … sha1 … )` lines carry the hashes. Parsed by
+///     a small tokeniser rather than streamed (these legacy catalogues
+///     are far smaller than a MAME listxml).
 /// - In-memory lookup. The on-disk sqlite cache for very large DATs
 ///   (multi-100k entries) is a separate follow-up — for typical ROM
 ///   collections (~5k–20k entries) the parse-on-load cost is sub-
@@ -37,9 +43,10 @@ namespace DatLookup {
 /// XML root element by `detectDialect` / `parseDat`. Exposed on Store
 /// so callers can surface "Loaded N entries from MAME listxml" etc.
 enum class Dialect {
-  Unknown, ///< Root not recognised; nothing was parsed.
-  Logiqx,  ///< `<datafile>` root — No-Intro, Redump, TOSEC.
-  Mame,    ///< `<mame>` root — MAME listxml.
+  Unknown,    ///< Root not recognised; nothing was parsed.
+  Logiqx,     ///< `<datafile>` root — No-Intro, Redump, TOSEC.
+  Mame,       ///< `<mame>` root — MAME listxml.
+  ClrMamePro, ///< `clrmamepro (`/`emulator (` text format — older catalogues.
 };
 
 /// One entry from a parsed DAT. Hash fields are stored lowercase-hex
@@ -63,6 +70,13 @@ struct DatRecord {
   QString crc;
   QString md5;
   QString sha1;
+  /// Parent set this entry is a clone of (Kartend-m6qsb.13), captured from the
+  /// game/machine's `cloneof` (falling back to `romof`) in MAME listxml,
+  /// clrmamepro, and Logiqx exports that carry it. Empty for parent sets and
+  /// for cataloguers that don't model clones (most No-Intro / Redump DATs).
+  /// Carried through so future clone-aware auditing has the relationship; no
+  /// current consumer interprets it.
+  QString cloneOf;
 };
 
 /// Peek at the XML root element to decide which parser to dispatch
@@ -114,10 +128,21 @@ struct DatHeader {
 /// skipped since they declare no usable hash.
 [[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml);
 
-/// Auto-dispatching parser. Sniffs the root element via
-/// `detectDialect` and routes to the matching parser. Returns an
-/// `InvalidArgument` error when the dialect can't be identified so
-/// the user gets a clearer diagnosis than a downstream parse hiccup.
+/// Parse a clrmamepro text DAT — the older non-XML format whose blocks
+/// look like `game ( name "…" rom ( name "…" size N crc … sha1 … ) )`.
+/// The `clrmamepro (` / `emulator (` header block is skipped (its
+/// fields are read by `probeHeader`); only `game` / `machine` / `set` /
+/// `resource` blocks contribute records. `rom` entries flagged
+/// `status nodump`, or carrying no hash at all, are dropped — same rule
+/// as the XML dialects. Tokenises the whole buffer (not streamed); fine
+/// for the small legacy catalogues this targets.
+[[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseClrMameProDat(const QByteArray &xml);
+
+/// Auto-dispatching parser. Sniffs the format via `detectDialect` and
+/// routes to the matching parser (Logiqx / MAME listxml / clrmamepro
+/// text). Returns an `InvalidArgument` error when the dialect can't be
+/// identified so the user gets a clearer diagnosis than a downstream
+/// parse hiccup.
 [[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml);
 
 /// Backwards-compat alias for code (and tests) that predate the

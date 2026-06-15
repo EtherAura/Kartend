@@ -27,8 +27,8 @@ QString normaliseHex(QStringView raw) {
 /// Build a DatRecord from a `<rom>` element's attributes. Returns
 /// nullopt when the entry has no usable hash (parse-time drop — an
 /// entry without any hash can't be reached from a lookup query).
-std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs,
-                                        const QString &gameName) {
+std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs, const QString &gameName,
+                                        const QString &cloneOf = {}) {
   // MAME marks placeholder roms with `status="nodump"` (the chip is
   // known to exist but no good dump is available). These entries
   // carry zeroed-out hashes that would otherwise collide with every
@@ -38,6 +38,7 @@ std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs,
 
   DatRecord r;
   r.gameName = gameName;
+  r.cloneOf = cloneOf;
   r.romName = attrs.value(QLatin1String("name")).toString();
   const QStringView sizeStr = attrs.value(QLatin1String("size"));
   if (!sizeStr.isEmpty()) {
@@ -54,6 +55,16 @@ std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs,
   return r;
 }
 
+/// The parent set named by a game/machine's `cloneof` (preferred) or `romof`
+/// attribute (Kartend-m6qsb.13). Empty for a parent / non-clone set.
+QString cloneOfFromAttrs(const QXmlStreamAttributes &attrs) {
+  QString c = attrs.value(QLatin1String("cloneof")).toString();
+  if (c.isEmpty()) {
+    c = attrs.value(QLatin1String("romof")).toString();
+  }
+  return c;
+}
+
 /// Standard parse-error builder so both parsers report errors with
 /// the same shape (caller surfaces line/column to the user).
 ErrorContext makeParseError(const QXmlStreamReader &reader, const char *context) {
@@ -62,6 +73,188 @@ ErrorContext makeParseError(const QXmlStreamReader &reader, const char *context)
                        .arg(reader.errorString())
                        .arg(reader.lineNumber())
                        .arg(reader.columnNumber()));
+}
+
+// --- clrmamepro text dialect ----------------------------------------------
+//
+// The clrmamepro format is a flat token soup of words, quoted strings, and
+// `(`/`)` block delimiters — e.g.
+//   game ( name "Title (USA)" rom ( name "Title (USA).bin" size 4 crc abcd1234 ) )
+// We tokenise the whole buffer once, then walk the tokens. There are no
+// comments or escape sequences in practice, so a quote runs to the next quote
+// and a bareword runs to the next whitespace/paren/quote.
+
+struct CmpToken {
+  enum Kind { Word, String, Open, Close } kind = Word;
+  QString text; // Word / String payload; empty for Open / Close
+};
+
+QList<CmpToken> tokenizeClrMamePro(const QString &s) {
+  QList<CmpToken> toks;
+  const int n = s.size();
+  int i = 0;
+  while (i < n) {
+    const QChar c = s.at(i);
+    if (c.isSpace()) {
+      ++i;
+    } else if (c == u'(') {
+      toks.append(CmpToken{CmpToken::Open, {}});
+      ++i;
+    } else if (c == u')') {
+      toks.append(CmpToken{CmpToken::Close, {}});
+      ++i;
+    } else if (c == u'"') {
+      ++i; // opening quote
+      QString val;
+      while (i < n && s.at(i) != u'"') {
+        val += s.at(i);
+        ++i;
+      }
+      if (i < n) ++i; // closing quote (tolerate an unterminated trailing string)
+      toks.append(CmpToken{CmpToken::String, val});
+    } else {
+      QString w;
+      while (i < n) {
+        const QChar wc = s.at(i);
+        if (wc.isSpace() || wc == u'(' || wc == u')' || wc == u'"') break;
+        w += wc;
+        ++i;
+      }
+      toks.append(CmpToken{CmpToken::Word, w});
+    }
+  }
+  return toks;
+}
+
+/// Read the value token (Word or String) following a key, advancing `i`.
+/// Returns empty without consuming when the next token is a paren — a key
+/// with no scalar value.
+QString cmpNextValue(const QList<CmpToken> &toks, int &i) {
+  if (i < toks.size() &&
+      (toks.at(i).kind == CmpToken::Word || toks.at(i).kind == CmpToken::String)) {
+    return toks.at(i++).text;
+  }
+  return QString();
+}
+
+/// Skip from just-after an `(` to just-past its matching `)`, honouring nesting.
+void cmpSkipBlock(const QList<CmpToken> &toks, int &i) {
+  const int n = toks.size();
+  int depth = 1;
+  while (i < n && depth > 0) {
+    if (toks.at(i).kind == CmpToken::Open)
+      ++depth;
+    else if (toks.at(i).kind == CmpToken::Close)
+      --depth;
+    ++i;
+  }
+}
+
+/// Parse a `rom ( … )` body (called with `i` just after the `(`); leaves `i`
+/// just past the matching `)`. Mirrors readRomElement's drop rules.
+std::optional<DatRecord> cmpParseRom(const QList<CmpToken> &toks, int &i) {
+  const int n = toks.size();
+  DatRecord r;
+  QString status;
+  while (i < n && toks.at(i).kind != CmpToken::Close) {
+    if (toks.at(i).kind == CmpToken::Word) {
+      const QString key = toks.at(i).text.toLower();
+      ++i;
+      const QString val = cmpNextValue(toks, i);
+      if (key == QLatin1String("name"))
+        r.romName = val;
+      else if (key == QLatin1String("size")) {
+        bool ok = false;
+        const qint64 sz = val.toLongLong(&ok);
+        if (ok) r.size = sz;
+      } else if (key == QLatin1String("crc"))
+        r.crc = normaliseHex(val);
+      else if (key == QLatin1String("md5"))
+        r.md5 = normaliseHex(val);
+      else if (key == QLatin1String("sha1"))
+        r.sha1 = normaliseHex(val);
+      else if (key == QLatin1String("status") || key == QLatin1String("flags"))
+        status = val.toLower();
+      // else: date / merge / bios / region / … — irrelevant to lookup.
+    } else if (toks.at(i).kind == CmpToken::Open) {
+      ++i;
+      cmpSkipBlock(toks, i); // defensive: no nested blocks expected inside rom
+    } else {
+      ++i;
+    }
+  }
+  if (i < n) ++i; // consume the rom block's ')'
+  if (status == QLatin1String("nodump")) return std::nullopt;
+  if (r.crc.isEmpty() && r.md5.isEmpty() && r.sha1.isEmpty()) return std::nullopt;
+  return r;
+}
+
+/// Parse a `game ( … )` / `resource ( … )` body (called with `i` just after
+/// the `(`); appends its roms to `out` and leaves `i` past the matching `)`.
+/// The block's `name` becomes the gameName (matching the Logiqx parser, which
+/// uses the `<game name>` attribute); `description` and other fields are read
+/// past but unused here.
+void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
+  const int n = toks.size();
+  QString gameName;
+  QString cloneOf; // cloneof, falling back to romof (Kartend-m6qsb.13)
+  QList<DatRecord> roms;
+  while (i < n && toks.at(i).kind != CmpToken::Close) {
+    if (toks.at(i).kind == CmpToken::Word) {
+      const QString key = toks.at(i).text.toLower();
+      ++i;
+      if (key == QLatin1String("rom")) {
+        if (i < n && toks.at(i).kind == CmpToken::Open) {
+          ++i;
+          if (auto r = cmpParseRom(toks, i)) roms.append(std::move(*r));
+        }
+      } else if (i < n && toks.at(i).kind == CmpToken::Open) {
+        // A nested block we don't index (disk / sample / archive / …).
+        ++i;
+        cmpSkipBlock(toks, i);
+      } else {
+        const QString val = cmpNextValue(toks, i);
+        if (key == QLatin1String("name"))
+          gameName = val;
+        else if (key == QLatin1String("cloneof"))
+          cloneOf = val;
+        else if (key == QLatin1String("romof") && cloneOf.isEmpty())
+          cloneOf = val;
+      }
+    } else if (toks.at(i).kind == CmpToken::Open) {
+      ++i;
+      cmpSkipBlock(toks, i);
+    } else {
+      ++i;
+    }
+  }
+  if (i < n) ++i; // consume the game block's ')'
+  for (auto &r : roms) {
+    r.gameName = gameName;
+    r.cloneOf = cloneOf;
+    out.append(std::move(r));
+  }
+}
+
+/// Cheap signature check used by `detectDialect` once the bytes have failed to
+/// parse as XML: the first word must be a known clrmamepro block keyword
+/// immediately followed by `(`.
+bool looksLikeClrMamePro(const QByteArray &bytes) {
+  const QString s = QString::fromUtf8(bytes);
+  const int n = s.size();
+  int i = 0;
+  while (i < n && s.at(i).isSpace()) ++i;
+  QString w;
+  while (i < n && !s.at(i).isSpace() && s.at(i) != u'(' && s.at(i) != u'"') {
+    w += s.at(i);
+    ++i;
+  }
+  while (i < n && s.at(i).isSpace()) ++i;
+  const bool hasOpen = (i < n && s.at(i) == u'(');
+  w = w.toLower();
+  return hasOpen && (w == QLatin1String("clrmamepro") || w == QLatin1String("emulator") ||
+                     w == QLatin1String("game") || w == QLatin1String("machine") ||
+                     w == QLatin1String("set") || w == QLatin1String("resource"));
 }
 
 } // namespace
@@ -73,18 +266,64 @@ Dialect detectDialect(const QByteArray &xml) {
   QXmlStreamReader reader(xml);
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
-    if (reader.hasError()) return Dialect::Unknown;
+    if (reader.hasError()) break; // not well-formed XML — fall through to the text sniff
     if (token != QXmlStreamReader::StartElement) continue;
     const QStringView name = reader.name();
     if (name == QLatin1String("datafile")) return Dialect::Logiqx;
     if (name == QLatin1String("mame")) return Dialect::Mame;
-    return Dialect::Unknown;
+    return Dialect::Unknown; // recognised as XML, but not a DAT root we know
   }
+  // Reached end without a recognised XML root, or the bytes aren't XML at all:
+  // the clrmamepro text format is the remaining possibility.
+  if (looksLikeClrMamePro(xml)) return Dialect::ClrMamePro;
   return Dialect::Unknown;
 }
 
 DatHeader probeHeader(const QByteArray &xml) {
   DatHeader out;
+
+  // clrmamepro text: read the leading `clrmamepro (`/`emulator (` block's
+  // name / description / version, then stop before the game blocks.
+  if (detectDialect(xml) == Dialect::ClrMamePro) {
+    out.dialect = Dialect::ClrMamePro;
+    const QList<CmpToken> toks = tokenizeClrMamePro(QString::fromUtf8(xml));
+    const int n = toks.size();
+    int i = 0;
+    while (i < n) {
+      if (toks.at(i).kind != CmpToken::Word) {
+        ++i;
+        continue;
+      }
+      const QString kind = toks.at(i).text.toLower();
+      ++i;
+      if (i >= n || toks.at(i).kind != CmpToken::Open) continue;
+      ++i; // consume '('
+      if (kind == QLatin1String("clrmamepro") || kind == QLatin1String("emulator")) {
+        while (i < n && toks.at(i).kind != CmpToken::Close) {
+          if (toks.at(i).kind == CmpToken::Word) {
+            const QString key = toks.at(i).text.toLower();
+            ++i;
+            const QString val = cmpNextValue(toks, i);
+            if (key == QLatin1String("name"))
+              out.name = val;
+            else if (key == QLatin1String("description"))
+              out.description = val;
+            else if (key == QLatin1String("version"))
+              out.version = val;
+          } else {
+            ++i;
+          }
+        }
+        break; // header block done; everything after is records
+      }
+      cmpSkipBlock(toks, i); // a game block before any header — skip it
+    }
+    out.name = out.name.trimmed();
+    out.description = out.description.trimmed();
+    out.version = out.version.trimmed();
+    return out;
+  }
+
   QXmlStreamReader reader(xml);
   bool sawRoot = false;
   bool inHeader = false;
@@ -171,6 +410,7 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   // export from MAME-WIP tools still works (real MAME listxml uses
   // the `<mame>` root → goes through parseMameListXml instead).
   QString currentGameName;
+  QString currentCloneOf; // Logiqx exports may carry cloneof/romof (Kartend-m6qsb.13)
 
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
@@ -180,8 +420,9 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
 
     if (name == QLatin1String("game") || name == QLatin1String("machine")) {
       currentGameName = reader.attributes().value(QLatin1String("name")).toString();
+      currentCloneOf = cloneOfFromAttrs(reader.attributes());
     } else if (name == QLatin1String("rom") && !currentGameName.isEmpty()) {
-      if (auto r = readRomElement(reader.attributes(), currentGameName)) {
+      if (auto r = readRomElement(reader.attributes(), currentGameName, currentCloneOf)) {
         out.append(std::move(*r));
       }
     }
@@ -212,6 +453,7 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   //    readRomElement above.
   QString currentSetId;
   QString currentDescription;
+  QString currentCloneOf; // cloneof/romof parent set (Kartend-m6qsb.13)
   bool inDescription = false;
   // Buffer roms seen so far for the current machine; flushed with
   // the resolved gameName at `</machine>` so any rom that appears
@@ -222,11 +464,13 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     const QString gameName = !currentDescription.isEmpty() ? currentDescription : currentSetId;
     for (auto &r : pendingRoms) {
       r.gameName = gameName;
+      r.cloneOf = currentCloneOf;
       out.append(std::move(r));
     }
     pendingRoms.clear();
     currentSetId.clear();
     currentDescription.clear();
+    currentCloneOf.clear();
   };
 
   while (!reader.atEnd()) {
@@ -237,6 +481,7 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
       if (name == QLatin1String("machine") || name == QLatin1String("game")) {
         // Some old MAME builds emit `<game>` here; treat it the same.
         currentSetId = reader.attributes().value(QLatin1String("name")).toString();
+        currentCloneOf = cloneOfFromAttrs(reader.attributes());
         currentDescription.clear();
         pendingRoms.clear();
       } else if (name == QLatin1String("description")) {
@@ -266,16 +511,43 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   return out;
 }
 
+ErrorUtils::Result<QList<DatRecord>> parseClrMameProDat(const QByteArray &xml) {
+  const QList<CmpToken> toks = tokenizeClrMamePro(QString::fromUtf8(xml));
+  QList<DatRecord> out;
+  const int n = toks.size();
+  int i = 0;
+  while (i < n) {
+    if (toks.at(i).kind != CmpToken::Word) {
+      ++i;
+      continue;
+    }
+    const QString kind = toks.at(i).text.toLower();
+    ++i;
+    if (i >= n || toks.at(i).kind != CmpToken::Open) continue; // a bare word, not a block
+    ++i;                                                       // consume '('
+    if (kind == QLatin1String("game") || kind == QLatin1String("machine") ||
+        kind == QLatin1String("set") || kind == QLatin1String("resource")) {
+      cmpParseGame(toks, i, out);
+    } else {
+      cmpSkipBlock(toks, i); // header (clrmamepro/emulator) or anything else
+    }
+  }
+  return out;
+}
+
 ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml) {
   switch (detectDialect(xml)) {
   case Dialect::Logiqx:
     return parseLogiqxDat(xml);
   case Dialect::Mame:
     return parseMameListXml(xml);
+  case Dialect::ClrMamePro:
+    return parseClrMameProDat(xml);
   case Dialect::Unknown:
     return ErrorContext::error(ErrorCode::InvalidArgument,
                                "Unrecognised DAT format — expected <datafile> (No-Intro / "
-                               "Redump / TOSEC) or <mame> (MAME listxml) root element",
+                               "Redump / TOSEC), <mame> (MAME listxml), or a clrmamepro "
+                               "text DAT",
                                "DatLookup::parseDat");
   }
   Q_UNREACHABLE();

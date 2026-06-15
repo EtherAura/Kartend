@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include "datlookup.h"
 
@@ -17,11 +18,19 @@ namespace DatAudit {
 /// is *missing*.
 class Catalogue {
 public:
+  /// Register a source DAT (by display name, typically its filename) and return
+  /// its id. buildCatalogue() calls this once per loaded DAT, then tags every
+  /// record from that DAT via addRecord(r, sourceId), so per-DAT completeness
+  /// can be attributed back to the catalogue it came from (Kartend-m6qsb.15).
+  int addSource(const QString &name);
+
   /// Add one record, updating the sha1/md5/crc and romName indexes. Empty
   /// hashes are skipped for that index; first-seen wins on collision (matches
   /// DatLookup::Store). Records with no hashes are still stored (so they can
-  /// surface as Missing) but are unmatchable by content.
-  void addRecord(const DatLookup::DatRecord &r);
+  /// surface as Missing) but are unmatchable by content. `sourceId` attributes
+  /// the record to a source registered via addSource() (-1 = no/unknown source,
+  /// e.g. a catalogue built by hand in a test).
+  void addRecord(const DatLookup::DatRecord &r, int sourceId = -1);
 
   /// Index of the first record matching any supplied hash (sha1 -> md5 -> crc
   /// priority), or -1 on miss. Empty hashes are skipped; inputs are matched
@@ -37,8 +46,20 @@ public:
   [[nodiscard]] int size() const { return static_cast<int>(m_records.size()); }
   [[nodiscard]] bool isEmpty() const { return m_records.isEmpty(); }
 
+  /// Source id attributed to record `i` (-1 when none). Pairs with sourceName().
+  [[nodiscard]] int recordSource(int i) const { return m_recordSource.at(i); }
+  /// Number of registered source DATs.
+  [[nodiscard]] int sourceCount() const { return static_cast<int>(m_sourceNames.size()); }
+  /// Display name of a registered source, or empty for an out-of-range id.
+  [[nodiscard]] QString sourceName(int sourceId) const {
+    return (sourceId >= 0 && sourceId < m_sourceNames.size()) ? m_sourceNames.at(sourceId)
+                                                              : QString();
+  }
+
 private:
   QList<DatLookup::DatRecord> m_records;
+  QList<int> m_recordSource;    ///< parallel to m_records; source id or -1
+  QStringList m_sourceNames;    ///< source id -> display name (DAT filename)
   QHash<QString, int> m_bySha1; ///< lowercase sha1 -> record index
   QHash<QString, int> m_byMd5;
   QHash<QString, int> m_byCrc;
