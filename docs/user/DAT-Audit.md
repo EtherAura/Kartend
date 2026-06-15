@@ -135,6 +135,9 @@ how the audit scans:
   *inside* it against the catalogue. Without this, an archived set would
   report nearly everything as *Unknown* and *Missing*, because the archive's
   outer bytes never match the catalogue's content hashes.
+- **Subfolder-per-item** — each item lives in its own subfolder as a multi-file
+  set (e.g. multi-part masters or disc-image pairs). Scanned recursively like
+  *Nested*; the distinct label just reflects the shape the probe found.
 
 The first audit of a large archive set extracts and hashes every member, which
 takes a while — the progress bar shows real counts, and the results are cached
