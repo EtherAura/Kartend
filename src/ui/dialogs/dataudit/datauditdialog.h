@@ -11,6 +11,8 @@
 #include "datauditlayout.h"
 #include "datauditprofile.h"
 #include "datauditrunner.h"
+#include "datlibrarystate.h"
+#include "nointrodownloader.h"
 #include "nointroparse.h"
 #include "redumpparse.h"
 
@@ -130,6 +132,8 @@ private slots:
   void onStartDownload();
   void onDownloadFinished();
   void onCancelDownload();
+  void onCheckUpdates();
+  void onCheckUpdatesFinished();
 
 private:
   /// Off-thread outcome of the daily-form probe (carries the parsed form or a
@@ -161,6 +165,26 @@ private:
     QString error;
     QList<RedumpParse::System> systems;
   };
+
+  /// Off-thread outcome of a "check for updates" run (Kartend-m6qsb.31): how
+  /// many provenanced catalogues were checked, and the re-download outcome of
+  /// each one found outdated (carrying the new provenance to persist).
+  struct UpdateRunResult {
+    int checked = 0;
+    QList<DownloadOutcome> downloads; ///< One per outdated catalogue re-downloaded.
+  };
+
+  /// Download + extract one source's DAT(s) into `lib`, returning the outcome
+  /// with provenance fields filled. Shared by the manual Download page and the
+  /// "check for updates" re-download. Static + pure-of-`this` so it runs on the
+  /// worker thread. `progress` may be null.
+  [[nodiscard]] static DownloadOutcome performDownload(bool redump, NoIntroDownload::Options niOpts,
+                                                       const QString &redumpSlug,
+                                                       const QString &packDate, const QString &lib,
+                                                       const NoIntroDownload::CancelToken &cancel,
+                                                       const NoIntroDownload::ProgressFn &progress);
+  /// Persist provenance for every DAT in a successful download outcome.
+  void recordDownloadProvenance(const DownloadOutcome &o);
 
   /// Which download source the page is targeting.
   enum class DownloadSource { NoIntro, Redump };
@@ -258,6 +282,9 @@ private:
   // Library page (Kartend-m6qsb.5).
   QLabel *m_libraryPathLabel = nullptr;
   QPushButton *m_libraryReviewButton = nullptr;
+  QPushButton *m_checkUpdatesButton = nullptr; ///< Check downloaded DATs for newer revisions (.31)
+  QFutureWatcher<UpdateRunResult> m_updateWatcher;
+  std::shared_ptr<std::atomic<bool>> m_updateCancel;
   QPushButton *m_importZipButton = nullptr;
   QPushButton *m_importFolderButton = nullptr;
   std::function<QString()> m_getLibraryPath;

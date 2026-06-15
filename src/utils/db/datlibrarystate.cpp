@@ -143,4 +143,24 @@ bool isUpdateAvailable(const QString &storedVersion, const QString &latestVersio
   return storedVersion.trimmed() != latestVersion.trimmed();
 }
 
+QList<Provenance> outdatedAmong(const QList<Provenance> &all,
+                                const std::function<QString(const Provenance &)> &fetchLatest) {
+  QList<Provenance> outdated;
+  if (!fetchLatest) {
+    return outdated;
+  }
+  for (const Provenance &p : all) {
+    if (p.source.isEmpty() || p.version.isEmpty()) {
+      continue; // generic import / never-versioned — can't check
+    }
+    const QString latest = fetchLatest(p);
+    if (isUpdateAvailable(p.version, latest)) {
+      Provenance up = p;
+      up.version = latest; // the revision a re-download will land
+      outdated.append(up);
+    }
+  }
+  return outdated;
+}
+
 } // namespace DatLibraryState

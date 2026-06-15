@@ -51,6 +51,6 @@ GUI-surfaced bits that need eyes on a running app.
   `source` = nointro/redump, `system_id`/`slug` set, `version` = the No-Intro
   pack date or the Redump DAT header version. Verify by opening the app sqlite
   DB and `SELECT * FROM dat_library_provenance;` after a download.
-- Note: this is the foundation only. The user-facing "Check for updates"
-  detection + one-click re-download (which consumes this provenance) is the
-  remaining Layer 3 of Kartend-m6qsb.26 — not yet wired to a button.
+- Note: this is the provenance foundation. The user-facing "Check for updates"
+  detection + one-click re-download that consumes it shipped as Kartend-m6qsb.31
+  — see MANUAL_VERIFICATION-2026-06-15.md.

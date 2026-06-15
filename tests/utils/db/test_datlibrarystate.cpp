@@ -24,6 +24,7 @@ private slots:
   void provenanceRoundTripsAndReplaces();
   void loadAllProvenanceReturnsEveryRow();
   void isUpdateAvailableComparesVersions();
+  void outdatedAmongSelectsNewerRevisions();
 
 private:
   QSqlDatabase m_db;
@@ -142,6 +143,38 @@ void TestDatLibraryState::isUpdateAvailableComparesVersions() {
   // Can't tell without both revisions.
   QVERIFY(!DatLibraryState::isUpdateAvailable(QString(), QStringLiteral("v2")));
   QVERIFY(!DatLibraryState::isUpdateAvailable(QStringLiteral("v1"), QString()));
+}
+
+void TestDatLibraryState::outdatedAmongSelectsNewerRevisions() {
+  using DatLibraryState::Provenance;
+  auto pv = [](const QString &path, const QString &source, const QString &ver) {
+    Provenance p;
+    p.canonicalPath = path;
+    p.source = source;
+    p.version = ver;
+    return p;
+  };
+  const QList<Provenance> all{
+      pv(QStringLiteral("/lib/a.dat"), QStringLiteral("nointro"), QStringLiteral("2026-05-30")),
+      pv(QStringLiteral("/lib/b.dat"), QStringLiteral("redump"), QStringLiteral("v1")),
+      pv(QStringLiteral("/lib/c.dat"), QStringLiteral(""), QStringLiteral("x")), // generic: skip
+      pv(QStringLiteral("/lib/d.dat"), QStringLiteral("nointro"),
+         QString())}; // no stored ver: skip
+
+  // Stub fetcher: a.dat has a newer date, b.dat is unchanged, others wouldn't be queried.
+  auto fetch = [](const Provenance &p) -> QString {
+    if (p.canonicalPath == QStringLiteral("/lib/a.dat")) return QStringLiteral("2026-06-14");
+    if (p.canonicalPath == QStringLiteral("/lib/b.dat")) return QStringLiteral("v1"); // same
+    return QString();
+  };
+
+  const auto outdated = DatLibraryState::outdatedAmong(all, fetch);
+  QCOMPARE(outdated.size(), 1);
+  QCOMPARE(outdated.first().canonicalPath, QStringLiteral("/lib/a.dat"));
+  QCOMPARE(outdated.first().version, QStringLiteral("2026-06-14")); // carries the new revision
+
+  // A null fetcher yields nothing rather than crashing.
+  QVERIFY(DatLibraryState::outdatedAmong(all, {}).isEmpty());
 }
 
 QTEST_MAIN(TestDatLibraryState)

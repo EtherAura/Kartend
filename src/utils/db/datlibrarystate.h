@@ -1,6 +1,7 @@
 #ifndef DATLIBRARYSTATE_H
 #define DATLIBRARYSTATE_H
 
+#include <functional>
 #include <optional>
 
 #include <QList>
@@ -65,6 +66,17 @@ struct Provenance {
 /// versions) aren't a uniform orderable format. Empty on either side = "can't
 /// tell" = no update flagged.
 [[nodiscard]] bool isUpdateAvailable(const QString &storedVersion, const QString &latestVersion);
+
+/// The subset of `all` for which the source reports a newer revision
+/// (Kartend-m6qsb.31). `fetchLatest(p)` returns the source's current version
+/// (empty = couldn't determine — skipped, never flagged). Entries with an
+/// empty source or empty stored version are skipped too. Each returned entry's
+/// `version` is set to the freshly-fetched latest, so the caller can persist it
+/// after re-downloading. Pure given the fetcher — the network lives in the
+/// caller's `fetchLatest`, so the selection logic is unit-testable with a stub.
+[[nodiscard]] QList<Provenance>
+outdatedAmong(const QList<Provenance> &all,
+              const std::function<QString(const Provenance &)> &fetchLatest);
 
 } // namespace DatLibraryState
 
