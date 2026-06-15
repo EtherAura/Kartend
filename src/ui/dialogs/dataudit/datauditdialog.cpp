@@ -1627,11 +1627,16 @@ void DatAuditDialog::onStartDownload() {
               return NoIntroDownload::run(o, progressFn, cancel);
             }();
         if (dl.isError()) {
-          return DownloadOutcome{false, dl.error().message, QString(), 0};
+          DownloadOutcome fail;
+          fail.error = dl.error().message;
+          return fail;
         }
         auto ex = NoIntroDownload::extractDatsTo(dl.value().zipPath, lib, cancel);
         if (ex.isError()) {
-          return DownloadOutcome{false, ex.error().message, dl.value().packName, 0};
+          DownloadOutcome fail;
+          fail.error = ex.error().message;
+          fail.packName = dl.value().packName;
+          return fail;
         }
         DownloadOutcome out;
         out.ok = true;
