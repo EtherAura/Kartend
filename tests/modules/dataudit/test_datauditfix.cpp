@@ -5,13 +5,20 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMap>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include "datauditfix.h"
 #include "dataudittypes.h"
 
+#ifdef KARTEND_HAS_LIBARCHIVE
+#include <archive.h>
+#include <archive_entry.h>
+#endif
+
 using DatAudit::AuditRow;
+using DatAudit::FixAction;
 using DatAudit::FixActionKind;
 using DatAudit::FixPlan;
 using DatAudit::FixSettings;
@@ -39,6 +46,59 @@ QString makeFile(const QTemporaryDir &dir, const QString &name, const QByteArray
   return path;
 }
 
+#ifdef KARTEND_HAS_LIBARCHIVE
+// Write a zip with the given {entryName, content} regular-file entries.
+bool makeZip(const QString &path, const QVector<QPair<QString, QByteArray>> &entries) {
+  struct archive *a = archive_write_new();
+  archive_write_set_format_zip(a);
+  if (archive_write_open_filename(a, QFile::encodeName(path).constData()) != ARCHIVE_OK) {
+    archive_write_free(a);
+    return false;
+  }
+  for (const auto &[name, content] : entries) {
+    struct archive_entry *e = archive_entry_new();
+    archive_entry_set_pathname(e, name.toUtf8().constData());
+    archive_entry_set_size(e, content.size());
+    archive_entry_set_filetype(e, AE_IFREG);
+    archive_entry_set_perm(e, 0644);
+    archive_write_header(a, e);
+    if (!content.isEmpty()) {
+      archive_write_data(a, content.constData(), static_cast<size_t>(content.size()));
+    }
+    archive_entry_free(e);
+  }
+  const bool ok = archive_write_close(a) == ARCHIVE_OK;
+  archive_write_free(a);
+  return ok;
+}
+
+// Read a zip into {entryName -> content}.
+QMap<QString, QByteArray> readZip(const QString &path) {
+  QMap<QString, QByteArray> out;
+  struct archive *a = archive_read_new();
+  archive_read_support_format_all(a);
+  archive_read_support_filter_all(a);
+  if (archive_read_open_filename(a, QFile::encodeName(path).constData(), 65536) != ARCHIVE_OK) {
+    archive_read_free(a);
+    return out;
+  }
+  struct archive_entry *e = nullptr;
+  while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
+    const QString name = QString::fromUtf8(archive_entry_pathname(e));
+    QByteArray data;
+    const void *buff = nullptr;
+    size_t len = 0;
+    la_int64_t off = 0;
+    while (archive_read_data_block(a, &buff, &len, &off) == ARCHIVE_OK) {
+      data.append(static_cast<const char *>(buff), static_cast<qsizetype>(len));
+    }
+    out.insert(name, data);
+  }
+  archive_read_free(a);
+  return out;
+}
+#endif // KARTEND_HAS_LIBARCHIVE
+
 } // namespace
 
 class TestDatAuditFix : public QObject {
@@ -49,13 +109,18 @@ private slots:
   void planSkipsNoopRename();
   void planRelocateAndQuarantineWhenEnabled();
   void planQuarantinesUnknownAndWrongContent();
-  void planSkipsArchiveMemberRows();
+  void planRepacksMisnamedArchiveSet();
+  void planRepacksMultiRomSingleGameInPlace();
+  void planQuarantinesWholeBadContainer();
+  void planSkipsMixedArchiveContainer();
+  void planSkipsMultiGameArchiveContainer();
   void planRelocatePerItemSubfolderUsesGameName();
   void applyRenameInPlaceAndUndo();
   void applyRelocateCopiesLeavesOriginalAndUndoDeletes();
   void applyQuarantineMovesAndUndoRestores();
   void applyDryRunMakesNoChange();
   void applyCollisionGuardSkips();
+  void applyRepackRenamesInnerAndContainerAndUndo();
 };
 
 void TestDatAuditFix::planRenameOnlyByDefault() {
@@ -139,23 +204,81 @@ void TestDatAuditFix::planQuarantinesUnknownAndWrongContent() {
   QCOMPARE(wrongHashOrigin, Status::WrongHash); // the action records its origin status
 }
 
-void TestDatAuditFix::planSkipsArchiveMemberRows() {
-  // Archive members carry a virtual path (`<archive>/<entry>`) with no on-disk
-  // file, so they must NEVER produce a fix action — not a rename, relocate, or
-  // quarantine — even with every option enabled. Only an archive-extension
-  // ancestor counts; the whole archive file itself is a real on-disk file.
+void TestDatAuditFix::planRepacksMisnamedArchiveSet() {
+  // A single-ROM zip whose inner ROM (and container) carry a non-canonical name
+  // yields ONE Repack action: rename the inner entry to the DAT name and the
+  // container to <game>.zip.
+  AuditRow r =
+      row(Status::WrongName, QStringLiteral("/roms/Game (1995-07-07).zip/Game (1995-07-07).md"),
+          QStringLiteral("Game (1995).md"));
+  r.gameName = QStringLiteral("Game (1995)");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, FixSettings{}); // rename on by default
+  QCOMPARE(plan.actions.size(), 1);
+  const FixAction &a = plan.actions.first();
+  QCOMPARE(a.kind, FixActionKind::Repack);
+  QCOMPARE(a.fromPath, QStringLiteral("/roms/Game (1995-07-07).zip"));
+  QCOMPARE(a.toPath, QStringLiteral("/roms/Game (1995).zip")); // container -> game.zip
+  QCOMPARE(a.innerRenames.size(), 1);
+  QCOMPARE(a.innerRenames.first().first, QStringLiteral("Game (1995-07-07).md")); // old inner
+  QCOMPARE(a.innerRenames.first().second, QStringLiteral("Game (1995).md"));      // new inner
+}
+
+void TestDatAuditFix::planRepacksMultiRomSingleGameInPlace() {
+  // A zip holding several ROMs of ONE game repacks all inner entries to canonical;
+  // the container is already correctly named, so toPath == fromPath (in-place).
+  auto member = [](const QString &path, const QString &expected) {
+    AuditRow r = row(Status::WrongName, path, expected);
+    r.gameName = QStringLiteral("G");
+    return r;
+  };
   const QList<AuditRow> rows{
-      row(Status::WrongHash, QStringLiteral("/roms/pack.zip/baddump.bin"),
-          QStringLiteral("baddump.bin")),
-      row(Status::Unknown, QStringLiteral("/roms/pack.7z/junk.bin"), QString()),
-      row(Status::WrongName, QStringLiteral("/roms/pack.zip/sub/misnamed.bin"),
-          QStringLiteral("Canonical.bin"))};
+      member(QStringLiteral("/roms/G.zip/d1 (old).md"), QStringLiteral("disc1.md")),
+      member(QStringLiteral("/roms/G.zip/d2 (old).md"), QStringLiteral("disc2.md"))};
+  const FixPlan plan = DatAudit::computeFixPlan(rows, FixSettings{});
+  QCOMPARE(plan.actions.size(), 1);
+  QCOMPARE(plan.actions.first().kind, FixActionKind::Repack);
+  QCOMPARE(plan.actions.first().fromPath, QStringLiteral("/roms/G.zip"));
+  QCOMPARE(plan.actions.first().toPath, QStringLiteral("/roms/G.zip")); // already canonical
+  QCOMPARE(plan.actions.first().innerRenames.size(), 2);
+}
+
+void TestDatAuditFix::planQuarantinesWholeBadContainer() {
+  // A zip whose only member is unknown/wrong-content is quarantined as a whole
+  // container (the real .zip file), not by the virtual inner path.
+  AuditRow r = row(Status::Unknown, QStringLiteral("/roms/Mystery.zip/mystery.md"), QString());
   FixSettings s;
-  s.relocateToManagedOutput = true;
-  s.managedOutputRoot = QStringLiteral("/out");
+  s.rename = false;
+  s.quarantineUnknown = true;
+  s.quarantineDir = QStringLiteral("/quar");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, s);
+  QCOMPARE(plan.actions.size(), 1);
+  QCOMPARE(plan.actions.first().kind, FixActionKind::Quarantine);
+  QCOMPARE(plan.actions.first().fromPath, QStringLiteral("/roms/Mystery.zip")); // container
+  QCOMPARE(plan.actions.first().toPath, QStringLiteral("/quar/Mystery.zip"));
+}
+
+void TestDatAuditFix::planSkipsMixedArchiveContainer() {
+  // A zip holding a good ROM AND a bad/unknown member is ambiguous: repacking
+  // can't drop the bad entry and quarantining loses the good — so it's skipped.
+  const QList<AuditRow> rows{
+      row(Status::WrongName, QStringLiteral("/roms/multi.zip/a (bad name).md"),
+          QStringLiteral("a.md")),
+      row(Status::Unknown, QStringLiteral("/roms/multi.zip/b.md"), QString())};
+  FixSettings s;
   s.quarantineUnknown = true;
   s.quarantineDir = QStringLiteral("/quar");
   const FixPlan plan = DatAudit::computeFixPlan(rows, s);
+  QVERIFY(plan.isEmpty());
+}
+
+void TestDatAuditFix::planSkipsMultiGameArchiveContainer() {
+  // A zip whose members map to different games has no single canonical container
+  // name, so it is skipped rather than guessed.
+  AuditRow a = row(Status::WrongName, QStringLiteral("/roms/two.zip/x.md"), QStringLiteral("X.md"));
+  a.gameName = QStringLiteral("Game X");
+  AuditRow b = row(Status::WrongName, QStringLiteral("/roms/two.zip/y.md"), QStringLiteral("Y.md"));
+  b.gameName = QStringLiteral("Game Y");
+  const FixPlan plan = DatAudit::computeFixPlan({a, b}, FixSettings{});
   QVERIFY(plan.isEmpty());
 }
 
@@ -279,6 +402,49 @@ void TestDatAuditFix::applyCollisionGuardSkips() {
   // Neither file disturbed.
   QVERIFY(QFileInfo::exists(from));
   QCOMPARE(QFile(to).size(), qint64(3)); // "two" still there, not overwritten
+}
+
+void TestDatAuditFix::applyRepackRenamesInnerAndContainerAndUndo() {
+#ifndef KARTEND_HAS_LIBARCHIVE
+  QSKIP("repack apply needs libarchive to build + read the fixture zip");
+#else
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString container = dir.filePath(QStringLiteral("Game (1995-07-07).zip"));
+  const QString newContainer = dir.filePath(QStringLiteral("Game.zip"));
+  const QByteArray rom = QByteArrayLiteral("\x10\x20 inner rom \x30\x40");
+  QVERIFY(makeZip(container, {{QStringLiteral("Game (1995-07-07).md"), rom}}));
+
+  FixPlan plan;
+  FixAction a;
+  a.kind = FixActionKind::Repack;
+  a.fromPath = container;
+  a.toPath = newContainer;
+  a.sourceStatus = Status::WrongName;
+  a.innerRenames.append({QStringLiteral("Game (1995-07-07).md"), QStringLiteral("Game.md")});
+  plan.actions.append(a);
+
+  auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/false);
+  QCOMPARE(res.applied, 1);
+  QCOMPARE(res.failed, 0);
+  QVERIFY(!QFile::exists(container));   // old container removed
+  QVERIFY(QFile::exists(newContainer)); // renamed container
+  {
+    const QMap<QString, QByteArray> out = readZip(newContainer);
+    QVERIFY(!out.contains(QStringLiteral("Game (1995-07-07).md")));
+    QCOMPARE(out.value(QStringLiteral("Game.md")), rom); // inner renamed, bytes intact
+  }
+
+  // Undo restores the original container name AND the inner entry name.
+  QCOMPARE(DatAudit::applyUndo(res.undo), 1);
+  QVERIFY(QFile::exists(container));
+  QVERIFY(!QFile::exists(newContainer));
+  {
+    const QMap<QString, QByteArray> out = readZip(container);
+    QCOMPARE(out.value(QStringLiteral("Game (1995-07-07).md")), rom);
+    QVERIFY(!out.contains(QStringLiteral("Game.md")));
+  }
+#endif
 }
 
 QTEST_MAIN(TestDatAuditFix)

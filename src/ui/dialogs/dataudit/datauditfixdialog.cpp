@@ -29,6 +29,8 @@ QString actionLine(const FixAction &a) {
     return QObject::tr("Copy to sorted output: %1 → %2").arg(from, a.toPath);
   case FixActionKind::Quarantine:
     return QObject::tr("Quarantine: %1 → %2").arg(from, a.toPath);
+  case FixActionKind::Repack:
+    return QObject::tr("Repack: %1 → %2 (%3 inner)").arg(from, to).arg(a.innerRenames.size());
   }
   return from;
 }

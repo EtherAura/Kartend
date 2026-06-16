@@ -3,29 +3,120 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QSet>
+#include <QTemporaryFile>
 
+#include "archiverepack.h"
 #include "romhasher.h"
 
 namespace DatAudit {
 
 namespace {
 
-/// True when filePath points INSIDE an archive — the runner builds member rows
-/// as `<archive>/<entry>`, a virtual path with no real on-disk file (see
-/// datauditrunner.cpp). Such rows can never be renamed/relocated/quarantined, so
-/// they must be excluded from every fix action. Walks the ancestor path
-/// components string-only (no filesystem access — computeFixPlan stays pure)
-/// looking for one that bears an archive extension.
-bool isArchiveMemberPath(const QString &filePath) {
+QString sanitizeFolderName(const QString &name); // defined below; used by planArchiveContainer
+
+/// The archive container an audit row lives in, or empty when the path is a real
+/// on-disk file. The runner builds archive members as `<archive>/<entry>`, so the
+/// container is the nearest ancestor component bearing an archive extension.
+/// Pure string walk — no filesystem access (keeps computeFixPlan pure).
+QString archiveContainerOf(const QString &filePath) {
   int slash = filePath.lastIndexOf(QLatin1Char('/'));
   while (slash > 0) {
     const QString ancestor = filePath.left(slash);
     if (RomHasher::isArchivePath(ancestor)) {
-      return true;
+      return ancestor;
     }
     slash = ancestor.lastIndexOf(QLatin1Char('/'));
   }
-  return false;
+  return {};
+}
+
+/// Plan the fix for one archive container from the audit rows whose members live
+/// inside it. Repacks a misnamed set (rename inner ROM(s) to canonical + the
+/// container to <game>.<ext>); quarantines a container that holds only
+/// unknown/wrong-content; skips anything ambiguous (mixed good+bad, or members
+/// spanning multiple games) for safety. Single-ROM zips are the common case.
+void planArchiveContainer(FixPlan &plan, const QString &container,
+                          const QList<const AuditRow *> &members, const FixSettings &settings) {
+  bool anyBad = false;    // Unknown / WrongHash
+  bool anyGood = false;   // Have / WrongName (catalogued content)
+  bool anyRename = false; // WrongName (a member whose name needs fixing)
+  QSet<QString> games;
+  for (const AuditRow *r : members) {
+    switch (r->status) {
+    case Status::Unknown:
+    case Status::WrongHash:
+      anyBad = true;
+      break;
+    case Status::WrongName:
+      anyRename = true;
+      [[fallthrough]];
+    case Status::Have:
+      anyGood = true;
+      if (!r->gameName.isEmpty()) {
+        games.insert(r->gameName);
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  // The whole container is uncatalogued / bad content -> quarantine the container.
+  if (anyBad && !anyGood) {
+    if (settings.quarantineUnknown && !settings.quarantineDir.isEmpty()) {
+      const QString to =
+          settings.quarantineDir + QLatin1Char('/') + QFileInfo(container).fileName();
+      plan.actions.append(
+          FixAction{FixActionKind::Quarantine, container, to, members.first()->status, {}});
+    }
+    return;
+  }
+  // Mixed good+bad (repacking can't drop the bad member, quarantining loses the
+  // good), or members from more than one game (ambiguous container name): skip.
+  if (anyBad || games.size() > 1) {
+    return;
+  }
+  if (!settings.rename || !anyRename) {
+    return; // nothing to repack (all members already canonical)
+  }
+
+  // Rename each misnamed inner ROM to its canonical name.
+  const QString prefix = container + QLatin1Char('/');
+  QList<QPair<QString, QString>> inner;
+  for (const AuditRow *r : members) {
+    if (r->status != Status::WrongName || r->expectedName.isEmpty() ||
+        !r->filePath.startsWith(prefix)) {
+      continue;
+    }
+    const QString oldInner = r->filePath.mid(prefix.size());
+    if (oldInner != r->expectedName) {
+      inner.append({oldInner, r->expectedName});
+    }
+  }
+
+  // Rename the container itself to <game>.<container-ext>.
+  const QString ext = container.mid(container.lastIndexOf(QLatin1Char('.')));
+  QString newContainer = container;
+  if (!games.isEmpty()) {
+    const QString game = sanitizeFolderName(*games.constBegin());
+    if (!game.isEmpty()) {
+      newContainer = QFileInfo(container).path() + QLatin1Char('/') + game + ext;
+    }
+  }
+
+  if (inner.isEmpty() && newContainer == container) {
+    return; // already fully canonical
+  }
+  if (inner.isEmpty()) {
+    // Only the container name is wrong — a plain file rename, no rewrite needed.
+    plan.actions.append(
+        FixAction{FixActionKind::Rename, container, newContainer, Status::WrongName, {}});
+    return;
+  }
+  plan.actions.append(
+      FixAction{FixActionKind::Repack, container, newContainer, Status::WrongName, inner});
 }
 
 /// Make a DAT game name safe to use as a single folder component: replace the
@@ -49,6 +140,56 @@ QString sanitizeFolderName(const QString &name) {
   return out;
 }
 
+// Repack `src` into `dst` (applying `renames`) via a temp file in dst's own
+// directory, then place it atomically: when dst differs from src, move temp->dst
+// and remove the old src; when they are the same file (only inner names changed),
+// replace in place. A failure never leaves a half-written destination. Returns
+// true on success; on failure writes a message to errorOut when non-null.
+bool repackAndSwap(const QString &src, const QString &dst,
+                   const QList<QPair<QString, QString>> &renames, QString *errorOut) {
+  const QString destDir = QFileInfo(dst).absolutePath();
+  QTemporaryFile tf(destDir + QStringLiteral("/.kartend-repack-XXXXXX"));
+  tf.setAutoRemove(false);
+  if (!tf.open()) {
+    if (errorOut != nullptr) {
+      *errorOut = QStringLiteral("could not create temp file in %1").arg(destDir);
+    }
+    return false;
+  }
+  const QString tmp = tf.fileName();
+  tf.close();
+
+  QHash<QString, QString> map;
+  for (const auto &pr : renames) {
+    map.insert(pr.first, pr.second);
+  }
+  // ArchiveRepack overwrites the temp; it refuses a src==dst, and tmp != src.
+  const auto rr = ArchiveRepack::repack(src, tmp, map);
+  if (rr.isError()) {
+    QFile::remove(tmp);
+    if (errorOut != nullptr) {
+      *errorOut = rr.error().message;
+    }
+    return false;
+  }
+
+  const bool inPlace = QFileInfo(src).absoluteFilePath() == QFileInfo(dst).absoluteFilePath();
+  if (inPlace) {
+    QFile::remove(src); // QFile::rename won't overwrite, so clear the slot first
+  }
+  if (!QFile::rename(tmp, dst)) {
+    QFile::remove(tmp);
+    if (errorOut != nullptr) {
+      *errorOut = QStringLiteral("could not place repacked archive: %1").arg(dst);
+    }
+    return false;
+  }
+  if (!inPlace) {
+    QFile::remove(src); // drop the old, now-renamed container
+  }
+  return true;
+}
+
 } // namespace
 
 QString fixActionKindToken(FixActionKind k) {
@@ -59,19 +200,30 @@ QString fixActionKindToken(FixActionKind k) {
     return QStringLiteral("relocate");
   case FixActionKind::Quarantine:
     return QStringLiteral("quarantine");
+  case FixActionKind::Repack:
+    return QStringLiteral("repack");
   }
   return QStringLiteral("rename");
 }
 
 FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings) {
   FixPlan plan;
+  // Archive members carry a virtual path (`<archive>/<entry>`) with no on-disk
+  // file — they can't be renamed/moved directly, so collect them per container
+  // and fix each archive as a unit (repack / quarantine) after the real-file
+  // rows. Stable container order keeps the plan deterministic.
+  QHash<QString, QList<const AuditRow *>> byContainer;
+  QStringList containerOrder;
   for (const AuditRow &r : rows) {
-    // Fix actions operate on real on-disk files only. An archive member carries
-    // a virtual path (`<archive>/<entry>`) with no on-disk presence, so it can
-    // never be renamed/relocated/quarantined — skip the whole row. This is the
-    // invariant datauditrunner.cpp documents, enforced here for all three gates.
-    if (isArchiveMemberPath(r.filePath)) {
-      continue;
+    if (!r.filePath.isEmpty()) {
+      const QString container = archiveContainerOf(r.filePath);
+      if (!container.isEmpty()) {
+        if (!byContainer.contains(container)) {
+          containerOrder.append(container);
+        }
+        byContainer[container].append(&r);
+        continue;
+      }
     }
     // Rename in place: content is correct, only the name is wrong.
     if (settings.rename && r.status == Status::WrongName && !r.filePath.isEmpty() &&
@@ -115,6 +267,10 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
       plan.actions.append(FixAction{FixActionKind::Quarantine, r.filePath, to, r.status});
     }
   }
+  // Fix each archive-packed container as a unit (repack / quarantine).
+  for (const QString &container : containerOrder) {
+    planArchiveContainer(plan, container, byContainer.value(container), settings);
+  }
   return plan;
 }
 
@@ -143,7 +299,22 @@ ApplyResult applyFixPlan(const FixPlan &plan, bool dryRun) {
     }
 
     bool ok = false;
-    if (a.kind == FixActionKind::Relocate) {
+    if (a.kind == FixActionKind::Repack) {
+      QString err;
+      ok = repackAndSwap(a.fromPath, a.toPath, a.innerRenames, &err);
+      if (ok) {
+        UndoEntry u;
+        u.wasRepack = true;
+        u.createdPath = a.toPath;
+        u.originalPath = a.fromPath;
+        for (const auto &pr : a.innerRenames) {
+          u.repackReverse.append({pr.second, pr.first}); // new -> old
+        }
+        res.undo.append(u);
+      } else if (!err.isEmpty()) {
+        res.errors.append(err);
+      }
+    } else if (a.kind == FixActionKind::Relocate) {
       ok = QFile::copy(a.fromPath, a.toPath);
       if (ok) {
         res.undo.append(UndoEntry{a.toPath, QString(), true});
@@ -158,7 +329,10 @@ ApplyResult applyFixPlan(const FixPlan &plan, bool dryRun) {
       ++res.applied;
     } else {
       ++res.failed;
-      res.errors.append(QStringLiteral("failed: %1 -> %2").arg(a.fromPath, a.toPath));
+      // Repack already recorded a specific error above.
+      if (a.kind != FixActionKind::Repack) {
+        res.errors.append(QStringLiteral("failed: %1 -> %2").arg(a.fromPath, a.toPath));
+      }
     }
   }
   return res;
@@ -170,7 +344,11 @@ int applyUndo(const QList<UndoEntry> &undo) {
   for (int i = undo.size() - 1; i >= 0; --i) {
     const UndoEntry &e = undo.at(i);
     bool ok = false;
-    if (e.wasCopy) {
+    if (e.wasRepack) {
+      // Reverse the repack: rewrite the new container back to the original name
+      // with the inverse inner renames (same temp-then-swap mechanics as apply).
+      ok = repackAndSwap(e.createdPath, e.originalPath, e.repackReverse, nullptr);
+    } else if (e.wasCopy) {
       ok = QFile::remove(e.createdPath);
     } else if (!e.originalPath.isEmpty()) {
       ok = QFile::rename(e.createdPath, e.originalPath);
