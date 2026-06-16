@@ -55,6 +55,11 @@ struct AuditRow {
   /// the row maps to one (Have / WrongName / WrongHash / Duplicate / Missing).
   /// Empty for catalogue-less rows (Unknown / Corrupt).
   QString sourceName;
+  /// The catalogue entry is flagged MIA ("Missing In Action") in its DAT
+  /// (Kartend-34lab) — documented but known to be unshared. Set on rows that map
+  /// to a catalogue entry; lets the browser show RomVault-style salmon MIA
+  /// counts. Always false for catalogue-less rows (Unknown / Corrupt).
+  bool mia = false;
 };
 
 /// Per-source (per-DAT) completeness attribution (Kartend-m6qsb.15). One entry

@@ -327,6 +327,13 @@ kartend_add_test(NAME DatAuditProfileDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-34lab: the browser page must build without crashing (construction-
+# order regression: filter checkbox toggled→applyFilters fired mid-build).
+kartend_add_test(NAME DatAuditBrowserPage
+  SOURCES ui/dialogs/test_datauditbrowserpage.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-m6qsb.18: DAT-library review optional-association combo
 kartend_add_test(NAME DatLibraryReviewDialog
   SOURCES ui/dialogs/test_datlibraryreviewdialog.cpp
@@ -1244,6 +1251,13 @@ kartend_add_test(NAME DatAuditFix
 # DatAudit results table model (rows / columns / status filter)
 kartend_add_test(NAME DatAuditModel
   SOURCES modules/dataudit/test_datauditmodel.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# Kartend-34lab: the audit browser models — global tree rollup, game-list
+# aggregation + completeness filter, ROM detail catalogue<->result join.
+kartend_add_test(NAME DatAuditBrowserModels
+  SOURCES modules/dataudit/test_datauditbrowsermodels.cpp
   LINK kartend_data kartend_api kartend_utils
 )
 

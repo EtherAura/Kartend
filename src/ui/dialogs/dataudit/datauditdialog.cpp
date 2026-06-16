@@ -41,6 +41,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "databaseschema.h"
+#include "datauditbrowserpage.h"
 #include "datauditexport.h"
 #include "datauditfixdialog.h"
 #include "datauditmodel.h"
@@ -206,6 +207,8 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   m_pages->addWidget(buildAuditPage());    // index 0
   m_pages->addWidget(buildLibraryPage());  // index 1
   m_pages->addWidget(buildDownloadPage()); // index 2
+  m_browserPage = new DatAuditBrowserPage(this);
+  m_pages->addWidget(m_browserPage); // index 3
 
   splitter->addWidget(m_nav);
   splitter->addWidget(rightWrap);
@@ -217,6 +220,7 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   addNavEntry(tr("Audit"), {QStringLiteral("document-edit"), QStringLiteral("configure")}, 0);
   addNavEntry(tr("DAT Library"), {QStringLiteral("folder-sync"), QStringLiteral("folder")}, 1);
   addNavEntry(tr("Download"), {QStringLiteral("download"), QStringLiteral("emblem-downloads")}, 2);
+  addNavEntry(tr("Browser"), {QStringLiteral("view-list-tree"), QStringLiteral("folder-table")}, 3);
 
   connect(m_nav, &QListWidget::currentRowChanged, this, &DatAuditDialog::onNavRowChanged);
   connect(m_addDatButton, &QPushButton::clicked, this, &DatAuditDialog::onAddDat);
@@ -302,8 +306,12 @@ QWidget *DatAuditDialog::buildAuditPage() {
 
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
-  m_linkedHint = new QLabel(
-      tr("DAT files and scan folder are managed by the linked collection's settings."), page);
+  m_linkedHint =
+      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
+                    "seeded from the collection's configured DATs, then managed here — add or "
+                    "remove them freely."),
+                 page);
+  m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
   root->addWidget(m_linkedHint);
   auto *inputs = new QHBoxLayout();
@@ -554,6 +562,11 @@ void DatAuditDialog::onNavRowChanged() {
   m_pages->setCurrentIndex(page);
   m_contextIcon->setPixmap(item->icon().pixmap(28, 28));
   m_contextTitle->setText(item->text());
+  // The browser reads persisted results on demand — refresh it each time it is
+  // shown so a just-completed audit is reflected without reopening the window.
+  if (page == 3 && m_browserPage != nullptr) {
+    m_browserPage->refresh();
+  }
 }
 
 void DatAuditDialog::applyUniformSizing() {
@@ -690,20 +703,25 @@ void DatAuditDialog::applyCollectionDerivation() {
   const QString scanRoot =
       PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
   m_currentProfile.scanRoots = scanRoot.isEmpty() ? QStringList{} : QStringList{scanRoot};
-  m_currentProfile.dats.clear();
-  for (const QString &d : linked->scraperOverrides.datFilePaths) {
-    if (!d.isEmpty()) {
-      DatAuditProfile::DatRef ref;
-      ref.path = d;
-      m_currentProfile.dats.append(ref);
+  // DAT files are user-managed even for a linked profile (the link only derives
+  // the scan folder): seed them from the collection's configured DATs the first
+  // time, but never overwrite a DAT list the user has since edited here — that
+  // is what blocked adding DATs to a linked profile (Kartend-4u1pr follow-up).
+  if (m_currentProfile.dats.isEmpty()) {
+    for (const QString &d : linked->scraperOverrides.datFilePaths) {
+      if (!d.isEmpty()) {
+        DatAuditProfile::DatRef ref;
+        ref.path = d;
+        m_currentProfile.dats.append(ref);
+      }
     }
   }
 }
 
 void DatAuditDialog::updateLinkedUiState() {
   const bool linked = !m_currentProfile.collectionUuid.isEmpty();
-  m_addDatButton->setEnabled(!linked);
-  m_removeDatButton->setEnabled(!linked);
+  // DAT files stay user-editable even when linked (the link only derives the
+  // scan folder); only the scan-root editors are locked to the collection.
   m_addRootButton->setEnabled(!linked);
   m_removeRootButton->setEnabled(!linked);
   m_linkedHint->setVisible(linked);
@@ -1068,6 +1086,16 @@ bool DatAuditDialog::hasResults() const {
   return !m_model->allRows().isEmpty();
 }
 
+bool DatAuditDialog::hasApplicableFixes() const {
+  for (const DatAudit::AuditRow &r : m_model->allRows()) {
+    if (r.status == DatAudit::Status::WrongName || r.status == DatAudit::Status::Unknown ||
+        r.status == DatAudit::Status::Duplicate) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void DatAuditDialog::onAddDat() {
   const QStringList files = QFileDialog::getOpenFileNames(
       this, tr("Add DAT files"), QString(), tr("DAT files (*.dat *.xml);;All files (*)"));
@@ -1224,6 +1252,11 @@ void DatAuditDialog::onAuditFinished() {
       row.status = static_cast<int>(r.status);
       row.filePath = r.filePath;
       row.detail = r.expectedName;
+      // Source DAT + game + MIA so the browser's tree/game-list rollups are
+      // grouped queries (Kartend-34lab, schema v22).
+      row.sourceName = r.sourceName;
+      row.gameName = r.gameName;
+      row.mia = r.mia;
       rows.append(row);
     }
     const qint64 profileId = m_currentProfile.id;
@@ -1347,7 +1380,9 @@ void DatAuditDialog::setBusy(bool busy) {
     m_progress->setRange(0, 0);
   }
   const bool canExport = !busy && hasResults();
-  m_fixButton->setEnabled(canExport);
+  // Fix illuminates only when something is actually fixable in place; exports
+  // (CSV / fixdat / miss-list) stay available for any result set.
+  m_fixButton->setEnabled(canExport && hasApplicableFixes());
   m_exportCsvButton->setEnabled(canExport);
   m_exportFixdatButton->setEnabled(canExport);
   m_exportMissButton->setEnabled(canExport);

@@ -172,6 +172,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       row.gameName = rec.gameName;
       row.expectedName = rec.romName;
       row.sourceName = catalogue.sourceName(catalogue.recordSource(idx));
+      row.mia = rec.mia;
       if (satisfied.contains(idx)) {
         row.status = Status::Duplicate;
       } else {
@@ -187,6 +188,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
         row.gameName = rec.gameName;
         row.expectedName = rec.romName;
         row.sourceName = catalogue.sourceName(catalogue.recordSource(nameIdx));
+        row.mia = rec.mia;
         row.status = Status::WrongHash;
       } else {
         row.status = Status::Unknown;
@@ -207,6 +209,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     row.md5 = rec.md5;
     row.sha1 = rec.sha1;
     row.sourceName = catalogue.sourceName(catalogue.recordSource(i));
+    row.mia = rec.mia;
     out.rows.append(row);
   };
 
@@ -304,9 +307,10 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
 
   // Phase 1: cache reads (serial — QSqlDatabase is single-thread). Files with a
   // valid (size,mtime) cache hit are resolved here; the rest queue for hashing.
-  // Under a confirmed archive-per-item layout (Kartend-m6qsb.7), an archive's
-  // audit units are its MEMBERS: a member-cache hit expands here, a miss
-  // queues the container for the serial extraction phase below.
+  // An archive's audit units are its MEMBERS (Kartend-m6qsb.7) — done for every
+  // archive, not just a confirmed archive-per-item layout, so compressed ROMs
+  // match the DAT in any layout: a member-cache hit expands here, a miss queues
+  // the container for the serial extraction phase below.
   QList<ScannedFile> results;
   results.reserve(total);
   QList<PendingHash> pending;
@@ -320,7 +324,13 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     const QString canonical = fi.canonicalFilePath();
     const qint64 size = fi.size();
     const qint64 mtimeMs = fi.lastModified().toMSecsSinceEpoch();
-    if (opts.layout == Layout::ArchivePerItem && RomHasher::isArchivePath(path)) {
+    // A DAT indexes the ROM *inside* an archive (its members' hashes), never
+    // the .zip/.7z itself — so any archive's audit units are its members,
+    // regardless of the detected layout. Whole-file hashing an archive can
+    // never match a catalogue entry; gating member extraction on a confirmed
+    // archive-per-item layout is what made compressed ROMs invisible
+    // (Kartend-34lab follow-up). Look inside every archive we enumerate.
+    if (RomHasher::isArchivePath(path)) {
       if (cacheDb != nullptr) {
         if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs)) {
           for (const FileHashCache::MemberEntry &m : *hit) {

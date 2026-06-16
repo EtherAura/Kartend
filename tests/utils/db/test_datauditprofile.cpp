@@ -59,6 +59,7 @@ private slots:
   void replaceResultsWritesAndRewritesSnapshot();
   void loadResultSummaryCountsByStatus();
   void loadResultSummaryDistinguishesNeverFromEmpty();
+  void rollupsGroupBySourceGameAndMia();
 
 private:
   QSqlDatabase m_db;
@@ -345,6 +346,63 @@ void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
 
   // Invalid profile id is rejected.
   QVERIFY(DatAuditProfile::replaceResults(m_db, -1, first).isError());
+}
+
+void TestDatAuditProfile::rollupsGroupBySourceGameAndMia() {
+  auto ins = DatAuditProfile::insert(m_db, sampleProfile());
+  QVERIFY(ins.isOk());
+  const qint64 id = ins.value();
+
+  // Two sources; source A has a present + a missing-MIA rom in one game, source
+  // B a present rom in another game (Kartend-34lab).
+  const auto mk = [](const QString &key, int status, const QString &src, const QString &game,
+                     bool mia) {
+    DatAuditProfile::ResultRow r;
+    r.entryKey = key;
+    r.status = status;
+    r.sourceName = src;
+    r.gameName = game;
+    r.mia = mia;
+    return r;
+  };
+  QList<DatAuditProfile::ResultRow> rows;
+  rows << mk(QStringLiteral("file:/a/ok.bin"), 0, QStringLiteral("A.dat"), QStringLiteral("Game A"),
+             false) // Have
+       << mk(QStringLiteral("entry:lost.bin"), 6, QStringLiteral("A.dat"), QStringLiteral("Game A"),
+             true) // Missing+MIA
+       << mk(QStringLiteral("file:/b/ok.bin"), 0, QStringLiteral("B.dat"), QStringLiteral("Game B"),
+             false); // Have
+  QVERIFY(DatAuditProfile::replaceResults(m_db, id, rows).isOk());
+
+  auto all = DatAuditProfile::loadAllRollups(m_db);
+  QVERIFY(all.isOk());
+  int miaTotal = 0;
+  int aHave = 0;
+  for (const auto &r : all.value()) {
+    if (r.profileId != id) continue;
+    if (r.mia) miaTotal += r.count;
+    if (r.sourceName == QLatin1String("A.dat") && r.status == 0) aHave += r.count;
+  }
+  QCOMPARE(miaTotal, 1);
+  QCOMPARE(aHave, 1);
+
+  // Game list for source A: one Have game-row + one Missing(MIA) game-row.
+  auto gamesA = DatAuditProfile::loadGameRollups(m_db, id, QStringLiteral("A.dat"));
+  QVERIFY(gamesA.isOk());
+  int aRows = 0;
+  bool sawMissingMia = false;
+  for (const auto &g : gamesA.value()) {
+    if (g.gameName == QLatin1String("Game A")) {
+      ++aRows;
+      if (g.status == 6 && g.mia) sawMissingMia = true;
+    }
+  }
+  QCOMPARE(aRows, 2);
+  QVERIFY(sawMissingMia);
+
+  auto gamesB = DatAuditProfile::loadGameRollups(m_db, id, QStringLiteral("B.dat"));
+  QVERIFY(gamesB.isOk());
+  QCOMPARE(gamesB.value().size(), 1);
 }
 
 void TestDatAuditProfile::loadResultSummaryCountsByStatus() {

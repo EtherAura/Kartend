@@ -77,6 +77,13 @@ struct DatRecord {
   /// Carried through so future clone-aware auditing has the relationship; no
   /// current consumer interprets it.
   QString cloneOf;
+  /// "Missing In Action" flag (Kartend-34lab): the entry is documented in the
+  /// catalogue but known to be unshared/unavailable, marked `mia="yes"` on the
+  /// `<game>`/`<machine>`/`<rom>` (Logiqx/MAME) or `mia yes` in clrmamepro.
+  /// Lets the auditor surface RomVault-style salmon "MIA" counts so a missing
+  /// entry that is *expected* to be missing reads differently from one the user
+  /// could still obtain. Empty/false for cataloguers that don't model MIA.
+  bool mia = false;
 };
 
 /// Peek at the XML root element to decide which parser to dispatch

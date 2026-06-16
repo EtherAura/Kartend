@@ -30,7 +30,9 @@ namespace {
 // by `migrateOrReset` below.
 // v2: header_name/header_description/header_version on dat_sources
 //     (Kartend-m6qsb.3) — the wipe forces a re-ingest that populates them.
-constexpr int kSchemaVersion = 3; // v3: dat_records.cloneof (Kartend-m6qsb.13)
+// v4: dat_records.mia + idx_dat_records_game (Kartend-34lab) — the wipe forces
+//     a re-ingest that populates the MIA flag from the freshly re-parsed DATs.
+constexpr int kSchemaVersion = 4;
 
 // Process-unique connection-name suffix so multiple Store instances
 // (tests + production) don't collide in QSqlDatabase's global
@@ -79,8 +81,11 @@ bool createSchema(QSqlDatabase &db) {
                                     "  md5 TEXT,"
                                     "  sha1 TEXT,"
                                     "  cloneof TEXT,"
+                                    "  mia INTEGER NOT NULL DEFAULT 0,"
                                     "  FOREIGN KEY(source_id) REFERENCES dat_sources(id) "
                                     "    ON DELETE CASCADE)")) &&
+      execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_records_game "
+                                    "ON dat_records(source_id, game_name)")) &&
       execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_records_sha1 "
                                     "ON dat_records(source_id, sha1)")) &&
       execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_records_md5 "
@@ -271,7 +276,8 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   {
     QSqlQuery ins(m_db);
     ins.prepare(QStringLiteral("INSERT INTO dat_records (source_id, game_name, rom_name, "
-                               "size, crc, md5, sha1, cloneof) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+                               "size, crc, md5, sha1, cloneof, mia) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     for (const DatLookup::DatRecord &r : records) {
       ins.bindValue(0, newId);
       ins.bindValue(1, r.gameName);
@@ -286,6 +292,7 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
       // NULL for non-clones (nullable TEXT, like the hash columns); readback
       // turns NULL back into an empty cloneOf.
       ins.bindValue(7, r.cloneOf.isEmpty() ? QVariant() : QVariant(r.cloneOf));
+      ins.bindValue(8, r.mia ? 1 : 0);
       if (!ins.exec()) {
         const QString err = ins.lastError().text();
         return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert DAT record",
@@ -345,7 +352,7 @@ std::optional<DatLookup::DatRecord> lookupByColumn(QSqlDatabase &db, qint64 sour
                                                    const char *column, const QString &hash) {
   if (hash.isEmpty()) return std::nullopt;
   QSqlQuery q(db);
-  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof "
+  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof, mia "
                            "FROM dat_records WHERE source_id = ? AND %1 = ? "
                            "LIMIT 1")
                 .arg(QLatin1String(column)));
@@ -360,6 +367,7 @@ std::optional<DatLookup::DatRecord> lookupByColumn(QSqlDatabase &db, qint64 sour
   r.md5 = q.value(4).toString();
   r.sha1 = q.value(5).toString();
   r.cloneOf = q.value(6).toString();
+  r.mia = q.value(7).toInt() != 0;
   return r;
 }
 
@@ -391,7 +399,7 @@ bool Store::forEachRecord(const CachedSource &source,
   // forwardOnly keeps QSQLITE from buffering the whole 250k-row result
   // set in memory — we stream one row at a time into the callback.
   q.setForwardOnly(true);
-  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof "
+  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof, mia "
                            "FROM dat_records WHERE source_id = ?"));
   q.addBindValue(source.id);
   if (!q.exec()) {
@@ -408,9 +416,41 @@ bool Store::forEachRecord(const CachedSource &source,
     r.md5 = q.value(4).toString();
     r.sha1 = q.value(5).toString();
     r.cloneOf = q.value(6).toString();
+    r.mia = q.value(7).toInt() != 0;
     callback(r);
   }
   return true;
+}
+
+QList<DatLookup::DatRecord> Store::recordsForGame(const CachedSource &source,
+                                                  const QString &gameName) const {
+  QList<DatLookup::DatRecord> out;
+  if (!isOpen() || !source.isValid()) return out;
+  QSqlDatabase &db = const_cast<Store *>(this)->m_db;
+  QSqlQuery q(db);
+  // Indexed by (source_id, game_name) — a handful of rows, not the whole source.
+  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof, mia "
+                           "FROM dat_records WHERE source_id = ? AND game_name = ?"));
+  q.addBindValue(source.id);
+  q.addBindValue(gameName);
+  if (!q.exec()) {
+    qWarning("DatCache: recordsForGame query failed for source %lld: %s", source.id,
+             qPrintable(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    DatLookup::DatRecord r;
+    r.gameName = q.value(0).toString();
+    r.romName = q.value(1).toString();
+    r.size = q.value(2).toLongLong();
+    r.crc = q.value(3).toString();
+    r.md5 = q.value(4).toString();
+    r.sha1 = q.value(5).toString();
+    r.cloneOf = q.value(6).toString();
+    r.mia = q.value(7).toInt() != 0;
+    out.append(r);
+  }
+  return out;
 }
 
 void Store::clearAll() {

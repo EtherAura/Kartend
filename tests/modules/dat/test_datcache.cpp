@@ -101,6 +101,7 @@ private slots:
   void forEachRecordStreamsAllRecords();
   void forEachRecordInvalidSourceReturnsFalse();
   void cloneOfRoundTripsThroughCache();
+  void miaRoundTripsThroughCache();
 
 private:
   QString cachePath() const { return m_dir.filePath("datcache.sqlite"); }
@@ -547,6 +548,35 @@ void TestDatCache::cloneOfRoundTripsThroughCache() {
                       [&](const DatLookup::DatRecord &r) { cloneByCrc.insert(r.crc, r.cloneOf); });
   QCOMPARE(cloneByCrc.value(QStringLiteral("bbbbbbbb")), QStringLiteral("parent"));
   QVERIFY(cloneByCrc.value(QStringLiteral("aaaaaaaa")).isEmpty());
+}
+
+void TestDatCache::miaRoundTripsThroughCache() {
+  // mia (Kartend-34lab) must survive ingest -> sqlite -> read back via both
+  // lookup() and forEachRecord(), so the MIA flag reaches the catalogue and the
+  // browser's salmon rollups.
+  writeDat(datPath(), R"xml(<?xml version="1.0"?>
+<mame>
+  <machine name="here"><description>Here</description>
+    <rom name="h.rom" size="1" crc="aaaaaaaa"/></machine>
+  <machine name="gone" mia="yes"><description>Gone</description>
+    <rom name="g.rom" size="1" crc="bbbbbbbb"/></machine>
+</mame>)xml");
+  DatCache::Store store(cachePath());
+  auto source = store.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+
+  auto gone = store.lookup(source.value(), QString(), QString(), QStringLiteral("bbbbbbbb"));
+  QVERIFY(gone.has_value());
+  QVERIFY(gone->mia);
+  auto here = store.lookup(source.value(), QString(), QString(), QStringLiteral("aaaaaaaa"));
+  QVERIFY(here.has_value());
+  QVERIFY(!here->mia);
+
+  QHash<QString, bool> miaByCrc;
+  store.forEachRecord(source.value(),
+                      [&](const DatLookup::DatRecord &r) { miaByCrc.insert(r.crc, r.mia); });
+  QVERIFY(miaByCrc.value(QStringLiteral("bbbbbbbb")));
+  QVERIFY(!miaByCrc.value(QStringLiteral("aaaaaaaa")));
 }
 
 QTEST_MAIN(TestDatCache)

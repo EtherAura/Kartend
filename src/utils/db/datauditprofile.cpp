@@ -432,14 +432,18 @@ ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList
   }
   QSqlQuery ins(db);
   ins.prepare(QStringLiteral("INSERT OR REPLACE INTO dat_audit_result "
-                             "(profile_id, entry_key, status, file_path, detail) "
-                             "VALUES (?, ?, ?, ?, ?)"));
+                             "(profile_id, entry_key, status, file_path, detail, "
+                             "source_name, game_name, mia) "
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
   for (const ResultRow &r : rows) {
     ins.bindValue(0, id);
     ins.bindValue(1, nonNull(r.entryKey));
     ins.bindValue(2, r.status);
     ins.bindValue(3, nonNull(r.filePath));
     ins.bindValue(4, nonNull(r.detail));
+    ins.bindValue(5, nonNull(r.sourceName));
+    ins.bindValue(6, nonNull(r.gameName));
+    ins.bindValue(7, r.mia ? 1 : 0);
     if (!ins.exec()) {
       const QString err = ins.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert result row",
@@ -494,6 +498,87 @@ ErrorUtils::Result<std::optional<ResultSummary>> loadResultSummary(QSqlDatabase 
     out.hasResults = true;
   }
   return std::optional<ResultSummary>(std::move(out));
+}
+
+ErrorUtils::Result<QList<RollupRow>> loadAllRollups(QSqlDatabase &db) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadAllRollups");
+  }
+  QList<RollupRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT profile_id, source_name, status, mia, COUNT(*) "
+                           "FROM dat_audit_result "
+                           "GROUP BY profile_id, source_name, status, mia"));
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load audit rollups",
+                               "DatAuditProfile::loadAllRollups")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    out.append(RollupRow{q.value(0).toLongLong(), q.value(1).toString(), q.value(2).toInt(),
+                         q.value(3).toInt() != 0, q.value(4).toInt()});
+  }
+  return out;
+}
+
+ErrorUtils::Result<QList<GameRollupRow>> loadGameRollups(QSqlDatabase &db, qint64 profileId,
+                                                         const QString &sourceName) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadGameRollups");
+  }
+  QList<GameRollupRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT game_name, status, mia, COUNT(*) FROM dat_audit_result "
+                           "WHERE profile_id = ? AND source_name = ? "
+                           "GROUP BY game_name, status, mia"));
+  q.addBindValue(profileId);
+  q.addBindValue(sourceName);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load game rollups",
+                               "DatAuditProfile::loadGameRollups")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    out.append(GameRollupRow{q.value(0).toString(), q.value(1).toInt(), q.value(2).toInt() != 0,
+                             q.value(3).toInt()});
+  }
+  return out;
+}
+
+ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64 profileId,
+                                                        const QString &sourceName,
+                                                        const QString &gameName) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadGameResultRows");
+  }
+  QList<ResultRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
+                           "mia FROM dat_audit_result "
+                           "WHERE profile_id = ? AND source_name = ? AND game_name = ?"));
+  q.addBindValue(profileId);
+  q.addBindValue(sourceName);
+  q.addBindValue(gameName);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load game result rows",
+                               "DatAuditProfile::loadGameResultRows")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    ResultRow r;
+    r.entryKey = q.value(0).toString();
+    r.status = q.value(1).toInt();
+    r.filePath = q.value(2).toString();
+    r.detail = q.value(3).toString();
+    r.sourceName = q.value(4).toString();
+    r.gameName = q.value(5).toString();
+    r.mia = q.value(6).toInt() != 0;
+    out.append(r);
+  }
+  return out;
 }
 
 } // namespace DatAuditProfile

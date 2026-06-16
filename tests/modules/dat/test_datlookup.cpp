@@ -53,6 +53,7 @@ private slots:
   void parseDatDispatchesToClrMamePro();
   void probeHeaderReadsClrMameProFields();
   void parsesCloneOfAcrossDialects();
+  void parsesMiaAcrossDialects();
   void readDatFilePlainAndPrefix();
   void readDatFileUnpacksZip();
 
@@ -591,6 +592,57 @@ void TestDatLookup::parsesCloneOfAcrossDialects() {
   QVERIFY(c.isOk());
   QCOMPARE(c.value().size(), 1);
   QCOMPARE(c.value()[0].cloneOf, QStringLiteral("Parent Set"));
+}
+
+void TestDatLookup::parsesMiaAcrossDialects() {
+  // MAME listxml: mia="yes" on <machine> flags all its roms; mia on a single
+  // <rom> flags just that one (Kartend-34lab).
+  const QByteArray mame = QByteArrayLiteral(R"xml(<?xml version="1.0"?>
+<mame>
+  <machine name="ok"><description>Ok</description>
+    <rom name="ok.rom" size="1" crc="aaaaaaaa"/></machine>
+  <machine name="gone" mia="yes"><description>Gone</description>
+    <rom name="g.rom" size="1" crc="bbbbbbbb"/></machine>
+  <machine name="part"><description>Part</description>
+    <rom name="have.rom" size="1" crc="cccccccc"/>
+    <rom name="lost.rom" size="1" crc="dddddddd" mia="yes"/></machine>
+</mame>)xml");
+  const auto m = DatLookup::parseMameListXml(mame);
+  QVERIFY(m.isOk());
+  const auto mr = m.value();
+  QCOMPARE(mr.size(), 4);
+  QVERIFY(!mr[0].mia); // ok
+  QVERIFY(mr[1].mia);  // machine-level mia
+  QVERIFY(!mr[2].mia); // have.rom in a non-mia machine
+  QVERIFY(mr[3].mia);  // rom-level mia
+
+  // Logiqx: mia on <game> and on a <rom>.
+  const QByteArray logiqx = QByteArrayLiteral(R"xml(<?xml version="1.0"?>
+<datafile>
+  <game name="Here"><rom name="h.rom" size="1" crc="11111111"/></game>
+  <game name="Lost" mia="yes"><rom name="l.rom" size="1" crc="22222222"/></game>
+  <game name="Mixed"><rom name="a.rom" size="1" crc="33333333"/>
+    <rom name="b.rom" size="1" crc="44444444" mia="yes"/></game>
+</datafile>)xml");
+  const auto l = DatLookup::parseLogiqxDat(logiqx);
+  QVERIFY(l.isOk());
+  const auto lr = l.value();
+  QCOMPARE(lr.size(), 4);
+  QVERIFY(!lr[0].mia);
+  QVERIFY(lr[1].mia); // game-level
+  QVERIFY(!lr[2].mia);
+  QVERIFY(lr[3].mia); // rom-level
+
+  // clrmamepro: `mia yes` inside the game block flags its roms.
+  const QByteArray cmp = QByteArrayLiteral("game ( name \"Gone Set\" mia yes "
+                                           "rom ( name x.bin size 1 crc deadbeef ) ) "
+                                           "game ( name \"Here Set\" "
+                                           "rom ( name y.bin size 1 crc feedface ) )");
+  const auto c = DatLookup::parseClrMameProDat(cmp);
+  QVERIFY(c.isOk());
+  QCOMPARE(c.value().size(), 2);
+  QVERIFY(c.value()[0].mia);
+  QVERIFY(!c.value()[1].mia);
 }
 
 void TestDatLookup::readDatFilePlainAndPrefix() {

@@ -27,11 +27,19 @@ QString normaliseHex(QStringView raw) {
   return raw.trimmed().toString().toLower();
 }
 
+/// True when a game/machine/rom carries the `mia="yes"` flag (Kartend-34lab).
+/// Tolerant of `yes`/`true`/`1` and case so the three dialects' conventions
+/// all read as MIA.
+bool miaFromAttrs(const QXmlStreamAttributes &attrs) {
+  const QString v = attrs.value(QLatin1String("mia")).toString().trimmed().toLower();
+  return v == QLatin1String("yes") || v == QLatin1String("true") || v == QLatin1String("1");
+}
+
 /// Build a DatRecord from a `<rom>` element's attributes. Returns
 /// nullopt when the entry has no usable hash (parse-time drop — an
 /// entry without any hash can't be reached from a lookup query).
 std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs, const QString &gameName,
-                                        const QString &cloneOf = {}) {
+                                        const QString &cloneOf = {}, bool gameMia = false) {
   // MAME marks placeholder roms with `status="nodump"` (the chip is
   // known to exist but no good dump is available). These entries
   // carry zeroed-out hashes that would otherwise collide with every
@@ -42,6 +50,9 @@ std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs, const
   DatRecord r;
   r.gameName = gameName;
   r.cloneOf = cloneOf;
+  // MIA can be declared on the game/machine (applies to all its roms) or on
+  // the individual <rom>; either marks this entry MIA.
+  r.mia = gameMia || miaFromAttrs(attrs);
   r.romName = attrs.value(QLatin1String("name")).toString();
   const QStringView sizeStr = attrs.value(QLatin1String("size"));
   if (!sizeStr.isEmpty()) {
@@ -178,6 +189,8 @@ std::optional<DatRecord> cmpParseRom(const QList<CmpToken> &toks, int &i) {
         r.sha1 = normaliseHex(val);
       else if (key == QLatin1String("status") || key == QLatin1String("flags"))
         status = val.toLower();
+      else if (key == QLatin1String("mia"))
+        r.mia = (val.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0); // (Kartend-34lab)
       // else: date / merge / bios / region / … — irrelevant to lookup.
     } else if (toks.at(i).kind == CmpToken::Open) {
       ++i;
@@ -200,7 +213,8 @@ std::optional<DatRecord> cmpParseRom(const QList<CmpToken> &toks, int &i) {
 void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
   const int n = toks.size();
   QString gameName;
-  QString cloneOf; // cloneof, falling back to romof (Kartend-m6qsb.13)
+  QString cloneOf;      // cloneof, falling back to romof (Kartend-m6qsb.13)
+  bool gameMia = false; // game-level `mia yes` (Kartend-34lab)
   QList<DatRecord> roms;
   while (i < n && toks.at(i).kind != CmpToken::Close) {
     if (toks.at(i).kind == CmpToken::Word) {
@@ -223,6 +237,8 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
           cloneOf = val;
         else if (key == QLatin1String("romof") && cloneOf.isEmpty())
           cloneOf = val;
+        else if (key == QLatin1String("mia"))
+          gameMia = (val.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0);
       }
     } else if (toks.at(i).kind == CmpToken::Open) {
       ++i;
@@ -235,6 +251,7 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
   for (auto &r : roms) {
     r.gameName = gameName;
     r.cloneOf = cloneOf;
+    r.mia = r.mia || gameMia; // OR game-level MIA over any rom-level flag
     out.append(std::move(r));
   }
 }
@@ -410,7 +427,8 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   // export from MAME-WIP tools still works (real MAME listxml uses
   // the `<mame>` root → goes through parseMameListXml instead).
   QString currentGameName;
-  QString currentCloneOf; // Logiqx exports may carry cloneof/romof (Kartend-m6qsb.13)
+  QString currentCloneOf;  // Logiqx exports may carry cloneof/romof (Kartend-m6qsb.13)
+  bool currentMia = false; // game-level mia="yes" (Kartend-34lab)
 
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
@@ -421,8 +439,10 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
     if (name == QLatin1String("game") || name == QLatin1String("machine")) {
       currentGameName = reader.attributes().value(QLatin1String("name")).toString();
       currentCloneOf = cloneOfFromAttrs(reader.attributes());
+      currentMia = miaFromAttrs(reader.attributes());
     } else if (name == QLatin1String("rom") && !currentGameName.isEmpty()) {
-      if (auto r = readRomElement(reader.attributes(), currentGameName, currentCloneOf)) {
+      if (auto r =
+              readRomElement(reader.attributes(), currentGameName, currentCloneOf, currentMia)) {
         out.append(std::move(*r));
       }
     }
@@ -453,7 +473,8 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   //    readRomElement above.
   QString currentSetId;
   QString currentDescription;
-  QString currentCloneOf; // cloneof/romof parent set (Kartend-m6qsb.13)
+  QString currentCloneOf;  // cloneof/romof parent set (Kartend-m6qsb.13)
+  bool currentMia = false; // machine-level mia="yes" (Kartend-34lab)
   bool inDescription = false;
   // Buffer roms seen so far for the current machine; flushed with
   // the resolved gameName at `</machine>` so any rom that appears
@@ -465,12 +486,15 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     for (auto &r : pendingRoms) {
       r.gameName = gameName;
       r.cloneOf = currentCloneOf;
+      // OR the machine-level MIA over any rom-level flag readRomElement already set.
+      r.mia = r.mia || currentMia;
       out.append(std::move(r));
     }
     pendingRoms.clear();
     currentSetId.clear();
     currentDescription.clear();
     currentCloneOf.clear();
+    currentMia = false;
   };
 
   while (!reader.atEnd()) {
@@ -482,6 +506,7 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
         // Some old MAME builds emit `<game>` here; treat it the same.
         currentSetId = reader.attributes().value(QLatin1String("name")).toString();
         currentCloneOf = cloneOfFromAttrs(reader.attributes());
+        currentMia = miaFromAttrs(reader.attributes());
         currentDescription.clear();
         pendingRoms.clear();
       } else if (name == QLatin1String("description")) {

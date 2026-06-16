@@ -36,8 +36,9 @@ struct AuditOptions {
   bool onePerGame = false;
   /// Confirmed folder layout of the scan roots (Kartend-m6qsb.6). Flat skips
   /// the recursive walk — subfolders are noise by the user's own confirmation.
-  /// Unknown / Nested / Mixed keep the historical fully-recursive behavior.
-  /// ArchivePerItem is consumed by the archive-member audit (Kartend-m6qsb.7).
+  /// Unknown / Nested / Mixed / ArchivePerItem keep the fully-recursive walk.
+  /// Note: archive *members* are hashed for every archive in any layout (so
+  /// compressed ROMs match the DAT) — layout only controls recursion now.
   Layout layout = Layout::Unknown;
 };
 

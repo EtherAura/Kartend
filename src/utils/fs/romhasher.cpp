@@ -19,6 +19,11 @@
 #include <atomic>
 #include <memory>
 
+#ifdef KARTEND_HAS_LIBARCHIVE
+#include <archive.h>
+#include <archive_entry.h>
+#endif
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -371,9 +376,173 @@ extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
   return rootCanonical;
 }
 
+#ifdef KARTEND_HAS_LIBARCHIVE
+namespace {
+
+// Hash every regular-file member of an archive natively via libarchive — no
+// temp directory, no external process (Kartend-cnlsy follow-up). Streams each
+// member's decompressed bytes straight through MD5/SHA-1/CRC-32, so it carries
+// the shell-out path's defences without the temp disk: the entry-count cap
+// guards a millions-of-files bomb, the running decompressed-byte cap guards a
+// high-ratio bomb, non-regular entries (dirs, smuggled symlinks, devices) are
+// skipped, and the cancel token aborts promptly. memberPath is the in-archive
+// path, '/'-separated, leading slashes stripped — matching the shell-out form.
+[[nodiscard]] ErrorUtils::Result<QList<MemberResult>>
+hashMembersLibarchive(const QString &archivePath,
+                      const std::shared_ptr<std::atomic<bool>> &cancelToken, const char *origin) {
+  // Mirror the shell-out path's up-front guards (libarchive treats an empty
+  // name as a no-op stream that "succeeds" empty, which must instead be a
+  // clear error).
+  if (archivePath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Empty archive path", origin);
+  }
+  if (const QFileInfo afi(archivePath); !afi.exists() || !afi.isFile()) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Archive file does not exist", origin)
+        .withDetails(archivePath);
+  }
+  struct archive *a = archive_read_new();
+  archive_read_support_filter_all(a);
+  archive_read_support_format_all(a);
+  if (archive_read_open_filename(a, QFile::encodeName(archivePath).constData(), CHUNK_SIZE) !=
+      ARCHIVE_OK) {
+    const QString err = QString::fromUtf8(archive_error_string(a));
+    archive_read_free(a);
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Could not open archive", origin)
+        .withDetails(archivePath + QStringLiteral(": ") + err);
+  }
+
+  QList<MemberResult> members;
+  qint64 totalBytes = 0;
+  int inspected = 0;
+  struct archive_entry *entry = nullptr;
+  int headerRc = ARCHIVE_OK;
+  while ((headerRc = archive_read_next_header(a, &entry)) == ARCHIVE_OK) {
+    if (cancelToken && cancelToken->load(std::memory_order_relaxed)) {
+      archive_read_free(a);
+      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive hashing cancelled",
+                                 origin);
+    }
+    if (++inspected > MAX_INNER_FILES_INSPECTED) {
+      break; // malicious-archive guard: stop walking a millions-of-entries bomb
+    }
+    if (archive_entry_filetype(entry) != AE_IFREG) {
+      archive_read_data_skip(a); // dirs / symlinks / devices are not audit units
+      continue;
+    }
+    const char *nm = archive_entry_pathname(entry);
+    QString memberPath = nm != nullptr ? QString::fromUtf8(nm) : QString();
+    while (memberPath.startsWith(QLatin1Char('/'))) {
+      memberPath.remove(0, 1);
+    }
+
+    QCryptographicHash md5(QCryptographicHash::Md5);
+    QCryptographicHash sha1(QCryptographicHash::Sha1);
+    Crc32 crc;
+    qint64 sz = 0;
+    bool readOk = true;
+    const void *buff = nullptr;
+    size_t len = 0;
+    la_int64_t offset = 0;
+    int blockRc = ARCHIVE_OK;
+    while ((blockRc = archive_read_data_block(a, &buff, &len, &offset)) == ARCHIVE_OK) {
+      if (cancelToken && cancelToken->load(std::memory_order_relaxed)) {
+        archive_read_free(a);
+        return ErrorContext::error(ErrorCode::OperationCancelled, "Archive hashing cancelled",
+                                   origin);
+      }
+      // Zero-copy view over libarchive's block (valid until the next read).
+      const QByteArray chunk =
+          QByteArray::fromRawData(static_cast<const char *>(buff), static_cast<qsizetype>(len));
+      md5.addData(chunk);
+      sha1.addData(chunk);
+      crc.addData(chunk);
+      sz += static_cast<qint64>(len);
+      totalBytes += static_cast<qint64>(len);
+      if (totalBytes > MAX_EXTRACTED_BYTES) {
+        archive_read_free(a);
+        return ErrorContext::error(
+                   ErrorCode::InvalidArgument,
+                   "Archive decompresses past the size ceiling (possible compression bomb)", origin)
+            .withDetails(archivePath);
+      }
+    }
+    if (blockRc != ARCHIVE_EOF) {
+      readOk = false; // member read error: report empty hashes, keep the rest
+    }
+    MemberResult m;
+    m.memberPath = memberPath;
+    if (readOk) {
+      m.hashes.md5 = QString::fromLatin1(md5.result().toHex());
+      m.hashes.sha1 = QString::fromLatin1(sha1.result().toHex());
+      m.hashes.crc = crc.hex();
+      m.hashes.size = sz;
+    } else {
+      m.hashes = Result{}; // size -1
+    }
+    members.append(m);
+  }
+  // A header read that ended on a hard error before any member was seen means
+  // the file was not a (readable) archive — let the caller fall back.
+  const bool fatalOpenError = members.isEmpty() && headerRc != ARCHIVE_EOF;
+  archive_read_free(a);
+  if (fatalOpenError) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Archive contained no readable members",
+                               origin)
+        .withDetails(archivePath);
+  }
+  return members;
+}
+
+} // namespace
+#endif // KARTEND_HAS_LIBARCHIVE
+
 ErrorUtils::Result<Result>
 hashArchiveInnerRom(const QString &archivePath,
                     const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+#ifdef KARTEND_HAS_LIBARCHIVE
+  // Native first; fall through to the external extractor only if libarchive
+  // can't read this archive (a format its build lacks, or a corrupt file the
+  // CLI tools happen to recover).
+  if (auto native =
+          hashMembersLibarchive(archivePath, cancelToken, "RomHasher::hashArchiveInnerRom");
+      native.isOk()) {
+    // Same largest-wins + ambiguous-multi-dump guard as the shell-out path,
+    // computed from the members' sizes.
+    const QList<MemberResult> &ms = native.value();
+    qint64 largestSize = -1;
+    qint64 secondLargestSize = -1;
+    const MemberResult *largest = nullptr;
+    for (const MemberResult &m : ms) {
+      if (m.hashes.size < 0) {
+        continue;
+      }
+      if (m.hashes.size > largestSize) {
+        secondLargestSize = largestSize;
+        largestSize = m.hashes.size;
+        largest = &m;
+      } else if (m.hashes.size > secondLargestSize) {
+        secondLargestSize = m.hashes.size;
+      }
+    }
+    if (largest == nullptr) {
+      return ErrorContext::error(ErrorCode::FileNotFound,
+                                 "Archive contained no regular files to hash",
+                                 "RomHasher::hashArchiveInnerRom")
+          .withDetails(archivePath);
+    }
+    if (secondLargestSize >= 0 && 2 * secondLargestSize >= largestSize) {
+      return ErrorContext::error(
+                 ErrorCode::InvalidArgument,
+                 "Archive has multiple comparably-large files (multi-disc/track); cannot pick a "
+                 "single inner ROM to hash",
+                 "RomHasher::hashArchiveInnerRom")
+          .withDetails(archivePath);
+    }
+    return largest->hashes;
+  } else if (native.hasErrorCode(ErrorCode::OperationCancelled)) {
+    return native.error(); // honor cancel; do not retry via the slow path
+  }
+#endif
   QTemporaryDir tmp;
   auto extracted =
       extractArchiveForHashing(archivePath, tmp, cancelToken, "RomHasher::hashArchiveInnerRom");
@@ -443,6 +612,15 @@ hashArchiveInnerRom(const QString &archivePath,
 ErrorUtils::Result<QList<MemberResult>>
 hashArchiveMembers(const QString &archivePath,
                    const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+#ifdef KARTEND_HAS_LIBARCHIVE
+  // Native first; fall through to the external extractor only on a non-cancel
+  // failure (a format libarchive's build can't read).
+  if (auto native =
+          hashMembersLibarchive(archivePath, cancelToken, "RomHasher::hashArchiveMembers");
+      native.isOk() || native.hasErrorCode(ErrorCode::OperationCancelled)) {
+    return native;
+  }
+#endif
   QTemporaryDir tmp;
   auto extracted =
       extractArchiveForHashing(archivePath, tmp, cancelToken, "RomHasher::hashArchiveMembers");

@@ -1,4 +1,8 @@
 target_sources(kartend_data PRIVATE
+  datauditbrowsermodels.cpp
+  datauditbrowsermodels.h
+  datauditbuckets.cpp
+  datauditbuckets.h
   datauditcatalogue.cpp
   datauditcatalogue.h
   datauditexport.cpp
