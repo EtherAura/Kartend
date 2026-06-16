@@ -319,6 +319,13 @@ kartend_add_test(NAME DatAuditProfileDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-34lab: the browser page must build without crashing (construction-
+# order regression: filter checkbox toggled→applyFilters fired mid-build).
+kartend_add_test(NAME DatAuditBrowserPage
+  SOURCES ui/dialogs/test_datauditbrowserpage.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-m6qsb.18: DAT-library review optional-association combo
 kartend_add_test(NAME DatLibraryReviewDialog
   SOURCES ui/dialogs/test_datlibraryreviewdialog.cpp

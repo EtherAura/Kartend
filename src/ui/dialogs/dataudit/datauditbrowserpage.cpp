@@ -132,20 +132,23 @@ void DatAuditBrowserPage::buildUi() {
 
   // Filter row.
   auto *filterRow = new QHBoxLayout();
-  const auto makeCheck = [&](QCheckBox *&slot, const QString &text) {
+  // Set each checkbox's initial state BEFORE wiring toggled→applyFilters().
+  // Otherwise flipping a checkbox during construction fires applyFilters()
+  // while a sibling checkbox is still null — applyFilters() reads all five, so
+  // that crashes. The proxy's defaults already match these states, so no
+  // initial applyFilters() call is needed.
+  const auto makeCheck = [&](QCheckBox *&slot, const QString &text, bool checked) {
     slot = new QCheckBox(text, this);
-    slot->setChecked(true);
+    slot->setChecked(checked);
     filterRow->addWidget(slot);
     connect(slot, &QCheckBox::toggled, this, &DatAuditBrowserPage::applyFilters);
   };
-  makeCheck(m_filterComplete, tr("Complete"));
-  makeCheck(m_filterPartial, tr("Partial"));
-  makeCheck(m_filterEmpty, tr("Empty"));
+  makeCheck(m_filterComplete, tr("Complete"), true);
+  makeCheck(m_filterPartial, tr("Partial"), true);
+  makeCheck(m_filterEmpty, tr("Empty"), true);
   // Fixes / MIA default off — they are "only show rows that have…" gates.
-  makeCheck(m_filterFixes, tr("Fixes"));
-  m_filterFixes->setChecked(false);
-  makeCheck(m_filterMia, tr("MIA"));
-  m_filterMia->setChecked(false);
+  makeCheck(m_filterFixes, tr("Fixes"), false);
+  makeCheck(m_filterMia, tr("MIA"), false);
   filterRow->addStretch(1);
   m_search = new QLineEdit(this);
   m_search->setPlaceholderText(tr("Filter games…"));
