@@ -50,10 +50,20 @@ void TestSystemThemeWatcher::emitsThemeChangedWhenKdeglobalsChanges() {
   SystemThemeWatcher watcher;
   QSignalSpy spy(&watcher, &SystemThemeWatcher::themeChanged);
 
+  // Qt's inotify backend registers the watch from the constructor but only
+  // begins delivering events once the event loop has spun at least once. Pump
+  // it briefly so the watch is genuinely live before the triggering write —
+  // otherwise a cold/loaded first run can write the change before the watcher's
+  // socket-notifier is armed and miss it entirely.
+  QTest::qWait(300);
+
   // A runtime accent change rewrites kdeglobals — the watcher must surface it
-  // (once, after its debounce).
+  // (once, after its 250ms debounce). QTRY returns as soon as the signal lands,
+  // so the generous ceiling only matters on a saturated box where inotify
+  // delivery stalls (CPU-bound build + desktop-stream encode); it does not slow
+  // the common case.
   writeAccent("200,40,40");
-  QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 3000);
+  QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 10000);
 #endif
 }
 
