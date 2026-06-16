@@ -8,6 +8,7 @@
   "homepage": "https://github.com/EtherAura/Kartend",
   "description": "Optional native deps for the Windows MSVC build (SDL2 gamepad backend, zstd for kart compression). Qt6 and Qt6Keychain are NOT here: Qt6 comes from jurplel/install-qt-action which serves the official binaries faster than vcpkg can build from source, and Qt6Keychain has no vcpkg port that plays nicely with install-qt-action's Qt; the scraper credential layer falls back to plaintext-INI when QtKeychain isn't found (same as Linux without qtkeychain-qt6-dev).",
   "dependencies": [
+    "libarchive",
     "sdl2",
     "zstd"
   ]

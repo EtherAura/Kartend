@@ -44,6 +44,7 @@ option(KARTEND_LINKER_MAP "Emit a linker .map file in Debug builds" OFF)
 option(KARTEND_ENABLE_QT_GAMEPAD "Allow auto-detecting Qt6::Gamepad" ON)
 option(KARTEND_ENABLE_SDL2_GAMEPAD "Allow auto-detecting SDL2 gamepad fallback" ON)
 option(KARTEND_ENABLE_ZSTD "Allow auto-detecting libzstd for kart compression" ON)
+option(KARTEND_ENABLE_LIBARCHIVE "Allow auto-detecting libarchive for in-process archive hashing" ON)
 
 if (KARTEND_ENABLE_CCACHE)
   find_program(CCACHE_PROGRAM ccache)
@@ -90,6 +91,12 @@ endif()
 # Falls back to Qt's built-in qCompress (zlib) when not found.
 if (PkgConfig_FOUND AND KARTEND_ENABLE_ZSTD)
   pkg_check_modules(ZSTD QUIET IMPORTED_TARGET libzstd)
+endif()
+
+# Optional: libarchive for in-process archive-member hashing (DAT auditor +
+# scraper). Falls back to shelling out to 7z/unzip/bsdtar when not found.
+if (PkgConfig_FOUND AND KARTEND_ENABLE_LIBARCHIVE)
+  pkg_check_modules(LIBARCHIVE QUIET IMPORTED_TARGET libarchive)
 endif()
 
 # Optional: QtKeychain for secure scraper credential storage. Without it,
@@ -365,6 +372,17 @@ if (TARGET PkgConfig::ZSTD)
   message(STATUS "zstd found; Kart compression will use zstd")
 else()
   message(STATUS "zstd not found; Kart compression will use zlib (qCompress)")
+endif()
+
+if (TARGET PkgConfig::LIBARCHIVE)
+  # libarchive is consumed by RomHasher (src/utils/fs/) which lives in
+  # kartend_utils; KARTEND_HAS_LIBARCHIVE gates the in-process member hasher
+  # there. PUBLIC so the define propagates like the other optional backends.
+  target_link_libraries(kartend_utils PUBLIC PkgConfig::LIBARCHIVE)
+  target_compile_definitions(kartend_utils PUBLIC KARTEND_HAS_LIBARCHIVE=1)
+  message(STATUS "libarchive found; archive ROMs hashed in-process")
+else()
+  message(STATUS "libarchive not found; archive ROMs hashed via 7z/unzip/bsdtar")
 endif()
 
 # APP_* defines are read from every layer (logging, error reporting,
