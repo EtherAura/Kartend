@@ -17,7 +17,7 @@ namespace DatAudit {
 enum class FixActionKind {
   Rename,     ///< Rename a file in place to its canonical DAT name (WrongName).
   Relocate,   ///< Copy a present file into the managed-output root under its canonical name.
-  Quarantine, ///< Move an unknown file into the quarantine area (never deleted).
+  Quarantine, ///< Move an unknown or wrong-content file into the quarantine area (never deleted).
 };
 
 [[nodiscard]] QString fixActionKindToken(FixActionKind k);
@@ -40,7 +40,7 @@ struct FixPlan {
 struct FixSettings {
   bool rename = true;                   ///< In-place: WrongName -> rename to canonical.
   bool relocateToManagedOutput = false; ///< Managed-output: copy present entries into the root.
-  bool quarantineUnknown = false;       ///< Move Unknown files into quarantineDir.
+  bool quarantineUnknown = false;       ///< Move Unknown + WrongHash files into quarantineDir.
   QString managedOutputRoot;            ///< Required when relocateToManagedOutput.
   QString quarantineDir;                ///< Required when quarantineUnknown.
   /// Structured managed output (Kartend-m6qsb.14): place each relocated file in

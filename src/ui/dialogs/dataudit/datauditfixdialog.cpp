@@ -48,7 +48,8 @@ DatAuditFixDialog::DatAuditFixDialog(QList<DatAudit::AuditRow> rows, QWidget *pa
   m_rename->setChecked(true);
   form->addRow(m_rename);
 
-  m_quarantine = new QCheckBox(tr("Move unknown files to a quarantine folder"), this);
+  m_quarantine =
+      new QCheckBox(tr("Move unknown and wrong-content files to a quarantine folder"), this);
   auto *quarRow = new QHBoxLayout();
   m_quarantineDir = new QLineEdit(this);
   m_quarantineDir->setPlaceholderText(tr("Quarantine folder…"));

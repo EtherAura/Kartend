@@ -75,9 +75,14 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
       const QString to = destDir + QLatin1Char('/') + r.expectedName;
       plan.actions.append(FixAction{FixActionKind::Relocate, r.filePath, to, r.status});
     }
-    // Quarantine unknown files (move, never delete).
+    // Quarantine unknown and wrong-content files (move out, never delete): an
+    // Unknown file matches no DAT entry, and a WrongHash file claims (by name) to
+    // be a known entry but holds bytes no entry matches — neither belongs in the
+    // verified set, so set both aside. classify() routes a content match (even
+    // under the wrong name) to WrongName/rename, so WrongHash is genuinely
+    // unrecoverable here and safe to move.
     if (settings.quarantineUnknown && !settings.quarantineDir.isEmpty() &&
-        r.status == Status::Unknown && !r.filePath.isEmpty()) {
+        (r.status == Status::Unknown || r.status == Status::WrongHash) && !r.filePath.isEmpty()) {
       const QString name = r.actualName.isEmpty() ? QFileInfo(r.filePath).fileName() : r.actualName;
       const QString to = settings.quarantineDir + QLatin1Char('/') + name;
       plan.actions.append(FixAction{FixActionKind::Quarantine, r.filePath, to, r.status});

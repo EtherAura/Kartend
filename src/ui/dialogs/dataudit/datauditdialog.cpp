@@ -1090,9 +1090,12 @@ bool DatAuditDialog::hasResults() const {
 }
 
 bool DatAuditDialog::hasApplicableFixes() const {
+  // The fix engine acts on exactly these statuses: WrongName (rename), and
+  // Unknown / WrongHash (quarantine). Duplicate/Corrupt/Missing produce no
+  // action, so they must not light the Fix button.
   for (const DatAudit::AuditRow &r : m_model->allRows()) {
     if (r.status == DatAudit::Status::WrongName || r.status == DatAudit::Status::Unknown ||
-        r.status == DatAudit::Status::Duplicate) {
+        r.status == DatAudit::Status::WrongHash) {
       return true;
     }
   }

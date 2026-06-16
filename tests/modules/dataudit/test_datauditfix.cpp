@@ -48,6 +48,7 @@ private slots:
   void planRenameOnlyByDefault();
   void planSkipsNoopRename();
   void planRelocateAndQuarantineWhenEnabled();
+  void planQuarantinesUnknownAndWrongContent();
   void planRelocatePerItemSubfolderUsesGameName();
   void applyRenameInPlaceAndUndo();
   void applyRelocateCopiesLeavesOriginalAndUndoDeletes();
@@ -105,6 +106,36 @@ void TestDatAuditFix::planRelocateAndQuarantineWhenEnabled() {
   }
   QCOMPARE(relocate, 2);   // Have + WrongName are both "present"
   QCOMPARE(quarantine, 1); // the Unknown
+}
+
+void TestDatAuditFix::planQuarantinesUnknownAndWrongContent() {
+  // The quarantine option moves BOTH unknown files (no DAT match) and
+  // wrong-content / WrongHash files (right name, bytes no entry matches). A
+  // WrongName row is still a rename, never a quarantine.
+  const QList<AuditRow> rows{
+      row(Status::Unknown, QStringLiteral("/roms/junk.bin"), QString()),
+      row(Status::WrongHash, QStringLiteral("/roms/baddump.bin"), QStringLiteral("baddump.bin")),
+      row(Status::WrongName, QStringLiteral("/roms/misnamed.bin"),
+          QStringLiteral("Canonical.bin"))};
+  FixSettings s;
+  s.rename = false; // isolate the quarantine behaviour
+  s.quarantineUnknown = true;
+  s.quarantineDir = QStringLiteral("/quar");
+  const FixPlan plan = DatAudit::computeFixPlan(rows, s);
+
+  QStringList quarantined;
+  Status wrongHashOrigin = Status::Have;
+  for (const auto &a : plan.actions) {
+    QCOMPARE(a.kind, FixActionKind::Quarantine); // rename is off, nothing else fires
+    quarantined << a.toPath;
+    if (a.toPath == QStringLiteral("/quar/baddump.bin")) {
+      wrongHashOrigin = a.sourceStatus;
+    }
+  }
+  quarantined.sort();
+  const QStringList expected{QStringLiteral("/quar/baddump.bin"), QStringLiteral("/quar/junk.bin")};
+  QCOMPARE(quarantined, expected);
+  QCOMPARE(wrongHashOrigin, Status::WrongHash); // the action records its origin status
 }
 
 void TestDatAuditFix::planRelocatePerItemSubfolderUsesGameName() {
