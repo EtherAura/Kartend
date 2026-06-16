@@ -87,8 +87,12 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
 
   // DAT files + scan folders. Locked + derived while a collection is linked
   // (Kartend-m6qsb.2) — see onLinkedCollectionChanged.
-  m_linkedHint = new QLabel(
-      tr("DAT files and scan folder are managed by the linked collection's settings."), this);
+  m_linkedHint =
+      new QLabel(tr("DAT files and scan folder come from the linked collection — add DATs in "
+                    "Settings → that collection → Configuration → DAT files. Or choose \"(none)\" "
+                    "above to set them here directly."),
+                 this);
+  m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
   root->addWidget(m_linkedHint);
   auto *inputs = new QHBoxLayout();

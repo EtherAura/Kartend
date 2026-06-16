@@ -306,8 +306,12 @@ QWidget *DatAuditDialog::buildAuditPage() {
 
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
-  m_linkedHint = new QLabel(
-      tr("DAT files and scan folder are managed by the linked collection's settings."), page);
+  m_linkedHint =
+      new QLabel(tr("DAT files and scan folder come from the linked collection — add DATs in "
+                    "Settings → that collection → Configuration → DAT files. Edit the profile and "
+                    "set its linked collection to \"(none)\" to manage DATs here directly."),
+                 page);
+  m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
   root->addWidget(m_linkedHint);
   auto *inputs = new QHBoxLayout();
