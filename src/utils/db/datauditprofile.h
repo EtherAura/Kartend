@@ -119,6 +119,13 @@ struct ResultRow {
   int status = 0;
   QString filePath;
   QString detail;
+  /// Source DAT + game this row belongs to and its MIA flag (Kartend-34lab,
+  /// schema v22). Let the browser's global tree and game list be simple grouped
+  /// queries; the entry_key carries no game/source identity. Empty/false on
+  /// pre-v22 snapshots until the profile is next re-audited.
+  QString sourceName;
+  QString gameName;
+  bool mia = false;
 };
 
 /// Replace profile `id`'s entire result snapshot with `rows`, in one
@@ -144,6 +151,37 @@ struct ResultSummary {
 /// does not exist; an error is returned only on a real DB failure.
 [[nodiscard]] ErrorUtils::Result<std::optional<ResultSummary>> loadResultSummary(QSqlDatabase &db,
                                                                                  qint64 id);
+
+/// One grouped rollup bucket for the audit browser (Kartend-34lab). A single
+/// `loadAllRollups` read returns one of these per (profile, source, status,
+/// mia) combination — enough to build the whole global tree's per-source
+/// counts without re-scanning. `status` is the int form of DatAudit::Status.
+struct RollupRow {
+  qint64 profileId = -1;
+  QString sourceName;
+  int status = 0;
+  bool mia = false;
+  int count = 0;
+};
+
+/// Every profile's per-(source, status, mia) result counts in one query, for
+/// the browser's global tree. Pre-v22 snapshots surface with an empty
+/// sourceName (their rows predate source attribution).
+[[nodiscard]] ErrorUtils::Result<QList<RollupRow>> loadAllRollups(QSqlDatabase &db);
+
+/// One grouped rollup bucket for a single game within one (profile, source),
+/// for the browser's game list. `status` is the int form of DatAudit::Status.
+struct GameRollupRow {
+  QString gameName;
+  int status = 0;
+  bool mia = false;
+  int count = 0;
+};
+
+/// Per-(game, status, mia) counts for one source within one profile, for the
+/// browser's game-list pane. One row per distinct (gameName, status, mia).
+[[nodiscard]] ErrorUtils::Result<QList<GameRollupRow>>
+loadGameRollups(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
 
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
 /// unknown string falls back to the safe default (InPlace).

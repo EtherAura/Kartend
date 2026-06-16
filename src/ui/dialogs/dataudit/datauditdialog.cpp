@@ -1224,6 +1224,11 @@ void DatAuditDialog::onAuditFinished() {
       row.status = static_cast<int>(r.status);
       row.filePath = r.filePath;
       row.detail = r.expectedName;
+      // Source DAT + game + MIA so the browser's tree/game-list rollups are
+      // grouped queries (Kartend-34lab, schema v22).
+      row.sourceName = r.sourceName;
+      row.gameName = r.gameName;
+      row.mia = r.mia;
       rows.append(row);
     }
     const qint64 profileId = m_currentProfile.id;

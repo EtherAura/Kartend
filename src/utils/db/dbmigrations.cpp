@@ -213,7 +213,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 21;
+  constexpr int CURRENT_SCHEMA_VERSION = 22;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -894,9 +894,38 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 21;
+  }
+
+  if (mutableVersion < 22) {
+    // v22 (Kartend-34lab): give each persisted audit-result row the source DAT
+    // + game it belongs to, plus the MIA flag, so the RomVault-style browser's
+    // global tree (per-source rollups) and game list (per-game rollups) are
+    // simple grouped queries. The entry_key carries no game/source identity, so
+    // without these the right panes couldn't attribute a row unambiguously.
+    // Pre-v22 snapshots leave these empty (source_name = '') and fall back to
+    // profile-level totals until the profile is next re-audited.
+    if (!runBlock(db, 22, origin, [&]() -> bool {
+          return ensureColumn(db, "dat_audit_result", "source_name", "TEXT NOT NULL DEFAULT ''",
+                              origin) &&
+                 ensureColumn(db, "dat_audit_result", "game_name", "TEXT NOT NULL DEFAULT ''",
+                              origin) &&
+                 ensureColumn(db, "dat_audit_result", "mia", "INTEGER NOT NULL DEFAULT 0",
+                              origin) &&
+                 ensureIndex(db,
+                             "CREATE INDEX IF NOT EXISTS idx_dat_audit_result_source "
+                             "ON dat_audit_result(profile_id, source_name, status)",
+                             origin, "idx_dat_audit_result_source") &&
+                 ensureIndex(db,
+                             "CREATE INDEX IF NOT EXISTS idx_dat_audit_result_game "
+                             "ON dat_audit_result(profile_id, source_name, game_name)",
+                             origin, "idx_dat_audit_result_game");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v22 block stays a pure copy-paste.
-    mutableVersion = 21; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v23 block stays a pure copy-paste.
+    mutableVersion = 22; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
