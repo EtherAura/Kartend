@@ -183,6 +183,14 @@ struct GameRollupRow {
 [[nodiscard]] ErrorUtils::Result<QList<GameRollupRow>>
 loadGameRollups(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
 
+/// The raw persisted result rows for one game (profile + source + game), for
+/// the browser's ROM-detail pane — joined by romName against the DAT cache to
+/// fill in hashes/sizes/clone info. Empty when nothing matches.
+[[nodiscard]] ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db,
+                                                                      qint64 profileId,
+                                                                      const QString &sourceName,
+                                                                      const QString &gameName);
+
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
 /// unknown string falls back to the safe default (InPlace).
 [[nodiscard]] QString fixModeToString(FixMode m);

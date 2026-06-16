@@ -41,6 +41,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "databaseschema.h"
+#include "datauditbrowserpage.h"
 #include "datauditexport.h"
 #include "datauditfixdialog.h"
 #include "datauditmodel.h"
@@ -206,6 +207,8 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   m_pages->addWidget(buildAuditPage());    // index 0
   m_pages->addWidget(buildLibraryPage());  // index 1
   m_pages->addWidget(buildDownloadPage()); // index 2
+  m_browserPage = new DatAuditBrowserPage(this);
+  m_pages->addWidget(m_browserPage); // index 3
 
   splitter->addWidget(m_nav);
   splitter->addWidget(rightWrap);
@@ -217,6 +220,7 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   addNavEntry(tr("Audit"), {QStringLiteral("document-edit"), QStringLiteral("configure")}, 0);
   addNavEntry(tr("DAT Library"), {QStringLiteral("folder-sync"), QStringLiteral("folder")}, 1);
   addNavEntry(tr("Download"), {QStringLiteral("download"), QStringLiteral("emblem-downloads")}, 2);
+  addNavEntry(tr("Browser"), {QStringLiteral("view-list-tree"), QStringLiteral("folder-table")}, 3);
 
   connect(m_nav, &QListWidget::currentRowChanged, this, &DatAuditDialog::onNavRowChanged);
   connect(m_addDatButton, &QPushButton::clicked, this, &DatAuditDialog::onAddDat);
@@ -554,6 +558,11 @@ void DatAuditDialog::onNavRowChanged() {
   m_pages->setCurrentIndex(page);
   m_contextIcon->setPixmap(item->icon().pixmap(28, 28));
   m_contextTitle->setText(item->text());
+  // The browser reads persisted results on demand — refresh it each time it is
+  // shown so a just-completed audit is reflected without reopening the window.
+  if (page == 3 && m_browserPage != nullptr) {
+    m_browserPage->refresh();
+  }
 }
 
 void DatAuditDialog::applyUniformSizing() {

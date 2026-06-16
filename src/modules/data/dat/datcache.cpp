@@ -422,6 +422,37 @@ bool Store::forEachRecord(const CachedSource &source,
   return true;
 }
 
+QList<DatLookup::DatRecord> Store::recordsForGame(const CachedSource &source,
+                                                  const QString &gameName) const {
+  QList<DatLookup::DatRecord> out;
+  if (!isOpen() || !source.isValid()) return out;
+  QSqlDatabase &db = const_cast<Store *>(this)->m_db;
+  QSqlQuery q(db);
+  // Indexed by (source_id, game_name) — a handful of rows, not the whole source.
+  q.prepare(QStringLiteral("SELECT game_name, rom_name, size, crc, md5, sha1, cloneof, mia "
+                           "FROM dat_records WHERE source_id = ? AND game_name = ?"));
+  q.addBindValue(source.id);
+  q.addBindValue(gameName);
+  if (!q.exec()) {
+    qWarning("DatCache: recordsForGame query failed for source %lld: %s", source.id,
+             qPrintable(q.lastError().text()));
+    return out;
+  }
+  while (q.next()) {
+    DatLookup::DatRecord r;
+    r.gameName = q.value(0).toString();
+    r.romName = q.value(1).toString();
+    r.size = q.value(2).toLongLong();
+    r.crc = q.value(3).toString();
+    r.md5 = q.value(4).toString();
+    r.sha1 = q.value(5).toString();
+    r.cloneOf = q.value(6).toString();
+    r.mia = q.value(7).toInt() != 0;
+    out.append(r);
+  }
+  return out;
+}
+
 void Store::clearAll() {
   if (!isOpen()) return;
   execSimple(m_db, QStringLiteral("DELETE FROM dat_records"));

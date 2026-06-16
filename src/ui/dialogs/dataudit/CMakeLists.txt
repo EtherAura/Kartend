@@ -1,6 +1,10 @@
 target_sources(kartend_ui PRIVATE
+  datauditbrowserpage.cpp
+  datauditbrowserpage.h
   datauditdialog.cpp
   datauditdialog.h
+  dattreebadgedelegate.cpp
+  dattreebadgedelegate.h
   datauditfixdialog.cpp
   datauditfixdialog.h
   datauditprofiledialog.cpp

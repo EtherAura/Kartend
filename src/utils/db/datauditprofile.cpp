@@ -547,4 +547,38 @@ ErrorUtils::Result<QList<GameRollupRow>> loadGameRollups(QSqlDatabase &db, qint6
   return out;
 }
 
+ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64 profileId,
+                                                        const QString &sourceName,
+                                                        const QString &gameName) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadGameResultRows");
+  }
+  QList<ResultRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
+                           "mia FROM dat_audit_result "
+                           "WHERE profile_id = ? AND source_name = ? AND game_name = ?"));
+  q.addBindValue(profileId);
+  q.addBindValue(sourceName);
+  q.addBindValue(gameName);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load game result rows",
+                               "DatAuditProfile::loadGameResultRows")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    ResultRow r;
+    r.entryKey = q.value(0).toString();
+    r.status = q.value(1).toInt();
+    r.filePath = q.value(2).toString();
+    r.detail = q.value(3).toString();
+    r.sourceName = q.value(4).toString();
+    r.gameName = q.value(5).toString();
+    r.mia = q.value(6).toInt() != 0;
+    out.append(r);
+  }
+  return out;
+}
+
 } // namespace DatAuditProfile

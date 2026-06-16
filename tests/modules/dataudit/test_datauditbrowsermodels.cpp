@@ -1,0 +1,201 @@
+// Tests for the DAT-audit browser models (Kartend-34lab): the global tree's
+// rollup, the game list's aggregation + completeness filter, and the ROM
+// detail's catalogue↔result join. Pure model logic, fed via setters — no DB,
+// no widgets — so QTEST_GUILESS_MAIN (a QCoreApplication) suffices.
+
+#include <QTest>
+
+#include "datauditbrowsermodels.h"
+#include "datauditbuckets.h"
+#include "datauditprofile.h"
+#include "datlookup.h"
+
+using namespace DatAudit;
+using DatAuditProfile::GameRollupRow;
+using DatAuditProfile::Profile;
+using DatAuditProfile::ResultRow;
+using DatAuditProfile::RollupRow;
+
+namespace {
+constexpr int kHave = 0;      // Status::Have
+constexpr int kMissing = 6;   // Status::Missing
+constexpr int kWrongName = 1; // Status::WrongName
+} // namespace
+
+class TestDatAuditBrowserModels : public QObject {
+  Q_OBJECT
+private slots:
+  void bucketCountsMapStatuses();
+  void treeBuildsProfilesAndSources();
+  void gameListAggregatesAndStates();
+  void gameFilterByStateAndFixes();
+  void romFileJoinsCatalogueAndStatus();
+  void romFileFallsBackToResultsWithoutCatalogue();
+};
+
+void TestDatAuditBrowserModels::bucketCountsMapStatuses() {
+  BucketCounts c;
+  c.add(static_cast<Status>(kHave), false, 3);
+  c.add(static_cast<Status>(kMissing), true, 2);    // MIA
+  c.add(static_cast<Status>(kWrongName), false, 1); // present + fixable
+  QCOMPARE(c.have, 4);                              // Have + WrongName
+  QCOMPARE(c.missing, 2);
+  QCOMPARE(c.fixable, 1); // WrongName
+  QCOMPARE(c.mia, 2);
+  QCOMPARE(c.total, 6);
+  QCOMPARE(gameStateOf(c), GameState::Partial); // some present, some missing
+}
+
+void TestDatAuditBrowserModels::treeBuildsProfilesAndSources() {
+  Profile single;
+  single.id = 1;
+  single.name = QStringLiteral("SNES");
+  DatAuditProfile::DatRef d1;
+  d1.path = QStringLiteral("/dats/snes.dat");
+  single.dats = {d1};
+
+  Profile multi;
+  multi.id = 2;
+  multi.name = QStringLiteral("Arcade");
+  DatAuditProfile::DatRef a;
+  a.path = QStringLiteral("/dats/mame.dat");
+  DatAuditProfile::DatRef b;
+  b.path = QStringLiteral("/dats/fbneo.dat");
+  multi.dats = {a, b};
+
+  Profile neverScanned;
+  neverScanned.id = 3;
+  neverScanned.name = QStringLiteral("Empty");
+
+  QList<RollupRow> rollups{
+      {1, QStringLiteral("snes.dat"), kHave, false, 10},
+      {1, QStringLiteral("snes.dat"), kMissing, false, 2},
+      {2, QStringLiteral("mame.dat"), kHave, false, 5},
+      {2, QStringLiteral("fbneo.dat"), kMissing, true, 3}, // MIA
+  };
+
+  AuditTreeModel tree;
+  tree.setTree({single, multi, neverScanned}, rollups);
+
+  QCOMPARE(tree.rowCount(QModelIndex()), 3);
+
+  // Single-source profile: a leaf carrying the source path + counts.
+  const QModelIndex snes = tree.index(0, 0);
+  QCOMPARE(tree.rowCount(snes), 0);
+  QCOMPARE(tree.datPathAt(snes), QStringLiteral("/dats/snes.dat"));
+  const auto snesCounts = qvariant_cast<BucketCounts>(tree.data(snes, AuditTreeModel::CountsRole));
+  QCOMPARE(snesCounts.have, 10);
+  QCOMPARE(snesCounts.missing, 2);
+
+  // Multi-source profile: two Source children; counts roll up.
+  const QModelIndex arcade = tree.index(1, 0);
+  QCOMPARE(tree.rowCount(arcade), 2);
+  const auto arcadeCounts =
+      qvariant_cast<BucketCounts>(tree.data(arcade, AuditTreeModel::CountsRole));
+  QCOMPARE(arcadeCounts.have, 5);
+  QCOMPARE(arcadeCounts.missing, 3);
+  QCOMPARE(arcadeCounts.mia, 3);
+  // A source child knows its DAT path for lazy loading + parent() round-trips.
+  const QModelIndex src0 = tree.index(0, 0, arcade);
+  QVERIFY(!tree.datPathAt(src0).isEmpty());
+  QCOMPARE(tree.parent(src0), arcade);
+
+  // Never-audited profile flagged unscanned.
+  const QModelIndex empty = tree.index(2, 0);
+  QVERIFY(tree.data(empty, AuditTreeModel::UnscannedRole).toBool());
+}
+
+void TestDatAuditBrowserModels::gameListAggregatesAndStates() {
+  GameListModel m;
+  m.setGames({
+      {QStringLiteral("Complete Game"), kHave, false, 2},
+      {QStringLiteral("Partial Game"), kHave, false, 1},
+      {QStringLiteral("Partial Game"), kMissing, false, 1},
+      {QStringLiteral("Empty Game"), kMissing, true, 3}, // all missing + MIA
+  });
+  QCOMPARE(m.rowCount(), 3);
+
+  // Find the row index for each game (order = first-seen).
+  auto stateOf = [&](const QString &name) {
+    for (int r = 0; r < m.rowCount(); ++r) {
+      if (m.gameNameAt(r) == name) {
+        return static_cast<GameState>(m.data(m.index(r, 0), GameListModel::GameStateRole).toInt());
+      }
+    }
+    return GameState::Empty;
+  };
+  QCOMPARE(stateOf(QStringLiteral("Complete Game")), GameState::Complete);
+  QCOMPARE(stateOf(QStringLiteral("Partial Game")), GameState::Partial);
+  QCOMPARE(stateOf(QStringLiteral("Empty Game")), GameState::Empty);
+}
+
+void TestDatAuditBrowserModels::gameFilterByStateAndFixes() {
+  auto *m = new GameListModel(this);
+  m->setGames({
+      {QStringLiteral("Done"), kHave, false, 2},
+      {QStringLiteral("Half"), kHave, false, 1},
+      {QStringLiteral("Half"), kMissing, false, 1},
+      {QStringLiteral("Gone"), kMissing, false, 2},
+      {QStringLiteral("Renameable"), kWrongName, false, 1}, // present + fixable
+  });
+  GameListFilterProxy proxy;
+  proxy.setSourceModel(m);
+
+  // Only Empty games.
+  proxy.setStateFilter(false, false, true);
+  QCOMPARE(proxy.rowCount(), 1); // "Gone"
+
+  // All states, but require Fixes → only the WrongName game.
+  proxy.setStateFilter(true, true, true);
+  proxy.setRequireFixes(true);
+  QCOMPARE(proxy.rowCount(), 1); // "Renameable"
+}
+
+void TestDatAuditBrowserModels::romFileJoinsCatalogueAndStatus() {
+  QList<DatLookup::DatRecord> recs;
+  DatLookup::DatRecord a;
+  a.romName = QStringLiteral("a.bin");
+  a.crc = QStringLiteral("aaaa1111");
+  a.cloneOf = QStringLiteral("parent");
+  a.mia = true;
+  DatLookup::DatRecord b;
+  b.romName = QStringLiteral("b.bin");
+  b.crc = QStringLiteral("bbbb2222");
+  recs = {a, b};
+
+  QList<ResultRow> results;
+  ResultRow ra; // a.bin is present
+  ra.detail = QStringLiteral("a.bin");
+  ra.status = kHave;
+  ra.filePath = QStringLiteral("/roms/a.bin");
+  results = {ra}; // b.bin has no result → Missing
+
+  RomFileModel m;
+  m.setGame(recs, results);
+  QCOMPARE(m.rowCount(), 2);
+
+  // Row 0 (a.bin): Have, carries clone + mia from the catalogue.
+  QCOMPARE(m.data(m.index(0, RomFileModel::RomColumn)).toString(), QStringLiteral("a.bin"));
+  QCOMPARE(m.data(m.index(0, 0), RomFileModel::StatusRole).toInt(), kHave);
+  QCOMPARE(m.data(m.index(0, RomFileModel::MergeColumn)).toString(), QStringLiteral("parent"));
+  QCOMPARE(m.data(m.index(0, RomFileModel::MiaColumn)).toString(), QStringLiteral("yes"));
+  QCOMPARE(m.data(m.index(0, RomFileModel::CrcColumn)).toString(), QStringLiteral("AAAA1111"));
+
+  // Row 1 (b.bin): no result row → Missing.
+  QCOMPARE(m.data(m.index(1, 0), RomFileModel::StatusRole).toInt(), kMissing);
+}
+
+void TestDatAuditBrowserModels::romFileFallsBackToResultsWithoutCatalogue() {
+  // Pre-v22 snapshot / no DAT path: catalogue empty, but result rows still
+  // render so status is visible.
+  ResultRow r;
+  r.detail = QStringLiteral("orphan.bin");
+  r.status = kMissing;
+  RomFileModel m;
+  m.setGame({}, {r});
+  QCOMPARE(m.rowCount(), 1);
+  QCOMPARE(m.data(m.index(0, RomFileModel::RomColumn)).toString(), QStringLiteral("orphan.bin"));
+}
+
+QTEST_GUILESS_MAIN(TestDatAuditBrowserModels)
+#include "test_datauditbrowsermodels.moc"

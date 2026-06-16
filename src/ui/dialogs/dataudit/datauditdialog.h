@@ -32,6 +32,7 @@ class QVBoxLayout;
 class QHideEvent;
 class QModelIndex;
 class QPoint;
+class DatAuditBrowserPage;
 struct CollectionConfig;
 
 namespace DatAudit {
@@ -196,6 +197,9 @@ private:
   QWidget *buildAuditPage();
   QWidget *buildLibraryPage();
   QWidget *buildDownloadPage();
+  /// RomVault-style browser page (Kartend-34lab). Lazily refreshed the first
+  /// time the user switches to it (and on each subsequent switch).
+  DatAuditBrowserPage *m_browserPage = nullptr;
   void addNavEntry(const QString &label, const QStringList &iconNames, int pageIndex);
   void onNavRowChanged();
   void applyUniformSizing();

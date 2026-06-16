@@ -114,6 +114,14 @@ public:
   bool forEachRecord(const CachedSource &source,
                      const std::function<void(const DatLookup::DatRecord &)> &callback) const;
 
+  /// All records of one game within `source`, in DAT order (Kartend-34lab).
+  /// Backed by the (source_id, game_name) index so the audit browser's ROM
+  /// detail pane can fetch just the selected game's roms — a handful of rows —
+  /// without streaming the whole (250k-entry) source. Returns an empty list on
+  /// an invalid source / query failure / unknown game.
+  [[nodiscard]] QList<DatLookup::DatRecord> recordsForGame(const CachedSource &source,
+                                                           const QString &gameName) const;
+
   /// Drop every cached source + record. Used by the "clear caches"
   /// UI and by tests between runs.
   void clearAll();

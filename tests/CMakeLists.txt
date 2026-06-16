@@ -1239,6 +1239,13 @@ kartend_add_test(NAME DatAuditModel
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Kartend-34lab: the audit browser models — global tree rollup, game-list
+# aggregation + completeness filter, ROM detail catalogue<->result join.
+kartend_add_test(NAME DatAuditBrowserModels
+  SOURCES modules/dataudit/test_datauditbrowsermodels.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # BatchScrapeRunner tests (async batch scrape state machine)
 # Compiles scrapepersistence + its db-store dependencies so the runner
 # can exercise its `applyScrapedItem` integration path without a real
