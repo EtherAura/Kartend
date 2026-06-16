@@ -88,9 +88,9 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   // DAT files + scan folders. Locked + derived while a collection is linked
   // (Kartend-m6qsb.2) — see onLinkedCollectionChanged.
   m_linkedHint =
-      new QLabel(tr("DAT files and scan folder come from the linked collection — add DATs in "
-                    "Settings → that collection → Configuration → DAT files. Or choose \"(none)\" "
-                    "above to set them here directly."),
+      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
+                    "seeded from the collection's configured DATs, then managed here — add or "
+                    "remove them freely."),
                  this);
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
@@ -192,8 +192,8 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   // derived state (linked, resolved upstream) or the cached fallback (link
   // unavailable) — re-deriving here would clobber the fallback.
   const bool linked = !(m_collection->currentData().toString().isEmpty());
-  m_addDatButton->setEnabled(!linked);
-  m_removeDatButton->setEnabled(!linked);
+  // DAT files stay user-editable even when linked; only the scan-root editors
+  // are locked (the link derives the scan folder, not the DATs).
   m_addRootButton->setEnabled(!linked);
   m_removeRootButton->setEnabled(!linked);
   m_linkedHint->setVisible(linked);
@@ -212,10 +212,14 @@ void DatAuditProfileDialog::onLinkedCollectionChanged() {
       if (CollectionUtils::computeCollectionUuid(c.name, expanded) != uuid) {
         continue;
       }
-      m_datList->clear();
-      for (const QString &d : c.scraperOverrides.datFilePaths) {
-        if (!d.isEmpty()) {
-          m_datList->addItem(d);
+      // Seed DATs from the collection only when the user hasn't added any —
+      // never clobber an edited DAT list (the link derives only the scan
+      // folder). The scan root below IS derived, so it is replaced.
+      if (m_datList->count() == 0) {
+        for (const QString &d : c.scraperOverrides.datFilePaths) {
+          if (!d.isEmpty()) {
+            m_datList->addItem(d);
+          }
         }
       }
       m_rootList->clear();
@@ -227,8 +231,8 @@ void DatAuditProfileDialog::onLinkedCollectionChanged() {
     }
   }
 
-  m_addDatButton->setEnabled(!linked);
-  m_removeDatButton->setEnabled(!linked);
+  // DAT files stay user-editable even when linked; only the scan-root editors
+  // are locked (the link derives the scan folder, not the DATs).
   m_addRootButton->setEnabled(!linked);
   m_removeRootButton->setEnabled(!linked);
   m_linkedHint->setVisible(linked);

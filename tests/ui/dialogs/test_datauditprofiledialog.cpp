@@ -34,9 +34,10 @@ private slots:
   void preservesLinkWhenNoCollectionsSupplied();
   void selectingACollectionStoresItsUuid();
   void selectingNoneClearsLink();
-  void linkingDerivesListsAndLocksEditors();
-  void unlinkingUnlocksEditors();
-  void orphanLinkKeepsSeedListsLocked();
+  void linkingDerivesScanRootButKeepsDats();
+  void linkingSeedsDatsWhenProfileHasNone();
+  void unlinkingUnlocksScanRootEditors();
+  void orphanLinkKeepsSeedListsAndDatsEditable();
 };
 
 namespace {
@@ -156,9 +157,10 @@ void TestDatAuditProfileDialog::selectingNoneClearsLink() {
   QVERIFY(dlg.profile().collectionUuid.isEmpty());
 }
 
-void TestDatAuditProfileDialog::linkingDerivesListsAndLocksEditors() {
-  // Kartend-m6qsb.2: linking a collection makes the collection's settings
-  // canonical — the editor's lists repopulate from it and lock.
+void TestDatAuditProfileDialog::linkingDerivesScanRootButKeepsDats() {
+  // Linking a collection derives the SCAN FOLDER (and locks the scan-root
+  // editors), but DAT files stay user-managed: a hand-picked DAT list is kept,
+  // not clobbered, and the Add/Remove DAT buttons stay enabled.
   CollectionConfig c = makeCollection(QStringLiteral("Concerts"), QStringLiteral("/m/concerts"));
   c.scraperOverrides.datFilePaths = {QStringLiteral("/dats/concerts.dat")};
   const QList<CollectionConfig> cols{c};
@@ -175,41 +177,64 @@ void TestDatAuditProfileDialog::linkingDerivesListsAndLocksEditors() {
   combo->setCurrentIndex(combo->findData(expectedUuid(c)));
 
   const DatAuditProfile::Profile out = dlg.profile();
+  // DAT list preserved (not derived from the collection); scan root derived.
   QCOMPARE(out.dats.size(), 1);
-  QCOMPARE(out.dats.at(0).path, QStringLiteral("/dats/concerts.dat"));
+  QCOMPARE(out.dats.at(0).path, QStringLiteral("/dats/manual.dat"));
   QCOMPARE(out.scanRoots,
            QStringList{PathUtils::expandPathWithoutExistenceCheck(c.mediaDirectory, c.name)});
 
   QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
   QPushButton *addRoot = buttonByText(dlg, QStringLiteral("Add folder…"));
   QVERIFY(addDat && addRoot);
-  QVERIFY(!addDat->isEnabled());
-  QVERIFY(!addRoot->isEnabled());
+  QVERIFY(addDat->isEnabled());   // DATs editable even when linked
+  QVERIFY(!addRoot->isEnabled()); // scan root is derived → locked
 }
 
-void TestDatAuditProfileDialog::unlinkingUnlocksEditors() {
+void TestDatAuditProfileDialog::linkingSeedsDatsWhenProfileHasNone() {
+  // Convenience: when the profile has no DATs yet, linking seeds them from the
+  // collection's configured DATs (one-time) — the user can then edit freely.
+  CollectionConfig c = makeCollection(QStringLiteral("Concerts"), QStringLiteral("/m/concerts"));
+  c.scraperOverrides.datFilePaths = {QStringLiteral("/dats/concerts.dat")};
+  const QList<CollectionConfig> cols{c};
+
+  DatAuditProfile::Profile seed; // unlinked, NO dats
+  DatAuditProfileDialog dlg(seed, &cols);
+  QComboBox *combo = linkedCombo(dlg);
+  QVERIFY(combo);
+  combo->setCurrentIndex(combo->findData(expectedUuid(c)));
+
+  const DatAuditProfile::Profile out = dlg.profile();
+  QCOMPARE(out.dats.size(), 1);
+  QCOMPARE(out.dats.at(0).path, QStringLiteral("/dats/concerts.dat"));
+}
+
+void TestDatAuditProfileDialog::unlinkingUnlocksScanRootEditors() {
   CollectionConfig c = makeCollection(QStringLiteral("Concerts"), QStringLiteral("/m/concerts"));
   c.scraperOverrides.datFilePaths = {QStringLiteral("/dats/concerts.dat")};
   const QList<CollectionConfig> cols{c};
   DatAuditProfile::Profile seed;
-  seed.collectionUuid = expectedUuid(c); // starts linked → locked
+  seed.collectionUuid = expectedUuid(c); // starts linked
 
   DatAuditProfileDialog dlg(seed, &cols);
   QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
-  QVERIFY(addDat);
-  QVERIFY(!addDat->isEnabled());
+  QPushButton *addRoot = buttonByText(dlg, QStringLiteral("Add folder…"));
+  QVERIFY(addDat && addRoot);
+  QVERIFY(addDat->isEnabled());   // DATs always editable
+  QVERIFY(!addRoot->isEnabled()); // scan root locked while linked
 
   QComboBox *combo = linkedCombo(dlg);
   QVERIFY(combo);
-  combo->setCurrentIndex(0); // "(none)" — local editing resumes
+  combo->setCurrentIndex(0); // "(none)" — scan-root editing resumes too
   QVERIFY(addDat->isEnabled());
+  QVERIFY(addRoot->isEnabled());
   QVERIFY(dlg.profile().collectionUuid.isEmpty());
 }
 
-void TestDatAuditProfileDialog::orphanLinkKeepsSeedListsLocked() {
+void TestDatAuditProfileDialog::orphanLinkKeepsSeedListsAndDatsEditable() {
   // An unresolvable stored link must not clobber the cached lists — they are
-  // the only record of what the profile audits — but editing stays locked
-  // (the lists are still semantically derived, just from a missing source).
+  // the only record of what the profile audits. The scan root stays locked
+  // (still semantically derived, just from a missing source), but DAT editing
+  // remains available.
   const CollectionConfig c = makeCollection(QStringLiteral("Movies"), QStringLiteral("/m/movies"));
   const QList<CollectionConfig> cols{c};
   DatAuditProfile::Profile seed;
@@ -226,8 +251,10 @@ void TestDatAuditProfileDialog::orphanLinkKeepsSeedListsLocked() {
   QCOMPARE(out.scanRoots, QStringList{QStringLiteral("/m/cached-root")});
 
   QPushButton *addDat = buttonByText(dlg, QStringLiteral("Add DAT…"));
-  QVERIFY(addDat);
-  QVERIFY(!addDat->isEnabled());
+  QPushButton *addRoot = buttonByText(dlg, QStringLiteral("Add folder…"));
+  QVERIFY(addDat && addRoot);
+  QVERIFY(addDat->isEnabled());   // DATs editable even under an orphan link
+  QVERIFY(!addRoot->isEnabled()); // scan root locked
 }
 
 QTEST_MAIN(TestDatAuditProfileDialog)

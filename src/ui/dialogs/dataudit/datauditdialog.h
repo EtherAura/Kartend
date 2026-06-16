@@ -231,6 +231,11 @@ private:
   [[nodiscard]] QStringList datPaths() const;
   [[nodiscard]] QStringList scanRoots() const;
   [[nodiscard]] bool hasResults() const;
+  /// True when the audit found something a fix would actually change in place —
+  /// a misnamed file (rename), an unknown file (quarantine), or a duplicate.
+  /// Gates the Fix button so it stays dark when there is nothing to correct
+  /// (an all-present collection); exports stay available regardless.
+  [[nodiscard]] bool hasApplicableFixes() const;
   /// AuditRow behind a view (proxy) index, mapped back to the source model.
   [[nodiscard]] const DatAudit::AuditRow *rowForProxyIndex(const QModelIndex &proxyIndex) const;
   void exportTo(const QString &caption, const QString &filter, const QByteArray &bytes);

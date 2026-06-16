@@ -307,9 +307,9 @@ QWidget *DatAuditDialog::buildAuditPage() {
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
   m_linkedHint =
-      new QLabel(tr("DAT files and scan folder come from the linked collection — add DATs in "
-                    "Settings → that collection → Configuration → DAT files. Edit the profile and "
-                    "set its linked collection to \"(none)\" to manage DATs here directly."),
+      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
+                    "seeded from the collection's configured DATs, then managed here — add or "
+                    "remove them freely."),
                  page);
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
@@ -703,20 +703,25 @@ void DatAuditDialog::applyCollectionDerivation() {
   const QString scanRoot =
       PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
   m_currentProfile.scanRoots = scanRoot.isEmpty() ? QStringList{} : QStringList{scanRoot};
-  m_currentProfile.dats.clear();
-  for (const QString &d : linked->scraperOverrides.datFilePaths) {
-    if (!d.isEmpty()) {
-      DatAuditProfile::DatRef ref;
-      ref.path = d;
-      m_currentProfile.dats.append(ref);
+  // DAT files are user-managed even for a linked profile (the link only derives
+  // the scan folder): seed them from the collection's configured DATs the first
+  // time, but never overwrite a DAT list the user has since edited here — that
+  // is what blocked adding DATs to a linked profile (Kartend-4u1pr follow-up).
+  if (m_currentProfile.dats.isEmpty()) {
+    for (const QString &d : linked->scraperOverrides.datFilePaths) {
+      if (!d.isEmpty()) {
+        DatAuditProfile::DatRef ref;
+        ref.path = d;
+        m_currentProfile.dats.append(ref);
+      }
     }
   }
 }
 
 void DatAuditDialog::updateLinkedUiState() {
   const bool linked = !m_currentProfile.collectionUuid.isEmpty();
-  m_addDatButton->setEnabled(!linked);
-  m_removeDatButton->setEnabled(!linked);
+  // DAT files stay user-editable even when linked (the link only derives the
+  // scan folder); only the scan-root editors are locked to the collection.
   m_addRootButton->setEnabled(!linked);
   m_removeRootButton->setEnabled(!linked);
   m_linkedHint->setVisible(linked);
@@ -1081,6 +1086,16 @@ bool DatAuditDialog::hasResults() const {
   return !m_model->allRows().isEmpty();
 }
 
+bool DatAuditDialog::hasApplicableFixes() const {
+  for (const DatAudit::AuditRow &r : m_model->allRows()) {
+    if (r.status == DatAudit::Status::WrongName || r.status == DatAudit::Status::Unknown ||
+        r.status == DatAudit::Status::Duplicate) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void DatAuditDialog::onAddDat() {
   const QStringList files = QFileDialog::getOpenFileNames(
       this, tr("Add DAT files"), QString(), tr("DAT files (*.dat *.xml);;All files (*)"));
@@ -1365,7 +1380,9 @@ void DatAuditDialog::setBusy(bool busy) {
     m_progress->setRange(0, 0);
   }
   const bool canExport = !busy && hasResults();
-  m_fixButton->setEnabled(canExport);
+  // Fix illuminates only when something is actually fixable in place; exports
+  // (CSV / fixdat / miss-list) stay available for any result set.
+  m_fixButton->setEnabled(canExport && hasApplicableFixes());
   m_exportCsvButton->setEnabled(canExport);
   m_exportFixdatButton->setEnabled(canExport);
   m_exportMissButton->setEnabled(canExport);
