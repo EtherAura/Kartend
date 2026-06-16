@@ -307,9 +307,9 @@ QWidget *DatAuditDialog::buildAuditPage() {
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
   m_linkedHint =
-      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
-                    "seeded from the collection's configured DATs, then managed here — add or "
-                    "remove them freely."),
+      new QLabel(tr("The scan folder and DAT files are seeded from the linked collection "
+                    "(its content folder and configured DATs), then managed here — add or "
+                    "remove them freely to override."),
                  page);
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
@@ -700,13 +700,17 @@ void DatAuditDialog::applyCollectionDerivation() {
   if (linked == nullptr) {
     return; // unlinked, or unresolved link — cached lists stay as fallback
   }
-  const QString scanRoot =
-      PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
-  m_currentProfile.scanRoots = scanRoot.isEmpty() ? QStringList{} : QStringList{scanRoot};
-  // DAT files are user-managed even for a linked profile (the link only derives
-  // the scan folder): seed them from the collection's configured DATs the first
-  // time, but never overwrite a DAT list the user has since edited here — that
-  // is what blocked adding DATs to a linked profile (Kartend-4u1pr follow-up).
+  // The scan folder and DAT files are both user-managed even for a linked
+  // profile: seed each from the collection (media dir → scan root, configured
+  // DATs → DAT list) the first time, but never overwrite a value the user has
+  // since edited here, so a deliberate override survives reload.
+  if (m_currentProfile.scanRoots.isEmpty()) {
+    const QString scanRoot =
+        PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
+    if (!scanRoot.isEmpty()) {
+      m_currentProfile.scanRoots = QStringList{scanRoot};
+    }
+  }
   if (m_currentProfile.dats.isEmpty()) {
     for (const QString &d : linked->scraperOverrides.datFilePaths) {
       if (!d.isEmpty()) {
@@ -720,10 +724,9 @@ void DatAuditDialog::applyCollectionDerivation() {
 
 void DatAuditDialog::updateLinkedUiState() {
   const bool linked = !m_currentProfile.collectionUuid.isEmpty();
-  // DAT files stay user-editable even when linked (the link only derives the
-  // scan folder); only the scan-root editors are locked to the collection.
-  m_addRootButton->setEnabled(!linked);
-  m_removeRootButton->setEnabled(!linked);
+  // The scan folder and DAT files stay user-editable even when linked — the
+  // collection only seeds them. Nothing in the lists is locked; the hint just
+  // explains the seeding.
   m_linkedHint->setVisible(linked);
 }
 
