@@ -125,6 +125,7 @@ private slots:
   void runHonoursIgnoreGlobs();
   void runFlatLayoutSkipsSubfolders();
   void runArchivePerItemAuditsMembers();
+  void runAuditsArchiveMembersInAnyLayout();
   void runCancelledBeforeScanReturnsCancelled();
   void runPopulatesHashCache();
 
@@ -432,6 +433,60 @@ void TestDatAuditRunner::runArchivePerItemAuditsMembers() {
   db.close();
   db = QSqlDatabase();
   QSqlDatabase::removeDatabase(conn);
+}
+
+void TestDatAuditRunner::runAuditsArchiveMembersInAnyLayout() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
+    QSKIP("zip not available — cannot build the archive fixture");
+  }
+  if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    QSKIP("no archive extractor on PATH — RomHasher would error out");
+  }
+
+  // Regression for "DAT auditor cannot see compressed ROMs" (Kartend-34lab
+  // follow-up): a zipped ROM must match the DAT even with the DEFAULT Unknown
+  // layout — member hashing must NOT require a confirmed archive-per-item
+  // layout. Before the fix this reported the .zip as Unknown + the entry as
+  // Missing.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QByteArray content = QByteArrayLiteral("ROM-INSIDE-A-ZIP-9876543210");
+  const QString srcDir = dir.path() + QStringLiteral("/src");
+  QVERIFY(QDir().mkpath(srcDir));
+  {
+    QFile f(srcDir + QStringLiteral("/Game (USA).gb"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(content);
+  }
+  auto memberHash = RomHasher::hashFile(srcDir + QStringLiteral("/Game (USA).gb"));
+  QVERIFY(memberHash.isOk());
+
+  QProcess zipProc;
+  zipProc.setWorkingDirectory(srcDir);
+  zipProc.start(QStringLiteral("zip"), {QStringLiteral("-q"), dir.path() + "/Game (USA).zip",
+                                        QStringLiteral("Game (USA).gb")});
+  QVERIFY(zipProc.waitForFinished(5000));
+  QCOMPARE(zipProc.exitCode(), 0);
+  QVERIFY(QDir(srcDir).removeRecursively()); // only the .zip remains
+
+  Catalogue c;
+  c.addRecord(makeRecord(QStringLiteral("Game (USA)"), QStringLiteral("Game (USA).gb"),
+                         memberHash.value().crc, memberHash.value().md5, memberHash.value().sha1,
+                         memberHash.value().size));
+
+  AuditOptions opts;
+  opts.scanRoots = {dir.path()};
+  opts.layout = DatAudit::Layout::Unknown; // the user never confirmed a layout
+  const AuditOutput out = DatAudit::run(c, opts, nullptr, nullptr, nullptr);
+  QVERIFY(!out.cancelled);
+  QCOMPARE(out.summary.have, 1);    // the zip member satisfies the entry
+  QCOMPARE(out.summary.missing, 0); // not Missing
+  QCOMPARE(out.summary.unknown, 0); // the container is not an Unknown file
 }
 
 void TestDatAuditRunner::runCancelledBeforeScanReturnsCancelled() {
