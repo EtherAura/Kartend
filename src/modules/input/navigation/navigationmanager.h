@@ -176,6 +176,15 @@ public slots:
   void applyBackgroundForCollection(int collectionIndex) override;
   void applyPrimaryColorForCollection(int collectionIndex) override;
 
+  /// Re-apply every per-collection derived colour for the given (active)
+  /// collection after a runtime system-palette change. Bundles the same
+  /// background + primary-colour + details-pane appearance pass used on a
+  /// collection switch, then rebuilds the breadcrumb HTML and the per-item
+  /// metadata rows (both bake the accent into a string, so a repaint alone
+  /// won't refresh them). Called from MainWindow's ApplicationPaletteChange
+  /// handler. No-op for an out-of-range index.
+  void reapplyActiveCollectionTheming(int collectionIndex);
+
 public slots:
   /// Kartend-2hzy: per-collection collectionBackgroundChanged receiver.
   /// Active-collection-guarded; non-active collections get the new

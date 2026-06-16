@@ -4,6 +4,7 @@
 #include "overlaylayermanager.h"
 
 #include <QApplication>
+#include <QEvent>
 #include <QGraphicsOpacityEffect>
 #include <QPainter>
 #include <QPainterPath>
@@ -334,4 +335,15 @@ void LoadingOverlay::updateAccentColor() {
                            .arg(m_accentColor.name());
 
   m_progressBar->setStyleSheet(styleSheet);
+}
+
+void LoadingOverlay::changeEvent(QEvent *event) {
+  QWidget::changeEvent(event);
+  // The accent is cached into m_accentColor (spinner) and baked as a literal
+  // hex into the progress-bar stylesheet, so a repaint alone won't refresh it.
+  // Re-resolve from the new system palette when it changes at runtime.
+  if (event->type() == QEvent::PaletteChange) {
+    updateAccentColor();
+    update();
+  }
 }

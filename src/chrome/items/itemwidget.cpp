@@ -309,12 +309,24 @@ auto ItemWidget::event(QEvent *event) -> bool {
   bool handled = QWidget::event(event);
   if (event->type() == QEvent::PaletteChange) {
     applyTitleTint();
-    if (imageLabel && !property(PropertyKeys::DeferArtworkUpdate).toBool()) {
+    // The subcollection triangle badge renders the Highlight fallback into a
+    // child QLabel pixmap (only on (re)selection/resize otherwise), so a
+    // repaint won't refresh it — rebuild it here. No-ops for non-subcollections.
+    updateTriangleIndicator();
+    if (imageLabel && !property(PropertyKeys::DeferArtworkUpdate).toBool() &&
+        !m_paletteArtworkRefreshPending) {
+      // A single accent change can deliver two PaletteChange events in one
+      // event-loop turn (the re-broadcast forces the palette past Qt's no-op
+      // check by cycling through a throwaway palette first). Coalesce them so
+      // the artwork re-render runs once, with the final palette — re-rendering
+      // every visible tile twice was a chunk of the perceived lag.
+      m_paletteArtworkRefreshPending = true;
       QPointer<ItemWidget> ptr = this;
       // Defer artwork update until after the palette change fully propagates -
       // ensures consistent appearance when switching light/dark themes
       QTimer::singleShot(0, this, [ptr]() {
         if (ptr) {
+          ptr->m_paletteArtworkRefreshPending = false;
           ptr->onArtworkChanged();
         }
       });

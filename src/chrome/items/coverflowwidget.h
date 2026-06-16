@@ -136,6 +136,9 @@ protected:
   void mouseDoubleClickEvent(QMouseEvent *e) override;
   void keyPressEvent(QKeyEvent *e) override;
   void hideEvent(QHideEvent *e) override;
+  // Drop palette-derived placeholder/thumbnail caches when the system palette
+  // changes at runtime so they re-render against the new accent on next paint.
+  void changeEvent(QEvent *e) override;
 
 private:
   // Cards drawn on each side of center. A class static (not a TU-local

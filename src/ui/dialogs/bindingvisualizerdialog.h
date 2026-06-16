@@ -32,6 +32,9 @@ public:
 
 protected:
   void keyPressEvent(QKeyEvent *event) override;
+  // Re-tint the currently-highlighted row (Highlight/HighlightedText are baked
+  // as concrete brushes into the item) when the system palette changes.
+  void changeEvent(QEvent *event) override;
 
 private:
   void setupUi();
@@ -39,6 +42,9 @@ private:
   void highlightKey(int key);
   void highlightGamepadButton(const QString &buttonName);
   void clearHighlight();
+  // Re-apply the current Highlight/HighlightedText brushes to whichever row is
+  // currently highlighted (no stored key — detected by a non-empty background).
+  void retintHighlightedRow();
 
   const GeneralSettings *m_settings = nullptr;
   GamepadManager *m_gamepadManager = nullptr;

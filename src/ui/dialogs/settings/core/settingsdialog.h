@@ -377,6 +377,11 @@ private:
 
   bool eventFilter(QObject *obj, QEvent *event) override;
 
+  /// Re-tint the cached save-button glow (QGraphicsDropShadowEffect colour is
+  /// snapshotted from QPalette::Highlight on first dirty transition) when the
+  /// system palette changes while the dialog is open.
+  void changeEvent(QEvent *event) override;
+
   /// Non-owning aggregate of the dialog's editable data fields. Initialized
   /// in the constructor body once the underlying members exist; handed to
   /// CollectionRemover so the removal pipeline can mutate the data without

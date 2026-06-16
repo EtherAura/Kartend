@@ -76,6 +76,27 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   }
 }
 
+void NavigationManager::reapplyActiveCollectionTheming(int collectionIndex) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+    return;
+  }
+  // Background + primary colour (toolbar/menubar/search-bar stylesheets,
+  // ItemWidget colour statics) + details-pane applyAppearance (content palette,
+  // bubble stylesheets) + collection-summary rows. Same bundle as a collection
+  // switch — safe to re-run; the inner setters no-op when nothing changed.
+  applyCollectionSettingsOnly(collectionIndex);
+  // applyAppearance/refreshCollectionSummary above rebuild the Collection-tab
+  // rows, but the Item-tab metadata rows bake the accent into a RichText hex
+  // span at build time and are only re-pushed by the metadata path — refresh
+  // them so the per-item "key:" prefixes pick up the new accent too.
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
+  }
+  // Breadcrumb link colour is HSL-derived from QPalette::Highlight and baked
+  // into the title/subfolder HTML; rebuild it from the fresh palette.
+  updateItemsPageTitle(collectionIndex);
+}
+
 void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
   if (m_backgroundController) {
     m_backgroundController->applyBackgroundForCollection(collectionIndex);

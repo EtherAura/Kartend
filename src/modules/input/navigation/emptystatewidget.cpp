@@ -1,6 +1,7 @@
 // Contextual empty/loading-state widget. See header for details.
 #include "emptystatewidget.h"
 
+#include <QEvent>
 #include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
@@ -134,6 +135,16 @@ void EmptyStateWidget::updateAccentColor() {
   m_accentColor = palette().color(QPalette::Highlight);
   if (m_spinnerWidget) {
     static_cast<SpinnerWidget *>(m_spinnerWidget)->setColor(m_accentColor);
+  }
+}
+
+void EmptyStateWidget::changeEvent(QEvent *event) {
+  QWidget::changeEvent(event);
+  // m_accentColor is cached once in the constructor and pushed into the
+  // spinner; re-resolve it when the system palette changes at runtime.
+  if (event->type() == QEvent::PaletteChange) {
+    updateAccentColor();
+    update();
   }
 }
 

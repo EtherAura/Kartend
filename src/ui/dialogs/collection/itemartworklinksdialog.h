@@ -69,6 +69,11 @@ public:
   /// art tree.
   void setBrowseStartDirectory(const QString &dir) { m_browseStartDir = dir; }
 
+protected:
+  // Re-stamp the muted disabled-text brush on the auto-hint rows when the
+  // system palette changes at runtime (the brush is baked into each item).
+  void changeEvent(QEvent *event) override;
+
 private slots:
   void onBrowseClicked(int row);
   void onClearClicked(int row);

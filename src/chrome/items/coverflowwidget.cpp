@@ -10,6 +10,7 @@
 #include <cmath>
 #include <QApplication>
 #include <QColor>
+#include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
 #include <QHideEvent>
@@ -667,6 +668,23 @@ void CoverFlowWidget::hideEvent(QHideEvent *event) {
     m_videoPreviewIndex = -1;
   }
   QWidget::hideEvent(event);
+}
+
+void CoverFlowWidget::changeEvent(QEvent *e) {
+  QWidget::changeEvent(e);
+  // Placeholder cards (palette Mid) and gallery thumbnails (palette
+  // Mid/HighlightedText) bake their colours into cached pixmaps that paint()
+  // returns verbatim, so a repaint can't refresh them. On a system palette
+  // change drop those caches — same set the tile-colour change clears — so
+  // they re-render against the new accent. (Real decoded artwork in
+  // m_pixmapCache is re-fetched; palette changes are rare.)
+  if (e->type() == QEvent::PaletteChange) {
+    m_pixmapCache.clear();
+    cancelPendingScales();
+    m_scaledPixmapCache.clear();
+    m_galleryThumbCache.clear();
+    update();
+  }
 }
 
 void CoverFlowWidget::updateVideoPreviewGeometry() {

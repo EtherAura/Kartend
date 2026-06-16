@@ -136,7 +136,16 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // existing palette(highlight) / palette(windowtext) stylesheet hooks pick
   // them up without re-styling each label.
   if (ui->contentWidget) {
-    QPalette pal = ui->contentWidget->palette();
+    // Start from a default-constructed palette (empty resolve mask) rather
+    // than the widget's current one. Only the roles a collection actually
+    // overrides get pinned; every other role is left unset so it keeps
+    // inheriting the live application palette. This is what lets the system
+    // accent reach contentWidget's Highlight when the collection has no custom
+    // accent — and clears a custom accent pinned by a *previous* collection
+    // when switching to one that follows the system accent. (A re-run of this
+    // pass on QEvent::ApplicationPaletteChange therefore re-syncs the pane to
+    // a runtime accent change; see MainWindow::reapplyDerivedThemingFromSystemPalette.)
+    QPalette pal;
     if (!collection.sidebar.sidebarTextColor.isEmpty()) {
       const QColor textColor(collection.sidebar.sidebarTextColor);
       if (textColor.isValid()) {

@@ -104,6 +104,9 @@ public:
   void applyTitleTint();
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
+  // Coalesces the duplicate PaletteChange a system-accent re-broadcast delivers
+  // in one event-loop turn into a single artwork re-render (see event()).
+  bool m_paletteArtworkRefreshPending = false;
 
   /// build a placeholder-style hatched tile at the given size
   /// using the app palette + s_tileColor + s_titleTintLightness. Static so

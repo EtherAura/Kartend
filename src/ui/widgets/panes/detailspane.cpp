@@ -120,9 +120,11 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // sidebar a solid stop for unhandled mouse events.
   setAttribute(Qt::WA_NoMousePropagation);
 
-  QPalette pal = palette();
-  pal.setColor(QPalette::Window, pal.color(QPalette::Window));
-  setPalette(pal);
+  // NB: we deliberately do NOT pin QPalette::Window on the DetailsPane itself.
+  // paintEvent fills the whole rect (m_bgColor, or palette(Window) as the
+  // default-background fallback) and applyAppearance sets autoFillBackground
+  // false, so an explicit Window pin here would only freeze that fallback
+  // against a later system/theme palette change — leave it inheriting.
 
   ui->scrollArea->setAutoFillBackground(true);
   QPalette scrollPalette = ui->scrollArea->palette();

@@ -55,6 +55,9 @@ protected:
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   bool eventFilter(QObject *watched, QEvent *event) override;
+  // Re-resolve the cached accent (spinner colour + baked progress-bar
+  // stylesheet) when the system palette changes at runtime.
+  void changeEvent(QEvent *event) override;
 
 private:
   void setupUI();

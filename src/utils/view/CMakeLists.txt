@@ -4,6 +4,7 @@ target_sources(kartend_utils PRIVATE
   imagedecodeutils.cpp
   kdecolorscheme.cpp
   placeholderwarmer.cpp
+  systemthemewatcher.cpp
   textzoom.cpp
   videoutils.cpp
   artworkcandidates.h
@@ -12,6 +13,7 @@ target_sources(kartend_utils PRIVATE
   imagedecodeutils.h
   kdecolorscheme.h
   placeholderwarmer.h
+  systemthemewatcher.h
   textzoom.h
   videoutils.h
 )

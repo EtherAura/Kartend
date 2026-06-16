@@ -80,6 +80,7 @@
 #include "settingsutils.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
+#include "systemthemewatcher.h"
 #include "textzoomhud.h"
 #include "ui_mainwindow.h"
 #include "uiconstants/dialog.h"
@@ -206,6 +207,13 @@ void MainWindow::setupUI() {
     marqueeSetup.isShuttingDown = [this]() { return m_isShuttingDown; };
     m_marqueeController->setupReferences(marqueeSetup);
   }
+
+  // Watch the desktop colour config so a runtime accent / colour-scheme change
+  // (which Qt does not deliver to us as a palette-change event on KDE) triggers
+  // a full re-theme. No-op on non-Linux.
+  m_systemThemeWatcher = std::make_unique<SystemThemeWatcher>(this);
+  connect(m_systemThemeWatcher.get(), &SystemThemeWatcher::themeChanged, this,
+          &MainWindow::onSystemThemeChanged);
 
   initializeAppContext();
   createMenuBar();

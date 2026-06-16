@@ -65,6 +65,11 @@ public:
   [[nodiscard]] int spinnerAngle() const { return m_spinnerAngle; }
   void setSpinnerAngle(int angle);
 
+protected:
+  // Re-resolve the cached accent (spinner colour) when the system palette
+  // changes at runtime.
+  void changeEvent(QEvent *event) override;
+
 private:
   void setupUI();
   void updateAccentColor();

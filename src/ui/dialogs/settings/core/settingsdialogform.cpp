@@ -8,6 +8,7 @@
 #include <QColorDialog>
 #include <QDir>
 #include <QEasingCurve>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFontDialog>
 #include <QGraphicsDropShadowEffect>
@@ -248,6 +249,18 @@ void SettingsDialog::updateSaveButtonStyle() {
       // wiring stable across dirty/clean transitions.
       m_saveButtonGlow->setEnabled(false);
     }
+  }
+}
+
+void SettingsDialog::changeEvent(QEvent *event) {
+  QDialog::changeEvent(event);
+  // The glow colour is snapshotted from QPalette::Highlight on first dirty
+  // transition and never recomputed; re-tint it if the system palette changes
+  // while the dialog is open.
+  if (event->type() == QEvent::PaletteChange && m_saveButtonGlow && m_saveButton) {
+    QColor glowColor = m_saveButton->palette().color(QPalette::Highlight);
+    glowColor.setAlpha(220);
+    m_saveButtonGlow->setColor(glowColor);
   }
 }
 

@@ -34,6 +34,7 @@ class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
 class CollectionFilesystemWatcher;
+class SystemThemeWatcher;
 class InteractionManager;
 class IDatabaseManager;
 class NavigationManager;
@@ -379,6 +380,11 @@ private:
   std::unique_ptr<DialogController> m_dialogController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
+  /// Coalesces the burst of QEvent::ApplicationPaletteChange / ThemeChange
+  /// events KDE fires during one color-scheme rewrite into a single
+  /// re-theme on the next event-loop turn. See
+  /// reapplyDerivedThemingFromSystemPalette().
+  bool m_paletteRetintPending = false;
 
   // Three-stage debounced pipeline coalescing rapid grid-width adjustments
   // (menu shortcuts) into a single settings save + layout/artwork refresh
@@ -397,6 +403,13 @@ private:
   /// destroyed first, while m_appManager is still alive. Null until
   /// setupFilesystemWatcher() runs.
   std::unique_ptr<CollectionFilesystemWatcher> m_collectionWatcher;
+
+  /// Watches the desktop colour config (kdeglobals) for runtime accent /
+  /// colour-scheme changes Qt doesn't deliver to us as a palette-change event.
+  /// Its themeChanged() signal drives onSystemThemeChanged(). Declared after
+  /// m_appManager so it is destroyed first (its slot reaches managers through
+  /// m_appManager). Null on non-Linux / when the config dir can't be resolved.
+  std::unique_ptr<SystemThemeWatcher> m_systemThemeWatcher;
   DetailsPane *m_MetadataSidebar = nullptr;
 
   // Kartend-hzef step 3: ScraperService ownership + the dialog cache moved
@@ -520,6 +533,24 @@ private:
   void initializeAppContext();
   void showAbout();
   void showFocusReturnSplash();
+
+  /// Re-apply every *derived* color (one computed from the system accent /
+  /// palette and then cached, baked into a stylesheet/HTML string, or pinned
+  /// via an explicit setPalette resolve-mask) after the system color scheme
+  /// changes at runtime — e.g. a KDE wallpaper-derived accent shifting when
+  /// the user switches Plasma activities. Colors read live inside paintEvent
+  /// already track the new palette; this covers everything that froze a copy.
+  /// Invoked debounced from event() on QEvent::ApplicationPaletteChange /
+  /// ThemeChange.
+  void reapplyDerivedThemingFromSystemPalette();
+
+  /// SystemThemeWatcher::themeChanged() handler: KDE updated the system accent
+  /// at runtime but Qt didn't dispatch a palette-change event to our widgets,
+  /// so synthesize the broadcast Qt skipped (re-assign the application palette
+  /// so every widget re-resolves + repaints) and re-apply the derived theming.
+  /// const: acts only on the global QApplication; the per-collection re-theme
+  /// it triggers runs via the ApplicationPaletteChange event() path.
+  void onSystemThemeChanged() const;
 
   /// Run the first-run wizard modally and persist its outcome.
   ///

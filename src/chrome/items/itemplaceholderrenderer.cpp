@@ -192,7 +192,15 @@ QPixmap buildTile(int width, int height, int cornerRadius, bool applyGradient,
     key ^= 0x1ULL;
   }
   key ^= static_cast<quint64>(std::clamp(lineAlphaScale * 100.0, 0.0, 200.0)) << 24;
-  const QString themeKey = theme.tileColor.isValid() ? theme.tileColor.name() : QString();
+  // When no per-collection tileColor is set, the hatch tint is derived from
+  // theme.accentColor (the title-tint/system-Highlight the caller resolved),
+  // so fold it into the cache-invalidation key — otherwise a pure system-accent
+  // change (same palette Mid base, no tileColor) would serve a stale tile.
+  const QString themeKey =
+      theme.tileColor.isValid()
+          ? theme.tileColor.name()
+          : (QStringLiteral("accent:") +
+             (theme.accentColor.isValid() ? theme.accentColor.name() : QString()));
   if (cachedTileColorKey != themeKey) {
     cache.clear();
     cachedTileColorKey = themeKey;

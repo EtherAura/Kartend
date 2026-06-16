@@ -303,6 +303,14 @@ kartend_add_test(NAME CoverFlowWidget
   LINK kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-a0d6c: ItemWidget title-tint follows the system accent
+# (QPalette::Highlight) and the placeholder-tile cache invalidates on an
+# accent change so a runtime KDE accent shift re-tints missing-artwork tiles.
+kartend_add_test(NAME ItemPlaceholderTint
+  SOURCES ui/widgets/test_itemplaceholdertint.cpp
+  LINK kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-liye: PathStatusGlyph attaches a trailing-action warning glyph to a
 # QLineEdit. Test links kartend_ui (for the helper) + kartend_utils (for
 # PathStatus + pathStatusDescription).
@@ -1287,6 +1295,14 @@ kartend_add_test(NAME KdeColorScheme
           ${SRC_DIR}/utils/view/kdecolorscheme.cpp
           ${SRC_DIR}/assets/resources.qrc
   LINK Qt6::Core Qt6::Gui
+)
+
+# Kartend-a0d6c: SystemThemeWatcher detects a runtime kdeglobals change (KDE
+# accent / colour scheme) and emits a debounced themeChanged().
+kartend_add_test(NAME SystemThemeWatcher
+  SOURCES utils/view/test_systemthemewatcher.cpp
+          ${SRC_DIR}/utils/view/systemthemewatcher.cpp
+  LINK Qt6::Core
 )
 target_include_directories(test_kdecolorscheme PRIVATE
   ${SRC_DIR}/utils/app

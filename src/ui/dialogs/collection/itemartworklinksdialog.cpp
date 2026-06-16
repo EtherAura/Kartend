@@ -2,6 +2,7 @@
 #include "itemartworklinksdialog.h"
 
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -175,6 +176,22 @@ void ItemArtworkLinksDialog::setAutoResolvedPaths(const QHash<QString, QString> 
     // active palette (dark / light) instead of a fixed gray.
     item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
     item->setToolTip(tr("Auto-discovered from %1. Edit to override.").arg(autoPath));
+  }
+}
+
+void ItemArtworkLinksDialog::changeEvent(QEvent *event) {
+  QDialog::changeEvent(event);
+  // The auto-hint rows bake palette(Disabled, Text) as a concrete brush; the
+  // override (non-hint) rows use the default foreground. Auto-hint rows are
+  // the italic ones, so re-stamp the brush on those when the palette changes.
+  if (event->type() == QEvent::PaletteChange && m_table) {
+    const QBrush hint = palette().brush(QPalette::Disabled, QPalette::Text);
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+      QTableWidgetItem *item = m_table->item(row, kColumnPath);
+      if (item && item->font().italic()) {
+        item->setForeground(hint);
+      }
+    }
   }
 }
 

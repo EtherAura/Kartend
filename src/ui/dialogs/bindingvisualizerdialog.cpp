@@ -3,6 +3,7 @@
 #include "uiconstants/color.h"
 
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -231,5 +232,31 @@ void BindingVisualizerDialog::clearHighlight() {
       item->setBackground(col, QBrush());
       item->setForeground(col, QBrush());
     }
+  }
+}
+
+void BindingVisualizerDialog::retintHighlightedRow() {
+  if (!m_tree) return;
+  // The highlight brushes are baked concrete colours; find the row that
+  // currently carries one (non-empty background) and re-stamp it from the
+  // fresh palette so a runtime accent change re-tints the active row.
+  const QColor highlight = palette().color(QPalette::Highlight);
+  const QColor highlightText = palette().color(QPalette::HighlightedText);
+  for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
+    QTreeWidgetItem *item = m_tree->topLevelItem(i);
+    if (item->background(0).style() == Qt::NoBrush) {
+      continue;
+    }
+    for (int col = 0; col < 3; ++col) {
+      item->setBackground(col, highlight);
+      item->setForeground(col, highlightText);
+    }
+  }
+}
+
+void BindingVisualizerDialog::changeEvent(QEvent *event) {
+  QDialog::changeEvent(event);
+  if (event->type() == QEvent::PaletteChange) {
+    retintHighlightedRow();
   }
 }

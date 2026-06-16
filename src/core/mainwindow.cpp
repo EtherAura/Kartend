@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPixmapCache>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -62,11 +63,13 @@
 #include "scraperservice.h"
 #include "scrolleventscontroller.h"
 #include "scrollmanager.h"
+#include "searchmanager.h"
 #include "sessionmanager.h"
 #include "settingsutils.h"
 #include "splashoverlay.h"
 #include "startupvideooverlay.h"
 #include "stringutils.h"
+#include "systemthemewatcher.h"
 #include "textzoom.h"
 #include "textzoomhud.h"
 #include "timerutils.h"
@@ -143,12 +146,93 @@ bool MainWindow::event(QEvent *event) {
         }
       }
       break;
+    case QEvent::ApplicationPaletteChange:
+    case QEvent::ThemeChange:
+      // The system color scheme changed at runtime (e.g. a KDE
+      // wallpaper-derived accent shifting on a Plasma activity switch). Qt has
+      // already delivered the new QApplication palette, but every color we
+      // cached / baked / pinned needs recomputing. KDE fires several of these
+      // back-to-back during one scheme rewrite, so coalesce to a single
+      // re-theme on the next event-loop turn — the singleShot(0) also lets the
+      // new palette finish propagating to children before we read it (same
+      // reason ItemWidget defers its artwork refresh).
+      if (!m_paletteRetintPending) {
+        m_paletteRetintPending = true;
+        // singleShot(0): coalesce the burst of palette/theme events KDE fires
+        // during one scheme rewrite into a single re-theme on the next
+        // event-loop turn, by which point qApp->palette() has fully resolved
+        // the new colours (reading it synchronously here can race that).
+        QTimer::singleShot(0, this, [this]() {
+          m_paletteRetintPending = false;
+          reapplyDerivedThemingFromSystemPalette();
+        });
+      }
+      break;
     default:
       break;
     }
   }
 
   return QMainWindow::event(event);
+}
+
+void MainWindow::reapplyDerivedThemingFromSystemPalette() {
+  if (m_isShuttingDown || QApplication::closingDown() || !m_appManager) {
+    return;
+  }
+  // Re-run the per-collection appearance pipeline for the active collection.
+  // This re-resolves the toolbar/menubar/search-bar primary-color stylesheets,
+  // the ItemWidget colour statics, the details-pane content palette + bubble
+  // stylesheets, and rebuilds the breadcrumb + metadata rows whose accent is
+  // baked into HTML. Skipped on the root/home view (no active collection);
+  // its surfaces are palette-driven and update on repaint.
+  if (auto *nav = m_appManager->getNavigationManager()) {
+    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
+      nav->reapplyActiveCollectionTheming(currentCollectionIndex);
+    }
+  }
+  // The search-bar placeholder tint is pinned via an explicit setPalette on
+  // the QLineEdit (resolve-mask), so Qt's automatic propagation can't refresh
+  // it — re-run the recompute against the fresh application palette.
+  if (auto *im = m_appManager->getInteractionManager()) {
+    if (auto *sm = im->searchManager()) {
+      sm->updateSearchBarPlaceholder();
+    }
+  }
+}
+
+void MainWindow::onSystemThemeChanged() const {
+  if (m_isShuttingDown || QApplication::closingDown()) {
+    return;
+  }
+  // KDE has already updated QApplication::palette() with the new accent, but on
+  // an accent-only change Qt does not dispatch the palette-change to our
+  // widgets — so neither the style-drawn chrome (toolbar/menubar/scrollbars)
+  // nor ItemWidget's own PaletteChange handler ever fire, and colours stay
+  // stale until a manual reload. Synthesize the broadcast Qt skipped: re-assign
+  // the application palette so every widget re-resolves the fresh colours and
+  // repaints. Re-assigning the *same* palette is a no-op in Qt, so cycle
+  // through a throwaway palette first to force propagation; both setPalette
+  // calls run synchronously, so no frame is ever painted with the intermediate.
+  const QPalette fresh = QApplication::palette();
+  QApplication::setPalette(QPalette());
+  QApplication::setPalette(fresh);
+  // KDE itself pushes accent updates via QApplication::setPalette, so the
+  // assignment above does not strand us in an app-owned palette — KDE's next
+  // change re-applies the same way.
+  //
+  // With a global application stylesheet installed (the QToolTip rule in
+  // main.cpp), the QStyleSheetStyle proxy caches resolved palette() refs and
+  // won't re-resolve them on a palette change alone — re-applying the sheet
+  // forces a full re-polish so style-drawn chrome (toolbar / menubar /
+  // scrollbars) picks up the new colours.
+  qApp->setStyleSheet(qApp->styleSheet());
+  // setPalette(fresh) lands an ApplicationPaletteChange on us, which event()
+  // coalesces into a single deferred reapplyDerivedThemingFromSystemPalette()
+  // for the cached/HTML/stylesheet chrome — so we deliberately do NOT call it a
+  // second time here (doing so re-ran the whole appearance pipeline twice,
+  // including the off-thread sidebar/background image reloads — the main source
+  // of the perceived lag).
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
