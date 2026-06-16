@@ -337,8 +337,9 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
             ScannedFile sf;
             // Virtual member path: container + '/' + member, so the result
             // table shows provenance and basename matching sees the member's
-            // own filename. Never a real on-disk path — the fix engine skips
-            // rows whose parent is not a directory.
+            // own filename. Never a real on-disk path — computeFixPlan excludes
+            // it from every fix action (isArchiveMemberPath: an archive-extension
+            // ancestor component, datauditfix.cpp).
             sf.path = path + QLatin1Char('/') + m.memberPath;
             sf.crc = m.crc;
             sf.md5 = m.md5;

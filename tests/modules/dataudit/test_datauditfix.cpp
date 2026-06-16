@@ -49,6 +49,7 @@ private slots:
   void planSkipsNoopRename();
   void planRelocateAndQuarantineWhenEnabled();
   void planQuarantinesUnknownAndWrongContent();
+  void planSkipsArchiveMemberRows();
   void planRelocatePerItemSubfolderUsesGameName();
   void applyRenameInPlaceAndUndo();
   void applyRelocateCopiesLeavesOriginalAndUndoDeletes();
@@ -136,6 +137,26 @@ void TestDatAuditFix::planQuarantinesUnknownAndWrongContent() {
   const QStringList expected{QStringLiteral("/quar/baddump.bin"), QStringLiteral("/quar/junk.bin")};
   QCOMPARE(quarantined, expected);
   QCOMPARE(wrongHashOrigin, Status::WrongHash); // the action records its origin status
+}
+
+void TestDatAuditFix::planSkipsArchiveMemberRows() {
+  // Archive members carry a virtual path (`<archive>/<entry>`) with no on-disk
+  // file, so they must NEVER produce a fix action — not a rename, relocate, or
+  // quarantine — even with every option enabled. Only an archive-extension
+  // ancestor counts; the whole archive file itself is a real on-disk file.
+  const QList<AuditRow> rows{
+      row(Status::WrongHash, QStringLiteral("/roms/pack.zip/baddump.bin"),
+          QStringLiteral("baddump.bin")),
+      row(Status::Unknown, QStringLiteral("/roms/pack.7z/junk.bin"), QString()),
+      row(Status::WrongName, QStringLiteral("/roms/pack.zip/sub/misnamed.bin"),
+          QStringLiteral("Canonical.bin"))};
+  FixSettings s;
+  s.relocateToManagedOutput = true;
+  s.managedOutputRoot = QStringLiteral("/out");
+  s.quarantineUnknown = true;
+  s.quarantineDir = QStringLiteral("/quar");
+  const FixPlan plan = DatAudit::computeFixPlan(rows, s);
+  QVERIFY(plan.isEmpty());
 }
 
 void TestDatAuditFix::planRelocatePerItemSubfolderUsesGameName() {

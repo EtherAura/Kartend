@@ -4,9 +4,29 @@
 #include <QFile>
 #include <QFileInfo>
 
+#include "romhasher.h"
+
 namespace DatAudit {
 
 namespace {
+
+/// True when filePath points INSIDE an archive — the runner builds member rows
+/// as `<archive>/<entry>`, a virtual path with no real on-disk file (see
+/// datauditrunner.cpp). Such rows can never be renamed/relocated/quarantined, so
+/// they must be excluded from every fix action. Walks the ancestor path
+/// components string-only (no filesystem access — computeFixPlan stays pure)
+/// looking for one that bears an archive extension.
+bool isArchiveMemberPath(const QString &filePath) {
+  int slash = filePath.lastIndexOf(QLatin1Char('/'));
+  while (slash > 0) {
+    const QString ancestor = filePath.left(slash);
+    if (RomHasher::isArchivePath(ancestor)) {
+      return true;
+    }
+    slash = ancestor.lastIndexOf(QLatin1Char('/'));
+  }
+  return false;
+}
 
 /// Make a DAT game name safe to use as a single folder component: replace the
 /// characters illegal on Windows/cross-platform filesystems with '_' and trim
@@ -46,6 +66,13 @@ QString fixActionKindToken(FixActionKind k) {
 FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings) {
   FixPlan plan;
   for (const AuditRow &r : rows) {
+    // Fix actions operate on real on-disk files only. An archive member carries
+    // a virtual path (`<archive>/<entry>`) with no on-disk presence, so it can
+    // never be renamed/relocated/quarantined — skip the whole row. This is the
+    // invariant datauditrunner.cpp documents, enforced here for all three gates.
+    if (isArchiveMemberPath(r.filePath)) {
+      continue;
+    }
     // Rename in place: content is correct, only the name is wrong.
     if (settings.rename && r.status == Status::WrongName && !r.filePath.isEmpty() &&
         !r.expectedName.isEmpty()) {
