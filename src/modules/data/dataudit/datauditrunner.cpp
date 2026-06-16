@@ -172,6 +172,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       row.gameName = rec.gameName;
       row.expectedName = rec.romName;
       row.sourceName = catalogue.sourceName(catalogue.recordSource(idx));
+      row.mia = rec.mia;
       if (satisfied.contains(idx)) {
         row.status = Status::Duplicate;
       } else {
@@ -187,6 +188,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
         row.gameName = rec.gameName;
         row.expectedName = rec.romName;
         row.sourceName = catalogue.sourceName(catalogue.recordSource(nameIdx));
+        row.mia = rec.mia;
         row.status = Status::WrongHash;
       } else {
         row.status = Status::Unknown;
@@ -207,6 +209,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     row.md5 = rec.md5;
     row.sha1 = rec.sha1;
     row.sourceName = catalogue.sourceName(catalogue.recordSource(i));
+    row.mia = rec.mia;
     out.rows.append(row);
   };
 
