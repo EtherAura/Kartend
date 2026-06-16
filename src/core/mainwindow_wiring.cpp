@@ -419,6 +419,9 @@ void MainWindow::connectDatabaseManager() {
     // collections INI; linked audit profiles see the change automatically
     // because their DAT lists are derived (Kartend-m6qsb.2).
     dc.getDatLibraryPath = [this]() { return m_generalSettings.scraper.options.datLibraryPath; };
+    dc.getQuarantineDefaultDir = [this]() {
+      return m_generalSettings.scraper.options.quarantineDefaultDir;
+    };
     dc.saveDatLibraryPath = [this](const QString &root) {
       if (m_generalSettings.scraper.options.datLibraryPath == root) {
         return;

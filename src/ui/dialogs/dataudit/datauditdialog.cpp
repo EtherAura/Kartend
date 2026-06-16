@@ -630,6 +630,10 @@ void DatAuditDialog::setLibraryPathAccessors(std::function<QString()> getter,
   }
 }
 
+void DatAuditDialog::setQuarantineDefaultProvider(std::function<QString()> provider) {
+  m_getQuarantineDefaultDir = std::move(provider);
+}
+
 void DatAuditDialog::setImportHandler(std::function<void(const QString &)> handler) {
   m_importPack = std::move(handler);
   const bool on = static_cast<bool>(m_importPack);
@@ -1403,6 +1407,13 @@ void DatAuditDialog::onFix() {
   // (Kartend-m6qsb.14) instead of always starting blank.
   dlg.setManagedOutputDefaults(m_currentProfile.fixMode == DatAuditProfile::FixMode::ManagedOutput,
                                m_currentProfile.managedOutputRoot);
+  // Seed the quarantine folder: the profile's per-collection root takes
+  // precedence, falling back to the global default. Either may be empty.
+  QString quarantineSeed = m_currentProfile.quarantineRoot.trimmed();
+  if (quarantineSeed.isEmpty() && m_getQuarantineDefaultDir) {
+    quarantineSeed = m_getQuarantineDefaultDir().trimmed();
+  }
+  dlg.setQuarantineDefault(quarantineSeed);
   dlg.exec();
   if (!dlg.didApply()) {
     return;

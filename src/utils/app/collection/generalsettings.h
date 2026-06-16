@@ -92,6 +92,7 @@ struct GeneralSettings {
     copy.startup.startupVideoPath = copy.startup.startupVideoPath.trimmed();
     copy.startup.homeViewLabel = copy.startup.homeViewLabel.trimmed();
     copy.startup.homeViewIcon = copy.startup.homeViewIcon.trimmed();
+    copy.scraper.options.quarantineDefaultDir = copy.scraper.options.quarantineDefaultDir.trimmed();
     return copy;
   }
 };

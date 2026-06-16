@@ -113,6 +113,8 @@ DatAuditDialog *DatAuditController::ensureDialog() {
   // Pass through the scraper opener (Kartend-m6qsb.27) — null when the host
   // didn't provide one, which the dialog treats as "no re-scrape offer".
   m_dialog->setScraperOpener(m_ctx.openScraperForCollection);
+  // Global default quarantine folder for the Fix dialog (null = no default).
+  m_dialog->setQuarantineDefaultProvider(m_ctx.getQuarantineDefaultDir);
   return m_dialog;
 }
 

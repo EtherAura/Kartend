@@ -26,6 +26,8 @@ GeneralSettingsPanel::GeneralSettingsPanel(QWidget *parent)
           &GeneralSettingsPanel::onBrowseStartupVideo);
   connect(ui->browseRetroarchConfigButton, &QPushButton::clicked, this,
           &GeneralSettingsPanel::onBrowseRetroarchConfig);
+  connect(ui->browseQuarantineDefaultButton, &QPushButton::clicked, this,
+          &GeneralSettingsPanel::onBrowseQuarantineDefault);
 
   connectChangeSignals();
 }
@@ -51,6 +53,8 @@ void GeneralSettingsPanel::load() {
   SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startup.startupVideoEnabled);
   SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startup.startupVideoPath);
   SettingsFormBinding::loadInto(ui->retroarchConfigLineEdit, s->launchers.retroarchConfigPath);
+  SettingsFormBinding::loadInto(ui->quarantineDefaultDirLineEdit,
+                                s->scraper.options.quarantineDefaultDir);
 
   // Selection & Display
   SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, s->input.rememberSelection);
@@ -126,6 +130,14 @@ void GeneralSettingsPanel::onBrowseRetroarchConfig() {
   }
 }
 
+void GeneralSettingsPanel::onBrowseQuarantineDefault() {
+  const QString dir = QFileDialog::getExistingDirectory(
+      this, tr("Select default quarantine folder"), QDir::homePath());
+  if (!dir.isEmpty()) {
+    ui->quarantineDefaultDirLineEdit->setText(dir);
+  }
+}
+
 void GeneralSettingsPanel::save() {
   if (!m_model || !m_model->generalSettings) {
     return;
@@ -139,6 +151,7 @@ void GeneralSettingsPanel::save() {
   s->startup.startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
   s->startup.startupVideoPath = ui->startupVideoPathLineEdit->text();
   s->launchers.retroarchConfigPath = ui->retroarchConfigLineEdit->text();
+  s->scraper.options.quarantineDefaultDir = ui->quarantineDefaultDirLineEdit->text();
 
   // Selection & Display
   s->input.rememberSelection = ui->rememberSelectionCheckBox->isChecked();
@@ -183,6 +196,8 @@ void GeneralSettingsPanel::connectChangeSignals() {
   connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
   connect(ui->retroarchConfigLineEdit, &QLineEdit::textChanged, this,
+          [this](const QString &) { save(); });
+  connect(ui->quarantineDefaultDirLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
 
   // Selection & Display

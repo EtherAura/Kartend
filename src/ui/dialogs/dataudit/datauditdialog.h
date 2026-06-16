@@ -86,6 +86,12 @@ public:
   void setLibraryPathAccessors(std::function<QString()> getter,
                                std::function<void(const QString &)> setter);
 
+  /// Provider for the global default quarantine folder (Settings → General → DAT
+  /// Auditor). The Fix dialog prefills its quarantine field from the audited
+  /// profile's per-collection root, falling back to this. Unset = no global
+  /// default (standalone/test).
+  void setQuarantineDefaultProvider(std::function<QString()> provider);
+
   /// Hook for "Import DAT pack" (Kartend-m6qsb.22): given a chosen zip / folder
   /// / .dat path, the controller imports it into the library and opens the
   /// review. Unset hides the import buttons (standalone/test).
@@ -298,6 +304,7 @@ private:
   QPushButton *m_importFolderButton = nullptr;
   std::function<QString()> m_getLibraryPath;
   std::function<void(const QString &)> m_saveLibraryPath;
+  std::function<QString()> m_getQuarantineDefaultDir;
   std::function<void(const QString &)> m_importPack;
   std::function<void(const QString &)> m_openScraperForCollection;
 

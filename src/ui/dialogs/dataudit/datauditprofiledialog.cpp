@@ -165,6 +165,18 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   mrow->addWidget(m_managedRoot, 1);
   mrow->addWidget(m_managedBrowse);
   fixV->addLayout(mrow);
+
+  // Per-collection quarantine folder for the Fix dialog (unknown + wrong-content
+  // files). Empty falls back to the global default (Settings → General → DAT
+  // Auditor). Independent of the in-place / managed-output mode above.
+  auto *qrow = new QHBoxLayout();
+  qrow->addWidget(new QLabel(tr("Quarantine folder:"), fix));
+  m_quarantineRoot = new QLineEdit(m_seed.quarantineRoot, fix);
+  m_quarantineRoot->setPlaceholderText(tr("Defaults to the global quarantine folder"));
+  m_quarantineBrowse = new QPushButton(tr("Browse…"), fix);
+  qrow->addWidget(m_quarantineRoot, 1);
+  qrow->addWidget(m_quarantineBrowse);
+  fixV->addLayout(qrow);
   root->addWidget(fix);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -182,6 +194,8 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   connect(downReg, &QPushButton::clicked, this, &DatAuditProfileDialog::onMoveRegionDown);
   connect(m_managedBrowse, &QPushButton::clicked, this,
           &DatAuditProfileDialog::onBrowseManagedRoot);
+  connect(m_quarantineBrowse, &QPushButton::clicked, this,
+          &DatAuditProfileDialog::onBrowseQuarantineRoot);
   connect(m_fixInPlace, &QRadioButton::toggled, this, &DatAuditProfileDialog::onFixModeChanged);
   connect(buttons, &QDialogButtonBox::accepted, this, &DatAuditProfileDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -292,6 +306,13 @@ void DatAuditProfileDialog::onBrowseManagedRoot() {
   }
 }
 
+void DatAuditProfileDialog::onBrowseQuarantineRoot() {
+  const QString dir = QFileDialog::getExistingDirectory(this, tr("Quarantine folder"));
+  if (!dir.isEmpty()) {
+    m_quarantineRoot->setText(dir);
+  }
+}
+
 void DatAuditProfileDialog::onFixModeChanged() {
   const bool managed = m_fixManaged->isChecked();
   m_managedRoot->setEnabled(managed);
@@ -346,5 +367,6 @@ DatAuditProfile::Profile DatAuditProfileDialog::profile() const {
 
   p.fixMode = m_fixManaged->isChecked() ? FixMode::ManagedOutput : FixMode::InPlace;
   p.managedOutputRoot = m_managedRoot->text().trimmed();
+  p.quarantineRoot = m_quarantineRoot->text().trimmed();
   return p;
 }

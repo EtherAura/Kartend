@@ -135,6 +135,17 @@ void DatAuditFixDialog::setManagedOutputDefaults(bool relocateToManagedOutput,
   recomputePlan();
 }
 
+void DatAuditFixDialog::setQuarantineDefault(const QString &quarantineRoot) {
+  // Prefill the quarantine folder (per-collection root, else the global default)
+  // only while the field is still blank, so a manual edit is never clobbered.
+  // The destructive quarantine option itself stays default-off — only the path
+  // is seeded, keeping it fully overridable.
+  if (!quarantineRoot.isEmpty() && m_quarantineDir->text().trimmed().isEmpty()) {
+    m_quarantineDir->setText(quarantineRoot);
+    recomputePlan();
+  }
+}
+
 void DatAuditFixDialog::recomputePlan() {
   m_plan = DatAudit::computeFixPlan(m_rows, settings());
   m_planList->clear();

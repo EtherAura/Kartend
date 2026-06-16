@@ -72,13 +72,14 @@ Profile readProfileRow(const QSqlQuery &q) {
   p.lastScanAtMs = q.value(11).toLongLong();
   p.createdAtMs = q.value(12).toLongLong();
   p.updatedAtMs = q.value(13).toLongLong();
+  p.quarantineRoot = q.value(14).toString();
   return p;
 }
 
 constexpr char kSelectColumns[] =
     "id, name, collection_uuid, scan_roots, region_prefs, one_per_game, "
     "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms";
+    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root";
 
 // Load the ordered DAT child rows for one profile into p.dats.
 bool loadDats(QSqlDatabase &db, Profile &p) {
@@ -165,8 +166,8 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
         "INSERT INTO dat_audit_profile "
         "(name, collection_uuid, scan_roots, region_prefs, one_per_game, "
         "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
@@ -180,6 +181,7 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(p.lastScanAtMs);
     q.addBindValue(now);
     q.addBindValue(now);
+    q.addBindValue(nonNull(p.quarantineRoot));
     if (!q.exec()) {
       const QString err = q.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert profile",
@@ -224,7 +226,8 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
                        "name = ?, collection_uuid = ?, scan_roots = ?, region_prefs = ?, "
                        "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
                        "detected_layout = ?, layout_confirmed = ?, "
-                       "last_scan_at_unix_ms = ?, updated_at_unix_ms = ? WHERE id = ?"));
+                       "last_scan_at_unix_ms = ?, updated_at_unix_ms = ?, quarantine_root = ? "
+                       "WHERE id = ?"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
@@ -237,6 +240,7 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(p.layoutConfirmed ? 1 : 0);
     q.addBindValue(p.lastScanAtMs);
     q.addBindValue(QDateTime::currentMSecsSinceEpoch());
+    q.addBindValue(nonNull(p.quarantineRoot));
     q.addBindValue(p.id);
     if (!q.exec()) {
       const QString err = q.lastError().text();

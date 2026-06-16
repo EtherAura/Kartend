@@ -39,6 +39,11 @@ public:
   /// per-item-subfolder structuring stays a per-session choice (off by default).
   void setManagedOutputDefaults(bool relocateToManagedOutput, const QString &managedOutputRoot);
 
+  /// Pre-fill the quarantine folder (the audited profile's per-collection root,
+  /// else the global default). Call before exec(); only fills while the field is
+  /// blank and never checks the quarantine option, so it stays overridable.
+  void setQuarantineDefault(const QString &quarantineRoot);
+
 private slots:
   void recomputePlan();
   void onBrowseQuarantine();

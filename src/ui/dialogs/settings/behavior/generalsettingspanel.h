@@ -52,6 +52,7 @@ private slots:
   void onBrowseHomeViewIcon();
   void onBrowseStartupVideo();
   void onBrowseRetroarchConfig();
+  void onBrowseQuarantineDefault();
 
 private:
   void connectChangeSignals();

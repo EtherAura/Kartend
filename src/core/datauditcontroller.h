@@ -44,6 +44,9 @@ struct DatAuditControllerContext {
   /// DAT-library hooks (Kartend-m6qsb.5). All optional; unset = library off.
   std::function<QString()> getDatLibraryPath;
   std::function<void(const QString &root)> saveDatLibraryPath;
+  /// Global default quarantine folder for the Fix dialog. Optional; unset = no
+  /// global default (the Fix field stays blank unless a profile sets its own).
+  std::function<QString()> getQuarantineDefaultDir;
   /// Append a DAT to the collection's datFilePaths and persist the INI —
   /// linked audit profiles pick the change up automatically because their
   /// lists are derived (Kartend-m6qsb.2).

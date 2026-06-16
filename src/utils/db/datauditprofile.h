@@ -63,6 +63,10 @@ struct Profile {
   QStringList ignoreRules; ///< Glob patterns excluded from scan/audit.
   FixMode fixMode = FixMode::InPlace;
   QString managedOutputRoot; ///< Destination when fixMode == ManagedOutput.
+  /// Per-collection quarantine folder for the Fix dialog (unknown + wrong-content
+  /// files). Empty falls back to the global default quarantine folder. Remembered
+  /// here so each collection can keep its own without re-typing per run.
+  QString quarantineRoot;
   /// Folder-structure probe result (Kartend-m6qsb.6). A DatAudit::layoutToken
   /// value ('' = never detected) — kept as the raw token here because this
   /// header sits below the dataudit module that owns the enum. Only a
