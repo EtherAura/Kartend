@@ -114,6 +114,13 @@ private slots:
   void planQuarantinesWholeBadContainer();
   void planSkipsMixedArchiveContainer();
   void planSkipsMultiGameArchiveContainer();
+  void planRepacks7zContainerPreservingExtension();
+  void planSkipsNonRepackableArchiveContainer();
+  void planSkipsCollidingInnerRenames();
+  void planSkipsRenameOntoExistingMember();
+  void planRepackPreservesNestedMemberSubdir();
+  void planRenamesMisnamedContainerWithCanonicalInner();
+  void applyInPlaceRepackBackupSwapAndUndo();
   void planRelocatePerItemSubfolderUsesGameName();
   void applyRenameInPlaceAndUndo();
   void applyRelocateCopiesLeavesOriginalAndUndoDeletes();
@@ -282,6 +289,130 @@ void TestDatAuditFix::planSkipsMultiGameArchiveContainer() {
   QVERIFY(plan.isEmpty());
 }
 
+void TestDatAuditFix::planRepacks7zContainerPreservingExtension() {
+  // A misnamed .7z set repacks too, keeping the .7z container extension.
+  AuditRow r = row(Status::WrongName, QStringLiteral("/roms/Game (old).7z/Game (old).md"),
+                   QStringLiteral("Game.md"));
+  r.gameName = QStringLiteral("Game");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, FixSettings{});
+  QCOMPARE(plan.actions.size(), 1);
+  QCOMPARE(plan.actions.first().kind, FixActionKind::Repack);
+  QCOMPARE(plan.actions.first().fromPath, QStringLiteral("/roms/Game (old).7z"));
+  QCOMPARE(plan.actions.first().toPath, QStringLiteral("/roms/Game.7z")); // .7z preserved
+}
+
+void TestDatAuditFix::planSkipsNonRepackableArchiveContainer() {
+  // libarchive can only write zip + 7z — a misnamed .rar set is left untouched
+  // (no repack action) rather than rewritten into the wrong format.
+  AuditRow r = row(Status::WrongName, QStringLiteral("/roms/Game (old).rar/Game (old).md"),
+                   QStringLiteral("Game.md"));
+  r.gameName = QStringLiteral("Game");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, FixSettings{});
+  QVERIFY(plan.isEmpty());
+}
+
+void TestDatAuditFix::planSkipsCollidingInnerRenames() {
+  // Two misnamed members that would both rename to the SAME canonical name are
+  // ambiguous — repacking would write a duplicate entry and silently drop a ROM,
+  // so the container is skipped (DATA-LOSS guard).
+  auto member = [](const QString &path, const QString &expected) {
+    AuditRow r = row(Status::WrongName, path, expected);
+    r.gameName = QStringLiteral("G");
+    return r;
+  };
+  const QList<AuditRow> rows{
+      member(QStringLiteral("/roms/G.zip/a (old).md"), QStringLiteral("Same.md")),
+      member(QStringLiteral("/roms/G.zip/b (old).md"), QStringLiteral("Same.md"))};
+  const FixPlan plan = DatAudit::computeFixPlan(rows, FixSettings{});
+  QVERIFY(plan.isEmpty());
+}
+
+void TestDatAuditFix::planSkipsRenameOntoExistingMember() {
+  // A misnamed member whose canonical name equals a sibling Have member's
+  // current name would collide on extraction — skip rather than drop a ROM.
+  AuditRow wrong =
+      row(Status::WrongName, QStringLiteral("/roms/G.zip/old.md"), QStringLiteral("keep.md"));
+  wrong.gameName = QStringLiteral("G");
+  AuditRow have =
+      row(Status::Have, QStringLiteral("/roms/G.zip/keep.md"), QStringLiteral("keep.md"));
+  have.gameName = QStringLiteral("G");
+  const FixPlan plan = DatAudit::computeFixPlan({wrong, have}, FixSettings{});
+  QVERIFY(plan.isEmpty());
+}
+
+void TestDatAuditFix::planRepackPreservesNestedMemberSubdir() {
+  // A misnamed member inside an in-archive subdirectory keeps its subdir — only
+  // the leaf is renamed, never flattened to the archive root.
+  AuditRow r = row(Status::WrongName, QStringLiteral("/roms/G.zip/sub/old.md"),
+                   QStringLiteral("Canonical.md"));
+  r.gameName = QStringLiteral("G");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, FixSettings{});
+  QCOMPARE(plan.actions.size(), 1);
+  QCOMPARE(plan.actions.first().kind, FixActionKind::Repack);
+  QCOMPARE(plan.actions.first().innerRenames.size(), 1);
+  QCOMPARE(plan.actions.first().innerRenames.first().first, QStringLiteral("sub/old.md"));
+  QCOMPARE(plan.actions.first().innerRenames.first().second, QStringLiteral("sub/Canonical.md"));
+}
+
+void TestDatAuditFix::planRenamesMisnamedContainerWithCanonicalInner() {
+  // The inner ROM is already canonical (Have) but the .zip is misnamed -> a
+  // PLAIN container rename to <game>.zip, no rewrite (works for any format).
+  AuditRow r =
+      row(Status::Have, QStringLiteral("/roms/WRONGNAME.zip/Game.md"), QStringLiteral("Game.md"));
+  r.gameName = QStringLiteral("Game");
+  const FixPlan plan = DatAudit::computeFixPlan({r}, FixSettings{});
+  QCOMPARE(plan.actions.size(), 1);
+  QCOMPARE(plan.actions.first().kind, FixActionKind::Rename); // plain rename, not repack
+  QCOMPARE(plan.actions.first().fromPath, QStringLiteral("/roms/WRONGNAME.zip"));
+  QCOMPARE(plan.actions.first().toPath, QStringLiteral("/roms/Game.zip"));
+  QVERIFY(plan.actions.first().innerRenames.isEmpty());
+}
+
+void TestDatAuditFix::applyInPlaceRepackBackupSwapAndUndo() {
+#ifndef KARTEND_HAS_LIBARCHIVE
+  QSKIP("in-place repack apply needs libarchive to build + read the fixture zip");
+#else
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  // Container name already canonical -> repack is IN-PLACE (toPath == fromPath).
+  const QString container = dir.filePath(QStringLiteral("G.zip"));
+  const QByteArray rom = QByteArrayLiteral("in-place rom \x07\x08");
+  QVERIFY(makeZip(container, {{QStringLiteral("old.md"), rom}}));
+
+  // The in-place swap stages the original to a dotted (hidden) sidecar.
+  const QString backupPath = QFileInfo(container).path() + QStringLiteral("/.") +
+                             QFileInfo(container).fileName() + QStringLiteral(".kartend-bak");
+
+  FixPlan plan;
+  FixAction a;
+  a.kind = FixActionKind::Repack;
+  a.fromPath = container;
+  a.toPath = container; // in-place
+  a.sourceStatus = Status::WrongName;
+  a.innerRenames.append({QStringLiteral("old.md"), QStringLiteral("new.md")});
+  plan.actions.append(a);
+
+  auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/false);
+  QCOMPARE(res.applied, 1);
+  QCOMPARE(res.failed, 0);
+  QVERIFY(QFile::exists(container));   // container stays put
+  QVERIFY(!QFile::exists(backupPath)); // backup cleaned up
+  {
+    const QMap<QString, QByteArray> out = readZip(container);
+    QCOMPARE(out.value(QStringLiteral("new.md")), rom);
+    QVERIFY(!out.contains(QStringLiteral("old.md")));
+  }
+
+  QCOMPARE(DatAudit::applyUndo(res.undo), 1);
+  {
+    const QMap<QString, QByteArray> out = readZip(container);
+    QCOMPARE(out.value(QStringLiteral("old.md")), rom); // restored
+    QVERIFY(!out.contains(QStringLiteral("new.md")));
+  }
+  QVERIFY(!QFile::exists(backupPath));
+#endif
+}
+
 void TestDatAuditFix::planRelocatePerItemSubfolderUsesGameName() {
   // Structured managed output (Kartend-m6qsb.14): present files go under a
   // per-item subfolder named for their game; rows without a game name fall back
@@ -325,7 +456,7 @@ void TestDatAuditFix::applyRenameInPlaceAndUndo() {
   const QString to = dir.filePath(QStringLiteral("Canonical.bin"));
 
   FixPlan plan;
-  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName});
+  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName, {}});
   auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/false);
   QCOMPARE(res.applied, 1);
   QCOMPARE(res.failed, 0);
@@ -344,7 +475,7 @@ void TestDatAuditFix::applyRelocateCopiesLeavesOriginalAndUndoDeletes() {
   const QString out = dir.filePath(QStringLiteral("managed/a.bin"));
 
   FixPlan plan;
-  plan.actions.append(DatAudit::FixAction{FixActionKind::Relocate, from, out, Status::Have});
+  plan.actions.append(DatAudit::FixAction{FixActionKind::Relocate, from, out, Status::Have, {}});
   auto res = DatAudit::applyFixPlan(plan, false);
   QCOMPARE(res.applied, 1);
   QVERIFY(QFileInfo::exists(from)); // original untouched (copy)
@@ -362,7 +493,8 @@ void TestDatAuditFix::applyQuarantineMovesAndUndoRestores() {
   const QString quar = dir.filePath(QStringLiteral("quarantine/junk.bin"));
 
   FixPlan plan;
-  plan.actions.append(DatAudit::FixAction{FixActionKind::Quarantine, from, quar, Status::Unknown});
+  plan.actions.append(
+      DatAudit::FixAction{FixActionKind::Quarantine, from, quar, Status::Unknown, {}});
   auto res = DatAudit::applyFixPlan(plan, false);
   QCOMPARE(res.applied, 1);
   QVERIFY(!QFileInfo::exists(from)); // moved out
@@ -380,7 +512,7 @@ void TestDatAuditFix::applyDryRunMakesNoChange() {
   const QString to = dir.filePath(QStringLiteral("Canonical.bin"));
 
   FixPlan plan;
-  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName});
+  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName, {}});
   auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/true);
   QCOMPARE(res.applied, 1); // counted as "would apply"
   QVERIFY(res.undo.isEmpty());
@@ -395,7 +527,7 @@ void TestDatAuditFix::applyCollisionGuardSkips() {
   const QString to = makeFile(dir, QStringLiteral("dst.bin"), QByteArrayLiteral("two"));
 
   FixPlan plan;
-  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName});
+  plan.actions.append(DatAudit::FixAction{FixActionKind::Rename, from, to, Status::WrongName, {}});
   auto res = DatAudit::applyFixPlan(plan, false);
   QCOMPARE(res.skipped, 1);
   QCOMPARE(res.applied, 0);

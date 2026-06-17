@@ -12,17 +12,23 @@
 namespace ArchiveRepack {
 
 /// True when the in-process libarchive repack is compiled in. When false,
-/// repack() falls back to a `7z rn` shell-out if 7z is on PATH, otherwise errors.
+/// repack() returns an error — callers should gate on this and skip repacking.
 [[nodiscard]] bool nativeAvailable();
 
-/// Rewrite srcArchive into dstArchive (a zip), renaming every entry whose name is
-/// a key of entryRenames to its mapped value; all other entries are copied
+/// True when an archive of this path's type can be rewritten by repack() — zip
+/// and 7z (the ROM container formats libarchive can write). rar/gz/tar etc. are
+/// not, so callers should not plan a repack for them. Pure extension check.
+[[nodiscard]] bool isRepackableFormat(const QString &archivePath);
+
+/// Rewrite srcArchive into dstArchive (zip or 7z, matching the source format),
+/// renaming every entry whose name is a key of entryRenames to its mapped value;
+/// all other entries are copied
 /// verbatim. dstArchive MUST differ from srcArchive — callers write to a temp
 /// path and swap, so a failure never corrupts the original. Returns the number
 /// of entries actually renamed, so a caller can detect a stale plan whose rename
-/// matched nothing. Streams through libarchive with no temp extraction; on a
-/// native failure (or when libarchive is absent) falls back to copying src→dst
-/// then `7z rn` per rename if 7z is available.
+/// matched nothing. Streams through libarchive with no temp extraction, and
+/// refuses to write two entries with the same name (which would silently drop a
+/// ROM). Requires libarchive — errors when it is not built in.
 [[nodiscard]] ErrorUtils::Result<int> repack(const QString &srcArchive, const QString &dstArchive,
                                              const QHash<QString, QString> &entryRenames);
 

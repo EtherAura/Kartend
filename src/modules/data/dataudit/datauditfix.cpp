@@ -39,9 +39,8 @@ QString archiveContainerOf(const QString &filePath) {
 /// spanning multiple games) for safety. Single-ROM zips are the common case.
 void planArchiveContainer(FixPlan &plan, const QString &container,
                           const QList<const AuditRow *> &members, const FixSettings &settings) {
-  bool anyBad = false;    // Unknown / WrongHash
-  bool anyGood = false;   // Have / WrongName (catalogued content)
-  bool anyRename = false; // WrongName (a member whose name needs fixing)
+  bool anyBad = false;  // Unknown / WrongHash
+  bool anyGood = false; // Have / WrongName (catalogued content)
   QSet<QString> games;
   for (const AuditRow *r : members) {
     switch (r->status) {
@@ -49,9 +48,7 @@ void planArchiveContainer(FixPlan &plan, const QString &container,
     case Status::WrongHash:
       anyBad = true;
       break;
-    case Status::WrongName:
-      anyRename = true;
-      [[fallthrough]];
+    case Status::WrongName: // a member whose name needs fixing (drives `inner` below)
     case Status::Have:
       anyGood = true;
       if (!r->gameName.isEmpty()) {
@@ -78,11 +75,13 @@ void planArchiveContainer(FixPlan &plan, const QString &container,
   if (anyBad || games.size() > 1) {
     return;
   }
-  if (!settings.rename || !anyRename) {
-    return; // nothing to repack (all members already canonical)
+  if (!settings.rename) {
+    return;
   }
 
-  // Rename each misnamed inner ROM to its canonical name.
+  // Rename each misnamed inner ROM to its canonical leaf, PRESERVING any
+  // in-archive subdirectory prefix (a member `sub/old.md` -> `sub/<canonical>`,
+  // never flattened to the archive root).
   const QString prefix = container + QLatin1Char('/');
   QList<QPair<QString, QString>> inner;
   for (const AuditRow *r : members) {
@@ -91,13 +90,42 @@ void planArchiveContainer(FixPlan &plan, const QString &container,
       continue;
     }
     const QString oldInner = r->filePath.mid(prefix.size());
-    if (oldInner != r->expectedName) {
-      inner.append({oldInner, r->expectedName});
+    const int slash = oldInner.lastIndexOf(QLatin1Char('/'));
+    const QString newInner = (slash >= 0 && !r->expectedName.contains(QLatin1Char('/')))
+                                 ? oldInner.left(slash + 1) + r->expectedName
+                                 : r->expectedName;
+    if (oldInner != newInner) {
+      inner.append({oldInner, newInner});
     }
   }
 
+  // Collision guard (DATA-LOSS critical): never rewrite a container into a
+  // duplicate-named state — libarchive's zip/7z writer silently accepts two
+  // entries with the same name, and on extraction one ROM is lost. Build the
+  // full set of resulting inner names (renamed targets + the current names of
+  // members left untouched, e.g. a Have entry) and bail if any repeats.
+  QSet<QString> renamedFrom;
+  QStringList finalNames;
+  for (const auto &pr : inner) {
+    renamedFrom.insert(pr.first);
+    finalNames.append(pr.second);
+  }
+  for (const AuditRow *r : members) {
+    if (!r->filePath.startsWith(prefix)) {
+      continue;
+    }
+    const QString curInner = r->filePath.mid(prefix.size());
+    if (!renamedFrom.contains(curInner)) {
+      finalNames.append(curInner);
+    }
+  }
+  if (QSet<QString>(finalNames.constBegin(), finalNames.constEnd()).size() != finalNames.size()) {
+    return; // a name would repeat — ambiguous, skip rather than drop a ROM
+  }
+
   // Rename the container itself to <game>.<container-ext>.
-  const QString ext = container.mid(container.lastIndexOf(QLatin1Char('.')));
+  const int dot = container.lastIndexOf(QLatin1Char('.'));
+  const QString ext = dot >= 0 ? container.mid(dot) : QString();
   QString newContainer = container;
   if (!games.isEmpty()) {
     const QString game = sanitizeFolderName(*games.constBegin());
@@ -110,9 +138,15 @@ void planArchiveContainer(FixPlan &plan, const QString &container,
     return; // already fully canonical
   }
   if (inner.isEmpty()) {
-    // Only the container name is wrong — a plain file rename, no rewrite needed.
+    // Only the container name is wrong (inner ROM already canonical) — a plain
+    // file rename, no rewrite, so it works for any archive type.
     plan.actions.append(
         FixAction{FixActionKind::Rename, container, newContainer, Status::WrongName, {}});
+    return;
+  }
+  // Inner ROM(s) need renaming -> a real rewrite; only when libarchive is
+  // available and the format is writable (zip/7z).
+  if (!ArchiveRepack::nativeAvailable() || !ArchiveRepack::isRepackableFormat(container)) {
     return;
   }
   plan.actions.append(
@@ -175,8 +209,37 @@ bool repackAndSwap(const QString &src, const QString &dst,
 
   const bool inPlace = QFileInfo(src).absoluteFilePath() == QFileInfo(dst).absoluteFilePath();
   if (inPlace) {
-    QFile::remove(src); // QFile::rename won't overwrite, so clear the slot first
+    // Same container name (only inner entries changed). QFile::rename won't
+    // overwrite, so the slot must be cleared — but never delete-before-rename:
+    // move the original aside and restore it if placing the new archive fails,
+    // so a failure can never leave the slot empty or destroy the only copy.
+    // The backup name is dotted (hidden) so a crash-orphaned sidecar is not
+    // enumerated by the auditor's file scan and mistaken for a loose ROM; the
+    // scan also skips the *.kartend-bak suffix outright (datauditrunner.cpp).
+    const QFileInfo srcInfo(src);
+    const QString backup =
+        srcInfo.path() + QStringLiteral("/.") + srcInfo.fileName() + QStringLiteral(".kartend-bak");
+    QFile::remove(backup);
+    if (!QFile::rename(src, backup)) {
+      QFile::remove(tmp);
+      if (errorOut != nullptr) {
+        *errorOut = QStringLiteral("could not stage the original archive: %1").arg(src);
+      }
+      return false;
+    }
+    if (!QFile::rename(tmp, dst)) {
+      QFile::rename(backup, src); // restore the original
+      QFile::remove(tmp);
+      if (errorOut != nullptr) {
+        *errorOut = QStringLiteral("could not place repacked archive: %1").arg(dst);
+      }
+      return false;
+    }
+    QFile::remove(backup); // success — drop the backup
+    return true;
   }
+  // Different container name: place the new one first, then drop the old — a
+  // failure leaves both the source and the temp intact.
   if (!QFile::rename(tmp, dst)) {
     QFile::remove(tmp);
     if (errorOut != nullptr) {
@@ -184,9 +247,7 @@ bool repackAndSwap(const QString &src, const QString &dst,
     }
     return false;
   }
-  if (!inPlace) {
-    QFile::remove(src); // drop the old, now-renamed container
-  }
+  QFile::remove(src); // drop the old, now-renamed container
   return true;
 }
 
@@ -234,7 +295,7 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
       const QString dir = QFileInfo(r.filePath).path();
       const QString to = dir + QLatin1Char('/') + r.expectedName;
       if (to != r.filePath) {
-        plan.actions.append(FixAction{FixActionKind::Rename, r.filePath, to, r.status});
+        plan.actions.append(FixAction{FixActionKind::Rename, r.filePath, to, r.status, {}});
       }
     }
     // Relocate present entries into the managed-output root (a clean sorted
@@ -252,7 +313,7 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
         }
       }
       const QString to = destDir + QLatin1Char('/') + r.expectedName;
-      plan.actions.append(FixAction{FixActionKind::Relocate, r.filePath, to, r.status});
+      plan.actions.append(FixAction{FixActionKind::Relocate, r.filePath, to, r.status, {}});
     }
     // Quarantine unknown and wrong-content files (move out, never delete): an
     // Unknown file matches no DAT entry, and a WrongHash file claims (by name) to
@@ -264,7 +325,7 @@ FixPlan computeFixPlan(const QList<AuditRow> &rows, const FixSettings &settings)
         (r.status == Status::Unknown || r.status == Status::WrongHash) && !r.filePath.isEmpty()) {
       const QString name = r.actualName.isEmpty() ? QFileInfo(r.filePath).fileName() : r.actualName;
       const QString to = settings.quarantineDir + QLatin1Char('/') + name;
-      plan.actions.append(FixAction{FixActionKind::Quarantine, r.filePath, to, r.status});
+      plan.actions.append(FixAction{FixActionKind::Quarantine, r.filePath, to, r.status, {}});
     }
   }
   // Fix each archive-packed container as a unit (repack / quarantine).
@@ -281,9 +342,13 @@ ApplyResult applyFixPlan(const FixPlan &plan, bool dryRun) {
       ++res.applied;
       continue;
     }
-    if (a.fromPath.isEmpty() || a.toPath.isEmpty() || !QFileInfo::exists(a.fromPath)) {
+    // isFile() (not just exists): the fix engine only ever moves/rewrites real
+    // files. Refusing a directory is a DATA-LOSS safety net — a real folder
+    // whose name ends in an archive extension can be mis-grouped as a container,
+    // and QFile::rename would move the WHOLE directory tree.
+    if (a.fromPath.isEmpty() || a.toPath.isEmpty() || !QFileInfo(a.fromPath).isFile()) {
       ++res.failed;
-      res.errors.append(QStringLiteral("source missing: %1").arg(a.fromPath));
+      res.errors.append(QStringLiteral("source missing or not a file: %1").arg(a.fromPath));
       continue;
     }
     // Never overwrite a different existing file at the destination.
@@ -317,12 +382,12 @@ ApplyResult applyFixPlan(const FixPlan &plan, bool dryRun) {
     } else if (a.kind == FixActionKind::Relocate) {
       ok = QFile::copy(a.fromPath, a.toPath);
       if (ok) {
-        res.undo.append(UndoEntry{a.toPath, QString(), true});
+        res.undo.append(UndoEntry{a.toPath, QString(), true, false, {}});
       }
     } else {
       ok = QFile::rename(a.fromPath, a.toPath);
       if (ok) {
-        res.undo.append(UndoEntry{a.toPath, a.fromPath, false});
+        res.undo.append(UndoEntry{a.toPath, a.fromPath, false, false, {}});
       }
     }
     if (ok) {

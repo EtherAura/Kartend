@@ -84,6 +84,12 @@ QStringList enumerateFiles(const AuditOptions &opts) {
       if (matchesAnyGlob(fi.fileName(), globs)) {
         continue;
       }
+      // Skip the fix engine's transient sidecars (a crash-orphaned in-place
+      // repack backup or temp) so they are never audited as loose ROMs.
+      if (fi.fileName().endsWith(QStringLiteral(".kartend-bak")) ||
+          fi.fileName().startsWith(QStringLiteral(".kartend-repack"))) {
+        continue;
+      }
       const QString canonical = fi.canonicalFilePath();
       if (!canonical.isEmpty() && datCanonical.contains(canonical)) {
         continue; // never audit the DAT file itself

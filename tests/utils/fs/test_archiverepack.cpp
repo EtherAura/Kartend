@@ -18,10 +18,16 @@
 
 namespace {
 
-// Write a zip with the given {entryName, content} regular-file entries.
-bool makeZip(const QString &path, const QVector<QPair<QString, QByteArray>> &entries) {
+// Write an archive (zip by default, 7z when sevenZip) with the given
+// {entryName, content} regular-file entries.
+bool makeZip(const QString &path, const QVector<QPair<QString, QByteArray>> &entries,
+             bool sevenZip = false) {
   struct archive *a = archive_write_new();
-  archive_write_set_format_zip(a);
+  if (sevenZip) {
+    archive_write_set_format_7zip(a);
+  } else {
+    archive_write_set_format_zip(a);
+  }
   if (archive_write_open_filename(a, QFile::encodeName(path).constData()) != ARCHIVE_OK) {
     archive_write_free(a);
     return false;
@@ -80,6 +86,7 @@ private slots:
   void missingSourceErrors();
   void renamesEntryAndPreservesContent();
   void nonMatchingRenameLeavesArchiveIntact();
+  void renames7zEntryPreservingFormat();
 };
 
 void TestArchiveRepack::refusesSameSourceAndDestination() {
@@ -148,6 +155,40 @@ void TestArchiveRepack::nonMatchingRenameLeavesArchiveIntact() {
   const QMap<QString, QByteArray> out = readZip(dst);
   QCOMPARE(out.size(), 1);
   QCOMPARE(out.value(QStringLiteral("only.md")), QByteArrayLiteral("data"));
+#endif
+}
+
+void TestArchiveRepack::renames7zEntryPreservingFormat() {
+#ifndef KARTEND_HAS_LIBARCHIVE
+  QSKIP("round-trip needs libarchive to build + read the fixture archive");
+#else
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString src = dir.filePath(QStringLiteral("Game (old).7z"));
+  const QString dst = dir.filePath(QStringLiteral("Game.7z"));
+  const QByteArray rom = QByteArrayLiteral("7z inner rom bytes \x01\x02\x03");
+  QVERIFY(makeZip(src, {{QStringLiteral("Game (old).md"), rom}}, /*sevenZip=*/true));
+
+  auto r = ArchiveRepack::repack(src, dst,
+                                 {{QStringLiteral("Game (old).md"), QStringLiteral("Game.md")}});
+  QVERIFY2(!r.isError(), qPrintable(r.isError() ? r.error().message : QString()));
+  QCOMPARE(r.value(), 1);
+
+  // Inner entry renamed + bytes intact...
+  const QMap<QString, QByteArray> out = readZip(dst);
+  QCOMPARE(out.value(QStringLiteral("Game.md")), rom);
+  QVERIFY(!out.contains(QStringLiteral("Game (old).md")));
+  // ...and the output is really 7z on disk (magic "7z…"), not a zip wearing a
+  // .7z name (zip would start with "PK").
+  QFile f(dst);
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QByteArray magic = f.read(2);
+  f.close();
+  QCOMPARE(magic, QByteArrayLiteral("7z"));
+
+  QVERIFY(ArchiveRepack::isRepackableFormat(dst));
+  QVERIFY(ArchiveRepack::isRepackableFormat(QStringLiteral("a.zip")));
+  QVERIFY(!ArchiveRepack::isRepackableFormat(QStringLiteral("a.rar")));
 #endif
 }
 
