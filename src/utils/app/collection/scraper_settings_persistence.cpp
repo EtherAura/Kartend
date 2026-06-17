@@ -43,6 +43,8 @@ void loadOptions(QSettings &settings, ScraperOptions &opts) {
   opts.regionSource =
       static_cast<ScraperOptions::ScraperRegionSource>(qBound(0, rawRegionSource, 2));
   opts.datLibraryPath = settings.value(keys::kDatLibraryPath, QString()).toString().trimmed();
+  opts.quarantineDefaultDir =
+      settings.value(keys::kQuarantineDefaultDir, QString()).toString().trimmed();
 }
 
 void saveOptions(QSettings &settings, const ScraperOptions &opts) {
@@ -61,6 +63,7 @@ void saveOptions(QSettings &settings, const ScraperOptions &opts) {
   settings.setValue(keys::kScraperMaxHashableSizeMB, opts.maxHashableSizeMB);
   settings.setValue(keys::kScraperRegionSource, static_cast<int>(opts.regionSource));
   settings.setValue(keys::kDatLibraryPath, opts.datLibraryPath);
+  settings.setValue(keys::kQuarantineDefaultDir, opts.quarantineDefaultDir);
 }
 
 } // namespace ScraperSettingsPersistence

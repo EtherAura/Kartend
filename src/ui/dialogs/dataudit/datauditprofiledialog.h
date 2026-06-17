@@ -40,12 +40,12 @@ private slots:
   void onMoveRegionUp();
   void onMoveRegionDown();
   void onBrowseManagedRoot();
+  void onBrowseQuarantineRoot();
   void onFixModeChanged();
-  /// React to the Linked-collection picker: a linked profile's DAT list and
-  /// scan root are DERIVED from the collection's settings (Kartend-m6qsb.2),
-  /// so linking repopulates both lists from the collection and locks their
-  /// editors; "(none)" unlocks them again. An unresolvable stored link keeps
-  /// the seed's cached lists, locked (read-only fallback).
+  /// React to the Linked-collection picker: linking seeds the DAT list and scan
+  /// folder from the collection only when the profile has none (seed-once), then
+  /// both stay user-editable — nothing is locked. "(none)" leaves the lists for
+  /// the user to edit; an unresolvable stored link keeps the seed's cached lists.
   void onLinkedCollectionChanged();
   void accept() override;
 
@@ -72,6 +72,8 @@ private:
   QRadioButton *m_fixManaged = nullptr;
   QLineEdit *m_managedRoot = nullptr;
   QPushButton *m_managedBrowse = nullptr;
+  QLineEdit *m_quarantineRoot = nullptr;
+  QPushButton *m_quarantineBrowse = nullptr;
 };
 
 #endif // DATAUDITPROFILEDIALOG_H

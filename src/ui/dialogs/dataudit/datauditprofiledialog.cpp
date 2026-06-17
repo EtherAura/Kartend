@@ -85,12 +85,13 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   form->addRow(tr("Linked collection:"), m_collection);
   root->addLayout(form);
 
-  // DAT files + scan folders. Locked + derived while a collection is linked
-  // (Kartend-m6qsb.2) — see onLinkedCollectionChanged.
+  // DAT files + scan folders are seeded from a linked collection but stay
+  // user-editable (seed-once, never clobber an override) — see
+  // onLinkedCollectionChanged.
   m_linkedHint =
-      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
-                    "seeded from the collection's configured DATs, then managed here — add or "
-                    "remove them freely."),
+      new QLabel(tr("The scan folder and DAT files are seeded from the linked collection "
+                    "(its content folder and configured DATs), then managed here — add or "
+                    "remove them freely to override."),
                  this);
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
@@ -164,6 +165,18 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   mrow->addWidget(m_managedRoot, 1);
   mrow->addWidget(m_managedBrowse);
   fixV->addLayout(mrow);
+
+  // Per-collection quarantine folder for the Fix dialog (unknown + wrong-content
+  // files). Empty falls back to the global default (Settings → General → DAT
+  // Auditor). Independent of the in-place / managed-output mode above.
+  auto *qrow = new QHBoxLayout();
+  qrow->addWidget(new QLabel(tr("Quarantine folder:"), fix));
+  m_quarantineRoot = new QLineEdit(m_seed.quarantineRoot, fix);
+  m_quarantineRoot->setPlaceholderText(tr("Defaults to the global quarantine folder"));
+  m_quarantineBrowse = new QPushButton(tr("Browse…"), fix);
+  qrow->addWidget(m_quarantineRoot, 1);
+  qrow->addWidget(m_quarantineBrowse);
+  fixV->addLayout(qrow);
   root->addWidget(fix);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -181,6 +194,8 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   connect(downReg, &QPushButton::clicked, this, &DatAuditProfileDialog::onMoveRegionDown);
   connect(m_managedBrowse, &QPushButton::clicked, this,
           &DatAuditProfileDialog::onBrowseManagedRoot);
+  connect(m_quarantineBrowse, &QPushButton::clicked, this,
+          &DatAuditProfileDialog::onBrowseQuarantineRoot);
   connect(m_fixInPlace, &QRadioButton::toggled, this, &DatAuditProfileDialog::onFixModeChanged);
   connect(buttons, &QDialogButtonBox::accepted, this, &DatAuditProfileDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -192,10 +207,8 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   // derived state (linked, resolved upstream) or the cached fallback (link
   // unavailable) — re-deriving here would clobber the fallback.
   const bool linked = !(m_collection->currentData().toString().isEmpty());
-  // DAT files stay user-editable even when linked; only the scan-root editors
-  // are locked (the link derives the scan folder, not the DATs).
-  m_addRootButton->setEnabled(!linked);
-  m_removeRootButton->setEnabled(!linked);
+  // The scan folder and DAT files stay user-editable even when linked — the
+  // collection only seeds them; nothing is locked.
   m_linkedHint->setVisible(linked);
 }
 
@@ -212,9 +225,9 @@ void DatAuditProfileDialog::onLinkedCollectionChanged() {
       if (CollectionUtils::computeCollectionUuid(c.name, expanded) != uuid) {
         continue;
       }
-      // Seed DATs from the collection only when the user hasn't added any —
-      // never clobber an edited DAT list (the link derives only the scan
-      // folder). The scan root below IS derived, so it is replaced.
+      // Seed the DAT list and the scan folder from the collection only when the
+      // user hasn't set them — never clobber an edited list, so a deliberate
+      // override survives. The collection just provides the defaults.
       if (m_datList->count() == 0) {
         for (const QString &d : c.scraperOverrides.datFilePaths) {
           if (!d.isEmpty()) {
@@ -222,19 +235,19 @@ void DatAuditProfileDialog::onLinkedCollectionChanged() {
           }
         }
       }
-      m_rootList->clear();
-      const QString scanRoot = PathUtils::expandPathWithoutExistenceCheck(c.mediaDirectory, c.name);
-      if (!scanRoot.isEmpty()) {
-        m_rootList->addItem(scanRoot);
+      if (m_rootList->count() == 0) {
+        const QString scanRoot =
+            PathUtils::expandPathWithoutExistenceCheck(c.mediaDirectory, c.name);
+        if (!scanRoot.isEmpty()) {
+          m_rootList->addItem(scanRoot);
+        }
       }
       break;
     }
   }
 
-  // DAT files stay user-editable even when linked; only the scan-root editors
-  // are locked (the link derives the scan folder, not the DATs).
-  m_addRootButton->setEnabled(!linked);
-  m_removeRootButton->setEnabled(!linked);
+  // The scan folder and DAT files stay user-editable even when linked — the
+  // collection only seeds them; nothing is locked.
   m_linkedHint->setVisible(linked);
 }
 
@@ -293,6 +306,13 @@ void DatAuditProfileDialog::onBrowseManagedRoot() {
   }
 }
 
+void DatAuditProfileDialog::onBrowseQuarantineRoot() {
+  const QString dir = QFileDialog::getExistingDirectory(this, tr("Quarantine folder"));
+  if (!dir.isEmpty()) {
+    m_quarantineRoot->setText(dir);
+  }
+}
+
 void DatAuditProfileDialog::onFixModeChanged() {
   const bool managed = m_fixManaged->isChecked();
   m_managedRoot->setEnabled(managed);
@@ -347,5 +367,6 @@ DatAuditProfile::Profile DatAuditProfileDialog::profile() const {
 
   p.fixMode = m_fixManaged->isChecked() ? FixMode::ManagedOutput : FixMode::InPlace;
   p.managedOutputRoot = m_managedRoot->text().trimmed();
+  p.quarantineRoot = m_quarantineRoot->text().trimmed();
   return p;
 }

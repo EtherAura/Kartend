@@ -29,6 +29,11 @@ private slots:
   // clears the override and ends with the sidebar visible (—
   // user intent outranks cover-flow's auto-hide).
   void detailsPaneManager_toggleClearsExternallyHidden();
+
+  // EventManager: a wheel tick whose target lives in a SEPARATE top-level window
+  // (a dialog such as the DAT Manager) must not be claimed as a main-window grid
+  // scroll — it has to reach the dialog's own widgets.
+  void eventManager_wheelOverForeignWindow_isNotClaimedByGridScroll();
 };
 
 #endif // TEST_EVENTMANAGER_DETAILSPANE_H

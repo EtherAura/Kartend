@@ -29,6 +29,8 @@ QString actionLine(const FixAction &a) {
     return QObject::tr("Copy to sorted output: %1 → %2").arg(from, a.toPath);
   case FixActionKind::Quarantine:
     return QObject::tr("Quarantine: %1 → %2").arg(from, a.toPath);
+  case FixActionKind::Repack:
+    return QObject::tr("Repack: %1 → %2 (%3 inner)").arg(from, to).arg(a.innerRenames.size());
   }
   return from;
 }
@@ -48,7 +50,8 @@ DatAuditFixDialog::DatAuditFixDialog(QList<DatAudit::AuditRow> rows, QWidget *pa
   m_rename->setChecked(true);
   form->addRow(m_rename);
 
-  m_quarantine = new QCheckBox(tr("Move unknown files to a quarantine folder"), this);
+  m_quarantine =
+      new QCheckBox(tr("Move unknown and wrong-content files to a quarantine folder"), this);
   auto *quarRow = new QHBoxLayout();
   m_quarantineDir = new QLineEdit(this);
   m_quarantineDir->setPlaceholderText(tr("Quarantine folder…"));
@@ -132,6 +135,17 @@ void DatAuditFixDialog::setManagedOutputDefaults(bool relocateToManagedOutput,
   m_relocate->setChecked(relocateToManagedOutput);
   m_perItemSubfolder->setEnabled(relocateToManagedOutput);
   recomputePlan();
+}
+
+void DatAuditFixDialog::setQuarantineDefault(const QString &quarantineRoot) {
+  // Prefill the quarantine folder (per-collection root, else the global default)
+  // only while the field is still blank, so a manual edit is never clobbered.
+  // The destructive quarantine option itself stays default-off — only the path
+  // is seeded, keeping it fully overridable.
+  if (!quarantineRoot.isEmpty() && m_quarantineDir->text().trimmed().isEmpty()) {
+    m_quarantineDir->setText(quarantineRoot);
+    recomputePlan();
+  }
 }
 
 void DatAuditFixDialog::recomputePlan() {

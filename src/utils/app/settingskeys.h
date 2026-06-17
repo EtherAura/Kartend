@@ -143,6 +143,7 @@ inline constexpr auto kPreset = "preset";
 inline constexpr auto kPresetId = "presetId";
 inline constexpr auto kPreviewVideoVolume = "previewVideoVolume";
 inline constexpr auto kPrimaryColor = "primaryColor";
+inline constexpr auto kQuarantineDefaultDir = "quarantineDefaultDir";
 inline constexpr auto kRememberSelection = "rememberSelection";
 inline constexpr auto kRescrapeMode = "rescrapeMode";
 inline constexpr auto kResumeFocusSplashEnabled = "resumeFocusSplashEnabled";

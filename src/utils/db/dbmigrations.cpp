@@ -213,7 +213,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 22;
+  constexpr int CURRENT_SCHEMA_VERSION = 23;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -923,9 +923,23 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 22; // read by the v23 block below
+  }
+
+  if (mutableVersion < 23) {
+    // v23: per-collection quarantine folder on the audit profile. Remembers the
+    // Fix dialog's quarantine target per profile so each collection keeps its
+    // own, falling back to the global default when empty. Pre-v23 profiles
+    // default to '' and use the global default.
+    if (!runBlock(db, 23, origin, [&]() -> bool {
+          return ensureColumn(db, "dat_audit_profile", "quarantine_root",
+                              "TEXT NOT NULL DEFAULT ''", origin);
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v23 block stays a pure copy-paste.
-    mutableVersion = 22; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v24 block stays a pure copy-paste.
+    mutableVersion = 23; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

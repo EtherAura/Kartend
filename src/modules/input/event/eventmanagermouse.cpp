@@ -38,6 +38,17 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (modalScrapeDialogVisible()) {
     return false;
   }
+  // Only claim wheel events whose target lives in the MAIN window. A wheel tick
+  // over any other top-level window — a dialog such as the DAT Manager, with its
+  // own lists/tables — must reach that window's widgets via Qt's normal delivery
+  // and scroll them, not the item grid behind it.
+  QWidget *ourWindow =
+      m_itemsPage ? m_itemsPage->window() : (m_gridContainer ? m_gridContainer->window() : nullptr);
+  auto *targetWidget = qobject_cast<QWidget *>(obj);
+  QWidget *targetWindow = targetWidget ? targetWidget->window() : nullptr;
+  if (ourWindow == nullptr || targetWindow != ourWindow) {
+    return false;
+  }
   return m_wheelHandler && m_wheelHandler->handleEvent(obj, event);
 }
 

@@ -1294,6 +1294,12 @@ kartend_add_test(NAME RomHasher
   LINK kartend_utils
 )
 
+# ArchiveRepack tests (rewrite a zip renaming inner entries; libarchive round-trip)
+kartend_add_test(NAME ArchiveRepack
+  SOURCES utils/fs/test_archiverepack.cpp
+  LINK kartend_utils
+)
+
 # RetroArchUtils tests (retroarch.cfg parsing + libretro core discovery)
 kartend_add_test(NAME RetroArchUtils
   SOURCES utils/fs/test_retroarchutils.cpp

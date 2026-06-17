@@ -85,15 +85,25 @@ IMainWindow::DatAuditStatus MainWindow::datAuditStatusForCollection(const QStrin
       // Same most-recently-updated selection the audit dialog itself uses, so
       // the hint describes the profile a collection-seeded launch would open.
       auto linked = DatAuditProfile::loadByCollectionUuid(db, collectionUuid);
-      if (linked.isOk() && linked.value().has_value()) {
-        auto summary = DatAuditProfile::loadResultSummary(db, linked.value()->id);
-        if (summary.isOk() && summary.value().has_value()) {
-          const DatAuditProfile::ResultSummary &s = *summary.value();
-          out.lastScanMs = s.lastScanAtMs;
-          out.hasResults = s.hasResults;
-          out.present = s.count(static_cast<int>(DatAudit::Status::Have)) +
-                        s.count(static_cast<int>(DatAudit::Status::WrongName));
-          out.missing = s.count(static_cast<int>(DatAudit::Status::Missing));
+      if (linked.isOk()) {
+        // Bind each Result's inner std::optional to a single name so its
+        // has_value() check and the subsequent access are the same expression.
+        // clang-tidy's bugprone-unchecked-optional-access cannot connect a check
+        // on one value() call to an access on a second value() call.
+        const auto &linkedOpt = linked.value();
+        if (linkedOpt.has_value()) {
+          auto summary = DatAuditProfile::loadResultSummary(db, linkedOpt->id);
+          if (summary.isOk()) {
+            const auto &summaryOpt = summary.value();
+            if (summaryOpt.has_value()) {
+              const DatAuditProfile::ResultSummary &s = *summaryOpt;
+              out.lastScanMs = s.lastScanAtMs;
+              out.hasResults = s.hasResults;
+              out.present = s.count(static_cast<int>(DatAudit::Status::Have)) +
+                            s.count(static_cast<int>(DatAudit::Status::WrongName));
+              out.missing = s.count(static_cast<int>(DatAudit::Status::Missing));
+            }
+          }
         }
       }
     }

@@ -50,6 +50,25 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="datAuditorGroupBox">
+     <property name="title"><string>DAT Auditor</string></property>
+     <layout class="QFormLayout" name="datAuditorFormLayout">
+      <property name="horizontalSpacing"><number>16</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="labelAlignment"><set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="quarantineDefaultDirLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Default Quarantine Folder:</string></property></widget></item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="quarantineDefaultDirLayout">
+        <item><widget class="QLineEdit" name="quarantineDefaultDirLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Default folder the DAT auditor's Fix dialog proposes when moving unknown or wrong-content files out of a set. Prefills the Fix dialog whenever the audited profile has no quarantine folder of its own. Empty leaves it blank.</string></property></widget></item>
+        <item><widget class="QPushButton" name="browseQuarantineDefaultButton"><property name="text"><string>Browse</string></property></widget></item>
+        <item><spacer name="quarantineDefaultDirSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="selectionGroupBox">
      <property name="title"><string>Selection &amp; Display</string></property>
      <layout class="QVBoxLayout" name="selectionFormLayout">

@@ -81,6 +81,7 @@ Profile TestDatAuditProfile::sampleProfile() {
   p.ignoreRules = {QStringLiteral("*.txt")};
   p.fixMode = FixMode::ManagedOutput;
   p.managedOutputRoot = QStringLiteral("/sorted");
+  p.quarantineRoot = QStringLiteral("/quarantine");
   p.detectedLayout = QStringLiteral("archive_per_item");
   p.layoutConfirmed = true;
   DatRef d1;
@@ -132,6 +133,7 @@ void TestDatAuditProfile::insertAndLoadRoundTrip() {
   QCOMPARE(out.ignoreRules, in.ignoreRules);
   QCOMPARE(out.fixMode, in.fixMode);
   QCOMPARE(out.managedOutputRoot, in.managedOutputRoot);
+  QCOMPARE(out.quarantineRoot, in.quarantineRoot);
   QCOMPARE(out.detectedLayout, in.detectedLayout);
   QCOMPARE(out.layoutConfirmed, in.layoutConfirmed);
   QCOMPARE(out.dats.size(), 2);

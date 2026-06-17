@@ -12,6 +12,8 @@
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QWheelEvent>
+#include <QWidget>
 
 void TestEventManagerDetailsPane::eventManager_isWiredOnInteractionManager() {
   KartendTest::MockedMainWindowFixture fixture;
@@ -130,4 +132,23 @@ void TestEventManagerDetailsPane::detailsPaneManager_toggleClearsExternallyHidde
   QSignalSpy spy(mgr, &DetailsPaneManager::sidebarVisibilityChanged);
   mgr->setExternallyHidden(false);
   QCOMPARE(spy.count(), 0);
+}
+
+void TestEventManagerDetailsPane::eventManager_wheelOverForeignWindow_isNotClaimedByGridScroll() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  EventManager *em = win->getApplicationManager()->getInteractionManager()->eventManager();
+  QVERIFY(em);
+
+  // A widget living in a SEPARATE top-level window (no parent) stands in for a
+  // dialog like the DAT Manager. The app-level filter must NOT consume a wheel
+  // tick over it as a main-window grid scroll — returning false lets Qt deliver
+  // the event to the dialog's own list/table so it scrolls.
+  QWidget foreign;
+  QWidget child(&foreign);
+  QWheelEvent wheel(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, -120), Qt::NoButton,
+                    Qt::NoModifier, Qt::NoScrollPhase, /*inverted=*/false);
+  QVERIFY2(!em->filterEvent(&child, &wheel),
+           "wheel over a foreign window must pass through, not scroll the grid");
 }

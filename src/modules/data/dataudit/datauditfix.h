@@ -2,6 +2,7 @@
 #define DATAUDITFIX_H
 
 #include <QList>
+#include <QPair>
 #include <QString>
 #include <QStringList>
 
@@ -17,7 +18,8 @@ namespace DatAudit {
 enum class FixActionKind {
   Rename,     ///< Rename a file in place to its canonical DAT name (WrongName).
   Relocate,   ///< Copy a present file into the managed-output root under its canonical name.
-  Quarantine, ///< Move an unknown file into the quarantine area (never deleted).
+  Quarantine, ///< Move an unknown/wrong-content file (or whole bad container) into quarantine.
+  Repack,     ///< Rewrite a zip-packed container, renaming inner ROM(s) + the container.
 };
 
 [[nodiscard]] QString fixActionKindToken(FixActionKind k);
@@ -28,6 +30,10 @@ struct FixAction {
   QString fromPath;                   ///< The existing file the action operates on.
   QString toPath;                     ///< Destination path.
   Status sourceStatus = Status::Have; ///< The audit status that produced this action.
+  /// Repack only: inner archive entries to rename (oldEntryName -> newEntryName).
+  /// fromPath is the source container, toPath the (possibly renamed) destination
+  /// container. Empty for every other kind.
+  QList<QPair<QString, QString>> innerRenames;
 };
 
 struct FixPlan {
@@ -38,11 +44,12 @@ struct FixPlan {
 /// Which fixes to include and where outputs go. Destructive categories default
 /// OFF; rename (the lowest-risk fix) defaults ON.
 struct FixSettings {
-  bool rename = true;                   ///< In-place: WrongName -> rename to canonical.
+  bool rename = true; ///< Rename WrongName files to canonical; repack misnamed archive sets.
   bool relocateToManagedOutput = false; ///< Managed-output: copy present entries into the root.
-  bool quarantineUnknown = false;       ///< Move Unknown files into quarantineDir.
-  QString managedOutputRoot;            ///< Required when relocateToManagedOutput.
-  QString quarantineDir;                ///< Required when quarantineUnknown.
+  bool quarantineUnknown =
+      false;                 ///< Move Unknown/WrongHash files + whole bad containers to quarantine.
+  QString managedOutputRoot; ///< Required when relocateToManagedOutput.
+  QString quarantineDir;     ///< Required when quarantineUnknown.
   /// Structured managed output (Kartend-m6qsb.14): place each relocated file in
   /// a per-item subfolder named after its DAT game (managedOutputRoot/<game>/
   /// <canonical>) instead of a flat managedOutputRoot/<canonical>. Groups
@@ -59,9 +66,13 @@ struct FixSettings {
 
 /// One reversible step recorded by applyFixPlan.
 struct UndoEntry {
-  QString createdPath;  ///< Path the action created (rename/quarantine target, or the copy).
-  QString originalPath; ///< Where to move it back; empty for copies (undo deletes createdPath).
-  bool wasCopy = false; ///< Copy (Relocate) vs move (Rename / Quarantine).
+  QString createdPath;    ///< Path the action created (rename/quarantine target, or the copy).
+  QString originalPath;   ///< Where to move it back; empty for copies (undo deletes createdPath).
+  bool wasCopy = false;   ///< Copy (Relocate) vs move (Rename / Quarantine).
+  bool wasRepack = false; ///< Repack: reverse by repacking createdPath back to originalPath.
+  /// Repack only: inverse inner renames (newEntryName -> oldEntryName) applied
+  /// when reversing the repack.
+  QList<QPair<QString, QString>> repackReverse;
 };
 
 struct ApplyResult {

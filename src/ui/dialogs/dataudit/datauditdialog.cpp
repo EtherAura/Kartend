@@ -172,7 +172,12 @@ void refreshDatRefMetadata(QList<DatAuditProfile::DatRef> &dats) {
 DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   setWindowTitle(tr("DAT Manager"));
   setWindowFlag(Qt::Window, true);
+  // Default opening size, and a generous minimum floor: without an explicit
+  // minimum the window can be dragged down to the layout's tiny hint, cramping
+  // the nav rail + the Browser's tree/DAT-info/game/ROM panes (the ROM table
+  // alone has 9 columns) and the multi-column Audit results. Keep it usable.
   resize(960, 640);
+  setMinimumSize(880, 600);
 
   m_model = new DatAuditModel(this);
 
@@ -307,9 +312,9 @@ QWidget *DatAuditDialog::buildAuditPage() {
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
   m_linkedHint =
-      new QLabel(tr("The scan folder is derived from the linked collection. DAT files are "
-                    "seeded from the collection's configured DATs, then managed here — add or "
-                    "remove them freely."),
+      new QLabel(tr("The scan folder and DAT files are seeded from the linked collection "
+                    "(its content folder and configured DATs), then managed here — add or "
+                    "remove them freely to override."),
                  page);
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
@@ -630,6 +635,10 @@ void DatAuditDialog::setLibraryPathAccessors(std::function<QString()> getter,
   }
 }
 
+void DatAuditDialog::setQuarantineDefaultProvider(std::function<QString()> provider) {
+  m_getQuarantineDefaultDir = std::move(provider);
+}
+
 void DatAuditDialog::setImportHandler(std::function<void(const QString &)> handler) {
   m_importPack = std::move(handler);
   const bool on = static_cast<bool>(m_importPack);
@@ -700,13 +709,17 @@ void DatAuditDialog::applyCollectionDerivation() {
   if (linked == nullptr) {
     return; // unlinked, or unresolved link — cached lists stay as fallback
   }
-  const QString scanRoot =
-      PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
-  m_currentProfile.scanRoots = scanRoot.isEmpty() ? QStringList{} : QStringList{scanRoot};
-  // DAT files are user-managed even for a linked profile (the link only derives
-  // the scan folder): seed them from the collection's configured DATs the first
-  // time, but never overwrite a DAT list the user has since edited here — that
-  // is what blocked adding DATs to a linked profile (Kartend-4u1pr follow-up).
+  // The scan folder and DAT files are both user-managed even for a linked
+  // profile: seed each from the collection (media dir → scan root, configured
+  // DATs → DAT list) the first time, but never overwrite a value the user has
+  // since edited here, so a deliberate override survives reload.
+  if (m_currentProfile.scanRoots.isEmpty()) {
+    const QString scanRoot =
+        PathUtils::expandPathWithoutExistenceCheck(linked->mediaDirectory, linked->name);
+    if (!scanRoot.isEmpty()) {
+      m_currentProfile.scanRoots = QStringList{scanRoot};
+    }
+  }
   if (m_currentProfile.dats.isEmpty()) {
     for (const QString &d : linked->scraperOverrides.datFilePaths) {
       if (!d.isEmpty()) {
@@ -720,10 +733,9 @@ void DatAuditDialog::applyCollectionDerivation() {
 
 void DatAuditDialog::updateLinkedUiState() {
   const bool linked = !m_currentProfile.collectionUuid.isEmpty();
-  // DAT files stay user-editable even when linked (the link only derives the
-  // scan folder); only the scan-root editors are locked to the collection.
-  m_addRootButton->setEnabled(!linked);
-  m_removeRootButton->setEnabled(!linked);
+  // The scan folder and DAT files stay user-editable even when linked — the
+  // collection only seeds them. Nothing in the lists is locked; the hint just
+  // explains the seeding.
   m_linkedHint->setVisible(linked);
 }
 
@@ -1087,9 +1099,12 @@ bool DatAuditDialog::hasResults() const {
 }
 
 bool DatAuditDialog::hasApplicableFixes() const {
+  // The fix engine acts on exactly these statuses: WrongName (rename), and
+  // Unknown / WrongHash (quarantine). Duplicate/Corrupt/Missing produce no
+  // action, so they must not light the Fix button.
   for (const DatAudit::AuditRow &r : m_model->allRows()) {
     if (r.status == DatAudit::Status::WrongName || r.status == DatAudit::Status::Unknown ||
-        r.status == DatAudit::Status::Duplicate) {
+        r.status == DatAudit::Status::WrongHash) {
       return true;
     }
   }
@@ -1397,6 +1412,13 @@ void DatAuditDialog::onFix() {
   // (Kartend-m6qsb.14) instead of always starting blank.
   dlg.setManagedOutputDefaults(m_currentProfile.fixMode == DatAuditProfile::FixMode::ManagedOutput,
                                m_currentProfile.managedOutputRoot);
+  // Seed the quarantine folder: the profile's per-collection root takes
+  // precedence, falling back to the global default. Either may be empty.
+  QString quarantineSeed = m_currentProfile.quarantineRoot.trimmed();
+  if (quarantineSeed.isEmpty() && m_getQuarantineDefaultDir) {
+    quarantineSeed = m_getQuarantineDefaultDir().trimmed();
+  }
+  dlg.setQuarantineDefault(quarantineSeed);
   dlg.exec();
   if (!dlg.didApply()) {
     return;

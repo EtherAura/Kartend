@@ -135,6 +135,13 @@ struct ScraperOptions {
   // caches it.
   QString datLibraryPath;
 
+  // Default quarantine folder for the DAT auditor's Fix dialog: prefills the
+  // per-run quarantine field when the audited profile has no per-collection
+  // quarantine of its own. Empty = no default. Lives here alongside
+  // datLibraryPath for the same reason (the DAT tooling shares this domain); no
+  // consumer caches it, so riding the hot-reload signal is harmless.
+  QString quarantineDefaultDir;
+
   // Value-equality for the per-domain hot-reload signal: the change
   // emit in SettingsManager::saveGeneralSettings only fires when this
   // returns false, so a Save that didn't actually touch ScraperOptions
@@ -149,7 +156,8 @@ struct ScraperOptions {
            scrapeLogging == other.scrapeLogging &&
            preferredScraperRegion == other.preferredScraperRegion && hashMode == other.hashMode &&
            maxHashableSizeMB == other.maxHashableSizeMB && regionSource == other.regionSource &&
-           datLibraryPath == other.datLibraryPath;
+           datLibraryPath == other.datLibraryPath &&
+           quarantineDefaultDir == other.quarantineDefaultDir;
   }
   bool operator!=(const ScraperOptions &other) const { return !(*this == other); }
 };
