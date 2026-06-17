@@ -172,7 +172,12 @@ void refreshDatRefMetadata(QList<DatAuditProfile::DatRef> &dats) {
 DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   setWindowTitle(tr("DAT Manager"));
   setWindowFlag(Qt::Window, true);
+  // Default opening size, and a generous minimum floor: without an explicit
+  // minimum the window can be dragged down to the layout's tiny hint, cramping
+  // the nav rail + the Browser's tree/DAT-info/game/ROM panes (the ROM table
+  // alone has 9 columns) and the multi-column Audit results. Keep it usable.
   resize(960, 640);
+  setMinimumSize(880, 600);
 
   m_model = new DatAuditModel(this);
 
