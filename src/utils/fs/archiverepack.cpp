@@ -17,12 +17,16 @@ namespace ArchiveRepack {
 namespace {
 
 constexpr const char *kOrigin = "ArchiveRepack::repack";
+
+#ifdef KARTEND_HAS_LIBARCHIVE
 // Sanity ceilings mirroring the hasher's compression-bomb guards — generous,
 // since these are the user's own archives being fixed, but still bounded so a
-// pathological input cannot exhaust the host.
+// pathological input cannot exhaust the host. Only the libarchive repack reads
+// them, so they live behind the guard (else they are unused without libarchive).
 constexpr int kMaxEntries = 200000;
 constexpr qint64 kMaxBytes = 64LL * 1024 * 1024 * 1024; // 64 GiB total payload
 constexpr size_t kChunk = 1U << 20;
+#endif
 
 bool isSameFile(const QString &a, const QString &b) {
   return QFileInfo(a).absoluteFilePath() == QFileInfo(b).absoluteFilePath();
@@ -188,6 +192,7 @@ ErrorUtils::Result<int> repack(const QString &srcArchive, const QString &dstArch
 #ifdef KARTEND_HAS_LIBARCHIVE
   return repackLibarchive(srcArchive, dstArchive, entryRenames);
 #else
+  (void)entryRenames; // only consumed by the libarchive path above
   // No shell-out fallback: `7z rn` applies multi-entry renames sequentially
   // (order-sensitive; swaps/chains corrupt the set) and trusts the exit code, so
   // it can silently mis-name a multi-ROM set. Repack therefore requires the
