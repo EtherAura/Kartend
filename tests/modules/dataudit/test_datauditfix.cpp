@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "archiverepack.h"
 #include "datauditfix.h"
 #include "dataudittypes.h"
 
@@ -212,6 +213,9 @@ void TestDatAuditFix::planQuarantinesUnknownAndWrongContent() {
 }
 
 void TestDatAuditFix::planRepacksMisnamedArchiveSet() {
+  if (!ArchiveRepack::nativeAvailable()) {
+    QSKIP("repack planning needs libarchive (computeFixPlan emits no Repack without it)");
+  }
   // A single-ROM zip whose inner ROM (and container) carry a non-canonical name
   // yields ONE Repack action: rename the inner entry to the DAT name and the
   // container to <game>.zip.
@@ -231,6 +235,9 @@ void TestDatAuditFix::planRepacksMisnamedArchiveSet() {
 }
 
 void TestDatAuditFix::planRepacksMultiRomSingleGameInPlace() {
+  if (!ArchiveRepack::nativeAvailable()) {
+    QSKIP("repack planning needs libarchive (computeFixPlan emits no Repack without it)");
+  }
   // A zip holding several ROMs of ONE game repacks all inner entries to canonical;
   // the container is already correctly named, so toPath == fromPath (in-place).
   auto member = [](const QString &path, const QString &expected) {
@@ -290,6 +297,9 @@ void TestDatAuditFix::planSkipsMultiGameArchiveContainer() {
 }
 
 void TestDatAuditFix::planRepacks7zContainerPreservingExtension() {
+  if (!ArchiveRepack::nativeAvailable()) {
+    QSKIP("repack planning needs libarchive (computeFixPlan emits no Repack without it)");
+  }
   // A misnamed .7z set repacks too, keeping the .7z container extension.
   AuditRow r = row(Status::WrongName, QStringLiteral("/roms/Game (old).7z/Game (old).md"),
                    QStringLiteral("Game.md"));
@@ -341,6 +351,9 @@ void TestDatAuditFix::planSkipsRenameOntoExistingMember() {
 }
 
 void TestDatAuditFix::planRepackPreservesNestedMemberSubdir() {
+  if (!ArchiveRepack::nativeAvailable()) {
+    QSKIP("repack planning needs libarchive (computeFixPlan emits no Repack without it)");
+  }
   // A misnamed member inside an in-archive subdirectory keeps its subdir — only
   // the leaf is renamed, never flattened to the archive root.
   AuditRow r = row(Status::WrongName, QStringLiteral("/roms/G.zip/sub/old.md"),
