@@ -1162,6 +1162,8 @@ void DatAuditDialog::onRun() {
   // an unconfirmed detection is just the banner waiting for an answer.
   const DatAudit::Layout layout =
       p.layoutConfirmed ? DatAudit::layoutFromToken(p.detectedLayout) : DatAudit::Layout::Unknown;
+  // Clone/parent expected-file model (Kartend-m6qsb.29). Empty/unknown -> Split.
+  const DatAudit::MergeMode mergeMode = DatAudit::mergeModeFromToken(p.mergeMode);
 
   m_cancel = std::make_shared<std::atomic<bool>>(false);
   setBusy(true);
@@ -1190,47 +1192,48 @@ void DatAuditDialog::onRun() {
   };
 
   auto cancel = m_cancel;
-  auto future = QtConcurrent::run(
-      [dats, roots, cancel, regionPrefs, ignore, onePerGame, layout, progressFn]() -> AuditOutput {
-        // Both DB connections below are created, used, and removed on THIS worker
-        // thread, satisfying QSqlDatabase's thread affinity.
-        DatCache::Store cache(DatCache::defaultPath());
-        QStringList failed;
-        DatAudit::Catalogue cat = DatAudit::buildCatalogue(cache, dats, &failed);
-        DatAudit::AuditOptions opts;
-        opts.scanRoots = roots;
-        opts.datPaths = dats;
-        opts.ignoreGlobs = ignore;
-        opts.regionPrefs = regionPrefs;
-        opts.onePerGame = onePerGame;
-        opts.layout = layout;
+  auto future = QtConcurrent::run([dats, roots, cancel, regionPrefs, ignore, onePerGame, layout,
+                                   mergeMode, progressFn]() -> AuditOutput {
+    // Both DB connections below are created, used, and removed on THIS worker
+    // thread, satisfying QSqlDatabase's thread affinity.
+    DatCache::Store cache(DatCache::defaultPath());
+    QStringList failed;
+    DatAudit::Catalogue cat = DatAudit::buildCatalogue(cache, dats, &failed);
+    DatAudit::AuditOptions opts;
+    opts.scanRoots = roots;
+    opts.datPaths = dats;
+    opts.ignoreGlobs = ignore;
+    opts.regionPrefs = regionPrefs;
+    opts.onePerGame = onePerGame;
+    opts.layout = layout;
+    opts.mergeMode = mergeMode;
 
-        // Open a main-DB connection for the file-hash cache so re-audits skip
-        // re-hashing unchanged files (the v17 file_hash_cache table already exists;
-        // the app applied migrations at startup). WAL lets this coexist with the
-        // DatabaseManager's own connection.
-        static QAtomicInteger<quint64> hashConnCounter{0};
-        const QString conn =
-            QStringLiteral("dataudit_hashcache_%1").arg(hashConnCounter.fetchAndAddRelaxed(1));
-        AuditOutput out;
-        {
-          QSqlDatabase hashDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
-          QSqlDatabase *cacheDb = nullptr;
-          if (DatabaseSchema::openConnection(
-                  hashDb, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))) {
-            DatabaseSchema::applyConnectionPragmas(hashDb);
-            cacheDb = &hashDb;
-          }
-          out = DatAudit::run(cat, opts, cacheDb, cancel, progressFn);
-          // Carry the failed-DAT list back to the GUI thread so it isn't
-          // silently dropped — the audit ran against a partial catalogue
-          // otherwise (Kartend-2zcrz).
-          out.failedDats = failed;
-          hashDb.close();
-        }
-        QSqlDatabase::removeDatabase(conn);
-        return out;
-      });
+    // Open a main-DB connection for the file-hash cache so re-audits skip
+    // re-hashing unchanged files (the v17 file_hash_cache table already exists;
+    // the app applied migrations at startup). WAL lets this coexist with the
+    // DatabaseManager's own connection.
+    static QAtomicInteger<quint64> hashConnCounter{0};
+    const QString conn =
+        QStringLiteral("dataudit_hashcache_%1").arg(hashConnCounter.fetchAndAddRelaxed(1));
+    AuditOutput out;
+    {
+      QSqlDatabase hashDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+      QSqlDatabase *cacheDb = nullptr;
+      if (DatabaseSchema::openConnection(
+              hashDb, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))) {
+        DatabaseSchema::applyConnectionPragmas(hashDb);
+        cacheDb = &hashDb;
+      }
+      out = DatAudit::run(cat, opts, cacheDb, cancel, progressFn);
+      // Carry the failed-DAT list back to the GUI thread so it isn't
+      // silently dropped — the audit ran against a partial catalogue
+      // otherwise (Kartend-2zcrz).
+      out.failedDats = failed;
+      hashDb.close();
+    }
+    QSqlDatabase::removeDatabase(conn);
+    return out;
+  });
   m_watcher.setFuture(future);
 }
 

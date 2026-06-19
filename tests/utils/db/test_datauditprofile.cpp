@@ -84,6 +84,7 @@ Profile TestDatAuditProfile::sampleProfile() {
   p.quarantineRoot = QStringLiteral("/quarantine");
   p.detectedLayout = QStringLiteral("archive_per_item");
   p.layoutConfirmed = true;
+  p.mergeMode = QStringLiteral("merged"); // Kartend-m6qsb.29
   DatRef d1;
   d1.path = QStringLiteral("/dats/nointro.dat");
   d1.mtimeMs = 111;
@@ -136,6 +137,7 @@ void TestDatAuditProfile::insertAndLoadRoundTrip() {
   QCOMPARE(out.quarantineRoot, in.quarantineRoot);
   QCOMPARE(out.detectedLayout, in.detectedLayout);
   QCOMPARE(out.layoutConfirmed, in.layoutConfirmed);
+  QCOMPARE(out.mergeMode, in.mergeMode);
   QCOMPARE(out.dats.size(), 2);
   // Order preserved by the position column.
   QCOMPARE(out.dats.at(0).path, in.dats.at(0).path);

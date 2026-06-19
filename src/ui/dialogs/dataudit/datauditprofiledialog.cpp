@@ -115,6 +115,24 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
   m_onePerGame->setChecked(m_seed.onePerGame);
   catV->addWidget(m_onePerGame);
 
+  // Merge mode (Kartend-m6qsb.29): how parent/clone sets relate when computing
+  // expected files. Only affects DATs that model clones (MAME, some Logiqx);
+  // for flat No-Intro/Redump DATs all three options behave identically.
+  auto *mergeRow = new QHBoxLayout();
+  mergeRow->addWidget(new QLabel(tr("Clone handling:"), cat));
+  m_mergeMode = new QComboBox(cat);
+  m_mergeMode->addItem(tr("Split — audit each set as the DAT lists it"), QStringLiteral("split"));
+  m_mergeMode->addItem(tr("Merged — fold clones under their parent set"), QStringLiteral("merged"));
+  m_mergeMode->addItem(tr("Non-merged — each clone also holds its parent's ROMs"),
+                       QStringLiteral("nonmerged"));
+  {
+    const QString token = m_seed.mergeMode.isEmpty() ? QStringLiteral("split") : m_seed.mergeMode;
+    const int idx = m_mergeMode->findData(token);
+    m_mergeMode->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
+  mergeRow->addWidget(m_mergeMode, 1);
+  catV->addLayout(mergeRow);
+
   // Region priority: a list (top = most preferred) with a known-region picker
   // and add / remove / reorder controls.
   auto *regRow = new QHBoxLayout();
@@ -351,6 +369,7 @@ DatAuditProfile::Profile DatAuditProfileDialog::profile() const {
   }
 
   p.onePerGame = m_onePerGame->isChecked();
+  p.mergeMode = m_mergeMode->currentData().toString();
   p.regionPrefs.clear();
   for (int i = 0; i < m_regionList->count(); ++i) {
     p.regionPrefs.append(m_regionList->item(i)->text());

@@ -213,7 +213,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 23;
+  constexpr int CURRENT_SCHEMA_VERSION = 24;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -937,9 +937,22 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 23; // read by the v24 block below
+  }
+
+  if (mutableVersion < 24) {
+    // v24: clone-aware merge mode on the audit profile (Kartend-m6qsb.29) —
+    // Split (no-op) / Merged / NonMerged, how parent/clone sets relate when
+    // computing expected files. Pre-v24 profiles default to 'split'.
+    if (!runBlock(db, 24, origin, [&]() -> bool {
+          return ensureColumn(db, "dat_audit_profile", "merge_mode",
+                              "TEXT NOT NULL DEFAULT 'split'", origin);
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v24 block stays a pure copy-paste.
-    mutableVersion = 23; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v25 block stays a pure copy-paste.
+    mutableVersion = 24; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
