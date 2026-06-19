@@ -7,6 +7,7 @@ class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QModelIndex;
+class QSplitter;
 class QTableView;
 class QTreeView;
 
@@ -32,6 +33,13 @@ public:
   /// Called when the page is shown (the dialog drives this lazily).
   void refresh();
 
+  /// Save / restore the page's layout (splitter proportions, table column
+  /// widths, filter checkbox states) under the DatManagerWindow QSettings group.
+  /// The dialog drives these alongside its own geometry persistence
+  /// (Kartend-o46gy): restoreState_() on open, persistState() on hide.
+  void persistState() const;
+  void restoreState_();
+
 private slots:
   void onTreeSelectionChanged();
   void onGameSelectionChanged();
@@ -41,6 +49,11 @@ private:
   void buildUi();
   void clearDatInfo();
   void loadGamesFor(qint64 profileId, const QString &sourceName, const QString &datPath);
+
+  // Splitters kept as members so their proportions can be saved/restored
+  // (Kartend-o46gy): horizontal tree|right, vertical gameTable/romTable.
+  QSplitter *m_hSplitter = nullptr;
+  QSplitter *m_vSplitter = nullptr;
 
   QTreeView *m_tree = nullptr;
   DatAudit::AuditTreeModel *m_treeModel = nullptr;

@@ -8,6 +8,8 @@
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSettings>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QSqlDatabase>
 #include <QStandardPaths>
@@ -65,7 +67,8 @@ void DatAuditBrowserPage::buildUi() {
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
 
-  auto *split = new QSplitter(Qt::Horizontal, this);
+  m_hSplitter = new QSplitter(Qt::Horizontal, this);
+  auto *split = m_hSplitter;
   split->setStyleSheet(QStringLiteral("QSplitter::handle { background: transparent; }"));
   split->setChildrenCollapsible(false);
 
@@ -98,7 +101,8 @@ void DatAuditBrowserPage::buildUi() {
   infoForm->addRow(tr("Status:"), makeValue(m_infoCounts));
   rightCol->addWidget(infoBox);
 
-  auto *detailSplit = new QSplitter(Qt::Vertical, right);
+  m_vSplitter = new QSplitter(Qt::Vertical, right);
+  auto *detailSplit = m_vSplitter;
   detailSplit->setStyleSheet(QStringLiteral("QSplitter::handle { background: transparent; }"));
   detailSplit->setChildrenCollapsible(false);
 
@@ -309,4 +313,72 @@ void DatAuditBrowserPage::applyFilters() {
                               m_filterEmpty->isChecked());
   m_gameProxy->setRequireFixes(m_filterFixes->isChecked());
   m_gameProxy->setRequireMia(m_filterMia->isChecked());
+}
+
+// Layout persistence (Kartend-o46gy). Keys live under the same
+// kartend/ui-state "DatManagerWindow" group the dialog uses for its own
+// geometry, namespaced with a "browser" prefix so they don't collide.
+void DatAuditBrowserPage::persistState() const {
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  settings.beginGroup(QStringLiteral("DatManagerWindow"));
+  if (m_hSplitter != nullptr) {
+    settings.setValue(QStringLiteral("browserHSplitter"), m_hSplitter->saveState());
+  }
+  if (m_vSplitter != nullptr) {
+    settings.setValue(QStringLiteral("browserVSplitter"), m_vSplitter->saveState());
+  }
+  if (m_tree != nullptr) {
+    settings.setValue(QStringLiteral("browserTreeHeader"), m_tree->header()->saveState());
+  }
+  if (m_gameTable != nullptr) {
+    settings.setValue(QStringLiteral("browserGameHeader"),
+                      m_gameTable->horizontalHeader()->saveState());
+  }
+  if (m_romTable != nullptr) {
+    settings.setValue(QStringLiteral("browserRomHeader"),
+                      m_romTable->horizontalHeader()->saveState());
+  }
+  settings.setValue(QStringLiteral("browserFilterComplete"), m_filterComplete->isChecked());
+  settings.setValue(QStringLiteral("browserFilterPartial"), m_filterPartial->isChecked());
+  settings.setValue(QStringLiteral("browserFilterEmpty"), m_filterEmpty->isChecked());
+  settings.setValue(QStringLiteral("browserFilterFixes"), m_filterFixes->isChecked());
+  settings.setValue(QStringLiteral("browserFilterMia"), m_filterMia->isChecked());
+  settings.endGroup();
+}
+
+void DatAuditBrowserPage::restoreState_() {
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  settings.beginGroup(QStringLiteral("DatManagerWindow"));
+
+  const auto restoreState = [&](auto *target, const QString &key) {
+    const QByteArray st = settings.value(key).toByteArray();
+    if (target != nullptr && !st.isEmpty()) {
+      target->restoreState(st);
+    }
+  };
+  restoreState(m_hSplitter, QStringLiteral("browserHSplitter"));
+  restoreState(m_vSplitter, QStringLiteral("browserVSplitter"));
+  restoreState(m_tree != nullptr ? m_tree->header() : nullptr, QStringLiteral("browserTreeHeader"));
+  restoreState(m_gameTable != nullptr ? m_gameTable->horizontalHeader() : nullptr,
+               QStringLiteral("browserGameHeader"));
+  restoreState(m_romTable != nullptr ? m_romTable->horizontalHeader() : nullptr,
+               QStringLiteral("browserRomHeader"));
+
+  // Filter checkboxes: only override the build-time defaults when a value was
+  // saved. Block each toggle so the five restores don't each fire applyFilters()
+  // — a single applyFilters() below picks up the final state.
+  const auto restoreCheck = [&](QCheckBox *box, const QString &key) {
+    if (box != nullptr && settings.contains(key)) {
+      const QSignalBlocker blocker(box);
+      box->setChecked(settings.value(key).toBool());
+    }
+  };
+  restoreCheck(m_filterComplete, QStringLiteral("browserFilterComplete"));
+  restoreCheck(m_filterPartial, QStringLiteral("browserFilterPartial"));
+  restoreCheck(m_filterEmpty, QStringLiteral("browserFilterEmpty"));
+  restoreCheck(m_filterFixes, QStringLiteral("browserFilterFixes"));
+  restoreCheck(m_filterMia, QStringLiteral("browserFilterMia"));
+  settings.endGroup();
+
+  applyFilters();
 }
