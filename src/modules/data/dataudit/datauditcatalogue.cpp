@@ -2,6 +2,15 @@
 
 namespace DatAudit {
 
+namespace {
+/// The set identity a clone's cloneof references. Prefer the explicit setId
+/// (MAME name= / Logiqx+clrmamepro game name); fall back to gameName for any
+/// pre-setId cache record (Kartend-m6qsb.29).
+QString setKeyOf(const DatLookup::DatRecord &r) {
+  return r.setId.isEmpty() ? r.gameName : r.setId;
+}
+} // namespace
+
 int Catalogue::addSource(const QString &name) {
   m_sourceNames.append(name);
   return static_cast<int>(m_sourceNames.size()) - 1;
@@ -24,6 +33,18 @@ void Catalogue::addRecord(const DatLookup::DatRecord &r, int sourceId) {
   if (!r.romName.isEmpty() && !m_byName.contains(r.romName)) {
     m_byName.insert(r.romName, idx);
   }
+  // Clone index: every record of a set is reachable by the set-id, so a clone's
+  // cloneof can resolve to its parent's roms (Kartend-m6qsb.29).
+  m_bySetKey[setKeyOf(r)].append(idx);
+}
+
+QList<int> Catalogue::recordsForSet(const QString &setKey) const {
+  return m_bySetKey.value(setKey);
+}
+
+QList<int> Catalogue::parentRecords(int i) const {
+  const QString parent = m_records.at(i).cloneOf;
+  return parent.isEmpty() ? QList<int>() : recordsForSet(parent);
 }
 
 int Catalogue::matchByHash(const QString &crc, const QString &md5, const QString &sha1) const {

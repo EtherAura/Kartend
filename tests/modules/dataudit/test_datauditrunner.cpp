@@ -111,6 +111,12 @@ private slots:
   void classifyMissing();
   void classifySummaryCounts();
 
+  // clone-aware merge modes (Kartend-m6qsb.29)
+  void classifyMergeSplitKeepsCloneIndependent();
+  void classifyMergeMergedFoldsCloneUnderParent();
+  void classifyMergeNonMergedExpectsParentRoms();
+  void classifyMergeNoOpForFlatCatalogue();
+
   // 1G1R / region collapse (Kartend-bmj1ko)
   void region_baseNameRegionAndRank();
   void classify1G1R_collapsesAbsentGameToPreferredRegion();
@@ -142,6 +148,7 @@ private slots:
 
 private:
   static Catalogue twoEntryCatalogue();
+  static Catalogue parentCloneCatalogue();
 };
 
 Catalogue TestDatAuditRunner::twoEntryCatalogue() {
@@ -155,6 +162,104 @@ Catalogue TestDatAuditRunner::twoEntryCatalogue() {
                          QStringLiteral("22222222222222222222222222222222"),
                          QStringLiteral("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 5));
   return c;
+}
+
+Catalogue TestDatAuditRunner::parentCloneCatalogue() {
+  // A parent set (one shared rom) and a clone of it (one unique rom, cloneof =
+  // the parent's set-id). gameName differs from setId on the parent to mirror
+  // the MAME description-vs-name= split — the clone resolves via setId.
+  Catalogue c;
+  DatRecord parent = makeRecord(QStringLiteral("Parent"), QStringLiteral("shared.bin"),
+                                QStringLiteral("aaaa0001"), QString(), QString());
+  parent.setId = QStringLiteral("parent");
+  c.addRecord(parent);
+  DatRecord clone = makeRecord(QStringLiteral("Clone"), QStringLiteral("unique.bin"),
+                               QStringLiteral("bbbb0002"), QString(), QString());
+  clone.setId = QStringLiteral("clone");
+  clone.cloneOf = QStringLiteral("parent");
+  c.addRecord(clone);
+  return c;
+}
+
+void TestDatAuditRunner::classifyMergeSplitKeepsCloneIndependent() {
+  const Catalogue c = parentCloneCatalogue();
+  // The clone's own rom is present; the parent's shared rom is absent.
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Split);
+  // Split = audit the DAT as listed: the clone is complete (its only rom is
+  // present); the parent is missing its rom, reported under the parent.
+  QCOMPARE(out.summary.have, 1);
+  QCOMPARE(out.summary.missing, 1);
+  int missingUnderParent = 0;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing) {
+      QCOMPARE(r.gameName, QStringLiteral("Parent"));
+      ++missingUnderParent;
+    }
+  }
+  QCOMPARE(missingUnderParent, 1);
+}
+
+void TestDatAuditRunner::classifyMergeMergedFoldsCloneUnderParent() {
+  const Catalogue c = parentCloneCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Merged);
+  // Same have/missing as Split, but the clone's rows fold under the parent — no
+  // row carries the clone's own gameName.
+  QCOMPARE(out.summary.have, 1);
+  QCOMPARE(out.summary.missing, 1);
+  for (const AuditRow &r : out.rows) {
+    QVERIFY2(r.gameName != QStringLiteral("Clone"),
+             "Merged must fold the clone's rows under its parent set");
+  }
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedExpectsParentRoms() {
+  const Catalogue c = parentCloneCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::NonMerged);
+  // The clone is ALSO expected to hold the parent's (absent) shared rom, so the
+  // shared rom is missing twice: once for the parent, once inherited by the clone.
+  QCOMPARE(out.summary.have, 1);
+  QCOMPARE(out.summary.missing, 2);
+  bool missingUnderParent = false;
+  bool missingUnderClone = false;
+  for (const AuditRow &r : out.rows) {
+    if (r.status != Status::Missing) {
+      continue;
+    }
+    if (r.gameName == QStringLiteral("Parent")) {
+      missingUnderParent = true;
+    }
+    if (r.gameName == QStringLiteral("Clone")) {
+      missingUnderClone = true;
+    }
+  }
+  QVERIFY(missingUnderParent);
+  QVERIFY(missingUnderClone);
+}
+
+void TestDatAuditRunner::classifyMergeNoOpForFlatCatalogue() {
+  // A clone-less catalogue must produce identical output under all three modes
+  // — the guarantee that No-Intro/Redump audits never change.
+  const Catalogue c = twoEntryCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/Alpha.bin"), QStringLiteral("deadbeef"),
+               QStringLiteral("11111111111111111111111111111111"),
+               QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))};
+  const AuditOutput split = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Split);
+  const AuditOutput merged = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Merged);
+  const AuditOutput nonMerged =
+      DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::NonMerged);
+  QCOMPARE(merged.summary.have, split.summary.have);
+  QCOMPARE(merged.summary.missing, split.summary.missing);
+  QCOMPARE(merged.rows.size(), split.rows.size());
+  QCOMPARE(nonMerged.summary.have, split.summary.have);
+  QCOMPARE(nonMerged.summary.missing, split.summary.missing);
+  QCOMPARE(nonMerged.rows.size(), split.rows.size());
 }
 
 void TestDatAuditRunner::catalogueMatchesByHashPriority() {

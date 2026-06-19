@@ -56,6 +56,16 @@ public:
                                                               : QString();
   }
 
+  // --- clone relationships (Kartend-m6qsb.29) -------------------------------
+  /// All record indices belonging to the set `setKey` (the set-id a clone's
+  /// cloneof references — DatRecord::setId). Empty for an unknown set.
+  [[nodiscard]] QList<int> recordsForSet(const QString &setKey) const;
+  /// Record indices of the PARENT set of record `i` (its cloneof target).
+  /// Empty when `i` is not a clone or the parent set isn't in this catalogue.
+  [[nodiscard]] QList<int> parentRecords(int i) const;
+  /// True when record `i` declares a cloneof — it is a clone of another set.
+  [[nodiscard]] bool isClone(int i) const { return !m_records.at(i).cloneOf.isEmpty(); }
+
 private:
   QList<DatLookup::DatRecord> m_records;
   QList<int> m_recordSource;    ///< parallel to m_records; source id or -1
@@ -63,7 +73,8 @@ private:
   QHash<QString, int> m_bySha1; ///< lowercase sha1 -> record index
   QHash<QString, int> m_byMd5;
   QHash<QString, int> m_byCrc;
-  QHash<QString, int> m_byName; ///< romName -> record index
+  QHash<QString, int> m_byName;          ///< romName -> record index
+  QHash<QString, QList<int>> m_bySetKey; ///< set-id -> all record indices of that set
 };
 
 } // namespace DatAudit

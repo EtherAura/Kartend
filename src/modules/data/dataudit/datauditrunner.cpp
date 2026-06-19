@@ -152,10 +152,23 @@ Catalogue buildCatalogue(DatCache::Store &cache, const QStringList &datPaths,
 }
 
 AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files,
-                     const QStringList &regionPrefs, bool onePerGame) {
+                     const QStringList &regionPrefs, bool onePerGame, MergeMode mergeMode) {
   AuditOutput out;
   QSet<int> satisfied;
   out.rows.reserve(files.size() + catalogue.size());
+
+  // Under Merged, a clone record's rows fold under its parent set so the report
+  // groups them there; in Split/NonMerged a record keeps its own gameName
+  // (Kartend-m6qsb.29). No-op for clone-less catalogues.
+  const auto attributedGame = [&](int idx) -> QString {
+    if (mergeMode == MergeMode::Merged && catalogue.isClone(idx)) {
+      const QList<int> parent = catalogue.parentRecords(idx);
+      if (!parent.isEmpty()) {
+        return catalogue.record(parent.first()).gameName;
+      }
+    }
+    return catalogue.record(idx).gameName;
+  };
 
   for (const ScannedFile &f : files) {
     AuditRow row;
@@ -175,7 +188,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     const int idx = catalogue.matchByHash(f.crc, f.md5, f.sha1);
     if (idx >= 0) {
       const DatLookup::DatRecord &rec = catalogue.record(idx);
-      row.gameName = rec.gameName;
+      row.gameName = attributedGame(idx);
       row.expectedName = rec.romName;
       row.sourceName = catalogue.sourceName(catalogue.recordSource(idx));
       row.mia = rec.mia;
@@ -191,7 +204,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       const int nameIdx = catalogue.matchByName(row.actualName);
       if (nameIdx >= 0) {
         const DatLookup::DatRecord &rec = catalogue.record(nameIdx);
-        row.gameName = rec.gameName;
+        row.gameName = attributedGame(nameIdx);
         row.expectedName = rec.romName;
         row.sourceName = catalogue.sourceName(catalogue.recordSource(nameIdx));
         row.mia = rec.mia;
@@ -203,12 +216,15 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     out.rows.append(row);
   }
 
-  // Emit a Missing row for catalogue entry `i`.
-  const auto emitMissing = [&](int i) {
+  // Emit a Missing row for catalogue entry `i`. gameOverride attributes the row
+  // to a different game than the record's own (the NonMerged pass uses it to
+  // report a parent rom under each clone that inherits it); by default the row
+  // carries attributedGame(i) (which folds clones under parents in Merged).
+  const auto emitMissing = [&](int i, const QString &gameOverride = QString()) {
     const DatLookup::DatRecord &rec = catalogue.record(i);
     AuditRow row;
     row.status = Status::Missing;
-    row.gameName = rec.gameName;
+    row.gameName = gameOverride.isEmpty() ? attributedGame(i) : gameOverride;
     row.expectedName = rec.romName;
     row.size = rec.size;
     row.crc = rec.crc;
@@ -264,6 +280,32 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     for (int i = 0; i < catalogue.size(); ++i) {
       if (!satisfied.contains(i)) {
         emitMissing(i);
+      }
+    }
+  }
+
+  if (mergeMode == MergeMode::NonMerged) {
+    // Each clone set is self-contained — it is also expected to physically hold
+    // its parent's roms. For every clone set, emit a Missing row (attributed to
+    // the clone) for each parent rom the collection lacks, so an incomplete
+    // non-merged clone folder reads as missing its inherited roms. Deduped per
+    // clone set so the parent roms aren't re-emitted once per clone rom
+    // (Kartend-m6qsb.29).
+    QSet<QString> seenCloneSets;
+    for (int i = 0; i < catalogue.size(); ++i) {
+      if (!catalogue.isClone(i)) {
+        continue;
+      }
+      const DatLookup::DatRecord &rec = catalogue.record(i);
+      const QString cloneKey = rec.setId.isEmpty() ? rec.gameName : rec.setId;
+      if (seenCloneSets.contains(cloneKey)) {
+        continue;
+      }
+      seenCloneSets.insert(cloneKey);
+      for (int p : catalogue.parentRecords(i)) {
+        if (!satisfied.contains(p)) {
+          emitMissing(p, rec.gameName);
+        }
       }
     }
   }
@@ -473,7 +515,8 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     }
   }
 
-  AuditOutput classified = classify(catalogue, results, opts.regionPrefs, opts.onePerGame);
+  AuditOutput classified =
+      classify(catalogue, results, opts.regionPrefs, opts.onePerGame, opts.mergeMode);
   out.rows = std::move(classified.rows);
   out.summary = classified.summary;
   // A cancelled run scanned only some files, so totalFiles reflects what was

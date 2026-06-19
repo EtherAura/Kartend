@@ -37,6 +37,20 @@ enum class Status {
 /// (Have or WrongName) — i.e. the entry is satisfied even if mislabeled.
 [[nodiscard]] bool isPresent(Status s);
 
+/// How parent/clone sets relate when computing expected files (Kartend-m6qsb.29).
+/// Chosen per profile; only matters for DATs that model clones (cloneof). For
+/// flat DATs (No-Intro/Redump, no clones) all three are identical to today.
+enum class MergeMode {
+  Split,     ///< Each set self-contained as the DAT lists it — today's behaviour.
+  Merged,    ///< Parent + clones audited as one combined set, rows folded under the parent.
+  NonMerged, ///< Each clone is ALSO expected to hold its parent's roms (self-contained folder).
+};
+
+/// Stable lowercase token for a merge mode — DB persistence + tests.
+[[nodiscard]] QString mergeModeToken(MergeMode m);
+/// Parse a merge-mode token; unknown/empty -> Split (the safe, no-op default).
+[[nodiscard]] MergeMode mergeModeFromToken(const QString &token);
+
 /// One audited unit. Entry-centric rows (Missing) carry the catalogue fields
 /// with an empty filePath; file-centric rows (Unknown / Corrupt) carry the
 /// file fields with an empty gameName; matched rows (Have / WrongName /

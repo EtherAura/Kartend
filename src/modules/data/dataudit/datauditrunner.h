@@ -40,6 +40,10 @@ struct AuditOptions {
   /// Note: archive *members* are hashed for every archive in any layout (so
   /// compressed ROMs match the DAT) — layout only controls recursion now.
   Layout layout = Layout::Unknown;
+  /// Clone/parent expected-file model (Kartend-m6qsb.29). Split = audit the DAT
+  /// as listed (no-op for clone-less DATs); Merged folds clones under parents;
+  /// NonMerged expects each clone to also hold its parent's roms.
+  MergeMode mergeMode = MergeMode::Split;
 };
 
 /// Progress tick delivered on the calling thread during a run.
@@ -87,7 +91,8 @@ using CancelToken = std::shared_ptr<std::atomic<bool>>;
 /// Missing row per catalogue entry no file satisfied, and fills
 /// totalCatalogue / totalFiles on the summary.
 [[nodiscard]] AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files,
-                                   const QStringList &regionPrefs = {}, bool onePerGame = false);
+                                   const QStringList &regionPrefs = {}, bool onePerGame = false,
+                                   MergeMode mergeMode = MergeMode::Split);
 
 /// Full scan: enumerate `opts.scanRoots`, hash each file (through FileHashCache
 /// when `cacheDb` is non-null, else RomHasher directly; the hashing is fanned
