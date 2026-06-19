@@ -344,7 +344,13 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
 
   const int maxThreads = m_scanWork.maxThreadCount();
   const int maxInFlight = std::max(1, maxThreads * 2);
-  ScanCompletionQueue queue;
+  // Heap-own the queue (shared_ptr) so a worker still finishing its final
+  // QMutexLocker teardown can't touch a destroyed mutex after this frame
+  // returns and reuses the stack (Kartend-bl8w0). `queue` aliases the owned
+  // object so the accesses below read unchanged; each DirectoryScanTask
+  // co-owns it by value, so the last finisher frees it.
+  auto queuePtr = std::make_shared<ScanCompletionQueue>();
+  ScanCompletionQueue &queue = *queuePtr;
 
   QVector<DirSignatureSample> signatureSamples;
   signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
@@ -363,7 +369,7 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
       QMutexLocker locker(&queue.mutex);
       ++queue.inFlight;
     }
-    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, queuePtr));
   };
 
   // Always scan root.
@@ -426,6 +432,10 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
       if (!queue.ready.isEmpty()) {
         result = std::move(queue.ready.back());
         queue.ready.removeLast();
+        // Acquire-load pairs with the worker's release-store in pushChunk so
+        // TSan sees this chunk's payload as synchronized across the lossy
+        // QWaitCondition epoch (ScanCompletionQueue::handoffSeq).
+        (void)queue.handoffSeq.load(std::memory_order_acquire);
         queue.hasSpace.wakeOne();
         gotResult = true;
       } else if (queue.inFlight == 0 && !dirIterator.hasNext()) {
@@ -578,7 +588,13 @@ bool ScanService::stageRecursiveScan(const QDir &dir, const QStringList &nameFil
   const int maxThreads = m_scanWork.maxThreadCount();
   const int maxInFlight = std::max(1, maxThreads * 2);
 
-  ScanCompletionQueue queue;
+  // Heap-own the queue (shared_ptr) so a worker still finishing its final
+  // QMutexLocker teardown can't touch a destroyed mutex after this frame
+  // returns and reuses the stack (Kartend-bl8w0). `queue` aliases the owned
+  // object so the accesses below read unchanged; each DirectoryScanTask
+  // co-owns it by value, so the last finisher frees it.
+  auto queuePtr = std::make_shared<ScanCompletionQueue>();
+  ScanCompletionQueue &queue = *queuePtr;
 
   QVector<DirSignatureSample> signatureSamples;
   signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
@@ -597,7 +613,7 @@ bool ScanService::stageRecursiveScan(const QDir &dir, const QStringList &nameFil
       QMutexLocker locker(&queue.mutex);
       ++queue.inFlight;
     }
-    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, queuePtr));
   };
 
   // Always scan the root directory.
@@ -648,6 +664,10 @@ bool ScanService::stageRecursiveScan(const QDir &dir, const QStringList &nameFil
       if (!queue.ready.isEmpty()) {
         result = std::move(queue.ready.back());
         queue.ready.removeLast();
+        // Acquire-load pairs with the worker's release-store in pushChunk so
+        // TSan sees this chunk's payload as synchronized across the lossy
+        // QWaitCondition epoch (ScanCompletionQueue::handoffSeq).
+        (void)queue.handoffSeq.load(std::memory_order_acquire);
         queue.hasSpace.wakeOne();
         gotResult = true;
       } else if (queue.inFlight == 0 && !dirIterator.hasNext()) {
