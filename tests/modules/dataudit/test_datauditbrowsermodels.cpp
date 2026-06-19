@@ -36,6 +36,7 @@ private slots:
   void groupsResultsByItemFolder();
   void browserPresetsRoundTrip();
   void browserPresetsDefaultUnsavedSlots();
+  void reconstructsAuditRowsFromResults();
 };
 
 void TestDatAuditBrowserModels::bucketCountsMapStatuses() {
@@ -104,6 +105,12 @@ void TestDatAuditBrowserModels::treeBuildsProfilesAndSources() {
   const QModelIndex src0 = tree.index(0, 0, arcade);
   QVERIFY(!tree.datPathAt(src0).isEmpty());
   QCOMPARE(tree.parent(src0), arcade);
+  // Profile id flows from every node up to its owning profile — the invariant
+  // the browser's profile-scoped Re-audit / Fix relies on (Kartend-7iqhl.2): a
+  // Source-DAT child reports its PARENT profile's id, not a source id.
+  QCOMPARE(tree.profileIdAt(snes), static_cast<qint64>(1));
+  QCOMPARE(tree.profileIdAt(arcade), static_cast<qint64>(2));
+  QCOMPARE(tree.profileIdAt(src0), static_cast<qint64>(2));
 
   // Never-audited profile flagged unscanned.
   const QModelIndex empty = tree.index(2, 0);
@@ -288,6 +295,41 @@ void TestDatAuditBrowserModels::browserPresetsDefaultUnsavedSlots() {
     QCOMPARE(p.groupByFolder, defaults.groupByFolder);
     QVERIFY(p.search.isEmpty());
   }
+}
+
+void TestDatAuditBrowserModels::reconstructsAuditRowsFromResults() {
+  // The browser's profile-scoped Fix (Kartend-7iqhl.2) rebuilds fix-engine
+  // AuditRows from the persisted snapshot. Verify the field mapping the Fix
+  // plan relies on: status, filePath, expectedName (= detail), actualName
+  // (= basename), gameName/sourceName/mia carried through.
+  ResultRow wrong;
+  wrong.status = kWrongName;
+  wrong.filePath = QStringLiteral("/roms/Game A/badname.bin");
+  wrong.detail = QStringLiteral("goodname.bin"); // the canonical rename target
+  wrong.gameName = QStringLiteral("Game A");
+  wrong.sourceName = QStringLiteral("snes.dat");
+  wrong.mia = false;
+  ResultRow missing; // entry-only Missing row: no on-disk file
+  missing.status = kMissing;
+  missing.gameName = QStringLiteral("Game B");
+  missing.detail = QStringLiteral("rom.bin");
+  missing.mia = true;
+
+  const QList<AuditRow> rows = auditRowsFromResults({wrong, missing});
+  QCOMPARE(rows.size(), 2);
+  QCOMPARE(rows.at(0).status, static_cast<Status>(kWrongName));
+  QCOMPARE(rows.at(0).filePath, QStringLiteral("/roms/Game A/badname.bin"));
+  QCOMPARE(rows.at(0).expectedName, QStringLiteral("goodname.bin"));
+  QCOMPARE(rows.at(0).actualName, QStringLiteral("badname.bin"));
+  QCOMPARE(rows.at(0).gameName, QStringLiteral("Game A"));
+  QCOMPARE(rows.at(0).sourceName, QStringLiteral("snes.dat"));
+  QVERIFY(!rows.at(0).mia);
+  // Entry-only row: no path → no actualName; mia preserved.
+  QCOMPARE(rows.at(1).status, static_cast<Status>(kMissing));
+  QVERIFY(rows.at(1).filePath.isEmpty());
+  QVERIFY(rows.at(1).actualName.isEmpty());
+  QCOMPARE(rows.at(1).expectedName, QStringLiteral("rom.bin"));
+  QVERIFY(rows.at(1).mia);
 }
 
 QTEST_GUILESS_MAIN(TestDatAuditBrowserModels)

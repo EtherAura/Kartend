@@ -13,6 +13,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QModelIndex;
+class QPoint;
 class QPushButton;
 class QTableView;
 class QTreeView;
@@ -39,10 +40,24 @@ public:
   /// Called when the page is shown (the dialog drives this lazily).
   void refresh();
 
+  /// Select the top-level Profile node with this id, if present. The dialog
+  /// calls this after a browser-initiated re-audit (Kartend-7iqhl.2) so the
+  /// just-audited profile stays selected through refresh()'s tree rebuild.
+  void selectProfileNode(qint64 profileId);
+
+signals:
+  /// The user asked, from the tree's context menu, to re-audit / Fix the
+  /// profile owning the selected node (Kartend-7iqhl.2). Profile-scoped: a
+  /// Source-DAT child reports its parent profile's id. The dialog owns the
+  /// runner + Fix dialog, so it does the work and refreshes this page.
+  void reauditProfileRequested(qint64 profileId);
+  void fixProfileRequested(qint64 profileId);
+
 private slots:
   void onTreeSelectionChanged();
   void onGameSelectionChanged();
   void applyFilters();
+  void onTreeContextMenu(const QPoint &pos);
 
 private:
   void buildUi();

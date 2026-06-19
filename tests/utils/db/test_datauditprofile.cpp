@@ -414,6 +414,20 @@ void TestDatAuditProfile::rollupsGroupBySourceGameAndMia() {
   auto srcB = DatAuditProfile::loadSourceResultRows(m_db, id, QStringLiteral("B.dat"));
   QVERIFY(srcB.isOk());
   QCOMPARE(srcB.value().size(), 1);
+
+  // Kartend-7iqhl.2: the browser's profile-scoped Fix loads every row across all
+  // sources (2 from A.dat + 1 from B.dat) to reconstruct fixable AuditRows.
+  auto allRows = DatAuditProfile::loadProfileResultRows(m_db, id);
+  QVERIFY(allRows.isOk());
+  QCOMPARE(allRows.value().size(), 3);
+  bool sawA = false;
+  bool sawB = false;
+  for (const auto &r : allRows.value()) {
+    sawA = sawA || r.sourceName == QLatin1String("A.dat");
+    sawB = sawB || r.sourceName == QLatin1String("B.dat");
+  }
+  QVERIFY(sawA);
+  QVERIFY(sawB);
 }
 
 void TestDatAuditProfile::loadResultSummaryCountsByStatus() {

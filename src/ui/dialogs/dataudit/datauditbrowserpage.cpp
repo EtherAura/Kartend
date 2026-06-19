@@ -1,5 +1,6 @@
 #include "datauditbrowserpage.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -10,6 +11,8 @@
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QPoint>
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -82,6 +85,11 @@ void DatAuditBrowserPage::buildUi() {
   m_treeModel = new DatAudit::AuditTreeModel(this);
   m_tree->setModel(m_treeModel);
   m_tree->setItemDelegate(new DatAudit::DatTreeBadgeDelegate(m_tree));
+  // Write-actions (Kartend-7iqhl.2): right-click a node for profile-scoped
+  // Re-audit / Fix. The dialog owns the runner + Fix dialog, so we only emit.
+  m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(m_tree, &QTreeView::customContextMenuRequested, this,
+          &DatAuditBrowserPage::onTreeContextMenu);
 
   // Right: DAT info + (game list / rom detail).
   auto *right = new QWidget(split);
@@ -232,6 +240,47 @@ void DatAuditBrowserPage::refresh() {
   m_currentProfileId = -1;
   m_currentSourceName.clear();
   m_currentDatPath.clear();
+}
+
+void DatAuditBrowserPage::selectProfileNode(qint64 profileId) {
+  if (profileId < 0) {
+    return;
+  }
+  const int rows = m_treeModel->rowCount(QModelIndex());
+  for (int r = 0; r < rows; ++r) {
+    const QModelIndex idx = m_treeModel->index(r, 0, QModelIndex());
+    if (m_treeModel->profileIdAt(idx) == profileId) {
+      // setCurrentIndex fires currentChanged → onTreeSelectionChanged, which
+      // reloads the DAT-info + game list for the node.
+      m_tree->setCurrentIndex(idx);
+      return;
+    }
+  }
+}
+
+void DatAuditBrowserPage::onTreeContextMenu(const QPoint &pos) {
+  const QModelIndex idx = m_tree->indexAt(pos);
+  if (!idx.isValid()) {
+    return;
+  }
+  const qint64 profileId = m_treeModel->profileIdAt(idx);
+  if (profileId < 0) {
+    return;
+  }
+  // Profile-scoped (Kartend-7iqhl.2): a Source-DAT child reports its parent
+  // Profile node's name; a single-source Profile node is itself the parent.
+  const QModelIndex profileIdx = idx.parent().isValid() ? idx.parent() : idx;
+  const QString profileName = profileIdx.data(Qt::DisplayRole).toString();
+
+  QMenu menu(this);
+  QAction *reaudit = menu.addAction(tr("Re-audit \"%1\"").arg(profileName));
+  QAction *fix = menu.addAction(tr("Fix \"%1\"…").arg(profileName));
+  const QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+  if (chosen == reaudit) {
+    emit reauditProfileRequested(profileId);
+  } else if (chosen == fix) {
+    emit fixProfileRequested(profileId);
+  }
 }
 
 void DatAuditBrowserPage::clearDatInfo() {

@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QTest>
+#include <QTreeView>
 
 #include "datauditbrowserpage.h"
 
@@ -33,6 +34,11 @@ void TestDatAuditBrowserPage::constructsWithoutCrash() {
   QCOMPARE(combos.size(), 1);
   QCOMPARE(combos.first()->count(), 4);
   QCOMPARE(page.findChildren<QPushButton *>().size(), 2); // Save + Rename
+  // Write-actions (Kartend-7iqhl.2): the tree opts into a custom context menu so
+  // right-click can offer profile-scoped Re-audit / Fix.
+  const auto trees = page.findChildren<QTreeView *>();
+  QCOMPARE(trees.size(), 1);
+  QCOMPARE(trees.first()->contextMenuPolicy(), Qt::CustomContextMenu);
 }
 
 QTEST_MAIN(TestDatAuditBrowserPage)

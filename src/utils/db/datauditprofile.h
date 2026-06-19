@@ -201,6 +201,12 @@ loadGameRollups(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
 [[nodiscard]] ErrorUtils::Result<QList<ResultRow>>
 loadSourceResultRows(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
 
+/// Every persisted result row for a profile, across all of its sources, for the
+/// browser's profile-scoped Fix action (Kartend-7iqhl.2) which reconstructs
+/// AuditRows from this snapshot. Empty when the profile has never been audited.
+[[nodiscard]] ErrorUtils::Result<QList<ResultRow>>
+loadProfileResultRows(QSqlDatabase &db, qint64 profileId);
+
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
 /// unknown string falls back to the safe default (InPlace).
 [[nodiscard]] QString fixModeToString(FixMode m);

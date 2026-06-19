@@ -9,6 +9,7 @@
 
 #include "datauditbuckets.h"
 #include "datauditprofile.h"
+#include "dataudittypes.h" // AuditRow
 #include "datlookup.h"
 
 class QSettings;
@@ -41,6 +42,20 @@ struct FolderRollup {
 [[nodiscard]] QList<FolderRollup>
 groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
                      const QStringList &scanRoots);
+
+/// Reconstruct fix-engine AuditRows from a profile's persisted audit snapshot
+/// (Kartend-7iqhl.2), so the read-only browser can open the Fix dialog without
+/// first running a fresh audit. computeFixPlan() only consults status /
+/// filePath / expectedName / gameName / actualName — all recoverable from a
+/// ResultRow (detail carries the DAT romName == expectedName; actualName is the
+/// filePath basename) — so the hash/size fields the snapshot drops do not
+/// matter. Even archive repack reconstructs faithfully: member rows persist
+/// their virtual "container/member" path + expected name, which is all
+/// planArchiveContainer needs. The only limitation is that the snapshot may
+/// predate on-disk changes — a staleness caveat shared by every fix kind and
+/// guarded by the Fix dialog's preview-before-apply.
+[[nodiscard]] QList<AuditRow>
+auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &results);
 
 /// A saved browser view (Kartend-7iqhl.1): the read-only browser's filter
 /// configuration only — the five completeness gates, the group-by-folder

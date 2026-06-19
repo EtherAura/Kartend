@@ -57,6 +57,24 @@ QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow>
   return out;
 }
 
+QList<AuditRow> auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &results) {
+  QList<AuditRow> rows;
+  rows.reserve(results.size());
+  for (const DatAuditProfile::ResultRow &r : results) {
+    AuditRow ar;
+    ar.status = static_cast<Status>(r.status);
+    ar.gameName = r.gameName;
+    ar.expectedName = r.detail; // detail persists the DAT romName (== expectedName)
+    ar.filePath = r.filePath;
+    ar.actualName = r.filePath.isEmpty() ? QString() : QFileInfo(r.filePath).fileName();
+    ar.sourceName = r.sourceName;
+    ar.mia = r.mia;
+    // size / crc / md5 / sha1 stay unset — computeFixPlan() does not read them.
+    rows.append(ar);
+  }
+  return rows;
+}
+
 namespace {
 constexpr auto kPresetsGroup = "DatAuditBrowserPresets";
 } // namespace
