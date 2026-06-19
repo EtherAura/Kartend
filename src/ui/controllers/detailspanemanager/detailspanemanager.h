@@ -116,7 +116,7 @@ public:
   /// the most recent pending args if a debounced update is queued,
   /// otherwise falls back to the currently-displayed item context.
   void refreshSidebarMetadataImmediate() override;
-  void applySidebarStateForCollection(int collectionIndex) override;
+  void applySidebarStateForCollection(int collectionIndex, bool reloadBackground = true) override;
   void updateSidebarLayout(int currentCollectionIndex) override;
   void positionSidebarOverlay();
   /// Recomputes the collection-level summary the sidebar shows when no

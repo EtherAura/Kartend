@@ -29,7 +29,7 @@
 #include "textzoom.h"
 #include "ui_detailspane.h"
 
-void DetailsPane::applyAppearance(const CollectionConfig &collection) {
+void DetailsPane::applyAppearance(const CollectionConfig &collection, bool reloadBackground) {
   // m_position must be set BEFORE setActiveTab, because
   // applyTabVisibility() consults it to decide whether the section-title
   // chrome (titleLabel / artworkLabel / fileInfoTitle) should be hidden in
@@ -96,25 +96,33 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // previous collection's image doesn't linger under the new colour/pattern)
   // and bump a generation so a rapid switch's slow decode can't overwrite the
   // current collection's background when it finally lands.
-  m_bgImage = QPixmap();
-  const int bgGen = ++m_bgImageGeneration;
-  if (ExtensionUtils::isDecodableImagePath(collection.sidebar.sidebarBackgroundImage)) {
-    const QString bgPath = collection.sidebar.sidebarBackgroundImage;
-    QPointer<DetailsPane> self = this;
-    auto *watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, bgGen]() {
-      watcher->deleteLater();
-      if (!self || self->m_bgImageGeneration != bgGen) return;
-      const QImage img = watcher->result();
-      self->m_bgImage = img.isNull() ? QPixmap() : QPixmap::fromImage(img);
-      self->update();
-    });
-    watcher->setFuture(
-        QtConcurrent::run([bgPath]() { return ImageDecodeUtils::loadCapped(bgPath); }));
+  //
+  // Kartend-gzptz: a colour-only re-theme (system-accent change) passes
+  // reloadBackground=false — the wallpaper can't have changed, so re-running the
+  // off-thread decode is pure waste, and the clear-then-reload below would flash
+  // the sidebar blank until the decode lands. Skip it and keep the cached
+  // pixmap; the colour/pattern/accent work below still re-applies.
+  if (reloadBackground) {
+    m_bgImage = QPixmap();
+    const int bgGen = ++m_bgImageGeneration;
+    if (ExtensionUtils::isDecodableImagePath(collection.sidebar.sidebarBackgroundImage)) {
+      const QString bgPath = collection.sidebar.sidebarBackgroundImage;
+      QPointer<DetailsPane> self = this;
+      auto *watcher = new QFutureWatcher<QImage>(this);
+      connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, bgGen]() {
+        watcher->deleteLater();
+        if (!self || self->m_bgImageGeneration != bgGen) return;
+        const QImage img = watcher->result();
+        self->m_bgImage = img.isNull() ? QPixmap() : QPixmap::fromImage(img);
+        self->update();
+      });
+      watcher->setFuture(
+          QtConcurrent::run([bgPath]() { return ImageDecodeUtils::loadCapped(bgPath); }));
+    }
+    // Empty or non-image path leaves m_bgImage cleared — never hand it to
+    // QPixmap's autodetect, which would route a .pdf to the abort()-prone PDF
+    // image plugin.
   }
-  // Empty or non-image path leaves m_bgImage cleared — never hand it to
-  // QPixmap's autodetect, which would route a .pdf to the abort()-prone PDF
-  // image plugin.
 
   // Make children transparent so the painted background shows through.
   // The default .ui sets autoFillBackground on each of these so the sidebar

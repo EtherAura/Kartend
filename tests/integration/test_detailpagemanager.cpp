@@ -44,7 +44,7 @@ public:
   void updateSidebarMetadata(ItemWidget *) override {}
   void updateSidebarMetadata(const QString &, const QString &) override {}
   void refreshSidebarMetadataImmediate() override {}
-  void applySidebarStateForCollection(int) override {}
+  void applySidebarStateForCollection(int, bool) override {}
   void updateSidebarLayout(int) override {}
   [[nodiscard]] bool isSidebarVisible() const override { return false; }
   [[nodiscard]] IDetailsPane *sidebarWidget() const override { return nullptr; }

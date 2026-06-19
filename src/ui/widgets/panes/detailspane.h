@@ -203,7 +203,11 @@ public:
   /// type / color / image / pattern, text color, accent color. Called by
   /// DetailsPaneManager whenever the active collection changes or settings are
   /// saved. Triggers a repaint.
-  void applyAppearance(const CollectionConfig &collection);
+  /// reloadBackground=false (Kartend-gzptz) keeps the already-decoded sidebar
+  /// background pixmap and only re-applies colours/pattern/accent — used for a
+  /// colour-only re-theme so the wallpaper isn't re-decoded (and doesn't flash
+  /// blank) on every system-accent change.
+  void applyAppearance(const CollectionConfig &collection, bool reloadBackground = true);
 
   /// switches the active built-in sidebar tab. Item shows the
   /// per-item view; Collection forces the summary regardless of selection;
