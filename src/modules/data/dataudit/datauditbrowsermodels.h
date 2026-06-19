@@ -20,6 +20,25 @@
 /// of the tree.
 namespace DatAudit {
 
+/// Per-item-folder rollup for SubfolderPerItem presentation (Kartend-m6qsb.30):
+/// one entry per containing item-folder, with the bucket counts of the audit
+/// rows that fall in it.
+struct FolderRollup {
+  QString folder;
+  BucketCounts counts;
+};
+
+/// Group persisted audit-result rows by their containing item-folder so the
+/// browser can present "Game A: 2/3 present" as one unit (Kartend-m6qsb.30). A
+/// row with a file is keyed by the first path component of its filePath relative
+/// to whichever scan root contains it (the item-folder); a Missing row (no file)
+/// is keyed by its gameName, which equals the folder name in a SubfolderPerItem
+/// layout, so absent ROMs count toward the folder's total. Folders surface in
+/// first-seen order.
+[[nodiscard]] QList<FolderRollup>
+groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
+                     const QStringList &scanRoots);
+
 /// Left-pane tree: Root → Profile → Source DAT (Source children only when a
 /// profile contributed more than one DAT). Each node exposes rolled-up bucket
 /// counts; games/roms are NOT in the tree.

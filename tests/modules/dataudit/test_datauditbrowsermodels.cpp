@@ -31,6 +31,7 @@ private slots:
   void gameFilterByStateAndFixes();
   void romFileJoinsCatalogueAndStatus();
   void romFileFallsBackToResultsWithoutCatalogue();
+  void groupsResultsByItemFolder();
 };
 
 void TestDatAuditBrowserModels::bucketCountsMapStatuses() {
@@ -195,6 +196,35 @@ void TestDatAuditBrowserModels::romFileFallsBackToResultsWithoutCatalogue() {
   m.setGame({}, {r});
   QCOMPARE(m.rowCount(), 1);
   QCOMPARE(m.data(m.index(0, RomFileModel::RomColumn)).toString(), QStringLiteral("orphan.bin"));
+}
+
+void TestDatAuditBrowserModels::groupsResultsByItemFolder() {
+  // SubfolderPerItem (Kartend-m6qsb.30): two item-folders under the scan root,
+  // plus a Missing rom attributed to its game (= folder name) so the folder's
+  // total includes the absent ROM and reads as "Game A: 2/3 present".
+  const QStringList scanRoots{QStringLiteral("/roms")};
+  ResultRow a1;
+  a1.status = kHave;
+  a1.filePath = QStringLiteral("/roms/Game A/disc1.bin");
+  ResultRow a2;
+  a2.status = kHave;
+  a2.filePath = QStringLiteral("/roms/Game A/disc2.bin");
+  ResultRow aMissing; // a third rom of Game A is absent (no on-disk file)
+  aMissing.status = kMissing;
+  aMissing.gameName = QStringLiteral("Game A");
+  ResultRow b1;
+  b1.status = kWrongName;
+  b1.filePath = QStringLiteral("/roms/Game B/rom.bin");
+
+  const auto folders = DatAudit::groupResultsByFolder({a1, a2, aMissing, b1}, scanRoots);
+  QCOMPARE(folders.size(), 2);
+  // First-seen order: Game A (from a1), then Game B.
+  QCOMPARE(folders.at(0).folder, QStringLiteral("Game A"));
+  QCOMPARE(folders.at(0).counts.have, 2);
+  QCOMPARE(folders.at(0).counts.missing, 1);
+  QCOMPARE(folders.at(0).counts.total, 3); // 2 of 3 present
+  QCOMPARE(folders.at(1).folder, QStringLiteral("Game B"));
+  QCOMPARE(folders.at(1).counts.total, 1);
 }
 
 QTEST_GUILESS_MAIN(TestDatAuditBrowserModels)

@@ -1,5 +1,6 @@
 #include "datauditbrowsermodels.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QIcon>
@@ -8,6 +9,55 @@
 #include "datauditmodel.h" // DatAuditModel::statusLabel
 
 namespace DatAudit {
+
+namespace {
+/// The item-folder a scanned file belongs to: the first path component of its
+/// path relative to whichever scan root contains it. A file directly in a root
+/// (no subfolder) — or under no root at all — keys under its own basename
+/// (Kartend-m6qsb.30).
+QString itemFolderFor(const QString &filePath, const QStringList &scanRoots) {
+  const QString fileClean = QDir::cleanPath(filePath);
+  for (const QString &root : scanRoots) {
+    const QString rootClean = QDir::cleanPath(root);
+    if (rootClean.isEmpty()) {
+      continue;
+    }
+    const QString prefix = rootClean + QLatin1Char('/');
+    if (fileClean.startsWith(prefix)) {
+      const QString rel = fileClean.mid(prefix.size());
+      const int slash = rel.indexOf(QLatin1Char('/'));
+      return slash >= 0 ? rel.left(slash) : rel;
+    }
+  }
+  return QFileInfo(fileClean).fileName();
+}
+} // namespace
+
+QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
+                                         const QStringList &scanRoots) {
+  QHash<QString, BucketCounts> byFolder;
+  QStringList order; // first-seen order for deterministic output
+  for (const DatAuditProfile::ResultRow &r : results) {
+    // A Missing row carries no on-disk file; key it by its game so absent ROMs
+    // still count toward the folder (folder == game name in SubfolderPerItem).
+    const QString folder = r.filePath.isEmpty() ? r.gameName : itemFolderFor(r.filePath, scanRoots);
+    if (folder.isEmpty()) {
+      continue;
+    }
+    auto it = byFolder.find(folder);
+    if (it == byFolder.end()) {
+      order.append(folder);
+      it = byFolder.insert(folder, BucketCounts{});
+    }
+    it.value().add(static_cast<Status>(r.status), r.mia, 1);
+  }
+  QList<FolderRollup> out;
+  out.reserve(order.size());
+  for (const QString &folder : order) {
+    out.append(FolderRollup{folder, byFolder.value(folder)});
+  }
+  return out;
+}
 
 // ── AuditTreeModel ─────────────────────────────────────────────────────────
 
