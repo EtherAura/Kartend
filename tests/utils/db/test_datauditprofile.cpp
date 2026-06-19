@@ -405,6 +405,15 @@ void TestDatAuditProfile::rollupsGroupBySourceGameAndMia() {
   auto gamesB = DatAuditProfile::loadGameRollups(m_db, id, QStringLiteral("B.dat"));
   QVERIFY(gamesB.isOk());
   QCOMPARE(gamesB.value().size(), 1);
+
+  // Kartend-m6qsb.30: the folder-as-item view loads every row of a source (all
+  // games), to regroup them by item-folder client-side.
+  auto srcA = DatAuditProfile::loadSourceResultRows(m_db, id, QStringLiteral("A.dat"));
+  QVERIFY(srcA.isOk());
+  QCOMPARE(srcA.value().size(), 2);
+  auto srcB = DatAuditProfile::loadSourceResultRows(m_db, id, QStringLiteral("B.dat"));
+  QVERIFY(srcB.isOk());
+  QCOMPARE(srcB.value().size(), 1);
 }
 
 void TestDatAuditProfile::loadResultSummaryCountsByStatus() {

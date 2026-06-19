@@ -1,6 +1,8 @@
 #ifndef DATAUDITBROWSERPAGE_H
 #define DATAUDITBROWSERPAGE_H
 
+#include <QHash>
+#include <QStringList>
 #include <QWidget>
 
 class QCheckBox;
@@ -64,12 +66,19 @@ private:
   QCheckBox *m_filterEmpty = nullptr;
   QCheckBox *m_filterFixes = nullptr;
   QCheckBox *m_filterMia = nullptr;
+  /// Kartend-m6qsb.30: when checked, the game list regroups the source's audit
+  /// rows by their containing item-folder ("Game A: 2/3 present") instead of by
+  /// DAT game.
+  QCheckBox *m_groupByFolder = nullptr;
   QLineEdit *m_search = nullptr;
 
   // The (profileId, sourceName, datPath) the game list is currently showing.
   qint64 m_currentProfileId = -1;
   QString m_currentSourceName;
   QString m_currentDatPath;
+  /// Scan roots per profile id (Kartend-m6qsb.30), cached on refresh() so the
+  /// folder-as-item view can derive each file's item-folder relative to a root.
+  QHash<qint64, QStringList> m_scanRootsByProfile;
 };
 
 #endif // DATAUDITBROWSERPAGE_H

@@ -149,6 +149,16 @@ void DatAuditBrowserPage::buildUi() {
   // Fixes / MIA default off — they are "only show rows that have…" gates.
   makeCheck(m_filterFixes, tr("Fixes"), false);
   makeCheck(m_filterMia, tr("MIA"), false);
+  // Group-by-folder is not a status filter — it regroups the game list by item
+  // folder (Kartend-m6qsb.30), so reload the current source on toggle rather
+  // than wiring it to applyFilters().
+  m_groupByFolder = new QCheckBox(tr("Group by folder"), this);
+  filterRow->addWidget(m_groupByFolder);
+  connect(m_groupByFolder, &QCheckBox::toggled, this, [this](bool) {
+    if (m_currentProfileId >= 0 && !m_currentSourceName.isEmpty()) {
+      loadGamesFor(m_currentProfileId, m_currentSourceName, m_currentDatPath);
+    }
+  });
   filterRow->addStretch(1);
   m_search = new QLineEdit(this);
   m_search->setPlaceholderText(tr("Filter games…"));
@@ -181,6 +191,12 @@ void DatAuditBrowserPage::refresh() {
     }
   });
   m_treeModel->setTree(profiles, rollups);
+  // Cache each profile's scan roots so the folder-as-item view can map a result
+  // row's absolute filePath back to its item-folder (Kartend-m6qsb.30).
+  m_scanRootsByProfile.clear();
+  for (const DatAuditProfile::Profile &p : profiles) {
+    m_scanRootsByProfile.insert(p.id, p.scanRoots);
+  }
   clearDatInfo();
   m_gameModel->clear();
   m_romModel->clear();
@@ -260,6 +276,20 @@ void DatAuditBrowserPage::loadGamesFor(qint64 profileId, const QString &sourceNa
   m_currentSourceName = sourceName;
   m_currentDatPath = datPath;
   m_romModel->clear();
+  if (m_groupByFolder != nullptr && m_groupByFolder->isChecked()) {
+    // Folder-as-item view: regroup the whole source's rows by item-folder.
+    QList<DatAuditProfile::ResultRow> results;
+    withDb([&](QSqlDatabase &db) {
+      if (auto r = DatAuditProfile::loadSourceResultRows(db, profileId, sourceName); r.isOk()) {
+        results = r.value();
+      } else {
+        ErrorUtils::logError(r.error());
+      }
+    });
+    m_gameModel->setFolders(
+        DatAudit::groupResultsByFolder(results, m_scanRootsByProfile.value(profileId)));
+    return;
+  }
   QList<DatAuditProfile::GameRollupRow> games;
   withDb([&](QSqlDatabase &db) {
     if (auto g = DatAuditProfile::loadGameRollups(db, profileId, sourceName); g.isOk()) {
@@ -280,6 +310,30 @@ void DatAuditBrowserPage::onGameSelectionChanged() {
   const int sourceRow = m_gameProxy->mapToSource(proxyIdx).row();
   const QString gameName = m_gameModel->gameNameAt(sourceRow);
   if (gameName.isEmpty()) {
+    m_romModel->clear();
+    return;
+  }
+
+  if (m_groupByFolder != nullptr && m_groupByFolder->isChecked()) {
+    // Folder mode: gameName is the selected item-folder. Show that folder's rows
+    // (Kartend-m6qsb.30) — no catalogue join, the rows already carry their state.
+    QList<DatAuditProfile::ResultRow> all;
+    withDb([&](QSqlDatabase &db) {
+      if (auto r =
+              DatAuditProfile::loadSourceResultRows(db, m_currentProfileId, m_currentSourceName);
+          r.isOk()) {
+        all = r.value();
+      }
+    });
+    const auto folders =
+        DatAudit::groupResultsByFolder(all, m_scanRootsByProfile.value(m_currentProfileId));
+    for (const DatAudit::FolderRollup &fr : folders) {
+      if (fr.folder == gameName) {
+        m_romModel->setGame({}, fr.rows);
+        m_romTable->resizeColumnsToContents();
+        return;
+      }
+    }
     m_romModel->clear();
     return;
   }

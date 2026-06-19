@@ -35,8 +35,8 @@ QString itemFolderFor(const QString &filePath, const QStringList &scanRoots) {
 
 QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
                                          const QStringList &scanRoots) {
-  QHash<QString, BucketCounts> byFolder;
-  QStringList order; // first-seen order for deterministic output
+  QList<FolderRollup> out;
+  QHash<QString, int> indexByFolder; // folder -> index into out, for first-seen order
   for (const DatAuditProfile::ResultRow &r : results) {
     // A Missing row carries no on-disk file; key it by its game so absent ROMs
     // still count toward the folder (folder == game name in SubfolderPerItem).
@@ -44,19 +44,32 @@ QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow>
     if (folder.isEmpty()) {
       continue;
     }
-    auto it = byFolder.find(folder);
-    if (it == byFolder.end()) {
-      order.append(folder);
-      it = byFolder.insert(folder, BucketCounts{});
+    int i = indexByFolder.value(folder, -1);
+    if (i < 0) {
+      i = static_cast<int>(out.size());
+      indexByFolder.insert(folder, i);
+      out.append(FolderRollup{folder, BucketCounts{}, {}});
     }
-    it.value().add(static_cast<Status>(r.status), r.mia, 1);
-  }
-  QList<FolderRollup> out;
-  out.reserve(order.size());
-  for (const QString &folder : order) {
-    out.append(FolderRollup{folder, byFolder.value(folder)});
+    out[i].counts.add(static_cast<Status>(r.status), r.mia, 1);
+    out[i].rows.append(r);
   }
   return out;
+}
+
+void GameListModel::setFolders(const QList<FolderRollup> &folders) {
+  beginResetModel();
+  m_rows.clear();
+  m_rows.reserve(folders.size());
+  for (const FolderRollup &f : folders) {
+    GameRow g;
+    g.gameName = f.folder; // the folder reads as the row's "game"
+    g.counts = f.counts;
+    g.state = gameStateOf(g.counts);
+    g.hasFixes = g.counts.fixable > 0;
+    g.hasMia = g.counts.mia > 0;
+    m_rows.append(g);
+  }
+  endResetModel();
 }
 
 // ── AuditTreeModel ─────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ namespace DatAudit {
 struct FolderRollup {
   QString folder;
   BucketCounts counts;
+  QList<DatAuditProfile::ResultRow> rows; ///< rows in this folder, for the rom-detail drill-down
 };
 
 /// Group persisted audit-result rows by their containing item-folder so the
@@ -116,6 +117,10 @@ public:
 
   /// Replace the rows from a source's game rollups (one row per distinct game).
   void setGames(const QList<DatAuditProfile::GameRollupRow> &rollups);
+  /// Re-display the table grouped by item-folder instead of by game
+  /// (Kartend-m6qsb.30): each FolderRollup is one row, its folder name shown in
+  /// the game column with the folder's rolled-up completeness.
+  void setFolders(const QList<FolderRollup> &folders);
   void clear();
 
   [[nodiscard]] QString gameNameAt(int row) const;

@@ -195,6 +195,12 @@ loadGameRollups(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
                                                                       const QString &sourceName,
                                                                       const QString &gameName);
 
+/// All persisted result rows for one source (every game), for the audit
+/// browser's folder-as-item view (Kartend-m6qsb.30) which regroups them by the
+/// containing item-folder. Empty when the source has no rows.
+[[nodiscard]] ErrorUtils::Result<QList<ResultRow>>
+loadSourceResultRows(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
+
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
 /// unknown string falls back to the safe default (InPlace).
 [[nodiscard]] QString fixModeToString(FixMode m);

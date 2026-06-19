@@ -20,8 +20,9 @@ private slots:
 void TestDatAuditBrowserPage::constructsWithoutCrash() {
   // Construction alone runs buildUi() — the path that previously crashed.
   DatAuditBrowserPage page;
-  // Complete / Partial / Empty / Fixes / MIA.
-  QCOMPARE(page.findChildren<QCheckBox *>().size(), 5);
+  // Complete / Partial / Empty / Fixes / MIA + the Group-by-folder toggle
+  // (Kartend-m6qsb.30).
+  QCOMPARE(page.findChildren<QCheckBox *>().size(), 6);
 }
 
 QTEST_MAIN(TestDatAuditBrowserPage)
