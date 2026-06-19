@@ -2,13 +2,18 @@
 #define DATAUDITBROWSERPAGE_H
 
 #include <QHash>
+#include <QList>
 #include <QStringList>
 #include <QWidget>
 
+#include "datauditbrowsermodels.h" // BrowserViewPreset
+
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QModelIndex;
+class QPushButton;
 class QTableView;
 class QTreeView;
 
@@ -44,6 +49,15 @@ private:
   void clearDatInfo();
   void loadGamesFor(qint64 profileId, const QString &sourceName, const QString &datPath);
 
+  // Named view presets (Kartend-7iqhl.1): each captures the filter
+  // configuration only (the 5 gates + group-by-folder + search), so recall is
+  // profile-independent.
+  void loadPresets();                                   ///< pull all slots from QSettings into the combo
+  void recallPreset(int slot);                          ///< apply the slot's captured view to the controls
+  void saveCurrentToPreset();                           ///< overwrite the selected slot with the live view + persist
+  void renameSelectedPreset();                          ///< retitle the selected slot via QInputDialog + persist
+  [[nodiscard]] DatAudit::BrowserViewPreset captureView() const; ///< the live filter state as a preset payload
+
   QTreeView *m_tree = nullptr;
   DatAudit::AuditTreeModel *m_treeModel = nullptr;
 
@@ -71,6 +85,12 @@ private:
   /// DAT game.
   QCheckBox *m_groupByFolder = nullptr;
   QLineEdit *m_search = nullptr;
+
+  // Preset controls (Kartend-7iqhl.1).
+  QComboBox *m_presetCombo = nullptr;
+  QPushButton *m_presetSave = nullptr;
+  QPushButton *m_presetRename = nullptr;
+  QList<DatAudit::BrowserViewPreset> m_presets;
 
   // The (profileId, sourceName, datPath) the game list is currently showing.
   qint64 m_currentProfileId = -1;

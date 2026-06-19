@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QIcon>
+#include <QSettings>
 #include <QStringList>
 
 #include "datauditmodel.h" // DatAuditModel::statusLabel
@@ -54,6 +55,55 @@ QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow>
     out[i].rows.append(r);
   }
   return out;
+}
+
+namespace {
+constexpr auto kPresetsGroup = "DatAuditBrowserPresets";
+} // namespace
+
+QList<BrowserViewPreset> loadBrowserPresets(QSettings &settings) {
+  QList<BrowserViewPreset> presets;
+  presets.reserve(kBrowserPresetCount);
+  settings.beginGroup(QString::fromLatin1(kPresetsGroup));
+  for (int slot = 0; slot < kBrowserPresetCount; ++slot) {
+    settings.beginGroup(QString::number(slot));
+    BrowserViewPreset p;
+    // Read against a default-constructed preset so unsaved slots inherit the
+    // page's default filters; only the name gets a slot-specific default.
+    const BrowserViewPreset d;
+    p.name = settings.value(QStringLiteral("name"),
+                            QStringLiteral("Preset %1").arg(slot + 1))
+                 .toString();
+    p.complete = settings.value(QStringLiteral("complete"), d.complete).toBool();
+    p.partial = settings.value(QStringLiteral("partial"), d.partial).toBool();
+    p.empty = settings.value(QStringLiteral("empty"), d.empty).toBool();
+    p.fixes = settings.value(QStringLiteral("fixes"), d.fixes).toBool();
+    p.mia = settings.value(QStringLiteral("mia"), d.mia).toBool();
+    p.groupByFolder = settings.value(QStringLiteral("groupByFolder"), d.groupByFolder).toBool();
+    p.search = settings.value(QStringLiteral("search"), d.search).toString();
+    settings.endGroup();
+    presets.append(p);
+  }
+  settings.endGroup();
+  return presets;
+}
+
+void saveBrowserPreset(QSettings &settings, int slot, const BrowserViewPreset &preset) {
+  if (slot < 0 || slot >= kBrowserPresetCount) {
+    return;
+  }
+  settings.beginGroup(QString::fromLatin1(kPresetsGroup));
+  settings.beginGroup(QString::number(slot));
+  settings.setValue(QStringLiteral("name"), preset.name);
+  settings.setValue(QStringLiteral("complete"), preset.complete);
+  settings.setValue(QStringLiteral("partial"), preset.partial);
+  settings.setValue(QStringLiteral("empty"), preset.empty);
+  settings.setValue(QStringLiteral("fixes"), preset.fixes);
+  settings.setValue(QStringLiteral("mia"), preset.mia);
+  settings.setValue(QStringLiteral("groupByFolder"), preset.groupByFolder);
+  settings.setValue(QStringLiteral("search"), preset.search);
+  settings.endGroup();
+  settings.endGroup();
 }
 
 void GameListModel::setFolders(const QList<FolderRollup> &folders) {

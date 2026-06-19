@@ -11,6 +11,8 @@
 #include "datauditprofile.h"
 #include "datlookup.h"
 
+class QSettings;
+
 /// Models backing the RomVault-style DAT-audit browser (Kartend-34lab).
 ///
 /// All three are fed via setters from the dialog (which owns the DB I/O), so
@@ -39,6 +41,37 @@ struct FolderRollup {
 [[nodiscard]] QList<FolderRollup>
 groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
                      const QStringList &scanRoots);
+
+/// A saved browser view (Kartend-7iqhl.1): the read-only browser's filter
+/// configuration only — the five completeness gates, the group-by-folder
+/// toggle, and the game-search text. Deliberately profile-independent (no tree
+/// node / DAT path), so recalling a preset just reconfigures the view and never
+/// dangles on a profile that has since been deleted. Four named slots persist
+/// via QSettings.
+struct BrowserViewPreset {
+  QString name;
+  bool complete = true;  ///< show Complete games
+  bool partial = true;   ///< show Partial games
+  bool empty = true;     ///< show Empty games
+  bool fixes = false;    ///< require: only games with fixes
+  bool mia = false;      ///< require: only games with MIA
+  bool groupByFolder = false; ///< folder-as-item game grouping (Kartend-m6qsb.30)
+  QString search;        ///< game-name filter text
+};
+
+/// Number of preset slots (RomVault uses four).
+inline constexpr int kBrowserPresetCount = 4;
+
+/// Load all `kBrowserPresetCount` presets from `settings`. The helper manages
+/// its own "DatAuditBrowserPresets" group, so callers pass the shared
+/// QSettings("kartend","ui-state") (or, in tests, a temp IniFormat instance).
+/// A slot that was never saved comes back with the page's default filters and
+/// the name "Preset N".
+[[nodiscard]] QList<BrowserViewPreset> loadBrowserPresets(QSettings &settings);
+
+/// Persist one preset `slot` (0-based, < kBrowserPresetCount) into `settings`
+/// under the "DatAuditBrowserPresets" group. Out-of-range slots are ignored.
+void saveBrowserPreset(QSettings &settings, int slot, const BrowserViewPreset &preset);
 
 /// Left-pane tree: Root → Profile → Source DAT (Source children only when a
 /// profile contributed more than one DAT). Each node exposes rolled-up bucket

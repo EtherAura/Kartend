@@ -1,13 +1,18 @@
 #include "datauditbrowserpage.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
+#include <QSettings>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QSqlDatabase>
 #include <QStandardPaths>
@@ -159,6 +164,29 @@ void DatAuditBrowserPage::buildUi() {
       loadGamesFor(m_currentProfileId, m_currentSourceName, m_currentDatPath);
     }
   });
+
+  // Named view presets (Kartend-7iqhl.1): a combo of four named slots that each
+  // captures the live filter view, with Save (overwrite the selected slot) and
+  // Rename buttons. Selecting a slot recalls it. Wire the combo BEFORE
+  // loadPresets() populates it — loadPresets blocks the combo's signals so the
+  // initial fill does not recall a preset (the page opens at its defaults).
+  filterRow->addWidget(new QLabel(tr("Preset:"), this));
+  m_presetCombo = new QComboBox(this);
+  m_presetCombo->setToolTip(tr("Select a saved view to recall it."));
+  filterRow->addWidget(m_presetCombo);
+  m_presetSave = new QPushButton(tr("Save"), this);
+  m_presetSave->setToolTip(tr("Overwrite the selected preset with the current filters."));
+  filterRow->addWidget(m_presetSave);
+  m_presetRename = new QPushButton(tr("Rename"), this);
+  m_presetRename->setToolTip(tr("Rename the selected preset."));
+  filterRow->addWidget(m_presetRename);
+  connect(m_presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &DatAuditBrowserPage::recallPreset);
+  connect(m_presetSave, &QPushButton::clicked, this,
+          &DatAuditBrowserPage::saveCurrentToPreset);
+  connect(m_presetRename, &QPushButton::clicked, this,
+          &DatAuditBrowserPage::renameSelectedPreset);
+
   filterRow->addStretch(1);
   m_search = new QLineEdit(this);
   m_search->setPlaceholderText(tr("Filter games…"));
@@ -174,6 +202,7 @@ void DatAuditBrowserPage::buildUi() {
   connect(m_search, &QLineEdit::textChanged, this,
           [this](const QString &t) { m_gameProxy->setFilterFixedString(t); });
 
+  loadPresets();
   clearDatInfo();
 }
 
@@ -363,4 +392,96 @@ void DatAuditBrowserPage::applyFilters() {
                               m_filterEmpty->isChecked());
   m_gameProxy->setRequireFixes(m_filterFixes->isChecked());
   m_gameProxy->setRequireMia(m_filterMia->isChecked());
+}
+
+void DatAuditBrowserPage::loadPresets() {
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  m_presets = DatAudit::loadBrowserPresets(settings);
+  // Block the combo while filling it so the initial population does not fire
+  // currentIndexChanged → recallPreset() (the page opens at its own defaults,
+  // not whatever is in slot 1).
+  const QSignalBlocker block(m_presetCombo);
+  m_presetCombo->clear();
+  for (const DatAudit::BrowserViewPreset &p : m_presets) {
+    m_presetCombo->addItem(p.name);
+  }
+  m_presetCombo->setCurrentIndex(0);
+}
+
+DatAudit::BrowserViewPreset DatAuditBrowserPage::captureView() const {
+  DatAudit::BrowserViewPreset p;
+  p.complete = m_filterComplete->isChecked();
+  p.partial = m_filterPartial->isChecked();
+  p.empty = m_filterEmpty->isChecked();
+  p.fixes = m_filterFixes->isChecked();
+  p.mia = m_filterMia->isChecked();
+  p.groupByFolder = m_groupByFolder->isChecked();
+  p.search = m_search->text();
+  return p;
+}
+
+void DatAuditBrowserPage::recallPreset(int slot) {
+  if (slot < 0 || slot >= m_presets.size()) {
+    return;
+  }
+  const DatAudit::BrowserViewPreset &p = m_presets.at(slot);
+  // Set every control with its signal blocked, then push the combined state
+  // through the same paths the signals would have (one filter pass, one game
+  // reload) instead of a cascade of partial updates mid-recall. The blockers
+  // stay in scope for those calls — applyFilters()/loadGamesFor() read the
+  // control states directly, not via the signals.
+  const QSignalBlocker bc(m_filterComplete);
+  const QSignalBlocker bp(m_filterPartial);
+  const QSignalBlocker be(m_filterEmpty);
+  const QSignalBlocker bf(m_filterFixes);
+  const QSignalBlocker bm(m_filterMia);
+  const QSignalBlocker bg(m_groupByFolder);
+  const QSignalBlocker bs(m_search);
+  m_filterComplete->setChecked(p.complete);
+  m_filterPartial->setChecked(p.partial);
+  m_filterEmpty->setChecked(p.empty);
+  m_filterFixes->setChecked(p.fixes);
+  m_filterMia->setChecked(p.mia);
+  m_groupByFolder->setChecked(p.groupByFolder);
+  m_search->setText(p.search);
+
+  applyFilters();
+  m_gameProxy->setFilterFixedString(p.search);
+  // group-by-folder changes which model is loaded, so re-pull the current
+  // source under the recalled grouping (its toggled signal was blocked above).
+  if (m_currentProfileId >= 0 && !m_currentSourceName.isEmpty()) {
+    loadGamesFor(m_currentProfileId, m_currentSourceName, m_currentDatPath);
+  }
+}
+
+void DatAuditBrowserPage::saveCurrentToPreset() {
+  const int slot = m_presetCombo->currentIndex();
+  if (slot < 0 || slot >= m_presets.size()) {
+    return;
+  }
+  DatAudit::BrowserViewPreset p = captureView();
+  p.name = m_presets.at(slot).name; // Save overwrites the view, keeps the name.
+  m_presets[slot] = p;
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  DatAudit::saveBrowserPreset(settings, slot, p);
+}
+
+void DatAuditBrowserPage::renameSelectedPreset() {
+  const int slot = m_presetCombo->currentIndex();
+  if (slot < 0 || slot >= m_presets.size()) {
+    return;
+  }
+  bool ok = false;
+  const QString name = QInputDialog::getText(this, tr("Rename preset"), tr("Preset name:"),
+                                             QLineEdit::Normal, m_presets.at(slot).name, &ok)
+                           .trimmed();
+  if (!ok || name.isEmpty()) {
+    return;
+  }
+  m_presets[slot].name = name;
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  DatAudit::saveBrowserPreset(settings, slot, m_presets.at(slot));
+  // Update the combo label only — do not recall (would reset the live view).
+  const QSignalBlocker block(m_presetCombo);
+  m_presetCombo->setItemText(slot, name);
 }

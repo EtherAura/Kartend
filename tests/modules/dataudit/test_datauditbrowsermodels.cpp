@@ -3,6 +3,8 @@
 // detail's catalogue↔result join. Pure model logic, fed via setters — no DB,
 // no widgets — so QTEST_GUILESS_MAIN (a QCoreApplication) suffices.
 
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "datauditbrowsermodels.h"
@@ -32,6 +34,8 @@ private slots:
   void romFileJoinsCatalogueAndStatus();
   void romFileFallsBackToResultsWithoutCatalogue();
   void groupsResultsByItemFolder();
+  void browserPresetsRoundTrip();
+  void browserPresetsDefaultUnsavedSlots();
 };
 
 void TestDatAuditBrowserModels::bucketCountsMapStatuses() {
@@ -225,6 +229,65 @@ void TestDatAuditBrowserModels::groupsResultsByItemFolder() {
   QCOMPARE(folders.at(0).counts.total, 3); // 2 of 3 present
   QCOMPARE(folders.at(1).folder, QStringLiteral("Game B"));
   QCOMPARE(folders.at(1).counts.total, 1);
+}
+
+void TestDatAuditBrowserModels::browserPresetsRoundTrip() {
+  // A saved slot round-trips every field through a real (temp) QSettings store
+  // — no mocking. saveBrowserPreset / loadBrowserPresets manage their own group,
+  // so the test just hands them a fresh IniFormat instance (Kartend-7iqhl.1).
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString iniPath = dir.filePath(QStringLiteral("ui-state.ini"));
+
+  BrowserViewPreset p;
+  p.name = QStringLiteral("MIA hunt");
+  p.complete = false;
+  p.partial = true;
+  p.empty = false;
+  p.fixes = true;
+  p.mia = true;
+  p.groupByFolder = true;
+  p.search = QStringLiteral("zelda");
+
+  {
+    QSettings settings(iniPath, QSettings::IniFormat);
+    saveBrowserPreset(settings, 2, p); // slot 2
+  }
+
+  QSettings settings(iniPath, QSettings::IniFormat);
+  const QList<BrowserViewPreset> loaded = loadBrowserPresets(settings);
+  QCOMPARE(loaded.size(), kBrowserPresetCount);
+  const BrowserViewPreset &got = loaded.at(2);
+  QCOMPARE(got.name, p.name);
+  QCOMPARE(got.complete, p.complete);
+  QCOMPARE(got.partial, p.partial);
+  QCOMPARE(got.empty, p.empty);
+  QCOMPARE(got.fixes, p.fixes);
+  QCOMPARE(got.mia, p.mia);
+  QCOMPARE(got.groupByFolder, p.groupByFolder);
+  QCOMPARE(got.search, p.search);
+}
+
+void TestDatAuditBrowserModels::browserPresetsDefaultUnsavedSlots() {
+  // An empty store yields four slots at the page's default filters, each named
+  // "Preset N" — so the combo is always fully populated.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  QSettings settings(dir.filePath(QStringLiteral("empty.ini")), QSettings::IniFormat);
+  const QList<BrowserViewPreset> presets = loadBrowserPresets(settings);
+  QCOMPARE(presets.size(), kBrowserPresetCount);
+  const BrowserViewPreset defaults; // the documented defaults
+  for (int i = 0; i < presets.size(); ++i) {
+    const BrowserViewPreset &p = presets.at(i);
+    QCOMPARE(p.name, QStringLiteral("Preset %1").arg(i + 1));
+    QCOMPARE(p.complete, defaults.complete);
+    QCOMPARE(p.partial, defaults.partial);
+    QCOMPARE(p.empty, defaults.empty);
+    QCOMPARE(p.fixes, defaults.fixes);
+    QCOMPARE(p.mia, defaults.mia);
+    QCOMPARE(p.groupByFolder, defaults.groupByFolder);
+    QVERIFY(p.search.isEmpty());
+  }
 }
 
 QTEST_GUILESS_MAIN(TestDatAuditBrowserModels)
