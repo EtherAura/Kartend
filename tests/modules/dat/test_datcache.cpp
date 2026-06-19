@@ -543,6 +543,14 @@ void TestDatCache::cloneOfRoundTripsThroughCache() {
   QVERIFY(parent.has_value());
   QVERIFY(parent->cloneOf.isEmpty());
 
+  // Kartend-m6qsb.29: setId round-trips, and the clone's cloneof resolves to the
+  // parent's setId ("parent", the name=) — NOT its gameName (the description
+  // "Parent"). This is exactly why clone resolution must key on setId.
+  QCOMPARE(clone->setId, QStringLiteral("clone"));
+  QCOMPARE(parent->setId, QStringLiteral("parent"));
+  QCOMPARE(clone->cloneOf, parent->setId);
+  QVERIFY(clone->cloneOf != parent->gameName);
+
   QHash<QString, QString> cloneByCrc; // crc -> cloneOf, gathered via the stream
   store.forEachRecord(source.value(),
                       [&](const DatLookup::DatRecord &r) { cloneByCrc.insert(r.crc, r.cloneOf); });

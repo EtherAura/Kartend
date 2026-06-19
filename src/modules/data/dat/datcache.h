@@ -24,7 +24,8 @@
 /// Schema:
 ///   dat_sources(id, path UNIQUE, mtime_unix_ms, dialect, record_count,
 ///               ingested_at_unix_ms)
-///   dat_records(source_id FK, game_name, rom_name, size, crc, md5, sha1)
+///   dat_records(source_id FK, game_name, rom_name, size, crc, md5, sha1,
+///               cloneof, setid, mia)
 ///   indexes on (source_id, sha1|md5|crc) for hash-lookup speed.
 ///
 /// Cache invalidation: when openOrIngest sees a DAT whose mtime no
