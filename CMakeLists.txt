@@ -95,8 +95,27 @@ endif()
 
 # Optional: libarchive for in-process archive-member hashing (DAT auditor +
 # scraper). Falls back to shelling out to 7z/unzip/bsdtar when not found.
-if (PkgConfig_FOUND AND KARTEND_ENABLE_LIBARCHIVE)
-  pkg_check_modules(LIBARCHIVE QUIET IMPORTED_TARGET libarchive)
+# Two discovery routes feed one normalized KARTEND_LIBARCHIVE_TARGET:
+#   1. pkg-config — Linux apt's libarchive-dev ships libarchive.pc, so this is
+#      the route every Linux CI/dev build takes.
+#   2. find_package(LibArchive) — CMake's bundled module, used when pkg-config
+#      can't see libarchive: MSVC/vcpkg has no libarchive.pc on the default
+#      search path (vcpkg's toolchain exposes it through FindLibArchive's
+#      cmake-wrapper instead), and macOS reaches the SDK/system libarchive the
+#      same way. Tried second so the pkg-config IMPORTED_TARGET wins where both
+#      exist.
+if (KARTEND_ENABLE_LIBARCHIVE)
+  if (PkgConfig_FOUND)
+    pkg_check_modules(LIBARCHIVE QUIET IMPORTED_TARGET libarchive)
+  endif()
+  if (TARGET PkgConfig::LIBARCHIVE)
+    set(KARTEND_LIBARCHIVE_TARGET PkgConfig::LIBARCHIVE)
+  else()
+    find_package(LibArchive QUIET)
+    if (LibArchive_FOUND)
+      set(KARTEND_LIBARCHIVE_TARGET LibArchive::LibArchive)
+    endif()
+  endif()
 endif()
 
 # Optional: QtKeychain for secure scraper credential storage. Without it,
@@ -374,13 +393,15 @@ else()
   message(STATUS "zstd not found; Kart compression will use zlib (qCompress)")
 endif()
 
-if (TARGET PkgConfig::LIBARCHIVE)
+if (KARTEND_LIBARCHIVE_TARGET)
   # libarchive is consumed by RomHasher (src/utils/fs/) which lives in
   # kartend_utils; KARTEND_HAS_LIBARCHIVE gates the in-process member hasher
   # there. PUBLIC so the define propagates like the other optional backends.
-  target_link_libraries(kartend_utils PUBLIC PkgConfig::LIBARCHIVE)
+  # The target is either pkg-config's PkgConfig::LIBARCHIVE (Linux) or
+  # FindLibArchive's LibArchive::LibArchive (MSVC/vcpkg + macOS).
+  target_link_libraries(kartend_utils PUBLIC ${KARTEND_LIBARCHIVE_TARGET})
   target_compile_definitions(kartend_utils PUBLIC KARTEND_HAS_LIBARCHIVE=1)
-  message(STATUS "libarchive found; archive ROMs hashed in-process")
+  message(STATUS "libarchive found (${KARTEND_LIBARCHIVE_TARGET}); archive ROMs hashed in-process")
 else()
   message(STATUS "libarchive not found; archive ROMs hashed via 7z/unzip/bsdtar")
 endif()
