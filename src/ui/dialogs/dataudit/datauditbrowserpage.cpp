@@ -13,6 +13,7 @@
 #include <QSplitter>
 #include <QSqlDatabase>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTableView>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -163,6 +164,15 @@ void DatAuditBrowserPage::buildUi() {
 
   connect(m_tree->selectionModel(), &QItemSelectionModel::currentChanged, this,
           &DatAuditBrowserPage::onTreeSelectionChanged);
+  // Track expand/collapse so the expanded set survives the setTree() rebuilds
+  // (Kartend-q66m4). Source nodes are leaves, so only multi-source Profile nodes
+  // ever fire these — keyed by their stable profile id.
+  connect(m_tree, &QTreeView::expanded, this, [this](const QModelIndex &idx) {
+    m_expandedProfiles.insert(m_treeModel->profileIdAt(idx));
+  });
+  connect(m_tree, &QTreeView::collapsed, this, [this](const QModelIndex &idx) {
+    m_expandedProfiles.remove(m_treeModel->profileIdAt(idx));
+  });
   connect(m_gameTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
           &DatAuditBrowserPage::onGameSelectionChanged);
   connect(m_search, &QLineEdit::textChanged, this,
@@ -184,7 +194,13 @@ void DatAuditBrowserPage::refresh() {
       ErrorUtils::logError(r.error());
     }
   });
-  m_treeModel->setTree(profiles, rollups);
+  {
+    // Block expand/collapse emissions during the rebuild so the model reset's
+    // view-collapse can't clear m_expandedProfiles before we re-apply it.
+    const QSignalBlocker blocker(m_tree);
+    m_treeModel->setTree(profiles, rollups);
+  }
+  restoreExpandedState();
   clearDatInfo();
   m_gameModel->clear();
   m_romModel->clear();
@@ -343,6 +359,15 @@ void DatAuditBrowserPage::persistState() const {
   settings.setValue(QStringLiteral("browserFilterEmpty"), m_filterEmpty->isChecked());
   settings.setValue(QStringLiteral("browserFilterFixes"), m_filterFixes->isChecked());
   settings.setValue(QStringLiteral("browserFilterMia"), m_filterMia->isChecked());
+
+  // Expanded tree nodes (Kartend-q66m4): store the profile ids as strings so
+  // the QSet round-trips through QSettings.
+  QStringList expandedIds;
+  expandedIds.reserve(m_expandedProfiles.size());
+  for (const qint64 id : m_expandedProfiles) {
+    expandedIds << QString::number(id);
+  }
+  settings.setValue(QStringLiteral("browserExpandedProfiles"), expandedIds);
   settings.endGroup();
 }
 
@@ -378,7 +403,37 @@ void DatAuditBrowserPage::restoreState_() {
   restoreCheck(m_filterEmpty, QStringLiteral("browserFilterEmpty"));
   restoreCheck(m_filterFixes, QStringLiteral("browserFilterFixes"));
   restoreCheck(m_filterMia, QStringLiteral("browserFilterMia"));
+
+  // Expanded tree nodes (Kartend-q66m4). The tree is empty until the first
+  // refresh(), so this only seeds the set; restoreExpandedState() applies it
+  // after each setTree().
+  m_expandedProfiles.clear();
+  const QStringList expandedIds =
+      settings.value(QStringLiteral("browserExpandedProfiles")).toStringList();
+  for (const QString &idStr : expandedIds) {
+    bool ok = false;
+    const qint64 id = idStr.toLongLong(&ok);
+    if (ok) {
+      m_expandedProfiles.insert(id);
+    }
+  }
   settings.endGroup();
 
   applyFilters();
+}
+
+void DatAuditBrowserPage::restoreExpandedState() {
+  if (m_tree == nullptr || m_treeModel == nullptr || m_expandedProfiles.isEmpty()) {
+    return;
+  }
+  // Block signals so the expand() calls below don't recurse into the
+  // expanded() handler that mutates m_expandedProfiles while we iterate it.
+  const QSignalBlocker blocker(m_tree);
+  const int rows = m_treeModel->rowCount();
+  for (int row = 0; row < rows; ++row) {
+    const QModelIndex idx = m_treeModel->index(row, 0);
+    if (m_expandedProfiles.contains(m_treeModel->profileIdAt(idx))) {
+      m_tree->expand(idx);
+    }
+  }
 }

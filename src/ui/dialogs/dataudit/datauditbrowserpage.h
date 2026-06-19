@@ -1,6 +1,7 @@
 #ifndef DATAUDITBROWSERPAGE_H
 #define DATAUDITBROWSERPAGE_H
 
+#include <QSet>
 #include <QWidget>
 
 class QCheckBox;
@@ -49,6 +50,11 @@ private:
   void buildUi();
   void clearDatInfo();
   void loadGamesFor(qint64 profileId, const QString &sourceName, const QString &datPath);
+  /// Re-expand the tree nodes whose profile id is in m_expandedProfiles. Called
+  /// after every setTree() rebuild so the saved expansion survives a refresh
+  /// (Kartend-q66m4). Blocks the tree's expand/collapse signals so re-applying
+  /// the set doesn't recurse into the handlers that mutate it.
+  void restoreExpandedState();
 
   // Splitters kept as members so their proportions can be saved/restored
   // (Kartend-o46gy): horizontal tree|right, vertical gameTable/romTable.
@@ -57,6 +63,11 @@ private:
 
   QTreeView *m_tree = nullptr;
   DatAudit::AuditTreeModel *m_treeModel = nullptr;
+  // Stable expanded-state key set (Kartend-q66m4): profile ids of the expanded
+  // (multi-source) tree nodes. The tree rebuilds on every refresh(), so this is
+  // the source of truth — updated live by the expanded/collapsed signals,
+  // re-applied after each setTree(), and persisted across sessions.
+  QSet<qint64> m_expandedProfiles;
 
   // DAT-info header fields.
   QLabel *m_infoName = nullptr;

@@ -7,8 +7,10 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QSet>
 #include <QSettings>
 #include <QSplitter>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -32,6 +34,7 @@ class TestDatAuditBrowserPage : public QObject {
 private slots:
   void constructsWithoutCrash();
   void persistsAndRestoresLayout();
+  void roundTripsExpandedTreeNodes();
 };
 
 void TestDatAuditBrowserPage::constructsWithoutCrash() {
@@ -84,6 +87,38 @@ void TestDatAuditBrowserPage::persistsAndRestoresLayout() {
         QStringLiteral("browserGameHeader"), QStringLiteral("browserRomHeader")}) {
     QVERIFY2(!settings.value(key).toByteArray().isEmpty(), qPrintable(key));
   }
+}
+
+// Kartend-q66m4: the expanded tree-node set (profile ids) round-trips through
+// QSettings. Re-applying it to a live tree needs a DB-populated multi-source
+// tree (runtime-verified); here we cover the load/serialize logic — that the
+// key name matches and the QStringList<->QSet<qint64> conversion survives a
+// restore->persist cycle.
+void TestDatAuditBrowserPage::roundTripsExpandedTreeNodes() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, tmp.path());
+
+  // Seed two expanded profile ids directly.
+  {
+    QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+    settings.beginGroup(QStringLiteral("DatManagerWindow"));
+    settings.setValue(QStringLiteral("browserExpandedProfiles"), QStringList{"7", "42"});
+    settings.endGroup();
+  }
+
+  // restoreState_() parses them into the set; persistState() writes them back.
+  {
+    DatAuditBrowserPage page;
+    page.restoreState_();
+    page.persistState();
+  }
+
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  settings.beginGroup(QStringLiteral("DatManagerWindow"));
+  const QStringList ids = settings.value(QStringLiteral("browserExpandedProfiles")).toStringList();
+  // QSet iteration order is unspecified, so compare as sets.
+  QCOMPARE(QSet<QString>(ids.begin(), ids.end()), (QSet<QString>{"7", "42"}));
 }
 
 QTEST_MAIN(TestDatAuditBrowserPage)
