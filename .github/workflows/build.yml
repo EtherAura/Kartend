@@ -306,7 +306,11 @@ jobs:
 
   sanitizers:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Kartend-cqnsi: normal runtime ~11 min, but a single stalled apt mirror
+    # once consumed ~29 min before the build even started. The apt retry/timeout
+    # hardening in install-deps should prevent that, but match thread-sanitizer's
+    # 45 min so a future mirror hiccup has headroom instead of a false red.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6

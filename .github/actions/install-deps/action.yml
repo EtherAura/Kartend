@@ -32,7 +32,20 @@ runs:
       # Retry once after a short pause so a transient mirror failure surfaces
       # apt's own network error rather than a confusing "Unable to locate
       # package" in the install step further down.
-      run: sudo apt-get update -qq || { sleep 5; sudo apt-get update -qq; }
+      #
+      # Kartend-cqnsi: the apt -o flags harden against a stalled mirror
+      # (azure.archive.ubuntu.com once hung ~29 min on a single connection and
+      # burned a whole 30-min job). Acquire::Retries makes apt retry a failed
+      # fetch itself, and the short http/https Timeout turns a silent stall
+      # into a fast failure that the retry can route around, instead of a hang
+      # that only the job's timeout-minutes eventually kills.
+      run: |
+        sudo apt-get $APT_OPTS update -qq || { sleep 5; sudo apt-get $APT_OPTS update -qq; }
+      env:
+        APT_OPTS: >-
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=30
+          -o Acquire::https::Timeout=30
 
     - name: Install apt packages
       shell: bash
@@ -40,7 +53,14 @@ runs:
       # any of the requested packages pulls them in transitively. Recommends
       # are left at apt's default (installed) — the previous cache wrapper
       # also installed them, and dropping them would silently change the
-      # dependency closure each job sees.
+      # dependency closure each job sees. APT_OPTS mirrors the update step
+      # (Kartend-cqnsi) so the package downloads get the same retry/timeout
+      # resilience as the index refresh.
       run: |
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y \
           ${{ inputs.packages }}
+      env:
+        APT_OPTS: >-
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=30
+          -o Acquire::https::Timeout=30
