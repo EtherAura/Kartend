@@ -135,7 +135,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -306,7 +306,11 @@ jobs:
 
   sanitizers:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Kartend-cqnsi: normal runtime ~11 min, but a single stalled apt mirror
+    # once consumed ~29 min before the build even started. The apt retry/timeout
+    # hardening in install-deps should prevent that, but match thread-sanitizer's
+    # 45 min so a future mirror hiccup has headroom instead of a false red.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -323,7 +327,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -417,7 +421,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -526,7 +530,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
 
       - name: Pin clang-format to v19
         # Ubuntu 24.04's default `clang-format` is v18, which formats slightly

@@ -243,16 +243,39 @@ struct ScanCompletionQueue {
   QWaitCondition hasResult;
   QWaitCondition hasSpace;
   QVector<DirectoryScanResult> ready;
-  int inFlight = 0;
+
+  // inFlight and handoffSeq are std::atomic only to hand ThreadSanitizer the
+  // happens-before edges it cannot derive from the mutex here. Every access to
+  // both — and to `ready` — is already under `mutex`, so the locking alone is
+  // correct; but TSan loses the QMutex lock epoch across
+  // QWaitCondition::wait(&mutex, msecs)'s annotated release/reacquire and then
+  // reports false data races whose two stacks are BOTH flagged holding this
+  // mutex (TSan's own record serializes them, so they cannot race). Same
+  // QWaitCondition epoch-loss class as the `run*lambda*` entry in
+  // tests/suppressions/tsan.txt; resolving it in code keeps genuine scan races
+  // visible instead of widening a suppression (Kartend-bl8w0). Both atomics
+  // only ADD synchronization over the existing mutex, so neither can mask a
+  // real race.
+  //
+  // inFlight: outstanding DirectoryScanTask count; the driver wait-loops use it
+  //   as their QWaitCondition predicate. (FP: worker `--inFlight` vs driver
+  //   `++inFlight`.)
+  std::atomic<int> inFlight = 0;
+  // handoffSeq: producer->consumer payload handshake. A worker release-stores
+  //   (fetch_add) after appending a chunk to `ready`; the driver acquire-loads
+  //   after popping one, so the chunk's QStringList/QHash read as synchronized.
+  //   (FP: worker chunk-build vs driver chunk-read.)
+  std::atomic<quint64> handoffSeq = 0;
 };
 
 class DirectoryScanTask final : public QRunnable {
 public:
   DirectoryScanTask(QString dirPath, QString rootPath, QStringList nameFilters,
-                    std::shared_ptr<std::atomic_bool> cancelToken, ScanCompletionQueue *queue)
+                    std::shared_ptr<std::atomic_bool> cancelToken,
+                    std::shared_ptr<ScanCompletionQueue> queue)
       : m_dirPath(std::move(dirPath)), m_rootPath(std::move(rootPath)),
         m_nameFilters(std::move(nameFilters)), m_cancelToken(std::move(cancelToken)),
-        m_queue(queue) {
+        m_queue(std::move(queue)) {
     setAutoDelete(true);
   }
 
@@ -287,6 +310,10 @@ public:
       }
 
       m_queue->ready.append(std::move(chunk));
+      // Release-store pairs with the scan driver's acquire-load when it pops
+      // this chunk — gives TSan a happens-before edge for the chunk payload
+      // across the lossy QWaitCondition epoch (ScanCompletionQueue::handoffSeq).
+      m_queue->handoffSeq.fetch_add(1, std::memory_order_release);
       m_queue->hasResult.wakeOne();
     };
 
@@ -338,7 +365,13 @@ private:
   QString m_rootPath;
   QStringList m_nameFilters;
   std::shared_ptr<std::atomic_bool> m_cancelToken;
-  ScanCompletionQueue *m_queue = nullptr;
+  // shared_ptr, not a raw pointer: a task can still be inside its final
+  // QMutexLocker teardown (unlocking m_queue->mutex) after the scan driver's
+  // drain loop observed inFlight==0 and returned, which would otherwise touch a
+  // destroyed mutex on the driver's reclaimed stack (Kartend-bl8w0). Co-owning
+  // the queue — exactly like the cancellation token above — lets the last
+  // finisher (driver or a slow worker) free it safely.
+  std::shared_ptr<ScanCompletionQueue> m_queue;
 };
 
 // SynchronousPragmaGuard was deleted in Kartend-fux2w: after Kartend-y9if

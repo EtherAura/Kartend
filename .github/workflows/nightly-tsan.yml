@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -163,7 +163,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev pulseaudio
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
