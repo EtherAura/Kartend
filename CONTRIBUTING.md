@@ -207,3 +207,13 @@ tag build if any are out of sync.
 
 After tagging, the release workflow updates `PKGBUILD` `sha256sums=` on
 `main` automatically — do not pre-commit a placeholder hash.
+
+### Changelog archiving (cadence)
+
+The root `CHANGELOG.md` keeps `[Unreleased]` plus the **three most recent
+releases**; everything older lives in `docs/changelogs/v0.0.x.md`. Promoting
+`[Unreleased]` in step 6 leaves four release sections in the root, so the same
+release moves the now-oldest one into the archive: cut its `## [X.Y.Z]` block
+(and its comparison link-ref) into `docs/changelogs/`, then refresh the root's
+bottom-of-file link-refs and the "Older releases" pointer. This keeps the root
+file small enough to grep and to render cleanly in PR diffs (Kartend-zdgj).
