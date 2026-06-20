@@ -66,6 +66,7 @@ private:
   QPushButton *m_removeRootButton = nullptr;
   QLabel *m_linkedHint = nullptr;
   QCheckBox *m_onePerGame = nullptr;
+  QComboBox *m_mergeMode = nullptr;    // clone/parent merge mode (Kartend-m6qsb.29)
   QListWidget *m_regionList = nullptr; // priority order, top = most preferred
   QComboBox *m_regionToAdd = nullptr;
   QPlainTextEdit *m_ignoreRules = nullptr; // one glob per line

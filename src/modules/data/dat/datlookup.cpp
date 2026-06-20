@@ -50,6 +50,10 @@ std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs, const
   DatRecord r;
   r.gameName = gameName;
   r.cloneOf = cloneOf;
+  // Logiqx's <game name> is both the title and the set-id; for the MAME path
+  // (called with an empty gameName, resolved later in flushMachine) this stays
+  // empty and flushMachine sets setId from the machine name= (Kartend-m6qsb.29).
+  r.setId = gameName;
   // MIA can be declared on the game/machine (applies to all its roms) or on
   // the individual <rom>; either marks this entry MIA.
   r.mia = gameMia || miaFromAttrs(attrs);
@@ -251,6 +255,7 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
   for (auto &r : roms) {
     r.gameName = gameName;
     r.cloneOf = cloneOf;
+    r.setId = gameName;       // clrmamepro's `name` is title + set-id (Kartend-m6qsb.29)
     r.mia = r.mia || gameMia; // OR game-level MIA over any rom-level flag
     out.append(std::move(r));
   }
@@ -486,6 +491,9 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     for (auto &r : pendingRoms) {
       r.gameName = gameName;
       r.cloneOf = currentCloneOf;
+      // MAME: gameName is the <description>, but cloneof references the parent's
+      // machine name= — so set-id must be the raw name=, not gameName (m6qsb.29).
+      r.setId = currentSetId;
       // OR the machine-level MIA over any rom-level flag readRomElement already set.
       r.mia = r.mia || currentMia;
       out.append(std::move(r));

@@ -30,6 +30,28 @@ bool isPresent(Status s) {
   return s == Status::Have || s == Status::WrongName;
 }
 
+QString mergeModeToken(MergeMode m) {
+  switch (m) {
+  case MergeMode::Merged:
+    return QStringLiteral("merged");
+  case MergeMode::NonMerged:
+    return QStringLiteral("nonmerged");
+  case MergeMode::Split:
+    break;
+  }
+  return QStringLiteral("split");
+}
+
+MergeMode mergeModeFromToken(const QString &token) {
+  if (token == QLatin1String("merged")) {
+    return MergeMode::Merged;
+  }
+  if (token == QLatin1String("nonmerged")) {
+    return MergeMode::NonMerged;
+  }
+  return MergeMode::Split;
+}
+
 AuditSummary summarize(const QList<AuditRow> &rows) {
   AuditSummary s;
   for (const AuditRow &r : rows) {

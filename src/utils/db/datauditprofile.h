@@ -60,6 +60,11 @@ struct Profile {
   QList<DatRef> dats;
   QStringList regionPrefs; ///< 1G1R region priority order, e.g. {"USA", "World"}.
   bool onePerGame = false; ///< 1G1R toggle.
+  /// Clone/parent expected-file model (Kartend-m6qsb.29). A DatAudit::
+  /// mergeModeToken value ('' / unknown -> "split", the no-op default). Kept as
+  /// the raw token because this header sits below the dataudit module that owns
+  /// the MergeMode enum (mirrors detectedLayout).
+  QString mergeMode;
   QStringList ignoreRules; ///< Glob patterns excluded from scan/audit.
   FixMode fixMode = FixMode::InPlace;
   QString managedOutputRoot; ///< Destination when fixMode == ManagedOutput.

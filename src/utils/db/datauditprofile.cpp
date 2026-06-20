@@ -74,13 +74,15 @@ Profile readProfileRow(const QSqlQuery &q) {
   p.updatedAtMs = q.value(13).toLongLong();
   p.quarantineRoot = q.value(14).toString();
   p.category = q.value(15).toString();
+  p.mergeMode = q.value(16).toString();
   return p;
 }
 
 constexpr char kSelectColumns[] =
     "id, name, collection_uuid, scan_roots, region_prefs, one_per_game, "
     "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category";
+    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category, "
+    "merge_mode";
 
 // Load the ordered DAT child rows for one profile into p.dats.
 bool loadDats(QSqlDatabase &db, Profile &p) {
@@ -167,8 +169,9 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
         "INSERT INTO dat_audit_profile "
         "(name, collection_uuid, scan_roots, region_prefs, one_per_game, "
         "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category, "
+        "merge_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
@@ -184,6 +187,9 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(now);
     q.addBindValue(nonNull(p.quarantineRoot));
     q.addBindValue(nonNull(p.category));
+    // merge_mode is NOT NULL DEFAULT 'split'; an empty profile token means the
+    // no-op Split mode (Kartend-m6qsb.29).
+    q.addBindValue(p.mergeMode.isEmpty() ? QStringLiteral("split") : p.mergeMode);
     if (!q.exec()) {
       const QString err = q.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert profile",
@@ -229,7 +235,7 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
                        "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
                        "detected_layout = ?, layout_confirmed = ?, "
                        "last_scan_at_unix_ms = ?, updated_at_unix_ms = ?, quarantine_root = ?, "
-                       "category = ? "
+                       "category = ?, merge_mode = ? "
                        "WHERE id = ?"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
@@ -245,6 +251,7 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(QDateTime::currentMSecsSinceEpoch());
     q.addBindValue(nonNull(p.quarantineRoot));
     q.addBindValue(nonNull(p.category));
+    q.addBindValue(p.mergeMode.isEmpty() ? QStringLiteral("split") : p.mergeMode);
     q.addBindValue(p.id);
     if (!q.exec()) {
       const QString err = q.lastError().text();

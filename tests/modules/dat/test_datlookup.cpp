@@ -284,6 +284,8 @@ void TestDatLookup::tosecReleaseChildIsIgnored() {
   QCOMPARE(records[0].gameName, QStringLiteral("Game Title (1992)(Acme)"));
   QCOMPARE(records[0].sha1, QStringLiteral("cccccccccccccccccccccccccccccccccccccccc"));
   QCOMPARE(records[0].size, qint64{8192});
+  // Kartend-m6qsb.29: for Logiqx the <game name=> is both title and set-id.
+  QCOMPARE(records[0].setId, records[0].gameName);
 }
 
 void TestDatLookup::parsesMameListXmlWithDescription() {
@@ -299,6 +301,10 @@ void TestDatLookup::parsesMameListXmlWithDescription() {
   QCOMPARE(records[0].romName, QStringLiteral("pacman.6e"));
   QCOMPARE(records[1].gameName, QStringLiteral("Pac-Man (Midway)"));
   QCOMPARE(records[1].romName, QStringLiteral("pacman.6f"));
+  // Kartend-m6qsb.29: setId is the machine name= set-id, NOT the description —
+  // the identity a clone's cloneof references, so it must differ from gameName.
+  QCOMPARE(records[0].setId, QStringLiteral("pacman"));
+  QVERIFY(records[0].setId != records[0].gameName);
 }
 
 void TestDatLookup::parseMameSkipsNodumpEntries() {
@@ -326,6 +332,8 @@ void TestDatLookup::parseMameFallsBackToSetIdWhenNoDescription() {
   });
   QVERIFY(it != records.end());
   QCOMPARE(it->gameName, QStringLiteral("setidonly"));
+  // With no description, gameName falls back to the set-id, so the two coincide.
+  QCOMPARE(it->setId, QStringLiteral("setidonly"));
 }
 
 void TestDatLookup::parseDatDispatchesByRoot() {

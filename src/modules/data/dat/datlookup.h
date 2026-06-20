@@ -77,6 +77,13 @@ struct DatRecord {
   /// Carried through so future clone-aware auditing has the relationship; no
   /// current consumer interprets it.
   QString cloneOf;
+  /// The set identity `cloneOf` points at (Kartend-m6qsb.29). For Logiqx and
+  /// clrmamepro this equals `gameName` (both come from `<game name="...">`). For
+  /// MAME listxml it is the machine `name=` set-id, which differs from
+  /// `gameName` (the human-readable `<description>`): a MAME clone's `cloneof`
+  /// names the PARENT's set-id, so clone resolution must key on `setId`, not
+  /// `gameName`. Empty only for records predating this field.
+  QString setId;
   /// "Missing In Action" flag (Kartend-34lab): the entry is documented in the
   /// catalogue but known to be unshared/unavailable, marked `mia="yes"` on the
   /// `<game>`/`<machine>`/`<rom>` (Logiqx/MAME) or `mia yes` in clrmamepro.
