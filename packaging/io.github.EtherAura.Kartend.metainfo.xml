@@ -37,6 +37,19 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.14" date="2026-06-20">
+      <description>
+        <p>Adds the DAT Manager — audit your collections against DAT files:</p>
+        <ul>
+          <li>See which items are present, wrong, or missing, reading inside .zip and .7z archives</li>
+          <li>A dedicated audit browser: results tree, dual detail panes, status filters, a folder-as-item view, category grouping, and saved view presets — with layout, filters, and expanded rows remembered across sessions</li>
+          <li>Clone-aware auditing with selectable Split, Merged, and Non-merged modes</li>
+          <li>One-click Fix repacks and renames archives to match the DAT; mismatched files are quarantined</li>
+          <li>DAT files can be downloaded, watched for updates, and re-downloaded in place</li>
+        </ul>
+        <p>Also: the mouse wheel now scrolls the focused dialog, and runtime system-accent changes update every colour live.</p>
+      </description>
+    </release>
     <release version="0.0.13" date="2026-06-11">
       <description>
         <p>Stability and performance release from a full-codebase audit:</p>
