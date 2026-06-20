@@ -368,6 +368,14 @@ void TestRomHasher::hashArchiveMembersPreservesArchiveOrder() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
 #endif
+#ifndef KARTEND_HAS_LIBARCHIVE
+  // Central-directory order is a guarantee of the in-process libarchive backend
+  // only. Without it, hashArchiveMembers() shells out to an extractor and walks
+  // the unpacked tree with QDirIterator, which yields path-sorted members — so
+  // there is no archive order to assert. CI's build-no-zstd / linux-qt-newer /
+  // macOS legs build without libarchive and would otherwise fail this QCOMPARE.
+  QSKIP("Archive (central-directory) order is only preserved by the libarchive backend.");
+#endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
     KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
@@ -381,7 +389,7 @@ void TestRomHasher::hashArchiveMembersPreservesArchiveOrder() {
   // list. Pin that the list is the archive's central-directory order, NOT
   // alphabetical: zip the members in an explicit, non-alphabetical argument
   // order (gamma, alpha, beta) and assert hashArchiveMembers returns them in
-  // that same order. Only meaningful on the libarchive backend, which CI uses.
+  // that same order. Only meaningful on the libarchive backend (guarded above).
   const QString workDir = m_dir.filePath("ordersrc");
   QVERIFY(QDir().mkpath(workDir));
   writeFile(workDir + "/gamma.bin", QByteArrayLiteral("GGGG"));
