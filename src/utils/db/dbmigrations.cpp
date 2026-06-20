@@ -43,6 +43,13 @@ static auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString
   return false;
 }
 
+static auto tableExists(QSqlDatabase &db, const QString &table) -> bool {
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"));
+  q.addBindValue(table);
+  return q.exec() && q.next();
+}
+
 // Returns true if the column is present after the call (already existed, or was
 // added). Returns false if the ALTER TABLE failed — the caller must abort the
 // migration block so user_version is not advanced past a column that does not
@@ -213,7 +220,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 23;
+  constexpr int CURRENT_SCHEMA_VERSION = 24;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -937,9 +944,49 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 23; // read by the v24 block below
+  }
+
+  if (mutableVersion < 24) {
+    // v24 (Kartend-7iqhl.4): record each archive member's index among its
+    // container's regular-file members (in central-directory order) so the
+    // browser's ROM detail can show a ZipIndex column. dat_audit_result.zip_index
+    // persists it per audited member
+    // (-1 for whole-file rows and pre-v24 snapshots until re-audited). The member
+    // hash cache must carry it too — lookupMembers returns rows ORDER BY
+    // member_path (not archive order), so a cache hit would otherwise lose the
+    // index. Clear the cache so warm entries (which predate the column, hence -1)
+    // are re-hashed with real indices on the next audit rather than persisting -1.
+    if (!runBlock(db, 24, origin, [&]() -> bool {
+          if (!ensureColumn(db, "dat_audit_result", "zip_index", "INTEGER NOT NULL DEFAULT -1",
+                            origin)) {
+            return false;
+          }
+          // The member cache is created by the v19 block, so a real upgrade
+          // always has it; guard anyway so the block still advances on a DB that
+          // never created it. Clearing forces a re-hash that repopulates the
+          // index (warm pre-v24 rows would otherwise persist -1).
+          if (tableExists(db, "archive_member_hash_cache")) {
+            if (!ensureColumn(db, "archive_member_hash_cache", "zip_index",
+                              "INTEGER NOT NULL DEFAULT -1", origin)) {
+              return false;
+            }
+            QSqlQuery del(db);
+            if (!del.exec(QStringLiteral("DELETE FROM archive_member_hash_cache"))) {
+              ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                         "Failed to clear archive member hash cache",
+                                                         origin)
+                                       .withDetails(del.lastError().text()));
+              return false;
+            }
+          }
+          return true;
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v24 block stays a pure copy-paste.
-    mutableVersion = 23; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v25 block stays a pure copy-paste.
+    mutableVersion = 24; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

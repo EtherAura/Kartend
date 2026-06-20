@@ -437,8 +437,8 @@ ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList
   QSqlQuery ins(db);
   ins.prepare(QStringLiteral("INSERT OR REPLACE INTO dat_audit_result "
                              "(profile_id, entry_key, status, file_path, detail, "
-                             "source_name, game_name, mia) "
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+                             "source_name, game_name, mia, zip_index) "
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   for (const ResultRow &r : rows) {
     ins.bindValue(0, id);
     ins.bindValue(1, nonNull(r.entryKey));
@@ -448,6 +448,7 @@ ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList
     ins.bindValue(5, nonNull(r.sourceName));
     ins.bindValue(6, nonNull(r.gameName));
     ins.bindValue(7, r.mia ? 1 : 0);
+    ins.bindValue(8, r.zipIndex);
     if (!ins.exec()) {
       const QString err = ins.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert result row",
@@ -561,7 +562,7 @@ ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64
   QList<ResultRow> out;
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
-                           "mia FROM dat_audit_result "
+                           "mia, zip_index FROM dat_audit_result "
                            "WHERE profile_id = ? AND source_name = ? AND game_name = ?"));
   q.addBindValue(profileId);
   q.addBindValue(sourceName);
@@ -580,6 +581,7 @@ ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64
     r.sourceName = q.value(4).toString();
     r.gameName = q.value(5).toString();
     r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
     out.append(r);
   }
   return out;
@@ -594,7 +596,7 @@ ErrorUtils::Result<QList<ResultRow>> loadSourceResultRows(QSqlDatabase &db, qint
   QList<ResultRow> out;
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
-                           "mia FROM dat_audit_result "
+                           "mia, zip_index FROM dat_audit_result "
                            "WHERE profile_id = ? AND source_name = ?"));
   q.addBindValue(profileId);
   q.addBindValue(sourceName);
@@ -612,6 +614,7 @@ ErrorUtils::Result<QList<ResultRow>> loadSourceResultRows(QSqlDatabase &db, qint
     r.sourceName = q.value(4).toString();
     r.gameName = q.value(5).toString();
     r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
     out.append(r);
   }
   return out;
@@ -625,7 +628,7 @@ ErrorUtils::Result<QList<ResultRow>> loadProfileResultRows(QSqlDatabase &db, qin
   QList<ResultRow> out;
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
-                           "mia FROM dat_audit_result WHERE profile_id = ?"));
+                           "mia, zip_index FROM dat_audit_result WHERE profile_id = ?"));
   q.addBindValue(profileId);
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load profile result rows",
@@ -641,6 +644,7 @@ ErrorUtils::Result<QList<ResultRow>> loadProfileResultRows(QSqlDatabase &db, qin
     r.sourceName = q.value(4).toString();
     r.gameName = q.value(5).toString();
     r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
     out.append(r);
   }
   return out;

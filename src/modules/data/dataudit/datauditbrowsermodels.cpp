@@ -69,6 +69,7 @@ QList<AuditRow> auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &re
     ar.actualName = r.filePath.isEmpty() ? QString() : QFileInfo(r.filePath).fileName();
     ar.sourceName = r.sourceName;
     ar.mia = r.mia;
+    ar.zipIndex = r.zipIndex; // carried for completeness; the fix engine ignores it
     // size / crc / md5 / sha1 stay unset — computeFixPlan() does not read them.
     rows.append(ar);
   }
@@ -496,6 +497,7 @@ void RomFileModel::setGame(const QList<DatLookup::DatRecord> &records,
     if (auto it = statusByName.constFind(rec.romName); it != statusByName.constEnd()) {
       row.status = static_cast<Status>(it.value()->status);
       row.filePath = it.value()->filePath;
+      row.zipIndex = it.value()->zipIndex;
     } else {
       row.status = Status::Missing;
     }
@@ -512,6 +514,7 @@ void RomFileModel::setGame(const QList<DatLookup::DatRecord> &records,
       row.rec.mia = rr.mia;
       row.status = static_cast<Status>(rr.status);
       row.filePath = rr.filePath;
+      row.zipIndex = rr.zipIndex;
       row.instanceCount = countByName.value(rr.detail, 0);
       m_rows.append(row);
     }
@@ -559,6 +562,9 @@ QVariant RomFileModel::data(const QModelIndex &index, int role) const {
       return r.rec.md5;
     case MiaColumn:
       return r.rec.mia ? tr("yes") : QString();
+    case ZipIndexColumn:
+      // Archive members only; blank for whole-file rows and pre-v24 snapshots.
+      return r.zipIndex >= 0 ? QString::number(r.zipIndex) : QString();
     case InstanceColumn:
       return r.instanceCount > 1 ? QString::number(r.instanceCount) : QString();
     default:
@@ -589,6 +595,8 @@ QVariant RomFileModel::headerData(int section, Qt::Orientation orientation, int 
     return tr("MD5");
   case MiaColumn:
     return tr("MIA");
+  case ZipIndexColumn:
+    return tr("ZipIndex");
   case InstanceColumn:
     return tr("Instances");
   default:

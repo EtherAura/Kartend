@@ -227,12 +227,14 @@ QList<FileHashCache::MemberEntry> twoMembers() {
   a.md5 = QStringLiteral("md5a");
   a.sha1 = QStringLiteral("sha1a");
   a.size = 100;
+  a.zipIndex = 0;
   FileHashCache::MemberEntry b;
   b.memberPath = QStringLiteral("extras/clip-two.mkv");
   b.crc = QStringLiteral("eeff0011");
   b.md5 = QStringLiteral("md5b");
   b.sha1 = QStringLiteral("sha1b");
   b.size = 200;
+  b.zipIndex = 1;
   return {a, b};
 }
 
@@ -251,6 +253,10 @@ void TestFileHashCache::memberStoreThenLookupRoundTrips() {
   QCOMPARE(hit->at(0).size, qint64(100));
   QCOMPARE(hit->at(1).memberPath, QStringLiteral("extras/clip-two.mkv"));
   QCOMPARE(hit->at(1).sha1, QStringLiteral("sha1b"));
+  // The central-directory index round-trips (Kartend-7iqhl.4) — carried as an
+  // explicit field, not inferred from the path-sorted row order.
+  QCOMPARE(hit->at(0).zipIndex, 0);
+  QCOMPARE(hit->at(1).zipIndex, 1);
 }
 
 void TestFileHashCache::memberLookupMissOnStaleContainer() {

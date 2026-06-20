@@ -229,6 +229,7 @@ public:
     Sha1Column,
     Md5Column,
     MiaColumn,
+    ZipIndexColumn, ///< archive member's central-directory index (Kartend-7iqhl.4)
     InstanceColumn,
     ColumnCount,
   };
@@ -257,6 +258,7 @@ private:
     Status status = Status::Missing;
     QString filePath;
     int instanceCount = 0;
+    int zipIndex = -1; ///< archive member index, -1 when not an archive member
   };
   QList<RomRow> m_rows;
 };

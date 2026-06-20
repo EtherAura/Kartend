@@ -76,6 +76,12 @@ struct MemberEntry {
   QString md5;
   QString sha1;
   qint64 size = -1;
+  /// The member's index among the container's regular-file members, in
+  /// central-directory order (Kartend-7iqhl.4), cached so a hit preserves that
+  /// order — lookupMembers returns rows ORDER BY member_path, not archive order,
+  /// so position alone can't recover it. -1 for entries cached before the
+  /// column existed.
+  int zipIndex = -1;
 };
 
 /// All cached members for `containerPath` (schema v19 table

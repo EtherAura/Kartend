@@ -69,6 +69,9 @@ struct ScannedFile {
   QString sha1;
   qint64 size = -1;
   bool readOk = true; ///< false => unreadable; classify() marks it Corrupt.
+  /// Archive members only (Kartend-7iqhl.4): the member's index in its
+  /// container's central directory; -1 for a whole-file (non-member) scan.
+  int zipIndex = -1;
 };
 
 using ProgressFn = std::function<void(const AuditProgress &)>;

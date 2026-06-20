@@ -130,6 +130,11 @@ struct ResultRow {
   QString sourceName;
   QString gameName;
   bool mia = false;
+  /// Archive members only (Kartend-7iqhl.4, schema v24): the member's index
+  /// among its container's regular-file members, in central-directory order, for
+  /// the browser's ZipIndex column. -1 for whole-file rows and pre-v24 snapshots
+  /// (until the profile is re-audited).
+  int zipIndex = -1;
 };
 
 /// Replace profile `id`'s entire result snapshot with `rows`, in one

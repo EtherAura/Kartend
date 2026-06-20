@@ -110,6 +110,7 @@ private slots:
   void classifyCorrupt();
   void classifyMissing();
   void classifySummaryCounts();
+  void classifyCarriesZipIndex();
 
   // 1G1R / region collapse (Kartend-bmj1ko)
   void region_baseNameRegionAndRank();
@@ -201,6 +202,20 @@ void TestDatAuditRunner::classifyHave() {
     }
   }
   QVERIFY(sawHave);
+}
+
+void TestDatAuditRunner::classifyCarriesZipIndex() {
+  // The archive member index threads from the ScannedFile onto the AuditRow
+  // (Kartend-7iqhl.4), regardless of how the row classifies. An unmatched
+  // member (Unknown) is the simplest carrier — no catalogue entry needed.
+  Catalogue empty;
+  ScannedFile member = makeFile(QStringLiteral("/x/set.zip/disc2.bin"),
+                                QStringLiteral("deadbeef"), QString(), QString(), 5);
+  member.zipIndex = 3;
+  const AuditOutput out = DatAudit::classify(empty, {member});
+  QCOMPARE(out.rows.size(), 1);
+  QCOMPARE(out.rows.at(0).status, Status::Unknown);
+  QCOMPARE(out.rows.at(0).zipIndex, 3);
 }
 
 void TestDatAuditRunner::classifyWrongName() {

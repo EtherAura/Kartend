@@ -1288,6 +1288,7 @@ void DatAuditDialog::onAuditFinished() {
       row.sourceName = r.sourceName;
       row.gameName = r.gameName;
       row.mia = r.mia;
+      row.zipIndex = r.zipIndex; // archive member index for the ZipIndex column
       rows.append(row);
     }
     const qint64 profileId = m_currentProfile.id;

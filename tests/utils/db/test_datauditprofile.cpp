@@ -320,6 +320,7 @@ void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
   a.status = 0; // Have
   a.filePath = QStringLiteral("/media/clip-one.mkv");
   a.detail = QStringLiteral("Clip One.mkv");
+  a.zipIndex = 4; // archive member index (Kartend-7iqhl.4)
   DatAuditProfile::ResultRow b;
   b.entryKey = QStringLiteral("entry:Clip Two.mkv");
   b.status = 6; // Missing
@@ -331,6 +332,19 @@ void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
   q.addBindValue(id);
   QVERIFY(q.exec() && q.next());
   QCOMPARE(q.value(0).toInt(), 2);
+
+  // zip_index round-trips: the member row keeps its index, the entry-only row
+  // keeps the -1 default (Kartend-7iqhl.4).
+  auto loaded = DatAuditProfile::loadProfileResultRows(m_db, id);
+  QVERIFY(loaded.isOk());
+  int zipForA = -99;
+  int zipForB = -99;
+  for (const auto &r : loaded.value()) {
+    if (r.entryKey == a.entryKey) zipForA = r.zipIndex;
+    if (r.entryKey == b.entryKey) zipForB = r.zipIndex;
+  }
+  QCOMPARE(zipForA, 4);
+  QCOMPARE(zipForB, -1);
 
   // A re-run is a full re-statement: the old snapshot must vanish wholesale,
   // not merge with the new rows.

@@ -50,6 +50,7 @@ private slots:
   void hashInnerRomAmbiguousMultiDumpReturnsError();
   void archiveMissingPathReturnsError();
   void hashArchiveMembersHashesEveryFile();
+  void hashArchiveMembersPreservesArchiveOrder();
   void hashArchiveMembersMissingPathReturnsError();
   void hashesSymlinkTargetSameAsDirect();
   void brokenSymlinkReturnsError();
@@ -361,6 +362,50 @@ void TestRomHasher::hashArchiveMembersHashesEveryFile() {
   }
   QVERIFY(sawA);
   QVERIFY(sawNested);
+}
+
+void TestRomHasher::hashArchiveMembersPreservesArchiveOrder() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
+  if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
+  }
+  if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
+      QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
+  }
+
+  // The ZipIndex (Kartend-7iqhl.4) is the member's position in the returned
+  // list. Pin that the list is the archive's central-directory order, NOT
+  // alphabetical: zip the members in an explicit, non-alphabetical argument
+  // order (gamma, alpha, beta) and assert hashArchiveMembers returns them in
+  // that same order. Only meaningful on the libarchive backend, which CI uses.
+  const QString workDir = m_dir.filePath("ordersrc");
+  QVERIFY(QDir().mkpath(workDir));
+  writeFile(workDir + "/gamma.bin", QByteArrayLiteral("GGGG"));
+  writeFile(workDir + "/alpha.bin", QByteArrayLiteral("AAAA"));
+  writeFile(workDir + "/beta.bin", QByteArrayLiteral("BBBB"));
+
+  const QString archivePath = m_dir.filePath("ordered.zip");
+  QProcess zipProc;
+  zipProc.setWorkingDirectory(workDir);
+  // Explicit argument order → deterministic central-directory order.
+  zipProc.start(QStringLiteral("zip"), {QStringLiteral("-q"), QStringLiteral("-X"), archivePath,
+                                        QStringLiteral("gamma.bin"), QStringLiteral("alpha.bin"),
+                                        QStringLiteral("beta.bin")});
+  QVERIFY(zipProc.waitForFinished(5000));
+  QCOMPARE(zipProc.exitCode(), 0);
+
+  auto result = RomHasher::hashArchiveMembers(archivePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  const auto members = result.value();
+  QCOMPARE(members.size(), 3);
+  // Archive order preserved (not sorted to alpha/beta/gamma).
+  QCOMPARE(members.at(0).memberPath, QStringLiteral("gamma.bin"));
+  QCOMPARE(members.at(1).memberPath, QStringLiteral("alpha.bin"));
+  QCOMPARE(members.at(2).memberPath, QStringLiteral("beta.bin"));
 }
 
 void TestRomHasher::hashArchiveMembersMissingPathReturnsError() {

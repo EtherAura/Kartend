@@ -176,10 +176,11 @@ void TestDatAuditBrowserModels::romFileJoinsCatalogueAndStatus() {
   recs = {a, b};
 
   QList<ResultRow> results;
-  ResultRow ra; // a.bin is present
+  ResultRow ra; // a.bin is present, an archive member at index 2
   ra.detail = QStringLiteral("a.bin");
   ra.status = kHave;
-  ra.filePath = QStringLiteral("/roms/a.bin");
+  ra.filePath = QStringLiteral("/roms/set.zip/a.bin");
+  ra.zipIndex = 2;
   results = {ra}; // b.bin has no result → Missing
 
   RomFileModel m;
@@ -192,9 +193,12 @@ void TestDatAuditBrowserModels::romFileJoinsCatalogueAndStatus() {
   QCOMPARE(m.data(m.index(0, RomFileModel::MergeColumn)).toString(), QStringLiteral("parent"));
   QCOMPARE(m.data(m.index(0, RomFileModel::MiaColumn)).toString(), QStringLiteral("yes"));
   QCOMPARE(m.data(m.index(0, RomFileModel::CrcColumn)).toString(), QStringLiteral("AAAA1111"));
+  // ZipIndex column shows the member's archive index (Kartend-7iqhl.4).
+  QCOMPARE(m.data(m.index(0, RomFileModel::ZipIndexColumn)).toString(), QStringLiteral("2"));
 
-  // Row 1 (b.bin): no result row → Missing.
+  // Row 1 (b.bin): no result row → Missing; no archive index → blank ZipIndex.
   QCOMPARE(m.data(m.index(1, 0), RomFileModel::StatusRole).toInt(), kMissing);
+  QVERIFY(m.data(m.index(1, RomFileModel::ZipIndexColumn)).toString().isEmpty());
 }
 
 void TestDatAuditBrowserModels::romFileFallsBackToResultsWithoutCatalogue() {
