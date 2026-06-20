@@ -80,11 +80,12 @@ private:
   // Named view presets (Kartend-7iqhl.1): each captures the filter
   // configuration only (the 5 gates + group-by-folder + search), so recall is
   // profile-independent.
-  void loadPresets();                                   ///< pull all slots from QSettings into the combo
-  void recallPreset(int slot);                          ///< apply the slot's captured view to the controls
-  void saveCurrentToPreset();                           ///< overwrite the selected slot with the live view + persist
-  void renameSelectedPreset();                          ///< retitle the selected slot via QInputDialog + persist
-  [[nodiscard]] DatAudit::BrowserViewPreset captureView() const; ///< the live filter state as a preset payload
+  void loadPresets();          ///< pull all slots from QSettings into the combo
+  void recallPreset(int slot); ///< apply the slot's captured view to the controls
+  void saveCurrentToPreset();  ///< overwrite the selected slot with the live view + persist
+  void renameSelectedPreset(); ///< retitle the selected slot via QInputDialog + persist
+  [[nodiscard]] DatAudit::BrowserViewPreset
+  captureView() const; ///< the live filter state as a preset payload
 
   QTreeView *m_tree = nullptr;
   DatAudit::AuditTreeModel *m_treeModel = nullptr;

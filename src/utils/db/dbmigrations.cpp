@@ -973,10 +973,10 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
             }
             QSqlQuery del(db);
             if (!del.exec(QStringLiteral("DELETE FROM archive_member_hash_cache"))) {
-              ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                                         "Failed to clear archive member hash cache",
-                                                         origin)
-                                       .withDetails(del.lastError().text()));
+              ErrorUtils::logError(
+                  ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                        "Failed to clear archive member hash cache", origin)
+                      .withDetails(del.lastError().text()));
               return false;
             }
           }

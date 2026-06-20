@@ -91,8 +91,7 @@ QList<BrowserViewPreset> loadBrowserPresets(QSettings &settings) {
     // Read against a default-constructed preset so unsaved slots inherit the
     // page's default filters; only the name gets a slot-specific default.
     const BrowserViewPreset d;
-    p.name = settings.value(QStringLiteral("name"),
-                            QStringLiteral("Preset %1").arg(slot + 1))
+    p.name = settings.value(QStringLiteral("name"), QStringLiteral("Preset %1").arg(slot + 1))
                  .toString();
     p.complete = settings.value(QStringLiteral("complete"), d.complete).toBool();
     p.partial = settings.value(QStringLiteral("partial"), d.partial).toBool();

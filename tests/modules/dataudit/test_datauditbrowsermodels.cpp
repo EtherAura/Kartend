@@ -396,9 +396,9 @@ void TestDatAuditBrowserModels::treeBuildsCategoryLevel() {
   QCOMPARE(tree.data(films, Qt::DisplayRole).toString(), QStringLiteral("Films"));
   // Category nodes are not profiles.
   QCOMPARE(tree.profileIdAt(retro), static_cast<qint64>(-1));
-  QCOMPARE(static_cast<AuditTreeModel::NodeKind>(
-               tree.data(retro, AuditTreeModel::KindRole).toInt()),
-           AuditTreeModel::NodeKind::Category);
+  QCOMPARE(
+      static_cast<AuditTreeModel::NodeKind>(tree.data(retro, AuditTreeModel::KindRole).toInt()),
+      AuditTreeModel::NodeKind::Category);
 
   // "Retro" has Alpha; "Films" has Bravo + Charlie.
   QCOMPARE(tree.rowCount(retro), 1);

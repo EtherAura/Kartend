@@ -209,8 +209,8 @@ void TestDatAuditRunner::classifyCarriesZipIndex() {
   // (Kartend-7iqhl.4), regardless of how the row classifies. An unmatched
   // member (Unknown) is the simplest carrier — no catalogue entry needed.
   Catalogue empty;
-  ScannedFile member = makeFile(QStringLiteral("/x/set.zip/disc2.bin"),
-                                QStringLiteral("deadbeef"), QString(), QString(), 5);
+  ScannedFile member = makeFile(QStringLiteral("/x/set.zip/disc2.bin"), QStringLiteral("deadbeef"),
+                                QString(), QString(), 5);
   member.zipIndex = 3;
   const AuditOutput out = DatAudit::classify(empty, {member});
   QCOMPARE(out.rows.size(), 1);

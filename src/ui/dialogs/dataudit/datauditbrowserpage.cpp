@@ -176,9 +176,8 @@ void DatAuditBrowserPage::buildUi() {
   // Group-by-category (Kartend-7iqhl.5) restructures the TREE, so rebuild it on
   // toggle (refresh() re-reads rollups and re-runs setTree with the new flag).
   m_groupByCategory = new QCheckBox(tr("Group by category"), this);
-  m_groupByCategory->setToolTip(
-      tr("Add a category level to the tree, from each profile's category "
-         "(or its linked collection)."));
+  m_groupByCategory->setToolTip(tr("Add a category level to the tree, from each profile's category "
+                                   "(or its linked collection)."));
   filterRow->addWidget(m_groupByCategory);
   connect(m_groupByCategory, &QCheckBox::toggled, this, [this](bool) { refresh(); });
 
@@ -199,10 +198,8 @@ void DatAuditBrowserPage::buildUi() {
   filterRow->addWidget(m_presetRename);
   connect(m_presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
           &DatAuditBrowserPage::recallPreset);
-  connect(m_presetSave, &QPushButton::clicked, this,
-          &DatAuditBrowserPage::saveCurrentToPreset);
-  connect(m_presetRename, &QPushButton::clicked, this,
-          &DatAuditBrowserPage::renameSelectedPreset);
+  connect(m_presetSave, &QPushButton::clicked, this, &DatAuditBrowserPage::saveCurrentToPreset);
+  connect(m_presetRename, &QPushButton::clicked, this, &DatAuditBrowserPage::renameSelectedPreset);
 
   filterRow->addStretch(1);
   m_search = new QLineEdit(this);

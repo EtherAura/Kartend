@@ -12,8 +12,8 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
-#include <QHBoxLayout>
 #include <QHash>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
 #include <QInputDialog>
@@ -1556,9 +1556,8 @@ void DatAuditDialog::onBrowserFixRequested(qint64 profileId) {
     // Distinguish a genuinely empty (never-audited) profile from a failed read,
     // so a DB error isn't reported as "nothing to fix".
     QMessageBox::information(this, tr("DAT Audit"),
-                             readOk
-                                 ? tr("This profile has no audited results to fix yet.")
-                                 : tr("Couldn't read this profile's audit results."));
+                             readOk ? tr("This profile has no audited results to fix yet.")
+                                    : tr("Couldn't read this profile's audit results."));
     return;
   }
 

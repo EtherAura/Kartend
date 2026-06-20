@@ -171,11 +171,11 @@ ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &container
     }
   }
   QSqlQuery ins(db);
-  ins.prepare(QStringLiteral(
-      "INSERT OR REPLACE INTO archive_member_hash_cache "
-      "(container_path, member_path, container_size, container_mtime_unix_ms, "
-      "crc, md5, sha1, member_size, computed_at_unix_ms, zip_index) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+  ins.prepare(
+      QStringLiteral("INSERT OR REPLACE INTO archive_member_hash_cache "
+                     "(container_path, member_path, container_size, container_mtime_unix_ms, "
+                     "crc, md5, sha1, member_size, computed_at_unix_ms, zip_index) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   for (const MemberEntry &m : members) {
     ins.bindValue(0, containerPath);

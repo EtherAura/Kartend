@@ -66,13 +66,13 @@ auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &results);
 /// via QSettings.
 struct BrowserViewPreset {
   QString name;
-  bool complete = true;  ///< show Complete games
-  bool partial = true;   ///< show Partial games
-  bool empty = true;     ///< show Empty games
-  bool fixes = false;    ///< require: only games with fixes
-  bool mia = false;      ///< require: only games with MIA
+  bool complete = true;       ///< show Complete games
+  bool partial = true;        ///< show Partial games
+  bool empty = true;          ///< show Empty games
+  bool fixes = false;         ///< require: only games with fixes
+  bool mia = false;           ///< require: only games with MIA
   bool groupByFolder = false; ///< folder-as-item game grouping (Kartend-m6qsb.30)
-  QString search;        ///< game-name filter text
+  QString search;             ///< game-name filter text
 };
 
 /// Number of preset slots (RomVault uses four).

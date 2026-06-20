@@ -668,8 +668,9 @@ hashArchiveMembers(const QString &archivePath,
   // fallback only runs without libarchive and walks the extracted tree in
   // filesystem order; sort by member path so the derived index is at least
   // deterministic run-to-run (it is not the archive's real order).
-  std::sort(members.begin(), members.end(),
-            [](const MemberResult &a, const MemberResult &b) { return a.memberPath < b.memberPath; });
+  std::sort(members.begin(), members.end(), [](const MemberResult &a, const MemberResult &b) {
+    return a.memberPath < b.memberPath;
+  });
   if (members.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Archive contained no regular files to hash",
