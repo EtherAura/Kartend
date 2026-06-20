@@ -34,6 +34,29 @@ struct LaunchScenario {
   bool valid = false;
 };
 
+// The launcher stands in for a media player. On POSIX it is an executable
+// #!/bin/sh script; Windows has no exec bit, so it is a .cmd batch (the
+// extension is what lets QProcess run it). Kartend-mhgzq.
+#ifdef Q_OS_WIN
+constexpr const char *kLauncherFileName = "noop-player.cmd";
+QByteArray noopLauncherScript() {
+  return QByteArrayLiteral("@echo off\r\nexit /b 0\r\n");
+}
+// `ping -n 3 127.0.0.1` blocks ~2s (three pings, ~1s apart) — the batch
+// stand-in for `sleep 2`, leaving the tracked-launch timing headroom.
+QByteArray sleepingLauncherScript() {
+  return QByteArrayLiteral("@echo off\r\nping -n 3 127.0.0.1 > nul\r\nexit /b 0\r\n");
+}
+#else
+constexpr const char *kLauncherFileName = "noop-player.sh";
+QByteArray noopLauncherScript() {
+  return QByteArrayLiteral("#!/bin/sh\nexit 0\n");
+}
+QByteArray sleepingLauncherScript() {
+  return QByteArrayLiteral("#!/bin/sh\nsleep 2\nexit 0\n");
+}
+#endif
+
 bool writeFile(const QString &path, const QByteArray &bytes, bool executable) {
   QFile f(path);
   if (!f.open(QIODevice::WriteOnly)) {
@@ -41,9 +64,13 @@ bool writeFile(const QString &path, const QByteArray &bytes, bool executable) {
   }
   f.write(bytes);
   f.close();
+#ifndef Q_OS_WIN
   if (executable) {
     return QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
   }
+#else
+  Q_UNUSED(executable); // Windows: the .cmd extension provides executability
+#endif
   return true;
 }
 
@@ -53,7 +80,7 @@ LaunchScenario makeScenario(const QByteArray &launcherScript) {
     return s;
   }
   s.itemPath = QDir(s.mediaDir.path()).filePath(QStringLiteral("nature-documentary.mp4"));
-  s.launcherPath = QDir(s.launcherDir.path()).filePath(QStringLiteral("noop-player.sh"));
+  s.launcherPath = QDir(s.launcherDir.path()).filePath(QString::fromLatin1(kLauncherFileName));
   s.valid = writeFile(s.itemPath, QByteArrayLiteral("fake video bytes"), /*executable=*/false) &&
             writeFile(s.launcherPath, launcherScript, /*executable=*/true);
   return s;
@@ -147,7 +174,7 @@ void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
   QSKIP("libtsan fork CHECK bug — launchItem forks the launcher script via QProcess");
 #endif
-  LaunchScenario scenario = makeScenario(QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+  LaunchScenario scenario = makeScenario(noopLauncherScript());
   QVERIFY2(scenario.valid, "failed to materialize media file + launcher script");
   const CollectionConfig cfg = makeCollection(scenario);
   const QString uuid = collectionUuidFor(cfg);
@@ -217,7 +244,7 @@ void TestLaunchFlow::testTrackedLaunchRecordsPlaySession() {
   // silently skipped (the elapsed > 0 gate). sleep 2 gives a full second of
   // headroom against delivery latency; the >= 1 assertion below is
   // unchanged.
-  LaunchScenario scenario = makeScenario(QByteArrayLiteral("#!/bin/sh\nsleep 2\nexit 0\n"));
+  LaunchScenario scenario = makeScenario(sleepingLauncherScript());
   QVERIFY2(scenario.valid, "failed to materialize media file + launcher script");
   const CollectionConfig cfg = makeCollection(scenario);
   const QString uuid = collectionUuidFor(cfg);
