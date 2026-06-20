@@ -8,9 +8,12 @@
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSettings>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QSqlDatabase>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTableView>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -65,7 +68,8 @@ void DatAuditBrowserPage::buildUi() {
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
 
-  auto *split = new QSplitter(Qt::Horizontal, this);
+  m_hSplitter = new QSplitter(Qt::Horizontal, this);
+  auto *split = m_hSplitter;
   split->setStyleSheet(QStringLiteral("QSplitter::handle { background: transparent; }"));
   split->setChildrenCollapsible(false);
 
@@ -98,7 +102,8 @@ void DatAuditBrowserPage::buildUi() {
   infoForm->addRow(tr("Status:"), makeValue(m_infoCounts));
   rightCol->addWidget(infoBox);
 
-  auto *detailSplit = new QSplitter(Qt::Vertical, right);
+  m_vSplitter = new QSplitter(Qt::Vertical, right);
+  auto *detailSplit = m_vSplitter;
   detailSplit->setStyleSheet(QStringLiteral("QSplitter::handle { background: transparent; }"));
   detailSplit->setChildrenCollapsible(false);
 
@@ -159,6 +164,15 @@ void DatAuditBrowserPage::buildUi() {
 
   connect(m_tree->selectionModel(), &QItemSelectionModel::currentChanged, this,
           &DatAuditBrowserPage::onTreeSelectionChanged);
+  // Track expand/collapse so the expanded set survives the setTree() rebuilds
+  // (Kartend-q66m4). Source nodes are leaves, so only multi-source Profile nodes
+  // ever fire these — keyed by their stable profile id.
+  connect(m_tree, &QTreeView::expanded, this, [this](const QModelIndex &idx) {
+    m_expandedProfiles.insert(m_treeModel->profileIdAt(idx));
+  });
+  connect(m_tree, &QTreeView::collapsed, this, [this](const QModelIndex &idx) {
+    m_expandedProfiles.remove(m_treeModel->profileIdAt(idx));
+  });
   connect(m_gameTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
           &DatAuditBrowserPage::onGameSelectionChanged);
   connect(m_search, &QLineEdit::textChanged, this,
@@ -180,7 +194,13 @@ void DatAuditBrowserPage::refresh() {
       ErrorUtils::logError(r.error());
     }
   });
-  m_treeModel->setTree(profiles, rollups);
+  {
+    // Block expand/collapse emissions during the rebuild so the model reset's
+    // view-collapse can't clear m_expandedProfiles before we re-apply it.
+    const QSignalBlocker blocker(m_tree);
+    m_treeModel->setTree(profiles, rollups);
+  }
+  restoreExpandedState();
   clearDatInfo();
   m_gameModel->clear();
   m_romModel->clear();
@@ -309,4 +329,111 @@ void DatAuditBrowserPage::applyFilters() {
                               m_filterEmpty->isChecked());
   m_gameProxy->setRequireFixes(m_filterFixes->isChecked());
   m_gameProxy->setRequireMia(m_filterMia->isChecked());
+}
+
+// Layout persistence (Kartend-o46gy). Keys live under the same
+// kartend/ui-state "DatManagerWindow" group the dialog uses for its own
+// geometry, namespaced with a "browser" prefix so they don't collide.
+void DatAuditBrowserPage::persistState() const {
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  settings.beginGroup(QStringLiteral("DatManagerWindow"));
+  if (m_hSplitter != nullptr) {
+    settings.setValue(QStringLiteral("browserHSplitter"), m_hSplitter->saveState());
+  }
+  if (m_vSplitter != nullptr) {
+    settings.setValue(QStringLiteral("browserVSplitter"), m_vSplitter->saveState());
+  }
+  if (m_tree != nullptr) {
+    settings.setValue(QStringLiteral("browserTreeHeader"), m_tree->header()->saveState());
+  }
+  if (m_gameTable != nullptr) {
+    settings.setValue(QStringLiteral("browserGameHeader"),
+                      m_gameTable->horizontalHeader()->saveState());
+  }
+  if (m_romTable != nullptr) {
+    settings.setValue(QStringLiteral("browserRomHeader"),
+                      m_romTable->horizontalHeader()->saveState());
+  }
+  settings.setValue(QStringLiteral("browserFilterComplete"), m_filterComplete->isChecked());
+  settings.setValue(QStringLiteral("browserFilterPartial"), m_filterPartial->isChecked());
+  settings.setValue(QStringLiteral("browserFilterEmpty"), m_filterEmpty->isChecked());
+  settings.setValue(QStringLiteral("browserFilterFixes"), m_filterFixes->isChecked());
+  settings.setValue(QStringLiteral("browserFilterMia"), m_filterMia->isChecked());
+
+  // Expanded tree nodes (Kartend-q66m4): store the profile ids as strings so
+  // the QSet round-trips through QSettings.
+  QStringList expandedIds;
+  expandedIds.reserve(m_expandedProfiles.size());
+  for (const qint64 id : m_expandedProfiles) {
+    expandedIds << QString::number(id);
+  }
+  settings.setValue(QStringLiteral("browserExpandedProfiles"), expandedIds);
+  settings.endGroup();
+}
+
+void DatAuditBrowserPage::restoreState_() {
+  QSettings settings(QStringLiteral("kartend"), QStringLiteral("ui-state"));
+  settings.beginGroup(QStringLiteral("DatManagerWindow"));
+
+  const auto restoreState = [&](auto *target, const QString &key) {
+    const QByteArray st = settings.value(key).toByteArray();
+    if (target != nullptr && !st.isEmpty()) {
+      target->restoreState(st);
+    }
+  };
+  restoreState(m_hSplitter, QStringLiteral("browserHSplitter"));
+  restoreState(m_vSplitter, QStringLiteral("browserVSplitter"));
+  restoreState(m_tree != nullptr ? m_tree->header() : nullptr, QStringLiteral("browserTreeHeader"));
+  restoreState(m_gameTable != nullptr ? m_gameTable->horizontalHeader() : nullptr,
+               QStringLiteral("browserGameHeader"));
+  restoreState(m_romTable != nullptr ? m_romTable->horizontalHeader() : nullptr,
+               QStringLiteral("browserRomHeader"));
+
+  // Filter checkboxes: only override the build-time defaults when a value was
+  // saved. Block each toggle so the five restores don't each fire applyFilters()
+  // — a single applyFilters() below picks up the final state.
+  const auto restoreCheck = [&](QCheckBox *box, const QString &key) {
+    if (box != nullptr && settings.contains(key)) {
+      const QSignalBlocker blocker(box);
+      box->setChecked(settings.value(key).toBool());
+    }
+  };
+  restoreCheck(m_filterComplete, QStringLiteral("browserFilterComplete"));
+  restoreCheck(m_filterPartial, QStringLiteral("browserFilterPartial"));
+  restoreCheck(m_filterEmpty, QStringLiteral("browserFilterEmpty"));
+  restoreCheck(m_filterFixes, QStringLiteral("browserFilterFixes"));
+  restoreCheck(m_filterMia, QStringLiteral("browserFilterMia"));
+
+  // Expanded tree nodes (Kartend-q66m4). The tree is empty until the first
+  // refresh(), so this only seeds the set; restoreExpandedState() applies it
+  // after each setTree().
+  m_expandedProfiles.clear();
+  const QStringList expandedIds =
+      settings.value(QStringLiteral("browserExpandedProfiles")).toStringList();
+  for (const QString &idStr : expandedIds) {
+    bool ok = false;
+    const qint64 id = idStr.toLongLong(&ok);
+    if (ok) {
+      m_expandedProfiles.insert(id);
+    }
+  }
+  settings.endGroup();
+
+  applyFilters();
+}
+
+void DatAuditBrowserPage::restoreExpandedState() {
+  if (m_tree == nullptr || m_treeModel == nullptr || m_expandedProfiles.isEmpty()) {
+    return;
+  }
+  // Block signals so the expand() calls below don't recurse into the
+  // expanded() handler that mutates m_expandedProfiles while we iterate it.
+  const QSignalBlocker blocker(m_tree);
+  const int rows = m_treeModel->rowCount();
+  for (int row = 0; row < rows; ++row) {
+    const QModelIndex idx = m_treeModel->index(row, 0);
+    if (m_expandedProfiles.contains(m_treeModel->profileIdAt(idx))) {
+      m_tree->expand(idx);
+    }
+  }
 }

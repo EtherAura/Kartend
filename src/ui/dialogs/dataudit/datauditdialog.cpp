@@ -602,6 +602,11 @@ void DatAuditDialog::persistGeometry() {
     settings.setValue(QStringLiteral("splitter"), m_splitter->saveState());
   }
   settings.endGroup();
+  // Kartend-o46gy: the browser page persists its own splitter/column/filter
+  // layout under the same group.
+  if (m_browserPage != nullptr) {
+    m_browserPage->persistState();
+  }
 }
 
 void DatAuditDialog::restoreGeometry_() {
@@ -616,6 +621,12 @@ void DatAuditDialog::restoreGeometry_() {
     m_splitter->restoreState(sp);
   }
   settings.endGroup();
+  // Kartend-o46gy: restore the browser page's saved layout alongside the
+  // dialog's own. Safe before first show — QSplitter/QHeaderView::restoreState
+  // stash the sizes and apply them when the page becomes visible.
+  if (m_browserPage != nullptr) {
+    m_browserPage->restoreState_();
+  }
 }
 
 void DatAuditDialog::setLibraryPathAccessors(std::function<QString()> getter,
