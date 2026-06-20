@@ -220,7 +220,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 24;
+  constexpr int CURRENT_SCHEMA_VERSION = 25;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -984,9 +984,23 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 24; // read by the v25 block below
+  }
+
+  if (mutableVersion < 25) {
+    // v25 (Kartend-7iqhl.5): optional grouping label on each audit profile, for
+    // the browser's category tree level. Empty (the default) falls back to the
+    // linked collection's name, then to "(Ungrouped)", so existing profiles
+    // group sensibly without being touched.
+    if (!runBlock(db, 25, origin, [&]() -> bool {
+          return ensureColumn(db, "dat_audit_profile", "category", "TEXT NOT NULL DEFAULT ''",
+                              origin);
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v25 block stays a pure copy-paste.
-    mutableVersion = 24; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v26 block stays a pure copy-paste.
+    mutableVersion = 25; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

@@ -3,6 +3,7 @@
 
 #include <QAbstractItemModel>
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QList>
 #include <QSortFilterProxyModel>
 #include <QString>
@@ -88,13 +89,20 @@ inline constexpr int kBrowserPresetCount = 4;
 /// under the "DatAuditBrowserPresets" group. Out-of-range slots are ignored.
 void saveBrowserPreset(QSettings &settings, int slot, const BrowserViewPreset &preset);
 
-/// Left-pane tree: Root → Profile → Source DAT (Source children only when a
-/// profile contributed more than one DAT). Each node exposes rolled-up bucket
-/// counts; games/roms are NOT in the tree.
+/// The category-grouping label for a profile (Kartend-7iqhl.5): its manual
+/// `category` when set, else the linked collection's display name (looked up in
+/// `collectionNamesByUuid`), else "(Ungrouped)". Pure + precedence-tested.
+[[nodiscard]] QString categoryLabelFor(const DatAuditProfile::Profile &profile,
+                                       const QHash<QString, QString> &collectionNamesByUuid);
+
+/// Left-pane tree: Root → [Category →] Profile → Source DAT (Category level only
+/// when grouping is on; Source children only when a profile contributed more
+/// than one DAT). Each node exposes rolled-up bucket counts; games/roms are NOT
+/// in the tree.
 class AuditTreeModel : public QAbstractItemModel {
   Q_OBJECT
 public:
-  enum class NodeKind { Profile, Source };
+  enum class NodeKind { Profile, Source, Category };
 
   enum Roles {
     KindRole = Qt::UserRole + 1, ///< int(NodeKind)
@@ -110,8 +118,12 @@ public:
   /// Rebuild the whole tree from the profile list (names + dats) and every
   /// profile's per-(source,status,mia) rollup rows (one DB read each). Named
   /// setTree (not setData) so it does not shadow QAbstractItemModel::setData.
+  /// With `groupByCategory`, profiles nest under a Category level resolved via
+  /// categoryLabelFor (using `collectionNamesByUuid`); categories surface in
+  /// first-seen order with their member profiles' counts rolled up.
   void setTree(const QList<DatAuditProfile::Profile> &profiles,
-               const QList<DatAuditProfile::RollupRow> &rollups);
+               const QList<DatAuditProfile::RollupRow> &rollups, bool groupByCategory = false,
+               const QHash<QString, QString> &collectionNamesByUuid = {});
 
   /// Profile id / source name / DAT path for an index (for lazy game loading).
   [[nodiscard]] qint64 profileIdAt(const QModelIndex &index) const;

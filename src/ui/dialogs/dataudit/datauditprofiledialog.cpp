@@ -83,6 +83,12 @@ DatAuditProfileDialog::DatAuditProfileDialog(const DatAuditProfile::Profile &see
     m_collection->setCurrentIndex(m_collection->count() - 1);
   }
   form->addRow(tr("Linked collection:"), m_collection);
+
+  // Optional grouping label for the audit browser's category tree level
+  // (Kartend-7iqhl.5). Empty falls back to the linked collection's name.
+  m_category = new QLineEdit(m_seed.category, this);
+  m_category->setPlaceholderText(tr("Optional — defaults to the linked collection"));
+  form->addRow(tr("Browser category:"), m_category);
   root->addLayout(form);
 
   // DAT files + scan folders are seeded from a linked collection but stay
@@ -368,5 +374,6 @@ DatAuditProfile::Profile DatAuditProfileDialog::profile() const {
   p.fixMode = m_fixManaged->isChecked() ? FixMode::ManagedOutput : FixMode::InPlace;
   p.managedOutputRoot = m_managedRoot->text().trimmed();
   p.quarantineRoot = m_quarantineRoot->text().trimmed();
+  p.category = m_category->text().trimmed();
   return p;
 }

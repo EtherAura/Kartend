@@ -37,6 +37,9 @@ private slots:
   void browserPresetsRoundTrip();
   void browserPresetsDefaultUnsavedSlots();
   void reconstructsAuditRowsFromResults();
+  void categoryLabelResolutionPrecedence();
+  void treeBuildsCategoryLevel();
+  void treeGroupedMultiSourceParentChain();
 };
 
 void TestDatAuditBrowserModels::bucketCountsMapStatuses() {
@@ -334,6 +337,108 @@ void TestDatAuditBrowserModels::reconstructsAuditRowsFromResults() {
   QVERIFY(rows.at(1).actualName.isEmpty());
   QCOMPARE(rows.at(1).expectedName, QStringLiteral("rom.bin"));
   QVERIFY(rows.at(1).mia);
+}
+
+void TestDatAuditBrowserModels::categoryLabelResolutionPrecedence() {
+  // Kartend-7iqhl.5: manual category wins; else the linked collection's name;
+  // else "(Ungrouped)".
+  const QHash<QString, QString> names{{QStringLiteral("uuid-movies"), QStringLiteral("Movies")}};
+
+  Profile manual;
+  manual.category = QStringLiteral("Favourites");
+  manual.collectionUuid = QStringLiteral("uuid-movies"); // manual still wins
+  QCOMPARE(categoryLabelFor(manual, names), QStringLiteral("Favourites"));
+
+  Profile linked;
+  linked.collectionUuid = QStringLiteral("uuid-movies");
+  QCOMPARE(categoryLabelFor(linked, names), QStringLiteral("Movies"));
+
+  Profile unlinked;
+  QCOMPARE(categoryLabelFor(unlinked, names), QStringLiteral("(Ungrouped)"));
+
+  Profile danglingLink; // linked to a collection not in the map
+  danglingLink.collectionUuid = QStringLiteral("uuid-gone");
+  QCOMPARE(categoryLabelFor(danglingLink, names), QStringLiteral("(Ungrouped)"));
+}
+
+void TestDatAuditBrowserModels::treeBuildsCategoryLevel() {
+  // Three profiles across two categories (manual on A, collection-derived on B
+  // and C), grouped: Root → Category → Profile. First-seen category order.
+  Profile a;
+  a.id = 1;
+  a.name = QStringLiteral("Alpha");
+  a.category = QStringLiteral("Retro");
+  Profile b;
+  b.id = 2;
+  b.name = QStringLiteral("Bravo");
+  b.collectionUuid = QStringLiteral("uuid-films");
+  Profile c;
+  c.id = 3;
+  c.name = QStringLiteral("Charlie");
+  c.collectionUuid = QStringLiteral("uuid-films"); // same category as Bravo
+
+  const QHash<QString, QString> names{{QStringLiteral("uuid-films"), QStringLiteral("Films")}};
+  const QList<RollupRow> rollups{
+      {1, QStringLiteral("a.dat"), kHave, false, 4},
+      {2, QStringLiteral("b.dat"), kHave, false, 3},
+      {2, QStringLiteral("b.dat"), kMissing, false, 1},
+      {3, QStringLiteral("c.dat"), kMissing, false, 2},
+  };
+
+  AuditTreeModel tree;
+  tree.setTree({a, b, c}, rollups, /*groupByCategory=*/true, names);
+
+  // Root → 2 categories in first-seen order: "Retro" (from Alpha), then "Films".
+  QCOMPARE(tree.rowCount(QModelIndex()), 2);
+  const QModelIndex retro = tree.index(0, 0);
+  const QModelIndex films = tree.index(1, 0);
+  QCOMPARE(tree.data(retro, Qt::DisplayRole).toString(), QStringLiteral("Retro"));
+  QCOMPARE(tree.data(films, Qt::DisplayRole).toString(), QStringLiteral("Films"));
+  // Category nodes are not profiles.
+  QCOMPARE(tree.profileIdAt(retro), static_cast<qint64>(-1));
+  QCOMPARE(static_cast<AuditTreeModel::NodeKind>(
+               tree.data(retro, AuditTreeModel::KindRole).toInt()),
+           AuditTreeModel::NodeKind::Category);
+
+  // "Retro" has Alpha; "Films" has Bravo + Charlie.
+  QCOMPARE(tree.rowCount(retro), 1);
+  QCOMPARE(tree.rowCount(films), 2);
+  const QModelIndex alpha = tree.index(0, 0, retro);
+  QCOMPARE(tree.profileIdAt(alpha), static_cast<qint64>(1));
+  QCOMPARE(tree.parent(alpha), retro); // 3-level parent() round-trip
+
+  // Category counts roll up their member profiles (Films: 3 have + 1+2 missing).
+  const auto filmsCounts =
+      qvariant_cast<BucketCounts>(tree.data(films, AuditTreeModel::CountsRole));
+  QCOMPARE(filmsCounts.have, 3);
+  QCOMPARE(filmsCounts.missing, 3);
+}
+
+void TestDatAuditBrowserModels::treeGroupedMultiSourceParentChain() {
+  // A multi-source profile under a category exercises the full
+  // Source → Profile → Category → root parent() chain (Kartend-7iqhl.5).
+  Profile p;
+  p.id = 1;
+  p.name = QStringLiteral("Arcade");
+  p.category = QStringLiteral("Coin-op");
+  const QList<RollupRow> rollups{
+      {1, QStringLiteral("mame.dat"), kHave, false, 5},
+      {1, QStringLiteral("fbneo.dat"), kHave, false, 3},
+  };
+  AuditTreeModel tree;
+  tree.setTree({p}, rollups, /*groupByCategory=*/true, {});
+
+  QCOMPARE(tree.rowCount(QModelIndex()), 1); // one category
+  const QModelIndex cat = tree.index(0, 0);
+  QCOMPARE(tree.data(cat, Qt::DisplayRole).toString(), QStringLiteral("Coin-op"));
+  QCOMPARE(tree.rowCount(cat), 1); // one profile under it
+  const QModelIndex prof = tree.index(0, 0, cat);
+  QCOMPARE(tree.profileIdAt(prof), static_cast<qint64>(1));
+  QCOMPARE(tree.parent(prof), cat); // Profile → Category
+  QCOMPARE(tree.rowCount(prof), 2); // two source children
+  const QModelIndex src0 = tree.index(0, 0, prof);
+  QCOMPARE(tree.parent(src0), prof);             // Source → Profile
+  QCOMPARE(tree.parent(tree.parent(src0)), cat); // …→ Category (full chain)
 }
 
 QTEST_GUILESS_MAIN(TestDatAuditBrowserModels)

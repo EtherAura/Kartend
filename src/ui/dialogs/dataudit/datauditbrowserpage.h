@@ -45,6 +45,11 @@ public:
   /// just-audited profile stays selected through refresh()'s tree rebuild.
   void selectProfileNode(qint64 profileId);
 
+  /// Supply the uuid → collection-name map used to resolve a profile's category
+  /// when grouping (Kartend-7iqhl.5). The dialog pushes this before refresh()
+  /// since the page has no collection list of its own.
+  void setCollectionNames(const QHash<QString, QString> &byUuid);
+
 signals:
   /// The user asked, from the tree's context menu, to re-audit / Fix the
   /// profile owning the selected node (Kartend-7iqhl.2). Profile-scoped: a
@@ -99,6 +104,9 @@ private:
   /// rows by their containing item-folder ("Game A: 2/3 present") instead of by
   /// DAT game.
   QCheckBox *m_groupByFolder = nullptr;
+  /// Kartend-7iqhl.5: when checked, the tree gains a Category level
+  /// (Root → Category → Profile → Source); rebuilds the tree on toggle.
+  QCheckBox *m_groupByCategory = nullptr;
   QLineEdit *m_search = nullptr;
 
   // Preset controls (Kartend-7iqhl.1).
@@ -114,6 +122,9 @@ private:
   /// Scan roots per profile id (Kartend-m6qsb.30), cached on refresh() so the
   /// folder-as-item view can derive each file's item-folder relative to a root.
   QHash<qint64, QStringList> m_scanRootsByProfile;
+  /// uuid → collection name, pushed by the dialog (Kartend-7iqhl.5), for
+  /// resolving a profile's category when "Group by category" is on.
+  QHash<QString, QString> m_collectionNamesByUuid;
 };
 
 #endif // DATAUDITBROWSERPAGE_H

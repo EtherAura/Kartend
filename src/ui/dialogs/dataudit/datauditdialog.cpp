@@ -13,6 +13,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QHeaderView>
 #include <QIcon>
 #include <QInputDialog>
@@ -577,6 +578,16 @@ void DatAuditDialog::onNavRowChanged() {
   // The browser reads persisted results on demand — refresh it each time it is
   // shown so a just-completed audit is reflected without reopening the window.
   if (page == 3 && m_browserPage != nullptr) {
+    // Resolve uuid → collection name so the browser can group profiles under
+    // their linked collection when category grouping is on (Kartend-7iqhl.5).
+    QHash<QString, QString> names;
+    if (m_collections != nullptr) {
+      for (const CollectionConfig &c : *m_collections) {
+        const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+        names.insert(CollectionUtils::computeCollectionUuid(c.name, expanded), c.name);
+      }
+    }
+    m_browserPage->setCollectionNames(names);
     m_browserPage->refresh();
   }
 }

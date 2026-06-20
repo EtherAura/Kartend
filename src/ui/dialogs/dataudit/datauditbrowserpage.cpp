@@ -172,6 +172,14 @@ void DatAuditBrowserPage::buildUi() {
       loadGamesFor(m_currentProfileId, m_currentSourceName, m_currentDatPath);
     }
   });
+  // Group-by-category (Kartend-7iqhl.5) restructures the TREE, so rebuild it on
+  // toggle (refresh() re-reads rollups and re-runs setTree with the new flag).
+  m_groupByCategory = new QCheckBox(tr("Group by category"), this);
+  m_groupByCategory->setToolTip(
+      tr("Add a category level to the tree, from each profile's category "
+         "(or its linked collection)."));
+  filterRow->addWidget(m_groupByCategory);
+  connect(m_groupByCategory, &QCheckBox::toggled, this, [this](bool) { refresh(); });
 
   // Named view presets (Kartend-7iqhl.1): a combo of four named slots that each
   // captures the live filter view, with Save (overwrite the selected slot) and
@@ -227,7 +235,8 @@ void DatAuditBrowserPage::refresh() {
       ErrorUtils::logError(r.error());
     }
   });
-  m_treeModel->setTree(profiles, rollups);
+  const bool groupByCategory = m_groupByCategory != nullptr && m_groupByCategory->isChecked();
+  m_treeModel->setTree(profiles, rollups, groupByCategory, m_collectionNamesByUuid);
   // Cache each profile's scan roots so the folder-as-item view can map a result
   // row's absolute filePath back to its item-folder (Kartend-m6qsb.30).
   m_scanRootsByProfile.clear();
@@ -242,18 +251,33 @@ void DatAuditBrowserPage::refresh() {
   m_currentDatPath.clear();
 }
 
+void DatAuditBrowserPage::setCollectionNames(const QHash<QString, QString> &byUuid) {
+  m_collectionNamesByUuid = byUuid;
+}
+
 void DatAuditBrowserPage::selectProfileNode(qint64 profileId) {
   if (profileId < 0) {
     return;
   }
-  const int rows = m_treeModel->rowCount(QModelIndex());
-  for (int r = 0; r < rows; ++r) {
-    const QModelIndex idx = m_treeModel->index(r, 0, QModelIndex());
-    if (m_treeModel->profileIdAt(idx) == profileId) {
-      // setCurrentIndex fires currentChanged → onTreeSelectionChanged, which
-      // reloads the DAT-info + game list for the node.
-      m_tree->setCurrentIndex(idx);
+  // Profiles are top-level in flat mode but one level down (under Category nodes,
+  // whose own profileId is -1) when "Group by category" is on (Kartend-7iqhl.5),
+  // so descend into each top-level node's children too. setCurrentIndex fires
+  // currentChanged → onTreeSelectionChanged, which reloads the right panes.
+  const int topRows = m_treeModel->rowCount(QModelIndex());
+  for (int r = 0; r < topRows; ++r) {
+    const QModelIndex top = m_treeModel->index(r, 0, QModelIndex());
+    if (m_treeModel->profileIdAt(top) == profileId) {
+      m_tree->setCurrentIndex(top);
       return;
+    }
+    const int childRows = m_treeModel->rowCount(top);
+    for (int c = 0; c < childRows; ++c) {
+      const QModelIndex child = m_treeModel->index(c, 0, top);
+      if (m_treeModel->profileIdAt(child) == profileId) {
+        m_tree->expand(top); // reveal the profile under its (collapsed) category
+        m_tree->setCurrentIndex(child);
+        return;
+      }
     }
   }
 }
@@ -267,9 +291,13 @@ void DatAuditBrowserPage::onTreeContextMenu(const QPoint &pos) {
   if (profileId < 0) {
     return;
   }
-  // Profile-scoped (Kartend-7iqhl.2): a Source-DAT child reports its parent
-  // Profile node's name; a single-source Profile node is itself the parent.
-  const QModelIndex profileIdx = idx.parent().isValid() ? idx.parent() : idx;
+  // Profile-scoped (Kartend-7iqhl.2): label the menu with the owning profile's
+  // name. Resolve by node KIND, not parent validity — under category grouping
+  // (Kartend-7iqhl.5) a leaf Profile node's parent is the Category, so the old
+  // parent()-validity heuristic would mislabel it with the category name.
+  const bool isSource = idx.data(DatAudit::AuditTreeModel::KindRole).toInt() ==
+                        static_cast<int>(DatAudit::AuditTreeModel::NodeKind::Source);
+  const QModelIndex profileIdx = isSource ? idx.parent() : idx;
   const QString profileName = profileIdx.data(Qt::DisplayRole).toString();
 
   QMenu menu(this);

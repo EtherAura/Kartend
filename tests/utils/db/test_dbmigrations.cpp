@@ -125,6 +125,7 @@ private slots:
   void v23AddsProfileQuarantineRootColumn();
   void v24AddsZipIndexColumns();
   void v24ClearsPopulatedMemberCache();
+  void v25AddsProfileCategoryColumn();
   void preservesExistingDataAcrossUpgrade();
   void failedBlockRollsBackAndKeepsVersion();
   void newerSchemaVersionIsLeftUntouched();
@@ -147,7 +148,7 @@ void TestDbMigrations::appliesToCurrentVersion() {
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
   // Must equal CURRENT_SCHEMA_VERSION in dbmigrations.cpp.
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
 
   closeAndRemove(db, conn);
 }
@@ -323,7 +324,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -339,7 +340,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -352,7 +353,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -381,7 +382,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -415,7 +416,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -431,7 +432,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -444,7 +445,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -479,7 +480,7 @@ void TestDbMigrations::v10AddsPlaylistTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "playlists"));
   QVERIFY(tableHasColumn(db, "playlists", "id"));
   QVERIFY(tableHasColumn(db, "playlists", "name"));
@@ -511,7 +512,7 @@ void TestDbMigrations::v12AddsDateAddedColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "items", "date_added"));
   QVERIFY(indexExists(db, "idx_items_date_added"));
 
@@ -559,7 +560,7 @@ void TestDbMigrations::v13AddsRelPathColumn() {
 
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "items", "rel_path"));
 
   // The pre-existing row survives and its rel_path defaults to NULL — the
@@ -582,7 +583,7 @@ void TestDbMigrations::v14AddsCurationColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "item_metadata", "notes"));
   QVERIFY(tableHasColumn(db, "item_metadata", "rating"));
   QVERIFY(tableHasColumn(db, "item_metadata", "source_url"));
@@ -612,7 +613,7 @@ void TestDbMigrations::v15AddsStateFlagColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "item_metadata", "is_pinned"));
   QVERIFY(tableHasColumn(db, "item_metadata", "is_hidden"));
   QVERIFY(tableHasColumn(db, "item_metadata", "continue_later"));
@@ -640,7 +641,7 @@ void TestDbMigrations::v16AddsFileHashCacheTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "file_hash_cache"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "path"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "file_size"));
@@ -661,7 +662,7 @@ void TestDbMigrations::v17AddsDatAuditProfileTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "dat_audit_profile"));
   QVERIFY(tableExists(db, "dat_audit_profile_dat"));
   QVERIFY(tableExists(db, "dat_audit_result"));
@@ -683,7 +684,7 @@ void TestDbMigrations::v11AddsSmartPlaylistColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "playlists", "is_smart"));
   QVERIFY(tableHasColumn(db, "playlists", "smart_filter"));
 
@@ -701,7 +702,7 @@ void TestDbMigrations::v18DropsEagerFtsSyncTriggers() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(!triggerExists(db, "items_fts_ai"));
   QVERIFY(!triggerExists(db, "items_fts_ad"));
   QVERIFY(!triggerExists(db, "items_fts_au"));
@@ -718,7 +719,7 @@ void TestDbMigrations::v19AddsDatAuditProfileCollectionIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(indexExists(db, "idx_dat_audit_profile_collection"));
   // Folder-structure probe persistence (Kartend-m6qsb.6) ships in the same
   // version block.
@@ -744,7 +745,7 @@ void TestDbMigrations::v20DropsInertMergeModeColumn() {
     auto db = openMemoryDb(conn);
     createBaseSchema(db);
     DbMigrations::applySchemaMigrations(db, "test");
-    QCOMPARE(getUserVersion(db), 24);
+    QCOMPARE(getUserVersion(db), 25);
     QVERIFY(!tableHasColumn(db, "dat_audit_profile", "merge_mode"));
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "collection_uuid"));
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "detected_layout"));
@@ -768,7 +769,7 @@ void TestDbMigrations::v20DropsInertMergeModeColumn() {
                    "file_path TEXT, detail TEXT, PRIMARY KEY (profile_id, entry_key))"));
     QVERIFY(q.exec("PRAGMA user_version = 19"));
     DbMigrations::applySchemaMigrations(db, "test");
-    QCOMPARE(getUserVersion(db), 24);
+    QCOMPARE(getUserVersion(db), 25);
     QVERIFY(!tableHasColumn(db, "dat_audit_profile", "merge_mode"));
     QVERIFY(q.exec("SELECT name FROM dat_audit_profile WHERE name = 'Keep me'"));
     QVERIFY(q.next());
@@ -785,7 +786,7 @@ void TestDbMigrations::v21AddsDatLibraryProvenanceTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableExists(db, "dat_library_provenance"));
   QVERIFY(tableHasColumn(db, "dat_library_provenance", "canonical_path"));
   QVERIFY(tableHasColumn(db, "dat_library_provenance", "source"));
@@ -805,7 +806,7 @@ void TestDbMigrations::v22AddsAuditResultIdentityColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "dat_audit_result", "source_name"));
   QVERIFY(tableHasColumn(db, "dat_audit_result", "game_name"));
   QVERIFY(tableHasColumn(db, "dat_audit_result", "mia"));
@@ -822,7 +823,7 @@ void TestDbMigrations::v23AddsProfileQuarantineRootColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "dat_audit_profile", "quarantine_root"));
 
   closeAndRemove(db, conn);
@@ -836,7 +837,7 @@ void TestDbMigrations::v24AddsZipIndexColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "dat_audit_result", "zip_index"));
   QVERIFY(tableHasColumn(db, "archive_member_hash_cache", "zip_index"));
 
@@ -857,18 +858,33 @@ void TestDbMigrations::v24ClearsPopulatedMemberCache() {
                  "file_path TEXT, detail TEXT, PRIMARY KEY (profile_id, entry_key))"));
   QVERIFY(q.exec("CREATE TABLE archive_member_hash_cache ("
                  "container_path TEXT NOT NULL, member_path TEXT NOT NULL)"));
+  // The later v25 block ALTERs dat_audit_profile, so it must exist too.
+  QVERIFY(q.exec("CREATE TABLE dat_audit_profile (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"));
   QVERIFY(q.exec("INSERT INTO archive_member_hash_cache (container_path, member_path) "
                  "VALUES ('/x/set.zip', 'a.bin')"));
   QVERIFY(q.exec("PRAGMA user_version = 23"));
 
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 24);
+  QCOMPARE(getUserVersion(db), 25);
   QVERIFY(tableHasColumn(db, "archive_member_hash_cache", "zip_index"));
   // The stale row is gone — the next audit re-hashes and stores real indices.
   QVERIFY(q.exec("SELECT COUNT(*) FROM archive_member_hash_cache"));
   QVERIFY(q.next());
   QCOMPARE(q.value(0).toInt(), 0);
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v25AddsProfileCategoryColumn() {
+  // v25 (Kartend-7iqhl.5): optional grouping label on each audit profile.
+  const QString conn = "test_v25_profile_category";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 25);
+  QVERIFY(tableHasColumn(db, "dat_audit_profile", "category"));
 
   closeAndRemove(db, conn);
 }

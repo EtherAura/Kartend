@@ -1,5 +1,6 @@
 #include "datauditbrowsermodels.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -145,8 +146,22 @@ void GameListModel::setFolders(const QList<FolderRollup> &folders) {
 
 AuditTreeModel::AuditTreeModel(QObject *parent) : QAbstractItemModel(parent) {}
 
+QString categoryLabelFor(const DatAuditProfile::Profile &profile,
+                         const QHash<QString, QString> &collectionNamesByUuid) {
+  if (const QString manual = profile.category.trimmed(); !manual.isEmpty()) {
+    return manual;
+  }
+  if (!profile.collectionUuid.isEmpty()) {
+    if (const QString name = collectionNamesByUuid.value(profile.collectionUuid); !name.isEmpty()) {
+      return name;
+    }
+  }
+  return QCoreApplication::translate("DatAudit", "(Ungrouped)");
+}
+
 void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
-                             const QList<DatAuditProfile::RollupRow> &rollups) {
+                             const QList<DatAuditProfile::RollupRow> &rollups, bool groupByCategory,
+                             const QHash<QString, QString> &collectionNamesByUuid) {
   beginResetModel();
   m_nodes.clear();
   m_nodes.append(Node{}); // index 0 — synthetic root
@@ -156,15 +171,36 @@ void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
     byProfile[r.profileId].append(r);
   }
 
+  // Category nodes (Kartend-7iqhl.5) when grouping: label → m_nodes index, in
+  // first-seen order. Profiles then nest under their category instead of root.
+  QHash<QString, int> categoryIdxByLabel;
+
   for (const DatAuditProfile::Profile &p : profiles) {
+    int parentIdx = 0; // synthetic root, unless grouped under a category
+    if (groupByCategory) {
+      const QString label = categoryLabelFor(p, collectionNamesByUuid);
+      int catIdx = categoryIdxByLabel.value(label, -1);
+      if (catIdx < 0) {
+        Node cat;
+        cat.kind = NodeKind::Category;
+        cat.parent = 0;
+        cat.label = label;
+        catIdx = static_cast<int>(m_nodes.size());
+        m_nodes.append(cat);
+        m_nodes[0].children.append(catIdx);
+        categoryIdxByLabel.insert(label, catIdx);
+      }
+      parentIdx = catIdx;
+    }
+
     Node prof;
     prof.kind = NodeKind::Profile;
-    prof.parent = 0;
+    prof.parent = parentIdx;
     prof.profileId = p.id;
     prof.label = p.name;
-    const int profIdx = m_nodes.size();
+    const int profIdx = static_cast<int>(m_nodes.size());
     m_nodes.append(prof);
-    m_nodes[0].children.append(profIdx);
+    m_nodes[parentIdx].children.append(profIdx);
 
     const QList<DatAuditProfile::RollupRow> &rows = byProfile.value(p.id);
 
@@ -210,6 +246,9 @@ void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
       }
     }
     m_nodes[profIdx].counts = profCounts;
+    if (groupByCategory) {
+      m_nodes[parentIdx].counts.add(profCounts); // roll the profile up to its category
+    }
   }
   endResetModel();
 }
@@ -305,8 +344,19 @@ QVariant AuditTreeModel::data(const QModelIndex &index, int role) const {
   case CountsRole:
     return QVariant::fromValue(n->counts);
   case Qt::DecorationRole:
-    return QIcon::fromTheme(n->kind == NodeKind::Source ? QStringLiteral("application-x-archive")
-                                                        : QStringLiteral("folder"));
+    switch (n->kind) {
+    case NodeKind::Source:
+      return QIcon::fromTheme(QStringLiteral("application-x-archive"));
+    case NodeKind::Category:
+      // Distinct from the plain Profile folder so the grouping level reads
+      // differently (Kartend-7iqhl.5); falls back to a folder if the theme
+      // lacks the tagged variant.
+      return QIcon::fromTheme(QStringLiteral("folder-tag"),
+                              QIcon::fromTheme(QStringLiteral("folder")));
+    case NodeKind::Profile:
+      break;
+    }
+    return QIcon::fromTheme(QStringLiteral("folder"));
   default:
     return {};
   }

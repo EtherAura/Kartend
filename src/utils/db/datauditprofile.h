@@ -67,6 +67,10 @@ struct Profile {
   /// files). Empty falls back to the global default quarantine folder. Remembered
   /// here so each collection can keep its own without re-typing per run.
   QString quarantineRoot;
+  /// Optional grouping label for the audit browser's category tree level
+  /// (Kartend-7iqhl.5, schema v25). Empty falls back to the linked collection's
+  /// name, then to "(Ungrouped)". User-editable in the profile dialog.
+  QString category;
   /// Folder-structure probe result (Kartend-m6qsb.6). A DatAudit::layoutToken
   /// value ('' = never detected) — kept as the raw token here because this
   /// header sits below the dataudit module that owns the enum. Only a

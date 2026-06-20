@@ -23,9 +23,9 @@ private slots:
 void TestDatAuditBrowserPage::constructsWithoutCrash() {
   // Construction alone runs buildUi() — the path that previously crashed.
   DatAuditBrowserPage page;
-  // Complete / Partial / Empty / Fixes / MIA + the Group-by-folder toggle
-  // (Kartend-m6qsb.30).
-  QCOMPARE(page.findChildren<QCheckBox *>().size(), 6);
+  // Complete / Partial / Empty / Fixes / MIA + Group-by-folder (Kartend-m6qsb.30)
+  // + Group-by-category (Kartend-7iqhl.5).
+  QCOMPARE(page.findChildren<QCheckBox *>().size(), 7);
   // Named view presets (Kartend-7iqhl.1): a combo of 4 slots loaded from
   // QSettings on construction, plus Save and Rename buttons. loadPresets()
   // blocks the combo while filling it, so construction must not recall a preset

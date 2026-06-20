@@ -57,6 +57,7 @@ private:
 
   QLineEdit *m_name = nullptr;
   QComboBox *m_collection = nullptr; // optional collection link; data() holds the UUID
+  QLineEdit *m_category = nullptr;   // optional browser grouping label (Kartend-7iqhl.5)
   QListWidget *m_datList = nullptr;
   QListWidget *m_rootList = nullptr;
   QPushButton *m_addDatButton = nullptr;
