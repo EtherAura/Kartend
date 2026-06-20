@@ -251,6 +251,23 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     out.rows.append(row);
   };
 
+  // A catalogue entry is satisfied "by content" when its own bytes are on disk:
+  // either its index directly won the hash race (it is in `satisfied`), or it
+  // shares hashes with the record that did. matchByHash is first-seen-wins per
+  // content (datauditcatalogue.cpp), so two content-equal records — e.g. a
+  // non-merged clone re-listing a parent's shared rom (the MAME parser keeps
+  // every <rom>) — collapse to one canonical index. Crediting by that canonical
+  // index keeps the second record from a spurious Missing / present-undercount
+  // (Kartend-k8a3y).
+  const auto satisfiedByContent = [&](int i) -> bool {
+    if (satisfied.contains(i)) {
+      return true;
+    }
+    const DatLookup::DatRecord &rec = catalogue.record(i);
+    const int canonical = catalogue.matchByHash(rec.crc, rec.md5, rec.sha1);
+    return canonical >= 0 && satisfied.contains(canonical);
+  };
+
   if (onePerGame) {
     // 1G1R completeness: group catalogue entries by base game name. A game is
     // covered when ANY of its region variants is present, so only a wholly
@@ -274,7 +291,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     for (const QString &key : order) {
       const QList<int> &idxs = games.value(key);
       const bool anyPresent =
-          std::any_of(idxs.cbegin(), idxs.cend(), [&](int i) { return satisfied.contains(i); });
+          std::any_of(idxs.cbegin(), idxs.cend(), [&](int i) { return satisfiedByContent(i); });
       if (anyPresent) {
         continue; // some variant's content is present — game covered under 1G1R
       }
@@ -294,7 +311,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
   } else {
     // Every catalogue entry no file satisfied (by content) is Missing.
     for (int i = 0; i < catalogue.size(); ++i) {
-      if (!satisfied.contains(i)) {
+      if (!satisfiedByContent(i)) {
         emitMissing(i);
       }
     }
@@ -398,7 +415,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       }
       SourceCompleteness &sc = out.summary.perSource[s];
       sc.total += 1;
-      if (satisfied.contains(i)) {
+      if (satisfiedByContent(i)) {
         sc.present += 1;
       }
     }
