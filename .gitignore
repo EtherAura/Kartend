@@ -90,6 +90,10 @@ venv/
 /AGENTS.md
 /.github/copilot-instructions.md
 
+# Manual runtime-verification checklists — ephemeral working notes
+# ("work through it, then delete"), never meant to be tracked.
+/MANUAL_VERIFICATION-*.md
+
 # Obsidian vault metadata (personal note-taking, not project state)
 .obsidian/
 
