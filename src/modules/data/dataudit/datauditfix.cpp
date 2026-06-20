@@ -182,16 +182,28 @@ QString sanitizeFolderName(const QString &name) {
 bool repackAndSwap(const QString &src, const QString &dst,
                    const QList<QPair<QString, QString>> &renames, QString *errorOut) {
   const QString destDir = QFileInfo(dst).absolutePath();
-  QTemporaryFile tf(destDir + QStringLiteral("/.kartend-repack-XXXXXX"));
-  tf.setAutoRemove(false);
-  if (!tf.open()) {
-    if (errorOut != nullptr) {
-      *errorOut = QStringLiteral("could not create temp file in %1").arg(destDir);
+  // QTemporaryFile keeps its file open internally for the whole lifetime of the
+  // object (Qt docs: "for as long as the QTemporaryFile object itself is not
+  // destroyed, the unique temporary file will ... be kept open internally"), so
+  // close() alone does not release the OS handle. On Windows that lingering
+  // handle locks the path and the libarchive write below
+  // (archive_write_open_filename(tmp)) fails with a sharing violation — which is
+  // why this only bit the Windows leg; POSIX tolerates the second open. Use the
+  // QTemporaryFile solely to mint a collision-free name, then let it destruct to
+  // release the handle before ArchiveRepack writes there; setAutoRemove(false)
+  // keeps the file on disk across that destruction.
+  QString tmp;
+  {
+    QTemporaryFile tf(destDir + QStringLiteral("/.kartend-repack-XXXXXX"));
+    tf.setAutoRemove(false);
+    if (!tf.open()) {
+      if (errorOut != nullptr) {
+        *errorOut = QStringLiteral("could not create temp file in %1").arg(destDir);
+      }
+      return false;
     }
-    return false;
+    tmp = tf.fileName();
   }
-  const QString tmp = tf.fileName();
-  tf.close();
 
   QHash<QString, QString> map;
   for (const auto &pr : renames) {

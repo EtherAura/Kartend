@@ -406,6 +406,7 @@ void TestDatAuditFix::applyInPlaceRepackBackupSwapAndUndo() {
   plan.actions.append(a);
 
   auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/false);
+  QVERIFY2(res.errors.isEmpty(), qPrintable(res.errors.join(QStringLiteral("; "))));
   QCOMPARE(res.applied, 1);
   QCOMPARE(res.failed, 0);
   QVERIFY(QFile::exists(container));   // container stays put
@@ -570,6 +571,7 @@ void TestDatAuditFix::applyRepackRenamesInnerAndContainerAndUndo() {
   plan.actions.append(a);
 
   auto res = DatAudit::applyFixPlan(plan, /*dryRun=*/false);
+  QVERIFY2(res.errors.isEmpty(), qPrintable(res.errors.join(QStringLiteral("; "))));
   QCOMPARE(res.applied, 1);
   QCOMPARE(res.failed, 0);
   QVERIFY(!QFile::exists(container));   // old container removed
