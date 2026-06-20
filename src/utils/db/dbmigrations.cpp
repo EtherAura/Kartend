@@ -213,7 +213,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 24;
+  constexpr int CURRENT_SCHEMA_VERSION = 26;
   const int version = getUserVersion(db);
 
   // Downgrade / future-version guard: a database written by a newer build
@@ -937,22 +937,28 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
-    mutableVersion = 23; // read by the v24 block below
+    mutableVersion = 23; // read by the v26 block below
   }
 
-  if (mutableVersion < 24) {
-    // v24: clone-aware merge mode on the audit profile (Kartend-m6qsb.29) —
+  // NOTE (Kartend-m6qsb.29): merge_mode is v26, not v24, so it stacks AFTER the
+  // DAT-browser series' v24 (zip_index) + v25 (category) which merge to main
+  // first. There are no v24/v25 blocks on this branch — a v23 DB jumps straight
+  // to v26 here; the intervening blocks arrive when this branch rebases onto the
+  // post-DAT-browser main. Version order MUST equal merge order or a reused
+  // number gets skipped.
+  if (mutableVersion < 26) {
+    // v26: clone-aware merge mode on the audit profile (Kartend-m6qsb.29) —
     // Split (no-op) / Merged / NonMerged, how parent/clone sets relate when
-    // computing expected files. Pre-v24 profiles default to 'split'.
-    if (!runBlock(db, 24, origin, [&]() -> bool {
+    // computing expected files. Pre-v26 profiles default to 'split'.
+    if (!runBlock(db, 26, origin, [&]() -> bool {
           return ensureColumn(db, "dat_audit_profile", "merge_mode",
                               "TEXT NOT NULL DEFAULT 'split'", origin);
         })) {
       return;
     }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v25 block stays a pure copy-paste.
-    mutableVersion = 24; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v27 block stays a pure copy-paste.
+    mutableVersion = 26; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
