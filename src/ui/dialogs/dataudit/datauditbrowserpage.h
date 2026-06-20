@@ -14,6 +14,7 @@ class QLabel;
 class QLineEdit;
 class QModelIndex;
 class QPoint;
+class QProgressBar;
 class QPushButton;
 class QTableView;
 class QTreeView;
@@ -49,6 +50,13 @@ public:
   /// when grouping (Kartend-7iqhl.5). The dialog pushes this before refresh()
   /// since the page has no collection list of its own.
   void setCollectionNames(const QHash<QString, QString> &byUuid);
+
+  /// Inline progress for a browser-initiated re-audit (Kartend-7iqhl.3): the
+  /// dialog's main progress bar lives on the Audit page and is invisible here,
+  /// so the dialog drives this one. setAuditRunning shows it (indeterminate) /
+  /// hides it; setAuditProgress makes it determinate as the runner ticks.
+  void setAuditRunning(bool running);
+  void setAuditProgress(int done, int total);
 
 signals:
   /// The user asked, from the tree's context menu, to re-audit / Fix the
@@ -114,6 +122,10 @@ private:
   QPushButton *m_presetSave = nullptr;
   QPushButton *m_presetRename = nullptr;
   QList<DatAudit::BrowserViewPreset> m_presets;
+
+  // Inline re-audit progress (Kartend-7iqhl.3); hidden unless an audit is
+  // running, driven by the dialog.
+  QProgressBar *m_auditProgress = nullptr;
 
   // The (profileId, sourceName, datPath) the game list is currently showing.
   qint64 m_currentProfileId = -1;

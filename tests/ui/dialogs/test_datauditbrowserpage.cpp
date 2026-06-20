@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QTest>
 #include <QTreeView>
@@ -18,6 +19,7 @@ class TestDatAuditBrowserPage : public QObject {
   Q_OBJECT
 private slots:
   void constructsWithoutCrash();
+  void auditProgressBarTogglesAndFills();
 };
 
 void TestDatAuditBrowserPage::constructsWithoutCrash() {
@@ -39,6 +41,31 @@ void TestDatAuditBrowserPage::constructsWithoutCrash() {
   const auto trees = page.findChildren<QTreeView *>();
   QCOMPARE(trees.size(), 1);
   QCOMPARE(trees.first()->contextMenuPolicy(), Qt::CustomContextMenu);
+}
+
+void TestDatAuditBrowserPage::auditProgressBarTogglesAndFills() {
+  // The browser-initiated re-audit progress bar (Kartend-7iqhl.3): hidden by
+  // default, shown while running, fills on ticks, hides when done. isHidden()
+  // reflects the explicit hide flag (the page itself is never shown here).
+  DatAuditBrowserPage page;
+  const auto bars = page.findChildren<QProgressBar *>();
+  QCOMPARE(bars.size(), 1);
+  QProgressBar *bar = bars.first();
+  QVERIFY(bar->isHidden());
+
+  page.setAuditRunning(true);
+  QVERIFY(!bar->isHidden());
+  QCOMPARE(bar->maximum(), 0); // indeterminate until the first real tick
+
+  page.setAuditProgress(3, 10);
+  QCOMPARE(bar->maximum(), 10);
+  QCOMPARE(bar->value(), 3);
+
+  page.setAuditProgress(0, 0); // a 0-total tick must not blow away the range
+  QCOMPARE(bar->maximum(), 10);
+
+  page.setAuditRunning(false);
+  QVERIFY(bar->isHidden());
 }
 
 QTEST_MAIN(TestDatAuditBrowserPage)

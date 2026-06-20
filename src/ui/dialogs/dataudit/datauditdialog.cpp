@@ -1212,6 +1212,11 @@ void DatAuditDialog::onRun() {
             m_progress->setRange(0, p.filesTotal);
             m_progress->setValue(p.filesDone);
           }
+          // Drive the browser's inline bar for a browser-initiated re-audit
+          // (Kartend-7iqhl.3); no-op (total<=0 / not pending) otherwise.
+          if (m_browserAuditPending && m_browserPage != nullptr) {
+            m_browserPage->setAuditProgress(p.filesDone, p.filesTotal);
+          }
         },
         Qt::QueuedConnection);
   };
@@ -1433,6 +1438,11 @@ void DatAuditDialog::setBusy(bool busy) {
     // Indeterminate until the runner's first progress tick supplies a total
     // (catalogue build + enumeration happen before any per-file granularity).
     m_progress->setRange(0, 0);
+  }
+  // The main bar above lives on the Audit page; mirror onto the browser page's
+  // inline bar when the run was launched from there (Kartend-7iqhl.3).
+  if (m_browserAuditPending && m_browserPage != nullptr) {
+    m_browserPage->setAuditRunning(busy);
   }
   const bool canExport = !busy && hasResults();
   // Fix illuminates only when something is actually fixable in place; exports

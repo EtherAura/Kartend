@@ -13,6 +13,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPoint>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -211,6 +212,14 @@ void DatAuditBrowserPage::buildUi() {
   filterRow->addWidget(m_search);
   root->addLayout(filterRow);
 
+  // Inline progress for a browser-initiated re-audit (Kartend-7iqhl.3); hidden
+  // until the dialog reports an audit is running on this page.
+  m_auditProgress = new QProgressBar(this);
+  m_auditProgress->setVisible(false);
+  m_auditProgress->setTextVisible(true);
+  m_auditProgress->setFormat(tr("Re-auditing… %p%"));
+  root->addWidget(m_auditProgress);
+
   connect(m_tree->selectionModel(), &QItemSelectionModel::currentChanged, this,
           &DatAuditBrowserPage::onTreeSelectionChanged);
   connect(m_gameTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
@@ -253,6 +262,24 @@ void DatAuditBrowserPage::refresh() {
 
 void DatAuditBrowserPage::setCollectionNames(const QHash<QString, QString> &byUuid) {
   m_collectionNamesByUuid = byUuid;
+}
+
+void DatAuditBrowserPage::setAuditRunning(bool running) {
+  if (m_auditProgress == nullptr) {
+    return;
+  }
+  if (running) {
+    m_auditProgress->setRange(0, 0); // indeterminate until the first real tick
+  }
+  m_auditProgress->setVisible(running);
+}
+
+void DatAuditBrowserPage::setAuditProgress(int done, int total) {
+  if (m_auditProgress == nullptr || total <= 0) {
+    return;
+  }
+  m_auditProgress->setRange(0, total);
+  m_auditProgress->setValue(done);
 }
 
 void DatAuditBrowserPage::selectProfileNode(qint64 profileId) {
