@@ -3,6 +3,8 @@
 // so the disk read happens once.
 #include "romhasher.h"
 
+#include <algorithm>
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
@@ -661,6 +663,14 @@ hashArchiveMembers(const QString &archivePath,
     }
     members.append(m);
   }
+  // The libarchive backend (above) yields members in true central-directory
+  // order, which becomes the ZipIndex (Kartend-7iqhl.4). This QDirIterator
+  // fallback only runs without libarchive and walks the extracted tree in
+  // filesystem order; sort by member path so the derived index is at least
+  // deterministic run-to-run (it is not the archive's real order).
+  std::sort(members.begin(), members.end(), [](const MemberResult &a, const MemberResult &b) {
+    return a.memberPath < b.memberPath;
+  });
   if (members.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Archive contained no regular files to hash",

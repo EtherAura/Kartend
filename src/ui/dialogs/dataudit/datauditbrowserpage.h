@@ -1,13 +1,22 @@
 #ifndef DATAUDITBROWSERPAGE_H
 #define DATAUDITBROWSERPAGE_H
 
+#include <QHash>
+#include <QList>
 #include <QSet>
+#include <QStringList>
 #include <QWidget>
 
+#include "datauditbrowsermodels.h" // BrowserViewPreset
+
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QModelIndex;
+class QPoint;
+class QProgressBar;
+class QPushButton;
 class QSplitter;
 class QTableView;
 class QTreeView;
@@ -41,10 +50,36 @@ public:
   void persistState() const;
   void restoreState_();
 
+  /// Select the top-level Profile node with this id, if present. The dialog
+  /// calls this after a browser-initiated re-audit (Kartend-7iqhl.2) so the
+  /// just-audited profile stays selected through refresh()'s tree rebuild.
+  void selectProfileNode(qint64 profileId);
+
+  /// Supply the uuid → collection-name map used to resolve a profile's category
+  /// when grouping (Kartend-7iqhl.5). The dialog pushes this before refresh()
+  /// since the page has no collection list of its own.
+  void setCollectionNames(const QHash<QString, QString> &byUuid);
+
+  /// Inline progress for a browser-initiated re-audit (Kartend-7iqhl.3): the
+  /// dialog's main progress bar lives on the Audit page and is invisible here,
+  /// so the dialog drives this one. setAuditRunning shows it (indeterminate) /
+  /// hides it; setAuditProgress makes it determinate as the runner ticks.
+  void setAuditRunning(bool running);
+  void setAuditProgress(int done, int total);
+
+signals:
+  /// The user asked, from the tree's context menu, to re-audit / Fix the
+  /// profile owning the selected node (Kartend-7iqhl.2). Profile-scoped: a
+  /// Source-DAT child reports its parent profile's id. The dialog owns the
+  /// runner + Fix dialog, so it does the work and refreshes this page.
+  void reauditProfileRequested(qint64 profileId);
+  void fixProfileRequested(qint64 profileId);
+
 private slots:
   void onTreeSelectionChanged();
   void onGameSelectionChanged();
   void applyFilters();
+  void onTreeContextMenu(const QPoint &pos);
 
 private:
   void buildUi();
@@ -60,6 +95,16 @@ private:
   // (Kartend-o46gy): horizontal tree|right, vertical gameTable/romTable.
   QSplitter *m_hSplitter = nullptr;
   QSplitter *m_vSplitter = nullptr;
+
+  // Named view presets (Kartend-7iqhl.1): each captures the filter
+  // configuration only (the 5 gates + group-by-folder + search), so recall is
+  // profile-independent.
+  void loadPresets();          ///< pull all slots from QSettings into the combo
+  void recallPreset(int slot); ///< apply the slot's captured view to the controls
+  void saveCurrentToPreset();  ///< overwrite the selected slot with the live view + persist
+  void renameSelectedPreset(); ///< retitle the selected slot via QInputDialog + persist
+  [[nodiscard]] DatAudit::BrowserViewPreset
+  captureView() const; ///< the live filter state as a preset payload
 
   QTreeView *m_tree = nullptr;
   DatAudit::AuditTreeModel *m_treeModel = nullptr;
@@ -88,12 +133,35 @@ private:
   QCheckBox *m_filterEmpty = nullptr;
   QCheckBox *m_filterFixes = nullptr;
   QCheckBox *m_filterMia = nullptr;
+  /// Kartend-m6qsb.30: when checked, the game list regroups the source's audit
+  /// rows by their containing item-folder ("Game A: 2/3 present") instead of by
+  /// DAT game.
+  QCheckBox *m_groupByFolder = nullptr;
+  /// Kartend-7iqhl.5: when checked, the tree gains a Category level
+  /// (Root → Category → Profile → Source); rebuilds the tree on toggle.
+  QCheckBox *m_groupByCategory = nullptr;
   QLineEdit *m_search = nullptr;
+
+  // Preset controls (Kartend-7iqhl.1).
+  QComboBox *m_presetCombo = nullptr;
+  QPushButton *m_presetSave = nullptr;
+  QPushButton *m_presetRename = nullptr;
+  QList<DatAudit::BrowserViewPreset> m_presets;
+
+  // Inline re-audit progress (Kartend-7iqhl.3); hidden unless an audit is
+  // running, driven by the dialog.
+  QProgressBar *m_auditProgress = nullptr;
 
   // The (profileId, sourceName, datPath) the game list is currently showing.
   qint64 m_currentProfileId = -1;
   QString m_currentSourceName;
   QString m_currentDatPath;
+  /// Scan roots per profile id (Kartend-m6qsb.30), cached on refresh() so the
+  /// folder-as-item view can derive each file's item-folder relative to a root.
+  QHash<qint64, QStringList> m_scanRootsByProfile;
+  /// uuid → collection name, pushed by the dialog (Kartend-7iqhl.5), for
+  /// resolving a profile's category when "Group by category" is on.
+  QHash<QString, QString> m_collectionNamesByUuid;
 };
 
 #endif // DATAUDITBROWSERPAGE_H

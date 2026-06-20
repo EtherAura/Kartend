@@ -82,6 +82,7 @@ Profile TestDatAuditProfile::sampleProfile() {
   p.fixMode = FixMode::ManagedOutput;
   p.managedOutputRoot = QStringLiteral("/sorted");
   p.quarantineRoot = QStringLiteral("/quarantine");
+  p.category = QStringLiteral("Retro");
   p.detectedLayout = QStringLiteral("archive_per_item");
   p.layoutConfirmed = true;
   DatRef d1;
@@ -134,6 +135,7 @@ void TestDatAuditProfile::insertAndLoadRoundTrip() {
   QCOMPARE(out.fixMode, in.fixMode);
   QCOMPARE(out.managedOutputRoot, in.managedOutputRoot);
   QCOMPARE(out.quarantineRoot, in.quarantineRoot);
+  QCOMPARE(out.category, in.category);
   QCOMPARE(out.detectedLayout, in.detectedLayout);
   QCOMPARE(out.layoutConfirmed, in.layoutConfirmed);
   QCOMPARE(out.dats.size(), 2);
@@ -320,6 +322,7 @@ void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
   a.status = 0; // Have
   a.filePath = QStringLiteral("/media/clip-one.mkv");
   a.detail = QStringLiteral("Clip One.mkv");
+  a.zipIndex = 4; // archive member index (Kartend-7iqhl.4)
   DatAuditProfile::ResultRow b;
   b.entryKey = QStringLiteral("entry:Clip Two.mkv");
   b.status = 6; // Missing
@@ -331,6 +334,19 @@ void TestDatAuditProfile::replaceResultsWritesAndRewritesSnapshot() {
   q.addBindValue(id);
   QVERIFY(q.exec() && q.next());
   QCOMPARE(q.value(0).toInt(), 2);
+
+  // zip_index round-trips: the member row keeps its index, the entry-only row
+  // keeps the -1 default (Kartend-7iqhl.4).
+  auto loaded = DatAuditProfile::loadProfileResultRows(m_db, id);
+  QVERIFY(loaded.isOk());
+  int zipForA = -99;
+  int zipForB = -99;
+  for (const auto &r : loaded.value()) {
+    if (r.entryKey == a.entryKey) zipForA = r.zipIndex;
+    if (r.entryKey == b.entryKey) zipForB = r.zipIndex;
+  }
+  QCOMPARE(zipForA, 4);
+  QCOMPARE(zipForB, -1);
 
   // A re-run is a full re-statement: the old snapshot must vanish wholesale,
   // not merge with the new rows.
@@ -405,6 +421,29 @@ void TestDatAuditProfile::rollupsGroupBySourceGameAndMia() {
   auto gamesB = DatAuditProfile::loadGameRollups(m_db, id, QStringLiteral("B.dat"));
   QVERIFY(gamesB.isOk());
   QCOMPARE(gamesB.value().size(), 1);
+
+  // Kartend-m6qsb.30: the folder-as-item view loads every row of a source (all
+  // games), to regroup them by item-folder client-side.
+  auto srcA = DatAuditProfile::loadSourceResultRows(m_db, id, QStringLiteral("A.dat"));
+  QVERIFY(srcA.isOk());
+  QCOMPARE(srcA.value().size(), 2);
+  auto srcB = DatAuditProfile::loadSourceResultRows(m_db, id, QStringLiteral("B.dat"));
+  QVERIFY(srcB.isOk());
+  QCOMPARE(srcB.value().size(), 1);
+
+  // Kartend-7iqhl.2: the browser's profile-scoped Fix loads every row across all
+  // sources (2 from A.dat + 1 from B.dat) to reconstruct fixable AuditRows.
+  auto allRows = DatAuditProfile::loadProfileResultRows(m_db, id);
+  QVERIFY(allRows.isOk());
+  QCOMPARE(allRows.value().size(), 3);
+  bool sawA = false;
+  bool sawB = false;
+  for (const auto &r : allRows.value()) {
+    sawA = sawA || r.sourceName == QLatin1String("A.dat");
+    sawB = sawB || r.sourceName == QLatin1String("B.dat");
+  }
+  QVERIFY(sawA);
+  QVERIFY(sawB);
 }
 
 void TestDatAuditProfile::loadResultSummaryCountsByStatus() {

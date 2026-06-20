@@ -33,6 +33,7 @@ class QHideEvent;
 class QModelIndex;
 class QPoint;
 class DatAuditBrowserPage;
+class DatAuditFixDialog;
 struct CollectionConfig;
 
 namespace DatAudit {
@@ -128,6 +129,11 @@ private slots:
   void onImportZip();
   void onImportFolder();
   void onFix();
+  // Browser write-actions (Kartend-7iqhl.2): the read-only browser asks, via its
+  // tree context menu, to re-audit / Fix a profile. The dialog owns the runner +
+  // Fix dialog, so it does the work and refreshes the browser when done.
+  void onBrowserReauditRequested(qint64 profileId);
+  void onBrowserFixRequested(qint64 profileId);
   void onExportCsv();
   void onExportFixdat();
   void onExportMissList();
@@ -199,6 +205,12 @@ private:
   void refreshDownloadButtonEnabled();
 
   void setBusy(bool busy);
+
+  // Fix-flow helpers shared by the Audit page's onFix() and the browser's
+  // profile-scoped Fix (Kartend-7iqhl.2), so the two paths cannot drift.
+  void seedFixDialogDefaults(DatAuditFixDialog &dlg);
+  void offerRescrapeAfterFix(const DatAuditFixDialog &dlg);
+
   // Nav-shell assembly (Kartend-m6qsb.17).
   QWidget *buildAuditPage();
   QWidget *buildLibraryPage();
@@ -233,6 +245,13 @@ private:
   [[nodiscard]] DatAuditProfile::Profile uiProfile() const;
   bool persistProfile(DatAuditProfile::Profile &p); // insert when id<0, else update
   void selectProfileById(qint64 id);
+  /// Load profile @p id from the DB into m_currentProfile and re-sync the Audit
+  /// page lists from it, unconditionally (Kartend-7iqhl.2). Unlike
+  /// selectProfileById — which only nudges the combo and is a no-op when the
+  /// index is unchanged — this guarantees the audit inputs reflect the PERSISTED
+  /// profile, not whatever (possibly unsaved-edited) lists are on screen.
+  /// Returns false when the profile id is not found.
+  bool loadProfileFromDb(qint64 id);
   void updateSummary(const DatAudit::AuditSummary &summary);
   [[nodiscard]] QStringList datPaths() const;
   [[nodiscard]] QStringList scanRoots() const;
@@ -286,6 +305,10 @@ private:
   DatAuditProfile::Profile m_currentProfile;        ///< Settings of the selected/working profile.
   QList<CollectionConfig> *m_collections = nullptr; ///< Borrowed from MainWindow; not owned.
   bool m_running = false;
+  /// Set when the in-flight audit was kicked off from the browser's context menu
+  /// (Kartend-7iqhl.2); onAuditFinished refreshes + re-selects the browser node
+  /// instead of leaving the result only on the (hidden) Audit page.
+  bool m_browserAuditPending = false;
 
   // Nav shell (Kartend-m6qsb.17).
   QSplitter *m_splitter = nullptr;

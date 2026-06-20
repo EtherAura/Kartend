@@ -73,13 +73,14 @@ Profile readProfileRow(const QSqlQuery &q) {
   p.createdAtMs = q.value(12).toLongLong();
   p.updatedAtMs = q.value(13).toLongLong();
   p.quarantineRoot = q.value(14).toString();
+  p.category = q.value(15).toString();
   return p;
 }
 
 constexpr char kSelectColumns[] =
     "id, name, collection_uuid, scan_roots, region_prefs, one_per_game, "
     "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root";
+    "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category";
 
 // Load the ordered DAT child rows for one profile into p.dats.
 bool loadDats(QSqlDatabase &db, Profile &p) {
@@ -166,8 +167,8 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
         "INSERT INTO dat_audit_profile "
         "(name, collection_uuid, scan_roots, region_prefs, one_per_game, "
         "ignore_rules, fix_mode, managed_output_root, detected_layout, layout_confirmed, "
-        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "last_scan_at_unix_ms, created_at_unix_ms, updated_at_unix_ms, quarantine_root, category) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
     q.addBindValue(stringListToJson(p.scanRoots));
@@ -182,6 +183,7 @@ ErrorUtils::Result<qint64> insert(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(now);
     q.addBindValue(now);
     q.addBindValue(nonNull(p.quarantineRoot));
+    q.addBindValue(nonNull(p.category));
     if (!q.exec()) {
       const QString err = q.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert profile",
@@ -226,7 +228,8 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
                        "name = ?, collection_uuid = ?, scan_roots = ?, region_prefs = ?, "
                        "one_per_game = ?, ignore_rules = ?, fix_mode = ?, managed_output_root = ?, "
                        "detected_layout = ?, layout_confirmed = ?, "
-                       "last_scan_at_unix_ms = ?, updated_at_unix_ms = ?, quarantine_root = ? "
+                       "last_scan_at_unix_ms = ?, updated_at_unix_ms = ?, quarantine_root = ?, "
+                       "category = ? "
                        "WHERE id = ?"));
     q.addBindValue(p.name);
     q.addBindValue(nonNull(p.collectionUuid));
@@ -241,6 +244,7 @@ ErrorUtils::Result<bool> update(QSqlDatabase &db, const Profile &p) {
     q.addBindValue(p.lastScanAtMs);
     q.addBindValue(QDateTime::currentMSecsSinceEpoch());
     q.addBindValue(nonNull(p.quarantineRoot));
+    q.addBindValue(nonNull(p.category));
     q.addBindValue(p.id);
     if (!q.exec()) {
       const QString err = q.lastError().text();
@@ -437,8 +441,8 @@ ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList
   QSqlQuery ins(db);
   ins.prepare(QStringLiteral("INSERT OR REPLACE INTO dat_audit_result "
                              "(profile_id, entry_key, status, file_path, detail, "
-                             "source_name, game_name, mia) "
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+                             "source_name, game_name, mia, zip_index) "
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   for (const ResultRow &r : rows) {
     ins.bindValue(0, id);
     ins.bindValue(1, nonNull(r.entryKey));
@@ -448,6 +452,7 @@ ErrorUtils::Result<bool> replaceResults(QSqlDatabase &db, qint64 id, const QList
     ins.bindValue(5, nonNull(r.sourceName));
     ins.bindValue(6, nonNull(r.gameName));
     ins.bindValue(7, r.mia ? 1 : 0);
+    ins.bindValue(8, r.zipIndex);
     if (!ins.exec()) {
       const QString err = ins.lastError().text();
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert result row",
@@ -561,7 +566,7 @@ ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64
   QList<ResultRow> out;
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
-                           "mia FROM dat_audit_result "
+                           "mia, zip_index FROM dat_audit_result "
                            "WHERE profile_id = ? AND source_name = ? AND game_name = ?"));
   q.addBindValue(profileId);
   q.addBindValue(sourceName);
@@ -580,6 +585,70 @@ ErrorUtils::Result<QList<ResultRow>> loadGameResultRows(QSqlDatabase &db, qint64
     r.sourceName = q.value(4).toString();
     r.gameName = q.value(5).toString();
     r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
+    out.append(r);
+  }
+  return out;
+}
+
+ErrorUtils::Result<QList<ResultRow>> loadSourceResultRows(QSqlDatabase &db, qint64 profileId,
+                                                          const QString &sourceName) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadSourceResultRows");
+  }
+  QList<ResultRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
+                           "mia, zip_index FROM dat_audit_result "
+                           "WHERE profile_id = ? AND source_name = ?"));
+  q.addBindValue(profileId);
+  q.addBindValue(sourceName);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load source result rows",
+                               "DatAuditProfile::loadSourceResultRows")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    ResultRow r;
+    r.entryKey = q.value(0).toString();
+    r.status = q.value(1).toInt();
+    r.filePath = q.value(2).toString();
+    r.detail = q.value(3).toString();
+    r.sourceName = q.value(4).toString();
+    r.gameName = q.value(5).toString();
+    r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
+    out.append(r);
+  }
+  return out;
+}
+
+ErrorUtils::Result<QList<ResultRow>> loadProfileResultRows(QSqlDatabase &db, qint64 profileId) {
+  if (!db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "DatAuditProfile::loadProfileResultRows");
+  }
+  QList<ResultRow> out;
+  QSqlQuery q(db);
+  q.prepare(QStringLiteral("SELECT entry_key, status, file_path, detail, source_name, game_name, "
+                           "mia, zip_index FROM dat_audit_result WHERE profile_id = ?"));
+  q.addBindValue(profileId);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load profile result rows",
+                               "DatAuditProfile::loadProfileResultRows")
+        .withDetails(q.lastError().text());
+  }
+  while (q.next()) {
+    ResultRow r;
+    r.entryKey = q.value(0).toString();
+    r.status = q.value(1).toInt();
+    r.filePath = q.value(2).toString();
+    r.detail = q.value(3).toString();
+    r.sourceName = q.value(4).toString();
+    r.gameName = q.value(5).toString();
+    r.mia = q.value(6).toInt() != 0;
+    r.zipIndex = q.value(7).toInt();
     out.append(r);
   }
   return out;

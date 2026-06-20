@@ -116,7 +116,7 @@ std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db, const QString 
   }
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT member_path, container_size, container_mtime_unix_ms, "
-                           "crc, md5, sha1, member_size "
+                           "crc, md5, sha1, member_size, zip_index "
                            "FROM archive_member_hash_cache WHERE container_path = ? "
                            "ORDER BY member_path"));
   q.addBindValue(containerPath);
@@ -136,6 +136,7 @@ std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db, const QString 
     m.md5 = q.value(4).toString();
     m.sha1 = q.value(5).toString();
     m.size = q.value(6).toLongLong();
+    m.zipIndex = q.value(7).toInt();
     members.append(m);
   }
   if (members.isEmpty()) {
@@ -170,10 +171,11 @@ ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &container
     }
   }
   QSqlQuery ins(db);
-  ins.prepare(QStringLiteral(
-      "INSERT OR REPLACE INTO archive_member_hash_cache "
-      "(container_path, member_path, container_size, container_mtime_unix_ms, "
-      "crc, md5, sha1, member_size, computed_at_unix_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+  ins.prepare(
+      QStringLiteral("INSERT OR REPLACE INTO archive_member_hash_cache "
+                     "(container_path, member_path, container_size, container_mtime_unix_ms, "
+                     "crc, md5, sha1, member_size, computed_at_unix_ms, zip_index) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   for (const MemberEntry &m : members) {
     ins.bindValue(0, containerPath);
@@ -185,6 +187,7 @@ ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &container
     ins.bindValue(6, m.sha1.isEmpty() ? QVariant() : QVariant(m.sha1));
     ins.bindValue(7, m.size);
     ins.bindValue(8, now);
+    ins.bindValue(9, m.zipIndex);
     if (!ins.exec()) {
       return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to store member hash",
                                  "FileHashCache::storeMembers")

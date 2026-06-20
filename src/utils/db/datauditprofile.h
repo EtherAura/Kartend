@@ -67,6 +67,10 @@ struct Profile {
   /// files). Empty falls back to the global default quarantine folder. Remembered
   /// here so each collection can keep its own without re-typing per run.
   QString quarantineRoot;
+  /// Optional grouping label for the audit browser's category tree level
+  /// (Kartend-7iqhl.5, schema v25). Empty falls back to the linked collection's
+  /// name, then to "(Ungrouped)". User-editable in the profile dialog.
+  QString category;
   /// Folder-structure probe result (Kartend-m6qsb.6). A DatAudit::layoutToken
   /// value ('' = never detected) — kept as the raw token here because this
   /// header sits below the dataudit module that owns the enum. Only a
@@ -130,6 +134,11 @@ struct ResultRow {
   QString sourceName;
   QString gameName;
   bool mia = false;
+  /// Archive members only (Kartend-7iqhl.4, schema v24): the member's index
+  /// among its container's regular-file members, in central-directory order, for
+  /// the browser's ZipIndex column. -1 for whole-file rows and pre-v24 snapshots
+  /// (until the profile is re-audited).
+  int zipIndex = -1;
 };
 
 /// Replace profile `id`'s entire result snapshot with `rows`, in one
@@ -194,6 +203,18 @@ loadGameRollups(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
                                                                       qint64 profileId,
                                                                       const QString &sourceName,
                                                                       const QString &gameName);
+
+/// All persisted result rows for one source (every game), for the audit
+/// browser's folder-as-item view (Kartend-m6qsb.30) which regroups them by the
+/// containing item-folder. Empty when the source has no rows.
+[[nodiscard]] ErrorUtils::Result<QList<ResultRow>>
+loadSourceResultRows(QSqlDatabase &db, qint64 profileId, const QString &sourceName);
+
+/// Every persisted result row for a profile, across all of its sources, for the
+/// browser's profile-scoped Fix action (Kartend-7iqhl.2) which reconstructs
+/// AuditRows from this snapshot. Empty when the profile has never been audited.
+[[nodiscard]] ErrorUtils::Result<QList<ResultRow>> loadProfileResultRows(QSqlDatabase &db,
+                                                                         qint64 profileId);
 
 /// Enum <-> column-text mapping. Exposed for the config UI and tests; an
 /// unknown string falls back to the safe default (InPlace).

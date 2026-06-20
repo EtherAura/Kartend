@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
@@ -41,6 +42,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "databaseschema.h"
+#include "datauditbrowsermodels.h" // DatAudit::auditRowsFromResults
 #include "datauditbrowserpage.h"
 #include "datauditexport.h"
 #include "datauditfixdialog.h"
@@ -214,6 +216,12 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   m_pages->addWidget(buildDownloadPage()); // index 2
   m_browserPage = new DatAuditBrowserPage(this);
   m_pages->addWidget(m_browserPage); // index 3
+  // Browser write-actions (Kartend-7iqhl.2): the page emits, the dialog (which
+  // owns the runner + Fix dialog) does the work and refreshes the page.
+  connect(m_browserPage, &DatAuditBrowserPage::reauditProfileRequested, this,
+          &DatAuditDialog::onBrowserReauditRequested);
+  connect(m_browserPage, &DatAuditBrowserPage::fixProfileRequested, this,
+          &DatAuditDialog::onBrowserFixRequested);
 
   splitter->addWidget(m_nav);
   splitter->addWidget(rightWrap);
@@ -570,6 +578,16 @@ void DatAuditDialog::onNavRowChanged() {
   // The browser reads persisted results on demand — refresh it each time it is
   // shown so a just-completed audit is reflected without reopening the window.
   if (page == 3 && m_browserPage != nullptr) {
+    // Resolve uuid → collection name so the browser can group profiles under
+    // their linked collection when category grouping is on (Kartend-7iqhl.5).
+    QHash<QString, QString> names;
+    if (m_collections != nullptr) {
+      for (const CollectionConfig &c : *m_collections) {
+        const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+        names.insert(CollectionUtils::computeCollectionUuid(c.name, expanded), c.name);
+      }
+    }
+    m_browserPage->setCollectionNames(names);
     m_browserPage->refresh();
   }
 }
@@ -703,15 +721,24 @@ void DatAuditDialog::onProfileSelected(int index) {
     updateLinkedUiState();
     return;
   }
-  withProfileDb([this, id](QSqlDatabase &db) {
-    auto loaded = DatAuditProfile::load(db, id);
-    if (loaded.isOk() && loaded.value().has_value()) {
-      m_currentProfile = *loaded.value();
+  loadProfileFromDb(id);
+  updateLinkedUiState();
+}
+
+bool DatAuditDialog::loadProfileFromDb(qint64 id) {
+  bool loaded = false;
+  withProfileDb([this, id, &loaded](QSqlDatabase &db) {
+    auto res = DatAuditProfile::load(db, id);
+    if (res.isOk() && res.value().has_value()) {
+      m_currentProfile = *res.value();
       applyCollectionDerivation();
       syncUiFromProfile();
+      loaded = true;
+    } else if (res.isError()) {
+      ErrorUtils::logError(res.error());
     }
   });
-  updateLinkedUiState();
+  return loaded;
 }
 
 void DatAuditDialog::applyCollectionDerivation() {
@@ -1196,6 +1223,11 @@ void DatAuditDialog::onRun() {
             m_progress->setRange(0, p.filesTotal);
             m_progress->setValue(p.filesDone);
           }
+          // Drive the browser's inline bar for a browser-initiated re-audit
+          // (Kartend-7iqhl.3); no-op (total<=0 / not pending) otherwise.
+          if (m_browserAuditPending && m_browserPage != nullptr) {
+            m_browserPage->setAuditProgress(p.filesDone, p.filesTotal);
+          }
         },
         Qt::QueuedConnection);
   };
@@ -1283,6 +1315,7 @@ void DatAuditDialog::onAuditFinished() {
       row.sourceName = r.sourceName;
       row.gameName = r.gameName;
       row.mia = r.mia;
+      row.zipIndex = r.zipIndex; // archive member index for the ZipIndex column
       rows.append(row);
     }
     const qint64 profileId = m_currentProfile.id;
@@ -1309,6 +1342,18 @@ void DatAuditDialog::onAuditFinished() {
   }
   m_running = false;
   setBusy(false);
+
+  // A browser-initiated re-audit (Kartend-7iqhl.2) updated this profile's
+  // snapshot while the user is on the Browser page; rebuild its tree and keep
+  // the just-audited profile selected. Cleared even on cancel so the flag never
+  // leaks into the next (Audit-page) run.
+  if (m_browserAuditPending) {
+    m_browserAuditPending = false;
+    if (m_browserPage != nullptr) {
+      m_browserPage->refresh();
+      m_browserPage->selectProfileNode(m_currentProfile.id);
+    }
+  }
 }
 
 void DatAuditDialog::onFilterChanged(int index) {
@@ -1405,6 +1450,11 @@ void DatAuditDialog::setBusy(bool busy) {
     // (catalogue build + enumeration happen before any per-file granularity).
     m_progress->setRange(0, 0);
   }
+  // The main bar above lives on the Audit page; mirror onto the browser page's
+  // inline bar when the run was launched from there (Kartend-7iqhl.3).
+  if (m_browserAuditPending && m_browserPage != nullptr) {
+    m_browserPage->setAuditRunning(busy);
+  }
   const bool canExport = !busy && hasResults();
   // Fix illuminates only when something is actually fixable in place; exports
   // (CSV / fixdat / miss-list) stay available for any result set.
@@ -1414,11 +1464,7 @@ void DatAuditDialog::setBusy(bool busy) {
   m_exportMissButton->setEnabled(canExport);
 }
 
-void DatAuditDialog::onFix() {
-  if (!hasResults()) {
-    return;
-  }
-  DatAuditFixDialog dlg(m_model->allRows(), this);
+void DatAuditDialog::seedFixDialogDefaults(DatAuditFixDialog &dlg) {
   // Seed the managed-output option from the profile's persisted fix mode + root
   // (Kartend-m6qsb.14) instead of always starting blank.
   dlg.setManagedOutputDefaults(m_currentProfile.fixMode == DatAuditProfile::FixMode::ManagedOutput,
@@ -1430,12 +1476,9 @@ void DatAuditDialog::onFix() {
     quarantineSeed = m_getQuarantineDefaultDir().trimmed();
   }
   dlg.setQuarantineDefault(quarantineSeed);
-  dlg.exec();
-  if (!dlg.didApply()) {
-    return;
-  }
-  onRun(); // re-audit so the table reflects the renamed/moved files
+}
 
+void DatAuditDialog::offerRescrapeAfterFix(const DatAuditFixDialog &dlg) {
   // After renames, the files carry their canonical names — the form
   // ScreenScraper matches best — so offer to re-scrape the linked collection
   // (Kartend-m6qsb.27). Only when collection-linked and a scraper hook exists.
@@ -1450,6 +1493,100 @@ void DatAuditDialog::onFix() {
       m_openScraperForCollection(m_currentProfile.collectionUuid);
     }
   }
+}
+
+void DatAuditDialog::onFix() {
+  if (!hasResults()) {
+    return;
+  }
+  DatAuditFixDialog dlg(m_model->allRows(), this);
+  seedFixDialogDefaults(dlg);
+  dlg.exec();
+  if (!dlg.didApply()) {
+    return;
+  }
+  onRun(); // re-audit so the table reflects the renamed/moved files
+  offerRescrapeAfterFix(dlg);
+}
+
+void DatAuditDialog::onBrowserReauditRequested(qint64 profileId) {
+  if (m_running) {
+    QMessageBox::information(this, tr("DAT Audit"),
+                             tr("An audit is already running — wait for it to finish."));
+    return;
+  }
+  // Load the PERSISTED profile into the (hidden) Audit page so onRun() audits it
+  // with the profile's own saved DATs / roots / region / ignore / layout — never
+  // whatever unsaved edits happen to be on the Audit page's list widgets. A bare
+  // selectProfileById() would no-op when the combo already sits on this profile,
+  // leaving onRun() to read those live lists and overwrite the snapshot with
+  // them (Kartend-7iqhl.2 review).
+  if (!loadProfileFromDb(profileId)) {
+    QMessageBox::information(this, tr("DAT Audit"), tr("Couldn't load that profile."));
+    return;
+  }
+  selectProfileById(profileId); // keep the combo display in sync (no-op-safe)
+  if (scanRoots().isEmpty() || datPaths().isEmpty()) {
+    QMessageBox::information(this, tr("DAT Audit"),
+                             tr("This profile has no folders or DAT files to audit."));
+    return;
+  }
+  m_browserAuditPending = true; // onAuditFinished refreshes + re-selects the node
+  onRun();
+}
+
+void DatAuditDialog::onBrowserFixRequested(qint64 profileId) {
+  if (m_running) {
+    QMessageBox::information(this, tr("DAT Audit"),
+                             tr("An audit is already running — wait for it to finish."));
+    return;
+  }
+  // Load the persisted profile so the Fix dialog gets this profile's
+  // managed-output / quarantine defaults, and the post-apply re-audit runs
+  // against the profile's saved DATs/roots (not unsaved on-screen edits).
+  if (!loadProfileFromDb(profileId)) {
+    QMessageBox::information(this, tr("DAT Audit"), tr("Couldn't load that profile."));
+    return;
+  }
+  selectProfileById(profileId); // keep the combo display in sync (no-op-safe)
+
+  // Fix from the persisted snapshot (Kartend-7iqhl.2): reconstruct AuditRows
+  // from the stored result rows rather than running a fresh audit first.
+  QList<DatAuditProfile::ResultRow> rows;
+  bool readOk = false;
+  withProfileDb([profileId, &rows, &readOk](QSqlDatabase &db) {
+    if (auto r = DatAuditProfile::loadProfileResultRows(db, profileId); r.isOk()) {
+      rows = r.value();
+      readOk = true;
+    } else {
+      ErrorUtils::logError(r.error());
+    }
+  });
+  const QList<DatAudit::AuditRow> auditRows = DatAudit::auditRowsFromResults(rows);
+  if (auditRows.isEmpty()) {
+    // Distinguish a genuinely empty (never-audited) profile from a failed read,
+    // so a DB error isn't reported as "nothing to fix".
+    QMessageBox::information(this, tr("DAT Audit"),
+                             readOk ? tr("This profile has no audited results to fix yet.")
+                                    : tr("Couldn't read this profile's audit results."));
+    return;
+  }
+
+  DatAuditFixDialog dlg(auditRows, this);
+  seedFixDialogDefaults(dlg);
+  dlg.exec();
+  if (!dlg.didApply()) {
+    return;
+  }
+  // Re-audit the profile so the browser reflects the renamed/moved files.
+  if (!scanRoots().isEmpty() && !datPaths().isEmpty()) {
+    m_browserAuditPending = true;
+    onRun();
+  } else if (m_browserPage != nullptr) {
+    m_browserPage->refresh(); // can't re-audit; at least re-read the snapshot
+    m_browserPage->selectProfileNode(profileId);
+  }
+  offerRescrapeAfterFix(dlg);
 }
 
 void DatAuditDialog::setScraperOpener(std::function<void(const QString &)> opener) {

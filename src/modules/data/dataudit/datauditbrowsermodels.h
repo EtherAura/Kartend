@@ -3,13 +3,17 @@
 
 #include <QAbstractItemModel>
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QList>
 #include <QSortFilterProxyModel>
 #include <QString>
 
 #include "datauditbuckets.h"
 #include "datauditprofile.h"
+#include "dataudittypes.h" // AuditRow
 #include "datlookup.h"
+
+class QSettings;
 
 /// Models backing the RomVault-style DAT-audit browser (Kartend-34lab).
 ///
@@ -20,13 +24,85 @@
 /// of the tree.
 namespace DatAudit {
 
-/// Left-pane tree: Root → Profile → Source DAT (Source children only when a
-/// profile contributed more than one DAT). Each node exposes rolled-up bucket
-/// counts; games/roms are NOT in the tree.
+/// Per-item-folder rollup for SubfolderPerItem presentation (Kartend-m6qsb.30):
+/// one entry per containing item-folder, with the bucket counts of the audit
+/// rows that fall in it.
+struct FolderRollup {
+  QString folder;
+  BucketCounts counts;
+  QList<DatAuditProfile::ResultRow> rows; ///< rows in this folder, for the rom-detail drill-down
+};
+
+/// Group persisted audit-result rows by their containing item-folder so the
+/// browser can present "Game A: 2/3 present" as one unit (Kartend-m6qsb.30). A
+/// row with a file is keyed by the first path component of its filePath relative
+/// to whichever scan root contains it (the item-folder); a Missing row (no file)
+/// is keyed by its gameName, which equals the folder name in a SubfolderPerItem
+/// layout, so absent ROMs count toward the folder's total. Folders surface in
+/// first-seen order.
+[[nodiscard]] QList<FolderRollup>
+groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
+                     const QStringList &scanRoots);
+
+/// Reconstruct fix-engine AuditRows from a profile's persisted audit snapshot
+/// (Kartend-7iqhl.2), so the read-only browser can open the Fix dialog without
+/// first running a fresh audit. computeFixPlan() only consults status /
+/// filePath / expectedName / gameName / actualName — all recoverable from a
+/// ResultRow (detail carries the DAT romName == expectedName; actualName is the
+/// filePath basename) — so the hash/size fields the snapshot drops do not
+/// matter. Even archive repack reconstructs faithfully: member rows persist
+/// their virtual "container/member" path + expected name, which is all
+/// planArchiveContainer needs. The only limitation is that the snapshot may
+/// predate on-disk changes — a staleness caveat shared by every fix kind and
+/// guarded by the Fix dialog's preview-before-apply.
+[[nodiscard]] QList<AuditRow>
+auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &results);
+
+/// A saved browser view (Kartend-7iqhl.1): the read-only browser's filter
+/// configuration only — the five completeness gates, the group-by-folder
+/// toggle, and the game-search text. Deliberately profile-independent (no tree
+/// node / DAT path), so recalling a preset just reconfigures the view and never
+/// dangles on a profile that has since been deleted. Four named slots persist
+/// via QSettings.
+struct BrowserViewPreset {
+  QString name;
+  bool complete = true;       ///< show Complete games
+  bool partial = true;        ///< show Partial games
+  bool empty = true;          ///< show Empty games
+  bool fixes = false;         ///< require: only games with fixes
+  bool mia = false;           ///< require: only games with MIA
+  bool groupByFolder = false; ///< folder-as-item game grouping (Kartend-m6qsb.30)
+  QString search;             ///< game-name filter text
+};
+
+/// Number of preset slots (RomVault uses four).
+inline constexpr int kBrowserPresetCount = 4;
+
+/// Load all `kBrowserPresetCount` presets from `settings`. The helper manages
+/// its own "DatAuditBrowserPresets" group, so callers pass the shared
+/// QSettings("kartend","ui-state") (or, in tests, a temp IniFormat instance).
+/// A slot that was never saved comes back with the page's default filters and
+/// the name "Preset N".
+[[nodiscard]] QList<BrowserViewPreset> loadBrowserPresets(QSettings &settings);
+
+/// Persist one preset `slot` (0-based, < kBrowserPresetCount) into `settings`
+/// under the "DatAuditBrowserPresets" group. Out-of-range slots are ignored.
+void saveBrowserPreset(QSettings &settings, int slot, const BrowserViewPreset &preset);
+
+/// The category-grouping label for a profile (Kartend-7iqhl.5): its manual
+/// `category` when set, else the linked collection's display name (looked up in
+/// `collectionNamesByUuid`), else "(Ungrouped)". Pure + precedence-tested.
+[[nodiscard]] QString categoryLabelFor(const DatAuditProfile::Profile &profile,
+                                       const QHash<QString, QString> &collectionNamesByUuid);
+
+/// Left-pane tree: Root → [Category →] Profile → Source DAT (Category level only
+/// when grouping is on; Source children only when a profile contributed more
+/// than one DAT). Each node exposes rolled-up bucket counts; games/roms are NOT
+/// in the tree.
 class AuditTreeModel : public QAbstractItemModel {
   Q_OBJECT
 public:
-  enum class NodeKind { Profile, Source };
+  enum class NodeKind { Profile, Source, Category };
 
   enum Roles {
     KindRole = Qt::UserRole + 1, ///< int(NodeKind)
@@ -42,8 +118,12 @@ public:
   /// Rebuild the whole tree from the profile list (names + dats) and every
   /// profile's per-(source,status,mia) rollup rows (one DB read each). Named
   /// setTree (not setData) so it does not shadow QAbstractItemModel::setData.
+  /// With `groupByCategory`, profiles nest under a Category level resolved via
+  /// categoryLabelFor (using `collectionNamesByUuid`); categories surface in
+  /// first-seen order with their member profiles' counts rolled up.
   void setTree(const QList<DatAuditProfile::Profile> &profiles,
-               const QList<DatAuditProfile::RollupRow> &rollups);
+               const QList<DatAuditProfile::RollupRow> &rollups, bool groupByCategory = false,
+               const QHash<QString, QString> &collectionNamesByUuid = {});
 
   /// Profile id / source name / DAT path for an index (for lazy game loading).
   [[nodiscard]] qint64 profileIdAt(const QModelIndex &index) const;
@@ -97,6 +177,10 @@ public:
 
   /// Replace the rows from a source's game rollups (one row per distinct game).
   void setGames(const QList<DatAuditProfile::GameRollupRow> &rollups);
+  /// Re-display the table grouped by item-folder instead of by game
+  /// (Kartend-m6qsb.30): each FolderRollup is one row, its folder name shown in
+  /// the game column with the folder's rolled-up completeness.
+  void setFolders(const QList<FolderRollup> &folders);
   void clear();
 
   [[nodiscard]] QString gameNameAt(int row) const;
@@ -157,6 +241,7 @@ public:
     Sha1Column,
     Md5Column,
     MiaColumn,
+    ZipIndexColumn, ///< archive member's central-directory index (Kartend-7iqhl.4)
     InstanceColumn,
     ColumnCount,
   };
@@ -185,6 +270,7 @@ private:
     Status status = Status::Missing;
     QString filePath;
     int instanceCount = 0;
+    int zipIndex = -1; ///< archive member index, -1 when not an archive member
   };
   QList<RomRow> m_rows;
 };

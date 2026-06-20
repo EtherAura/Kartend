@@ -165,6 +165,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     row.crc = f.crc;
     row.md5 = f.md5;
     row.sha1 = f.sha1;
+    row.zipIndex = f.zipIndex; // archive member index, -1 for whole-file rows
 
     if (!f.readOk) {
       row.status = Status::Corrupt;
@@ -352,6 +353,10 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
             sf.sha1 = m.sha1;
             sf.size = m.size;
             sf.readOk = m.size >= 0;
+            // Take the index from the cache, not the loop position —
+            // lookupMembers sorts by member_path, not archive order
+            // (Kartend-7iqhl.4).
+            sf.zipIndex = m.zipIndex;
             results.append(sf);
           }
           ++done;
@@ -442,8 +447,10 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
         results.append(sf);
       } else {
         QList<FileHashCache::MemberEntry> entries;
-        entries.reserve(members.value().size());
-        for (const RomHasher::MemberResult &m : members.value()) {
+        const QList<RomHasher::MemberResult> &mems = members.value();
+        entries.reserve(mems.size());
+        for (int mi = 0; mi < mems.size(); ++mi) {
+          const RomHasher::MemberResult &m = mems.at(mi);
           ScannedFile sf;
           sf.path = a.path + QLatin1Char('/') + m.memberPath;
           sf.crc = m.hashes.crc;
@@ -451,6 +458,11 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
           sf.sha1 = m.hashes.sha1;
           sf.size = m.hashes.size;
           sf.readOk = m.hashes.size >= 0;
+          // The member list is the regular-file members in central-directory
+          // order (libarchive backend), so its position IS the ZipIndex
+          // (Kartend-7iqhl.4); persist it in the cache so a later hit recovers
+          // it despite lookupMembers' path sort.
+          sf.zipIndex = mi;
           results.append(sf);
           FileHashCache::MemberEntry e;
           e.memberPath = m.memberPath;
@@ -458,6 +470,7 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
           e.md5 = m.hashes.md5;
           e.sha1 = m.hashes.sha1;
           e.size = m.hashes.size;
+          e.zipIndex = mi;
           entries.append(e);
         }
         if (cacheDb != nullptr) {

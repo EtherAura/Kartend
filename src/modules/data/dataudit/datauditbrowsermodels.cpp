@@ -1,20 +1,166 @@
 #include "datauditbrowsermodels.h"
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QIcon>
+#include <QSettings>
 #include <QStringList>
 
 #include "datauditmodel.h" // DatAuditModel::statusLabel
 
 namespace DatAudit {
 
+namespace {
+/// The item-folder a scanned file belongs to: the first path component of its
+/// path relative to whichever scan root contains it. A file directly in a root
+/// (no subfolder) — or under no root at all — keys under its own basename
+/// (Kartend-m6qsb.30).
+QString itemFolderFor(const QString &filePath, const QStringList &scanRoots) {
+  const QString fileClean = QDir::cleanPath(filePath);
+  for (const QString &root : scanRoots) {
+    const QString rootClean = QDir::cleanPath(root);
+    if (rootClean.isEmpty()) {
+      continue;
+    }
+    const QString prefix = rootClean + QLatin1Char('/');
+    if (fileClean.startsWith(prefix)) {
+      const QString rel = fileClean.mid(prefix.size());
+      const int slash = rel.indexOf(QLatin1Char('/'));
+      return slash >= 0 ? rel.left(slash) : rel;
+    }
+  }
+  return QFileInfo(fileClean).fileName();
+}
+} // namespace
+
+QList<FolderRollup> groupResultsByFolder(const QList<DatAuditProfile::ResultRow> &results,
+                                         const QStringList &scanRoots) {
+  QList<FolderRollup> out;
+  QHash<QString, int> indexByFolder; // folder -> index into out, for first-seen order
+  for (const DatAuditProfile::ResultRow &r : results) {
+    // A Missing row carries no on-disk file; key it by its game so absent ROMs
+    // still count toward the folder (folder == game name in SubfolderPerItem).
+    const QString folder = r.filePath.isEmpty() ? r.gameName : itemFolderFor(r.filePath, scanRoots);
+    if (folder.isEmpty()) {
+      continue;
+    }
+    int i = indexByFolder.value(folder, -1);
+    if (i < 0) {
+      i = static_cast<int>(out.size());
+      indexByFolder.insert(folder, i);
+      out.append(FolderRollup{folder, BucketCounts{}, {}});
+    }
+    out[i].counts.add(static_cast<Status>(r.status), r.mia, 1);
+    out[i].rows.append(r);
+  }
+  return out;
+}
+
+QList<AuditRow> auditRowsFromResults(const QList<DatAuditProfile::ResultRow> &results) {
+  QList<AuditRow> rows;
+  rows.reserve(results.size());
+  for (const DatAuditProfile::ResultRow &r : results) {
+    AuditRow ar;
+    ar.status = static_cast<Status>(r.status);
+    ar.gameName = r.gameName;
+    ar.expectedName = r.detail; // detail persists the DAT romName (== expectedName)
+    ar.filePath = r.filePath;
+    ar.actualName = r.filePath.isEmpty() ? QString() : QFileInfo(r.filePath).fileName();
+    ar.sourceName = r.sourceName;
+    ar.mia = r.mia;
+    ar.zipIndex = r.zipIndex; // carried for completeness; the fix engine ignores it
+    // size / crc / md5 / sha1 stay unset — computeFixPlan() does not read them.
+    rows.append(ar);
+  }
+  return rows;
+}
+
+namespace {
+constexpr auto kPresetsGroup = "DatAuditBrowserPresets";
+} // namespace
+
+QList<BrowserViewPreset> loadBrowserPresets(QSettings &settings) {
+  QList<BrowserViewPreset> presets;
+  presets.reserve(kBrowserPresetCount);
+  settings.beginGroup(QString::fromLatin1(kPresetsGroup));
+  for (int slot = 0; slot < kBrowserPresetCount; ++slot) {
+    settings.beginGroup(QString::number(slot));
+    BrowserViewPreset p;
+    // Read against a default-constructed preset so unsaved slots inherit the
+    // page's default filters; only the name gets a slot-specific default.
+    const BrowserViewPreset d;
+    p.name = settings.value(QStringLiteral("name"), QStringLiteral("Preset %1").arg(slot + 1))
+                 .toString();
+    p.complete = settings.value(QStringLiteral("complete"), d.complete).toBool();
+    p.partial = settings.value(QStringLiteral("partial"), d.partial).toBool();
+    p.empty = settings.value(QStringLiteral("empty"), d.empty).toBool();
+    p.fixes = settings.value(QStringLiteral("fixes"), d.fixes).toBool();
+    p.mia = settings.value(QStringLiteral("mia"), d.mia).toBool();
+    p.groupByFolder = settings.value(QStringLiteral("groupByFolder"), d.groupByFolder).toBool();
+    p.search = settings.value(QStringLiteral("search"), d.search).toString();
+    settings.endGroup();
+    presets.append(p);
+  }
+  settings.endGroup();
+  return presets;
+}
+
+void saveBrowserPreset(QSettings &settings, int slot, const BrowserViewPreset &preset) {
+  if (slot < 0 || slot >= kBrowserPresetCount) {
+    return;
+  }
+  settings.beginGroup(QString::fromLatin1(kPresetsGroup));
+  settings.beginGroup(QString::number(slot));
+  settings.setValue(QStringLiteral("name"), preset.name);
+  settings.setValue(QStringLiteral("complete"), preset.complete);
+  settings.setValue(QStringLiteral("partial"), preset.partial);
+  settings.setValue(QStringLiteral("empty"), preset.empty);
+  settings.setValue(QStringLiteral("fixes"), preset.fixes);
+  settings.setValue(QStringLiteral("mia"), preset.mia);
+  settings.setValue(QStringLiteral("groupByFolder"), preset.groupByFolder);
+  settings.setValue(QStringLiteral("search"), preset.search);
+  settings.endGroup();
+  settings.endGroup();
+}
+
+void GameListModel::setFolders(const QList<FolderRollup> &folders) {
+  beginResetModel();
+  m_rows.clear();
+  m_rows.reserve(folders.size());
+  for (const FolderRollup &f : folders) {
+    GameRow g;
+    g.gameName = f.folder; // the folder reads as the row's "game"
+    g.counts = f.counts;
+    g.state = gameStateOf(g.counts);
+    g.hasFixes = g.counts.fixable > 0;
+    g.hasMia = g.counts.mia > 0;
+    m_rows.append(g);
+  }
+  endResetModel();
+}
+
 // ── AuditTreeModel ─────────────────────────────────────────────────────────
 
 AuditTreeModel::AuditTreeModel(QObject *parent) : QAbstractItemModel(parent) {}
 
+QString categoryLabelFor(const DatAuditProfile::Profile &profile,
+                         const QHash<QString, QString> &collectionNamesByUuid) {
+  if (const QString manual = profile.category.trimmed(); !manual.isEmpty()) {
+    return manual;
+  }
+  if (!profile.collectionUuid.isEmpty()) {
+    if (const QString name = collectionNamesByUuid.value(profile.collectionUuid); !name.isEmpty()) {
+      return name;
+    }
+  }
+  return QCoreApplication::translate("DatAudit", "(Ungrouped)");
+}
+
 void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
-                             const QList<DatAuditProfile::RollupRow> &rollups) {
+                             const QList<DatAuditProfile::RollupRow> &rollups, bool groupByCategory,
+                             const QHash<QString, QString> &collectionNamesByUuid) {
   beginResetModel();
   m_nodes.clear();
   m_nodes.append(Node{}); // index 0 — synthetic root
@@ -24,15 +170,36 @@ void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
     byProfile[r.profileId].append(r);
   }
 
+  // Category nodes (Kartend-7iqhl.5) when grouping: label → m_nodes index, in
+  // first-seen order. Profiles then nest under their category instead of root.
+  QHash<QString, int> categoryIdxByLabel;
+
   for (const DatAuditProfile::Profile &p : profiles) {
+    int parentIdx = 0; // synthetic root, unless grouped under a category
+    if (groupByCategory) {
+      const QString label = categoryLabelFor(p, collectionNamesByUuid);
+      int catIdx = categoryIdxByLabel.value(label, -1);
+      if (catIdx < 0) {
+        Node cat;
+        cat.kind = NodeKind::Category;
+        cat.parent = 0;
+        cat.label = label;
+        catIdx = static_cast<int>(m_nodes.size());
+        m_nodes.append(cat);
+        m_nodes[0].children.append(catIdx);
+        categoryIdxByLabel.insert(label, catIdx);
+      }
+      parentIdx = catIdx;
+    }
+
     Node prof;
     prof.kind = NodeKind::Profile;
-    prof.parent = 0;
+    prof.parent = parentIdx;
     prof.profileId = p.id;
     prof.label = p.name;
-    const int profIdx = m_nodes.size();
+    const int profIdx = static_cast<int>(m_nodes.size());
     m_nodes.append(prof);
-    m_nodes[0].children.append(profIdx);
+    m_nodes[parentIdx].children.append(profIdx);
 
     const QList<DatAuditProfile::RollupRow> &rows = byProfile.value(p.id);
 
@@ -78,6 +245,9 @@ void AuditTreeModel::setTree(const QList<DatAuditProfile::Profile> &profiles,
       }
     }
     m_nodes[profIdx].counts = profCounts;
+    if (groupByCategory) {
+      m_nodes[parentIdx].counts.add(profCounts); // roll the profile up to its category
+    }
   }
   endResetModel();
 }
@@ -173,8 +343,19 @@ QVariant AuditTreeModel::data(const QModelIndex &index, int role) const {
   case CountsRole:
     return QVariant::fromValue(n->counts);
   case Qt::DecorationRole:
-    return QIcon::fromTheme(n->kind == NodeKind::Source ? QStringLiteral("application-x-archive")
-                                                        : QStringLiteral("folder"));
+    switch (n->kind) {
+    case NodeKind::Source:
+      return QIcon::fromTheme(QStringLiteral("application-x-archive"));
+    case NodeKind::Category:
+      // Distinct from the plain Profile folder so the grouping level reads
+      // differently (Kartend-7iqhl.5); falls back to a folder if the theme
+      // lacks the tagged variant.
+      return QIcon::fromTheme(QStringLiteral("folder-tag"),
+                              QIcon::fromTheme(QStringLiteral("folder")));
+    case NodeKind::Profile:
+      break;
+    }
+    return QIcon::fromTheme(QStringLiteral("folder"));
   default:
     return {};
   }
@@ -365,6 +546,7 @@ void RomFileModel::setGame(const QList<DatLookup::DatRecord> &records,
     if (auto it = statusByName.constFind(rec.romName); it != statusByName.constEnd()) {
       row.status = static_cast<Status>(it.value()->status);
       row.filePath = it.value()->filePath;
+      row.zipIndex = it.value()->zipIndex;
     } else {
       row.status = Status::Missing;
     }
@@ -381,6 +563,7 @@ void RomFileModel::setGame(const QList<DatLookup::DatRecord> &records,
       row.rec.mia = rr.mia;
       row.status = static_cast<Status>(rr.status);
       row.filePath = rr.filePath;
+      row.zipIndex = rr.zipIndex;
       row.instanceCount = countByName.value(rr.detail, 0);
       m_rows.append(row);
     }
@@ -428,6 +611,9 @@ QVariant RomFileModel::data(const QModelIndex &index, int role) const {
       return r.rec.md5;
     case MiaColumn:
       return r.rec.mia ? tr("yes") : QString();
+    case ZipIndexColumn:
+      // Archive members only; blank for whole-file rows and pre-v24 snapshots.
+      return r.zipIndex >= 0 ? QString::number(r.zipIndex) : QString();
     case InstanceColumn:
       return r.instanceCount > 1 ? QString::number(r.instanceCount) : QString();
     default:
@@ -458,6 +644,8 @@ QVariant RomFileModel::headerData(int section, Qt::Orientation orientation, int 
     return tr("MD5");
   case MiaColumn:
     return tr("MIA");
+  case ZipIndexColumn:
+    return tr("ZipIndex");
   case InstanceColumn:
     return tr("Instances");
   default:

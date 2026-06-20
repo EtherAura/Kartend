@@ -60,6 +60,11 @@ struct AuditRow {
   /// to a catalogue entry; lets the browser show RomVault-style salmon MIA
   /// counts. Always false for catalogue-less rows (Unknown / Corrupt).
   bool mia = false;
+  /// Archive members only (Kartend-7iqhl.4): the member's index among its
+  /// container's regular-file members, in central-directory order (skipped
+  /// directory/symlink entries are not counted). Surfaced as the browser's
+  /// ZipIndex column; -1 for whole-file rows (and Missing/catalogue-only rows).
+  int zipIndex = -1;
 };
 
 /// Per-source (per-DAT) completeness attribution (Kartend-m6qsb.15). One entry
