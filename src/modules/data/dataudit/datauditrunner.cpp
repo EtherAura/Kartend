@@ -157,18 +157,25 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
   QSet<int> satisfied;
   out.rows.reserve(files.size() + catalogue.size());
 
-  // Under Merged, a clone record's rows fold under its parent set so the report
-  // groups them there; in Split/NonMerged a record keeps its own gameName
+  // Under Merged, a clone record's rows fold under its ROOT parent set so the
+  // report groups them there (transitive — a clone-of-a-clone folds all the way
+  // up, not one hop); in Split/NonMerged a record keeps its own gameName
   // (Kartend-m6qsb.29). No-op for clone-less catalogues.
   const auto attributedGame = [&](int idx) -> QString {
     if (mergeMode == MergeMode::Merged && catalogue.isClone(idx)) {
-      const QList<int> parent = catalogue.parentRecords(idx);
-      if (!parent.isEmpty()) {
-        return catalogue.record(parent.first()).gameName;
-      }
+      return catalogue.rootSetGameName(idx);
     }
     return catalogue.record(idx).gameName;
   };
+
+  // NonMerged folder-scoped satisfaction (Kartend-m6qsb.29): a non-merged clone
+  // set is expected to physically self-contain its inherited roms IN ITS OWN
+  // folder/archive, so track which catalogue indices' content is present in each
+  // containing folder (the file's immediate directory — the set folder for
+  // folder-per-item, the container for archive-per-item). Only populated/used
+  // for NonMerged; left empty otherwise.
+  QHash<QString, QSet<int>> folderSatisfied; // folder -> catalogue indices present there
+  QHash<int, QSet<QString>> idxFolders;      // catalogue index -> folders it is present in
 
   for (const ScannedFile &f : files) {
     AuditRow row;
@@ -187,6 +194,14 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
 
     const int idx = catalogue.matchByHash(f.crc, f.md5, f.sha1);
     if (idx >= 0) {
+      // The content is physically present in this file's folder — recorded for
+      // NonMerged folder-scoped inherited-rom checks (folder = immediate dir, or
+      // the archive container for a virtual "container/member" path).
+      if (mergeMode == MergeMode::NonMerged) {
+        const QString folder = QFileInfo(f.path).path();
+        folderSatisfied[folder].insert(idx);
+        idxFolders[idx].insert(folder);
+      }
       const DatLookup::DatRecord &rec = catalogue.record(idx);
       row.gameName = attributedGame(idx);
       row.expectedName = rec.romName;
@@ -284,28 +299,80 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     }
   }
 
-  if (mergeMode == MergeMode::NonMerged) {
-    // Each clone set is self-contained — it is also expected to physically hold
-    // its parent's roms. For every clone set, emit a Missing row (attributed to
-    // the clone) for each parent rom the collection lacks, so an incomplete
-    // non-merged clone folder reads as missing its inherited roms. Deduped per
-    // clone set so the parent roms aren't re-emitted once per clone rom
+  if (mergeMode == MergeMode::NonMerged && !onePerGame) {
+    // A non-merged clone set is expected to physically self-contain its whole
+    // inherited-rom chain. For each clone set present on disk, emit a Missing
+    // (attributed to the clone) for any ancestor rom whose content is absent
+    // from the set's OWN folder(s) — folder-scoped, so the parent's copy living
+    // elsewhere in the collection does NOT satisfy it. A set may occupy more than
+    // one folder (nested archive members, multi-subdir sets are one logical set),
+    // so the rom counts as present if it appears in ANY of them. Presence is by
+    // CONTENT (the canonical index for the rom's hashes), so a clone's own copy
+    // of a shared rom satisfies it regardless of which record won the hash race.
+    // Suppressed under 1G1R, which collapses to one row per absent game
     // (Kartend-m6qsb.29).
-    QSet<QString> seenCloneSets;
+    QSet<QString> processedSets; // each clone set discovered once
+    QSet<QString> emitted;       // cloneKey + content-key — emit each inherited rom once per set
     for (int i = 0; i < catalogue.size(); ++i) {
       if (!catalogue.isClone(i)) {
         continue;
       }
       const DatLookup::DatRecord &rec = catalogue.record(i);
       const QString cloneKey = rec.setId.isEmpty() ? rec.gameName : rec.setId;
-      if (seenCloneSets.contains(cloneKey)) {
+      if (processedSets.contains(cloneKey)) {
         continue;
       }
-      seenCloneSets.insert(cloneKey);
-      for (int p : catalogue.parentRecords(i)) {
-        if (!satisfied.contains(p)) {
-          emitMissing(p, rec.gameName);
+      processedSets.insert(cloneKey);
+
+      // Folders this clone set physically occupies = where any of its OWN roms'
+      // CONTENT is present (keyed by canonical index, so a rom that collides on
+      // hashes with an ancestor still maps to the right folder). A set absent on
+      // disk has no folder — its own roms already surface as Missing above, so
+      // skip the inherited expansion.
+      QSet<QString> cloneFolders;
+      for (int c : catalogue.recordsForSet(cloneKey)) {
+        const DatLookup::DatRecord &crec = catalogue.record(c);
+        const int canonicalC = catalogue.matchByHash(crec.crc, crec.md5, crec.sha1);
+        if (canonicalC < 0) {
+          continue;
         }
+        if (auto it = idxFolders.constFind(canonicalC); it != idxFolders.constEnd()) {
+          cloneFolders.unite(it.value());
+        }
+      }
+      if (cloneFolders.isEmpty()) {
+        continue;
+      }
+
+      for (int p : catalogue.ancestorRecords(i)) {
+        const DatLookup::DatRecord &prec = catalogue.record(p);
+        const int canonical = catalogue.matchByHash(prec.crc, prec.md5, prec.sha1);
+        // Present if the content appears in ANY of the set's folders (it self-
+        // contains the rom). A hashless ancestor rom (canonical < 0) can't be
+        // verified by content, so it is treated as missing.
+        bool presentInClone = false;
+        if (canonical >= 0) {
+          for (const QString &folder : cloneFolders) {
+            if (folderSatisfied.value(folder).contains(canonical)) {
+              presentInClone = true;
+              break;
+            }
+          }
+        }
+        if (presentInClone) {
+          continue;
+        }
+        // Dedup once per (set, content); fold the record index into the hashless
+        // fallback so two distinct hashless ancestor roms can't collide on name.
+        const QString contentKey = canonical >= 0 ? QString::number(canonical)
+                                                  : QStringLiteral("n:") + QString::number(p) +
+                                                        QLatin1Char(':') + prec.romName;
+        const QString dedup = cloneKey + QChar(0x1F) + contentKey;
+        if (emitted.contains(dedup)) {
+          continue;
+        }
+        emitted.insert(dedup);
+        emitMissing(p, rec.gameName);
       }
     }
   }

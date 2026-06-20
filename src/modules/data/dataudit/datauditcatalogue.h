@@ -60,9 +60,16 @@ public:
   /// All record indices belonging to the set `setKey` (the set-id a clone's
   /// cloneof references — DatRecord::setId). Empty for an unknown set.
   [[nodiscard]] QList<int> recordsForSet(const QString &setKey) const;
-  /// Record indices of the PARENT set of record `i` (its cloneof target).
-  /// Empty when `i` is not a clone or the parent set isn't in this catalogue.
-  [[nodiscard]] QList<int> parentRecords(int i) const;
+  /// Record indices of EVERY ancestor set of record `i` — its parent set, that
+  /// set's parent, … to the root — walking cloneof transitively with a cycle
+  /// guard (Kartend-m6qsb.29). Empty when `i` is not a clone. Lets NonMerged
+  /// expand a clone's full inherited-rom expectation across multi-level chains.
+  [[nodiscard]] QList<int> ancestorRecords(int i) const;
+  /// gameName of the ROOT set of record `i`: follow cloneof to the topmost
+  /// resolvable ancestor, returning `i`'s own gameName when it is not a clone or
+  /// its parent is absent. Lets Merged fold a chained clone under its root set
+  /// rather than only its immediate parent.
+  [[nodiscard]] QString rootSetGameName(int i) const;
   /// True when record `i` declares a cloneof — it is a clone of another set.
   [[nodiscard]] bool isClone(int i) const { return !m_records.at(i).cloneOf.isEmpty(); }
 

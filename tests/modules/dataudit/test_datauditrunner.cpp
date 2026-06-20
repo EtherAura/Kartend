@@ -116,6 +116,14 @@ private slots:
   void classifyMergeMergedFoldsCloneUnderParent();
   void classifyMergeNonMergedExpectsParentRoms();
   void classifyMergeNoOpForFlatCatalogue();
+  // clone-aware review follow-ups (Kartend-m6qsb.29 review)
+  void classifyMergeNonMergedSuppressedUnder1G1R();
+  void classifyMergeNonMergedFolderScoped();
+  void classifyMergeChainedCloneFoldsToRoot();
+  void classifyMergeNonMergedChainInheritsGrandparent();
+  void classifyMergeNonMergedDedupsInheritedRoms();
+  void classifyMergeCyclicCloneofTerminates();
+  void classifyMergeNonMergedMultiFolderSetSelfContains();
 
   // 1G1R / region collapse (Kartend-bmj1ko)
   void region_baseNameRegionAndRank();
@@ -260,6 +268,186 @@ void TestDatAuditRunner::classifyMergeNoOpForFlatCatalogue() {
   QCOMPARE(nonMerged.summary.have, split.summary.have);
   QCOMPARE(nonMerged.summary.missing, split.summary.missing);
   QCOMPARE(nonMerged.rows.size(), split.rows.size());
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedSuppressedUnder1G1R() {
+  const Catalogue c = parentCloneCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString())};
+  // onePerGame=true: 1G1R collapses to one row per absent game and the NonMerged
+  // per-clone inherited expansion is suppressed (review decision). Only the
+  // parent's wholly-absent game is Missing — no spurious inherited clone row.
+  const AuditOutput out =
+      DatAudit::classify(c, files, {}, /*onePerGame=*/true, DatAudit::MergeMode::NonMerged);
+  QCOMPARE(out.summary.have, 1);
+  QCOMPARE(out.summary.missing, 1);
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing) {
+      QCOMPARE(r.gameName, QStringLiteral("Parent")); // never an inherited "Clone" row
+    }
+  }
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedFolderScoped() {
+  const Catalogue c = parentCloneCatalogue();
+  // The parent's shared rom IS present — but in the parent's folder, NOT the
+  // clone's. Folder-scoped NonMerged must still report the clone missing its
+  // inherited rom even though the content exists elsewhere in the collection.
+  const QList<ScannedFile> files{makeFile(QStringLiteral("/games/Parent/shared.bin"),
+                                          QStringLiteral("aaaa0001"), QString(), QString()),
+                                 makeFile(QStringLiteral("/games/Clone/unique.bin"),
+                                          QStringLiteral("bbbb0002"), QString(), QString())};
+  const AuditOutput out =
+      DatAudit::classify(c, files, {}, /*onePerGame=*/false, DatAudit::MergeMode::NonMerged);
+  QCOMPARE(out.summary.have, 2); // both files match their own records
+  QCOMPARE(out.summary.missing, 1);
+  bool inheritedUnderClone = false;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing && r.gameName == QStringLiteral("Clone")) {
+      inheritedUnderClone = true;
+      QCOMPARE(r.expectedName, QStringLiteral("shared.bin"));
+    }
+  }
+  QVERIFY2(inheritedUnderClone, "folder-scoped NonMerged must flag a clone folder missing its "
+                                "inherited rom even when the rom is present elsewhere");
+}
+
+// root <- mid (clone of root) <- leaf (clone of mid): a clone-of-a-clone chain.
+static Catalogue threeLevelChainCatalogue() {
+  Catalogue c;
+  DatRecord root = makeRecord(QStringLiteral("Root"), QStringLiteral("root.bin"),
+                              QStringLiteral("aaaa0001"), QString(), QString());
+  root.setId = QStringLiteral("root");
+  c.addRecord(root);
+  DatRecord mid = makeRecord(QStringLiteral("Mid"), QStringLiteral("mid.bin"),
+                             QStringLiteral("aaaa0002"), QString(), QString());
+  mid.setId = QStringLiteral("mid");
+  mid.cloneOf = QStringLiteral("root");
+  c.addRecord(mid);
+  DatRecord leaf = makeRecord(QStringLiteral("Leaf"), QStringLiteral("leaf.bin"),
+                              QStringLiteral("aaaa0003"), QString(), QString());
+  leaf.setId = QStringLiteral("leaf");
+  leaf.cloneOf = QStringLiteral("mid");
+  c.addRecord(leaf);
+  return c;
+}
+
+void TestDatAuditRunner::classifyMergeChainedCloneFoldsToRoot() {
+  const Catalogue c = threeLevelChainCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/leaf.bin"), QStringLiteral("aaaa0003"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Merged);
+  // Merged folds the leaf all the way to the ROOT set, not the immediate (Mid).
+  bool foldedToRoot = false;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Have) {
+      QCOMPARE(r.gameName, QStringLiteral("Root"));
+      foldedToRoot = true;
+    }
+  }
+  QVERIFY(foldedToRoot);
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedChainInheritsGrandparent() {
+  const Catalogue c = threeLevelChainCatalogue();
+  // Only the leaf's own rom is present; NonMerged must inherit BOTH ancestors'
+  // roms (the grandparent's too — a transitive walk, not one hop).
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/leaf.bin"), QStringLiteral("aaaa0003"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::NonMerged);
+  bool inheritedGrandparent = false;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing && r.gameName == QStringLiteral("Leaf") &&
+        r.expectedName == QStringLiteral("root.bin")) {
+      inheritedGrandparent = true;
+    }
+  }
+  QVERIFY2(inheritedGrandparent,
+           "NonMerged must inherit the grandparent's rom across a clone-of-a-clone chain");
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedDedupsInheritedRoms() {
+  // A 2-rom parent + a 2-rom clone, only the clone's roms present. The inherited
+  // parent roms must be emitted once per clone SET (2 rows), not once per clone
+  // rom (which would be 4).
+  Catalogue c;
+  DatRecord p1 = makeRecord(QStringLiteral("Parent"), QStringLiteral("p1.bin"),
+                            QStringLiteral("aaaa0001"), QString(), QString());
+  p1.setId = QStringLiteral("parent");
+  c.addRecord(p1);
+  DatRecord p2 = makeRecord(QStringLiteral("Parent"), QStringLiteral("p2.bin"),
+                            QStringLiteral("aaaa0002"), QString(), QString());
+  p2.setId = QStringLiteral("parent");
+  c.addRecord(p2);
+  DatRecord cc1 = makeRecord(QStringLiteral("Clone"), QStringLiteral("c1.bin"),
+                             QStringLiteral("bbbb0001"), QString(), QString());
+  cc1.setId = QStringLiteral("clone");
+  cc1.cloneOf = QStringLiteral("parent");
+  c.addRecord(cc1);
+  DatRecord cc2 = makeRecord(QStringLiteral("Clone"), QStringLiteral("c2.bin"),
+                             QStringLiteral("bbbb0002"), QString(), QString());
+  cc2.setId = QStringLiteral("clone");
+  cc2.cloneOf = QStringLiteral("parent");
+  c.addRecord(cc2);
+
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/c1.bin"), QStringLiteral("bbbb0001"), QString(), QString()),
+      makeFile(QStringLiteral("/x/c2.bin"), QStringLiteral("bbbb0002"), QString(), QString())};
+  const AuditOutput out = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::NonMerged);
+  int inheritedUnderClone = 0;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Missing && r.gameName == QStringLiteral("Clone")) {
+      ++inheritedUnderClone;
+    }
+  }
+  QCOMPARE(inheritedUnderClone, 2); // p1.bin + p2.bin once each, not 4
+  QCOMPARE(out.summary.have, 2);
+  QCOMPARE(out.summary.missing, 4); // 2 parent's-own (Parent) + 2 inherited (Clone)
+}
+
+void TestDatAuditRunner::classifyMergeCyclicCloneofTerminates() {
+  // Malformed input: A cloneof B, B cloneof A. The transitive cloneof walk must
+  // terminate via its visited-set cycle guard (not hang) and still classify.
+  Catalogue c;
+  DatRecord a = makeRecord(QStringLiteral("A"), QStringLiteral("a.bin"), QStringLiteral("aaaa0001"),
+                           QString(), QString());
+  a.setId = QStringLiteral("a");
+  a.cloneOf = QStringLiteral("b");
+  c.addRecord(a);
+  DatRecord b = makeRecord(QStringLiteral("B"), QStringLiteral("b.bin"), QStringLiteral("aaaa0002"),
+                           QString(), QString());
+  b.setId = QStringLiteral("b");
+  b.cloneOf = QStringLiteral("a");
+  c.addRecord(b);
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/x/a.bin"), QStringLiteral("aaaa0001"), QString(), QString())};
+  // Both modes exercise the walk (Merged via rootSetGameName, NonMerged via
+  // ancestorRecords). Reaching these asserts means no infinite loop.
+  const AuditOutput merged = DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::Merged);
+  QVERIFY(!merged.rows.isEmpty());
+  const AuditOutput nonMerged =
+      DatAudit::classify(c, files, {}, false, DatAudit::MergeMode::NonMerged);
+  QVERIFY(!nonMerged.rows.isEmpty());
+}
+
+void TestDatAuditRunner::classifyMergeNonMergedMultiFolderSetSelfContains() {
+  // A clone set whose roms span TWO folders (e.g. nested archive members or a
+  // multi-subdir set — one logical set on disk). The inherited shared rom is
+  // present in only ONE of them; the set still self-contains it, so NO inherited
+  // Missing (review: the per-folder check unites, it must not require every
+  // folder to hold the rom).
+  const Catalogue c = parentCloneCatalogue();
+  const QList<ScannedFile> files{
+      makeFile(QStringLiteral("/A/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString()),
+      makeFile(QStringLiteral("/B/unique.bin"), QStringLiteral("bbbb0002"), QString(), QString()),
+      makeFile(QStringLiteral("/A/shared.bin"), QStringLiteral("aaaa0001"), QString(), QString())};
+  const AuditOutput out =
+      DatAudit::classify(c, files, {}, /*onePerGame=*/false, DatAudit::MergeMode::NonMerged);
+  QCOMPARE(out.summary.missing, 0); // both catalogue roms present; set self-contained
+  for (const AuditRow &r : out.rows) {
+    QVERIFY2(!(r.status == Status::Missing && r.gameName == QStringLiteral("Clone")),
+             "an inherited rom present in ANY of the set's folders must satisfy it");
+  }
 }
 
 void TestDatAuditRunner::catalogueMatchesByHashPriority() {

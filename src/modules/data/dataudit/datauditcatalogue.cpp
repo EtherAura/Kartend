@@ -1,5 +1,7 @@
 #include "datauditcatalogue.h"
 
+#include <QSet>
+
 namespace DatAudit {
 
 namespace {
@@ -42,9 +44,37 @@ QList<int> Catalogue::recordsForSet(const QString &setKey) const {
   return m_bySetKey.value(setKey);
 }
 
-QList<int> Catalogue::parentRecords(int i) const {
-  const QString parent = m_records.at(i).cloneOf;
-  return parent.isEmpty() ? QList<int>() : recordsForSet(parent);
+QList<int> Catalogue::ancestorRecords(int i) const {
+  QList<int> out;
+  QSet<QString> visited;                     // set-keys seen — cycle guard
+  visited.insert(setKeyOf(m_records.at(i))); // never revisit the start set
+  QString parent = m_records.at(i).cloneOf;
+  while (!parent.isEmpty() && !visited.contains(parent)) {
+    visited.insert(parent);
+    const QList<int> recs = recordsForSet(parent);
+    out.append(recs);
+    // Climb to the parent set's own parent. A set's records share one cloneof,
+    // so any record of it answers; empty (dangling parent) ends the walk.
+    parent = recs.isEmpty() ? QString() : m_records.at(recs.first()).cloneOf;
+  }
+  return out;
+}
+
+QString Catalogue::rootSetGameName(int i) const {
+  QSet<QString> visited;
+  int rep = i; // representative record of the highest set reached so far
+  visited.insert(setKeyOf(m_records.at(rep)));
+  QString parent = m_records.at(rep).cloneOf;
+  while (!parent.isEmpty() && !visited.contains(parent)) {
+    const QList<int> recs = recordsForSet(parent);
+    if (recs.isEmpty()) {
+      break; // parent set absent from this catalogue — stop at the last resolvable
+    }
+    visited.insert(parent);
+    rep = recs.first();
+    parent = m_records.at(rep).cloneOf;
+  }
+  return m_records.at(rep).gameName;
 }
 
 int Catalogue::matchByHash(const QString &crc, const QString &md5, const QString &sha1) const {
