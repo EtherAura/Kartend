@@ -11,12 +11,25 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSaveFile>
+#include <QStringConverter>
 #include <QTextStream>
 
+#include "errorutils.h"
 #include "pathutils.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
+
+namespace {
+
+// Highest on-disk envelope version this build knows how to read. Bumped in
+// lockstep with the version written by exportJson (currently 2). parseJsonFile
+// rejects anything above this so a file produced by a newer Kartend is refused
+// outright rather than parsed against a shape this build doesn't understand
+// (Kartend-2sg2t).
+constexpr int KARTEND_PLAYLIST_MAX_VERSION = 2;
+
+} // namespace
 
 namespace PlaylistSerializer {
 
@@ -81,8 +94,13 @@ ErrorUtils::Result<int> exportM3U(const QList<PlaylistItemRef> &items, const QSt
                                "PlaylistSerializer::exportM3U")
         .withDetails(file.errorString());
   }
+  int written = 0;
   {
     QTextStream out(&file);
+    // Pin UTF-8 so round-trip fidelity is deterministic across locales /
+    // platforms rather than depending on Qt6's implicit default encoding
+    // (Kartend-93ju5).
+    out.setEncoding(QStringConverter::Utf8);
     // Extended-M3U marker on line 1 so parsers that look for it (most modern
     // players) recognise the dialect. Each entry gets an EXTINF line with
     // duration -1 (unknown) and the file's basename as the title — we don't
@@ -90,9 +108,25 @@ ErrorUtils::Result<int> exportM3U(const QList<PlaylistItemRef> &items, const QSt
     // what every other Kartend surface defaults to.
     out << "#EXTM3U\n";
     for (const PlaylistItemRef &item : items) {
+      // A path containing a newline or carriage return would split one logical
+      // entry across multiple M3U lines; on re-read the continuation would parse
+      // as a separate (garbage) path and corrupt the file. M3U has no escaping
+      // for embedded line breaks, so skip the entry and warn rather than emit a
+      // file that round-trips into corruption (Kartend-93ju5).
+      if (item.sourcePath.contains(QLatin1Char('\n')) ||
+          item.sourcePath.contains(QLatin1Char('\r'))) {
+        ErrorUtils::logError(
+            ErrorContext::warning(ErrorCode::InvalidArgument,
+                                  "M3U export: skipping path containing a newline/carriage return "
+                                  "(would corrupt the file)",
+                                  "PlaylistSerializer::exportM3U")
+                .withDetails(item.sourcePath));
+        continue;
+      }
       const QString title = QFileInfo(item.sourcePath).completeBaseName();
       out << "#EXTINF:-1," << title << "\n";
       out << item.sourcePath << "\n";
+      ++written;
     }
     out.flush();
     if (out.status() != QTextStream::Ok) {
@@ -107,7 +141,7 @@ ErrorUtils::Result<int> exportM3U(const QList<PlaylistItemRef> &items, const QSt
         .withDetails(file.errorString());
   }
   PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
-  return items.size();
+  return written;
 }
 
 ErrorUtils::Result<ParsedPlaylist> parseJsonFile(const QString &inPath) {
@@ -128,10 +162,21 @@ ErrorUtils::Result<ParsedPlaylist> parseJsonFile(const QString &inPath) {
         .withDetails(parseErr.errorString());
   }
   const QJsonObject root = doc.object();
-  if (root.value("kartend_playlist_version").toInt(0) < 1) {
+  // Read the version as a raw double first so a non-integral value like 2.9
+  // does not silently truncate into the accepted range (QJsonValue::toInt only
+  // returns the integer when the stored double is exactly integral). Reject
+  // anything below 1 (missing/garbage) or above the highest version this build
+  // knows how to read (Kartend-2sg2t).
+  const double versionRaw = root.value("kartend_playlist_version").toDouble(0.0);
+  const int version = root.value("kartend_playlist_version").toInt(0);
+  if (version < 1 || version > KARTEND_PLAYLIST_MAX_VERSION ||
+      static_cast<double>(version) != versionRaw) {
     return ErrorContext::error(ErrorCode::InvalidArgument,
                                "Missing or unsupported kartend_playlist_version",
-                               "PlaylistSerializer::parseJsonFile");
+                               "PlaylistSerializer::parseJsonFile")
+        .withDetails(QStringLiteral("version=%1 (supported range 1..%2)")
+                         .arg(versionRaw)
+                         .arg(KARTEND_PLAYLIST_MAX_VERSION));
   }
 
   ParsedPlaylist out;
@@ -146,7 +191,18 @@ ErrorUtils::Result<ParsedPlaylist> parseJsonFile(const QString &inPath) {
   out.isSmart = root.value("is_smart").toBool(false);
   out.smartFilterJson = root.value("smart_filter").toString();
 
-  const QJsonArray itemsArray = root.value("items").toArray();
+  // A present "items" field that isn't an array (e.g. an object, a string, or a
+  // number) signals a structurally invalid file — previously it silently
+  // collapsed to an empty playlist reported as a successful import. A missing or
+  // null field is still tolerated (smart playlists and legacy item-less exports
+  // legitimately omit it), yielding an empty static item list (Kartend-2sg2t).
+  const QJsonValue itemsValue = root.value("items");
+  if (!itemsValue.isUndefined() && !itemsValue.isNull() && !itemsValue.isArray()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Playlist 'items' field is present but not an array",
+                               "PlaylistSerializer::parseJsonFile");
+  }
+  const QJsonArray itemsArray = itemsValue.toArray();
   out.items.reserve(itemsArray.size());
   for (const auto &val : itemsArray) {
     const QJsonObject obj = val.toObject();
@@ -165,8 +221,17 @@ ErrorUtils::Result<QStringList> readM3UPaths(const QString &inPath) {
   }
   QStringList paths;
   QTextStream in(&file);
+  // Pin UTF-8 so re-reads decode identically to what exportM3U wrote,
+  // independent of the platform/locale default encoding (Kartend-93ju5).
+  in.setEncoding(QStringConverter::Utf8);
   while (!in.atEnd()) {
     const QString line = in.readLine().trimmed();
+    // KNOWN LIMITATION (Kartend-93ju5): a path that legitimately begins with
+    // '#' is indistinguishable from an M3U comment line and is dropped here.
+    // The M3U format reserves a leading '#' for directives/comments and offers
+    // no standard escaping for paths that start with it, so we deliberately do
+    // not invent a non-standard escape scheme; such entries cannot survive an
+    // M3U round-trip (use the lossless JSON format for those paths).
     if (line.isEmpty() || line.startsWith('#')) {
       continue;
     }

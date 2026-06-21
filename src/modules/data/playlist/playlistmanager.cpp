@@ -30,6 +30,37 @@ using ErrorUtils::ErrorContext;
 
 namespace {
 
+// Upper bounds on user-/file-supplied strings before they reach the TEXT NOT
+// NULL columns. A crafted or corrupt JSON envelope could otherwise carry
+// megabyte-sized paths or garbage UUID strings straight into playlist_items /
+// playlists (Kartend-2sg2t). These caps are generous relative to any real
+// filesystem path or display name but bound worst-case row size.
+constexpr int kMaxSourcePathLength = 4096;
+// source_collection_uuid is NOT a QUuid: collection identity is a 40-char SHA-1
+// hex digest (CollectionUtils::computeCollectionUuid). A QUuid::fromString
+// round-trip would therefore reject every real ref, so we bound the length only
+// — generous over the 40-char digest while still capping worst-case row size.
+constexpr int kMaxUuidLength = 128;
+constexpr int kMaxPlaylistNameLength = 512;
+
+// Validate a (uuid, path) item ref before it is persisted. Caps both string
+// lengths so a crafted/corrupt envelope cannot inject megabyte-sized values
+// into the TEXT NOT NULL columns. Returns true when the ref is acceptable.
+// Empty path/uuid handling stays with the callers (path-empty is a skip; an
+// empty uuid is a legitimate "no source collection" ref), so this only rejects
+// over-long values (Kartend-2sg2t). Note: collection uuids are SHA-1 hex
+// digests, not RFC-4122 UUIDs, so no QUuid::fromString well-formedness check is
+// applied — it would reject every production ref.
+bool validateItemRef(const QString &uuid, const QString &path) {
+  if (path.length() > kMaxSourcePathLength) {
+    return false;
+  }
+  if (uuid.length() > kMaxUuidLength) {
+    return false;
+  }
+  return true;
+}
+
 QString isoNow() {
   return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
 }
@@ -172,6 +203,10 @@ ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
     return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is empty",
                                "PlaylistManager::createPlaylist");
   }
+  if (name.trimmed().length() > kMaxPlaylistNameLength) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is too long",
+                               "PlaylistManager::createPlaylist");
+  }
 
   const QString id = newPlaylistId();
   const QString now = isoNow();
@@ -210,6 +245,10 @@ PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Fil
   }
   if (name.trimmed().isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is empty",
+                               "PlaylistManager::createSmartPlaylist");
+  }
+  if (name.trimmed().length() > kMaxPlaylistNameLength) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is too long",
                                "PlaylistManager::createSmartPlaylist");
   }
 
@@ -347,6 +386,15 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   if (!m_db.isOpen() || playlistId.isEmpty() || sourcePath.isEmpty()) {
     return false;
   }
+  if (!validateItemRef(sourceCollectionUuid, sourcePath)) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::InvalidArgument,
+                                               "Rejecting over-long playlist item ref",
+                                               "PlaylistManager::addItem")
+                             .withDetails(QStringLiteral("path length: %1, uuid length: %2")
+                                              .arg(sourcePath.length())
+                                              .arg(sourceCollectionUuid.length())));
+    return false;
+  }
   if (containsItem(playlistId, sourceCollectionUuid, sourcePath)) {
     return false; // Idempotent: the chooser surface treats re-add as a no-op.
   }
@@ -436,8 +484,15 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
   del.addBindValue(playlistId);
   del.addBindValue(sourceCollectionUuid);
   del.addBindValue(sourcePath);
-  if (!del.exec() || del.numRowsAffected() <= 0) {
+  if (!del.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to delete playlist item",
+                                               "PlaylistManager::removeItem")
+                             .withDetails(del.lastError().text()));
     return false; // guard dtor rolls back
+  }
+  if (del.numRowsAffected() <= 0) {
+    return false; // item not present — benign no-op (no row removed)
   }
 
   // Re-densify positions to 0..N-1. The PK on (playlist_id, position) means we
@@ -583,6 +638,12 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
     return m_favoritesId;
   }
   if (!m_db.isOpen()) {
+    // Kartend-cywbk: every failure path logs so a silent "starring does
+    // nothing" degrade (the empty id is later swallowed by addItem) is
+    // diagnosable from the call site rather than only at the DB layer.
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen,
+                                               "Cannot ensure favorites playlist: database not open",
+                                               "PlaylistManager::ensureFavoritesPlaylist"));
     return QString();
   }
 
@@ -609,6 +670,15 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
   // and the row appears in the sidebar without a restart.
   auto created = createPlaylist(defaultName, QString(), QStringLiteral("favorites"));
   if (created.isError()) {
+    // Kartend-cywbk: createPlaylist logs the underlying DB failure, but log
+    // again at this call site so the bootstrap-failure root cause (which
+    // otherwise degrades into a permanent, invisible "stars don't persist" for
+    // the rest of the session) is unambiguous in the logs.
+    ErrorUtils::logError(
+        ErrorContext::warning(created.error().code,
+                              "Failed to create favorites playlist; favorites will not persist",
+                              "PlaylistManager::ensureFavoritesPlaylist")
+            .withDetails(created.error().message));
     return QString();
   }
   m_favoritesId = created.value();
@@ -682,8 +752,12 @@ ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
 }
 
 ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPath,
-                                                            const QString &nameOverride) {
+                                                            const QString &nameOverride,
+                                                            int *outSkipped) {
   assertOwnerThread();
+  if (outSkipped) {
+    *outSkipped = 0;
+  }
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::importFromJson");
@@ -733,6 +807,12 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   // invoked lambda so its rollback runs BEFORE the deletePlaylist cleanup —
   // deletePlaylist issues its own DELETE, which must not execute inside the
   // still-open (about to be rolled back) import transaction.
+  //
+  // Kartend-2sg2t: mirror importFromM3U's skip accounting — empty-path,
+  // duplicate, and over-long/invalid item refs are counted so the caller can
+  // surface "N items skipped" instead of the import silently dropping them
+  // while still reporting success.
+  int skipped = 0;
   const auto insertFailure = [&]() -> std::optional<ErrorUtils::ErrorContext> {
     KartendDb::DbTransaction txn(m_db, "PlaylistManager::importFromJson");
     if (!txn.active()) {
@@ -746,10 +826,23 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
       const QString &uuid = entry.sourceCollectionUuid;
       const QString &path = entry.sourcePath;
       if (path.isEmpty()) {
+        ++skipped;
+        continue;
+      }
+      if (!validateItemRef(uuid, path)) {
+        ++skipped;
+        ErrorUtils::logError(
+            ErrorContext::warning(ErrorCode::InvalidArgument,
+                                  "Skipping over-long/invalid imported playlist item ref",
+                                  "PlaylistManager::importFromJson")
+                .withDetails(QStringLiteral("path length: %1, uuid length: %2")
+                                 .arg(path.length())
+                                 .arg(uuid.length())));
         continue;
       }
       const QString dedupKey = uuid + QLatin1Char('\x1f') + path;
       if (seen.contains(dedupKey)) {
+        ++skipped;
         continue;
       }
       seen.insert(dedupKey);
@@ -785,15 +878,21 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
     return *insertFailure;
   }
   emit playlistsChanged();
+  if (outSkipped) {
+    *outSkipped = skipped;
+  }
   return newId;
 }
 
 ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath,
                                                            const QString &playlistName,
-                                                           int *outSkipped) {
+                                                           int *outSkipped, int *outAmbiguous) {
   assertOwnerThread();
   if (outSkipped) {
     *outSkipped = 0;
+  }
+  if (outAmbiguous) {
+    *outAmbiguous = 0;
   }
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
@@ -843,7 +942,20 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
   resolved.reserve(paths.value().size());
   QSet<QString> seen;
   int skipped = 0;
+  int ambiguous = 0;
   for (const QString &line : paths.value()) {
+    // Kartend-2sg2t: bound the file-supplied path before it reaches the DB so a
+    // crafted M3U cannot inject a megabyte-sized source_path. (The resolved
+    // uuid comes from the trusted items table, so the path is the only
+    // attacker-controlled half here.)
+    if (!validateItemRef(QString(), line)) {
+      ++skipped;
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::InvalidArgument,
+                                                 "M3U import: skipping over-long path",
+                                                 "PlaylistManager::importFromM3U")
+                               .withDetails(QStringLiteral("path length: %1").arg(line.length())));
+      continue;
+    }
     resolve.bindValue(0, line);
     if (!resolve.exec() || !resolve.next()) {
       ++skipped;
@@ -851,6 +963,7 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
     }
     const QString uuid = resolve.value(0).toString();
     if (resolve.next()) {
+      ++ambiguous;
       ErrorUtils::logError(
           ErrorContext::warning(ErrorCode::InvalidArgument,
                                 "M3U import: path exists in multiple collections; M3U can't "
@@ -912,6 +1025,13 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
 
   if (outSkipped) {
     *outSkipped = skipped;
+  }
+  // Kartend-93ju5: surface how many paths resolved ambiguously (existed in more
+  // than one collection, so the lowest-uuid pick may have bound them to the
+  // wrong source collection) so the import caller / UI can warn the user that
+  // resolution was lossy rather than reporting an unqualified success.
+  if (outAmbiguous) {
+    *outAmbiguous = ambiguous;
   }
   return newId;
 }
