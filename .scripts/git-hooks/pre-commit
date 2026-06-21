@@ -17,34 +17,16 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+# Shared pinned clang-format version + resolver (Kartend-gv2xq): the version
+# lives in exactly one place so the hook, build.sh's quality lib, and CI can't
+# drift. Provides KARTEND_CLANG_FORMAT_VERSION, resolve_clang_format, and
+# clang_format_missing_hint.
+# shellcheck source=.scripts/lib/clang-format-version.sh
+. "$ROOT/.scripts/lib/clang-format-version.sh"
+
 red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
-
-# Resolve a clang-format binary that matches CI's v19 pin. Ubuntu 24.04 ships
-# v18 and current Arch ships v21; both format differently enough from v19 to
-# produce false-positive drift on commits that pass CI. Returns the resolved
-# path/name on stdout, or empty (rc != 0) if no v19 candidate was found.
-resolve_clang_format_19() {
-  # 1. Debian/Ubuntu `clang-format-19` package
-  if command -v clang-format-19 >/dev/null 2>&1; then
-    printf 'clang-format-19\n'; return 0
-  fi
-  # 2. Arch/Gentoo llvm slot
-  if [ -x /usr/lib/llvm/19/bin/clang-format ]; then
-    printf '/usr/lib/llvm/19/bin/clang-format\n'; return 0
-  fi
-  # 3. CI symlink style (Dockerfile.ci + build.yml both write here)
-  if [ -x /usr/local/bin/clang-format ]; then
-    printf '/usr/local/bin/clang-format\n'; return 0
-  fi
-  # 4. Bare clang-format, but only if its --version reports 19.x
-  if command -v clang-format >/dev/null 2>&1 \
-     && clang-format --version 2>/dev/null | grep -qE 'version 19\.'; then
-    printf 'clang-format\n'; return 0
-  fi
-  return 1
-}
 
 fail=0
 
@@ -56,7 +38,7 @@ mapfile -d '' STAGED_SRC < <(
 )
 
 if [ ${#STAGED_SRC[@]} -gt 0 ]; then
-  if CF=$(resolve_clang_format_19); then
+  if CF=$(resolve_clang_format); then
     drift=()
     for file in "${STAGED_SRC[@]}"; do
       [ -n "$file" ] || continue
@@ -72,10 +54,8 @@ if [ ${#STAGED_SRC[@]} -gt 0 ]; then
       fail=1
     fi
   else
-    yellow "Skipping clang-format check: no clang-format-19 found."
-    yellow "  Looked for: clang-format-19, /usr/lib/llvm/19/bin/clang-format,"
-    yellow "              /usr/local/bin/clang-format, and \`clang-format\` reporting v19.x."
-    yellow "  Install clang-format-19 to match CI's pin (avoids false-positive drift)."
+    yellow "Skipping clang-format check: no clang-format-${KARTEND_CLANG_FORMAT_VERSION} found."
+    clang_format_missing_hint | while IFS= read -r _line; do yellow "  $_line"; done
   fi
 fi
 

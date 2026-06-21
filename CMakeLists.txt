@@ -76,123 +76,11 @@ set(KARTEND_MIN_QT_VERSION 6.4)
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets Network LinguistTools)
 find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
-# Optional: Qt Gamepad support
-if (KARTEND_ENABLE_QT_GAMEPAD)
-  find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS Gamepad QUIET)
-endif()
-
-# Optional: SDL2 fallback gamepad backend (used when Qt6::Gamepad unavailable)
-find_package(PkgConfig QUIET)
-if (PkgConfig_FOUND AND KARTEND_ENABLE_SDL2_GAMEPAD)
-  pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
-endif()
-
-# Optional: zstd compression for the Kart packaging system.
-# Falls back to Qt's built-in qCompress (zlib) when not found.
-if (PkgConfig_FOUND AND KARTEND_ENABLE_ZSTD)
-  pkg_check_modules(ZSTD QUIET IMPORTED_TARGET libzstd)
-endif()
-
-# Optional: libarchive for in-process archive-member hashing (DAT auditor +
-# scraper). Falls back to shelling out to 7z/unzip/bsdtar when not found.
-# Two discovery routes feed one normalized KARTEND_LIBARCHIVE_TARGET:
-#   1. pkg-config — Linux apt's libarchive-dev ships libarchive.pc, so this is
-#      the route every Linux CI/dev build takes.
-#   2. find_package(LibArchive) — CMake's bundled module, used when pkg-config
-#      can't see libarchive: MSVC/vcpkg has no libarchive.pc on the default
-#      search path (vcpkg's toolchain exposes it through FindLibArchive's
-#      cmake-wrapper instead), and macOS reaches the SDK/system libarchive the
-#      same way. Tried second so the pkg-config IMPORTED_TARGET wins where both
-#      exist.
-if (KARTEND_ENABLE_LIBARCHIVE)
-  if (PkgConfig_FOUND)
-    pkg_check_modules(LIBARCHIVE QUIET IMPORTED_TARGET libarchive)
-  endif()
-  if (TARGET PkgConfig::LIBARCHIVE)
-    set(KARTEND_LIBARCHIVE_TARGET PkgConfig::LIBARCHIVE)
-  else()
-    find_package(LibArchive QUIET)
-    if (LibArchive_FOUND)
-      set(KARTEND_LIBARCHIVE_TARGET LibArchive::LibArchive)
-    endif()
-  endif()
-endif()
-
-# Optional: QtKeychain for secure scraper credential storage. Without it,
-# the [Scrapers] group is persisted to QSettings as plaintext (the legacy
-# behaviour). With it, credential values are stored in the platform
-# secret service (GNOME Keyring, KWallet, Windows Credential Manager,
-# macOS Keychain) and the INI file holds only the index of which
-# provider/field pairs exist. QtKeychain itself ships an
-# insecureFallback mode for headless / no-secret-service systems, so the
-# runtime degrades gracefully rather than refusing to start.
-find_package(Qt6Keychain QUIET)
-
-# MSVC fallback: install-qt-action doesn't ship Qt6Keychain and the
-# vcpkg port's transitive Qt6 dep collides with install-qt-action's Qt
-# (a single CMake project can't reconcile two Qt6 trees). FetchContent
-# builds upstream qtkeychain 0.15.x against the already-discovered Qt6
-# instead — small build cost (~30s on Windows CI), no extra runtime
-# deps (the Windows backend uses Win32 Credential Manager APIs from
-# advapi32 directly), and the resulting target aliases cleanly to the
-# Qt6Keychain::Qt6Keychain name the src/CMakeLists conditional expects.
-# Gated to MSVC (not generic WIN32) because qtkeychain's CMakeLists
-# adds MSVC-syntax `/utf-8` unconditionally — MinGW chokes on it.
-# MinGW Windows builds can still pick qtkeychain up via find_package
-# if the host installs a mingw qtkeychain package.
-if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
-  include(FetchContent)
-  FetchContent_Declare(qtkeychain
-    GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
-    # Upstream switched off the v-prefix between v0.14.0 and 0.15.0.
-    # 0.15.0 (ad7344c) is recent enough to have current Qt6 fixes and
-    # old enough to be well-shaken-down by downstreams.
-    # Manual-bump pin: FetchContent tags are outside Dependabot's ecosystems
-    # (it watches Actions + pip), and this touches credential storage — review
-    # for a newer tag during the quarterly dependency sweep.
-    GIT_TAG 0.15.0
-    GIT_SHALLOW TRUE
-  )
-  # Upstream toggles. BUILD_WITH_QT6 picks the Qt6 build path; the rest
-  # trim payload (we don't ship qtkeychain's tests, translations, or
-  # public installs — it's purely a static-ish dep linked into kartend).
-  set(BUILD_WITH_QT6     ON  CACHE BOOL "" FORCE)
-  set(BUILD_TESTING      OFF CACHE BOOL "" FORCE)
-  set(BUILD_TRANSLATIONS OFF CACHE BOOL "" FORCE)
-  set(QTKEYCHAIN_STATIC  ON  CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(qtkeychain)
-  # Upstream exports the build target as `qt6keychain` (lowercase).
-  # Bridge to the namespaced alias the rest of the codebase queries
-  # for via TARGET Qt6Keychain::Qt6Keychain.
-  if (TARGET qt6keychain AND NOT TARGET Qt6Keychain::Qt6Keychain)
-    # Header layout shim: the installed Linux qtkeychain-qt6-dev package
-    # puts keychain.h under <prefix>/include/qt6keychain/, so the
-    # codebase #include is <qt6keychain/keychain.h>. Upstream's source
-    # tree has the file at qtkeychain/keychain.h — FetchContent doesn't
-    # run the install step, so the qt6keychain/ namespace dir doesn't
-    # exist anywhere in the include search path. Stage the header into
-    # a generated qt6keychain/ subdir of the build tree and push that
-    # location onto qt6keychain's INTERFACE_INCLUDE_DIRECTORIES so
-    # every consumer that links against the alias picks the right
-    # search path up automatically.
-    set(_qkc_shim_dir "${CMAKE_CURRENT_BINARY_DIR}/qtkeychain-include-shim")
-    file(MAKE_DIRECTORY "${_qkc_shim_dir}/qt6keychain")
-    configure_file(
-      "${qtkeychain_SOURCE_DIR}/qtkeychain/keychain.h"
-      "${_qkc_shim_dir}/qt6keychain/keychain.h"
-      COPYONLY
-    )
-    # $<BUILD_INTERFACE:...> keeps the path out of any export/install
-    # surface — qt6keychain's CMakeLists doesn't install in this
-    # FetchContent path, but the generator-expression wrap is what
-    # CMake requires for any build-tree-only include directory.
-    target_include_directories(qt6keychain INTERFACE
-      "$<BUILD_INTERFACE:${_qkc_shim_dir}>")
-    unset(_qkc_shim_dir)
-
-    add_library(Qt6Keychain::Qt6Keychain ALIAS qt6keychain)
-  endif()
-endif()
+# Optional-backend discovery (gamepad / zstd / libarchive / QtKeychain incl.
+# the MSVC FetchContent + header-shim block) lives in a dedicated module
+# (Kartend-9fdsd). Behaviour-identical: include()d here in the same scope and
+# at the same point the inline blocks used to sit.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/OptionalBackends.cmake)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -269,6 +157,15 @@ if (NOT DEFINED BUILD_DATE)
 endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Compiler/linker flag policy (Kartend-9fdsd): defines the flag-matrix
+# variables (HARDENING_* / RELEASE_PERF_* / KARTEND_LTO_LINK_OPTIONS) and the
+# kartend_apply_area_flags() helper that applies the per-area-library compile
+# options as a single source of truth. The variables depend only on
+# compiler/platform identity (stable after project()), and the helper is
+# CALLED below once the area libs exist — so including the module here is
+# behaviour-identical to the old inline blocks.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerFlags.cmake)
 
 add_subdirectory(src)
 
@@ -419,119 +316,23 @@ target_compile_definitions(kartend_utils
     BUILD_DATE="${BUILD_DATE}"
 )
 
-# Warning flags applied uniformly across every area OBJECT lib (PRIVATE
-# because warnings shouldn't leak through INTERFACE_COMPILE_OPTIONS to
-# external consumers like Qt's autogen units).
-# -Wshadow + -Wimplicit-fallthrough added in Kartend-bxfv as the first
-# pair of higher-floor warnings the codebase is already clean against.
-# Additional candidates (-Wcast-align, -Wformat=2, -Wnull-dereference,
-# -Wdouble-promotion, -Wold-style-cast, -Wnon-virtual-dtor) need their
-# own follow-up sweep before enabling.
-# MSVC: /W4 is the closest analogue to -Wall -Wextra; /permissive- enforces
-# standards conformance (no Microsoft extensions). Specific MSVC noise
-# (C4127 from Qt's signal/slot macros, etc.) is left untouched until it
-# actually fires — same don't-suppress-blindly stance as the GCC list.
-foreach(_area ${KARTEND_AREA_LIBS})
-  if (MSVC)
-    target_compile_options(${_area} PRIVATE /W4 /permissive-)
-  else()
-    target_compile_options(${_area} PRIVATE
-      -Wall -Wextra -Wpedantic -Wshadow -Wimplicit-fallthrough)
-  endif()
-endforeach()
-
-# Keep GCC-only intent with Clang analogue on RISC-V
-if (NOT MSVC AND CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
-  foreach(_area ${KARTEND_AREA_LIBS})
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      target_compile_options(${_area} PRIVATE -mno-direct-extern-access)
-    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-      target_compile_options(${_area} PRIVATE -fno-direct-access-external-data)
-    endif()
-  endforeach()
-endif()
-
-# Release flags split into:
-#   HARDENING_*    — always-on for non-Debug. Distro packagers need these.
-#   RELEASE_PERF_* — high-performance Release-only. -march=native makes the
-#                    binary non-portable, so KARTEND_PORTABLE_RELEASE skips it
-#                    (and -O3/fast-math) for distro packaging.
-if (MSVC)
-  # MSVC equivalents of the GNU/ELF hardening set:
-  #   /sdl       — additional security-development-lifecycle checks (extra
-  #                buffer-overflow detection beyond /GS, which is on by
-  #                default)
-  #   /guard:cf  — Control Flow Guard; compile-side and link-side both
-  #                required
-  #   /DYNAMICBASE, /NXCOMPAT, /HIGHENTROPYVA — linker defaults on modern
-  #                MSVC, listed explicitly so the intent mirrors the GNU
-  #                -pie/-Wl,-z,relro/-Wl,-z,now set.
-  # PIE / FORTIFY_SOURCE have no PE/MSVC analogue (ASLR is OS-managed via
-  # /DYNAMICBASE; there's no fortified libc to wrap).
-  set(HARDENING_COMPILE_OPTS /sdl /guard:cf)
-  set(HARDENING_LINK_OPTS /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA)
-
-  # KARTEND_PORTABLE_RELEASE is a no-op on MSVC — there's no -march=native
-  # equivalent and vectorization is already on at /O2. /GL + /LTCG is the
-  # MSVC LTO pair; the /LTCG companion lives in KARTEND_LTO_LINK_OPTIONS
-  # below so the integration-test exe picks it up too.
-  set(RELEASE_PERF_COMPILE_OPTS /O2 /GL /DQT_NO_DEBUG)
-  set(RELEASE_PERF_LINK_OPTS /LTCG /OPT:REF /OPT:ICF)
-else()
-  # GCC/Clang. Stack protector is portable; -D_FORTIFY_SOURCE / -fPIE /
-  # -Wl,-z,* / -pie are ELF-only — MinGW's ld rejects -z, and PIE has no
-  # PE counterpart. Gate them behind NOT WIN32 so MinGW cross-builds link
-  # cleanly. On MinGW the equivalent runtime mitigations (ASLR, DEP,
-  # high-entropy VA) are binutils defaults — no extra flags required.
-  set(HARDENING_COMPILE_OPTS -fstack-protector-strong)
-  set(HARDENING_LINK_OPTS)
-  if (NOT WIN32)
-    list(APPEND HARDENING_COMPILE_OPTS -D_FORTIFY_SOURCE=2 -fPIE)
-  endif()
-  # GNU-ld hardening flags: Apple's ld rejects -Wl,-z,* options (and applies
-  # its own load-time mitigations), so gate the link-side set out on macOS.
-  if (NOT WIN32 AND NOT APPLE)
-    list(APPEND HARDENING_LINK_OPTS -Wl,-z,now -Wl,-z,relro -pie)
-  endif()
-
-  if (KARTEND_PORTABLE_RELEASE)
-    set(RELEASE_PERF_COMPILE_OPTS -flto=auto -DQT_NO_DEBUG)
-    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,--gc-sections -Wl,--as-needed)
-  else()
-    # Removed flags (the perf gain on a Qt frontend is in the noise, the risk
-    # is real):
-    #   -ffast-math: defines __FAST_MATH__ which can poison transitive headers
-    #     (some libraries #error on it) and changes IEEE-754 rounding;
-    #     -fno-signed-zeros / -fno-trapping-math / -fno-math-errno are part of
-    #     the same family.
-    #   -fdelete-null-pointer-checks: legal C++ pessimization that has caused
-    #     CVE-class bugs in mainstream projects when assumptions about UB
-    #     differ between compiler versions.
-    #   -fmerge-all-constants: violates the C/C++ standard's "distinct
-    #     addresses for distinct objects" guarantee; rarely matters in
-    #     practice but breaks identity comparisons of string literals.
-    set(RELEASE_PERF_COMPILE_OPTS
-      -O3 -march=native -flto=auto
-      -fomit-frame-pointer -funroll-loops
-      -fno-semantic-interposition -ftree-vectorize
-      -DQT_NO_DEBUG
-    )
-    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
-  endif()
-
-  # Apple's ld rejects the GNU-ld perf options (-Wl,-O3 / --gc-sections /
-  # --as-needed); keep only the portable LTO flag on macOS.
-  if (APPLE)
-    set(RELEASE_PERF_LINK_OPTS -flto=auto)
-  endif()
-
-  # lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
-  # the GNU linker or gold. Apple's default ld already handles Clang LTO, and
-  # -fuse-ld=lld is unsupported there, so skip it on macOS.
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
-    list(PREPEND RELEASE_PERF_LINK_OPTS -fuse-ld=lld)
-  endif()
-endif()
+# Per-area compile-flag application — single source of truth (Kartend-9fdsd).
+# kartend_apply_area_flags() (cmake/CompilerFlags.cmake) applies, to every
+# area OBJECT lib, the full uniform set the root used to spread across six
+# hand-written foreach(_area ...) loops: warnings, the RISC-V extern-access
+# intent, hardening (non-Debug) + release-perf (Release/RelWithDebInfo)
+# compile opts, NDEBUG in Release, -Werror in maintenance, and the PGO
+# generate/use compile opts. Collapsing them into one call means a flag lands
+# on EVERY area lib or none — it can't be applied to five and silently skipped
+# on the sixth. The flag-matrix variables (HARDENING_* / RELEASE_PERF_* /
+# KARTEND_LTO_LINK_OPTIONS) it reads are computed in that same module.
+#
+# The PGO STATUS/FATAL_ERROR diagnostics and the target-SPECIFIC link/define
+# applications the old loops were interleaved with (the kartend exe link
+# options, kartend_utils PUBLIC interface link options, the PGO link options
+# on the kartend exe) stay inline below — they are single-target, not a
+# per-area sweep.
+kartend_apply_area_flags(${KARTEND_AREA_LIBS})
 
 # RPATH: portable bundles (Flatpak, AppImage) ship Qt and other transitive
 # libraries inside the bundle alongside the executable. Embed $ORIGIN-relative
@@ -553,18 +354,10 @@ if (KARTEND_PORTABLE_RELEASE AND NOT WIN32)
   )
 endif()
 
-# Hardening (non-Debug) + release perf options applied to every per-area
-# OBJECT lib so the generated .o files participate in LTO and pick up the
-# same security flags as the main exe link. RELEASE_PERF (LTO + QT_NO_DEBUG +
-# --gc-sections/--as-needed; no -march, so portable) also applies to
-# RelWithDebInfo so the --relwithdebinfo "for profiling" build measures a binary
-# representative of the shipped Release rather than an un-LTO'd, asserts-on one.
-foreach(_area ${KARTEND_AREA_LIBS})
-  target_compile_options(${_area} PRIVATE
-    $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
-    $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:${RELEASE_PERF_COMPILE_OPTS}>
-  )
-endforeach()
+# The per-area hardening/release-perf COMPILE options are applied by
+# kartend_apply_area_flags() above (cmake/CompilerFlags.cmake). The matching
+# LINK options on the kartend EXECUTABLE are target-specific, so they stay
+# here.
 target_link_options(kartend PRIVATE
   $<$<NOT:$<CONFIG:Debug>>:${HARDENING_LINK_OPTS}>
   $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:${RELEASE_PERF_LINK_OPTS}>
@@ -580,27 +373,15 @@ target_link_options(kartend PRIVATE
 # PUBLIC-links kartend_utils per the DAG in src/CMakeLists.txt, so any
 # consumer linking ANY area lib transitively inherits these flags through
 # the chain. Tested under clang-18 Release where small test binaries link
-# direct area-lib .o subsets (Kartend-eyzv).
-if (MSVC)
-  # /GL is on the compile side via RELEASE_PERF_COMPILE_OPTS above; /LTCG
-  # is the matching link-side flag and must propagate to every test exe
-  # that consumes the LTO'd OBJECT libs.
-  set(KARTEND_LTO_LINK_OPTIONS
-    $<$<CONFIG:Release>:/LTCG>
-  )
-else()
-  set(KARTEND_LTO_LINK_OPTIONS
-    $<$<CONFIG:Release>:-flto=auto>
-  )
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
-    list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
-  endif()
-endif()
+# direct area-lib .o subsets (Kartend-eyzv). KARTEND_LTO_LINK_OPTIONS is
+# computed in cmake/CompilerFlags.cmake (single source of truth with the
+# compile-side LTO flags).
 target_link_options(kartend_utils INTERFACE ${KARTEND_LTO_LINK_OPTIONS})
 
-# PGO: applied to each area lib (must come AFTER target_compile_options
-# above used genex substitution — applying via separate target_*_options calls
-# accumulates rather than relying on dead list(APPEND) text substitution).
+# PGO: the per-area COMPILE opts (-fprofile-generate / -fprofile-use) are
+# applied by kartend_apply_area_flags() above. The STATUS/FATAL_ERROR
+# diagnostics and the kartend-executable LINK options are target-specific /
+# one-shot, so they stay here.
 if (KARTEND_USE_PGO)
   if (MSVC)
     # MSVC PGO uses /GENPROFILE / /USEPROFILE (compile and link side) plus
@@ -612,19 +393,10 @@ if (KARTEND_USE_PGO)
   endif()
   if (KARTEND_PGO_GENERATE)
     message(STATUS "PGO: Generating profile data in ${KARTEND_PGO_PROFILE_DIR}")
-    foreach(_area ${KARTEND_AREA_LIBS})
-      target_compile_options(${_area} PRIVATE
-        $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
-    endforeach()
     target_link_options(kartend PRIVATE
       $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
   elseif (KARTEND_PGO_USE)
     message(STATUS "PGO: Using profile data from ${KARTEND_PGO_PROFILE_DIR}")
-    foreach(_area ${KARTEND_AREA_LIBS})
-      target_compile_options(${_area} PRIVATE
-        $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>
-        $<$<CONFIG:Release>:-fprofile-correction>)
-    endforeach()
     target_link_options(kartend PRIVATE
       $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>)
   endif()
@@ -638,9 +410,7 @@ endif()
 # packagers' jobs harder. Flatpak and AppImage builders also strip on
 # their own. Local installers can pass --strip themselves if desired.
 
-foreach(_area ${KARTEND_AREA_LIBS})
-  target_compile_definitions(${_area} PRIVATE $<$<CONFIG:Release>:NDEBUG>)
-endforeach()
+# (NDEBUG in Release is applied per-area by kartend_apply_area_flags() above.)
 
 # Debug-only linker map file output. Opt-in via -DKARTEND_LINKER_MAP=ON; the
 # map is written to the build directory so sandboxed/chroot builders
@@ -661,20 +431,10 @@ if (KARTEND_LINKER_MAP)
   endif()
 endif()
 
-# Install (Linux)
-if (UNIX AND NOT APPLE)
-  include(GNUInstallDirs)
-  install(TARGETS kartend RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(FILES packaging/${KARTEND_APP_ID}.desktop
-          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
-  install(FILES src/assets/icon.svg
-          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps
-          RENAME ${KARTEND_APP_ID}.svg)
-  install(FILES packaging/${KARTEND_APP_ID}.metainfo.xml
-          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo)
-  install(FILES ${KARTEND_TRANSLATION_QM_FILES}
-          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${KARTEND_TRANSLATION_INSTALL_SUBDIR})
-endif()
+# Install rules (Linux) + CPack/DEB packaging config live in a dedicated
+# module (Kartend-9fdsd), include()d at the end of this file. The uninstall
+# custom target stays here because it's referenced by build.sh's --uninstall
+# path and is not packaging config per se.
 
 # Uninstall: read install_manifest.txt and remove the listed files. Honors
 # DESTDIR. Run via `cmake --build <build-dir> --target uninstall`.
@@ -686,16 +446,8 @@ if (NOT TARGET uninstall)
     VERBATIM)
 endif()
 
-# KARTEND_MAINTENANCE adds -Werror (or /WX on MSVC) to every area lib.
-if (KARTEND_MAINTENANCE)
-  foreach(_area ${KARTEND_AREA_LIBS})
-    if (MSVC)
-      target_compile_options(${_area} PRIVATE /WX)
-    else()
-      target_compile_options(${_area} PRIVATE -Werror)
-    endif()
-  endforeach()
-endif()
+# (KARTEND_MAINTENANCE's -Werror / /WX is applied per-area by
+# kartend_apply_area_flags() above.)
 
 # Tests (optional; declared at top with other options)
 if (KARTEND_BUILD_TESTS)
@@ -705,47 +457,9 @@ if (KARTEND_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
 
-# CPack: enables `cpack -G TGZ` for binary tarballs and `cpack --config
-# CPackSourceConfig.cmake -G TGZ` for source tarballs. The tag-triggered
-# release workflow uses `git archive` directly, so CPack is here for
-# ad-hoc prerelease bundling and downstream packaging assistance.
-set(CPACK_PACKAGE_NAME "kartend")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_VENDOR "EtherAura")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-  "Qt6 KDE frontend for organizing and launching multimedia collections")
-set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/EtherAura/Kartend")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
-set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/readme.md")
-set(CPACK_GENERATOR "TGZ")
-set(CPACK_SOURCE_GENERATOR "TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "Kartend-${PROJECT_VERSION}")
-set(CPACK_SOURCE_IGNORE_FILES
-  "/\\\\.git/"
-  "/\\\\.beads/"
-  "/\\\\.cache/"
-  "/\\\\.claude/"
-  "/\\\\.obsidian/"
-  "/\\\\.vscode/"
-  "/build/"
-  "/Testing/"
-  "/\\\\.backups/"
-  "\\\\.dolt/"
-  "\\\\.swp$"
-  "~$"
-)
-
-# Debian (.deb) generator config. Selected at pack time with `cpack -G DEB`.
-# Exercised by .scripts/test-install-ubuntu.sh, which builds a .deb here and
-# then verifies it installs cleanly in a fresh ubuntu:24.04 container.
-# SHLIBDEPS=ON walks the installed ELF with `dpkg-shlibdeps` to discover the
-# exact runtime libQt6Core/libSDL2/etc package names — saves us from chasing
-# the libqt6*6t64 renames that landed in noble's time_t transition.
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "EtherAura <https://github.com/EtherAura>")
-set(CPACK_DEBIAN_PACKAGE_SECTION "kde")
-set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
-
-include(CPack)
+# Install rules (Linux) + CPack / Debian packaging config live in a dedicated
+# module (Kartend-9fdsd). Included last so every install() call and the CPACK_*
+# variables it sets are visible to its trailing include(CPack), and so the
+# install rules run after the tests subdirectory has been added (no
+# cross-dependency, behaviour-identical to the previous inline ordering).
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Packaging.cmake)

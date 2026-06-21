@@ -64,18 +64,30 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 
 ## Test Coverage
 
-Tests are grouped into five areas. Each `test_*.cpp` is a standalone Qt
+Tests are grouped into seven areas. Each `test_*.cpp` is a standalone Qt
 Test binary discovered by CTest, with the exception of the integration
 suite which links all of its `TestXxx` classes into a single binary
 (`test_integration`) driven by `tests/integration/test_main.cpp`.
+(`tests/support/` holds shared fixture headers, not tests, and
+`tests/suppressions/` holds sanitizer suppression files — neither is a
+test area; both are described below the table.)
 
 | Area | Path | Coverage |
 |------|------|----------|
 | Module unit tests | `tests/modules/<feature>/` | Per-manager and per-helper coverage for `src/modules/`. One flat folder per feature — the `behavior/data/input/media` group level is omitted. Includes `dat/` and `scraper/`. |
 | Utility unit tests | `tests/utils/` | Helpers under `src/utils/` **only** (`app`, `db`, `fs`, `text`, `threading`, `view`). Tests for `src/modules/` files must NOT land here. |
+| Core helper tests | `tests/core/` | Extractable helpers lifted out of `src/core/` (e.g. `GridWidthDebouncer`, title-counts helpers). Test the lift-able logic; leave the `QMainWindow`/`QWidget` shell to integration tests. See [Core Helper Tests](#core-helper-tests). |
 | Integration tests | `tests/integration/` | One binary (`test_integration`). `MainWindowFixture`-driven multi-manager scenarios; shared mocks under `tests/integration/mocks/`. |
 | UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior for generic `src/ui/widgets/` widgets (e.g. `CoverFlowWidget`). Tests for widgets that live under `src/modules/` go in `tests/modules/<feature>/`. |
+| UI dialog tests | `tests/ui/dialogs/` | Dialog, panel, and dialog-controller coverage for `src/ui/` dialogs (e.g. `BulkEditDialog`, `ScraperSettingsPanel`, `GamepadCaptureController`). Each is a standalone binary. |
 | Benchmarks | `tests/benchmarks/` | Perf benchmarks labelled `benchmark`; skipped by default. Run with `ctest -L benchmark`. |
+
+**Shared fixtures (`tests/support/`).** Header-only test support reused
+across areas — `TestSandbox`, `InspectorDb`, `MacHomeSandbox`,
+`ScopeExit`. These are `#include`d by test files; they are not themselves
+tests and register no CTest binaries. **Sanitizer suppressions
+(`tests/suppressions/`)** holds the ASan/UBSan/TSan suppression lists
+consumed by sanitizer builds — likewise not a test area.
 
 Binary and method counts drift fast — prefer `ctest --output-on-failure
 --test-dir build/ninja-release` for an authoritative list and pass count.
@@ -94,6 +106,7 @@ leaving a test folder behind after deleting a module, fails the lint.
 | `src/modules/data/cache/` | `tests/modules/cache/` |
 | `src/modules/data/dat/` | `tests/modules/dat/` |
 | `src/modules/data/database/` | `tests/modules/database/` |
+| `src/modules/data/dataudit/` | `tests/modules/dataudit/` |
 | `src/modules/data/kart/` | `tests/modules/kart/` |
 | `src/modules/data/playlist/` | `tests/modules/playlist/` |
 | `src/modules/data/query/` | `tests/modules/query/` |
@@ -101,6 +114,7 @@ leaving a test folder behind after deleting a module, fails the lint.
 | `src/modules/data/scraper/` | `tests/modules/scraper/` |
 | `src/modules/data/session/` | `tests/modules/session/` |
 | `src/modules/data/settings/` | `tests/modules/settings/` |
+| `src/modules/data/watcher/` | `tests/modules/watcher/` |
 | `src/modules/input/animation/` | `tests/modules/animation/` |
 | `src/modules/input/attract/` | `tests/modules/attract/` |
 | `src/modules/input/event/` | `tests/modules/event/` |
@@ -124,6 +138,40 @@ leaving a test folder behind after deleting a module, fails the lint.
 Integration-only features (no `tests/modules/<feature>/`) are listed in
 `INTEGRATION_ONLY` inside `check-test-mapping.py`; new additions there
 need a comment pointing to the integration test that covers them.
+
+### Core Helper Tests
+
+`src/core/` is the application's largest layer by line count and its
+largest untested area — its biggest files are the `MainWindow` split
+(`mainwindow_dialogs`, `mainwindow_setup`, `mainwindow_wiring`) and the
+toolbar/menu controllers (`menucontroller`, `toolbarcontroller`). Most of
+that bulk is `QMainWindow`/`QWidget` shell code that's only reachable
+through the full widget graph, so it's exercised via the integration
+binary rather than in isolation.
+
+`tests/core/` holds standalone unit tests for the **extractable helpers**
+lifted out of that shell — pure logic with no widget dependency, such as
+`GridWidthDebouncer` (`tests/core/test_gridwidthdebouncer.cpp`) and the
+title-counts helpers (`tests/core/test_titlecountshelpers.cpp`). Follow
+the same rule used elsewhere in this doc: **test the extractable helpers,
+leave the `QWidget` shell.** When adding logic under `src/core/`, prefer
+to factor the lift-able part into a small helper (mirroring
+`titlecountshelpers` / `gridwidthdebouncer`) and unit-test it here; cover
+the surrounding `MainWindow`/controller wiring through
+`tests/integration/` instead.
+
+**Enforcement: `src/core/` is NOT mapping-tracked, by design.** Unlike
+`src/modules/` (bidirectional per-feature mapping) and `tests/utils/`
+(cluster mirror), `check-test-mapping.py` enforces **no** structural rule
+for `src/core/`: a new `src/core/` file will *not* trip the mapping lint.
+This is intentional — most of `src/core/` is shell code that can't be
+unit-tested in isolation, so a per-file mapping requirement would be
+almost all false positives. Instead, the script emits a **non-fatal
+advisory coverage report** for `src/core/` and `src/chrome/`
+(`report_core_chrome_coverage`, added in Kartend-tu2hq): it lists every
+`.cpp` with no matching `test_<name>.cpp` so the gap stays visible, but it
+**never affects the lint's exit status**. Raising core coverage is
+incremental work, not a gate.
 
 ## Adding New Tests
 

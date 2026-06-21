@@ -56,9 +56,17 @@ Build options:
                     require Clang and set this implicitly)
 
 Maintenance-only:
-  --apply-fixes      Apply safe clang-tidy fixes (requires --maintenance)
-  --format-check     Run clang-format check (requires --maintenance)
-  --format-apply     Apply clang-format (requires --maintenance)
+  --apply-fixes      Apply safe clang-tidy fixes in place (requires
+                     --maintenance; refuses to run on a dirty git tree —
+                     fix set is derived from .clang-tidy)
+  --apply-fixes-dirty-ok
+                     Allow --apply-fixes / --format-apply to run on a dirty
+                     working tree (the diff will be mixed with your
+                     uncommitted changes; not recommended)
+  --format-check     Run clang-format check (requires --maintenance; fails
+                     loud if no clang-format-19 binary is found)
+  --format-apply     Apply clang-format in place (requires --maintenance;
+                     refuses to run on a dirty git tree)
 
 Environment (maintenance-only):
   KARTEND_TIDY_ONLY_FILES=PATH
