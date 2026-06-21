@@ -51,7 +51,7 @@ jobs:
     # in ~30s instead of costing a contributor an hour of CI (Kartend-cifqk).
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install lint dependencies
         run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils
@@ -130,7 +130,7 @@ jobs:
             cxx: clang++
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         uses: ./.github/actions/install-deps
@@ -241,7 +241,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         # Deliberately omit libzstd-dev. KARTEND_ENABLE_ZSTD=OFF below makes
@@ -313,7 +313,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         # The instrumented (ASan/UBSan) build plus the full test-binary set
@@ -416,7 +416,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         uses: ./.github/actions/install-deps
@@ -498,7 +498,7 @@ jobs:
     timeout-minutes: 150
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history so the diff-scope step below can resolve the merge
           # base against the PR's target branch (origin/$GITHUB_BASE_REF...HEAD).
@@ -611,7 +611,7 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Qt 6.7 LTS
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
@@ -768,7 +768,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install build tools + Qt runtime libs
         # No apt qt6-* packages here — they would collide with the
@@ -858,7 +858,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install build deps
         run: brew install ninja ccache zstd
