@@ -5,6 +5,8 @@
 // utils/app/collection/*_persistence.{h,cpp}.
 #include "settingsmanager.h"
 
+#include <utility>
+
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QLoggingCategory>
@@ -383,7 +385,18 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   // bound until the stack aborts (SIGABRT on details-sidebar tab switch).
   // Snapshot the prior baseline, commit the new one, then diff against the
   // snapshot so re-entrant saves observe no change and stop.
-  const QList<CollectionConfig> previouslySaved = m_lastSavedCollections;
+  //
+  // Kartend-lc58a: move (not copy) the old baseline out of the member before
+  // overwriting it. m_lastSavedCollections is reassigned on the very next line,
+  // so its prior buffer can be stolen rather than ref-shared — this avoids a
+  // detach-deep-copy of every collection's embedded QHash/QList if a re-entrant
+  // save mutates the (new) baseline while these emits are on the stack. Behavior
+  // is identical: previouslySaved still holds the exact pre-save list and is the
+  // diff's `previous` argument. The broader hot-path copy this issue targets
+  // (the m_lastSavedCollections snapshot itself) lives on the member declared in
+  // settingsmanager.h and can't be converted to shared/fingerprint storage
+  // without editing that header — out of this change's file scope.
+  const QList<CollectionConfig> previouslySaved = std::move(m_lastSavedCollections);
   m_lastSavedCollections = collections;
   emitPerCollectionDiffs(previouslySaved, collections);
 

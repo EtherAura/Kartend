@@ -77,6 +77,22 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   setWindowTitle(tr("Settings"));
   setModal(true);
 
+  // Resolve the save/load host ONCE here instead of re-casting QObject::parent()
+  // at the eight downstream use sites (Kartend-rn0ym). A null result is normal
+  // in tests / CLI / headless construction (no parent at all). But when a parent
+  // widget WAS supplied and the cast still fails — a reparent or a
+  // non-MainWindow construction path — the general-settings save/load silently
+  // no-ops while reporting success, dropping the user's edits. Warn + assert in
+  // that case so the condition is diagnosable rather than invisible; the genuine
+  // headless case (no parent) stays silent.
+  m_host = dynamic_cast<IMainWindow *>(QObject::parent());
+  if (!m_host && QObject::parent()) {
+    qCWarning(ErrorUtils::lcErrors())
+        << "SettingsDialog: parent widget is not an IMainWindow; general-settings "
+           "save/load will be a no-op and edits would be silently dropped";
+    Q_ASSERT_X(m_host, "SettingsDialog", "parent() is non-null but not an IMainWindow");
+  }
+
   // Persistent Save button — lives in the dialog's bottom button row, left of
   // Cancel/OK, so it's reachable from every settings page. Its text, icon and
   // initial disabled state come from settingsdialog.ui; the click handler and
@@ -103,7 +119,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // configuration panel can launch an audit for the edited collection and show
   // its last-audited time. A null parent (tests / standalone construction)
   // leaves the hooks unset; the panel guards on them (Kartend-4mqkof).
-  if (auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent())) {
+  if (auto *mainWindow = m_host) {
     m_model.openDatAudit = [mainWindow](const CollectionConfig &collection) {
       mainWindow->openDatAuditForCollection(collection);
     };
@@ -186,7 +202,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
           [this](const QString &c) {
-            auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
+            auto *mainWindow = m_host;
             auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
             if (!mainWindow || !sm) return;
             mainWindow->generalSettings().appearance.titleBaseColor = c;
@@ -213,9 +229,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // without going through the deferred-save path.
   ui->fontsPanel->setModel(&m_model);
   connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
-    // QObject::parent() — explicit because the enclosing constructor's
-    // own `parent` argument is in scope and shadows the member function.
-    auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
+    auto *mainWindow = m_host;
     auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
     if (!mainWindow || !sm) {
       return;
@@ -234,7 +248,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // so persisting is sufficient.
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
-    auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
+    auto *mainWindow = m_host;
     auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
     if (!mainWindow || !sm) {
       return;
@@ -473,7 +487,7 @@ void SettingsDialog::restoreLiveAppliedSettings() {
   if (!m_liveSettingsApplied) {
     return;
   }
-  auto *mainWindow = dynamic_cast<IMainWindow *>(QObject::parent());
+  auto *mainWindow = m_host;
   auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
   if (!mainWindow || !sm) {
     return;

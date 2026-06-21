@@ -32,6 +32,7 @@ class QTimer;
 QT_END_NAMESPACE
 
 struct ApplicationContext;
+class IMainWindow;
 class CollectionTreeWidget;
 class ConfigProfileController;
 class DetailsPaneManager;
@@ -342,6 +343,17 @@ private:
   /// construct the dialog without an app context; the manager-touching
   /// paths null-guard accordingly.
   const ApplicationContext *m_ctx = nullptr;
+  /// Save/load host (MainWindow), resolved ONCE at construction from the
+  /// QObject parent via dynamic_cast<IMainWindow*> (Kartend-rn0ym). Replaces
+  /// the eight scattered per-use casts so every consumer reads one stored
+  /// pointer instead of independently remembering to null-guard. Null in
+  /// tests / CLI / headless contexts (no MainWindow parent) and on any
+  /// reparent-to-non-MainWindow path; the manager-touching paths null-guard
+  /// on it. When it resolves null while a parent widget WAS supplied (the
+  /// reparent / wrong-type case, not the headless case) the constructor warns
+  /// and asserts so the silent-no-op condition is diagnosable rather than
+  /// invisible.
+  IMainWindow *m_host = nullptr;
   /// Multi-step collection-removal pipeline — owns the seven discrete
   /// steps (validate / capture-expanded / perform-removal /
   /// update-parents / rebuild-indices / restore-expanded /

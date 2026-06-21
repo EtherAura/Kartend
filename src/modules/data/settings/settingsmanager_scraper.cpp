@@ -66,8 +66,8 @@ bool runKeychainJobBounded(QKeychain::Job &job, const char *opName) {
   QTimer::singleShot(kKeychainTimeoutMs, &loop, &QEventLoop::quit);
   loop.exec();
   if (!finished) {
-    qWarning() << "SettingsManager: keychain" << opName << "timed out after" << kKeychainTimeoutMs
-               << "ms";
+    qCWarning(lcSettingsManager) << "SettingsManager: keychain" << opName << "timed out after"
+                                 << kKeychainTimeoutMs << "ms";
   }
   return finished;
 }

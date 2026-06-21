@@ -1,6 +1,7 @@
 // Keyboard shortcuts help dialog
 #include "shortcutsdialog.h"
 
+#include "errorutils.h"
 #include "imainwindow.h"
 
 #include <QFont>
@@ -81,6 +82,16 @@ void ShortcutsDialog::populateContent() {
   clearLayout(m_rightColumnLayout);
 
   const auto *mw = dynamic_cast<IMainWindow *>(parent());
+  // Read-only display: a null host falls back to default keybindings rather than
+  // dropping any state (no save path here). But a non-null parent that isn't an
+  // IMainWindow means the user would see fabricated defaults instead of their
+  // real bindings — warn so that misconfiguration is diagnosable (Kartend-rn0ym),
+  // while the genuine parentless case stays silent.
+  if (!mw && parent()) {
+    qCWarning(ErrorUtils::lcErrors())
+        << "ShortcutsDialog: parent widget is not an IMainWindow; showing default "
+           "keybindings instead of the user's configured shortcuts";
+  }
   const auto settings = mw ? mw->generalSettings() : GeneralSettings{};
 
   auto keyText = [](int key) -> QString {

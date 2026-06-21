@@ -18,6 +18,7 @@
 #include "collection/validationhelpers.h"
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
+#include "errordialog.h"
 #include "pathutils.h"
 #include "settingsdialog.h"
 #include "treemanager.h"
@@ -38,6 +39,17 @@ void SettingsDialog::addCollection() {
   if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
     saveCollectionFromUI(currentCollectionIndex);
   }
+
+  // Flush global general settings too (Kartend-c427s). The title-tint fields
+  // (saturation / lightness / base color) are consumed off the appearance-colors
+  // widget into m_generalSettings as the user edits, but saveCollectionFromUI
+  // only writes the per-collection row — so without this the global edit would be
+  // silently dropped on add/duplicate/copy. Mirrors handleSaveCollection's flush;
+  // disk failures are surfaced but don't abort the add.
+  if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+    ErrorDialog::showError(this, result.error());
+  }
+  m_originalGeneralSettings = m_generalSettings;
 
   CollectionConfig newCollection;
   newCollection.name = name;
@@ -192,6 +204,19 @@ namespace {
 // mask leave @p dst's existing values untouched. Identity, paths, launcher
 // list, and scan-affecting flags are never copied regardless of the mask —
 // those still require an explicit per-collection edit.
+//
+// Kartend-fybhy: the per-field copies below are deliberately an explicit,
+// opt-in allowlist — NOT a whole-leaf `dst.background = src.background` /
+// `dst.listView = src.listView` assignment. Today the Colors block happens to
+// cover every CollectionBackground field and the ListView block every
+// ListViewOptions field, so collapsing them would be field-equivalent *right
+// now*. It is intentionally left expanded so that a future leaf field which
+// should NOT propagate (e.g. a runtime-only member, as FolderBrowsingOptions::
+// currentSubfolder already is) does not start propagating silently the moment
+// it is added. The flip side — a propagatable field added to a leaf but
+// forgotten here — is the drift this issue tracks; when migrating propagation
+// onto a per-leaf "propagatable" descriptor, do it leaf-by-leaf rather than by
+// swapping these in for raw whole-leaf assignment.
 void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst,
                                    ApplySettingsDialog::FieldCategories categories) {
   if (categories.testFlag(ApplySettingsDialog::GridLayout)) {
@@ -300,6 +325,14 @@ void SettingsDialog::duplicateCollection() {
   // Snapshot the live form first so the duplicate captures what the user
   // currently sees, not the last-saved state.
   saveCollectionFromUI(currentCollectionIndex);
+
+  // Flush global general settings too (Kartend-c427s) — saveCollectionFromUI
+  // writes only the per-collection row, so an in-memory title-tint edit consumed
+  // off the appearance-colors widget would otherwise be dropped here.
+  if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+    ErrorDialog::showError(this, result.error());
+  }
+  m_originalGeneralSettings = m_generalSettings;
 
   const CollectionConfig source = collections[currentCollectionIndex];
 
@@ -428,6 +461,14 @@ void SettingsDialog::copySettingsFromOtherCollection() {
   // Snapshot the form first so an in-progress edit isn't silently discarded
   // when we reload the UI after the copy.
   saveCollectionFromUI(currentCollectionIndex);
+
+  // Flush global general settings too (Kartend-c427s) — saveCollectionFromUI
+  // writes only the per-collection row, so an in-memory title-tint edit consumed
+  // off the appearance-colors widget would otherwise be dropped here.
+  if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+    ErrorDialog::showError(this, result.error());
+  }
+  m_originalGeneralSettings = m_generalSettings;
 
   // Count eligible source collections (everything except current + playlists)
   // before opening the dialog so we can give a useful empty-state message.
