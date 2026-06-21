@@ -31,6 +31,13 @@ constexpr char kBase[] = "https://datomatic.no-intro.org/";
 constexpr char kUserAgent[] =
     "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0";
 
+// Response-size cap (Kartend-85zrx). The whole body is buffered with readAll()
+// before inspection, so a hostile/compromised upstream or a MITM could stream
+// unbounded data into memory and OOM the process. Abort once received bytes
+// cross this ceiling, mirroring the scraper HttpClient's downloadProgress→abort
+// pattern. 200 MiB comfortably fits real DAT packs (~tens of MiB).
+constexpr qint64 kMaxResponseBytes = 200LL * 1024 * 1024;
+
 bool cancelled(const CancelToken &c) {
   return c && c->load(std::memory_order_relaxed);
 }
@@ -50,6 +57,10 @@ QNetworkReply *blockingRequest(QNetworkAccessManager &nam, const QUrl &url, cons
                                const std::function<void(qint64, qint64)> &onProgress) {
   QNetworkRequest req(url);
   req.setRawHeader("User-Agent", kUserAgent);
+  // Bound a stalled/slowloris server so the download worker can't hang
+  // indefinitely (the cancel token only fires on explicit user cancel).
+  // Matches the scraper HttpClient's 30s transfer timeout (Kartend-vu8io).
+  req.setTransferTimeout(30000);
   if (!referer.isEmpty()) {
     req.setRawHeader("Referer", referer.toUtf8());
   }
@@ -71,6 +82,16 @@ QNetworkReply *blockingRequest(QNetworkAccessManager &nam, const QUrl &url, cons
     QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
                      [&onProgress](qint64 rcv, qint64 total) { onProgress(rcv, total); });
   }
+  // Response-size cap: abort the reply once received bytes cross the ceiling so
+  // a runaway response can't be buffered into memory before readAll() inspects
+  // it (Kartend-85zrx). The aborted reply finishes with OperationCanceledError,
+  // which the callers surface as a download failure.
+  QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
+                   [reply](qint64 rcv, qint64 /*total*/) {
+                     if (rcv > kMaxResponseBytes && reply->isRunning()) {
+                       reply->abort();
+                     }
+                   });
   // Poll the cancel token on a short timer so a mid-transfer cancel aborts the
   // reply (which then finishes with OperationCanceledError and quits the loop).
   QTimer cancelTimer;

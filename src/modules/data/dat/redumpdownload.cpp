@@ -24,6 +24,13 @@ constexpr char kBase[] = "https://redump.org/";
 constexpr char kUserAgent[] =
     "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0";
 
+// Response-size cap (Kartend-85zrx). The whole body is buffered with readAll()
+// before inspection, so a hostile/compromised upstream or a MITM could stream
+// unbounded data into memory and OOM the process. Abort once received bytes
+// cross this ceiling, mirroring the scraper HttpClient's downloadProgress→abort
+// pattern. 200 MiB comfortably fits real DAT packs (~tens of MiB).
+constexpr qint64 kMaxResponseBytes = 200LL * 1024 * 1024;
+
 bool cancelled(const CancelToken &c) {
   return c && c->load(std::memory_order_relaxed);
 }
@@ -37,6 +44,10 @@ QNetworkReply *blockingGet(QNetworkAccessManager &nam, const QUrl &url, const Ca
   req.setRawHeader("User-Agent", kUserAgent);
   req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                    QNetworkRequest::NoLessSafeRedirectPolicy);
+  // Bound a stalled/slowloris server so the download worker can't hang
+  // indefinitely (the cancel token only fires on explicit user cancel).
+  // Matches the scraper HttpClient's 30s transfer timeout (Kartend-vu8io).
+  req.setTransferTimeout(30000);
   QNetworkReply *reply = nam.get(req);
 
   QEventLoop loop;
@@ -45,6 +56,16 @@ QNetworkReply *blockingGet(QNetworkAccessManager &nam, const QUrl &url, const Ca
     QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
                      [&onProgress](qint64 rcv, qint64 total) { onProgress(rcv, total); });
   }
+  // Response-size cap: abort the reply once received bytes cross the ceiling so
+  // a runaway response can't be buffered into memory before readAll() inspects
+  // it (Kartend-85zrx). The aborted reply finishes with OperationCanceledError,
+  // which the caller surfaces as a download failure.
+  QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
+                   [reply](qint64 rcv, qint64 /*total*/) {
+                     if (rcv > kMaxResponseBytes && reply->isRunning()) {
+                       reply->abort();
+                     }
+                   });
   QTimer cancelTimer;
   if (cancel) {
     QObject::connect(&cancelTimer, &QTimer::timeout, &loop, [reply, &cancel]() {

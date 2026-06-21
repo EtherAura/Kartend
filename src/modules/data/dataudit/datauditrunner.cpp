@@ -139,14 +139,30 @@ Catalogue buildCatalogue(DatCache::Store &cache, const QStringList &datPaths,
       }
       continue;
     }
+    // Stream the source's records into a buffer first, then commit them to the
+    // catalogue only if the stream completed cleanly (Kartend-u4sdu). A
+    // mid-stream SELECT failure makes forEachRecord return false; committing the
+    // truncated set would silently build the catalogue from an incomplete record
+    // list and yield wrong Have/Miss verdicts with no failure surfaced. On
+    // failure we record the DAT in failedDats and add none of its records, so a
+    // partially-read source never masquerades as complete.
+    QList<DatLookup::DatRecord> buffered;
+    const bool streamed = cache.forEachRecord(
+        src.value(), [&buffered](const DatLookup::DatRecord &r) { buffered.append(r); });
+    if (!streamed) {
+      if (failedDats) {
+        failedDats->append(dat);
+      }
+      continue;
+    }
     // Attribute every record from this DAT to a source id so per-DAT
     // completeness can be reported (Kartend-m6qsb.15). The filename is the
     // provenance label the UI shows; the full path is the disambiguator only
     // when two DATs share a basename, which is rare enough not to special-case.
     const int sourceId = cat.addSource(QFileInfo(dat).fileName());
-    cache.forEachRecord(src.value(), [&cat, sourceId](const DatLookup::DatRecord &r) {
+    for (const DatLookup::DatRecord &r : buffered) {
       cat.addRecord(r, sourceId);
-    });
+    }
   }
   return cat;
 }
@@ -465,7 +481,11 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     // (Kartend-34lab follow-up). Look inside every archive we enumerate.
     if (RomHasher::isArchivePath(path)) {
       if (cacheDb != nullptr) {
-        if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs)) {
+        // opts.ignoreHashCache forces a miss here so a same-size/same-mtime
+        // in-place replacement is re-extracted, not trusted (Kartend-p30ic).
+        // The miss path below re-extracts and refreshes the cached rows.
+        if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs,
+                                                    opts.ignoreHashCache)) {
           for (const FileHashCache::MemberEntry &m : *hit) {
             ScannedFile sf;
             // Virtual member path: container + '/' + member, so the result
@@ -494,7 +514,11 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
       continue;
     }
     if (cacheDb != nullptr) {
-      if (auto hit = FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs)) {
+      // opts.ignoreHashCache forces a miss so the file is re-hashed and the
+      // cached entry refreshed, catching a same-size/same-mtime in-place swap
+      // the cache key can't (Kartend-p30ic). Phase 2 below writes the new hash.
+      if (auto hit = FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs,
+                                           opts.ignoreHashCache)) {
         ScannedFile sf;
         sf.path = path;
         sf.crc = hit->crc;

@@ -33,6 +33,12 @@ struct DailySet {
 /// The parsed daily-download form.
 struct DailyForm {
   bool valid = false;     ///< False when the expected form wasn't found.
+  /// True when the `name="daily"` form block was located on the page at all,
+  /// independent of whether its contents parsed into a valid request
+  /// (Kartend-s9k45). Lets a caller distinguish a likely site/layout change or
+  /// anti-bot block (`formFound == false`) from a form that was found but came
+  /// back without a usable Request button (`formFound == true && !valid`).
+  bool formFound = false;
   QString requestField;   ///< Submit name, e.g. "daily_dl_2026-05-30".
   QString packDate;       ///< Date parsed out of requestField, e.g. "2026-05-30".
   QStringList datTypes;   ///< Offered dat_type radio values (dat/pc/db).
