@@ -19,6 +19,8 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "pathutils.h"
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -33,14 +35,9 @@ namespace {
 
 // SS controls the remote media `type` (used downstream as an on-disk
 // subdirectory) and the group/company `scopeKey` (used as a filename). Gate
-// both before they can reach a filesystem path in scrapepersistence.
-
-// A safe single path component: non-empty, no separators, not `.`/`..`. A
-// hostile `type` like "../../etc" is dropped (Kartend-xncf).
-bool isSafePathComponent(const QString &s) {
-  return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
-         s != QLatin1String(".") && s != QLatin1String("..");
-}
+// both via PathUtils::isSafePathComponent before they can reach a filesystem
+// path in scrapepersistence. The guard is shared with scrapepersistence so the
+// path-traversal check can't drift between them (Kartend-2mol7).
 
 // SS returns plain-text error blobs at HTTP 200 instead of JSON — "Erreur de
 // login : ...", "Le quota ... est atteint", or (via a misbehaving proxy) an
@@ -307,7 +304,7 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
     // Kartend-xncf: `type` is the on-disk subdirectory; drop any asset whose
     // type isn't a safe single path component before it can traverse out of
     // artworkDirectory.
-    if (!isSafePathComponent(type)) continue;
+    if (!PathUtils::isSafePathComponent(type)) continue;
     const int rank = regionRank(m.value("region").toString());
     // Normalize to the canonical type FIRST so multi-tag variants (ss +
     // screenshot, box-2D + front, manuel + manual) collapse to one type BEFORE

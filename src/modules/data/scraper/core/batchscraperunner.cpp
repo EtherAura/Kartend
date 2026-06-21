@@ -36,12 +36,18 @@
 namespace Scraper {
 
 namespace {
+Q_LOGGING_CATEGORY(lcBatchScrape, "kartend.scrape.batch", QtWarningMsg)
+
 /// Bounded join for the write worker thread. Ample for the worst case
 /// (a single SQLite save on a busy disk) without risking a hang at
 /// shutdown if the disk is wedged — we'd rather leak the thread than
-/// block the UI on close. Mirrors DatabaseManager's SHUTDOWN_WAIT_MS
-/// budget for the same reason.
-constexpr int kWriteWorkerShutdownWaitMs = 2000;
+/// block the UI on close. Kartend-n5m1c: lowered from 2000ms — this wait
+/// runs back-to-back with the media-write drain on the GUI thread, so the
+/// two budgets stacked to ~4s of unresponsive window on wedged storage.
+/// The teardown is abandon-safe (the leaked thread + connection are reaped
+/// at process exit), so a shorter budget costs only a leaked thread in the
+/// rare timeout case, not correctness. Capped at ~2s combined now.
+constexpr int kWriteWorkerShutdownWaitMs = 1000;
 } // namespace
 
 BatchScrapeRunner::BatchScrapeRunner(const ApplicationContext *ctx,
@@ -82,7 +88,14 @@ BatchScrapeRunner::~BatchScrapeRunner() {
   // write to disk after the runner is gone. The watchers are children of
   // `this` and are destroyed below — they never fire post-dtor.
   m_mediaWriteCancel->store(true, std::memory_order_release);
-  constexpr int kMediaWriteDrainBudgetMs = 2000;
+  // Kartend-n5m1c: lowered from 2000ms. This drain runs back-to-back with
+  // shutdownWriteWorker()'s thread join below, both on the GUI thread, so the
+  // two budgets stacked to ~4s of an unresponsive window on wedged/network
+  // storage. The token already makes the write lambdas exit within one
+  // in-progress asset, so the full budget is only ever consumed on genuinely
+  // stalled storage — abandoning past it is safe (value-captures only). 1000ms
+  // here + 1000ms join caps the worst-case GUI freeze at ~2s.
+  constexpr int kMediaWriteDrainBudgetMs = 1000;
   QDeadlineTimer deadline(kMediaWriteDrainBudgetMs);
   bool abandoned = false;
   for (auto &future : m_inFlightMediaWrites) {
@@ -94,9 +107,10 @@ BatchScrapeRunner::~BatchScrapeRunner() {
     }
   }
   if (abandoned) {
-    qWarning() << "BatchScrapeRunner: media writes did not drain in" << kMediaWriteDrainBudgetMs
-               << "ms during destruction; abandoned them (value-captures only — the "
-                  "in-progress asset may still finish writing to disk)";
+    qCWarning(lcBatchScrape)
+        << "BatchScrapeRunner: media writes did not drain in" << kMediaWriteDrainBudgetMs
+        << "ms during destruction; abandoned them (value-captures only — the "
+           "in-progress asset may still finish writing to disk)";
   }
   shutdownWriteWorker();
 }

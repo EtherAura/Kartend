@@ -43,6 +43,25 @@ QList<QRegularExpression> compilePatterns(const QStringList &patterns,
     if (trimmed.isEmpty()) {
       continue;
     }
+    // ReDoS guard (Kartend-omin4): these patterns run via QString::remove(re)
+    // once PER displayed item on the UI / DB-interception path, and can arrive
+    // from imported collection configs, not just hand entry. Reject implausibly
+    // long patterns outright. (Qt/PCRE2 also bounds catastrophic backtracking
+    // via its internal match limit; this caps the per-item cost up to it.)
+    constexpr int kMaxPatternLength = 256;
+    if (trimmed.size() > kMaxPatternLength) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::InvalidArgument,
+              QStringLiteral("Title-exclusion regex too long; skipped"),
+              QStringLiteral("TitleFilter::compilePatterns"))
+              .withDetails(QStringLiteral("context=%1 length=%2 max=%3")
+                               .arg(diagnosticContext.isEmpty() ? QStringLiteral("<unset>")
+                                                                : diagnosticContext)
+                               .arg(trimmed.size())
+                               .arg(kMaxPatternLength)));
+      continue;
+    }
     QRegularExpression re(trimmed);
     if (!re.isValid()) {
       // Skip invalid patterns rather than wedging the whole list. Surfacing

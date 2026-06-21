@@ -114,6 +114,12 @@ enum class PathStatus {
 /// to special-case those.
 [[nodiscard]] QString pathStatusDescription(PathStatus status);
 
+/// True iff `s` is a single safe path component: non-empty, contains no path
+/// separator (`/` or `\`), and is neither "." nor "..". Used to refuse building
+/// a filesystem path from an untrusted provider/response string. Shared by the
+/// scraper persistence and ScreenScraper parser paths (Kartend-2mol7).
+[[nodiscard]] bool isSafePathComponent(const QString &s);
+
 } // namespace PathUtils
 
 #endif

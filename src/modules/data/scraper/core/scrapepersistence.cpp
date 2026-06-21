@@ -26,6 +26,7 @@
 #include "idatabasemanager.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
+#include "pathutils.h"
 
 #include <QSqlDatabase>
 
@@ -42,12 +43,9 @@ namespace {
 // Defense-in-depth (Kartend-xncf / Kartend-xhbt): asset.type becomes a
 // subdirectory and asset.scopeKey a filename below. Both originate from remote
 // provider responses, so refuse to build a path from anything that isn't a
-// single safe component — this holds regardless of which provider produced the
-// asset, not just the ScreenScraper parser that validates at parse time.
-bool isSafePathComponent(const QString &s) {
-  return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
-         s != QLatin1String(".") && s != QLatin1String("..");
-}
+// single safe component. The guard now lives in PathUtils::isSafePathComponent,
+// shared with the ScreenScraper parser so it can't drift between them
+// (Kartend-2mol7).
 
 bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
   // Caller already mkpath'd the parent dir. QSaveFile writes to a temp sibling
@@ -265,7 +263,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // Defense-in-depth (Kartend-xncf): never let a remote-derived
       // subdirectory escape artworkDirectory. The hardcoded video/manual names
       // are safe; this matters for the Image case where subdir == asset.type.
-      if (!isSafePathComponent(subdir)) {
+      if (!PathUtils::isSafePathComponent(subdir)) {
         ++result.mediaSkipped;
         if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
@@ -284,7 +282,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // Defense-in-depth (Kartend-xhbt): a shared scopeKey becomes the filename
       // below; refuse it if it isn't a single safe component so it can't
       // traverse out of the _shared/ directory.
-      if (sharedScope && !isSafePathComponent(write.asset.scopeKey)) {
+      if (sharedScope && !PathUtils::isSafePathComponent(write.asset.scopeKey)) {
         ++result.mediaSkipped;
         if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(
