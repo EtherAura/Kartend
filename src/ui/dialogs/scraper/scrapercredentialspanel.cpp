@@ -1,6 +1,7 @@
 #include "scrapercredentialspanel.h"
 
 #include "collectiontypes.h"
+#include "formbuilders.h"
 #include "settingsmodel.h"
 
 #include <QFont>
@@ -12,21 +13,7 @@
 #include <QVBoxLayout>
 
 namespace {
-constexpr int kLabelMinWidth = 200;
 constexpr int kLineEditMaxWidth = 320;
-
-// Set a uniform min width on every label in a QFormLayout so the
-// label column aligns with the other settings panels. Walks the
-// LabelRole items rather than tracking each addRow call.
-void uniformLabelColumn(QFormLayout *form) {
-  for (int row = 0; row < form->rowCount(); ++row) {
-    QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
-    if (!item) continue;
-    if (auto *label = qobject_cast<QLabel *>(item->widget())) {
-      label->setMinimumWidth(kLabelMinWidth);
-    }
-  }
-}
 } // namespace
 
 ScraperCredentialsPanel::ScraperCredentialsPanel(QWidget *parent) : QWidget(parent) {
@@ -93,7 +80,7 @@ void ScraperCredentialsPanel::rebuildLayout() {
     tmdbForm->addRow(tmdbHelp);
     addField(tmdbForm, QStringLiteral("tmdb"), QStringLiteral("api_token"), tr("API token:"),
              /*sensitive=*/true, QStringLiteral("eyJhbGciOiJIUzI1NiJ9..."));
-    uniformLabelColumn(tmdbForm);
+    FormBuilders::uniformLabelColumn(tmdbForm);
     root->addWidget(tmdbGroup);
   }
 
@@ -122,7 +109,7 @@ void ScraperCredentialsPanel::rebuildLayout() {
     addField(ssForm, QStringLiteral("screenscraper"), QStringLiteral("user_password"),
              tr("Password:"),
              /*sensitive=*/true);
-    uniformLabelColumn(ssForm);
+    FormBuilders::uniformLabelColumn(ssForm);
     root->addWidget(ssGroup);
   }
 

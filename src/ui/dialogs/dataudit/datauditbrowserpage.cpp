@@ -18,51 +18,27 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
-#include <QSqlDatabase>
-#include <QStandardPaths>
 #include <QStringList>
 #include <QTableView>
 #include <QTreeView>
 #include <QVBoxLayout>
 
-#include "databaseschema.h"
 #include "datauditbrowsermodels.h"
 #include "datauditbuckets.h"
 #include "datauditprofile.h"
 #include "datauditresultdelegate.h"
-#include "datcache.h"
 #include "dattreebadgedelegate.h"
-#include "errorutils.h"
+#include "formbuilders.h"
 
 namespace {
 
-// Short-lived UI-thread connection to the app DB (same pattern as the dialog's
-// withProfileDb). The browser's reads are light + occasional.
-template <typename Fn> void withDb(Fn &&fn) {
-  static int counter = 0; // UI thread only
-  const QString conn = QStringLiteral("dataudit_browser_%1").arg(counter++);
-  {
-    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (DatabaseSchema::openConnection(db, dir)) {
-      DatabaseSchema::applyConnectionPragmas(db);
-      fn(db);
-    }
-    db.close();
-  }
-  QSqlDatabase::removeDatabase(conn);
-}
-
-// Apply the shared results-table look (Kartend-m6qsb.20 idiom).
+// Apply the shared results-table look (Kartend-m6qsb.20 idiom) via the
+// centralized FormBuilders helper (Kartend-t06mx). The per-table status
+// delegate stays a data-audit concern, so it is constructed here and handed
+// to the generic helper rather than baked into it.
 void configureTable(QTableView *t) {
-  t->setSelectionBehavior(QAbstractItemView::SelectRows);
-  t->setSelectionMode(QAbstractItemView::SingleSelection);
-  t->setEditTriggers(QAbstractItemView::NoEditTriggers);
-  t->setSortingEnabled(true);
-  t->setAlternatingRowColors(true);
-  t->verticalHeader()->setVisible(false);
-  t->horizontalHeader()->setStretchLastSection(false);
-  t->setItemDelegate(new DatAudit::DatAuditResultDelegate(t));
+  FormBuilders::configureResultTable(t, new DatAudit::DatAuditResultDelegate(t),
+                                     /*stretchLastSection=*/false);
 }
 
 } // namespace
@@ -241,18 +217,8 @@ void DatAuditBrowserPage::buildUi() {
 }
 
 void DatAuditBrowserPage::refresh() {
-  QList<DatAuditProfile::Profile> profiles;
-  QList<DatAuditProfile::RollupRow> rollups;
-  withDb([&](QSqlDatabase &db) {
-    if (auto p = DatAuditProfile::listAll(db); p.isOk()) {
-      profiles = p.value();
-    }
-    if (auto r = DatAuditProfile::loadAllRollups(db); r.isOk()) {
-      rollups = r.value();
-    } else {
-      ErrorUtils::logError(r.error());
-    }
-  });
+  const QList<DatAuditProfile::Profile> profiles = m_repo.profiles();
+  const QList<DatAuditProfile::RollupRow> rollups = m_repo.rollups();
   {
     // Block expand/collapse emissions during the rebuild so the model reset's
     // view-collapse can't clear m_expandedProfiles before we re-apply it
@@ -380,15 +346,12 @@ void DatAuditBrowserPage::onTreeSelectionChanged() {
   m_infoName->setText(idx.data(Qt::DisplayRole).toString());
   QString desc = QStringLiteral("—");
   QString version = QStringLiteral("—");
-  if (!datPath.isEmpty()) {
-    DatCache::Store cache(DatCache::defaultPath());
-    if (const auto src = cache.peek(datPath)) {
-      if (!src->headerDescription.isEmpty()) {
-        desc = src->headerDescription;
-      }
-      if (!src->headerVersion.isEmpty()) {
-        version = src->headerVersion;
-      }
+  if (const auto src = m_repo.datHeader(datPath)) {
+    if (!src->headerDescription.isEmpty()) {
+      desc = src->headerDescription;
+    }
+    if (!src->headerVersion.isEmpty()) {
+      version = src->headerVersion;
     }
   }
   m_infoDescription->setText(desc);
@@ -427,27 +390,12 @@ void DatAuditBrowserPage::loadGamesFor(qint64 profileId, const QString &sourceNa
   m_romModel->clear();
   if (m_groupByFolder != nullptr && m_groupByFolder->isChecked()) {
     // Folder-as-item view: regroup the whole source's rows by item-folder.
-    QList<DatAuditProfile::ResultRow> results;
-    withDb([&](QSqlDatabase &db) {
-      if (auto r = DatAuditProfile::loadSourceResultRows(db, profileId, sourceName); r.isOk()) {
-        results = r.value();
-      } else {
-        ErrorUtils::logError(r.error());
-      }
-    });
+    const QList<DatAuditProfile::ResultRow> results = m_repo.sourceRows(profileId, sourceName);
     m_gameModel->setFolders(
         DatAudit::groupResultsByFolder(results, m_scanRootsByProfile.value(profileId)));
     return;
   }
-  QList<DatAuditProfile::GameRollupRow> games;
-  withDb([&](QSqlDatabase &db) {
-    if (auto g = DatAuditProfile::loadGameRollups(db, profileId, sourceName); g.isOk()) {
-      games = g.value();
-    } else {
-      ErrorUtils::logError(g.error());
-    }
-  });
-  m_gameModel->setGames(games);
+  m_gameModel->setGames(m_repo.gamesFor(profileId, sourceName));
 }
 
 void DatAuditBrowserPage::onGameSelectionChanged() {
@@ -466,14 +414,8 @@ void DatAuditBrowserPage::onGameSelectionChanged() {
   if (m_groupByFolder != nullptr && m_groupByFolder->isChecked()) {
     // Folder mode: gameName is the selected item-folder. Show that folder's rows
     // (Kartend-m6qsb.30) — no catalogue join, the rows already carry their state.
-    QList<DatAuditProfile::ResultRow> all;
-    withDb([&](QSqlDatabase &db) {
-      if (auto r =
-              DatAuditProfile::loadSourceResultRows(db, m_currentProfileId, m_currentSourceName);
-          r.isOk()) {
-        all = r.value();
-      }
-    });
+    const QList<DatAuditProfile::ResultRow> all =
+        m_repo.sourceRows(m_currentProfileId, m_currentSourceName);
     const auto folders =
         DatAudit::groupResultsByFolder(all, m_scanRootsByProfile.value(m_currentProfileId));
     for (const DatAudit::FolderRollup &fr : folders) {
@@ -487,22 +429,9 @@ void DatAuditBrowserPage::onGameSelectionChanged() {
     return;
   }
 
-  QList<DatAuditProfile::ResultRow> results;
-  withDb([&](QSqlDatabase &db) {
-    if (auto r = DatAuditProfile::loadGameResultRows(db, m_currentProfileId, m_currentSourceName,
-                                                     gameName);
-        r.isOk()) {
-      results = r.value();
-    }
-  });
-
-  QList<DatLookup::DatRecord> records;
-  if (!m_currentDatPath.isEmpty()) {
-    DatCache::Store cache(DatCache::defaultPath());
-    if (const auto src = cache.peek(m_currentDatPath)) {
-      records = cache.recordsForGame(*src, gameName);
-    }
-  }
+  const QList<DatAuditProfile::ResultRow> results =
+      m_repo.romsFor(m_currentProfileId, m_currentSourceName, gameName);
+  const QList<DatLookup::DatRecord> records = m_repo.datRecordsFor(m_currentDatPath, gameName);
   m_romModel->setGame(records, results);
   m_romTable->resizeColumnsToContents();
 }

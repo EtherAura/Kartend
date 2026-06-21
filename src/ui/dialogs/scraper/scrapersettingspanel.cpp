@@ -1,6 +1,7 @@
 #include "scrapersettingspanel.h"
 
 #include "collection/generalsettings.h"
+#include "formbuilders.h"
 #include "scrapelogger.h"
 #include "screenscraperparser.h"
 #include "screenscraperprovider.h"
@@ -27,24 +28,6 @@ namespace {
 // Mirrors the per-.ui maximumWidth values in the rest of the panels.
 constexpr int kSpinMaxWidth = 120;
 constexpr int kComboMaxWidth = 320;
-// Minimum width of the label column. Matches the `minimumSize` set on
-// every QLabel in the other settings panels so label edges line up
-// across groupboxes even when their label text is short.
-constexpr int kLabelMinWidth = 200;
-
-// Walk every row in the form, set the same minimum width on each
-// label widget. QFormLayout::addRow(QString, …) auto-creates a QLabel
-// that defaults to its text's sizeHint, so short labels collapse left
-// of long ones. A uniform min width keeps the label column aligned.
-void uniformLabelColumn(QFormLayout *form) {
-  for (int row = 0; row < form->rowCount(); ++row) {
-    QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
-    if (!item) continue;
-    if (auto *label = qobject_cast<QLabel *>(item->widget())) {
-      label->setMinimumWidth(kLabelMinWidth);
-    }
-  }
-}
 
 // Preset snapshots — switching the combo to anything other than Custom
 // stamps these onto the three numeric fields. Custom leaves the user's
@@ -89,6 +72,21 @@ void ScraperSettingsPanel::buildLayout() {
   root->setContentsMargins(0, 0, 0, 0);
   root->setSpacing(8);
 
+  // Composed from the two group builders below (Kartend-1adgj). The
+  // uniformLabelColumn fix-ups are applied here, after both groups exist, so
+  // every label column across the two groups converges on the same width.
+  auto *perfGroup = buildPerformanceGroup();
+  auto *behaviorGroup = buildBehaviorGroup();
+
+  FormBuilders::uniformLabelColumn(qobject_cast<QFormLayout *>(perfGroup->layout()));
+  FormBuilders::uniformLabelColumn(qobject_cast<QFormLayout *>(behaviorGroup->layout()));
+
+  root->addWidget(perfGroup);
+  root->addWidget(behaviorGroup);
+  root->addStretch(1);
+}
+
+QGroupBox *ScraperSettingsPanel::buildPerformanceGroup() {
   // ── Performance group ─────────────────────────────────────────
   // Rows ordered by widget type: dropdown first, then spin boxes,
   // then checkbox, then the Detect button + result label. The
@@ -205,8 +203,10 @@ void ScraperSettingsPanel::buildLayout() {
   explainer->setForegroundRole(QPalette::PlaceholderText);
   perfForm->addRow(explainer);
 
-  root->addWidget(perfGroup);
+  return perfGroup;
+}
 
+QGroupBox *ScraperSettingsPanel::buildBehaviorGroup() {
   // ── Re-scrape & metadata group ──────────────────────────────
   // Same widget-type ordering: dropdowns first, spin box next,
   // checkboxes last. The warning + skip-window pair sit under
@@ -400,11 +400,7 @@ void ScraperSettingsPanel::buildLayout() {
                                        .arg(ScrapeLogger::logFilePath()));
   behaviorForm->addRow(QString(), m_scrapeLoggingCheck);
 
-  uniformLabelColumn(perfForm);
-  uniformLabelColumn(behaviorForm);
-
-  root->addWidget(behaviorGroup);
-  root->addStretch(1);
+  return behaviorGroup;
 }
 
 void ScraperSettingsPanel::connectChangeSignals() {
@@ -448,16 +444,9 @@ void ScraperSettingsPanel::connectChangeSignals() {
 
   connect(m_rescrapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
     if (m_loading) return;
-    const auto mode = static_cast<ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
-    m_rescrapeWarning->setVisible(mode == ScraperRescrapeMode::UpdateChanged);
-    // The refresh-window controls only have meaning under modes that
-    // pre-filter the queue (Skip, Fill missing). Hide them under
-    // Overwrite / Update changed where every item already flows
-    // through to the provider regardless.
-    const bool windowApplies =
-        mode == ScraperRescrapeMode::Skip || mode == ScraperRescrapeMode::FillMissing;
-    if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
-    if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
+    // The rescrape-warning + refresh-window visibility derive from this combo;
+    // updateConditionalVisibility() is the single gate (Kartend-1adgj).
+    updateConditionalVisibility();
     writeModel();
     emit changed();
   });
@@ -500,11 +489,9 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // and also writes back the model so the change is durable.
   connect(m_hashModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
     if (m_loading) return;
-    const auto mode =
-        static_cast<ScraperOptions::ScraperHashMode>(m_hashModeCombo->currentData().toInt());
-    const bool sizeGated = mode == ScraperOptions::ScraperHashMode::SizeGated;
-    if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
-    if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
+    // The max-hashable-size controls only show under SizeGated;
+    // updateConditionalVisibility() owns that gate now (Kartend-1adgj).
+    updateConditionalVisibility();
     writeModel();
     emit changed();
   });
@@ -519,61 +506,87 @@ void ScraperSettingsPanel::connectChangeSignals() {
     emit changed();
   });
 
-  // Detect-threads button: fire ssuserInfos.php with the current
-  // member credentials and surface the result in the label next to
-  // the button. QPointer guard so a panel destroyed before the
-  // reply lands doesn't UAF.
-  connect(m_detectButton, &QPushButton::clicked, this, [this]() {
-    if (!m_model || !m_model->generalSettings) return;
-    m_detectedThreadsLabel->setText(tr("Querying ScreenScraper…"));
-    m_detectButton->setEnabled(false);
-    QPointer<ScraperSettingsPanel> guard(this);
-    ScreenScraperProviderHelpers::fetchUserInfo(
-        m_model->generalSettings,
-        [guard](ErrorUtils::Result<ScreenScraperParser::ScreenScraperUserInfo> r) {
-          if (guard.isNull()) return;
-          guard->m_detectButton->setEnabled(true);
-          if (r.isError()) {
-            guard->m_detectedThreadsLabel->setText(
-                ScraperSettingsPanel::tr("Detection failed: %1").arg(r.error().message));
-            return;
+  // Detect-threads button: the async ssuserInfos.php query + result rendering
+  // lives in its own slot (Kartend-1adgj) so the threading / provider logic
+  // stays out of this wiring method.
+  connect(m_detectButton, &QPushButton::clicked, this,
+          &ScraperSettingsPanel::onDetectThreadsClicked);
+}
+
+void ScraperSettingsPanel::onDetectThreadsClicked() {
+  // Fire ssuserInfos.php with the current member credentials and surface the
+  // result in the label next to the button. QPointer guard so a panel
+  // destroyed before the reply lands doesn't UAF.
+  if (!m_model || !m_model->generalSettings) return;
+  m_detectedThreadsLabel->setText(tr("Querying ScreenScraper…"));
+  m_detectButton->setEnabled(false);
+  QPointer<ScraperSettingsPanel> guard(this);
+  ScreenScraperProviderHelpers::fetchUserInfo(
+      m_model->generalSettings,
+      [guard](ErrorUtils::Result<ScreenScraperParser::ScreenScraperUserInfo> r) {
+        if (guard.isNull()) return;
+        guard->m_detectButton->setEnabled(true);
+        if (r.isError()) {
+          guard->m_detectedThreadsLabel->setText(
+              ScraperSettingsPanel::tr("Detection failed: %1").arg(r.error().message));
+          return;
+        }
+        const auto &info = r.value();
+        // Sanity-bound the API reply before stamping it into the
+        // spinbox so a corrupt response can't drive the runtime
+        // past safe limits. 1..16 matches the spinbox range.
+        if (info.maxThreads > 0) {
+          guard->m_batchItemSpin->setValue(qBound(1, info.maxThreads, 16));
+        }
+        QStringList parts;
+        parts << ScraperSettingsPanel::tr("threads: %1").arg(info.maxThreads);
+        if (!info.level.isEmpty()) {
+          parts << ScraperSettingsPanel::tr("tier: %1").arg(info.level);
+        }
+        if (info.maxDownloadSpeedKBps > 0) {
+          parts << ScraperSettingsPanel::tr("download cap: %1 KB/s").arg(info.maxDownloadSpeedKBps);
+        }
+        if (info.maxRequestsPerDay > 0) {
+          // Inline the failed-lookup count when SS reports either a
+          // KO quota or any KO requests today — gives the user a
+          // heads-up before they hit HTTP 431.
+          QString quotaPart = ScraperSettingsPanel::tr("%1 / %2 requests today")
+                                  .arg(info.requestsToday)
+                                  .arg(info.maxRequestsPerDay);
+          if (info.maxRequestsKoPerDay > 0 || info.requestsKoToday > 0) {
+            quotaPart += ScraperSettingsPanel::tr(" (%1/%2 failed)")
+                             .arg(info.requestsKoToday)
+                             .arg(info.maxRequestsKoPerDay);
           }
-          const auto &info = r.value();
-          // Sanity-bound the API reply before stamping it into the
-          // spinbox so a corrupt response can't drive the runtime
-          // past safe limits. 1..16 matches the spinbox range.
-          if (info.maxThreads > 0) {
-            guard->m_batchItemSpin->setValue(qBound(1, info.maxThreads, 16));
-          }
-          QStringList parts;
-          parts << ScraperSettingsPanel::tr("threads: %1").arg(info.maxThreads);
-          if (!info.level.isEmpty()) {
-            parts << ScraperSettingsPanel::tr("tier: %1").arg(info.level);
-          }
-          if (info.maxDownloadSpeedKBps > 0) {
-            parts
-                << ScraperSettingsPanel::tr("download cap: %1 KB/s").arg(info.maxDownloadSpeedKBps);
-          }
-          if (info.maxRequestsPerDay > 0) {
-            // Inline the failed-lookup count when SS reports either a
-            // KO quota or any KO requests today — gives the user a
-            // heads-up before they hit HTTP 431.
-            QString quotaPart = ScraperSettingsPanel::tr("%1 / %2 requests today")
-                                    .arg(info.requestsToday)
-                                    .arg(info.maxRequestsPerDay);
-            if (info.maxRequestsKoPerDay > 0 || info.requestsKoToday > 0) {
-              quotaPart += ScraperSettingsPanel::tr(" (%1/%2 failed)")
-                               .arg(info.requestsKoToday)
-                               .arg(info.maxRequestsKoPerDay);
-            }
-            parts << quotaPart;
-          }
-          if (info.maxRequestsPerMinute > 0) {
-            parts << ScraperSettingsPanel::tr("%1 req/min").arg(info.maxRequestsPerMinute);
-          }
-          guard->m_detectedThreadsLabel->setText(parts.join(QStringLiteral(" · ")));
-        });
-  });
+          parts << quotaPart;
+        }
+        if (info.maxRequestsPerMinute > 0) {
+          parts << ScraperSettingsPanel::tr("%1 req/min").arg(info.maxRequestsPerMinute);
+        }
+        guard->m_detectedThreadsLabel->setText(parts.join(QStringLiteral(" · ")));
+      });
+}
+
+void ScraperSettingsPanel::updateConditionalVisibility() {
+  // Single source of truth for the three conditional gates (Kartend-1adgj),
+  // derived from the current combo selections so it gives the same result
+  // whether called after a programmatic load() or from a change handler.
+  const auto rescrapeMode =
+      static_cast<ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
+  m_rescrapeWarning->setVisible(rescrapeMode == ScraperRescrapeMode::UpdateChanged);
+  // The refresh-window controls only have meaning under modes that pre-filter
+  // the queue (Skip, Fill missing). Hide them under Overwrite / Update changed
+  // where every item already flows through to the provider regardless.
+  const bool windowApplies =
+      rescrapeMode == ScraperRescrapeMode::Skip || rescrapeMode == ScraperRescrapeMode::FillMissing;
+  if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
+  if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
+
+  const auto hashMode =
+      static_cast<ScraperOptions::ScraperHashMode>(m_hashModeCombo->currentData().toInt());
+  const bool sizeGated = hashMode == ScraperOptions::ScraperHashMode::SizeGated;
+  if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
+  if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
 }
 
 void ScraperSettingsPanel::applyPresetToFields() {
@@ -629,16 +642,10 @@ void ScraperSettingsPanel::load() {
   m_batchItemSpin->setValue(opts.batchItemConcurrency);
   m_preferJpgCheck->setChecked(opts.preferJpgOutput);
   m_rescrapeCombo->setCurrentIndex(m_rescrapeCombo->findData(static_cast<int>(opts.rescrapeMode)));
-  m_rescrapeWarning->setVisible(opts.rescrapeMode == ScraperRescrapeMode::UpdateChanged);
   if (m_skipRecentDaysSpin) {
     QSignalBlocker b(m_skipRecentDaysSpin);
     m_skipRecentDaysSpin->setValue(qBound(0, opts.skipRecentScrapeDays, 365));
   }
-  // Mirror the visibility rule from the rescrape-combo change handler.
-  const bool windowApplies = opts.rescrapeMode == ScraperRescrapeMode::Skip ||
-                             opts.rescrapeMode == ScraperRescrapeMode::FillMissing;
-  if (m_skipRecentDaysLabel) m_skipRecentDaysLabel->setVisible(windowApplies);
-  if (m_skipRecentDaysSpin) m_skipRecentDaysSpin->setVisible(windowApplies);
   if (m_autoResumeCheck) {
     QSignalBlocker b(m_autoResumeCheck);
     m_autoResumeCheck->setChecked(opts.scrapeAutoResume);
@@ -661,13 +668,13 @@ void ScraperSettingsPanel::load() {
     QSignalBlocker b(m_maxHashableSizeSpin);
     m_maxHashableSizeSpin->setValue(qBound(1, opts.maxHashableSizeMB, 65536));
   }
-  const bool sizeGated = opts.hashMode == ScraperOptions::ScraperHashMode::SizeGated;
-  if (m_maxHashableSizeLabel) m_maxHashableSizeLabel->setVisible(sizeGated);
-  if (m_maxHashableSizeSpin) m_maxHashableSizeSpin->setVisible(sizeGated);
   if (m_regionSourceCombo) {
     const int idx = m_regionSourceCombo->findData(static_cast<int>(opts.regionSource));
     m_regionSourceCombo->setCurrentIndex(idx >= 0 ? idx : 0);
   }
+  // All conditional gates derive from the combos set above; apply them once
+  // through the single source of truth (Kartend-1adgj).
+  updateConditionalVisibility();
   m_loading = false;
 }
 

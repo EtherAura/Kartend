@@ -123,16 +123,16 @@ void SelectionDisplayManager::onListColumnClicked(ListSortColumn column) {
     return;
   }
 
-  // Toggle direction if clicking the same column
-  static ListSortColumn lastColumn = ListSortColumn::Name;
-  static bool ascending = true;
-
-  if (column == lastColumn) {
-    ascending = !ascending;
+  // Toggle direction if clicking the same column. State is per-instance
+  // (m_lastSortColumn / m_sortAscending) — previously process-global function
+  // statics that leaked sort direction across collection switches and rebuilds.
+  if (column == m_lastSortColumn) {
+    m_sortAscending = !m_sortAscending;
   } else {
-    lastColumn = column;
-    ascending = true;
+    m_lastSortColumn = column;
+    m_sortAscending = true;
   }
+  const bool ascending = m_sortAscending;
 
   m_listHeader->setSortColumn(column, ascending);
 
@@ -216,6 +216,23 @@ bool SelectionDisplayManager::hideArtworkPreview() {
   return false;
 }
 
+void SelectionDisplayManager::ensureArtworkPreviewOverlay() {
+  // Lazy single-construction + single-wiring. Both showArtworkPreview and
+  // showMediaPreview route through here so the two signal connections live in
+  // exactly one place; the null guard keeps each connect made once per overlay
+  // instance (Kartend-lyoje). Callers must have verified m_mediaScrollArea.
+  if (m_artworkPreviewOverlay) {
+    return;
+  }
+  m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+  connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
+          &SelectionDisplayManager::artworkPreviewLaunchRequested);
+  // bug #7: forward overlay visibility so DetailsPaneManager can
+  // lower the sidebar while the overlay is on top.
+  connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
+          &SelectionDisplayManager::artworkPreviewVisibilityChanged);
+}
+
 void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
                                                  const QString &artworkDir) {
   if (!m_mediaScrollArea) {
@@ -223,15 +240,7 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
   }
 
   // Create overlay lazily on first use
-  if (!m_artworkPreviewOverlay) {
-    m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
-    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
-            &SelectionDisplayManager::artworkPreviewLaunchRequested);
-    // bug #7: forward overlay visibility so DetailsPaneManager can
-    // lower the sidebar while the overlay is on top.
-    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
-            &SelectionDisplayManager::artworkPreviewVisibilityChanged);
-  }
+  ensureArtworkPreviewOverlay();
 
   // Show artwork preview using the item's collection artwork directory
   m_artworkPreviewOverlay->showArtworkForFile(filePath, artworkDir);
@@ -242,15 +251,7 @@ bool SelectionDisplayManager::showMediaPreview(const QString &filePath, const QS
   if (!m_mediaScrollArea) {
     return false;
   }
-  if (!m_artworkPreviewOverlay) {
-    m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
-    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
-            &SelectionDisplayManager::artworkPreviewLaunchRequested);
-    // bug #7: forward overlay visibility so DetailsPaneManager can
-    // lower the sidebar while the overlay is on top.
-    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
-            &SelectionDisplayManager::artworkPreviewVisibilityChanged);
-  }
+  ensureArtworkPreviewOverlay();
   // Returns false when neither a video nor artwork was found: the overlay
   // stays hidden, so callers must not treat this as a shown preview.
   return m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);

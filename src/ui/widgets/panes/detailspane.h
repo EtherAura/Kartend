@@ -271,6 +271,20 @@ protected:
 
 private:
   void setupUI();
+  // Constructor decomposition (Kartend-nk4v7). The constructor stays the
+  // orchestrator (.ui setup + palette/attribute pins) and delegates the bulk
+  // of its work to these three single-responsibility helpers, called in the
+  // same order the inlined blocks ran.
+  // setupWidgets: builds + parents the embedded widgets (video preview tile,
+  // tab bar, resize grip, gallery / artwork / metadata helpers, edit button)
+  // and applies the initial alignment + preview-size pass.
+  void setupWidgets();
+  // setupConnections: wires the resize-grip, gallery-view, and edit-metadata
+  // button signals through to the matching DetailsPane signals/slots.
+  void setupConnections();
+  // setupVideo: arms the debounced video-preview start timer (the timeout
+  // lambda that DetailsPane's preview pipeline drives).
+  void setupVideo();
   void updateFileInfo(const QString &filePath);
   /// Apply the cached async file-stat result (m_fileStatDisplay) to the File
   /// tab's size/modified (and, when not-found, path/extension) labels. No-op

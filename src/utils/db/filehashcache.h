@@ -47,8 +47,15 @@ struct Entry {
 /// re-hashes and overwrites the stale row. Returns nullopt on miss, stale, an
 /// empty path, or a closed DB. `path` is compared verbatim — pass the same
 /// spelling you stored under (hashFileCached canonicalises for you).
+///
+/// `ignoreCache` forces a miss even on a valid `(size, mtime)` row, so the
+/// caller re-hashes and refreshes the stale entry. This is the escape hatch for
+/// the same-size/same-mtime staleness blind spot documented at the validity
+/// check in filehashcache.cpp (an in-place replacement that preserves both — as
+/// `rsync --times` / `cp -p` do — reads as a hit and returns the OLD file's
+/// hashes). Default false leaves the fast path byte-for-byte unchanged.
 [[nodiscard]] std::optional<Entry> lookup(QSqlDatabase &db, const QString &path, qint64 currentSize,
-                                          qint64 currentMtimeMs);
+                                          qint64 currentMtimeMs, bool ignoreCache = false);
 
 /// Upsert the hashes for `path` keyed on the path primary key, recording the
 /// `(size, mtime)` they were computed against. INSERT OR REPLACE so a re-hash
@@ -63,10 +70,13 @@ struct Entry {
 /// canonical path. A cache read/write failure never fails the call: the hash
 /// itself still succeeds, so a broken cache degrades to "always re-hash".
 /// Honors @p cancelToken via RomHasher (a mid-stream cancel returns
-/// OperationCancelled and writes nothing).
+/// OperationCancelled and writes nothing). `forceRehash` bypasses a valid
+/// `(size, mtime)` cache hit (see lookup()'s `ignoreCache`): the file is always
+/// re-hashed and the cached entry refreshed. Default false — unchanged fast path.
 [[nodiscard]] ErrorUtils::Result<RomHasher::Result>
 hashFileCached(QSqlDatabase &db, const QString &path,
-               const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
+               const std::shared_ptr<std::atomic<bool>> &cancelToken = {},
+               bool forceRehash = false);
 
 /// One cached archive member (archive-per-item auditing, Kartend-m6qsb.7).
 /// `memberPath` is the member's '/'-separated path inside its container.
@@ -90,10 +100,16 @@ struct MemberEntry {
 /// every member row at once, mirroring the outer cache's invalidation key.
 /// nullopt on miss/stale/closed DB; the caller re-extracts and calls
 /// storeMembers. An empty (but valid) member list is a legal hit.
+///
+/// `ignoreCache` forces a miss even on a valid `(size, mtime)` match, so the
+/// caller re-extracts and refreshes the rows — the container-level counterpart
+/// to lookup()'s bypass, for the same same-size/same-mtime staleness blind spot.
+/// Default false leaves the fast path unchanged.
 [[nodiscard]] std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db,
                                                               const QString &containerPath,
                                                               qint64 currentSize,
-                                                              qint64 currentMtimeMs);
+                                                              qint64 currentMtimeMs,
+                                                              bool ignoreCache = false);
 
 /// Replace `containerPath`'s member rows with `members` in one transaction,
 /// stamped against the container's `(size, mtime)`.

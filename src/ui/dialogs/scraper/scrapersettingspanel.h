@@ -6,6 +6,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QGroupBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
@@ -36,9 +37,26 @@ public:
 signals:
   void changed();
 
+private slots:
+  /// Detect-threads action (Kartend-1adgj): fire ssuserInfos.php with the
+  /// current member credentials and surface the result in the label beside
+  /// the button. Extracted from the connectChangeSignals lambda so the
+  /// threading / ScreenScraperProviderHelpers logic stays out of the wiring.
+  void onDetectThreadsClicked();
+
 private:
   void buildLayout();
+  /// Performance / Re-scrape group builders (Kartend-1adgj): each constructs
+  /// one QGroupBox + QFormLayout with its rows + per-widget configuration.
+  /// buildLayout composes both and applies the uniformLabelColumn fix-ups.
+  QGroupBox *buildPerformanceGroup();
+  QGroupBox *buildBehaviorGroup();
   void connectChangeSignals();
+  /// Single source of truth (Kartend-1adgj) for the three conditional gates —
+  /// rescrape warning, skip-recent-days, max-hashable-size — derived from the
+  /// current combo selections. Called from load() and the relevant change
+  /// handlers instead of duplicating the show/hide rules at each site.
+  void updateConditionalVisibility();
   void applyPresetToFields();
   void writeModel();
 

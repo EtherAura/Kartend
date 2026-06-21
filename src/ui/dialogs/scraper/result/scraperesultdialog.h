@@ -270,10 +270,11 @@ private:
   // ScrapeResultDialogUnified (queue walker + live metadata panel +
   // ScraperService handlers), ScrapeResultSelectionModel (collection-tree /
   // items-list selection state), ScrapeResultThumbnailLoader (recent-media
-  // strip), and ValueMarqueeTicker (the per-150ms chip scroll). The first
-  // keeps its state on this host; the latter three own their slice of state
-  // directly. The onScrapeClicked slot above is a 1-line trampoline into
-  // m_unified.
+  // strip), and ValueMarqueeTicker (the per-150ms chip scroll). Kartend-unlta:
+  // each now owns its own slice of state — the unified controller's
+  // queue/totals/interactive/rate state moved off this host onto it. The host
+  // keeps only the shell state the legacy flows read (mode/phase/result/batch).
+  // The onScrapeClicked slot above is a 1-line trampoline into m_unified.
 
   // m_provider, m_candidates, m_detailCache, m_currentRow, m_currentDetail
   // moved into SingleItemScrapeView in Kartend-xvci step 4. The view drives
@@ -438,48 +439,26 @@ private:
   // ── Unified-flow state ──────────────────────────────────────────
   ScraperContext m_scraperCtx;
   Scraper::ScraperService *m_service = nullptr; ///< Non-owning; lives on MainWindow.
-  /// Snapshot at scrape time: queue of (collectionIndex, items) tuples
-  /// to process in sequence. AutoRunning + Interactive both walk this.
-  struct CollectionJob {
-    int collectionIndex;
-    QString collectionName;
-    QStringList items;
-  };
-  QList<CollectionJob> m_unifiedQueue;
-  int m_unifiedQueueCursor = 0;
+  // Kartend-unlta: the scrape-orchestration state (queue + cursor, aggregate
+  // totals, interactive-mode iterator, the rate-sampling window, and the
+  // cancel flag) moved onto ScrapeResultDialogUnified, which already owns the
+  // queue walker + interactive driver that mutate it. What stays here is the
+  // state the dialog shell itself reads directly: the phase, the live-tick
+  // timer, and the service/context handles above.
   UnifiedPhase m_unifiedPhase = UnifiedPhase::Setup;
-  qint64 m_unifiedStartMs = 0;
-  /// Sliding window of (timestampMs, cumulativeBytes) samples used
-  /// to compute a recent download rate for the Live view. Pruned to
-  /// the last ~10 seconds of samples on every update so the rate
-  /// readout reflects current activity, not the all-run average
-  /// (which gets dragged down by long lookup-API idle stretches).
-  QList<QPair<qint64, qint64>> m_rateSamples;
   /// 1-second tick that keeps the Live view's timing/rate readout
   /// fresh between item-event signals (a slow download can leave the
   /// label stale otherwise). Started when the service goes active,
   /// stopped on scrapeFinished.
   QTimer m_liveTickTimer; // Kartend-a911.6: value member
   bool m_liveTickTimerInited = false;
-  int m_unifiedItemsCompletedAcross = 0;
-  int m_unifiedScrapedTotal = 0;
-  int m_unifiedSkippedTotal = 0;
-  int m_unifiedErrorsTotal = 0;
-  QStringList m_unifiedFailures;
-  /// Active provider for the current collection (interactive mode).
-  std::shared_ptr<MetadataLookupProvider> m_interactiveProvider;
-  /// Iterator state for interactive mode: items list for current
-  /// collection, cursor into it.
-  QStringList m_interactiveItems;
-  int m_interactiveCursor = 0;
-  int m_interactiveCollectionIndex = -1;
-  bool m_unifiedCancelled = false;
 
   /// Owns the unified-flow queue walker, live-metadata panel renderer, and
   /// ScraperService signal handlers. Constructed once in the ctor with a
-  /// back-pointer to `this`; the queue/run state it touches stays on this
-  /// host so the legacy SingleItem / Batch paths keep their direct member
-  /// access.
+  /// back-pointer to `this`. Kartend-unlta: it also now owns the unified
+  /// orchestration state (queue/totals/interactive/rate) that used to sit on
+  /// this host. The legacy SingleItem / Batch paths keep their direct access
+  /// to the state that remains here (mode, phase, batch runner, result).
   std::unique_ptr<ScrapeResultDialogUnified> m_unified;
   /// Owns the collection-tree + items-list selection state (which
   /// collections/items are checked, the per-collection item cache, and the

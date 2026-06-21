@@ -416,32 +416,52 @@ QList<CoverFlowWidget::CardLayout> CoverFlowWidget::computeVisibleLayout() const
   // large enough that the card at center+sign(frac) is closer to the center
   // than center itself, swap their painted order so the closer one ends up
   // on top.
-  if (std::abs(frac) > 0.5 && out.size() >= 2) {
-    int neighborSide = frac > 0 ? 1 : -1;
-    int neighborIdx = center + neighborSide;
-    if (neighborIdx >= 0 && neighborIdx < total) {
-      // Find center entry (last) and neighbor entry, swap if needed
-      auto centerIt = std::find_if(out.rbegin(), out.rend(),
-                                   [&](const CardLayout &c) { return c.index == center; });
-      auto neighborIt = std::find_if(out.begin(), out.end(),
-                                     [&](const CardLayout &c) { return c.index == neighborIdx; });
-      if (centerIt != out.rend() && neighborIt != out.end()) {
-        // Move neighbor to the end (top), center just before it
-        CardLayout neighbor = *neighborIt;
-        CardLayout cnt = *centerIt;
-        out.erase(neighborIt);
-        // re-find center after erase
-        auto centerIt2 = std::find_if(out.begin(), out.end(),
-                                      [&](const CardLayout &c) { return c.index == center; });
-        if (centerIt2 != out.end()) {
-          out.erase(centerIt2);
-        }
-        out.append(cnt);
-        out.append(neighbor);
-      }
+  ensureCenterCardOnTop(out, center, frac);
+  return out;
+}
+
+void CoverFlowWidget::ensureCenterCardOnTop(QList<CardLayout> &layouts, int center,
+                                            qreal frac) const {
+  // Only relevant once the glide has carried more than halfway toward a
+  // neighbour; below that the symmetric build order already has the center on
+  // top. Mirrors the previous block's guards exactly.
+  if (std::abs(frac) <= 0.5 || layouts.size() < 2) {
+    return;
+  }
+  const int total = static_cast<int>(m_cards.size());
+  const int neighborSide = frac > 0 ? 1 : -1;
+  const int neighborIdx = center + neighborSide;
+  if (neighborIdx < 0 || neighborIdx >= total) {
+    return;
+  }
+
+  // Locate the center and neighbour entries without erase-then-re-find: copy
+  // both out, drop them from their current positions in a single pass, then
+  // re-append center (under) and neighbour (on top). Indices are unique per
+  // layout, so a forward scan finds each at most once — equivalent to the old
+  // rbegin/begin finds since center is appended last by the builder above.
+  int centerPos = -1;
+  int neighborPos = -1;
+  for (int i = 0; i < layouts.size(); ++i) {
+    if (centerPos < 0 && layouts[i].index == center) {
+      centerPos = i;
+    } else if (neighborPos < 0 && layouts[i].index == neighborIdx) {
+      neighborPos = i;
     }
   }
-  return out;
+  if (centerPos < 0 || neighborPos < 0) {
+    return;
+  }
+
+  const CardLayout cnt = layouts[centerPos];
+  const CardLayout neighbor = layouts[neighborPos];
+  // Remove the higher index first so the lower index stays valid.
+  const int first = std::max(centerPos, neighborPos);
+  const int second = std::min(centerPos, neighborPos);
+  layouts.removeAt(first);
+  layouts.removeAt(second);
+  layouts.append(cnt);
+  layouts.append(neighbor);
 }
 
 void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
@@ -502,104 +522,27 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     }
 
     painter.save();
-    painter.setOpacity(opacity);
 
-    // Build the perspective transform: translate to card center, apply a
-    // vertical shear that points away from the stage center (cards on the
-    // left tilt right, cards on the right tilt left), then translate back.
-    // We render the (already-scaled) pixmap into c.rect via drawPixmap with
-    // the transform set — Qt::SmoothPixmapTransform keeps it crisp.
-    qreal shear = 0.0;
-    if (absDelta > 0.001) {
-      qreal sign = (c.offset < 0) ? 1.0 : -1.0; // left side: shear positive Y
-      shear = sign * kSideCardShear * std::min<qreal>(1.5, absDelta);
-    }
-    QTransform t;
-    t.translate(c.rect.center().x(), c.rect.center().y());
-    if (!qFuzzyIsNull(shear)) {
-      t.shear(0, shear);
-    }
-    t.translate(-c.rect.center().x(), -c.rect.center().y());
-    painter.setTransform(t, true);
-
-    // Look up a pre-scaled pixmap; if missing, schedule a worker-thread
-    // scale and fall back to scaling the source pm at draw time for this
-    // frame. The cache is invalidated on resize / setCards / setTileColor
-    // and bounded by requestScaledPixmap. Steady-state paint is a hash
-    // lookup + drawPixmap; only the first paint after a size change scales
-    // the source on the main thread, and the worker delivers the cached
-    // entry before the next paint (Kartend-g6ft).
-    const QString &cardPath = m_cards[c.index].artworkPath;
-    const QSize cardSize = c.rect.size();
-    // Kartend-el0fr: struct key — no per-frame string concatenation per card.
-    const CoverFlowScaledKey scaledKey{cardPath, cardSize.width(), cardSize.height()};
+    // Resolve the scaled pixmap, set the per-card opacity + perspective
+    // transform + (on a cache miss) the fast-transform hint, and draw the
+    // card. The reflection (drawn into a separate, non-overlapping rect below
+    // the card) and the selection border reuse the resolved pixmap / draw
+    // size returned via the out-params.
     QPixmap scaled;
     QSize scaledDrawSize;
     bool useFastTransform = false;
-    if (auto it = m_scaledPixmapCache.constFind(scaledKey); it != m_scaledPixmapCache.constEnd()) {
-      scaled = it.value();
-      scaledDrawSize = scaled.size();
-    } else {
-      scaled = pm;
-      // KeepAspectRatio: the on-disk source pm may be wider or taller than
-      // the card slot. Compute what its target size would be so target
-      // rects line up the same way pm.scaled() would have produced.
-      scaledDrawSize = pm.size().scaled(cardSize, Qt::KeepAspectRatio);
-      // On miss, the painter would scale the source pm at draw time using
-      // SmoothPixmapTransform — that's the slow path we're trying to defer.
-      // Render this frame with FastTransformation (cheap nearest-neighbour)
-      // and let the worker deliver a Smooth-scaled cache entry for the next
-      // paint (Kartend-g6ft). The cards briefly look slightly pixelated
-      // until the worker finishes; sub-frame perceptible in practice.
-      useFastTransform = true;
-      requestScaledPixmap(scaledKey, pm, cardSize);
-    }
+    renderCardPixmap(painter, c, pm, scaled, scaledDrawSize, useFastTransform);
 
-    // The outer painter.save() at the top of this card iteration captures
-    // the SmoothPixmapTransform hint state, so the restore() below brings
-    // it back to the default after the (cheap, slightly pixelated) miss
-    // draw.
-    if (useFastTransform) {
-      painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    }
-
-    // Paint reflection underneath (a flipped, faded copy) for the iTunes
-    // look — only for the center-ish band to keep paint cost low.
+    // Reflection underneath (a flipped, faded copy) for the iTunes look —
+    // only for the center-ish band to keep paint cost low.
     if (absDelta < 1.5) {
-      QRect refl(c.rect.x(), c.rect.bottom(), c.rect.width(), c.rect.height() / 2);
-      painter.save();
-      painter.setOpacity(opacity * (kReflectionAlpha / 255.0));
-      QTransform flip;
-      flip.translate(refl.center().x(), refl.top());
-      flip.scale(1.0, -0.5);
-      flip.translate(-refl.center().x(), -refl.top());
-      painter.setTransform(flip, true);
-      QRect target = c.rect;
-      target.moveCenter(c.rect.center());
-      painter.drawPixmap(target, scaled);
-      painter.restore();
-      // Fade the reflection out toward the bottom
-      QLinearGradient g(refl.topLeft(), refl.bottomLeft());
-      g.setColorAt(0.0, QColor(0, 0, 0, 0));
-      g.setColorAt(1.0, bg);
-      painter.fillRect(refl, g);
-    }
-
-    // The card itself: same scaled pixmap, with corner radius.
-    QRect target(QPoint(0, 0), scaledDrawSize);
-    target.moveCenter(c.rect.center());
-    if (m_cornerRadius > 0) {
-      QPainterPath clip;
-      clip.addRoundedRect(target, m_cornerRadius, m_cornerRadius);
-      painter.setClipPath(clip, Qt::ReplaceClip);
-    }
-    painter.drawPixmap(target, scaled);
-    if (m_cornerRadius > 0) {
-      painter.setClipping(false);
+      renderCardReflection(painter, c, scaled, opacity, bg);
     }
 
     // Selection border on the centered card.
     if (c.index == m_selectedIndex && absDelta < 0.5) {
+      QRect target(QPoint(0, 0), scaledDrawSize);
+      target.moveCenter(c.rect.center());
       QPen pen(selectionColorOrFallback(), 2);
       painter.setPen(pen);
       painter.setBrush(Qt::NoBrush);
@@ -616,6 +559,119 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
 
   // Title strip under the carousel for the centered card. Sits above the
   // optional gallery thumbnail row at the very bottom.
+  renderTitleStrip(painter);
+
+  // Per-item gallery toolbar.
+  if (!m_gallery.isEmpty() && m_galleryStrip) {
+    m_galleryStrip->paint(painter);
+  }
+}
+
+void CoverFlowWidget::renderCardPixmap(QPainter &painter, const CardLayout &c, const QPixmap &pm,
+                                       QPixmap &scaled, QSize &scaledDrawSize,
+                                       bool &useFastTransform) {
+  const qreal absDelta = std::abs(c.offset);
+  qreal opacity = 1.0;
+  if (absDelta > 0.001) {
+    opacity = kSideCardOpacityStart - kSideCardOpacityStep * std::max<qreal>(0.0, absDelta - 1.0);
+    opacity = std::clamp(opacity, 0.25, 1.0);
+  }
+  painter.setOpacity(opacity);
+
+  // Build the perspective transform: translate to card center, apply a
+  // vertical shear that points away from the stage center (cards on the
+  // left tilt right, cards on the right tilt left), then translate back.
+  // We render the (already-scaled) pixmap into c.rect via drawPixmap with
+  // the transform set — Qt::SmoothPixmapTransform keeps it crisp.
+  qreal shear = 0.0;
+  if (absDelta > 0.001) {
+    qreal sign = (c.offset < 0) ? 1.0 : -1.0; // left side: shear positive Y
+    shear = sign * kSideCardShear * std::min<qreal>(1.5, absDelta);
+  }
+  QTransform t;
+  t.translate(c.rect.center().x(), c.rect.center().y());
+  if (!qFuzzyIsNull(shear)) {
+    t.shear(0, shear);
+  }
+  t.translate(-c.rect.center().x(), -c.rect.center().y());
+  painter.setTransform(t, true);
+
+  // Look up a pre-scaled pixmap; if missing, schedule a worker-thread
+  // scale and fall back to scaling the source pm at draw time for this
+  // frame. The cache is invalidated on resize / setCards / setTileColor
+  // and bounded by requestScaledPixmap. Steady-state paint is a hash
+  // lookup + drawPixmap; only the first paint after a size change scales
+  // the source on the main thread, and the worker delivers the cached
+  // entry before the next paint (Kartend-g6ft).
+  const QString &cardPath = m_cards[c.index].artworkPath;
+  const QSize cardSize = c.rect.size();
+  // Kartend-el0fr: struct key — no per-frame string concatenation per card.
+  const CoverFlowScaledKey scaledKey{cardPath, cardSize.width(), cardSize.height()};
+  useFastTransform = false;
+  if (auto it = m_scaledPixmapCache.constFind(scaledKey); it != m_scaledPixmapCache.constEnd()) {
+    scaled = it.value();
+    scaledDrawSize = scaled.size();
+  } else {
+    scaled = pm;
+    // KeepAspectRatio: the on-disk source pm may be wider or taller than
+    // the card slot. Compute what its target size would be so target
+    // rects line up the same way pm.scaled() would have produced.
+    scaledDrawSize = pm.size().scaled(cardSize, Qt::KeepAspectRatio);
+    // On miss, the painter would scale the source pm at draw time using
+    // SmoothPixmapTransform — that's the slow path we're trying to defer.
+    // Render this frame with FastTransformation (cheap nearest-neighbour)
+    // and let the worker deliver a Smooth-scaled cache entry for the next
+    // paint (Kartend-g6ft). The cards briefly look slightly pixelated
+    // until the worker finishes; sub-frame perceptible in practice.
+    useFastTransform = true;
+    requestScaledPixmap(scaledKey, pm, cardSize);
+  }
+
+  // The outer painter.save() at the top of this card iteration captures
+  // the SmoothPixmapTransform hint state, so the restore() there brings
+  // it back to the default after the (cheap, slightly pixelated) miss
+  // draw.
+  if (useFastTransform) {
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+  }
+
+  // The card itself: same scaled pixmap, with corner radius.
+  QRect target(QPoint(0, 0), scaledDrawSize);
+  target.moveCenter(c.rect.center());
+  if (m_cornerRadius > 0) {
+    QPainterPath clip;
+    clip.addRoundedRect(target, m_cornerRadius, m_cornerRadius);
+    painter.setClipPath(clip, Qt::ReplaceClip);
+  }
+  painter.drawPixmap(target, scaled);
+  if (m_cornerRadius > 0) {
+    painter.setClipping(false);
+  }
+}
+
+void CoverFlowWidget::renderCardReflection(QPainter &painter, const CardLayout &c,
+                                           const QPixmap &scaled, qreal opacity, const QColor &bg) {
+  QRect refl(c.rect.x(), c.rect.bottom(), c.rect.width(), c.rect.height() / 2);
+  painter.save();
+  painter.setOpacity(opacity * (kReflectionAlpha / 255.0));
+  QTransform flip;
+  flip.translate(refl.center().x(), refl.top());
+  flip.scale(1.0, -0.5);
+  flip.translate(-refl.center().x(), -refl.top());
+  painter.setTransform(flip, true);
+  QRect target = c.rect;
+  target.moveCenter(c.rect.center());
+  painter.drawPixmap(target, scaled);
+  painter.restore();
+  // Fade the reflection out toward the bottom
+  QLinearGradient g(refl.topLeft(), refl.bottomLeft());
+  g.setColorAt(0.0, QColor(0, 0, 0, 0));
+  g.setColorAt(1.0, bg);
+  painter.fillRect(refl, g);
+}
+
+void CoverFlowWidget::renderTitleStrip(QPainter &painter) {
+  // Sits above the optional gallery thumbnail row at the very bottom.
   const int gallerySlotEnd = m_gallery.isEmpty() ? 0 : kStripHeight;
   if (!m_hideTitles && m_selectedIndex >= 0 && m_selectedIndex < m_cards.size()) {
     QFont f = painter.font();
@@ -632,11 +688,6 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     QFontMetrics fm(f);
     QString elided = fm.elidedText(title, Qt::ElideRight, titleRect.width() - 32);
     painter.drawText(titleRect, Qt::AlignHCenter | Qt::AlignVCenter, elided);
-  }
-
-  // Per-item gallery toolbar.
-  if (!m_gallery.isEmpty() && m_galleryStrip) {
-    m_galleryStrip->paint(painter);
   }
 }
 

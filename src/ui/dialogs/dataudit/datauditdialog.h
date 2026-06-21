@@ -20,6 +20,7 @@ class QCheckBox;
 class QComboBox;
 class QGroupBox;
 class QLabel;
+class QLayout;
 class QLineEdit;
 class QListWidget;
 class QProgressBar;
@@ -215,6 +216,23 @@ private:
   QWidget *buildAuditPage();
   QWidget *buildLibraryPage();
   QWidget *buildDownloadPage();
+  // Audit-page section builders (Kartend-139sr) — buildAuditPage composes
+  // these instead of inlining every section. Each constructs its widgets +
+  // sub-layout against @p page and returns it for the page's root layout.
+  QLayout *buildProfileRow(QWidget *page);
+  QLayout *buildInputsSection(QWidget *page);
+  QLayout *buildLayoutBanner(QWidget *page);
+  QWidget *buildResultsTable(QWidget *page);
+  QLayout *buildExportRow(QWidget *page);
+  // Download-page source sub-forms (Kartend-139sr): the two mutually-exclusive
+  // No-Intro / Redump groups, each returned for the page's root layout.
+  QWidget *buildNoIntroSource(QWidget *page);
+  QWidget *buildRedumpSource(QWidget *page);
+  // Constructor connect grouping (Kartend-139sr): the flat connect block is
+  // split into one wire* helper per concern.
+  void wireProfileActions();
+  void wireAuditActions();
+  void wireDownloadActions();
   /// RomVault-style browser page (Kartend-34lab). Lazily refreshed the first
   /// time the user switches to it (and on each subsequent switch).
   DatAuditBrowserPage *m_browserPage = nullptr;
@@ -287,6 +305,10 @@ private:
   DatAudit::LayoutDetection m_pendingDetection;
   QPushButton *m_runButton = nullptr;
   QPushButton *m_cancelButton = nullptr;
+  /// "Verify (ignore cache)" force-rehash for the next run (Kartend-p30ic):
+  /// bypasses the file-hash cache so a same-size/same-mtime in-place swap is
+  /// detected. Off by default; read in onRun(), disabled while a run is busy.
+  QCheckBox *m_forceRehashCheck = nullptr;
   QProgressBar *m_progress = nullptr;
   QLabel *m_summaryLabel = nullptr;
   QProgressBar *m_completionBar = nullptr;

@@ -166,6 +166,12 @@ private slots:
   void onListArtworkColumnWidthChanged(int artworkWidth);
 
 private:
+  // Lazily constructs m_artworkPreviewOverlay on first use and wires its
+  // launchRequested / visibilityChanged signals exactly once. No-op when the
+  // overlay already exists. Shared by showArtworkPreview and showMediaPreview
+  // so the connect wiring lives in a single place (Kartend-lyoje).
+  void ensureArtworkPreviewOverlay();
+
   // Selection update internal helpers (moved from ScrollManager,)
   void prewarmSurroundingWidgets(int selectedIndex);
   void scheduleArrowKeyUpdate(int selectedIndex);
@@ -183,6 +189,13 @@ private:
   std::unique_ptr<SelectionStateTracker> m_stateTracker;
   std::unique_ptr<ArtworkPreviewOverlay> m_artworkPreviewOverlay;
   ListHeaderWidget *m_listHeader = nullptr; // Qt-parented to viewport
+
+  // List-header sort toggle state. Per-instance (was process-global function
+  // statics in onListColumnClicked, which leaked sort direction across
+  // collection switches and manager rebuilds). ListSortColumn::Name == 0, so
+  // value-init reproduces the historical default; m_sortAscending starts true.
+  ListSortColumn m_lastSortColumn{};
+  bool m_sortAscending = true;
 
   // Borrowed dependencies
   QScrollArea *m_mediaScrollArea = nullptr;
