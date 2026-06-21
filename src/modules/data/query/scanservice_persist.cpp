@@ -526,9 +526,16 @@ bool ScanService::prepareCollectionForItemsInsert(const CollectionConfig &collec
         QSqlQuery idq(m_db);
         idq.prepare("SELECT id FROM collections WHERE uuid = ?");
         idq.addBindValue(uuid);
-        if (idq.exec() && idq.next()) {
-          legacyIdOut = idq.value(0).toInt();
+        if (!idq.exec()) {
+          throw SqlStepError(idq.lastError());
         }
+        if (!idq.next()) {
+          // The row was just upserted above, so a missing id is a real DB
+          // fault. Abort so the transaction rolls back rather than committing
+          // collection_id = -1 for every applied item (Kartend-f7iy3).
+          throw SqlStepError(idq.lastError());
+        }
+        legacyIdOut = idq.value(0).toInt();
       }
 
       if (!txn.commit()) {
@@ -649,7 +656,16 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     for (int i = batchStart; i < batchEnd; ++i) {
       batchPaths.append(filePaths[i]);
     }
-    m_scannedItems.insertBatch(batchPaths, timestamps, collection.mediaDirectory);
+    if (!m_scannedItems.insertBatch(batchPaths, timestamps, collection.mediaDirectory)) {
+      // A failed staging INSERT leaves the temp table partial; roll back the
+      // open interval transaction and bail before the apply block, so phase 2's
+      // deleteItemsMissingFromScan never runs against a partial scan (it would
+      // prune items whose rows merely failed to stage) and last_scanned /
+      // dir_signature are not advanced (Kartend-o1ed7). insertBatch already
+      // logged the cause; the staging cleanup guard empties the temp table.
+      txn.reset(); // guard dtor rolls back the aborted transaction
+      return;
+    }
 
     itemsInserted = batchEnd;
     ++batchesSinceCommit;

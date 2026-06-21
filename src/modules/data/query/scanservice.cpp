@@ -794,7 +794,16 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
       batchesSinceCommit = 0;
     }
 
-    m_scannedItems.insertBatch(batchPaths, batchTimestamps, collection.mediaDirectory);
+    if (!m_scannedItems.insertBatch(batchPaths, batchTimestamps, collection.mediaDirectory)) {
+      // A failed staging INSERT leaves the temp table partial; latch the
+      // failure (already logged by insertBatch) so the staging transaction
+      // rolls back via txn.reset() and phase 2's deleteItemsMissingFromScan is
+      // skipped — otherwise unstaged-but-present items would be pruned
+      // (Kartend-o1ed7). Don't credit itemsStaged for the dropped batch.
+      txn.reset();
+      stagingFailed = true;
+      return false;
+    }
     itemsStaged += batchPaths.size();
     ++batchesSinceCommit;
 

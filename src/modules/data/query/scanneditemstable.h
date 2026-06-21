@@ -38,9 +38,15 @@ public:
 
   /// INSERT OR REPLACE one batch of discovered files: absolute `path`
   /// (PK, shared with items.path), media-dir-relative `rel_path`, name,
-  /// last-modified and file size.
-  void insertBatch(const QStringList &paths, const QHash<QString, QDateTime> &timestamps,
-                   const QString &mediaRoot);
+  /// last-modified and file size. False on exec() failure (e.g. lock
+  /// contention, the SQLite "too many SQL variables" limit, or I/O error) so
+  /// callers can latch the failure and roll back the staging transaction
+  /// instead of letting phase 2 (deleteItemsMissingFromScan) prune items whose
+  /// rows merely failed to stage (Kartend-o1ed7). An empty batch is a no-op
+  /// success.
+  [[nodiscard]] bool insertBatch(const QStringList &paths,
+                                 const QHash<QString, QDateTime> &timestamps,
+                                 const QString &mediaRoot);
 
   /// Upsert every staged row into the persistent `items` table for the
   /// given collection. False on prepare/exec failure.
