@@ -310,6 +310,20 @@ private:
   [[nodiscard]] bool maybeExpandInsteadOfLaunch(const QString &filePath, int collectionIndex,
                                                 int activationIndex);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // DESTRUCTION-ORDER ANCHOR (Kartend-wxtx6 / Kartend-gutqx).
+  // The declaration order of the owned-sub-manager unique_ptr members below is
+  // LOAD-BEARING: they are destroyed in reverse declaration order after
+  // ~InteractionManager's body runs, and ~InteractionManager
+  // (interactionmanager.cpp) detaches its event filters expecting m_eventManager
+  // and friends to still be alive at that point. It is also mirrored, reversed,
+  // by ApplicationManager::destroyManagersAndClearContextSlots()
+  // (applicationmanager.cpp), which nulls the matching ctx->managers.* slots
+  // before m_interactionManager.reset(). Reordering these members can silently
+  // re-introduce the UBSan/vptr teardown bug history under Kartend-gutqx — if
+  // you reorder, re-read ~InteractionManager and destroyManagersAndClearContextSlots().
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Search delegation (owned helper)
   std::unique_ptr<SearchManager> m_searchManager;
 

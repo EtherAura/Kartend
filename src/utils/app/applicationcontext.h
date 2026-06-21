@@ -206,6 +206,12 @@ struct ApplicationContext {
       scrollData = nullptr;
     }
   } managers;
+  // INVARIANT (Kartend-rdzu9): every IXxxManager* slot in ManagerRefs above must
+  // also be explicitly nulled before its owner is reset in
+  // ApplicationManager::destroyManagersAndClearContextSlots. Otherwise a
+  // teardown-phase `if (auto *m = ctx->x())` reads a dangling pointer. Adding a
+  // new manager accessor here without that null-before-reset line silently
+  // reintroduces the stale-pointer-during-teardown window.
 
   // ─────────────────────────────────────────────────────────────────────────
   // Convenience accessors with null-safety
