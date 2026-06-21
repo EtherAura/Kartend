@@ -451,8 +451,8 @@ ItemMetadataStore::ItemMetadata mergeScrapedIntoExisting(ItemMetadataStore::Item
                                                          const QString &collectionUuid,
                                                          const QString &sourcePath,
                                                          const ScrapedItem &scraped) {
-  auto pickNonEmpty = [](const QString &scraped, const QString &existing) {
-    return scraped.trimmed().isEmpty() ? existing : scraped;
+  auto pickNonEmpty = [](const QString &candidate, const QString &fallback) {
+    return candidate.trimmed().isEmpty() ? fallback : candidate;
   };
   existing.collectionUuid = collectionUuid;
   existing.path = sourcePath;

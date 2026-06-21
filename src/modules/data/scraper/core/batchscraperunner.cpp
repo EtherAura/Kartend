@@ -615,7 +615,7 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
     // as the provider's lookup callback is the one that calls
     // fetchDetail (which it is, here).
     self->m_provider->fetchDetail(
-        candidates.first(), [self, state](ErrorUtils::Result<Scraper::ScrapedItem> result) {
+        candidates.first(), [self, state](ErrorUtils::Result<Scraper::ScrapedItem> detailResult) {
           if (self.isNull()) return;
           if (self->m_cancelled) {
             self->itemFinished();
@@ -626,11 +626,11 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
             self->itemFinished();
             return;
           }
-          if (result.isError()) {
-            self->recordError(QFileInfo(state->path).fileName(), result.error());
+          if (detailResult.isError()) {
+            self->recordError(QFileInfo(state->path).fileName(), detailResult.error());
             return;
           }
-          const auto scraped = result.value();
+          const auto scraped = detailResult.value();
           if (self->m_quotaStopped) {
             // Kartend-fv3yr: quota was exhausted by a sibling between this
             // item's detail fetch and now. Keep the metadata we already have
