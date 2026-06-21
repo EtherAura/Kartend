@@ -119,7 +119,11 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.launcher.corePath = "/cp";
   c.launcher.launchParameters = "-p";
   c.launcher.launcherName = "Primary";
-  c.launcher.defaultLauncherIndex = 2;
+  // Two launchers exist (the primary above + the "Secondary" additional
+  // launcher appended below), so index 1 is in range and round-trips. An
+  // out-of-range value is intentionally clamped at the import boundary now
+  // (Kartend-aep2e), so this must stay within [0, launcherCount()-1].
+  c.launcher.defaultLauncherIndex = 1;
   c.mediaDirectory = "md";
   c.artworkDirectory = "ad";
   c.videoDirectory = "vd";

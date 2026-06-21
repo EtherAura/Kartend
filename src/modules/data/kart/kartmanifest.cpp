@@ -239,7 +239,11 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   for (const auto &v : addlArr) {
     c.launcher.additionalLaunchers.append(jsonToLauncherConfig(v.toObject()));
   }
-  c.launcher.defaultLauncherIndex = o["default_launcher_index"].toInt(0);
+  // Clamp the manifest-supplied index at the import boundary so an out-of-range
+  // value from an untrusted .kart can't reach a consumer that forgets to clamp
+  // (Kartend-aep2e). launcherCount() >= 1, so the upper bound is never negative.
+  const int rawDefaultIndex = o["default_launcher_index"].toInt(0);
+  c.launcher.defaultLauncherIndex = qBound(0, rawDefaultIndex, c.launcher.launcherCount() - 1);
 
   c.mediaDirectory = o["media_directory"].toString();
   c.artworkDirectory = o["artwork_directory"].toString();
