@@ -228,6 +228,14 @@ private:
   QHash<QString, qint64> m_lastLaunchTimes;
   static constexpr qint64 kDoubleLaunchGuardMs = 500;
 
+  /// Kartend-fqsv0: how long the detached-path early-failure watcher stays
+  /// armed after spawn. A child that dies non-zero within this window is
+  /// reported as a launch failure and does NOT get its play_count stamped;
+  /// surviving the window is treated as a successful launch and the watcher
+  /// forgets the child (fire-and-forget). Kept short so a slow-but-healthy
+  /// launcher (emulator splash screens, shader compile) is never mis-flagged.
+  static constexpr int kEarlyFailureWindowMs = 1500;
+
   /// The currently-tracked child process when runtime detection is enabled.
   /// Only one tracked child at a time — a second launch attempt while one is
   /// already running is rejected.
@@ -256,6 +264,20 @@ private:
   /// runtimeFinished. Returns true on a successful start.
   bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd, const QString &filePath,
                      const QString &collectionUuid);
+
+  /// Detached-path launch with a short-lived early-failure watcher
+  /// (Kartend-fqsv0). Spawns `cmd` via an owned QProcess and keeps an
+  /// errorOccurred / early-finished handler armed for `kEarlyFailureWindowMs`.
+  /// If the child fails to start or exits non-zero within that window the
+  /// failure is surfaced, the extracted dir (if any) is reclaimed, and
+  /// recordSuccessfulLaunch is suppressed. Once the window elapses with the
+  /// child still alive (the genuine-success case) the launch is recorded and
+  /// the watcher detaches — it stops reporting and never measures a session.
+  /// Returns true when the spawn was issued (mirrors the historical
+  /// startDetached return contract well enough for the caller's scope guard).
+  bool launchDetachedWatched(const QString &launcherPath, const LaunchCommand &cmd,
+                             const QString &originalFilePath, const QString &extractedDir,
+                             const QString &collectionUuid);
 
   /// Runs extractArchiveToTemp on a QtConcurrent worker (Kartend-mkcak) and
   /// continues the launch in the completion callback on the GUI thread.

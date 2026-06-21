@@ -42,7 +42,12 @@ void load(QSettings &settings, LauncherProfile &profile, bool &needsRewrite,
     profile.additionalLaunchers.append(launcher);
   }
   settings.endArray();
-  profile.defaultLauncherIndex = settings.value(keys::kDefaultLauncherIndex, 0).toInt();
+  // Clamp at the load boundary so the stored value is always in range and no
+  // downstream consumer has to defend against an out-of-range index from a
+  // hand-edited INI (Kartend-aep2e). launcherCount() >= 1, so the upper bound
+  // is never negative.
+  const int rawDefaultIndex = settings.value(keys::kDefaultLauncherIndex, 0).toInt();
+  profile.defaultLauncherIndex = qBound(0, rawDefaultIndex, profile.launcherCount() - 1);
   Q_UNUSED(collectionName);
 }
 
