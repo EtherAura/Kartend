@@ -718,8 +718,7 @@ void TestLaunchManager::testBuildLaunchCommand_substitutesFilePlaceholder() {
   auto ffResult = LaunchManager::buildLaunchCommand(ffmpeg, "Audio", filePath);
   QVERIFY2(ffResult.isOk(), qPrintable(ffResult.isError() ? ffResult.error().message : QString()));
   // The media path lands where %1 was; no literal %1 token and no extra append.
-  QCOMPARE(ffResult.value().arguments,
-           (QStringList{"-autoexit", "-nodisp", filePath}));
+  QCOMPARE(ffResult.value().arguments, (QStringList{"-autoexit", "-nodisp", filePath}));
 
   LauncherConfig fAlias{"mpv", "mpv", "", "--play %F"};
   auto fResult = LaunchManager::buildLaunchCommand(fAlias, "Audio", filePath);
@@ -747,8 +746,7 @@ void TestLaunchManager::testBuildLaunchCommand_substitutesCorePlaceholderInPlain
                           "-L %core \"%1\""};
   auto result = LaunchManager::buildLaunchCommand(launcher, "Retro", filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
-  QCOMPARE(result.value().arguments,
-           (QStringList{"-L", "/cores/snes9x.so", filePath}));
+  QCOMPARE(result.value().arguments, (QStringList{"-L", "/cores/snes9x.so", filePath}));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_noPlaceholderStillAppendsFilePath() {
@@ -796,9 +794,8 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_includesLaunchParameter
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
-  QCOMPARE(result.value().arguments,
-           (QStringList{"--fullscreen", "--config", "/tmp/retro.cfg", "-L", "/tmp/core.so",
-                        filePath}));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", "--config", "/tmp/retro.cfg",
+                                                  "-L", "/tmp/core.so", filePath}));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_unclosedQuoteParameterFails() {
@@ -1237,7 +1234,8 @@ void TestLaunchManager::testPreview_detectsBareFilePlaceholderToken() {
       break;
     }
   }
-  QVERIFY2(sawPlaceholderWarning, "bare %2-style token must be flagged as an unresolved placeholder");
+  QVERIFY2(sawPlaceholderWarning,
+           "bare %2-style token must be flagged as an unresolved placeholder");
 }
 
 void TestLaunchManager::testPreview_substitutedFilePlaceholderProducesNoWarning() {

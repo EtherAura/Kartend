@@ -93,10 +93,9 @@ QString encodeIniValue(const QString &value) {
   for (int i = 0; i < value.size(); ++i) {
     const QChar ch = value.at(i);
     const bool atEdge = (i == 0 || i == value.size() - 1);
-    const bool encodeChar =
-        ch == '%' || ch == '=' || ch == '\n' || ch == '\r' ||
-        (atEdge && (ch == ' ' || ch == '\t')) ||
-        (i == 0 && (ch == '[' || ch == ';' || ch == '#'));
+    const bool encodeChar = ch == '%' || ch == '=' || ch == '\n' || ch == '\r' ||
+                            (atEdge && (ch == ' ' || ch == '\t')) ||
+                            (i == 0 && (ch == '[' || ch == ';' || ch == '#'));
     if (encodeChar) {
       out += '%';
       out += QString::number(ch.unicode(), 16).rightJustified(2, '0').toUpper();

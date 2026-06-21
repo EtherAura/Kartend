@@ -517,8 +517,8 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
       // opts.ignoreHashCache forces a miss so the file is re-hashed and the
       // cached entry refreshed, catching a same-size/same-mtime in-place swap
       // the cache key can't (Kartend-p30ic). Phase 2 below writes the new hash.
-      if (auto hit = FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs,
-                                           opts.ignoreHashCache)) {
+      if (auto hit =
+              FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs, opts.ignoreHashCache)) {
         ScannedFile sf;
         sf.path = path;
         sf.crc = hit->crc;

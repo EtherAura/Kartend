@@ -96,9 +96,10 @@ public:
   [[nodiscard]] virtual ErrorUtils::Result<QString>
   importFromJson(const QString &inPath, const QString &nameOverride = QString(),
                  int *outSkipped = nullptr) = 0;
-  [[nodiscard]] virtual ErrorUtils::Result<QString>
-  importFromM3U(const QString &inPath, const QString &playlistName, int *outSkipped = nullptr,
-                int *outAmbiguous = nullptr) = 0;
+  [[nodiscard]] virtual ErrorUtils::Result<QString> importFromM3U(const QString &inPath,
+                                                                  const QString &playlistName,
+                                                                  int *outSkipped = nullptr,
+                                                                  int *outAmbiguous = nullptr) = 0;
 
   // ─── Favorites built-in ───────────────────────────────────────────────────
   virtual QString

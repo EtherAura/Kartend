@@ -142,9 +142,9 @@ public:
   /// receives the count of dropped items (empty-path, duplicate, or
   /// over-long/invalid refs) so callers can surface "N items skipped" the way
   /// importFromM3U does (Kartend-2sg2t).
-  [[nodiscard]] ErrorUtils::Result<QString>
-  importFromJson(const QString &inPath, const QString &nameOverride = QString(),
-                 int *outSkipped = nullptr) override;
+  [[nodiscard]] ErrorUtils::Result<QString> importFromJson(const QString &inPath,
+                                                           const QString &nameOverride = QString(),
+                                                           int *outSkipped = nullptr) override;
 
   /// Reads an M3U file and creates a new playlist from its entries. Each path
   /// is resolved against the live `items` table; entries that don't currently

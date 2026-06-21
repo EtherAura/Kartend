@@ -32,7 +32,7 @@ struct DailySet {
 
 /// The parsed daily-download form.
 struct DailyForm {
-  bool valid = false;     ///< False when the expected form wasn't found.
+  bool valid = false; ///< False when the expected form wasn't found.
   /// True when the `name="daily"` form block was located on the page at all,
   /// independent of whether its contents parsed into a valid request
   /// (Kartend-s9k45). Lets a caller distinguish a likely site/layout change or

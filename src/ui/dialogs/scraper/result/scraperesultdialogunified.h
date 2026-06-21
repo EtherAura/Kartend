@@ -136,9 +136,8 @@ private:
   // Recent-media thumbnail filmstrip (m_dlg->m_liveThumbsGroup) plus the
   // progress bar + current / timing / counts / quota status labels. Returned
   // via out-params; all are added to the root in order and start hidden.
-  void buildProgressLabels(QGroupBox *&thumbsGroup, QWidget *&currentLabel,
-                           QWidget *&progressBar, QWidget *&timingLabel, QWidget *&countsLabel,
-                           QWidget *&quotaLabel);
+  void buildProgressLabels(QGroupBox *&thumbsGroup, QWidget *&currentLabel, QWidget *&progressBar,
+                           QWidget *&timingLabel, QWidget *&countsLabel, QWidget *&quotaLabel);
 
   // ── Unified-flow orchestration state (Kartend-unlta) ────────────────────
   // Relocated off ScrapeResultDialog's header onto this controller, which

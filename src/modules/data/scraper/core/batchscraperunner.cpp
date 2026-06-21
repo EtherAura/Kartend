@@ -107,10 +107,10 @@ BatchScrapeRunner::~BatchScrapeRunner() {
     }
   }
   if (abandoned) {
-    qCWarning(lcBatchScrape)
-        << "BatchScrapeRunner: media writes did not drain in" << kMediaWriteDrainBudgetMs
-        << "ms during destruction; abandoned them (value-captures only — the "
-           "in-progress asset may still finish writing to disk)";
+    qCWarning(lcBatchScrape) << "BatchScrapeRunner: media writes did not drain in"
+                             << kMediaWriteDrainBudgetMs
+                             << "ms during destruction; abandoned them (value-captures only — the "
+                                "in-progress asset may still finish writing to disk)";
   }
   shutdownWriteWorker();
 }

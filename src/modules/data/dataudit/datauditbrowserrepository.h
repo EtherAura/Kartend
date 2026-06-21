@@ -6,8 +6,8 @@
 #include <QList>
 #include <QString>
 
-#include "datcache.h"        // DatCache::CachedSource
 #include "datauditprofile.h" // DatAuditProfile::{Profile,RollupRow,GameRollupRow,ResultRow}
+#include "datcache.h"        // DatCache::CachedSource
 #include "datlookup.h"       // DatLookup::DatRecord
 
 namespace DatAudit {
@@ -42,7 +42,7 @@ public:
   /// Per-(game, status, mia) counts for one source within one profile, for the
   /// game-list pane. Empty on a DB failure (logged).
   [[nodiscard]] QList<DatAuditProfile::GameRollupRow> gamesFor(qint64 profileId,
-                                                              const QString &sourceName) const;
+                                                               const QString &sourceName) const;
 
   /// The raw persisted result rows for one game (profile + source + game), for
   /// the ROM-detail pane. Empty when nothing matches / on a DB failure.
@@ -52,8 +52,8 @@ public:
   /// All persisted result rows for one source (every game), for the
   /// folder-as-item view which regroups them by containing item-folder. Empty
   /// when the source has no rows / on a DB failure.
-  [[nodiscard]] QList<DatAuditProfile::ResultRow>
-  sourceRows(qint64 profileId, const QString &sourceName) const;
+  [[nodiscard]] QList<DatAuditProfile::ResultRow> sourceRows(qint64 profileId,
+                                                             const QString &sourceName) const;
 
   /// The DAT records of one game from the cache (no app-DB access), for joining
   /// hashes/sizes/clone info into the ROM-detail pane. Empty when the cache has

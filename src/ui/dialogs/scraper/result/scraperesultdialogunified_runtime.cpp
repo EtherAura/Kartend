@@ -341,8 +341,7 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
     const qint64 bytes = m_dlg->m_service->totalBytesDownloaded();
     constexpr qint64 kWindowMs = 10000;
     m_rateSamples.append({nowMs, bytes});
-    while (m_rateSamples.size() > 1 &&
-           nowMs - m_rateSamples.first().first > kWindowMs) {
+    while (m_rateSamples.size() > 1 && nowMs - m_rateSamples.first().first > kWindowMs) {
       m_rateSamples.removeFirst();
     }
     if (m_rateSamples.size() >= 2) {
@@ -596,8 +595,7 @@ void ScrapeResultDialogUnified::runAutoCollection(int collectionIndex, const QSt
       m_dlg->m_scraperCtx.providerBuilder(collectionIndex);
   if (!provider) {
     m_unifiedFailures.append(
-        tr("%1: no provider applies")
-            .arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
+        tr("%1: no provider applies").arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
     m_unifiedErrorsTotal += items.size();
     m_unifiedItemsCompletedAcross += items.size();
     ++m_unifiedQueueCursor;
@@ -673,8 +671,7 @@ void ScrapeResultDialogUnified::runInteractiveCollection(int collectionIndex,
   m_interactiveCollectionIndex = collectionIndex;
   if (!m_interactiveProvider) {
     m_unifiedFailures.append(
-        tr("%1: no provider applies")
-            .arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
+        tr("%1: no provider applies").arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
     m_unifiedErrorsTotal += items.size();
     m_unifiedItemsCompletedAcross += items.size();
     ++m_unifiedQueueCursor;
@@ -699,11 +696,11 @@ void ScrapeResultDialogUnified::interactiveNextItem() {
   const QString queryText = QFileInfo(filePath).completeBaseName();
   MetadataLookupProvider::LookupContext ctx{queryText, filePath};
   QPointer<ScrapeResultDialog> guard(m_dlg);
-  m_interactiveProvider->lookup(
-      ctx, [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
-        if (guard.isNull()) return;
-        guard->m_unified->interactiveOnLookupResult(std::move(r));
-      });
+  m_interactiveProvider->lookup(ctx,
+                                [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
+                                  if (guard.isNull()) return;
+                                  guard->m_unified->interactiveOnLookupResult(std::move(r));
+                                });
 }
 
 void ScrapeResultDialogUnified::interactiveOnLookupResult(
@@ -717,8 +714,7 @@ void ScrapeResultDialogUnified::interactiveOnLookupResult(
     if (result.isError()) {
       ++m_unifiedErrorsTotal;
       m_unifiedFailures.append(QStringLiteral("%1: %2").arg(
-          QFileInfo(m_interactiveItems[m_interactiveCursor]).fileName(),
-          result.error().message));
+          QFileInfo(m_interactiveItems[m_interactiveCursor]).fileName(), result.error().message));
     } else {
       ++m_unifiedSkippedTotal;
     }
@@ -741,8 +737,7 @@ void ScrapeResultDialogUnified::interactiveOnLookupResult(
   m_dlg->m_applyButton->show();
   m_dlg->m_applyButton->setEnabled(false);
   if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->hide();
-  m_dlg->m_singleItemView->setProviderAndCandidates(m_interactiveProvider.get(),
-                                                    result.value());
+  m_dlg->m_singleItemView->setProviderAndCandidates(m_interactiveProvider.get(), result.value());
 }
 
 void ScrapeResultDialogUnified::interactiveOnApplied() {
@@ -757,8 +752,7 @@ void ScrapeResultDialogUnified::interactiveOnApplied() {
   }
   if (m_dlg->m_scraperCtx.applyResult) {
     m_dlg->m_scraperCtx.applyResult(m_interactiveCollectionIndex,
-                                    m_interactiveItems[m_interactiveCursor],
-                                    delivered);
+                                    m_interactiveItems[m_interactiveCursor], delivered);
   }
   ++m_unifiedScrapedTotal;
   ++m_unifiedItemsCompletedAcross;

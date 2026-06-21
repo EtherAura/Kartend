@@ -96,8 +96,8 @@ DatAuditBrowserRepository::sourceRows(qint64 profileId, const QString &sourceNam
   return out;
 }
 
-QList<DatLookup::DatRecord> DatAuditBrowserRepository::datRecordsFor(const QString &datPath,
-                                                                    const QString &gameName) const {
+QList<DatLookup::DatRecord>
+DatAuditBrowserRepository::datRecordsFor(const QString &datPath, const QString &gameName) const {
   if (datPath.isEmpty()) {
     return {};
   }

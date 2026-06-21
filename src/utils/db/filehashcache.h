@@ -105,11 +105,9 @@ struct MemberEntry {
 /// caller re-extracts and refreshes the rows — the container-level counterpart
 /// to lookup()'s bypass, for the same same-size/same-mtime staleness blind spot.
 /// Default false leaves the fast path unchanged.
-[[nodiscard]] std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db,
-                                                              const QString &containerPath,
-                                                              qint64 currentSize,
-                                                              qint64 currentMtimeMs,
-                                                              bool ignoreCache = false);
+[[nodiscard]] std::optional<QList<MemberEntry>>
+lookupMembers(QSqlDatabase &db, const QString &containerPath, qint64 currentSize,
+              qint64 currentMtimeMs, bool ignoreCache = false);
 
 /// Replace `containerPath`'s member rows with `members` in one transaction,
 /// stamped against the container's `(size, mtime)`.

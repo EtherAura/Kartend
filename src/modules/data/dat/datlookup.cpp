@@ -375,7 +375,9 @@ Dialect detectDialect(const QByteArray &xml) {
   return Dialect::Unknown;
 }
 
-DatHeader probeHeader(const QByteArray &xml) { return probeHeader(xml, detectDialect(xml)); }
+DatHeader probeHeader(const QByteArray &xml) {
+  return probeHeader(xml, detectDialect(xml));
+}
 
 DatHeader probeHeader(const QByteArray &xml, Dialect dialect) {
   DatHeader out;

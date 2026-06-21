@@ -641,9 +641,9 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
     // Kartend-cywbk: every failure path logs so a silent "starring does
     // nothing" degrade (the empty id is later swallowed by addItem) is
     // diagnosable from the call site rather than only at the DB layer.
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseNotOpen,
-                                               "Cannot ensure favorites playlist: database not open",
-                                               "PlaylistManager::ensureFavoritesPlaylist"));
+    ErrorUtils::logError(ErrorContext::warning(
+        ErrorCode::DatabaseNotOpen, "Cannot ensure favorites playlist: database not open",
+        "PlaylistManager::ensureFavoritesPlaylist"));
     return QString();
   }
 

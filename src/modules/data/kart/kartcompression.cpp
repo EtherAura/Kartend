@@ -100,9 +100,8 @@ ErrorUtils::Result<QByteArray> compress(const QByteArray &raw, KartFormat::Compr
     const size_t bound = ZSTD_compressBound(static_cast<size_t>(raw.size()));
     QByteArray out;
     out.resize(static_cast<qsizetype>(bound));
-    const size_t result =
-        ZSTD_compress(out.data(), static_cast<size_t>(out.size()), raw.constData(),
-                      static_cast<size_t>(raw.size()), 3);
+    const size_t result = ZSTD_compress(out.data(), static_cast<size_t>(out.size()),
+                                        raw.constData(), static_cast<size_t>(raw.size()), 3);
     if (ZSTD_isError(result)) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
                                              "zstd compression failed", "KartCompression::compress")
