@@ -222,7 +222,10 @@ private:
   auto finalizeNavigation(int collectionIndex) -> void;
 
   [[nodiscard]] auto areItemsShared(int fromIndex, int toIndex) const -> bool;
-  auto applyCollectionSettingsOnly(int collectionIndex) -> void;
+  // reloadBackground=false (Kartend-gzptz): skip the main-view + sidebar
+  // background-image reload and only re-apply colours — for a colour-only
+  // re-theme where the wallpaper can't have changed.
+  auto applyCollectionSettingsOnly(int collectionIndex, bool reloadBackground = true) -> void;
   [[nodiscard]] auto getSubcollections(int parentIndex) const -> QList<int>;
   [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
 

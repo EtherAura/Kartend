@@ -41,7 +41,8 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
     }                                                                                              \
   } while (0)
 
-auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void {
+auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex, bool reloadBackground)
+    -> void {
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
@@ -68,11 +69,16 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
                                                  (*m_collections));
   SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex, (*m_collections));
 
-  applyBackgroundForCollection(collectionIndex);
+  // Kartend-gzptz: the main-view wallpaper/video/vignette/logo are per-collection,
+  // not accent-derived, so a colour-only re-theme skips this whole re-decode +
+  // stylesheet rebuild and leaves the already-rendered background in place.
+  if (reloadBackground) {
+    applyBackgroundForCollection(collectionIndex);
+  }
   applyPrimaryColorForCollection(collectionIndex);
 
   if (detailsPaneMgr()) {
-    detailsPaneMgr()->applySidebarStateForCollection(collectionIndex);
+    detailsPaneMgr()->applySidebarStateForCollection(collectionIndex, reloadBackground);
   }
 }
 
@@ -80,11 +86,12 @@ void NavigationManager::reapplyActiveCollectionTheming(int collectionIndex) {
   if (!m_collections || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
-  // Background + primary colour (toolbar/menubar/search-bar stylesheets,
-  // ItemWidget colour statics) + details-pane applyAppearance (content palette,
-  // bubble stylesheets) + collection-summary rows. Same bundle as a collection
-  // switch — safe to re-run; the inner setters no-op when nothing changed.
-  applyCollectionSettingsOnly(collectionIndex);
+  // Primary colour (toolbar/menubar/search-bar stylesheets, ItemWidget colour
+  // statics) + details-pane applyAppearance (content palette, bubble
+  // stylesheets) + collection-summary rows. reloadBackground=false (Kartend-gzptz):
+  // this is a colour-only re-theme, so the main-view and sidebar wallpapers —
+  // which don't depend on the accent — are left as-is rather than re-decoded.
+  applyCollectionSettingsOnly(collectionIndex, /*reloadBackground=*/false);
   // applyAppearance/refreshCollectionSummary above rebuild the Collection-tab
   // rows, but the Item-tab metadata rows bake the accent into a RichText hex
   // span at build time and are only re-pushed by the metadata path — refresh

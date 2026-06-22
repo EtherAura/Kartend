@@ -41,7 +41,11 @@ public:
   virtual void updateSidebarMetadata(ItemWidget *selectedItem) = 0;
   virtual void updateSidebarMetadata(const QString &filePath, const QString &itemName) = 0;
   virtual void refreshSidebarMetadataImmediate() = 0;
-  virtual void applySidebarStateForCollection(int collectionIndex) = 0;
+  // reloadBackground=false (Kartend-gzptz) re-applies the sidebar colours but
+  // reuses the already-decoded background pixmap — for a colour-only re-theme
+  // where the wallpaper can't have changed.
+  virtual void applySidebarStateForCollection(int collectionIndex,
+                                              bool reloadBackground = true) = 0;
   virtual void updateSidebarLayout(int currentCollectionIndex) = 0;
   [[nodiscard]] virtual bool isSidebarVisible() const = 0;
   [[nodiscard]] virtual IDetailsPane *sidebarWidget() const = 0;

@@ -246,7 +246,8 @@ void DetailsPaneManager::onSidebarAppearanceChanged(int collectionIndex,
   updateSidebarLayout(collectionIndex);
 }
 
-void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
+void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex,
+                                                        bool reloadBackground) {
   if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
@@ -257,7 +258,7 @@ void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
 
   // apply per-collection appearance (bg type, colors, pattern).
   if (m_DetailsPane) {
-    m_DetailsPane->applyAppearance(collection);
+    m_DetailsPane->applyAppearance(collection, reloadBackground);
   }
 
   // Push the new collection's summary to the sidebar so the no-selection
