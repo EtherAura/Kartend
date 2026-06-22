@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Kartend-5qmjp: full history so diff-cover can compare a PR's changed
           # lines against the merge base (a shallow clone has no common ancestor).
