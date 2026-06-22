@@ -768,31 +768,30 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
                     [child](int, QProcess::ExitStatus) { child->deleteLater(); });
           });
 
-  connect(
-      child, &QProcess::errorOccurred, this,
-      [this, settled, child, cmd, launcherPath, reclaimExtraction](QProcess::ProcessError error) {
-        if (*settled) {
-          return;
-        }
-        // FailedToStart is terminal here (parity with the old startDetached
-        // false-return). Other errors before the window elapses are also
-        // treated as an early failure — the child is gone or unusable.
-        if (error == QProcess::FailedToStart) {
-          *settled = true;
-          const QString errorMsg =
-              QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
-                      "sure the launcher path is correct and the file is executable.")
-                  .arg(launcherPath)
-                  .arg(launcherPath)
-                  .arg(cmd.arguments.join(" "));
-          ErrorPresentation::showError(
-              nullptr,
-              ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
-                                     QStringLiteral("LaunchManager::launchDetachedWatched")));
-          reclaimExtraction();
-          child->deleteLater();
-        }
-      });
+  connect(child, &QProcess::errorOccurred, this,
+          [settled, child, cmd, launcherPath, reclaimExtraction](QProcess::ProcessError error) {
+            if (*settled) {
+              return;
+            }
+            // FailedToStart is terminal here (parity with the old startDetached
+            // false-return). Other errors before the window elapses are also
+            // treated as an early failure — the child is gone or unusable.
+            if (error == QProcess::FailedToStart) {
+              *settled = true;
+              const QString errorMsg =
+                  QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
+                          "sure the launcher path is correct and the file is executable.")
+                      .arg(launcherPath)
+                      .arg(launcherPath)
+                      .arg(cmd.arguments.join(" "));
+              ErrorPresentation::showError(
+                  nullptr,
+                  ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
+                                         QStringLiteral("LaunchManager::launchDetachedWatched")));
+              reclaimExtraction();
+              child->deleteLater();
+            }
+          });
 
   connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
           [this, settled, child, originalFilePath, collectionUuid,
