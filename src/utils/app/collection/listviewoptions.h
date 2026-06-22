@@ -8,6 +8,7 @@
 // subnamespace. collectionutils.h re-includes this header so existing
 // callers compile unchanged.
 
+#include <QHash>
 #include <QString>
 
 #include <uiconstants/item.h>
@@ -33,5 +34,12 @@ struct ListViewOptions {
   }
   bool operator!=(const ListViewOptions &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+inline size_t qHash(const ListViewOptions &key, size_t seed = 0) {
+  return qHashMulti(seed, key.listFontSize, key.listRowHeight, key.listRowColor,
+                    key.listAltRowColor);
+}
 
 #endif

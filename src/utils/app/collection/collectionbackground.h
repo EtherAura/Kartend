@@ -9,6 +9,7 @@
 // collectionutils.h re-includes this header so existing callers compile
 // unchanged.
 
+#include <QHash>
 #include <QString>
 
 #include "../collectiontypes.h"
@@ -82,5 +83,17 @@ struct CollectionBackground {
   }
   bool operator!=(const CollectionBackground &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h
+// for the full rationale). Scoped enums are cast to int because qHash(Enum) only
+// exists since Qt 6.5 and CI pins Qt 6.4.2.
+inline size_t qHash(const CollectionBackground &key, size_t seed = 0) {
+  return qHashMulti(
+      seed, static_cast<int>(key.backgroundType), key.backgroundColor, key.backgroundImage,
+      key.backgroundVideo, key.primaryColor, key.tileColor, key.selectionColor, key.headerLogoImage,
+      static_cast<int>(key.headerLogoPosition), key.vignetteEnabled, key.vignetteIntensity,
+      key.wallpaperParallax, key.parallaxStrength, key.toolbarBackdropBlur, key.backdropBlurRadius);
+}
 
 #endif

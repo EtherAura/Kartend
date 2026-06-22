@@ -8,6 +8,7 @@
 // + UIConstants. collectionutils.h re-includes this header so existing
 // callers compile unchanged.
 
+#include <QHash>
 #include <QString>
 
 /// Virtual-folder browsing options + the runtime cursor for the currently
@@ -41,5 +42,14 @@ struct FolderBrowsingOptions {
   }
   bool operator!=(const FolderBrowsingOptions &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+// currentSubfolder is runtime-only but IS part of operator==, so it is hashed too.
+inline size_t qHash(const FolderBrowsingOptions &key, size_t seed = 0) {
+  return qHashMulti(seed, key.includeContentSubfolders, key.includeArtworkSubfolders,
+                    key.showAllSubfolderItems, key.hideSubfolderTitles, key.showHiddenFolders,
+                    key.currentSubfolder);
+}
 
 #endif

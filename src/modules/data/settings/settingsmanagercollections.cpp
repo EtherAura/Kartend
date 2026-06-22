@@ -15,6 +15,7 @@
 #include <QString>
 #include <QStringList>
 
+#include "collectiondifffingerprint.h"
 #include "collectionhierarchybuilder.h"
 #include "errorpresentation.h"
 #include "loggingcategories.h"
@@ -53,6 +54,21 @@ const QSet<QString> &reservedTopLevelGroups() {
   static const QSet<QString> groups{QStringLiteral("General"), QStringLiteral("Scrapers"),
                                     QStringLiteral("ScraperOptions"), QStringLiteral("Launchers")};
   return groups;
+}
+
+// Kartend-lc58a: builds the per-collection fingerprint baseline keyed by
+// (name, mediaDirectory) UUID. Mirrors the identity rule emitPerCollectionDiffs
+// uses; on a duplicate UUID the last entry wins, matching the prior
+// QHash<uuid, const CollectionConfig*> lookup behaviour.
+QHash<QString, CollectionDiffFingerprint>
+buildFingerprintIndex(const QList<CollectionConfig> &collections) {
+  QHash<QString, CollectionDiffFingerprint> index;
+  index.reserve(collections.size());
+  for (const CollectionConfig &c : collections) {
+    index.insert(CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory),
+                 collectionDiffFingerprint(c));
+  }
+  return index;
 }
 
 } // namespace
@@ -175,7 +191,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
   // and fire every signal for every collection at once — noisy, and the
   // listeners would refresh state that hadn't actually changed since the
   // user opened the app.
-  m_lastSavedCollections = collections;
+  m_lastSavedCollectionFingerprints = buildFingerprintIndex(collections);
 
   // Validate loaded collections and log any issues
   auto validation = ConfigValidation::validateAllCollections(collections);
@@ -386,56 +402,53 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   // Snapshot the prior baseline, commit the new one, then diff against the
   // snapshot so re-entrant saves observe no change and stop.
   //
-  // Kartend-lc58a: move (not copy) the old baseline out of the member before
-  // overwriting it. m_lastSavedCollections is reassigned on the very next line,
-  // so its prior buffer can be stolen rather than ref-shared — this avoids a
-  // detach-deep-copy of every collection's embedded QHash/QList if a re-entrant
-  // save mutates the (new) baseline while these emits are on the stack. Behavior
-  // is identical: previouslySaved still holds the exact pre-save list and is the
-  // diff's `previous` argument. The broader hot-path copy this issue targets
-  // (the m_lastSavedCollections snapshot itself) lives on the member declared in
-  // settingsmanager.h and can't be converted to shared/fingerprint storage
-  // without editing that header — out of this change's file scope.
-  const QList<CollectionConfig> previouslySaved = std::move(m_lastSavedCollections);
-  m_lastSavedCollections = collections;
-  emitPerCollectionDiffs(previouslySaved, collections);
+  // Kartend-lc58a: the baseline is now a per-collection fingerprint map rather
+  // than a full by-value QList<CollectionConfig>, so committing it no longer
+  // deep-copies every collection's embedded QHash/QList (and no longer shares
+  // copy-on-write storage with the live list, which used to force that deep copy
+  // on the live list's next mutation — a sidebar drag, tab switch, filter
+  // toggle). Each leaf cluster's fingerprint comes from its co-located qHash;
+  // see collectiondifffingerprint.h. Move the old map out before overwriting so
+  // the diff reads the exact pre-save baseline.
+  const QHash<QString, CollectionDiffFingerprint> previousFingerprints =
+      std::move(m_lastSavedCollectionFingerprints);
+  m_lastSavedCollectionFingerprints = buildFingerprintIndex(collections);
+  emitPerCollectionDiffs(previousFingerprints, collections);
 
   return ErrorUtils::Result<void>::success();
 }
 
-void SettingsManager::emitPerCollectionDiffs(const QList<CollectionConfig> &previous,
-                                             const QList<CollectionConfig> &collections) {
+void SettingsManager::emitPerCollectionDiffs(
+    const QHash<QString, CollectionDiffFingerprint> &previous,
+    const QList<CollectionConfig> &collections) {
   // Identity is (name, mediaDirectory) UUID so a reorder of unchanged
   // collections doesn't fire spurious diffs; an added collection has no
-  // matching old entry and skips the diff (collectionsModified covers the
+  // matching baseline entry and skips the diff (collectionsModified covers the
   // add/remove lifecycle separately).
-  QHash<QString, const CollectionConfig *> oldByUuid;
-  oldByUuid.reserve(previous.size());
-  for (const CollectionConfig &oldCfg : previous) {
-    const QString uuid = CollectionUtils::computeCollectionUuid(oldCfg.name, oldCfg.mediaDirectory);
-    oldByUuid.insert(uuid, &oldCfg);
-  }
-
   for (int i = 0; i < collections.size(); ++i) {
     const CollectionConfig &newCfg = collections[i];
     const QString uuid = CollectionUtils::computeCollectionUuid(newCfg.name, newCfg.mediaDirectory);
-    const auto it = oldByUuid.constFind(uuid);
-    if (it == oldByUuid.constEnd()) {
+    const auto it = previous.constFind(uuid);
+    if (it == previous.constEnd()) {
       continue;
     }
-    const CollectionConfig &oldCfg = *(it.value());
+    const CollectionDiffFingerprint &oldFp = it.value();
+    const CollectionDiffFingerprint newFp = collectionDiffFingerprint(newCfg);
 
-    if (oldCfg.gridLayout != newCfg.gridLayout) emit gridLayoutChanged(i, newCfg.gridLayout);
-    if (oldCfg.sidebar != newCfg.sidebar) emit sidebarAppearanceChanged(i, newCfg.sidebar);
-    if (oldCfg.background != newCfg.background)
+    // Compare per-cluster fingerprints, not the values themselves. Equal
+    // clusters always fingerprint equal, so a real change is never missed; the
+    // emit still carries the live NEW value (not the hash) to listeners.
+    if (oldFp.gridLayout != newFp.gridLayout) emit gridLayoutChanged(i, newCfg.gridLayout);
+    if (oldFp.sidebar != newFp.sidebar) emit sidebarAppearanceChanged(i, newCfg.sidebar);
+    if (oldFp.background != newFp.background)
       emit collectionBackgroundChanged(i, newCfg.background);
-    if (oldCfg.listView != newCfg.listView) emit listViewOptionsChanged(i, newCfg.listView);
-    if (oldCfg.archive != newCfg.archive) emit archiveOptionsChanged(i, newCfg.archive);
-    if (oldCfg.folderBrowsing != newCfg.folderBrowsing)
+    if (oldFp.listView != newFp.listView) emit listViewOptionsChanged(i, newCfg.listView);
+    if (oldFp.archive != newFp.archive) emit archiveOptionsChanged(i, newCfg.archive);
+    if (oldFp.folderBrowsing != newFp.folderBrowsing)
       emit folderBrowsingOptionsChanged(i, newCfg.folderBrowsing);
-    if (oldCfg.filter != newCfg.filter) emit collectionFilterPreferencesChanged(i, newCfg.filter);
-    if (oldCfg.scraperOverrides != newCfg.scraperOverrides)
+    if (oldFp.filter != newFp.filter) emit collectionFilterPreferencesChanged(i, newCfg.filter);
+    if (oldFp.scraperOverrides != newFp.scraperOverrides)
       emit scraperOverridesChanged(i, newCfg.scraperOverrides);
-    if (oldCfg.launcher != newCfg.launcher) emit launcherProfileChanged(i, newCfg.launcher);
+    if (oldFp.launcher != newFp.launcher) emit launcherProfileChanged(i, newCfg.launcher);
   }
 }

@@ -1,6 +1,7 @@
 #ifndef SETTINGSMANAGER_H
 #define SETTINGSMANAGER_H
 
+#include "collectiondifffingerprint.h"
 #include "isettingsmanager.h"
 #include <QHash>
 #include <QLoggingCategory>
@@ -57,25 +58,28 @@ private:
   // per-domain hot-reload pattern.
   QString m_credentialDemotionReason;
 
-  // Last successfully-saved collection list, used as the diff baseline for
-  // the per-domain *Changed signals emitted from saveCollections(). Updated
-  // atomically at the end of a successful save (and seeded from
-  // loadCollections so the first save after launch has a sensible baseline
-  // instead of an empty one that fires every signal at once).
-  QList<CollectionConfig> m_lastSavedCollections;
+  // Per-collection fingerprint of the last successfully-saved list, keyed by
+  // (name, mediaDirectory) UUID. Diff baseline for the per-domain *Changed
+  // signals emitted from saveCollections(). Updated atomically at the end of a
+  // successful save (and seeded from loadCollections so the first save after
+  // launch has a sensible baseline instead of an empty one that fires every
+  // signal at once). Kartend-lc58a: stores cluster hashes, not full
+  // CollectionConfig copies, so a save no longer deep-copies every embedded
+  // QHash/QList — see collectiondifffingerprint.h.
+  QHash<QString, CollectionDiffFingerprint> m_lastSavedCollectionFingerprints;
 
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                            QList<CollectionConfig> &collections, const bool &needsRewrite);
 
   // Per-collection hot-reload diff. Compares `collections` against the
-  // `previous` snapshot by (name, mediaDirectory) UUID and fires the
+  // `previous` fingerprint baseline by (name, mediaDirectory) UUID and fires the
   // per-leaf-struct *Changed signals. Called from saveCollections() after
   // a successful disk write so observers (background painter, sidebar
   // appearance, etc.) refresh only when their slice actually changed.
   // `previous` is passed explicitly (rather than read from
-  // m_lastSavedCollections) because the baseline is committed *before* this
-  // emit — see saveCollections() for why the ordering matters.
-  void emitPerCollectionDiffs(const QList<CollectionConfig> &previous,
+  // m_lastSavedCollectionFingerprints) because the baseline is committed
+  // *before* this emit — see saveCollections() for why the ordering matters.
+  void emitPerCollectionDiffs(const QHash<QString, CollectionDiffFingerprint> &previous,
                               const QList<CollectionConfig> &collections);
 
   // Stamped into [General/schemaVersion] on save and checked on load (older

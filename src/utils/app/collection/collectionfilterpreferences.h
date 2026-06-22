@@ -8,6 +8,7 @@
 // dragging in CollectionConfig + UIConstants. collectionutils.h
 // re-includes this header so existing callers compile unchanged.
 
+#include <QHash>
 #include <QStringList>
 
 /// Per-collection title-cleanup filter. First sub-struct extracted from the
@@ -31,5 +32,14 @@ struct CollectionFilterPreferences {
   }
   bool operator!=(const CollectionFilterPreferences &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+// The pattern list is folded in order-sensitively via qHashRange (there is no
+// qHash overload for QList/QStringList).
+inline size_t qHash(const CollectionFilterPreferences &key, size_t seed = 0) {
+  seed = qHashRange(key.titleExclusionPatterns.begin(), key.titleExclusionPatterns.end(), seed);
+  return qHashMulti(seed, key.titleExclusionEnabled);
+}
 
 #endif

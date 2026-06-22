@@ -1477,6 +1477,15 @@ kartend_add_test(NAME CollectionConfigEquality
   LINK kartend_utils
 )
 
+# Per-cluster qHash field-coverage test (Kartend-lc58a). The save/diff baseline
+# fingerprints each leaf cluster instead of keeping full CollectionConfig copies;
+# this guards against a field added to a cluster's operator== but forgotten in
+# its qHash (a silently-dropped edit). Pure value types — links kartend_utils.
+kartend_add_test(NAME CollectionDiffFingerprint
+  SOURCES modules/settings/test_collectiondifffingerprint.cpp
+  LINK kartend_utils
+)
+
 # SettingsManager migration / schemaVersion tests (Kartend-39g9). Links
 # against the full kartend object-lib aggregate because SettingsManager
 # pulls in a wide dependency footprint (path/error/config-validation utils,

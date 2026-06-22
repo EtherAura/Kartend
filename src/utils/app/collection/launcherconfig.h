@@ -15,6 +15,7 @@
 // collection/launcherconfig.cpp (Kartend-7uia).
 
 #include <QFileInfo>
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -46,6 +47,15 @@ struct LauncherConfig {
            launchParameters == other.launchParameters && presetId == other.presetId;
   }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+// Declared before LauncherProfile's qHash so the latter can fold the
+// additionalLaunchers list in via qHashRange.
+inline size_t qHash(const LauncherConfig &key, size_t seed = 0) {
+  return qHashMulti(seed, key.name, key.launcherPath, key.corePath, key.launchParameters,
+                    key.presetId);
+}
 
 namespace LauncherUtils {
 
@@ -152,6 +162,16 @@ struct LauncherProfile {
   }
   bool operator!=(const LauncherProfile &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+// additionalLaunchers is folded in order-sensitively via qHashRange, which calls
+// the LauncherConfig qHash declared above (there is no qHash overload for QList).
+inline size_t qHash(const LauncherProfile &key, size_t seed = 0) {
+  seed = qHashMulti(seed, key.launcherPath, key.corePath, key.launchParameters, key.launcherName,
+                    key.defaultLauncherIndex);
+  return qHashRange(key.additionalLaunchers.begin(), key.additionalLaunchers.end(), seed);
+}
 
 namespace LauncherUtils {
 

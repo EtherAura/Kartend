@@ -306,6 +306,22 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
   IDatabaseManager *databaseManager = context.databaseManager;
 
   int viewingCollectionIndex = currentCollectionIndex;
+  // Kartend-lc58a: the three full-list copies in this open/accept cycle
+  // (originalCollections here, newCollections at getCollections(), and the
+  // write-back collections = newCollections) are necessarily distinct, not
+  // redundant snapshots, and the fingerprint trick used for SettingsManager's
+  // save/diff baseline does NOT apply here:
+  //   1. originalCollections is the pre-dialog baseline. detectChanges() and the
+  //      rename-reconciliation loop below compare actual FIELD VALUES (and read
+  //      oldC.name / mediaDirectory), so a per-cluster hash can't replace it; it
+  //      must also survive the dialog session, during which `collections` is
+  //      reassigned by the onCollectionSaved callback. QList is copy-on-write, so
+  //      this is O(1) until a later write actually forces a detach.
+  //   2. newCollections = dlg->getCollections() is the dialog's edited state — a
+  //      move from the returned value, not a copy of an existing list.
+  //   3. collections = newCollections is the write-back to the live list and
+  //      can't move from newCollections, which stays live afterward as the
+  //      downstream diff source (handleReloadRequired, orphan purge, layout).
   QList<CollectionConfig> originalCollections = collections;
 
   // MainWindow supplies a factory that constructs the concrete SettingsDialog
