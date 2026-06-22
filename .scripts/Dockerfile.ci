@@ -42,6 +42,9 @@ RUN apt-get update \
       qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
       libarchive-dev qtkeychain-qt6-dev \
       clang-tidy clang-format-19 cppcheck iwyu jq \
+ `# clang-format pin (19) is owned by .scripts/lib/clang-format-version.sh;` \
+ `# build.yml's "Verify pinned clang-format version" step fails CI if this` \
+ `# literal drifts from that source of truth (Kartend-gv2xq).` \
  && ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format \
  && rm -rf /var/lib/apt/lists/*
 

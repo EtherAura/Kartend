@@ -141,25 +141,24 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
   if (configA.name != configB.name) {
     titleChanged = true;
   }
-  // Appearance changes (colors)
-  if (configA.background.primaryColor != configB.background.primaryColor ||
-      configA.background.tileColor != configB.background.tileColor ||
-      configA.background.selectionColor != configB.background.selectionColor ||
-      configA.background.backgroundColor != configB.background.backgroundColor ||
-      configA.background.backgroundImage != configB.background.backgroundImage ||
-      configA.background.backgroundVideo != configB.background.backgroundVideo ||
-      configA.background.backgroundType != configB.background.backgroundType ||
+  // Appearance changes (colors).
+  //
+  // Kartend-fybhy: the whole-background scalar enumeration that used to live
+  // here collapses to the leaf-level CollectionBackground::operator!= — that
+  // operator compares exactly the 15 background fields the old block listed
+  // (backgroundType/Color/Image/Video, primary/tile/selectionColor,
+  // headerLogoImage/Position, vignetteEnabled/Intensity, wallpaperParallax/
+  // parallaxStrength, toolbarBackdropBlur/backdropBlurRadius), so this is a
+  // field-for-field equivalent that can no longer silently miss a newly added
+  // background field. The three listView appearance fields are kept inline (NOT
+  // collapsed to ListViewOptions::operator!=) on purpose: that leaf also covers
+  // listFontSize, which is already routed through the fontSizeChanged path
+  // above — folding the whole leaf in here would over-trigger appearanceChanged
+  // on a font-size-only edit.
+  if (configA.background != configB.background ||
       configA.listView.listRowColor != configB.listView.listRowColor ||
       configA.listView.listAltRowColor != configB.listView.listAltRowColor ||
-      configA.listView.listRowHeight != configB.listView.listRowHeight ||
-      configA.background.headerLogoImage != configB.background.headerLogoImage ||
-      configA.background.headerLogoPosition != configB.background.headerLogoPosition ||
-      configA.background.vignetteEnabled != configB.background.vignetteEnabled ||
-      configA.background.vignetteIntensity != configB.background.vignetteIntensity ||
-      configA.background.wallpaperParallax != configB.background.wallpaperParallax ||
-      configA.background.parallaxStrength != configB.background.parallaxStrength ||
-      configA.background.toolbarBackdropBlur != configB.background.toolbarBackdropBlur ||
-      configA.background.backdropBlurRadius != configB.background.backdropBlurRadius) {
+      configA.listView.listRowHeight != configB.listView.listRowHeight) {
     hasChanges = true;
     appearanceChanged = true;
   }
@@ -307,6 +306,22 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
   IDatabaseManager *databaseManager = context.databaseManager;
 
   int viewingCollectionIndex = currentCollectionIndex;
+  // Kartend-lc58a: the three full-list copies in this open/accept cycle
+  // (originalCollections here, newCollections at getCollections(), and the
+  // write-back collections = newCollections) are necessarily distinct, not
+  // redundant snapshots, and the fingerprint trick used for SettingsManager's
+  // save/diff baseline does NOT apply here:
+  //   1. originalCollections is the pre-dialog baseline. detectChanges() and the
+  //      rename-reconciliation loop below compare actual FIELD VALUES (and read
+  //      oldC.name / mediaDirectory), so a per-cluster hash can't replace it; it
+  //      must also survive the dialog session, during which `collections` is
+  //      reassigned by the onCollectionSaved callback. QList is copy-on-write, so
+  //      this is O(1) until a later write actually forces a detach.
+  //   2. newCollections = dlg->getCollections() is the dialog's edited state — a
+  //      move from the returned value, not a copy of an existing list.
+  //   3. collections = newCollections is the write-back to the live list and
+  //      can't move from newCollections, which stays live afterward as the
+  //      downstream diff source (handleReloadRequired, orphan purge, layout).
   QList<CollectionConfig> originalCollections = collections;
 
   // MainWindow supplies a factory that constructs the concrete SettingsDialog

@@ -204,19 +204,12 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
     return existing;
   }
 
-  // Either cache miss (no row) or stale (mtime mismatch). For the
-  // stale case, drop the old records first — the ON DELETE CASCADE
-  // on dat_records.source_id handles the row sweep when we delete
-  // the dat_sources row.
-  if (existing.id >= 0) {
-    QSqlQuery del(m_db);
-    del.prepare(QStringLiteral("DELETE FROM dat_sources WHERE id = ?"));
-    del.addBindValue(existing.id);
-    if (!del.exec()) {
-      qWarning("DatCache: failed to evict stale source %lld: %s", existing.id,
-               qPrintable(del.lastError().text()));
-    }
-  }
+  // Either cache miss (no row) or stale (mtime mismatch). The stale-row
+  // eviction now runs INSIDE the ingest transaction below (Kartend-4qqma) so
+  // the DELETE + re-INSERT commit or roll back together — closing the crash
+  // window between them and surfacing a real DELETE failure instead of masking
+  // it behind a UNIQUE-constraint INSERT error.
+  const bool stale = existing.id >= 0;
 
   // Read + parse the DAT via DatLookup. This is the slow path —
   // multi-second on a 100MB MAME XML, sub-second on a 5MB No-Intro.
@@ -227,28 +220,67 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   const QByteArray bytes = DatLookup::readDatFile(datPath);
   if (bytes.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
-                               "Failed to read DAT file for ingest (unreadable, empty, or a .zip "
-                               "with no .dat member / no archive tool)",
+                               "Failed to read DAT file for ingest (unreadable, empty, oversized, "
+                               "or a .zip with no .dat member / no archive tool)",
                                "DatCache::Store::openOrIngest")
         .withDetails(datPath);
   }
+  // Detect the dialect once and thread it through probeHeader + parseDat
+  // (Kartend-xcqfc) instead of letting each helper re-detect (and, for
+  // clrmamepro, re-decode the whole buffer) on the slow ingest path.
   const DatLookup::Dialect dialect = DatLookup::detectDialect(bytes);
   // Header metadata rides along with the ingest so the matcher / UI can
   // identify the catalogue without re-touching the XML (Kartend-m6qsb.3).
-  const DatLookup::DatHeader header = DatLookup::probeHeader(bytes);
-  auto parsed = DatLookup::parseDat(bytes);
+  const DatLookup::DatHeader header = DatLookup::probeHeader(bytes, dialect);
+  auto parsed = DatLookup::parseDat(bytes, dialect);
   if (parsed.isError()) {
     return parsed.error();
   }
   const auto records = parsed.value();
 
+  // Fail loud on the "detected dialect, zero records" contradiction
+  // (Kartend-u4sdu): a DAT positively detected as a known dialect that yields
+  // no records is a truncated download / empty <datafile> / corrupt file, not a
+  // legitimately-empty catalogue. Committing it would cache a bogus "complete
+  // but empty" verdict (sticky on path+mtime) and the audit would report wrong
+  // Have/Miss results. A genuinely-empty, NON-detected file (Unknown dialect)
+  // already errors out of parseDat above, so this only fires on the
+  // detected-but-empty case.
+  if (records.isEmpty() && dialect != DatLookup::Dialect::Unknown) {
+    return ErrorContext::warning(ErrorCode::InvalidArgument,
+                                 "DAT was detected as a known dialect but parsed to zero records "
+                                 "(truncated download, empty, or corrupt) — refusing to cache an "
+                                 "incomplete catalogue as a success",
+                                 "DatCache::Store::openOrIngest")
+        .withDetails(datPath);
+  }
+
   // Bulk insert under a single transaction. Without batching, ingesting
   // 250k MAME rows would take tens of seconds (one fsync per row);
-  // wrapped in a transaction it's well under a second.
+  // wrapped in a transaction it's well under a second. The stale-row eviction
+  // (when re-ingesting an updated DAT) runs first inside this same transaction
+  // (Kartend-4qqma).
   KartendDb::DbTransaction txn(m_db, "DatCache::Store::openOrIngest");
   if (!txn.active()) {
     return txn.beginError("Failed to begin ingest transaction", nullptr,
                           ErrorUtils::Severity::Error);
+  }
+
+  // Evict the stale source row first (within the transaction). The ON DELETE
+  // CASCADE on dat_records.source_id sweeps its records. A failed DELETE aborts
+  // the whole re-ingest (the guard dtor rolls back) and propagates the real
+  // failure, instead of being swallowed by a qWarning and then masquerading as
+  // a UNIQUE-constraint "Failed to insert DAT source row" error (Kartend-4qqma).
+  if (stale) {
+    QSqlQuery del(m_db);
+    del.prepare(QStringLiteral("DELETE FROM dat_sources WHERE id = ?"));
+    del.addBindValue(existing.id);
+    if (!del.exec()) {
+      return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                 "Failed to evict stale DAT source row before re-ingest",
+                                 "DatCache::Store::openOrIngest")
+          .withDetails(del.lastError().text());
+    }
   }
 
   qint64 newId = -1;

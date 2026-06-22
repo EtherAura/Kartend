@@ -119,6 +119,14 @@ struct DatHeader {
 /// "what is this?", and "nothing usable" is an answer, not a failure.
 [[nodiscard]] DatHeader probeHeader(const QByteArray &xml);
 
+/// Dialect-taking overload (Kartend-xcqfc): use the already-detected dialect
+/// instead of re-running `detectDialect` over the buffer. Lets `openOrIngest`
+/// detect once and thread the result through, avoiding a redundant re-parse
+/// (and, for clrmamepro, a redundant whole-buffer UTF-8 decode) on the slow
+/// ingest path. Behaviour is otherwise identical to the detect-internally
+/// overload.
+[[nodiscard]] DatHeader probeHeader(const QByteArray &xml, Dialect dialect);
+
 /// File convenience for `probeHeader`. Reads a bounded prefix of the file
 /// (both dialects put the metadata at the document head) so probing a
 /// 100MB listxml doesn't read 100MB. Missing/unreadable file yields the
@@ -158,6 +166,13 @@ struct DatHeader {
 /// identified so the user gets a clearer diagnosis than a downstream
 /// parse hiccup.
 [[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml);
+
+/// Dialect-taking overload (Kartend-xcqfc): dispatch to the dialect-specific
+/// parser using an already-detected dialect instead of re-running
+/// `detectDialect`. Used by `openOrIngest` to detect once and reuse the result
+/// across header probe + parse. Behaviour matches the detect-internally
+/// overload for a given dialect.
+[[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml, Dialect dialect);
 
 /// Backwards-compat alias for code (and tests) that predate the
 /// dialect dispatch. No-Intro and Redump are both Logiqx-shaped so

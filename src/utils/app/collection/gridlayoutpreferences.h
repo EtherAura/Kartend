@@ -8,6 +8,8 @@
 // CollectionConfig + the rest of UIConstants. collectionutils.h
 // re-includes this header so existing callers compile unchanged.
 
+#include <QHash>
+
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 
@@ -66,5 +68,20 @@ struct GridLayoutPreferences {
   }
   bool operator!=(const GridLayoutPreferences &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a):
+// SettingsManager keeps a per-collection hash of each leaf cluster instead of a
+// full by-value snapshot, so a save no longer deep-copies every embedded
+// container. MUST hash exactly the fields operator== compares — if the two ever
+// drift, an equal config could fingerprint differently (a spurious refresh) or,
+// worse, a real change could go unnoticed. Keep the member list in lockstep with
+// operator== above. (No enums/containers here — all members hash directly.)
+inline size_t qHash(const GridLayoutPreferences &key, size_t seed = 0) {
+  return qHashMulti(seed, key.gridWidth, key.horizontalGridHeight, key.gridWidthSidebarHidden,
+                    key.horizontalGridHeightSidebarHidden, key.gridHeightSidebarHidden,
+                    key.horizontalSpacing, key.verticalSpacing, key.hideHorizontalScrollbar,
+                    key.hideVerticalScrollbar, key.itemWidth, key.itemHeight, key.fontSize,
+                    key.cornerRadius);
+}
 
 #endif

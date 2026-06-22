@@ -15,8 +15,15 @@ using ErrorUtils::ErrorContext;
 namespace FileHashCache {
 
 std::optional<Entry> lookup(QSqlDatabase &db, const QString &path, qint64 currentSize,
-                            qint64 currentMtimeMs) {
+                            qint64 currentMtimeMs, bool ignoreCache) {
   if (!db.isOpen() || path.isEmpty()) {
+    return std::nullopt;
+  }
+  // Caller-requested bypass (the "Verify (ignore cache)" / force-rehash path,
+  // Kartend-p30ic): report a miss without even reading the row so the caller
+  // re-hashes and refreshes the entry. See the staleness note below for why a
+  // user would need this.
+  if (ignoreCache) {
     return std::nullopt;
   }
   QSqlQuery q(db);
@@ -28,8 +35,24 @@ std::optional<Entry> lookup(QSqlDatabase &db, const QString &path, qint64 curren
   }
   const qint64 cachedSize = q.value(0).toLongLong();
   const qint64 cachedMtime = q.value(1).toLongLong();
-  // Stale: the file changed since we hashed it. Report a miss so the caller
+  // Validity is the standard ROM-manager invalidation key: (size, mtime) match
+  // => hit. Stale (file changed since we hashed it) => miss, so the caller
   // re-hashes and replaces the row.
+  //
+  // KNOWN STALENESS BLIND SPOT (intentional; the escape hatch is `ignoreCache`):
+  // this tuple cannot detect an in-place replacement that preserves BOTH the
+  // byte size AND the mtime. That state is routine, not a corner case —
+  //   * `rsync --times` and `cp -p` deliberately restore the source mtime;
+  //   * timestamp-preserving extraction (`unzip`, `tar -p`) reinstates it;
+  //   * editing a file then touching its mtime back leaves both unchanged.
+  // mtime is stored in ms, but many filesystems / network mounts report only
+  // SECOND granularity, so even two distinct writes inside one wall-clock second
+  // present an identical stored mtime and read as a hit. For an integrity audit
+  // this is the worst failure: a silently swapped file is reported correct using
+  // the PREVIOUS file's hashes. Detecting it automatically would mean adding
+  // inode/ctime to the key (deliberately out of scope — it would slow the common
+  // case and degrades on some mounts); instead, a user who suspects a same-size/
+  // same-mtime swap forces a re-hash for the run via `ignoreCache` above.
   if (cachedSize != currentSize || cachedMtime != currentMtimeMs) {
     return std::nullopt;
   }
@@ -73,7 +96,7 @@ ErrorUtils::Result<bool> store(QSqlDatabase &db, const QString &path, qint64 siz
 
 ErrorUtils::Result<RomHasher::Result>
 hashFileCached(QSqlDatabase &db, const QString &path,
-               const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+               const std::shared_ptr<std::atomic<bool>> &cancelToken, bool forceRehash) {
   const QFileInfo fi(path);
   if (!fi.isFile()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "File does not exist",
@@ -86,7 +109,7 @@ hashFileCached(QSqlDatabase &db, const QString &path,
   const qint64 size = fi.size();
   const qint64 mtimeMs = fi.lastModified().toMSecsSinceEpoch();
 
-  if (auto hit = lookup(db, key, size, mtimeMs)) {
+  if (auto hit = lookup(db, key, size, mtimeMs, forceRehash)) {
     RomHasher::Result r;
     r.crc = hit->crc;
     r.md5 = hit->md5;
@@ -110,8 +133,15 @@ hashFileCached(QSqlDatabase &db, const QString &path,
 }
 
 std::optional<QList<MemberEntry>> lookupMembers(QSqlDatabase &db, const QString &containerPath,
-                                                qint64 currentSize, qint64 currentMtimeMs) {
+                                                qint64 currentSize, qint64 currentMtimeMs,
+                                                bool ignoreCache) {
   if (!db.isOpen() || containerPath.isEmpty()) {
+    return std::nullopt;
+  }
+  // Force a miss so the caller re-extracts and refreshes the rows — the
+  // container-level escape hatch for the same staleness blind spot lookup()
+  // documents (Kartend-p30ic).
+  if (ignoreCache) {
     return std::nullopt;
   }
   QSqlQuery q(db);

@@ -4,6 +4,8 @@
 #include <zstd.h>
 #endif
 
+#include <limits>
+
 namespace KartCompression {
 
 bool zstdAvailable() {
@@ -27,10 +29,22 @@ ErrorUtils::Result<QByteArray> decompress(const QByteArray &compressed,
                                              "Decompressed size out of range",
                                              "KartCompression::decompress");
     }
+    // Guard the narrowing to qsizetype: on 32-bit targets qsizetype is 32-bit,
+    // and the validation above permits expectedSize up to MAX_ENTRY_SIZE (8 GiB).
+    // Reject anything that won't fit the buffer's index type rather than
+    // truncating it (the prior static_cast<int> could wrap to a tiny/negative
+    // size while zstd was still told the full capacity — a heap overflow).
+    if (expectedSize > static_cast<qint64>(std::numeric_limits<qsizetype>::max())) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "Decompressed size exceeds addressable range",
+                                             "KartCompression::decompress");
+    }
     QByteArray out;
-    out.resize(static_cast<int>(expectedSize));
+    out.resize(static_cast<qsizetype>(expectedSize));
+    // Hand zstd the actual buffer capacity (out.size()), never a separately
+    // derived value, so the destination size can never exceed the allocation.
     const size_t result =
-        ZSTD_decompress(out.data(), static_cast<size_t>(expectedSize), compressed.constData(),
+        ZSTD_decompress(out.data(), static_cast<size_t>(out.size()), compressed.constData(),
                         static_cast<size_t>(compressed.size()));
     if (ZSTD_isError(result)) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
@@ -85,15 +99,15 @@ ErrorUtils::Result<QByteArray> compress(const QByteArray &raw, KartFormat::Compr
 #ifdef KARTEND_HAS_ZSTD
     const size_t bound = ZSTD_compressBound(static_cast<size_t>(raw.size()));
     QByteArray out;
-    out.resize(static_cast<int>(bound));
-    const size_t result =
-        ZSTD_compress(out.data(), bound, raw.constData(), static_cast<size_t>(raw.size()), 3);
+    out.resize(static_cast<qsizetype>(bound));
+    const size_t result = ZSTD_compress(out.data(), static_cast<size_t>(out.size()),
+                                        raw.constData(), static_cast<size_t>(raw.size()), 3);
     if (ZSTD_isError(result)) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
                                              "zstd compression failed", "KartCompression::compress")
           .withDetails(QString::fromUtf8(ZSTD_getErrorName(result)));
     }
-    out.resize(static_cast<int>(result));
+    out.resize(static_cast<qsizetype>(result));
     return out;
 #else
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,

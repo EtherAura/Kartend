@@ -568,7 +568,19 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
           return;
         }
         handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
-      });
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes,
+      // No Content-Type constraint: api2 returns JSON (output=json) but SS
+      // also serves text/plain error bodies under 4xx that the parser path
+      // surfaces verbatim — pinning "application/json" would mask those.
+      QString(),
+      // Kartend-8xs72: this URL carries devpassword/sspassword in the query
+      // string. Pin the request — and any redirect it follows — to
+      // ScreenScraper's domain so a cross-host redirect can't silently forward
+      // the credential-bearing URL to an attacker host. Reuses the same
+      // allowlist mechanism (hostMatchesAllowlist + UserVerifiedRedirectPolicy)
+      // that fetchMediaBytes already applies to response-derived media URLs.
+      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
 }
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
@@ -876,7 +888,13 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
           return;
         }
         callback(ScreenScraperParser::parseUserInfoResponse(response.value()));
-      });
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+      // Kartend-8xs72: ssuserInfos.php carries devpassword/sspassword in the
+      // query string — pin it (and its redirects) to ScreenScraper's domain so
+      // a cross-host redirect can't forward the credential-bearing URL. Same
+      // allowlist mechanism fetchMediaBytes uses for media URLs.
+      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
 }
 
 void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback) {
@@ -924,7 +942,13 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
           return;
         }
         callback(ScreenScraperParser::parseInfraInfoResponse(response.value()));
-      });
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+      // Kartend-8xs72: ssinfraInfos.php carries devpassword/sspassword in the
+      // query string — pin it (and its redirects) to ScreenScraper's domain so
+      // a cross-host redirect can't forward the credential-bearing URL. Same
+      // allowlist mechanism fetchMediaBytes uses for media URLs.
+      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
 }
 
 void fetchHealthStatus(const GeneralSettings *settings,

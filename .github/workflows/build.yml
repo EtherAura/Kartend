@@ -53,6 +53,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Verify pinned clang-format version
+        # Kartend-gv2xq: the clang-format major version lives in exactly one
+        # place — .scripts/lib/clang-format-version.sh. The package name and
+        # check command below still spell "19" literally (apt needs the
+        # literal package name), so assert they match the source of truth and
+        # fail loud if the file is bumped without updating this workflow.
+        run: |
+          PINNED="$(. .scripts/lib/clang-format-version.sh && echo "$KARTEND_CLANG_FORMAT_VERSION")"
+          if [ "$PINNED" != "19" ]; then
+            echo "::error::clang-format pin is $PINNED in .scripts/lib/clang-format-version.sh but this workflow hardcodes clang-format-19. Update .github/workflows/build.yml + Dockerfile.ci + ci-local.sh to clang-format-$PINNED."
+            exit 1
+          fi
+
       - name: Install lint dependencies
         run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils
 
@@ -128,6 +141,19 @@ jobs:
           - compiler: clang
             cc: clang
             cxx: clang++
+          # Kartend-3qpq8: enforce -Werror under GCC too. KARTEND_MAINTENANCE
+          # (which adds -Werror -Wall -Wextra -Wshadow) was previously only
+          # ever exercised under clang (build.sh --maintenance / the
+          # maintenance-check job), so a GCC-only -Wall/-Wextra/-Wshadow
+          # diagnostic was never promoted to an error and could land silently.
+          # This overlay targets exactly the Release+gcc cell (the cheapest
+          # reasonable one — it reuses that cell's existing ccache and adds no
+          # new job) by matching both keys; cmake_extra is empty for every
+          # other cell. Keep on Release+gcc specifically so it sits alongside
+          # the REQUIRED `build (Release, gcc)` check.
+          - build_type: Release
+            compiler: gcc
+            cmake_extra: -DKARTEND_MAINTENANCE=ON
 
     steps:
       - uses: actions/checkout@v7
@@ -171,12 +197,16 @@ jobs:
           CXX: ${{ matrix.cxx }}
         run: |
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
+          # ${{ matrix.cmake_extra }} is empty for every cell except the
+          # Release+gcc one, where it carries -DKARTEND_MAINTENANCE=ON
+          # (Kartend-3qpq8) so -Werror is enforced under GCC as well as clang.
           cmake -G Ninja ../.. \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_PORTABLE_RELEASE=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            ${{ matrix.cmake_extra }}
 
       - name: Build
         run: |
@@ -537,7 +567,17 @@ jobs:
         # differently from v19/v21 used locally. Symlinking makes `clang-format`
         # resolve to v19 in PATH so .scripts/build.sh's --format-check matches
         # what developers produce locally.
-        run: sudo ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
+        # Kartend-gv2xq: the pinned major version is owned by
+        # .scripts/lib/clang-format-version.sh; assert this hardcoded "19"
+        # still matches it before symlinking so a bump there can't silently
+        # leave CI pinning a stale version.
+        run: |
+          PINNED="$(. .scripts/lib/clang-format-version.sh && echo "$KARTEND_CLANG_FORMAT_VERSION")"
+          if [ "$PINNED" != "19" ]; then
+            echo "::error::clang-format pin is $PINNED in .scripts/lib/clang-format-version.sh but this job symlinks clang-format-19. Update this workflow + Dockerfile.ci + ci-local.sh."
+            exit 1
+          fi
+          sudo ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
 
       - name: Cache ccache
         uses: actions/cache@v5

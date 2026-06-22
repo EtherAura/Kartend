@@ -103,6 +103,16 @@ void ApplicationManager::destroyManagersAndClearContextSlots() {
     ctx->managers.launchManager = nullptr;
     ctx->managers.interactionState = nullptr;
   }
+  // DESTRUCTION-ORDER ANCHOR (Kartend-wxtx6 / Kartend-gutqx). The reset() below
+  // triggers ~InteractionManager, which detaches its app-/widget-level event
+  // filters and then lets its owned unique_ptr sub-managers fall in reverse
+  // member-declaration order. That ordering is duplicated knowledge: the slot
+  // nulling just above and the reverse-order resets in THIS method mirror the
+  // member-declaration order in interactionmanager.h, and ~InteractionManager
+  // (interactionmanager.cpp) relies on the same order for safe filter detach.
+  // A member reorder in interactionmanager.h or a reorder of the resets here
+  // silently breaks the other with no compile/test signal — keep both in sync
+  // and re-read the Kartend-gutqx UBSan/vptr history before changing either.
   m_interactionManager.reset();
 
   if (ctx) {

@@ -56,6 +56,82 @@ ErrorUtils::Result<void> atomicReplaceFile(const QString &srcPath, const QString
   return ErrorUtils::Result<void>::success();
 }
 
+// The hand-rolled "conf" format trims values and treats '['/';'/'#'-prefixed
+// and newline-bearing lines specially, so raw user strings (launch params,
+// regexes, paths, font families) could not survive a write/read round-trip
+// (Kartend-n777n). encodeIniValue / decodeIniValue add QSettings-equivalent
+// percent-escaping that is a strict NO-OP for "plain" values, so existing
+// on-disk config files (written without escaping) keep reading byte-identical.
+//
+// A value is written verbatim when it has no leading/trailing whitespace and
+// contains none of the characters that the reader would otherwise mangle:
+// '%' (the escape introducer itself), '=', CR, LF, and a leading '[', ';' or
+// '#'. Anything else is percent-encoded. Because '%' itself forces encoding, a
+// value written verbatim can never contain '%' — that is the invariant the
+// decoder relies on to tell a legacy/plain value (trim, as the old reader did)
+// from an escaped one (percent-decode exactly, no trimming).
+QString encodeIniValue(const QString &value) {
+  bool needsEncoding = value != value.trimmed();
+  if (!needsEncoding) {
+    if (value.startsWith('[') || value.startsWith(';') || value.startsWith('#')) {
+      needsEncoding = true;
+    } else {
+      for (const QChar ch : value) {
+        if (ch == '%' || ch == '=' || ch == '\n' || ch == '\r') {
+          needsEncoding = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!needsEncoding) {
+    return value; // Plain value: written exactly as before — back-compat.
+  }
+
+  QString out;
+  out.reserve(value.size());
+  for (int i = 0; i < value.size(); ++i) {
+    const QChar ch = value.at(i);
+    const bool atEdge = (i == 0 || i == value.size() - 1);
+    const bool encodeChar = ch == '%' || ch == '=' || ch == '\n' || ch == '\r' ||
+                            (atEdge && (ch == ' ' || ch == '\t')) ||
+                            (i == 0 && (ch == '[' || ch == ';' || ch == '#'));
+    if (encodeChar) {
+      out += '%';
+      out += QString::number(ch.unicode(), 16).rightJustified(2, '0').toUpper();
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// Reverse encodeIniValue. A raw value containing no '%' is a legacy/plain value
+// (or a freshly-written plain value); both are .trimmed() to reproduce the
+// historical reader behavior exactly. A value containing '%' was produced by
+// encodeIniValue, so it is percent-decoded verbatim with no trimming.
+QString decodeIniValue(const QString &raw) {
+  if (!raw.contains('%')) {
+    return raw.trimmed();
+  }
+  QString out;
+  out.reserve(raw.size());
+  for (int i = 0; i < raw.size(); ++i) {
+    const QChar ch = raw.at(i);
+    if (ch == '%' && i + 2 < raw.size()) {
+      bool ok = false;
+      const ushort code = static_cast<ushort>(raw.mid(i + 1, 2).toUInt(&ok, 16));
+      if (ok) {
+        out += QChar(code);
+        i += 2;
+        continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+
 bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
   QTextStream in(&device);
   QString currentSection;
@@ -68,7 +144,7 @@ bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
       int eqPos = line.indexOf('=');
       if (eqPos != -1) {
         QString key = line.left(eqPos).trimmed();
-        QString value = line.mid(eqPos + 1).trimmed();
+        QString value = decodeIniValue(line.mid(eqPos + 1));
         if (!currentSection.isEmpty()) {
           map[currentSection + "/" + key] = value;
         } else {
@@ -98,7 +174,7 @@ bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
   }
 
   for (auto it = rootKeys.begin(); it != rootKeys.end(); ++it) {
-    out << it.key() << "=" << it.value().toString() << "\n";
+    out << it.key() << "=" << encodeIniValue(it.value().toString()) << "\n";
   }
   if (!rootKeys.isEmpty() && !sections.isEmpty()) out << "\n";
 
@@ -110,7 +186,7 @@ bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
     out << "[" << sectionName << "]\n";
     const auto &group = sections[sectionName];
     for (auto it = group.begin(); it != group.end(); ++it) {
-      out << it.key() << "=" << it.value().toString() << "\n";
+      out << it.key() << "=" << encodeIniValue(it.value().toString()) << "\n";
     }
     out << "\n";
   }
@@ -226,7 +302,23 @@ auto SettingsUtils::exportConfig(const QString &destPath) -> ErrorUtils::Result<
 
   // Atomic copy: read the just-synced source and write it onto the destination
   // via QSaveFile + parent-dir fsync (Kartend-g2ox).
-  return atomicReplaceFile(sourcePath, destPath, "SettingsUtils::exportConfig");
+  auto result = atomicReplaceFile(sourcePath, destPath, "SettingsUtils::exportConfig");
+  if (result.isError()) {
+    return result;
+  }
+  // The config may contain plaintext scraper credentials (keychain-unavailable
+  // fallback), so tighten the exported copy to 0600 — mirrors importConfig and
+  // tightenConfigPermissions. Best-effort: a destination filesystem without
+  // POSIX permissions (FAT/exFAT) shouldn't fail an otherwise-successful
+  // export, so we log rather than error (Kartend-igcgn).
+  if (!QFile::setPermissions(destPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::info(ErrorUtils::ErrorCode::FileWriteError,
+                                       "Failed to tighten exported config permissions to 0600",
+                                       "SettingsUtils::exportConfig")
+            .withDetails(QString("Destination: %1").arg(destPath)));
+  }
+  return result;
 }
 
 auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Result<void> {

@@ -24,6 +24,7 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include <algorithm>
 #include <atomic>
@@ -173,6 +174,47 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
   LaunchCommand cmd;
   cmd.program = expandedLauncherPath;
 
+  // Parse + expand the user's launch parameters once, shared by both the
+  // libretro and plain-launcher branches below (Kartend-q21fy).
+  //
+  // Kartend-nv9iw: tokenize the RAW template, THEN substitute %collection%
+  // inside each already-split argument. Expanding before tokenizing let a
+  // collection name containing spaces or a leading dash (which can arrive from
+  // an imported .kart manifest) split into extra argv entries — injecting
+  // attacker-chosen flags into the launcher. Per-token substitution can never
+  // introduce a new argument boundary.
+  //
+  // Kartend-51d3e: the same per-token pass substitutes the media-path
+  // placeholders (%1, %f) and the core placeholder (%core), so probe-/wizard-
+  // seeded templates like ffmpeg's `-autoexit -nodisp "%1"` or RetroArch's
+  // `-L %core "%1"` land the real paths in the placeholder position instead of
+  // passing a literal token through. Replacing inside the already-split token
+  // keeps the argv boundary the template author chose — `"%1"` stays one
+  // argument even when filePath contains spaces.
+  bool sawFilePlaceholder = false;
+  auto expandLaunchParameters = [&](QStringList &out) -> ErrorUtils::Result<void> {
+    const QString rawLaunchParameters = launcher.launchParameters.trimmed();
+    if (rawLaunchParameters.isEmpty()) {
+      return {};
+    }
+    auto parseResult = parseParameters(rawLaunchParameters);
+    if (parseResult.isError()) {
+      return parseResult.error();
+    }
+    QStringList expandedArgs = parseResult.value();
+    for (QString &arg : expandedArgs) {
+      arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
+      if (arg.contains("%1") || arg.contains("%f", Qt::CaseInsensitive)) {
+        sawFilePlaceholder = true;
+        arg.replace("%1", filePath);
+        arg.replace("%f", filePath, Qt::CaseInsensitive);
+      }
+      arg.replace("%core", expandedCorePath, Qt::CaseInsensitive);
+    }
+    out.append(expandedArgs);
+    return {};
+  };
+
   if (LauncherUtils::usesLibretroCore(expandedLauncherPath)) {
     if (expandedCorePath.isEmpty()) {
       return ErrorContext::error(ErrorCode::InvalidArgument, "No libretro core configured",
@@ -192,30 +234,30 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
       return coreValidation.error();
     }
 
+    // Kartend-q21fy: honor the user's launch parameters on the libretro path
+    // too. They were previously discarded silently — a configured
+    // --fullscreen / --config override simply never took effect. Insert the
+    // parsed + expanded tokens AHEAD of the `-L <core> <file>` triple so the
+    // triple ordering RetroArch expects stays intact.
+    auto paramResult = expandLaunchParameters(cmd.arguments);
+    if (paramResult.isError()) {
+      return paramResult.error();
+    }
     cmd.arguments << "-L" << expandedCorePath << filePath;
     return cmd;
   }
 
   // Plain launcher: parse optional launch parameters string.
-  // Kartend-nv9iw: tokenize the RAW template, THEN substitute %collection%
-  // inside each already-split argument. Expanding before tokenizing let a
-  // collection name containing spaces or a leading dash (which can arrive from
-  // an imported .kart manifest) split into extra argv entries — injecting
-  // attacker-chosen flags into the launcher. Per-token substitution can never
-  // introduce a new argument boundary.
-  const QString rawLaunchParameters = launcher.launchParameters.trimmed();
-  if (!rawLaunchParameters.isEmpty()) {
-    auto parseResult = parseParameters(rawLaunchParameters);
-    if (parseResult.isError()) {
-      return parseResult.error();
-    }
-    QStringList expandedArgs = parseResult.value();
-    for (QString &arg : expandedArgs) {
-      arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
-    }
-    cmd.arguments.append(expandedArgs);
+  auto paramResult = expandLaunchParameters(cmd.arguments);
+  if (paramResult.isError()) {
+    return paramResult.error();
   }
-  cmd.arguments << filePath;
+  // Only fall back to appending the media path when no %1/%f placeholder set
+  // its position explicitly — this preserves the historical append-at-end
+  // behavior for the common templates that carry no media placeholder.
+  if (!sawFilePlaceholder) {
+    cmd.arguments << filePath;
+  }
   return cmd;
 }
 
@@ -279,11 +321,30 @@ auto LaunchManager::previewLaunchCommand(const CollectionConfig &collection,
     }
   }
 
+  // Kartend-pgfks: a configured core path is only ever consumed by the
+  // libretro branch of buildLaunchCommand (which keys off the launcher's
+  // basename). When the launcher isn't classified libretro the core path is
+  // silently dropped at launch — surface that here so a stray core path (e.g.
+  // left over from a rename or arriving via an imported bundle) is visible in
+  // the preview rather than mysteriously ignored. Preview-only; the actual
+  // command above is unchanged.
+  const QString previewCorePath =
+      QString(launcher.corePath).replace("%collection%", collection.name, Qt::CaseInsensitive);
+  if (!previewCorePath.trimmed().isEmpty() && !LauncherUtils::usesLibretroCore(out.program)) {
+    out.warnings << QObject::tr(
+                        "Core path will be ignored (launcher is not a libretro core launcher): %1")
+                        .arg(previewCorePath.trimmed());
+  }
+
   // Heuristic unresolved-placeholder check. We've already substituted
-  // %collection%; any remaining %name% style token after expansion likely
-  // indicates a typo in the launcher's parameter string. Flag it without
-  // claiming to know what the user meant.
-  static const QRegularExpression kPlaceholderRe(QStringLiteral("%[A-Za-z0-9_]+%"));
+  // %collection%, %1/%f (media path) and %core; any remaining placeholder —
+  // a %name% style token, or a bare %1/%f/%core that was never substituted
+  // (e.g. %core left in a non-libretro launcher) — likely indicates a typo or
+  // a placeholder the launcher won't honour. Flag it without claiming to know
+  // what the user meant.
+  static const QRegularExpression kPlaceholderRe(
+      QStringLiteral("%[A-Za-z0-9_]+%|%(?:[0-9]+|f|core)\\b"),
+      QRegularExpression::CaseInsensitiveOption);
   for (const QString &arg : out.arguments) {
     auto m = kPlaceholderRe.match(arg);
     if (m.hasMatch()) {
@@ -644,32 +705,127 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
     return;
   }
 
-  // Some launchers (RetroArch on Windows-style install layouts, anything
-  // packaged as a portable directory) expect CWD == install dir so sibling
-  // DLLs / config files resolve. Without this, the child inherits Kartend's
-  // CWD (typically $HOME), which breaks those launchers (Kartend-bmvu).
-  const QString launcherDir = QFileInfo(launcherPath).absolutePath();
-  bool success = QProcess::startDetached(launcherPath, cmd.arguments, launcherDir);
-
-  if (!success) {
-    const QString errorMsg =
-        QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
-                "sure the launcher path is correct and the file is executable.")
-            .arg(launcherPath)
-            .arg(launcherPath)
-            .arg(cmd.arguments.join(" "));
-
-    ErrorPresentation::showError(
-        nullptr, ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
-                                        QStringLiteral("LaunchManager::finishLaunch")));
-    return;
-  }
-
-  // detached launches can't measure session duration (we don't
-  // own the child PID), but we still record the launch event. Time-played
-  // remains zero until the user enables runtime detection.
+  // Detached launch with a short-lived early-failure watcher (Kartend-fqsv0).
+  // The child reads the extracted file while it runs, so the directory must be
+  // released to the spawn path regardless of outcome — launchDetachedWatched
+  // owns reclaiming it on an early failure, so dismiss the guard here.
   cleanupExtraction.dismiss();
-  recordSuccessfulLaunch(originalFilePath, collectionUuid);
+  launchDetachedWatched(launcherPath, cmd, originalFilePath, extractedDir, collectionUuid);
+}
+
+bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const LaunchCommand &cmd,
+                                          const QString &originalFilePath,
+                                          const QString &extractedDir,
+                                          const QString &collectionUuid) {
+  // Kartend-fqsv0: the historical detached path used QProcess::startDetached,
+  // which only reports whether the *spawn* succeeded — a launcher that starts
+  // and immediately dies (bad core, unreadable media, missing codec) was
+  // indistinguishable from success, surfaced no error, and still inflated
+  // play_count. Spawn an OWNED QProcess instead and keep an errorOccurred /
+  // early-finished handler armed for a short window so an immediate failure is
+  // reported and the play_count increment suppressed. This is a watcher, not a
+  // tracked session: we never measure duration, never block a second launch,
+  // and once the window elapses with the child alive we record success and let
+  // the child run on (fire-and-forget) until it exits on its own.
+  auto *child = new QProcess(this);
+
+  // Mirror the tracked path: pin CWD to the launcher's own directory so
+  // sibling DLLs / config files resolve (Kartend-bmvu), and detach stdio so a
+  // chatty launcher can't fill our pipes.
+  child->setWorkingDirectory(QFileInfo(launcherPath).absolutePath());
+  child->setProcessChannelMode(QProcess::ForwardedChannels);
+  child->setInputChannelMode(QProcess::ForwardedInputChannel);
+
+  // Shared so the window timer and the QProcess handlers settle the outcome
+  // exactly once — whichever fires first (early failure vs. window elapsing)
+  // wins; the loser becomes a no-op.
+  auto settled = std::make_shared<bool>(false);
+
+  auto reclaimExtraction = [extractedDir]() {
+    if (!extractedDir.isEmpty()) {
+      QDir(extractedDir).removeRecursively();
+    }
+  };
+
+  // The window timer is parented to the child so it dies with it; capture by
+  // value detaches the QStrings from the (soon-dead) reference params.
+  auto *window = new QTimer(child);
+  window->setSingleShot(true);
+  window->setInterval(kEarlyFailureWindowMs);
+
+  connect(window, &QTimer::timeout, this,
+          [this, settled, originalFilePath, collectionUuid, child]() {
+            if (*settled) {
+              return;
+            }
+            *settled = true;
+            // Survived the window with the spawn intact → genuine launch.
+            // Record it once, then forget the child: drop our slots so a later
+            // exit is silent, and let the QProcess self-delete when it ends.
+            recordSuccessfulLaunch(originalFilePath, collectionUuid);
+            child->disconnect();
+            connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), child,
+                    [child](int, QProcess::ExitStatus) { child->deleteLater(); });
+          });
+
+  connect(child, &QProcess::errorOccurred, this,
+          [settled, child, cmd, launcherPath, reclaimExtraction](QProcess::ProcessError error) {
+            if (*settled) {
+              return;
+            }
+            // FailedToStart is terminal here (parity with the old startDetached
+            // false-return). Other errors before the window elapses are also
+            // treated as an early failure — the child is gone or unusable.
+            if (error == QProcess::FailedToStart) {
+              *settled = true;
+              const QString errorMsg =
+                  QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
+                          "sure the launcher path is correct and the file is executable.")
+                      .arg(launcherPath)
+                      .arg(launcherPath)
+                      .arg(cmd.arguments.join(" "));
+              ErrorPresentation::showError(
+                  nullptr,
+                  ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
+                                         QStringLiteral("LaunchManager::launchDetachedWatched")));
+              reclaimExtraction();
+              child->deleteLater();
+            }
+          });
+
+  connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+          [this, settled, child, originalFilePath, collectionUuid,
+           reclaimExtraction](int exitCode, QProcess::ExitStatus status) {
+            if (*settled) {
+              return;
+            }
+            // The child died WITHIN the watch window. Per Kartend-fqsv0 only a
+            // non-zero exit (or a crash) is a demonstrable failure — report it
+            // and suppress the play_count increment. A clean, zero exit this
+            // fast is a legitimate short-lived launcher, recorded like a
+            // survived-window launch so it isn't a false positive.
+            *settled = true;
+            const bool failed = (status != QProcess::NormalExit) || (exitCode != 0);
+            if (failed) {
+              ErrorPresentation::showError(
+                  nullptr, ErrorContext::critical(
+                               ErrorCode::UnknownError,
+                               tr("The launcher started but exited immediately (code %1).\n%2")
+                                   .arg(exitCode)
+                                   .arg(originalFilePath),
+                               QStringLiteral("LaunchManager::launchDetachedWatched")));
+              reclaimExtraction();
+            } else {
+              recordSuccessfulLaunch(originalFilePath, collectionUuid);
+            }
+            child->deleteLater();
+          });
+
+  child->start(launcherPath, cmd.arguments);
+  window->start();
+  // start() is async on Unix; FailedToStart arrives via errorOccurred. Report
+  // the spawn as issued (the caller has already dismissed its cleanup guard).
+  return true;
 }
 
 bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,

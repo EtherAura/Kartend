@@ -139,14 +139,30 @@ Catalogue buildCatalogue(DatCache::Store &cache, const QStringList &datPaths,
       }
       continue;
     }
+    // Stream the source's records into a buffer first, then commit them to the
+    // catalogue only if the stream completed cleanly (Kartend-u4sdu). A
+    // mid-stream SELECT failure makes forEachRecord return false; committing the
+    // truncated set would silently build the catalogue from an incomplete record
+    // list and yield wrong Have/Miss verdicts with no failure surfaced. On
+    // failure we record the DAT in failedDats and add none of its records, so a
+    // partially-read source never masquerades as complete.
+    QList<DatLookup::DatRecord> buffered;
+    const bool streamed = cache.forEachRecord(
+        src.value(), [&buffered](const DatLookup::DatRecord &r) { buffered.append(r); });
+    if (!streamed) {
+      if (failedDats) {
+        failedDats->append(dat);
+      }
+      continue;
+    }
     // Attribute every record from this DAT to a source id so per-DAT
     // completeness can be reported (Kartend-m6qsb.15). The filename is the
     // provenance label the UI shows; the full path is the disambiguator only
     // when two DATs share a basename, which is rare enough not to special-case.
     const int sourceId = cat.addSource(QFileInfo(dat).fileName());
-    cache.forEachRecord(src.value(), [&cat, sourceId](const DatLookup::DatRecord &r) {
+    for (const DatLookup::DatRecord &r : buffered) {
       cat.addRecord(r, sourceId);
-    });
+    }
   }
   return cat;
 }
@@ -251,6 +267,23 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     out.rows.append(row);
   };
 
+  // A catalogue entry is satisfied "by content" when its own bytes are on disk:
+  // either its index directly won the hash race (it is in `satisfied`), or it
+  // shares hashes with the record that did. matchByHash is first-seen-wins per
+  // content (datauditcatalogue.cpp), so two content-equal records — e.g. a
+  // non-merged clone re-listing a parent's shared rom (the MAME parser keeps
+  // every <rom>) — collapse to one canonical index. Crediting by that canonical
+  // index keeps the second record from a spurious Missing / present-undercount
+  // (Kartend-k8a3y).
+  const auto satisfiedByContent = [&](int i) -> bool {
+    if (satisfied.contains(i)) {
+      return true;
+    }
+    const DatLookup::DatRecord &rec = catalogue.record(i);
+    const int canonical = catalogue.matchByHash(rec.crc, rec.md5, rec.sha1);
+    return canonical >= 0 && satisfied.contains(canonical);
+  };
+
   if (onePerGame) {
     // 1G1R completeness: group catalogue entries by base game name. A game is
     // covered when ANY of its region variants is present, so only a wholly
@@ -274,7 +307,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
     for (const QString &key : order) {
       const QList<int> &idxs = games.value(key);
       const bool anyPresent =
-          std::any_of(idxs.cbegin(), idxs.cend(), [&](int i) { return satisfied.contains(i); });
+          std::any_of(idxs.cbegin(), idxs.cend(), [&](int i) { return satisfiedByContent(i); });
       if (anyPresent) {
         continue; // some variant's content is present — game covered under 1G1R
       }
@@ -294,7 +327,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
   } else {
     // Every catalogue entry no file satisfied (by content) is Missing.
     for (int i = 0; i < catalogue.size(); ++i) {
-      if (!satisfied.contains(i)) {
+      if (!satisfiedByContent(i)) {
         emitMissing(i);
       }
     }
@@ -398,7 +431,7 @@ AuditOutput classify(const Catalogue &catalogue, const QList<ScannedFile> &files
       }
       SourceCompleteness &sc = out.summary.perSource[s];
       sc.total += 1;
-      if (satisfied.contains(i)) {
+      if (satisfiedByContent(i)) {
         sc.present += 1;
       }
     }
@@ -448,7 +481,11 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
     // (Kartend-34lab follow-up). Look inside every archive we enumerate.
     if (RomHasher::isArchivePath(path)) {
       if (cacheDb != nullptr) {
-        if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs)) {
+        // opts.ignoreHashCache forces a miss here so a same-size/same-mtime
+        // in-place replacement is re-extracted, not trusted (Kartend-p30ic).
+        // The miss path below re-extracts and refreshes the cached rows.
+        if (auto hit = FileHashCache::lookupMembers(*cacheDb, canonical, size, mtimeMs,
+                                                    opts.ignoreHashCache)) {
           for (const FileHashCache::MemberEntry &m : *hit) {
             ScannedFile sf;
             // Virtual member path: container + '/' + member, so the result
@@ -477,7 +514,11 @@ AuditOutput run(const Catalogue &catalogue, const AuditOptions &opts, QSqlDataba
       continue;
     }
     if (cacheDb != nullptr) {
-      if (auto hit = FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs)) {
+      // opts.ignoreHashCache forces a miss so the file is re-hashed and the
+      // cached entry refreshed, catching a same-size/same-mtime in-place swap
+      // the cache key can't (Kartend-p30ic). Phase 2 below writes the new hash.
+      if (auto hit =
+              FileHashCache::lookup(*cacheDb, canonical, size, mtimeMs, opts.ignoreHashCache)) {
         ScannedFile sf;
         sf.path = path;
         sf.crc = hit->crc;

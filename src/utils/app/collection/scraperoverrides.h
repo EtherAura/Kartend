@@ -8,6 +8,7 @@
 // UIConstants. collectionutils.h re-includes this header so existing
 // callers compile unchanged.
 
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -41,5 +42,15 @@ struct ScraperOverrides {
   }
   bool operator!=(const ScraperOverrides &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+// datFilePaths is folded in order-sensitively via qHashRange (there is no qHash
+// overload for QList/QStringList).
+inline size_t qHash(const ScraperOverrides &key, size_t seed = 0) {
+  seed = qHashMulti(seed, key.screenscraperSystemId, key.screenscraperHashArchive,
+                    key.scraperProviderId);
+  return qHashRange(key.datFilePaths.begin(), key.datFilePaths.end(), seed);
+}
 
 #endif

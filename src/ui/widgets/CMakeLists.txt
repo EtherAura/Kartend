@@ -2,6 +2,8 @@
 # under Kartend-jvib, so src/ui/widgets/ now only holds the UI-coupled
 # widgets that legitimately belong in the UI layer.
 target_sources(kartend_ui PRIVATE
+  formbuilders.cpp
+  formbuilders.h
   pathstatusglyph.cpp
   pathstatusglyph.h
 )

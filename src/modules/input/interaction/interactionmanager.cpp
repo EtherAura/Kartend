@@ -78,6 +78,23 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
 }
 
 // Destructor: stop timers/animations and clear selection
+//
+// DESTRUCTION-ORDER ANCHOR (Kartend-wxtx6 / Kartend-gutqx). The safety of
+// this teardown depends on TWO orderings that are encoded in separate files
+// and are NOT enforced by the compiler — keep them in sync:
+//   1. (local) The detach-then-destroy sequence below relies on the owned
+//      sub-managers being destroyed AFTER this body runs, which is implicit
+//      member-declaration order in interactionmanager.h (m_eventManager and
+//      the other unique_ptr members are destroyed in reverse declaration
+//      order once this destructor returns). Reordering those members can
+//      move m_eventManager's destruction relative to the filter detach.
+//   2. (cross-file) ApplicationManager::destroyManagersAndClearContextSlots()
+//      (applicationmanager.cpp) nulls each ctx->managers.* slot and resets
+//      m_interactionManager.reset() in a reverse-of-declaration order that
+//      mirrors this. A member reorder in EITHER file silently breaks the
+//      other with no compile-time or test-time signal.
+// If you reorder members here or in applicationmanager.h, re-read both
+// sites and the Kartend-gutqx UBSan/vptr history before shipping.
 InteractionManager::~InteractionManager() {
   // Mark teardown FIRST (Kartend-gutqx) so eventFilter() and slots like
   // onKeyboardStopRepeat short-circuit from this point on — sub-manager
@@ -86,6 +103,9 @@ InteractionManager::~InteractionManager() {
   // handler unique_ptr has already been freed by member destruction), and
   // nested event processing during teardown must not re-enter
   // m_eventManager->filterEvent() on a partially-destroyed object.
+  //
+  // LOAD-BEARING INVARIANT: m_destroying MUST be set before any event-filter
+  // detach or sub-manager teardown below. Do not move it later.
   m_destroying = true;
 
   // Detach the application-wide event filter installed in

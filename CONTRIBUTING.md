@@ -66,6 +66,16 @@ re-evaluate whether a suppressed issue has since been fixed upstream and the
 entry can be dropped. The policy and audit notes are in
 [docs/dev/sanitizer-suppressions.md](docs/dev/sanitizer-suppressions.md).
 
+**This review is automated** (Kartend-b7nf8). The
+[`quarterly-lint-review`](.github/workflows/quarterly-lint-review.yml) workflow
+runs on a quarterly cron (1st of Jan/Apr/Jul/Oct) and opens a dated tracking
+issue (label `lint-review`) that enumerates the current disabled clang-tidy
+checks and every TSan/LSan suppression entry with its cited bd ID — so the
+review is a worked checklist, not a reminder you have to remember. You don't
+need to scan the files by hand; just work the issue the job files and close it.
+Trigger it on demand any time via the workflow's **Run workflow**
+(`workflow_dispatch`) button.
+
 ### Optional pre-commit hook
 
 An opt-in git pre-commit hook lives in `.scripts/git-hooks/pre-commit`. It
@@ -207,3 +217,13 @@ tag build if any are out of sync.
 
 After tagging, the release workflow updates `PKGBUILD` `sha256sums=` on
 `main` automatically — do not pre-commit a placeholder hash.
+
+### Changelog archiving (cadence)
+
+The root `CHANGELOG.md` keeps `[Unreleased]` plus the **three most recent
+releases**; everything older lives in `docs/changelogs/v0.0.x.md`. Promoting
+`[Unreleased]` in step 6 leaves four release sections in the root, so the same
+release moves the now-oldest one into the archive: cut its `## [X.Y.Z]` block
+(and its comparison link-ref) into `docs/changelogs/`, then refresh the root's
+bottom-of-file link-refs and the "Older releases" pointer. This keeps the root
+file small enough to grep and to render cleanly in PR diffs (Kartend-zdgj).

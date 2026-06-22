@@ -205,6 +205,12 @@ void QueryManager::clearSortedItemsCache() {
 QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QString &filter,
                                               SortMode sortMode) {
   // Pure generation-token hash — see querycachehash.h (Kartend-z8i0c).
+  // NB (Kartend-5jgg1): this hash keys ONLY on (uuids, filter, sortMode) — it
+  // does NOT fold in an items-content / items-generation token, so a rescan
+  // that mutates a collection's item set leaves the hash matching. Post-scan
+  // freshness is therefore the invalidation hook's job, NOT the hash's: a
+  // background rescan (on the scan worker) routes scan completion to this
+  // worker's invalidateQueryCaches() in DatabaseManager (Kartend-6r4g2).
   return QueryCacheHash::sortCacheHash(uuids, filter, sortMode);
 }
 
@@ -494,6 +500,10 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   {
     QSqlQuery clear(m_db);
     if (!clear.exec("DELETE FROM sorted_items_cache")) {
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to clear sorted_items_cache",
+                                                 "QueryManagerCache::populateSortedItemsCache")
+                               .withDetails(clear.lastError().text()));
       return false;
     }
   }
@@ -694,10 +704,12 @@ bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {
 
     QSqlQuery insert(m_db);
     insert.prepare("INSERT OR IGNORE INTO query_playlist_scope (uuid, path) VALUES (?, ?)");
+    bool anyInsertFailed = false;
     for (const auto &m : matches) {
       insert.bindValue(0, m.collectionUuid);
       insert.bindValue(1, m.path);
       if (!insert.exec()) {
+        anyInsertFailed = true;
         ErrorUtils::logError(
             ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                   "Failed to insert smart-playlist match into scope",
@@ -706,7 +718,10 @@ bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {
         // Keep going — partial scope is better than refusing the whole open.
       }
     }
-    return true;
+    // Don't let a partially-populated scope be cached as authoritative: report
+    // failure so ensurePlaylistScopePopulated rebuilds on the next fetch rather
+    // than serving a truncated set for the rest of the session (Kartend-ugihh).
+    return !anyInsertFailed;
   }
 
   // INSERT OR IGNORE because (uuid, path) is the PK; a malformed playlist_items

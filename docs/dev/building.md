@@ -61,12 +61,19 @@ summary at the end — so install whatever you want enforced locally. Otherwise
 `--maintenance` returns success while running nothing and drift surfaces only in
 CI.
 
-- **clang-format** — pinned to **v19** to match CI. Install `clang-format-19`
-  (e.g. from [apt.llvm.org](https://apt.llvm.org) on Debian/Ubuntu) or run the
-  check through the `kartend-ci` container (see [ci-local.md](ci-local.md)). The
-  build script no-ops if no v19 binary is found, so a newer system
-  `clang-format` won't reformat against a different style. This is the one check
-  CI fails hard on.
+- **clang-format** — pinned to **v19** to match CI. The pinned major version
+  lives in exactly one place, [`.scripts/lib/clang-format-version.sh`](../../.scripts/lib/clang-format-version.sh),
+  consumed by `build.sh`'s quality lib, the `pre-commit` hook, and verified by
+  CI; bumping the formatter means editing that file (and the literal apt
+  package names CI asserts against it). Install `clang-format-19` (e.g. from
+  [apt.llvm.org](https://apt.llvm.org) on Debian/Ubuntu) or run the check
+  through the `kartend-ci` container (see [ci-local.md](ci-local.md)). The
+  default advisory `--maintenance` pass self-skips (and says so in the
+  ran-vs-skipped summary) when no v19 binary is found, so a newer system
+  `clang-format` won't reformat against a different style. **An enforcing
+  `--format-check`** (what CI runs) instead **fails loud** with a remediation
+  message pointing at the container — it no longer silently passes while
+  running nothing. This is the one check CI fails hard on.
 - **clang-tidy** — ships with the LLVM/Clang tooling (`clang-tools-extra` on
   Fedora, `clang-tools` on Debian/Ubuntu).
 - **cppcheck** — package `cppcheck` on all distros.
@@ -136,9 +143,10 @@ does, when to reach for it, and what it leaves behind.
 
 | Flag | Purpose | When to use | Side effects |
 |------|---------|-------------|--------------|
-| `--apply-fixes` | Apply safe clang-tidy auto-fixes in-place. | Cleaning up after a large refactor when the lint report is repetitive. | **Modifies tracked source files**; the auto-fixer has been known to mangle headers under `src/utils/uiconstants/` — inspect `git diff` after. |
-| `--format-check` | clang-format dry-run; non-zero exit if anything would change. | CI gate; pre-push verification. | No file writes. |
-| `--format-apply` | clang-format in-place. | Routine pre-push cleanup. | **Modifies tracked source files**. Requires clang-format 19 on PATH (the system v21 drifts). |
+| `--apply-fixes` | Apply safe clang-tidy auto-fixes in-place. | Cleaning up after a large refactor when the lint report is repetitive. | **Modifies tracked source files** and **refuses to run on a dirty git tree** (commit/stash first, or pass `--apply-fixes-dirty-ok`) so the diff is reviewable. The fix set is **derived from `.clang-tidy`**, so it can't reintroduce checks the project disables. The script prints a runtime hazard warning: the auto-fixer has been known to mangle headers under `src/utils/uiconstants/` — inspect `git diff` after, and `git checkout -- src/utils/uiconstants/` if it corrupts them. |
+| `--apply-fixes-dirty-ok` | Override the clean-tree guard for `--apply-fixes` / `--format-apply`. | Only when you knowingly want the fixer diff mixed into uncommitted work. | The apply diff is no longer isolated; not recommended. |
+| `--format-check` | clang-format dry-run; non-zero exit if anything would change. | CI gate; pre-push verification. | No file writes. **Fails loud** (non-zero, with a remediation message pointing at the `kartend-ci` container) if no `clang-format-19` binary is found, instead of silently passing. |
+| `--format-apply` | clang-format in-place. | Routine pre-push cleanup. | **Modifies tracked source files** and **refuses to run on a dirty git tree** (override with `--apply-fixes-dirty-ok`). Requires clang-format 19 on PATH (the system v21 drifts). |
 
 ### Test flags
 

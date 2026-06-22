@@ -194,6 +194,18 @@ constexpr qint64 kArtworkRevalidateIntervalMs = 5000;
 
 // Initializes persistent cache metadata from disk
 auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
+  // Kartend-rqoa0: this is the COLD / one-shot reader. On a memory-cache miss it
+  // does synchronous disk I/O + a QPixmap(cachePath) PNG decode inline (a few ms
+  // per call), so it must NOT be called from the scroll/layout hot path. The
+  // interactive artwork pipeline (ArtworkManager::… -> getArtworkFromMemoryOnly)
+  // takes the memory-only fast path for the immediate read and routes the disk
+  // decode through a worker thread instead. As of this audit there are no
+  // production callers of this disk variant — every interactive read already
+  // goes through getArtworkFromMemoryOnly() + worker decode — so the synchronous
+  // decode below never runs on the GUI thread during scroll. Keep it for any
+  // genuinely cold, one-shot caller; route new hot-path reads through the
+  // memory-only variant.
+  //
   // QPixmap construction + QGuiApplication::primaryScreen() below are GUI-thread
   // only. Uncalled from decode workers today, but assert the contract so a future
   // worker-side caller fails loudly instead of touching QPixmap off-thread

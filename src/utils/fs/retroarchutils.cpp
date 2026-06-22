@@ -18,6 +18,22 @@ namespace RetroArchUtils {
 
 namespace {
 
+// Bounds for the GUI-thread discovery work (Kartend-m8jfc). Both run inline
+// on the main thread when the launcher editor / launcher settings tab opens,
+// so a pathological (or attacker-supplied) retroarch.cfg / core directory must
+// not drive unbounded work.
+//
+// Cap the cfg read so a giant or malformed config can't drive unbounded line
+// processing before the first `libretro_directory` line is found. A real
+// retroarch.cfg holds a few hundred short keys; these ceilings are generous.
+constexpr int kMaxConfigLinesScanned = 100000;
+constexpr qint64 kMaxConfigBytesScanned = 16 * 1024 * 1024; // 16 MiB
+// Cap the number of core-directory entries processed, mirroring the existing
+// UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED ceiling (50000) used by
+// the archive-extraction scan. A normal core dir holds well under a thousand
+// entries; this bounds a pathological directory to a finite result set.
+constexpr int kMaxCoresInspected = 50000;
+
 // Libretro core file extensions across the three desktop platforms.
 const QStringList &coreExtensions() {
   static const QStringList kExts = {QStringLiteral("so"), QStringLiteral("dll"),
@@ -79,8 +95,22 @@ QString coreDirectoryFromConfig(const QString &configPath) {
     return {};
   }
   QTextStream stream(&file);
+  // Kartend-m8jfc: bound the read in addition to stopping at the first
+  // libretro_directory line. A giant or malformed config (synced dotfiles, a
+  // shipped image, an attacker-supplied path override) must not drive unbounded
+  // line processing on the GUI thread before the target key is reached. Give up
+  // (treat as unset) once either ceiling is hit; discovery falls through to the
+  // standard probe in resolveCoreDirectory.
+  int linesScanned = 0;
+  qint64 bytesScanned = 0;
   while (!stream.atEnd()) {
-    const QString line = stream.readLine().trimmed();
+    const QString rawLine = stream.readLine();
+    ++linesScanned;
+    bytesScanned += rawLine.size();
+    if (linesScanned > kMaxConfigLinesScanned || bytesScanned > kMaxConfigBytesScanned) {
+      return {};
+    }
+    const QString line = rawLine.trimmed();
     if (!line.startsWith(QStringLiteral("libretro_directory"))) {
       continue;
     }
@@ -161,7 +191,16 @@ QList<Core> discoverCores(const QString &coreDirectory) {
   }
   const QFileInfoList entries =
       dir.entryInfoList(nameFilters, QDir::Files | QDir::NoSymLinks, QDir::Name);
+  // Kartend-m8jfc: cap the entries processed so a pathological core directory
+  // (tens of thousands of .so/.dll/.dylib files) yields a bounded result set
+  // rather than blocking the GUI thread for the full enumeration. Mirrors
+  // UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED. A normal install is far
+  // under this ceiling, so no real core is dropped.
+  int inspected = 0;
   for (const QFileInfo &entry : entries) {
+    if (++inspected > kMaxCoresInspected) {
+      break;
+    }
     Core core;
     core.path = entry.absoluteFilePath();
     // Cores ship as `<name>_libretro.<ext>`; the short name is what

@@ -1374,6 +1374,16 @@ kartend_add_test(NAME HistoryStore
   LINK kartend_utils
 )
 
+# StatisticsService tests (Kartend-vy7d7): the off-thread aggregation that backs
+# the Statistics dialog. gather() opens its own read-only connection to a db
+# FILE, so these run against a real on-disk SQLite database (QTemporaryDir) —
+# writer seeds via the migration chain, gather() reads the same file, and the
+# returned StatsSnapshot is asserted field-by-field. No DB mocking.
+kartend_add_test(NAME StatisticsService
+  SOURCES utils/db/test_statisticsservice.cpp
+  LINK kartend_utils
+)
+
 # VariantGrouping tests (Kartend-skhk). Pure same-basename grouper.
 kartend_add_test(NAME VariantGrouping
   SOURCES utils/db/test_variantgrouping.cpp
@@ -1464,6 +1474,15 @@ kartend_add_test(NAME CollectionHierarchyBuilder
 # struct but forgotten in operator== (breaks settings-dialog dirty-tracking).
 kartend_add_test(NAME CollectionConfigEquality
   SOURCES modules/settings/test_collectionconfigequality.cpp
+  LINK kartend_utils
+)
+
+# Per-cluster qHash field-coverage test (Kartend-lc58a). The save/diff baseline
+# fingerprints each leaf cluster instead of keeping full CollectionConfig copies;
+# this guards against a field added to a cluster's operator== but forgotten in
+# its qHash (a silently-dropped edit). Pure value types — links kartend_utils.
+kartend_add_test(NAME CollectionDiffFingerprint
+  SOURCES modules/settings/test_collectiondifffingerprint.cpp
   LINK kartend_utils
 )
 

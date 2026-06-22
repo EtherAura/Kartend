@@ -2,29 +2,55 @@
 // verified request sequence; everything here is a function of captured bytes.
 #include "nointroparse.h"
 
+#include <QHash>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 #include <QRegularExpressionMatchIterator>
+#include <QStringDecoder>
 
 namespace NoIntroParse {
 
 namespace {
 
+// Decode raw page bytes to a QString with a UTF-8-then-Latin-1 fallback
+// (Kartend-a3s01). Pages without a valid UTF-8 encoding (Latin-1 / Win-1252
+// markup with no declaration) would otherwise get U+FFFD-mangled. Latin-1 never
+// fails; valid UTF-8 still decodes identically via the first attempt.
+QString decodePage(const QByteArray &bytes) {
+  QStringDecoder utf8(QStringDecoder::Utf8);
+  QString s = utf8.decode(bytes);
+  if (utf8.hasError()) {
+    return QString::fromLatin1(bytes);
+  }
+  return s;
+}
+
 // Read attribute `attr` from a single tag string. Tolerates single/double
 // quotes and arbitrary attribute order — the page is hand-written PHP output
 // whose attribute order we must not depend on.
+//
+// The pattern is parameterised by `name`, so it can't be one `static const`;
+// instead we cache the compiled QRegularExpression per attribute name
+// (Kartend-s9k45) so the small fixed set of names (type / name / value /
+// checked) recompiles once rather than on every call inside the per-input loop.
 QString attr(const QString &tag, const QString &name) {
-  const QRegularExpression re(QStringLiteral("\\b%1\\s*=\\s*([\"'])(.*?)\\1").arg(name),
-                              QRegularExpression::CaseInsensitiveOption);
-  const QRegularExpressionMatch m = re.match(tag);
+  static QHash<QString, QRegularExpression> cache;
+  auto it = cache.constFind(name);
+  if (it == cache.constEnd()) {
+    it = cache.insert(name,
+                      QRegularExpression(QStringLiteral("\\b%1\\s*=\\s*([\"'])(.*?)\\1").arg(name),
+                                         QRegularExpression::CaseInsensitiveOption));
+  }
+  const QRegularExpressionMatch m = it.value().match(tag);
   return m.hasMatch() ? m.captured(2) : QString();
 }
 
 // Slice out the `<form name="daily" ...> ... </form>` block. Returns empty
 // when absent. Non-greedy to the first </form> after the opening tag.
 QString dailyFormBlock(const QString &html) {
-  const QRegularExpression open(QStringLiteral("<form[^>]*\\bname\\s*=\\s*[\"']daily[\"'][^>]*>"),
-                                QRegularExpression::CaseInsensitiveOption);
+  static const QRegularExpression open(
+      QStringLiteral("<form[^>]*\\bname\\s*=\\s*[\"']daily[\"'][^>]*>"),
+      QRegularExpression::CaseInsensitiveOption);
   const QRegularExpressionMatch om = open.match(html);
   if (!om.hasMatch()) {
     return QString();
@@ -41,14 +67,23 @@ QString dailyFormBlock(const QString &html) {
 
 DailyForm parseDailyPage(const QByteArray &html) {
   DailyForm out;
-  const QString form = dailyFormBlock(QString::fromUtf8(html));
+  const QString form = dailyFormBlock(decodePage(html));
   if (form.isEmpty()) {
+    // No `name="daily"` form anywhere on the page — a likely layout change or
+    // an anti-bot block, distinct from a form that was found but parsed empty
+    // (Kartend-s9k45). Flag it so the breakage is detectable, not silently
+    // collapsed into the generic "invalid" case.
+    out.formFound = false;
+    qWarning("NoIntroParse: no name=\"daily\" form found — DAT-o-MATIC page layout "
+             "may have changed (or the request was blocked)");
     return out;
   }
+  out.formFound = true;
 
   // Iterate every <input ...> in the form once; classify by type/name.
-  const QRegularExpression inputRe(QStringLiteral("<input\\b[^>]*>"),
-                                   QRegularExpression::CaseInsensitiveOption);
+  // static const: compiled once, not per call (Kartend-s9k45).
+  static const QRegularExpression inputRe(QStringLiteral("<input\\b[^>]*>"),
+                                          QRegularExpression::CaseInsensitiveOption);
   QRegularExpressionMatchIterator it = inputRe.globalMatch(form);
   while (it.hasNext()) {
     const QRegularExpressionMatch match = it.next();
@@ -97,9 +132,11 @@ DailyForm parseDailyPage(const QByteArray &html) {
 QString parseConfirmToken(const QByteArray &html) {
   // <input type="submit" name="<32-hex>" value="Download!!">. Anchor on the
   // value so we never grab some other hex-named field on the page.
-  const QString s = QString::fromUtf8(html);
-  const QRegularExpression inputRe(QStringLiteral("<input\\b[^>]*>"),
-                                   QRegularExpression::CaseInsensitiveOption);
+  const QString s = decodePage(html);
+  // static const: both compiled once, not per call / per iteration (Kartend-s9k45).
+  static const QRegularExpression inputRe(QStringLiteral("<input\\b[^>]*>"),
+                                          QRegularExpression::CaseInsensitiveOption);
+  static const QRegularExpression hexToken(QStringLiteral("^[0-9a-fA-F]{32}$"));
   QRegularExpressionMatchIterator it = inputRe.globalMatch(s);
   while (it.hasNext()) {
     const QString tag = it.next().captured(0);
@@ -110,7 +147,7 @@ QString parseConfirmToken(const QByteArray &html) {
       continue;
     }
     const QString name = attr(tag, QStringLiteral("name"));
-    if (QRegularExpression(QStringLiteral("^[0-9a-fA-F]{32}$")).match(name).hasMatch()) {
+    if (hexToken.match(name).hasMatch()) {
       return name;
     }
   }

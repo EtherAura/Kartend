@@ -1,0 +1,191 @@
+name: Quarterly lint/suppression review
+
+# Automates the manual "scan each quarter" convention documented in
+# CONTRIBUTING.md (Kartend-b7nf8): the .clang-tidy disabled-check list and the
+# TSan/LSan suppression lists are meant to be transient, but on a
+# single-developer project a purely manual cadence reliably slips. This job
+# turns the convention into a recurring, auditable artifact: each quarter it
+# opens a dated tracking issue enumerating the CURRENT disabled checks and the
+# current suppression entries (each with its cited bd ID), so the maintainer
+# just works the checklist and closes the issue.
+#
+# Additive only — it reads .clang-tidy and tests/suppressions/*.txt and opens
+# an issue. It does NOT alter any existing CI job, the suppression machinery,
+# or the lint config. Cron pattern + github-script issue creation mirror
+# .github/workflows/nightly-tsan.yml.
+
+on:
+  schedule:
+    # 07:11 UTC on the 1st of Jan / Apr / Jul / Oct — quarterly. Off-the-hour
+    # minute avoids the congested GitHub-hosted runner queue windows (same
+    # rationale as nightly-tsan's 03:17).
+    - cron: '11 7 1 1,4,7,10 *'
+  # Manual trigger so the maintainer can generate the checklist on demand
+  # (e.g. to dry-run the format before the first scheduled run).
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: quarterly-lint-review
+  cancel-in-progress: false
+
+jobs:
+  open-review-issue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build review checklist from .clang-tidy + suppression files
+        id: checklist
+        # Deterministic file parsing in plain shell (no build needed):
+        #   * disabled clang-tidy checks  — the `-name-of-check` tokens inside
+        #     the Checks: string in .clang-tidy (the leading `-*` reset and the
+        #     family-enable globs like `readability-*` are filtered out; only
+        #     specific `-foo-bar` disables are listed).
+        #   * TSan / LSan suppressions    — every non-comment, non-blank line in
+        #     tests/suppressions/{tsan,lsan}.txt, annotated with the nearest
+        #     preceding `Kartend-xxxxx` bd ID found in the comment block above
+        #     it (the suppression files cite the justifying bd per group).
+        # The markdown body is written to $GITHUB_OUTPUT as a multiline value.
+        run: |
+          set -euo pipefail
+
+          CLANG_TIDY=.clang-tidy
+          TSAN=tests/suppressions/tsan.txt
+          LSAN=tests/suppressions/lsan.txt
+
+          # --- disabled clang-tidy checks ------------------------------------
+          # Parse ONLY the Checks: line's quoted value (so comment text and the
+          # WarningsAsErrors: line can't leak fragments in). Split it on commas
+          # and keep the specific '-check-name' disable tokens: drop the leading
+          # '-*' reset and any family glob ending in '*' (those are category
+          # enables/narrowings, not deliberate single-check disables). This
+          # yields exactly the disabled-check list the .clang-tidy header
+          # documents.
+          checks_value="$(grep -E '^Checks:' "$CLANG_TIDY" \
+            | sed -E 's/^Checks:[[:space:]]*"//; s/"[[:space:]]*$//')"
+          disabled_checks="$(
+            printf '%s\n' "$checks_value" \
+            | tr ',' '\n' \
+            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+            | grep -E '^-[a-z]' \
+            | grep -vE '\*$' \
+            | sort -u || true
+          )"
+
+          # --- suppression entries with cited bd IDs -------------------------
+          # For each suppression file: walk lines; remember the most recent
+          # Kartend-xxxx seen in a comment; when a non-comment, non-blank line
+          # (an actual suppression entry) appears, emit "<entry>  (<bd id>)".
+          extract_suppressions() {
+            local f="$1"
+            [ -f "$f" ] || { echo "_(file not found: $f)_"; return 0; }
+            awk '
+              # Track the last bd id mentioned in any comment line. The
+              # optional .N tail captures dotted sub-issues (Kartend-3hjs.1)
+              # without swallowing trailing sentence punctuation ("Closed:
+              # Kartend-pa5a.").
+              /Kartend-[a-z0-9]+/ {
+                if (match($0, /Kartend-[a-z0-9]+(\.[0-9]+)?/)) {
+                  last_bd = substr($0, RSTART, RLENGTH)
+                }
+              }
+              # Skip comments and blank lines.
+              /^[[:space:]]*#/ { next }
+              /^[[:space:]]*$/ { next }
+              # Real suppression entry.
+              {
+                entry=$0
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", entry)
+                if (entry == "") next
+                if (last_bd != "") {
+                  printf "- `%s`  — %s\n", entry, last_bd
+                } else {
+                  printf "- `%s`  — _(no bd id cited)_\n", entry
+                }
+              }
+            ' "$f"
+          }
+
+          tsan_entries="$(extract_suppressions "$TSAN")"
+          lsan_entries="$(extract_suppressions "$LSAN")"
+
+          n_disabled="$(printf '%s\n' "$disabled_checks" | grep -c . || true)"
+          n_tsan="$(printf '%s\n' "$tsan_entries" | grep -c . || true)"
+          n_lsan="$(printf '%s\n' "$lsan_entries" | grep -c . || true)"
+
+          # --- assemble the markdown body ------------------------------------
+          today="$(date -u +%Y-%m-%d)"
+          {
+            echo "Quarterly review of the project's transient lint/suppression debt"
+            echo "(automated by \`.github/workflows/quarterly-lint-review.yml\`,"
+            echo "Kartend-b7nf8). These lists are meant to shrink over time — work"
+            echo "the checklist below and close this issue when done. See"
+            echo "[CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#quarterly-lint-review)"
+            echo "and [docs/dev/sanitizer-suppressions.md](../blob/main/docs/dev/sanitizer-suppressions.md)."
+            echo
+            echo "## Disabled clang-tidy checks (${n_disabled})"
+            echo
+            echo "From \`.clang-tidy\`. For each: can it be re-enabled now? Even"
+            echo "one or two re-enables per quarter compound."
+            echo
+            if [ -n "$disabled_checks" ]; then
+              printf '%s\n' "$disabled_checks" | while IFS= read -r c; do
+                [ -n "$c" ] && echo "- [ ] \`${c#-}\`"
+              done
+            else
+              echo "_(none parsed — check the .clang-tidy Checks: format)_"
+            fi
+            echo
+            echo "## TSan suppressions (${n_tsan})"
+            echo
+            echo "From \`tests/suppressions/tsan.txt\`. For each: has the upstream"
+            echo "(Qt / glib / PulseAudio / …) race been fixed, or the local code"
+            echo "changed so the entry can be dropped?"
+            echo
+            printf '%s\n' "$tsan_entries"
+            echo
+            echo "## LSan suppressions (${n_lsan})"
+            echo
+            echo "From \`tests/suppressions/lsan.txt\`. Same question as above for"
+            echo "leaks."
+            echo
+            printf '%s\n' "$lsan_entries"
+            echo
+            echo "---"
+            echo "_Generated ${today}. Re-run on demand via the workflow's"
+            echo "\`workflow_dispatch\` trigger._"
+          } > review-body.md
+
+          echo "issue_title=Quarterly lint/suppression review — ${today}" >> "$GITHUB_OUTPUT"
+          {
+            echo "issue_body<<__REVIEW_BODY_EOF__"
+            cat review-body.md
+            echo "__REVIEW_BODY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the tracking issue
+        # Mirrors nightly-tsan.yml's github-script issue creation. Uses a
+        # stable label so the issues are easy to find/filter; always creates a
+        # fresh dated issue (unlike nightly-tsan's rolling single issue) so each
+        # quarter's snapshot is its own auditable artifact.
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = process.env.ISSUE_TITLE;
+            const body = process.env.ISSUE_BODY;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['lint-review', 'cleanup'],
+            });
+        env:
+          ISSUE_TITLE: ${{ steps.checklist.outputs.issue_title }}
+          ISSUE_BODY: ${{ steps.checklist.outputs.issue_body }}

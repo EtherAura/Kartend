@@ -74,7 +74,12 @@ private slots:
   // buildLaunchCommand tests
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
   void testBuildLaunchCommand_collectionSubstitutionDoesNotInjectArgs();
+  void testBuildLaunchCommand_substitutesFilePlaceholder();
+  void testBuildLaunchCommand_filePlaceholderKeepsSingleArgWithSpaces();
+  void testBuildLaunchCommand_substitutesCorePlaceholderInPlainLauncher();
+  void testBuildLaunchCommand_noPlaceholderStillAppendsFilePath();
   void testBuildLaunchCommand_retroArch_usesCorePath();
+  void testBuildLaunchCommand_retroArch_includesLaunchParameters();
   void testBuildLaunchCommand_allowsAmpersandMediaPath();
   void testBuildLaunchCommand_rejectsCollectionPathTraversal_data();
   void testBuildLaunchCommand_rejectsCollectionPathTraversal();
@@ -106,6 +111,10 @@ private slots:
   void testPreview_warnsWhenLauncherNotOnPath();
   void testPreview_resolvesAbsoluteLauncher();
   void testPreview_detectsUnresolvedPlaceholder();
+  void testPreview_detectsBareFilePlaceholderToken();
+  void testPreview_substitutedFilePlaceholderProducesNoWarning();
+  void testPreview_warnsCorePathIgnoredForNonLibretroLauncher();
+  void testPreview_noCoreWarningForLibretroLauncher();
   void testPreview_unclosedQuoteParameterSurfacedAsWarning();
 
   // Archive extraction (extractArchiveToTemp) + isArchiveFile coverage.
@@ -698,18 +707,95 @@ void TestLaunchManager::testBuildLaunchCommand_collectionSubstitutionDoesNotInje
            (QStringList{"--title", "Live --fullscreen Sets", "/tmp/media/file.bin"}));
 }
 
+void TestLaunchManager::testBuildLaunchCommand_substitutesFilePlaceholder() {
+  // Kartend-51d3e: a probe-seeded ffmpeg template carries the media path as a
+  // %1 placeholder. buildLaunchCommand must substitute the real path INTO the
+  // placeholder position (not append it after a literal %1 token). %f is a
+  // case-insensitive alias for the same placeholder.
+  const QString filePath = "/tmp/clip.mp4";
+
+  LauncherConfig ffmpeg{"ffmpeg", "ffmpeg", "", "-autoexit -nodisp \"%1\""};
+  auto ffResult = LaunchManager::buildLaunchCommand(ffmpeg, "Audio", filePath);
+  QVERIFY2(ffResult.isOk(), qPrintable(ffResult.isError() ? ffResult.error().message : QString()));
+  // The media path lands where %1 was; no literal %1 token and no extra append.
+  QCOMPARE(ffResult.value().arguments, (QStringList{"-autoexit", "-nodisp", filePath}));
+
+  LauncherConfig fAlias{"mpv", "mpv", "", "--play %F"};
+  auto fResult = LaunchManager::buildLaunchCommand(fAlias, "Audio", filePath);
+  QVERIFY2(fResult.isOk(), qPrintable(fResult.isError() ? fResult.error().message : QString()));
+  QCOMPARE(fResult.value().arguments, (QStringList{"--play", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_filePlaceholderKeepsSingleArgWithSpaces() {
+  // Substitution happens per already-split token, so a quoted "%1" stays a
+  // single argv entry even when the substituted path contains spaces — no new
+  // argument boundary is introduced (mirrors the %collection% guarantee).
+  const QString filePath = "/tmp/My Concert Set.mp4";
+  LauncherConfig launcher{"mpv", "mpv", "", "--fullscreen \"%1\""};
+  auto result = LaunchManager::buildLaunchCommand(launcher, "Video", filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_substitutesCorePlaceholderInPlainLauncher() {
+  // A libretro frontend whose basename is NOT "retroarch" takes the plain
+  // branch, so its %core placeholder must be expanded there (with %1 for the
+  // media path). Both placeholders resolve; nothing is appended after %1.
+  const QString filePath = "/tmp/game.zip";
+  LauncherConfig launcher{"libretro-fe", "/usr/bin/libretro-fe", "/cores/snes9x.so",
+                          "-L %core \"%1\""};
+  auto result = LaunchManager::buildLaunchCommand(launcher, "Retro", filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, (QStringList{"-L", "/cores/snes9x.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_noPlaceholderStillAppendsFilePath() {
+  // Regression guard: a template WITHOUT %1/%f keeps the historical
+  // append-filePath-at-end behavior unchanged.
+  CollectionConfig config;
+  config.name = "TestCollection";
+  config.launcher.launcherPath = "echo";
+  config.launcher.launchParameters = "--fullscreen --scale 2";
+  const QString filePath = "/tmp/testfile.bin";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", "--scale", "2", filePath}));
+}
+
 void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   CollectionConfig config;
   config.name = "TestCollection";
   config.launcher.launcherPath = "retroarch";
   config.launcher.corePath = "/tmp/core.so";
-  config.launcher.launchParameters = "--should-be-ignored";
+  // No launch parameters configured: the libretro branch still emits exactly
+  // the `-L <core> <file>` triple.
+  config.launcher.launchParameters = "";
 
   const QString filePath = "/tmp/testfile.bin";
   auto result = LaunchManager::buildLaunchCommand(config, filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_retroArch_includesLaunchParameters() {
+  // Kartend-q21fy: the libretro branch used to silently DROP configured launch
+  // parameters and emit only `-L <core> <file>`. They must now be parsed via
+  // the same parseParameters + %collection% expansion the plain branch uses
+  // and inserted AHEAD of the `-L <core> <file>` triple (which keeps the
+  // ordering RetroArch expects intact).
+  CollectionConfig config;
+  config.name = "TestCollection";
+  config.launcher.launcherPath = "retroarch";
+  config.launcher.corePath = "/tmp/core.so";
+  config.launcher.launchParameters = "--fullscreen --config /tmp/retro.cfg";
+
+  const QString filePath = "/tmp/testfile.bin";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("retroarch"));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", "--config", "/tmp/retro.cfg",
+                                                  "-L", "/tmp/core.so", filePath}));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_unclosedQuoteParameterFails() {
@@ -1126,6 +1212,84 @@ void TestLaunchManager::testPreview_detectsUnresolvedPlaceholder() {
     }
   }
   QVERIFY(sawPlaceholderWarning);
+}
+
+void TestLaunchManager::testPreview_detectsBareFilePlaceholderToken() {
+  // Kartend-51d3e: the preview placeholder warning must also catch bare
+  // %1-style tokens that survive substitution. A %core in a non-libretro
+  // launcher is dropped (its expansion is empty there) only when no core is
+  // set; with no core configured and %2 present, the %2 token is unresolved
+  // and must surface so the user notices.
+  CollectionConfig collection;
+  collection.name = "Audio";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = "--track %2 --quiet";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  bool sawPlaceholderWarning = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("placeholder")) {
+      sawPlaceholderWarning = true;
+      break;
+    }
+  }
+  QVERIFY2(sawPlaceholderWarning,
+           "bare %2-style token must be flagged as an unresolved placeholder");
+}
+
+void TestLaunchManager::testPreview_substitutedFilePlaceholderProducesNoWarning() {
+  // The opposite of the above: once %1 is substituted with the real path, no
+  // placeholder warning should fire — the token is fully resolved.
+  CollectionConfig collection;
+  collection.name = "Video";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = "--fullscreen \"%1\"";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  for (const QString &w : preview.warnings) {
+    QVERIFY2(!w.contains("placeholder"),
+             qPrintable(QString("Unexpected placeholder warning: %1").arg(w)));
+  }
+}
+
+void TestLaunchManager::testPreview_warnsCorePathIgnoredForNonLibretroLauncher() {
+  // Kartend-pgfks: a non-empty corePath on a launcher that isn't classified
+  // libretro is silently dropped at launch. The preview must warn that the
+  // core path will be ignored so the user can see the stray value.
+  CollectionConfig collection;
+  collection.name = "Video";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable; // basename has no "retroarch"
+  launcher.corePath = "/cores/leftover.so";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  bool sawCoreIgnored = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("Core path will be ignored")) {
+      sawCoreIgnored = true;
+      break;
+    }
+  }
+  QVERIFY2(sawCoreIgnored,
+           "a core path on a non-libretro launcher must surface an 'ignored' warning");
+}
+
+void TestLaunchManager::testPreview_noCoreWarningForLibretroLauncher() {
+  // A libretro-classified launcher consumes its core path, so no
+  // "core path will be ignored" warning should be emitted. (A bare command
+  // name keeps buildOk true even though it won't resolve on PATH.)
+  CollectionConfig collection;
+  collection.name = "Retro";
+  LauncherConfig launcher;
+  launcher.launcherPath = "retroarch";
+  launcher.corePath = "/cores/snes9x.so";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  for (const QString &w : preview.warnings) {
+    QVERIFY2(!w.contains("Core path will be ignored"),
+             qPrintable(QString("Unexpected core-ignored warning: %1").arg(w)));
+  }
 }
 
 // ---------------------------------------------------------------------------

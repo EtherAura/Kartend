@@ -287,6 +287,13 @@ void InteractionManager::connectAttractManagerSignals() {
   // Only item selection changes should reset attract timeout / stop active
   // attract scrolling. Mouse movement/focus churn must not count as activity
   // for attract mode.
+  //
+  // NOTE (Kartend-b93at): the connections wired here, plus the
+  // requestSelectIndex → selectItemByIndex → selectionChanged chain, must stay
+  // synchronous (default Direct). AttractManager::advanceSelection clears its
+  // isDrivingSelection() guard via a scope guard immediately after emitting, so
+  // a Qt::QueuedConnection anywhere in this chain would let selectionChanged
+  // fire after the guard cleared — stopping attract mode on its own first tick.
   connect(m_selectionManager.get(), &SelectionManager::selectionChanged, m_attractManager.get(),
           [this](int index) {
             Q_UNUSED(index);

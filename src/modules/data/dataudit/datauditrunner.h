@@ -44,6 +44,12 @@ struct AuditOptions {
   /// as listed (no-op for clone-less DATs); Merged folds clones under parents;
   /// NonMerged expects each clone to also hold its parent's roms.
   MergeMode mergeMode = MergeMode::Split;
+  /// "Verify (ignore cache)" force-rehash (Kartend-p30ic). When true, run()
+  /// bypasses every file-hash-cache hit and recomputes (then refreshes the
+  /// cached value), so an in-place same-size/same-mtime replacement — which the
+  /// `(size, mtime)` key cannot see (filehashcache.cpp) — is detected. Default
+  /// false keeps the fast cached path for the common case.
+  bool ignoreHashCache = false;
 };
 
 /// Progress tick delivered on the calling thread during a run.

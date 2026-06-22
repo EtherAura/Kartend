@@ -355,4 +355,9 @@ QString pathStatusDescription(PathStatus status) {
   return QString();
 }
 
+bool isSafePathComponent(const QString &s) {
+  return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
+         s != QLatin1String(".") && s != QLatin1String("..");
+}
+
 } // namespace PathUtils

@@ -300,7 +300,10 @@ void ScrapeResultDialog::buildUi() {
         reject();
         return;
       }
-      m_unifiedCancelled = true;
+      // Kartend-unlta: the cancel flag now lives on the unified controller
+      // (which owns the queue walker that reads it); flip it via the narrow
+      // accessor instead of touching the relocated member directly.
+      m_unified->requestUnifiedCancel();
       if (m_batchRunner) m_batchRunner->cancel();
       return;
     }

@@ -37,6 +37,22 @@ inline constexpr quint32 MAX_MANIFEST_SIZE = 64u * 1024u * 1024u;
 
 inline constexpr quint64 MAX_ENTRY_SIZE = 8ull * 1024ull * 1024ull * 1024ull;
 
+// Aggregate decompression-bomb guards for the whole-archive extraction loop,
+// complementing the per-entry MAX_ENTRY_SIZE / MAX_PATH_LEN checks. A crafted
+// bundle can pass every per-entry check yet still exhaust inodes (millions of
+// tiny entries) or disk (many near-MAX_ENTRY_SIZE entries) in aggregate.
+//
+// MAX_ENTRY_COUNT mirrors archiverepack.cpp's kMaxEntries (200000) so the
+// inode-exhaustion ceiling is recognizable across extractors.
+//
+// MAX_TOTAL_EXTRACTED_BYTES is a deliberately generous sanity backstop, NOT a
+// tight quota: a legitimate .kart can carry an entire media collection, so this
+// sits well above launchmanagerarchive's per-launch MAX_EXTRACTION_BYTES (4 GiB)
+// — it exists only to stop a runaway/abusive bundle from filling the disk.
+inline constexpr quint64 MAX_ENTRY_COUNT = 200000;
+
+inline constexpr quint64 MAX_TOTAL_EXTRACTED_BYTES = 2048ull * 1024ull * 1024ull * 1024ull;
+
 enum EntryFlag : quint8 {
   Flag_Media = 0x01,
   Flag_Artwork = 0x02,

@@ -366,7 +366,7 @@ void SettingsDialog::updateGridWidthLimits() {
 // signal; the spin box now connects straight to checkForChanges().
 
 void SettingsDialog::loadGeneralSettingsToUI() {
-  auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
+  auto *mainWindow = m_host;
   if (mainWindow) {
     m_generalSettings = mainWindow->generalSettings();
   }
@@ -417,7 +417,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 }
 
 ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
-  auto *mainWindow = dynamic_cast<IMainWindow *>(parent());
+  auto *mainWindow = m_host;
   auto *settingsManager = m_ctx ? m_ctx->settingsManager() : nullptr;
   if (mainWindow && settingsManager) {
     GeneralSettings &mwSettings = mainWindow->generalSettings();
@@ -497,5 +497,15 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
 
     return saveResult;
   }
-  return ErrorUtils::Result<void>::success();
+  // Host or settings-manager unresolved. Previously this returned success() and
+  // accept() closed the dialog over unwritten general settings — silently
+  // dropping the user's edits (Kartend-rn0ym). Returning an error instead lets
+  // accept() surface an ErrorDialog and keep the dialog open rather than
+  // discarding state under a false success. m_host is resolved once at
+  // construction and warns there when a parent was supplied but isn't an
+  // IMainWindow, so this path is also diagnosable in logs.
+  return ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::ConfigSaveFailed,
+      tr("General settings could not be saved: the settings host is unavailable."),
+      QStringLiteral("SettingsDialog::saveGeneralSettingsFromUI"));
 }

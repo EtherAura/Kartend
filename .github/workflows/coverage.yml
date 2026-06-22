@@ -167,11 +167,18 @@ jobs:
           # therefore pinned just under the worst-case CI reading rather than
           # chasing local; real coverage is healthy. Floors still catch gross
           # regressions (deleted suite, disabled job, half a manager going
-          # untested), not drift. Raise manually when coverage improves enough
-          # to justify it (no ongoing ratchet). Set either var to 0 to disable
-          # that metric's enforcement (report-only).
-          KARTEND_COVERAGE_MIN_LINES: '36'
-          KARTEND_COVERAGE_MIN_FUNCTIONS: '46'
+          # untested), not drift.
+          # Kartend-en8mj: tightened to ~1pp under the current CI-measured
+          # actual (~38% lines / ~47.7% functions) so hard-won gains are
+          # locked in, while keeping a small non-zero margin so normal
+          # CI-vs-local gcov drift / benign refactors don't flap. This is a
+          # MANUAL RATCHET, not a hard ceiling: when a PR lands that improves
+          # coverage, bump these floors opportunistically to capture the gain
+          # (still no automated per-run rewrite — keep it a deliberate edit).
+          # Set either var to 0 to disable that metric's enforcement
+          # (report-only).
+          KARTEND_COVERAGE_MIN_LINES: '37'
+          KARTEND_COVERAGE_MIN_FUNCTIONS: '47'
         run: |
           # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
           # Capture the percentage and write a GitHub step summary.

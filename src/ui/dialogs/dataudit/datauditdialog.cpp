@@ -54,6 +54,7 @@
 #include "datlibrarystate.h"
 #include "datlookup.h"
 #include "errorutils.h"
+#include "formbuilders.h"
 #include "nointrodownloader.h"
 #include "pathutils.h"
 #include "redumpdownload.h"
@@ -91,23 +92,6 @@ QList<FilterEntry> filterEntries() {
       {QT_TR_NOOP("Unknown"), QSet<Status>{Status::Unknown}},
       {QT_TR_NOOP("Corrupt"), QSet<Status>{Status::Corrupt}},
   };
-}
-
-QGroupBox *makePathGroup(const QString &title, QListWidget *&list, QPushButton *&add,
-                         QPushButton *&remove, const QString &addText) {
-  auto *box = new QGroupBox(title);
-  auto *v = new QVBoxLayout(box);
-  list = new QListWidget(box);
-  list->setSelectionMode(QAbstractItemView::ExtendedSelection);
-  v->addWidget(list);
-  auto *row = new QHBoxLayout();
-  add = new QPushButton(addText, box);
-  remove = new QPushButton(QObject::tr("Remove"), box);
-  row->addWidget(add);
-  row->addWidget(remove);
-  row->addStretch();
-  v->addLayout(row);
-  return box;
 }
 
 // Run `fn` with a transient connection to the main app DB (where the v17
@@ -236,56 +220,9 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   addNavEntry(tr("Browser"), {QStringLiteral("view-list-tree"), QStringLiteral("folder-table")}, 3);
 
   connect(m_nav, &QListWidget::currentRowChanged, this, &DatAuditDialog::onNavRowChanged);
-  connect(m_addDatButton, &QPushButton::clicked, this, &DatAuditDialog::onAddDat);
-  connect(m_removeDatButton, &QPushButton::clicked, this, &DatAuditDialog::onRemoveDat);
-  connect(m_addRootButton, &QPushButton::clicked, this, &DatAuditDialog::onAddRoot);
-  connect(m_removeRootButton, &QPushButton::clicked, this, &DatAuditDialog::onRemoveRoot);
-  connect(m_detectLayoutButton, &QPushButton::clicked, this, [this] { runLayoutDetection(false); });
-  connect(m_applyLayoutButton, &QPushButton::clicked, this, &DatAuditDialog::applyDetectedLayout);
-  connect(m_dismissLayoutButton, &QPushButton::clicked, this, [this] {
-    m_pendingDetection = DatAudit::LayoutDetection{};
-    m_layoutBanner->setVisible(false);
-    m_applyLayoutButton->setVisible(false);
-    m_dismissLayoutButton->setVisible(false);
-  });
-  connect(m_runButton, &QPushButton::clicked, this, &DatAuditDialog::onRun);
-  connect(m_cancelButton, &QPushButton::clicked, this, &DatAuditDialog::onCancel);
-  connect(m_filterCombo, &QComboBox::currentIndexChanged, this, &DatAuditDialog::onFilterChanged);
-  connect(m_fixButton, &QPushButton::clicked, this, &DatAuditDialog::onFix);
-  connect(m_exportCsvButton, &QPushButton::clicked, this, &DatAuditDialog::onExportCsv);
-  connect(m_exportFixdatButton, &QPushButton::clicked, this, &DatAuditDialog::onExportFixdat);
-  connect(m_exportMissButton, &QPushButton::clicked, this, &DatAuditDialog::onExportMissList);
-  connect(&m_watcher, &QFutureWatcher<AuditOutput>::finished, this,
-          &DatAuditDialog::onAuditFinished);
-  connect(m_profileCombo, &QComboBox::currentIndexChanged, this,
-          &DatAuditDialog::onProfileSelected);
-  connect(m_newProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onNewProfile);
-  connect(m_editProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onEditProfile);
-  connect(m_duplicateProfileButton, &QPushButton::clicked, this,
-          &DatAuditDialog::onDuplicateProfile);
-  connect(m_renameProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onRenameProfile);
-  connect(m_deleteProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onDeleteProfile);
-
-  // Download page wiring (Kartend-m6qsb.16).
-  connect(m_dlSourceCombo, &QComboBox::currentIndexChanged, this,
-          &DatAuditDialog::onDownloadSourceChanged);
-  connect(m_dlLoadButton, &QPushButton::clicked, this, &DatAuditDialog::onLoadDailyForm);
-  connect(m_redumpRefreshButton, &QPushButton::clicked, this, [this] {
-    m_redumpSystemCombo->clear();
-    onDownloadSourceChanged(); // re-triggers the fetch
-  });
-  connect(m_redumpSystemCombo, &QComboBox::currentIndexChanged, this,
-          [this] { refreshDownloadButtonEnabled(); });
-  connect(&m_redumpSystemsWatcher, &QFutureWatcher<RedumpSystemsOutcome>::finished, this,
-          &DatAuditDialog::onRedumpSystemsFetched);
-  connect(m_dlDownloadButton, &QPushButton::clicked, this, &DatAuditDialog::onStartDownload);
-  connect(m_dlCancelButton, &QPushButton::clicked, this, &DatAuditDialog::onCancelDownload);
-  connect(&m_dlFormWatcher, &QFutureWatcher<DailyFormOutcome>::finished, this,
-          &DatAuditDialog::onLoadDailyFormFinished);
-  connect(&m_dlWatcher, &QFutureWatcher<DownloadOutcome>::finished, this,
-          &DatAuditDialog::onDownloadFinished);
-  connect(&m_updateWatcher, &QFutureWatcher<UpdateRunResult>::finished, this,
-          &DatAuditDialog::onCheckUpdatesFinished);
+  wireProfileActions();
+  wireAuditActions();
+  wireDownloadActions();
 
   applyUniformSizing();
   setBusy(false);
@@ -300,22 +237,9 @@ QWidget *DatAuditDialog::buildAuditPage() {
   auto *root = new QVBoxLayout(page);
   root->setContentsMargins(0, 0, 0, 0);
 
-  // Saved profiles.
-  auto *profileRow = new QHBoxLayout();
-  profileRow->addWidget(new QLabel(tr("Profile:"), page));
-  m_profileCombo = new QComboBox(page);
-  m_newProfileButton = new QPushButton(tr("New…"), page);
-  m_editProfileButton = new QPushButton(tr("Edit…"), page);
-  m_duplicateProfileButton = new QPushButton(tr("Duplicate"), page);
-  m_renameProfileButton = new QPushButton(tr("Rename"), page);
-  m_deleteProfileButton = new QPushButton(tr("Delete"), page);
-  profileRow->addWidget(m_profileCombo, 1);
-  profileRow->addWidget(m_newProfileButton);
-  profileRow->addWidget(m_editProfileButton);
-  profileRow->addWidget(m_duplicateProfileButton);
-  profileRow->addWidget(m_renameProfileButton);
-  profileRow->addWidget(m_deleteProfileButton);
-  root->addLayout(profileRow);
+  // Composed from the per-section builders below (Kartend-139sr); the
+  // add-order here is the construction order the page has always had.
+  root->addLayout(buildProfileRow(page));
 
   // DAT files + scan folders. Locked + derived for a linked profile
   // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
@@ -327,27 +251,9 @@ QWidget *DatAuditDialog::buildAuditPage() {
   m_linkedHint->setWordWrap(true);
   m_linkedHint->setVisible(false);
   root->addWidget(m_linkedHint);
-  auto *inputs = new QHBoxLayout();
-  inputs->addWidget(
-      makePathGroup(tr("DAT files"), m_datList, m_addDatButton, m_removeDatButton, tr("Add DAT…")));
-  inputs->addWidget(makePathGroup(tr("Scan folders"), m_rootList, m_addRootButton,
-                                  m_removeRootButton, tr("Add folder…")));
-  root->addLayout(inputs);
+  root->addLayout(buildInputsSection(page));
 
-  // Folder-structure detection banner (Kartend-m6qsb.6).
-  auto *layoutRow = new QHBoxLayout();
-  m_detectLayoutButton = new QPushButton(tr("Detect structure"), page);
-  layoutRow->addWidget(m_detectLayoutButton);
-  m_layoutBanner = new QLabel(page);
-  m_layoutBanner->setVisible(false);
-  layoutRow->addWidget(m_layoutBanner, 1);
-  m_applyLayoutButton = new QPushButton(tr("Apply"), page);
-  m_applyLayoutButton->setVisible(false);
-  m_dismissLayoutButton = new QPushButton(tr("Dismiss"), page);
-  m_dismissLayoutButton->setVisible(false);
-  layoutRow->addWidget(m_applyLayoutButton);
-  layoutRow->addWidget(m_dismissLayoutButton);
-  root->addLayout(layoutRow);
+  root->addLayout(buildLayoutBanner(page));
 
   // Run / cancel / progress / filter.
   auto *controls = new QHBoxLayout();
@@ -356,8 +262,18 @@ QWidget *DatAuditDialog::buildAuditPage() {
   m_cancelButton->setEnabled(false);
   m_progress = new QProgressBar(page);
   m_progress->setVisible(false);
+  // "Verify (ignore cache)" force-rehash (Kartend-p30ic): off by default keeps
+  // the fast cached path; when ticked, this run bypasses every file-hash-cache
+  // hit and recomputes, catching an in-place same-size/same-mtime replacement
+  // (rsync --times / cp -p) the (size, mtime) cache key cannot detect.
+  m_forceRehashCheck = new QCheckBox(tr("Verify (ignore cache)"), page);
+  m_forceRehashCheck->setToolTip(
+      tr("Re-hash every file this run instead of trusting the cache. Use after a file may "
+         "have been replaced in place while keeping the same size and modified time "
+         "(e.g. rsync --times, cp -p), which the cache would otherwise miss. Slower."));
   controls->addWidget(m_runButton);
   controls->addWidget(m_cancelButton);
+  controls->addWidget(m_forceRehashCheck);
   controls->addWidget(m_progress, 1);
   controls->addWidget(new QLabel(tr("View:"), page));
   m_filterCombo = new QComboBox(page);
@@ -382,6 +298,59 @@ QWidget *DatAuditDialog::buildAuditPage() {
   summaryRow->addWidget(m_completionBar);
   root->addLayout(summaryRow);
 
+  root->addWidget(buildResultsTable(page), 1);
+
+  root->addLayout(buildExportRow(page));
+  return page;
+}
+
+QLayout *DatAuditDialog::buildProfileRow(QWidget *page) {
+  // Saved profiles.
+  auto *profileRow = new QHBoxLayout();
+  profileRow->addWidget(new QLabel(tr("Profile:"), page));
+  m_profileCombo = new QComboBox(page);
+  m_newProfileButton = new QPushButton(tr("New…"), page);
+  m_editProfileButton = new QPushButton(tr("Edit…"), page);
+  m_duplicateProfileButton = new QPushButton(tr("Duplicate"), page);
+  m_renameProfileButton = new QPushButton(tr("Rename"), page);
+  m_deleteProfileButton = new QPushButton(tr("Delete"), page);
+  profileRow->addWidget(m_profileCombo, 1);
+  profileRow->addWidget(m_newProfileButton);
+  profileRow->addWidget(m_editProfileButton);
+  profileRow->addWidget(m_duplicateProfileButton);
+  profileRow->addWidget(m_renameProfileButton);
+  profileRow->addWidget(m_deleteProfileButton);
+  return profileRow;
+}
+
+QLayout *DatAuditDialog::buildInputsSection(QWidget *page) {
+  Q_UNUSED(page);
+  auto *inputs = new QHBoxLayout();
+  inputs->addWidget(FormBuilders::makePathListGroup(tr("DAT files"), m_datList, m_addDatButton,
+                                                    m_removeDatButton, tr("Add DAT…")));
+  inputs->addWidget(FormBuilders::makePathListGroup(tr("Scan folders"), m_rootList, m_addRootButton,
+                                                    m_removeRootButton, tr("Add folder…")));
+  return inputs;
+}
+
+QLayout *DatAuditDialog::buildLayoutBanner(QWidget *page) {
+  // Folder-structure detection banner (Kartend-m6qsb.6).
+  auto *layoutRow = new QHBoxLayout();
+  m_detectLayoutButton = new QPushButton(tr("Detect structure"), page);
+  layoutRow->addWidget(m_detectLayoutButton);
+  m_layoutBanner = new QLabel(page);
+  m_layoutBanner->setVisible(false);
+  layoutRow->addWidget(m_layoutBanner, 1);
+  m_applyLayoutButton = new QPushButton(tr("Apply"), page);
+  m_applyLayoutButton->setVisible(false);
+  m_dismissLayoutButton = new QPushButton(tr("Dismiss"), page);
+  m_dismissLayoutButton->setVisible(false);
+  layoutRow->addWidget(m_applyLayoutButton);
+  layoutRow->addWidget(m_dismissLayoutButton);
+  return layoutRow;
+}
+
+QWidget *DatAuditDialog::buildResultsTable(QWidget *page) {
   // Status-tinted, sortable, searchable results (Kartend-m6qsb.20). The status
   // combo still filters the source model; the proxy adds sort + a text search
   // on top. The delegate paints the per-status tint + icon.
@@ -399,13 +368,15 @@ QWidget *DatAuditDialog::buildAuditPage() {
   m_table->setContextMenuPolicy(Qt::CustomContextMenu);
   m_table->horizontalHeader()->setStretchLastSection(true);
   m_table->verticalHeader()->setVisible(false);
-  root->addWidget(m_table, 1);
   connect(m_searchEdit, &QLineEdit::textChanged, m_proxy,
           &QSortFilterProxyModel::setFilterFixedString);
   connect(m_table, &QTableView::customContextMenuRequested, this,
           &DatAuditDialog::onResultsContextMenu);
   connect(m_table, &QTableView::doubleClicked, this, &DatAuditDialog::onResultDoubleClicked);
+  return m_table;
+}
 
+QLayout *DatAuditDialog::buildExportRow(QWidget *page) {
   auto *exports = new QHBoxLayout();
   m_fixButton = new QPushButton(tr("Fix…"), page);
   exports->addWidget(m_fixButton);
@@ -416,8 +387,7 @@ QWidget *DatAuditDialog::buildAuditPage() {
   exports->addWidget(m_exportCsvButton);
   exports->addWidget(m_exportFixdatButton);
   exports->addWidget(m_exportMissButton);
-  root->addLayout(exports);
-  return page;
+  return exports;
 }
 
 QWidget *DatAuditDialog::buildLibraryPage() {
@@ -491,6 +461,33 @@ QWidget *DatAuditDialog::buildDownloadPage() {
   sourceRow->addStretch();
   root->addLayout(sourceRow);
 
+  // The two mutually-exclusive source sub-forms (Kartend-139sr): No-Intro's
+  // box + its sets box, then Redump's box. onDownloadSourceChanged toggles
+  // their visibility; the add-order here is unchanged from the inlined form.
+  root->addWidget(buildNoIntroSource(page));
+  root->addWidget(m_setsBox);
+  root->addWidget(buildRedumpSource(page));
+
+  auto *dlRow = new QHBoxLayout();
+  m_dlDownloadButton = new QPushButton(tr("Download && import"), page);
+  m_dlDownloadButton->setEnabled(false);
+  m_dlCancelButton = new QPushButton(tr("Cancel"), page);
+  m_dlCancelButton->setEnabled(false);
+  m_dlProgress = new QProgressBar(page);
+  m_dlProgress->setVisible(false);
+  dlRow->addWidget(m_dlDownloadButton);
+  dlRow->addWidget(m_dlCancelButton);
+  dlRow->addWidget(m_dlProgress, 1);
+  root->addLayout(dlRow);
+
+  m_dlStatus = new QLabel(page);
+  m_dlStatus->setWordWrap(true);
+  root->addWidget(m_dlStatus);
+  root->addStretch(1);
+  return page;
+}
+
+QWidget *DatAuditDialog::buildNoIntroSource(QWidget *page) {
   // --- No-Intro source ---
   m_noIntroBox = new QGroupBox(tr("No-Intro (DAT-o-MATIC)"), page);
   auto *form = new QFormLayout(m_noIntroBox);
@@ -512,16 +509,20 @@ QWidget *DatAuditDialog::buildDownloadPage() {
   m_dlPackLabel = new QLabel(tr("Load a system to see the available pack."), m_noIntroBox);
   m_dlPackLabel->setForegroundRole(QPalette::PlaceholderText);
   form->addRow(tr("Pack:"), m_dlPackLabel);
-  root->addWidget(m_noIntroBox);
 
+  // The "Include sets" group belongs to the No-Intro source; it is created
+  // here but added to the page root separately by buildDownloadPage so the
+  // widget add-order stays exactly as before.
   m_setsBox = new QGroupBox(tr("Include sets"), page);
   auto *setsOuter = new QVBoxLayout(m_setsBox);
   m_dlSetsContainer = new QWidget(m_setsBox);
   m_dlSetsLayout = new QVBoxLayout(m_dlSetsContainer);
   m_dlSetsLayout->setContentsMargins(0, 0, 0, 0);
   setsOuter->addWidget(m_dlSetsContainer);
-  root->addWidget(m_setsBox);
+  return m_noIntroBox;
+}
 
+QWidget *DatAuditDialog::buildRedumpSource(QWidget *page) {
   // --- Redump source (one GET per system; pick by name) ---
   m_redumpBox = new QGroupBox(tr("Redump"), page);
   auto *redumpRow = new QHBoxLayout(m_redumpBox);
@@ -532,25 +533,65 @@ QWidget *DatAuditDialog::buildDownloadPage() {
   redumpRow->addWidget(m_redumpSystemCombo, 1);
   redumpRow->addWidget(m_redumpRefreshButton);
   m_redumpBox->setVisible(false);
-  root->addWidget(m_redumpBox);
+  return m_redumpBox;
+}
 
-  auto *dlRow = new QHBoxLayout();
-  m_dlDownloadButton = new QPushButton(tr("Download && import"), page);
-  m_dlDownloadButton->setEnabled(false);
-  m_dlCancelButton = new QPushButton(tr("Cancel"), page);
-  m_dlCancelButton->setEnabled(false);
-  m_dlProgress = new QProgressBar(page);
-  m_dlProgress->setVisible(false);
-  dlRow->addWidget(m_dlDownloadButton);
-  dlRow->addWidget(m_dlCancelButton);
-  dlRow->addWidget(m_dlProgress, 1);
-  root->addLayout(dlRow);
+void DatAuditDialog::wireProfileActions() {
+  connect(m_profileCombo, &QComboBox::currentIndexChanged, this,
+          &DatAuditDialog::onProfileSelected);
+  connect(m_newProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onNewProfile);
+  connect(m_editProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onEditProfile);
+  connect(m_duplicateProfileButton, &QPushButton::clicked, this,
+          &DatAuditDialog::onDuplicateProfile);
+  connect(m_renameProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onRenameProfile);
+  connect(m_deleteProfileButton, &QPushButton::clicked, this, &DatAuditDialog::onDeleteProfile);
+}
 
-  m_dlStatus = new QLabel(page);
-  m_dlStatus->setWordWrap(true);
-  root->addWidget(m_dlStatus);
-  root->addStretch(1);
-  return page;
+void DatAuditDialog::wireAuditActions() {
+  connect(m_addDatButton, &QPushButton::clicked, this, &DatAuditDialog::onAddDat);
+  connect(m_removeDatButton, &QPushButton::clicked, this, &DatAuditDialog::onRemoveDat);
+  connect(m_addRootButton, &QPushButton::clicked, this, &DatAuditDialog::onAddRoot);
+  connect(m_removeRootButton, &QPushButton::clicked, this, &DatAuditDialog::onRemoveRoot);
+  connect(m_detectLayoutButton, &QPushButton::clicked, this, [this] { runLayoutDetection(false); });
+  connect(m_applyLayoutButton, &QPushButton::clicked, this, &DatAuditDialog::applyDetectedLayout);
+  connect(m_dismissLayoutButton, &QPushButton::clicked, this, [this] {
+    m_pendingDetection = DatAudit::LayoutDetection{};
+    m_layoutBanner->setVisible(false);
+    m_applyLayoutButton->setVisible(false);
+    m_dismissLayoutButton->setVisible(false);
+  });
+  connect(m_runButton, &QPushButton::clicked, this, &DatAuditDialog::onRun);
+  connect(m_cancelButton, &QPushButton::clicked, this, &DatAuditDialog::onCancel);
+  connect(m_filterCombo, &QComboBox::currentIndexChanged, this, &DatAuditDialog::onFilterChanged);
+  connect(m_fixButton, &QPushButton::clicked, this, &DatAuditDialog::onFix);
+  connect(m_exportCsvButton, &QPushButton::clicked, this, &DatAuditDialog::onExportCsv);
+  connect(m_exportFixdatButton, &QPushButton::clicked, this, &DatAuditDialog::onExportFixdat);
+  connect(m_exportMissButton, &QPushButton::clicked, this, &DatAuditDialog::onExportMissList);
+  connect(&m_watcher, &QFutureWatcher<AuditOutput>::finished, this,
+          &DatAuditDialog::onAuditFinished);
+}
+
+void DatAuditDialog::wireDownloadActions() {
+  // Download page wiring (Kartend-m6qsb.16).
+  connect(m_dlSourceCombo, &QComboBox::currentIndexChanged, this,
+          &DatAuditDialog::onDownloadSourceChanged);
+  connect(m_dlLoadButton, &QPushButton::clicked, this, &DatAuditDialog::onLoadDailyForm);
+  connect(m_redumpRefreshButton, &QPushButton::clicked, this, [this] {
+    m_redumpSystemCombo->clear();
+    onDownloadSourceChanged(); // re-triggers the fetch
+  });
+  connect(m_redumpSystemCombo, &QComboBox::currentIndexChanged, this,
+          [this] { refreshDownloadButtonEnabled(); });
+  connect(&m_redumpSystemsWatcher, &QFutureWatcher<RedumpSystemsOutcome>::finished, this,
+          &DatAuditDialog::onRedumpSystemsFetched);
+  connect(m_dlDownloadButton, &QPushButton::clicked, this, &DatAuditDialog::onStartDownload);
+  connect(m_dlCancelButton, &QPushButton::clicked, this, &DatAuditDialog::onCancelDownload);
+  connect(&m_dlFormWatcher, &QFutureWatcher<DailyFormOutcome>::finished, this,
+          &DatAuditDialog::onLoadDailyFormFinished);
+  connect(&m_dlWatcher, &QFutureWatcher<DownloadOutcome>::finished, this,
+          &DatAuditDialog::onDownloadFinished);
+  connect(&m_updateWatcher, &QFutureWatcher<UpdateRunResult>::finished, this,
+          &DatAuditDialog::onCheckUpdatesFinished);
 }
 
 void DatAuditDialog::addNavEntry(const QString &label, const QStringList &iconNames,
@@ -1202,6 +1243,10 @@ void DatAuditDialog::onRun() {
       p.layoutConfirmed ? DatAudit::layoutFromToken(p.detectedLayout) : DatAudit::Layout::Unknown;
   // Clone/parent expected-file model (Kartend-m6qsb.29). Empty/unknown -> Split.
   const DatAudit::MergeMode mergeMode = DatAudit::mergeModeFromToken(p.mergeMode);
+  // "Verify (ignore cache)" force-rehash (Kartend-p30ic). Read on this (UI)
+  // thread; passed by value into the worker. A null checkbox (test-built dialog)
+  // reads as off — the default cached path.
+  const bool ignoreHashCache = m_forceRehashCheck != nullptr && m_forceRehashCheck->isChecked();
 
   m_cancel = std::make_shared<std::atomic<bool>>(false);
   setBusy(true);
@@ -1236,7 +1281,7 @@ void DatAuditDialog::onRun() {
 
   auto cancel = m_cancel;
   auto future = QtConcurrent::run([dats, roots, cancel, regionPrefs, ignore, onePerGame, layout,
-                                   mergeMode, progressFn]() -> AuditOutput {
+                                   mergeMode, ignoreHashCache, progressFn]() -> AuditOutput {
     // Both DB connections below are created, used, and removed on THIS worker
     // thread, satisfying QSqlDatabase's thread affinity.
     DatCache::Store cache(DatCache::defaultPath());
@@ -1250,6 +1295,7 @@ void DatAuditDialog::onRun() {
     opts.onePerGame = onePerGame;
     opts.layout = layout;
     opts.mergeMode = mergeMode;
+    opts.ignoreHashCache = ignoreHashCache;
 
     // Open a main-DB connection for the file-hash cache so re-audits skip
     // re-hashing unchanged files (the v17 file_hash_cache table already exists;
@@ -1447,6 +1493,9 @@ void DatAuditDialog::setBusy(bool busy) {
   m_running = busy;
   m_runButton->setEnabled(!busy);
   m_cancelButton->setEnabled(busy);
+  if (m_forceRehashCheck != nullptr) {
+    m_forceRehashCheck->setEnabled(!busy);
+  }
   m_progress->setVisible(busy);
   if (busy) {
     // Indeterminate until the runner's first progress tick supplies a total

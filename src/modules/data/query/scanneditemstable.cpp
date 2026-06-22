@@ -53,11 +53,14 @@ void ScannedItemsTable::clear() {
   }
 }
 
-void ScannedItemsTable::insertBatch(const QStringList &paths,
+bool ScannedItemsTable::insertBatch(const QStringList &paths,
                                     const QHash<QString, QDateTime> &timestamps,
                                     const QString &mediaRoot) {
-  if (!m_db.isOpen() || paths.isEmpty()) {
-    return;
+  if (!m_db.isOpen()) {
+    return false;
+  }
+  if (paths.isEmpty()) {
+    return true; // empty batch is a no-op success
   }
 
   // 5 columns per row -> keep under SQLite 999 variable limit.
@@ -81,7 +84,13 @@ void ScannedItemsTable::insertBatch(const QStringList &paths,
     const QFileInfo absoluteInfo(absolutePath);
     ins.addBindValue(absolutePath);
     ins.addBindValue(p);
-    ins.addBindValue(QFileInfo(p).completeBaseName());
+    QString stagedName = QFileInfo(p).completeBaseName();
+    if (stagedName.isEmpty()) {
+      // Dotfiles (e.g. ".gitignore") have an empty completeBaseName; fall back
+      // to the full file name so items.name (sort key / FTS) isn't blank.
+      stagedName = QFileInfo(p).fileName();
+    }
+    ins.addBindValue(stagedName);
     ins.addBindValue(timestamps.value(p).toString(Qt::ISODate));
     ins.addBindValue(absoluteInfo.exists() ? absoluteInfo.size() : 0);
   }
@@ -90,7 +99,9 @@ void ScannedItemsTable::insertBatch(const QStringList &paths,
                                                "Failed to insert scanned_items batch",
                                                "ScannedItemsTable::insertBatch")
                              .withDetails(ins.lastError().text()));
+    return false;
   }
+  return true;
 }
 
 bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid) {

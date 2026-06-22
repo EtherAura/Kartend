@@ -7,6 +7,7 @@
 // don't drag in CollectionConfig + UIConstants. collectionutils.h
 // re-includes this header so existing callers compile unchanged.
 
+#include <QHash>
 #include <QString>
 
 /// Archive-extraction toggles. Originally flat fields on CollectionConfig;
@@ -27,5 +28,11 @@ struct ArchiveOptions {
   }
   bool operator!=(const ArchiveOptions &other) const { return !(*this == other); }
 };
+
+// Fingerprint hash for the settings hot-reload diff baseline (Kartend-lc58a) —
+// must hash exactly the fields operator== compares (see gridlayoutpreferences.h).
+inline size_t qHash(const ArchiveOptions &key, size_t seed = 0) {
+  return qHashMulti(seed, key.extractArchives, key.extractedExtension);
+}
 
 #endif

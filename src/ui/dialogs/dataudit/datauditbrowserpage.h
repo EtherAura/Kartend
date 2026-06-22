@@ -7,7 +7,8 @@
 #include <QStringList>
 #include <QWidget>
 
-#include "datauditbrowsermodels.h" // BrowserViewPreset
+#include "datauditbrowsermodels.h"     // BrowserViewPreset
+#include "datauditbrowserrepository.h" // DatAudit::DatAuditBrowserRepository
 
 class QCheckBox;
 class QComboBox;
@@ -90,6 +91,10 @@ private:
   /// (Kartend-q66m4). Blocks the tree's expand/collapse signals so re-applying
   /// the set doesn't recurse into the handlers that mutate it.
   void restoreExpandedState();
+
+  // Data-access boundary (Kartend-ma608): all schema / DAT-cache reads run
+  // through this repository instead of inline withDb lambdas in the view slots.
+  DatAudit::DatAuditBrowserRepository m_repo;
 
   // Splitters kept as members so their proportions can be saved/restored
   // (Kartend-o46gy): horizontal tree|right, vertical gameTable/romTable.

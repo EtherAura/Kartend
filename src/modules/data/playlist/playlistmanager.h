@@ -138,18 +138,26 @@ public:
   /// Reads a JSON document produced by exportToJson() and creates a new
   /// playlist with its contents. Returns the new playlist id; the supplied
   /// `nameOverride` (when non-empty) wins over the name embedded in the file
-  /// so users can disambiguate when re-importing.
-  [[nodiscard]] ErrorUtils::Result<QString>
-  importFromJson(const QString &inPath, const QString &nameOverride = QString()) override;
+  /// so users can disambiguate when re-importing. `outSkipped` (when non-null)
+  /// receives the count of dropped items (empty-path, duplicate, or
+  /// over-long/invalid refs) so callers can surface "N items skipped" the way
+  /// importFromM3U does (Kartend-2sg2t).
+  [[nodiscard]] ErrorUtils::Result<QString> importFromJson(const QString &inPath,
+                                                           const QString &nameOverride = QString(),
+                                                           int *outSkipped = nullptr) override;
 
   /// Reads an M3U file and creates a new playlist from its entries. Each path
   /// is resolved against the live `items` table; entries that don't currently
   /// match any indexed item are skipped (the count of skipped lines is
-  /// available via `outSkipped` for caller-facing diagnostics). Returns the
+  /// available via `outSkipped` for caller-facing diagnostics). `outAmbiguous`
+  /// (when non-null) receives the count of paths that resolved to more than one
+  /// collection — the lowest-uuid pick may have bound them to the wrong source
+  /// collection, so the caller can warn the user (Kartend-93ju5). Returns the
   /// new playlist id.
   [[nodiscard]] ErrorUtils::Result<QString> importFromM3U(const QString &inPath,
                                                           const QString &playlistName,
-                                                          int *outSkipped = nullptr) override;
+                                                          int *outSkipped = nullptr,
+                                                          int *outAmbiguous = nullptr) override;
 
   // ─── Favorites built-in ────────────────────────────────────
 

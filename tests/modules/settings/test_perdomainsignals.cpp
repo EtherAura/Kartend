@@ -30,6 +30,7 @@ private slots:
   void multipleDomainChanges_eachEmitsOnce();
   void addedCollection_doesNotFirePerDomainSignals();
   void reorderOnly_doesNotFirePerDomainSignals();
+  void duplicateUuid_lastEntrySeedsSharedBaseline();
 
   // Kartend-xsyt: emission tests for the remaining per-cluster signals so
   // the matrix in docs/dev/settings-hotreload.md is fully covered.
@@ -179,6 +180,33 @@ void TestPerDomainSignals::reorderOnly_doesNotFirePerDomainSignals() {
 
   QCOMPARE(gridSpy.count(), 0);
   QCOMPARE(sidebarSpy.count(), 0);
+}
+
+void TestPerDomainSignals::duplicateUuid_lastEntrySeedsSharedBaseline() {
+  // Kartend-lc58a: the fingerprint baseline is keyed by (name, mediaDirectory)
+  // UUID, so two collections that collide on a UUID share one baseline slot and
+  // the LAST one inserted wins — faithfully reproducing the prior
+  // QHash<uuid, const CollectionConfig*> lookup. (Duplicate UUIDs are a
+  // ConfigValidation error in normal operation; this pins the diff's documented
+  // collision contract so a future change to the keying can't silently drift.)
+  SettingsManager mgr(nullptr, nullptr);
+  CollectionConfig a = makeCol("Dup", "/tmp/dup");
+  CollectionConfig b = makeCol("Dup", "/tmp/dup"); // identical UUID to a
+  a.gridLayout.gridWidth = 5;
+  b.gridLayout.gridWidth = 9;
+  QList<CollectionConfig> collections{a, b};
+  mgr.saveCollections(collections); // seed: baseline[uuid] = fingerprint(b), last wins
+
+  QSignalSpy gridSpy(&mgr, &ISettingsManager::gridLayoutChanged);
+
+  // Re-save with NOTHING changed. Because both entries share the UUID, the
+  // baseline is b's (the last seeded). Index 0 (a, gridWidth 5) is therefore
+  // diffed against b's baseline (gridWidth 9) and reports a gridLayout change;
+  // index 1 (b) matches its own baseline and stays silent.
+  mgr.saveCollections(collections);
+
+  QCOMPARE(gridSpy.count(), 1);
+  QCOMPARE(gridSpy.first().at(0).toInt(), 0);
 }
 
 // Kartend-xsyt emission slots for the previously-untested per-cluster signals.

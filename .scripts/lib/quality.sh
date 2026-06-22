@@ -145,17 +145,87 @@ do_clang_tidy() {
   fi
 }
 
+# Kartend-rqvp7: print the apply-path hazard warnings to the script's own
+# output (they previously lived only in docs/dev/building.md, so anyone
+# invoking --apply-fixes / --format-apply directly never saw them).
+warn_apply_hazards() {
+  cat <<'WARN'
+─────────────────────────────────────────────────────────────────────────
+ CAUTION: in-place auto-fix paths rewrite tracked source files.
+   * The clang-tidy auto-fixer has been known to MANGLE headers under
+     src/utils/uiconstants/ — inspect `git diff` carefully afterward and
+     be ready to `git checkout -- src/utils/uiconstants/` if it corrupts
+     them.
+   * Fixes are applied in place. This run requires a clean working tree
+     (or --apply-fixes-dirty-ok) so the resulting diff is isolated and
+     reviewable.
+─────────────────────────────────────────────────────────────────────────
+WARN
+}
+
+# Kartend-rqvp7: refuse to rewrite files on a dirty tree so the apply diff is
+# reviewable in isolation (the auto-fixers can mangle headers; mixing their
+# edits into uncommitted work makes the churn impossible to inspect or back
+# out). Returns 0 if clean (or git is unavailable / not a repo — in which
+# case there's nothing to clobber from VCS's view), non-zero if dirty.
+# Override with KARTEND_APPLY_FIXES_DIRTY_OK=1 (build.sh exposes
+# --apply-fixes-dirty-ok). Checks tracked files only (untracked files aren't
+# rewritten by the fixers).
+require_clean_tree_for_apply() {
+  local rootdir="$1"
+  if [ "${KARTEND_APPLY_FIXES_DIRTY_OK:-0}" = "1" ]; then
+    echo "Note: KARTEND_APPLY_FIXES_DIRTY_OK=1 — skipping the clean-tree guard; the apply diff will be mixed with your uncommitted changes."
+    return 0
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! git -C "$rootdir" rev-parse --git-dir >/dev/null 2>&1; then
+    return 0
+  fi
+  # Tracked-file changes only (staged or unstaged). Untracked files are not
+  # touched by clang-tidy/clang-format -i, so they don't compromise the diff.
+  if ! git -C "$rootdir" diff --quiet || ! git -C "$rootdir" diff --cached --quiet; then
+    echo "Error: refusing to apply in-place fixes on a dirty working tree." >&2
+    echo "  The auto-fixers rewrite tracked source files in place; running them on" >&2
+    echo "  top of uncommitted work makes the resulting diff impossible to review or" >&2
+    echo "  back out cleanly (and can mangle src/utils/uiconstants/ headers)." >&2
+    echo "  Commit or stash your changes first, then re-run — or set" >&2
+    echo "  KARTEND_APPLY_FIXES_DIRTY_OK=1 (build.sh: --apply-fixes-dirty-ok) to override." >&2
+    return 1
+  fi
+  return 0
+}
+
+# Kartend-rqvp7: the apply check list is derived from .clang-tidy rather than
+# a separate hardcoded set. The old hardcoded list included
+# readability-braces-around-statements and readability-implicit-bool-conversion
+# — both DISABLED in .clang-tidy — so --apply-fixes introduced edits that
+# violated the project's own committed style policy and then got reverted.
+# Using --config-file makes clang-tidy honor exactly the enabled set (the
+# WarningsAsErrors-promoted checks plus the modernize-use-* fixers the config
+# leaves on), so the fix set can never drift from the source of truth again.
 do_clang_tidy_apply_fixes() {
   local compdb="$1" srcdir="$2" checks="$3"
   if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
-    local tmpdir rc
+    local tmpdir rc rootdir
     tmpdir="$(mktemp -d)"
+    rootdir="$(dirname "$srcdir")"
     sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
-    # Apply curated, safe fixes across all .cpp files
+    # Prefer the .clang-tidy config so the applied fixes match the project's
+    # enabled-check policy exactly. The legacy explicit `$checks` list is the
+    # fallback only when no config is present.
+    local -a config_arg
+    if [ -f "$rootdir/.clang-tidy" ]; then
+      config_arg=(--config-file="$rootdir/.clang-tidy")
+    else
+      config_arg=(-checks="$checks")
+    fi
+    # Apply fixes across all .cpp files
     rc=0
     if ! find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
       -p="$tmpdir" \
-      -checks="$checks" \
+      "${config_arg[@]}" \
       -fix -fix-errors \
       --header-filter="$srcdir/.*"; then
       rc=$?
@@ -248,33 +318,25 @@ do_cppcheck() {
   fi
 }
 
-# Resolve a clang-format binary that matches CI's v19 pin. Ubuntu 24.04 ships
-# v18 and current Arch ships v21; both format differently enough from v19 to
-# produce false-positive drift on commits that pass CI. Returns the resolved
-# path/name on stdout, or empty (rc != 0) if no v19 candidate was found. Kept
-# in sync with .scripts/git-hooks/pre-commit's copy of the same resolver.
-resolve_clang_format_19() {
-  if command -v clang-format-19 >/dev/null 2>&1; then
-    printf 'clang-format-19\n'; return 0
-  fi
-  if [ -x /usr/lib/llvm/19/bin/clang-format ]; then
-    printf '/usr/lib/llvm/19/bin/clang-format\n'; return 0
-  fi
-  if [ -x /usr/local/bin/clang-format ]; then
-    printf '/usr/local/bin/clang-format\n'; return 0
-  fi
-  if command -v clang-format >/dev/null 2>&1 \
-     && clang-format --version 2>/dev/null | grep -qE 'version 19\.'; then
-    printf 'clang-format\n'; return 0
-  fi
-  return 1
-}
+# The clang-format resolver (resolve_clang_format) and the pinned version
+# (KARTEND_CLANG_FORMAT_VERSION) live in .scripts/lib/clang-format-version.sh,
+# sourced by build.sh before this module so the pin can't drift between the
+# build script, the pre-commit hook, and CI. The hint text for the fail-loud
+# paths is clang_format_missing_hint there too.
 
 # Accepts one or more directories (Kartend-rni3g: callers pass src/ AND
 # tests/ so the hand-maintained test tree is held to the same format bar).
+#
+# Kartend-gv2xq: when an enforcing --format-check is requested (build.sh's
+# $format_check global, true in CI's maintenance run), a missing pinned
+# clang-format is now a HARD FAILURE with a clear remediation message
+# instead of a silent no-op — a silent skip made the gate look enforced
+# while doing nothing. The default advisory pass (no --format-check) still
+# self-skips so a contributor without the v19 binary isn't blocked, but the
+# skip is surfaced in the end-of-run ran-vs-skipped summary.
 do_clang_format() {
   local cf
-  if cf=$(resolve_clang_format_19); then
+  if cf=$(resolve_clang_format); then
     # Check formatting without applying changes, report issues but don't fail
     local issues=0 srcdir
     for srcdir in "$@"; do
@@ -292,14 +354,19 @@ do_clang_format() {
       echo "All files properly formatted (using $cf)"
     fi
     return 0  # Always return success for quality checks
+  elif [ "${format_check:-false}" = true ]; then
+    # Enforcing check (CI) with no pinned binary: fail loud, do not pretend.
+    echo "Error: clang-format check cannot run — no pinned formatter found." >&2
+    clang_format_missing_hint >&2
+    return 1
   else
-    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
+    echo "skipped: no clang-format-${KARTEND_CLANG_FORMAT_VERSION} found (matches CI pin)"; return 0
   fi
 }
 
 do_clang_format_apply() {
   local cf
-  if cf=$(resolve_clang_format_19); then
+  if cf=$(resolve_clang_format); then
     # Apply formatting fixes to all source files
     echo "Applying formatting with $cf"
     local srcdir
@@ -310,7 +377,7 @@ do_clang_format_apply() {
     done
     return 0
   else
-    echo "skipped: no clang-format-19 found (matches CI pin)"; return 0
+    echo "skipped: no clang-format-${KARTEND_CLANG_FORMAT_VERSION} found (matches CI pin)"; return 0
   fi
 }
 

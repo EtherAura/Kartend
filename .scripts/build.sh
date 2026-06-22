@@ -5,6 +5,8 @@ set -euo pipefail
 # combinations, and orchestrates each build mode. The reusable helper
 # functions live in sourced modules under .scripts/lib/.
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=lib/clang-format-version.sh
+source "$script_dir/lib/clang-format-version.sh"
 # shellcheck source=lib/ui.sh
 source "$script_dir/lib/ui.sh"
 # shellcheck source=lib/steps.sh
@@ -22,6 +24,7 @@ relwithdebinfo_build=false
 sanitize_build=false
 maintenance_build=false
 apply_fixes=false
+apply_fixes_dirty_ok=false
 format_check=false
 format_apply=false
 pgo_generate=false
@@ -49,6 +52,7 @@ for arg in "$@"; do
     --sanitize|--sanitizers) sanitize_build=true ;;
     --maintenance) maintenance_build=true ;;
     --apply-fixes) apply_fixes=true ;;
+    --apply-fixes-dirty-ok) apply_fixes_dirty_ok=true ;;
     --format-check) format_check=true ;;
     --format-apply) format_apply=true ;;
     --tests)       build_tests=true ;;
@@ -122,6 +126,16 @@ fi
 if $apply_fixes && ! $maintenance_build; then
   echo "Error: --apply-fixes is only supported with --maintenance."
   exit 1
+fi
+if $apply_fixes_dirty_ok && ! ($apply_fixes || $format_apply); then
+  echo "Error: --apply-fixes-dirty-ok only applies with --apply-fixes or --format-apply."
+  exit 1
+fi
+# Kartend-rqvp7: surface the override to the quality-lib guard, which reads
+# KARTEND_APPLY_FIXES_DIRTY_OK (so it works whether the guard runs in-process
+# or in a subshell).
+if $apply_fixes_dirty_ok; then
+  export KARTEND_APPLY_FIXES_DIRTY_OK=1
 fi
 if $format_apply && ! $maintenance_build; then
   echo "Error: --format-apply is only supported with --maintenance."
@@ -267,6 +281,11 @@ IWYU_FAILED=false
 IWYU_SUGGESTED=false
 CPPCHECK_WARNED=false
 CLANG_FORMAT_ISSUES=false
+# Kartend-gv2xq: set true when an enforcing --format-check requested the
+# pinned clang-format but no matching binary was found — turns the formerly
+# silent skip into a hard CI failure (see the fail-loud block at the end of
+# the maintenance run).
+CLANG_FORMAT_TOOL_MISSING=false
 RAW_QLOG_WARNED=false
 # Ran-vs-skipped record for the lint/static-analysis checks, printed as a summary
 # at the end of --maintenance. The do_* helpers print "skipped: ..." and still
@@ -427,12 +446,34 @@ mkdir -p "$SANDBOX_COMPDB_DIR"
 sanitize_compdb "$COMPDB_FILE" "$SANDBOX_COMPDB_DIR/compile_commands.json"
 EOF
 
+  # Kartend-rqvp7: any in-place apply path (--format-apply or --apply-fixes)
+  # rewrites tracked files. Surface the known-hazard warning in the script
+  # itself (not just the docs) and refuse to run on a dirty tree so the diff
+  # stays reviewable. Done once, up front, before either fixer runs — and as
+  # a hard gate (not run_optional) so a dirty tree aborts before any rewrite.
+  if $format_apply || $apply_fixes; then
+    warn_apply_hazards
+    if ! require_clean_tree_for_apply "$root_dir"; then
+      err_msg "Aborting before in-place fixes: working tree is dirty. Commit/stash first, or pass --apply-fixes-dirty-ok."
+      exit 1
+    fi
+  fi
+
   # clang-format operations
   if $format_apply; then
     run_optional "clang-format (apply fixes)" "$logs_dir/clang-format-apply.log" do_clang_format_apply "$root_dir/src" "$root_dir/tests"
   fi
   if $format_check || ! $format_apply; then
-    run_quality_check "clang-format check" "$logs_dir/clang-format.log" do_clang_format "$root_dir/src" "$root_dir/tests"
+    # Kartend-gv2xq: when --format-check is set (CI), a missing pinned
+    # clang-format makes do_clang_format return non-zero. run_quality_check
+    # only warns on non-zero, so capture the rc here and fail hard below so
+    # the gate can't pass while having run no formatter at all.
+    CLANG_FORMAT_TOOL_MISSING=false
+    if ! run_quality_check "clang-format check" "$logs_dir/clang-format.log" do_clang_format "$root_dir/src" "$root_dir/tests"; then
+      if $format_check; then
+        CLANG_FORMAT_TOOL_MISSING=true
+      fi
+    fi
     # Check for clang-format issues
     if [ -s "$logs_dir/clang-format.log" ]; then
       if grep -qE 'Format issue:|Found [0-9]+ files with formatting issues' "$logs_dir/clang-format.log"; then
@@ -442,7 +483,15 @@ EOF
   fi
 
   if $apply_fixes; then
-    fix_checks="readability-braces-around-statements,modernize-use-nullptr,modernize-use-override,readability-implicit-bool-conversion"
+    # Kartend-rqvp7: do_clang_tidy_apply_fixes derives its check set from
+    # .clang-tidy (--config-file) so applied fixes match the project's
+    # enabled-check policy and can't reintroduce style the config disables
+    # (the old hardcoded list applied readability-braces-around-statements
+    # and readability-implicit-bool-conversion, both OFF in .clang-tidy).
+    # This $fix_checks list survives only as the fallback do_clang_tidy_apply_fixes
+    # uses when no .clang-tidy is present; keep it free of config-disabled
+    # checks so even the fallback honors the policy.
+    fix_checks="modernize-use-nullptr,modernize-use-override"
     run_optional "clang-tidy (apply fixes)" "$logs_dir/clang-tidy-fixes.log" do_clang_tidy_apply_fixes "$COMPDB_FILE" "$root_dir/src" "$fix_checks"
     run_step "Rebuild after clang-tidy fixes" "$logs_dir/cmake_build_after_fixes.log" "$cmake_bin" --build "$build_dir" -j"$build_jobs"
   fi
@@ -583,6 +632,10 @@ EOF
   # bugprone/clang-analyzer subchecks that are verified-clean in the current
   # baseline; other tidy categories remain advisory until
   # their baselines are cleared.
+  if [ "$format_check" = true ] && [ "$CLANG_FORMAT_TOOL_MISSING" = true ]; then
+    err_msg "clang-format check failed: no clang-format-${KARTEND_CLANG_FORMAT_VERSION} found, so the format gate ran nothing. Install the pinned formatter (apt.llvm.org) or run the check through the kartend-ci container — see build/*/logs/clang-format.log and docs/dev/building.md."
+    exit 1
+  fi
   if [ "$format_check" = true ] && [ "$CLANG_FORMAT_ISSUES" = true ]; then
     err_msg "clang-format check failed: formatting drift detected. Run '.scripts/build.sh --maintenance --format-apply' locally and recommit."
     exit 1

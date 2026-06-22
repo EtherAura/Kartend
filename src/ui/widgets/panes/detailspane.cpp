@@ -146,6 +146,19 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
+  // Kartend-nk4v7: the constructor stays the orchestrator; the embedded
+  // widgets, signal wiring, and the video-debounce timer are built by three
+  // helpers in the same order the inlined blocks ran. setupWidgets() builds
+  // the video preview tile (which setupConnections / setupVideo and the final
+  // clearMetadata() depend on), so it must run first.
+  setupWidgets();
+  setupConnections();
+  setupVideo();
+
+  clearMetadata();
+}
+
+void DetailsPane::setupWidgets() {
   // Insert a preview video widget into the artwork pane, sized to match the
   // artwork display. Hidden by default; shown only when a preview video is
   // found for the current selection.
@@ -188,32 +201,22 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   // implementation kept on DetailsPane (drag flags + start positions).
   // Lock state and dock position are kept in sync by applyAppearance.
   m_resizeGrip = new DetailsPaneResizeGrip(this, this);
-  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthDragged, this, &DetailsPane::widthDragged);
-  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthCommitted, this, &DetailsPane::widthCommitted);
-  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightDragged, this, &DetailsPane::heightDragged);
-  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightCommitted, this,
-          &DetailsPane::heightCommitted);
 
   // Vertical-dock media gallery view. Lazy-builds its widgets on the first
   // setEntries() call. Forwards its public events (Edit click + overlay
   // visibility transitions) as DetailsPane signals.
   m_galleryView = new DetailsPaneGalleryView(this);
   m_galleryView->setHost(this);
-  connect(m_galleryView, &DetailsPaneGalleryView::editRequested, this,
-          &DetailsPane::editArtworkRequested);
-  connect(m_galleryView, &DetailsPaneGalleryView::overlayVisibilityChanged, this,
-          &DetailsPane::galleryOverlayVisibilityChanged);
 
   // Inline edit-metadata button (Kartend-oewu) — mirrors the gallery's
   // editRequested wiring. Icon resolves from the active theme; the .ui
   // form leaves it blank because Qt Designer can't express runtime
-  // theme lookups.
+  // theme lookups. (The click→editMetadataRequested wiring lives in
+  // setupConnections.)
   if (ui->editMetadataButton) {
     ui->editMetadataButton->setIcon(UIConstants::Icons::fromTheme(
         {UIConstants::Icons::EDIT, "edit-entry", "accessories-text-editor"}));
     ui->editMetadataButton->setText(QString());
-    connect(ui->editMetadataButton, &QToolButton::clicked, this,
-            &DetailsPane::editMetadataRequested);
   }
 
   // Artwork + video-preview helper (Kartend-5nxz). State lives on the
@@ -237,6 +240,44 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   applyContentAlignment();
   applyPreviewSize();
 
+  // Pre-warm the gallery section's lazy widget construction so the cost
+  // (~2.5s on a slow filesystem — Kartend-jxp5) lands in startup instead
+  // of the user's first-click critical path. Section is hidden until
+  // setEntries populates it; prewarming has no UI consequence beyond the
+  // up-front allocation. Safe to call after m_videoPlayback.videoPreview is constructed
+  // because ensureSection's insertion-index calculation reads it as the
+  // anchor for placing the gallery container below the video tile.
+  if (m_galleryView) {
+    m_galleryView->prewarmSection();
+  }
+}
+
+void DetailsPane::setupConnections() {
+  // Resize-grip drag/commit forwards. The grip controller owns the live
+  // drag bookkeeping; these surface its width/height drag + commit events
+  // as DetailsPane signals for DetailsPaneManager to persist.
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthDragged, this, &DetailsPane::widthDragged);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthCommitted, this, &DetailsPane::widthCommitted);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightDragged, this, &DetailsPane::heightDragged);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightCommitted, this,
+          &DetailsPane::heightCommitted);
+
+  // Gallery-view events (Edit click + overlay visibility transitions)
+  // forwarded as DetailsPane signals.
+  connect(m_galleryView, &DetailsPaneGalleryView::editRequested, this,
+          &DetailsPane::editArtworkRequested);
+  connect(m_galleryView, &DetailsPaneGalleryView::overlayVisibilityChanged, this,
+          &DetailsPane::galleryOverlayVisibilityChanged);
+
+  // Inline edit-metadata button click (Kartend-oewu) — mirrors the gallery's
+  // editRequested wiring.
+  if (ui->editMetadataButton) {
+    connect(ui->editMetadataButton, &QToolButton::clicked, this,
+            &DetailsPane::editMetadataRequested);
+  }
+}
+
+void DetailsPane::setupVideo() {
   // Debounce timer: avoid loading a video for every transient selection
   // change while the user is scrolling. Single-shot, restarted on each new
   // selection that has a video.
@@ -278,19 +319,6 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
       updateHorizontalView();
     }
   });
-
-  // Pre-warm the gallery section's lazy widget construction so the cost
-  // (~2.5s on a slow filesystem — Kartend-jxp5) lands in startup instead
-  // of the user's first-click critical path. Section is hidden until
-  // setEntries populates it; prewarming has no UI consequence beyond the
-  // up-front allocation. Safe to call after m_videoPlayback.videoPreview is constructed
-  // because ensureSection's insertion-index calculation reads it as the
-  // anchor for placing the gallery container below the video tile.
-  if (m_galleryView) {
-    m_galleryView->prewarmSection();
-  }
-
-  clearMetadata();
 }
 
 DetailsPane::~DetailsPane() {

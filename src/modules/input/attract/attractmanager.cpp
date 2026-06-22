@@ -376,6 +376,14 @@ void AttractManager::onAdvanceSelectionTick() {
   // arbitrarily deep — if one throws or tears the manager down, a bare reset
   // would be skipped, leaving the flag stuck true and permanently suppressing
   // real-input detection (Kartend-77ay).
+  //
+  // INVARIANT (Kartend-b93at): the chain requestSelectIndex → selectItemByIndex
+  // → SelectionManager::selectionChanged → the isDrivingSelection() guard in
+  // InteractionManager::connectAttractManagerSignals must run as synchronous
+  // (default Direct, same-thread) connections. If any link is switched to
+  // Qt::QueuedConnection, selectionChanged fires AFTER this scope guard has
+  // already cleared m_drivingSelection, the guard reads false, and attract mode
+  // stops itself on its first tick.
   const auto guard = qScopeGuard([this]() { m_drivingSelection = false; });
   emit requestSelectIndex(next);
 }

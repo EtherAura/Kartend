@@ -13,6 +13,7 @@
 #include "applicationcontext.h"
 #include "batchprogressview.h"
 #include "flowlayout.h"
+#include "formbuilders.h"
 #include "mediatypecheckboxbuilder.h"
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
@@ -124,6 +125,11 @@ QList<Scraper::MediaAsset> ScrapeResultDialogUnified::selectInteractiveMediaForA
 }
 
 void ScrapeResultDialogUnified::buildUnifiedPanel() {
+  // Kartend-etbol: this method used to construct the entire unified panel
+  // inline (421 lines). It is now a short assembler that stitches together
+  // one helper per UI section, adding each to the page's root layout in the
+  // original top-to-bottom order. The helpers build the exact same widget
+  // tree and member wiring as before — pure structural extraction.
   m_dlg->m_unifiedPage = new QWidget(m_dlg->m_modeStack);
   auto *root = new QVBoxLayout(m_dlg->m_unifiedPage);
   root->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
@@ -132,6 +138,36 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
                            UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   root->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
+  // ── Top: collection tree (left) + items list (right) ────────────
+  root->addWidget(buildCollectionAndItemsPanel(), 1);
+
+  // ── Middle: media types + mode toggle ───────────────────────────
+  QGroupBox *mediaTypesGroup = nullptr;
+  QWidget *modeRowContainer = nullptr;
+  buildMediaTypesGroup(mediaTypesGroup, modeRowContainer);
+  root->addWidget(mediaTypesGroup);
+  root->addWidget(modeRowContainer);
+
+  // ── Live view: currently-scraping metadata panel ────────────────
+  root->addWidget(buildLiveMetadataPanel());
+
+  // ── Live view: recent media + progress/status labels ────────────
+  QGroupBox *thumbsGroup = nullptr;
+  QWidget *currentLabel = nullptr;
+  QWidget *progressBar = nullptr;
+  QWidget *timingLabel = nullptr;
+  QWidget *countsLabel = nullptr;
+  QWidget *quotaLabel = nullptr;
+  buildProgressLabels(thumbsGroup, currentLabel, progressBar, timingLabel, countsLabel, quotaLabel);
+  root->addWidget(thumbsGroup);
+  root->addWidget(currentLabel);
+  root->addWidget(progressBar);
+  root->addWidget(timingLabel);
+  root->addWidget(countsLabel);
+  root->addWidget(quotaLabel);
+}
+
+QWidget *ScrapeResultDialogUnified::buildCollectionAndItemsPanel() {
   // ── Top: collection tree (left) + items list (right) ────────────
   auto *splitter = new QSplitter(Qt::Horizontal, m_dlg->m_unifiedPage);
   m_dlg->m_unifiedSplitterContainer = splitter; // tracked so we can hide during a run
@@ -176,8 +212,11 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   splitter->addWidget(rightContainer);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
-  root->addWidget(splitter, 1);
+  return splitter;
+}
 
+void ScrapeResultDialogUnified::buildMediaTypesGroup(QGroupBox *&mediaTypesGroup,
+                                                     QWidget *&modeRowContainer) {
   // ── Middle: media types ─────────────────────────────────────────
   // MediaTypeCheckboxBuilder owns the curated SS media-type table,
   // the 3-column grid layout, and the Select-all/none bulk-toggle
@@ -186,7 +225,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   // checked state.
   m_dlg->m_mediaTypesGroup =
       MediaTypeCheckboxBuilder::build(m_dlg->m_unifiedPage, m_dlg->m_mediaTypeChecks);
-  root->addWidget(m_dlg->m_mediaTypesGroup);
+  mediaTypesGroup = m_dlg->m_mediaTypesGroup;
 
   // ── Mode toggle ─────────────────────────────────────────────────
   // Wrap the radio row in a container widget so we can hide the whole
@@ -205,8 +244,10 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   modeRow->addWidget(m_dlg->m_modeAutoRadio);
   modeRow->addWidget(m_dlg->m_modeInteractiveRadio);
   modeRow->addStretch(1);
-  root->addWidget(m_dlg->m_modeRowContainer);
+  modeRowContainer = m_dlg->m_modeRowContainer;
+}
 
+QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
   // ── Live view: currently-scraping metadata panel ────────────────
   // 10-column QGridLayout: FIVE (label, value) pairs per row.
   // Cross-row alignment is the whole point — every label sits in
@@ -348,23 +389,13 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
                                 UIConstants::ScrapeResultDialog::POST_SECTION_V_MARGIN);
   postOuter->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
-  // Helper that builds a fixed-size "chip" container holding a
-  // right-aligned label and a read-only QLineEdit. Returns the
-  // wrapper widget that the FlowLayout treats as a single item.
+  // Builds a fixed-size "chip" container holding a right-aligned label and
+  // a read-only QLineEdit (FormBuilders::makeChipPair, Kartend-t06mx) so the
+  // typed-fields flow shares one chip-assembly source with the custom-fields
+  // flow below. Returns the wrapper widget the FlowLayout treats as a single
+  // item.
   auto makeChipPair = [&](const QString &label, QLineEdit *edit) -> QWidget * {
-    auto *w = new QWidget(postDescFrame);
-    auto *h = new QHBoxLayout(w);
-    h->setContentsMargins(0, 0, 0, 0);
-    h->setSpacing(4);
-    auto *lbl = new QLabel(label, w);
-    lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    lbl->setFixedWidth(kLabelW);
-    edit->setParent(w);
-    edit->setFixedWidth(kValueChipW);
-    h->addWidget(lbl);
-    h->addWidget(edit);
-    w->setFixedSize(kLabelW + 4 + kValueChipW, edit->sizeHint().height() + 2);
-    return w;
+    return FormBuilders::makeChipPair(postDescFrame, label, edit, kLabelW, kValueChipW);
   };
 
   // ── Combined chip flow ────────────────────────────────────────
@@ -373,24 +404,28 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   // means custom-field chips fill in directly after Tags on the same
   // row (instead of always starting a new row), so the bottom row
   // never has just one orphaned chip when there's horizontal room.
-  m_dlg->m_liveMetadataPublisher = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataPublisher->setReadOnly(true);
-  m_dlg->m_liveMetadataDeveloper = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataDeveloper->setReadOnly(true);
-  m_dlg->m_liveMetadataReleased = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataReleased->setReadOnly(true);
-  m_dlg->m_liveMetadataSource = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataSource->setReadOnly(true);
-  m_dlg->m_liveMetadataGenre = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataGenre->setReadOnly(true);
-  m_dlg->m_liveMetadataPlayers = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataPlayers->setReadOnly(true);
-  m_dlg->m_liveMetadataContentRating = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataContentRating->setReadOnly(true);
-  m_dlg->m_liveMetadataRuntime = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataRuntime->setReadOnly(true);
-  m_dlg->m_liveMetadataTags = new QLineEdit(postDescFrame);
-  m_dlg->m_liveMetadataTags->setReadOnly(true);
+  //
+  // Kartend-etbol: the nine typed fields used to be nine hand-repeated
+  // "new QLineEdit + setReadOnly + makeChipPair" blocks. They now live in
+  // one {label, &memberPtr} table walked by a single loop, so a styling /
+  // read-only / chip-layout tweak lands once. Order matches the original
+  // (Publisher … Tags) so the rendered chip sequence is unchanged. The
+  // QLineEdit/chip construction inside the loop body is identical to the
+  // per-field code it replaces.
+  const struct {
+    QString label;
+    QLineEdit **member;
+  } kTypedFields[] = {
+      {tr("Publisher:"), &m_dlg->m_liveMetadataPublisher},
+      {tr("Developer:"), &m_dlg->m_liveMetadataDeveloper},
+      {tr("Released:"), &m_dlg->m_liveMetadataReleased},
+      {tr("Source:"), &m_dlg->m_liveMetadataSource},
+      {tr("Genre:"), &m_dlg->m_liveMetadataGenre},
+      {tr("Players:"), &m_dlg->m_liveMetadataPlayers},
+      {tr("Rating:"), &m_dlg->m_liveMetadataContentRating},
+      {tr("Runtime:"), &m_dlg->m_liveMetadataRuntime},
+      {tr("Tags:"), &m_dlg->m_liveMetadataTags},
+  };
 
   m_dlg->m_liveExtrasContainer = new QWidget(postDescFrame);
   // FlowLayout computes height-for-width so the container grows /
@@ -400,15 +435,12 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   auto *extrasLayout = new FlowLayout(m_dlg->m_liveExtrasContainer, /*margin=*/0,
                                       /*hSp=*/8, /*vSp=*/6);
   m_dlg->m_liveExtrasContainer->setLayout(extrasLayout);
-  extrasLayout->addWidget(makeChipPair(tr("Publisher:"), m_dlg->m_liveMetadataPublisher));
-  extrasLayout->addWidget(makeChipPair(tr("Developer:"), m_dlg->m_liveMetadataDeveloper));
-  extrasLayout->addWidget(makeChipPair(tr("Released:"), m_dlg->m_liveMetadataReleased));
-  extrasLayout->addWidget(makeChipPair(tr("Source:"), m_dlg->m_liveMetadataSource));
-  extrasLayout->addWidget(makeChipPair(tr("Genre:"), m_dlg->m_liveMetadataGenre));
-  extrasLayout->addWidget(makeChipPair(tr("Players:"), m_dlg->m_liveMetadataPlayers));
-  extrasLayout->addWidget(makeChipPair(tr("Rating:"), m_dlg->m_liveMetadataContentRating));
-  extrasLayout->addWidget(makeChipPair(tr("Runtime:"), m_dlg->m_liveMetadataRuntime));
-  extrasLayout->addWidget(makeChipPair(tr("Tags:"), m_dlg->m_liveMetadataTags));
+  for (const auto &field : kTypedFields) {
+    auto *edit = new QLineEdit(postDescFrame);
+    edit->setReadOnly(true);
+    *field.member = edit;
+    extrasLayout->addWidget(makeChipPair(field.label, edit));
+  }
   // populateCustomFields appends custom-key chips AFTER these typed
   // chips. m_dlg->m_typedChipCount marks the boundary so re-renders only
   // tear down the custom chips, leaving typed chips in place.
@@ -468,8 +500,12 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   metaOuter->addWidget(metaGridHost);
 
   m_dlg->m_liveMetadataGroup->hide();
-  root->addWidget(m_dlg->m_liveMetadataGroup);
+  return m_dlg->m_liveMetadataGroup;
+}
 
+void ScrapeResultDialogUnified::buildProgressLabels(QGroupBox *&thumbsGroup, QWidget *&currentLabel,
+                                                    QWidget *&progressBar, QWidget *&timingLabel,
+                                                    QWidget *&countsLabel, QWidget *&quotaLabel) {
   // ── Live view: recent media thumbnails ──────────────────────────
   // Compact horizontal filmstrip — auto-scrolls to keep the newest
   // thumbnail visible, no manual scrollbars. Items are tightly
@@ -505,25 +541,25 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_liveThumbsStrip->setFrameShape(QFrame::NoFrame);
   thumbsLayout->addWidget(m_dlg->m_liveThumbsStrip);
   m_dlg->m_liveThumbsGroup->hide();
-  root->addWidget(m_dlg->m_liveThumbsGroup);
+  thumbsGroup = m_dlg->m_liveThumbsGroup;
 
   // ── Progress + status (visible during scrape) ───────────────────
   m_dlg->m_unifiedCurrentLabel = new QLabel(m_dlg->m_unifiedPage);
   m_dlg->m_unifiedCurrentLabel->setWordWrap(true);
   m_dlg->m_unifiedCurrentLabel->hide();
-  root->addWidget(m_dlg->m_unifiedCurrentLabel);
+  currentLabel = m_dlg->m_unifiedCurrentLabel;
 
   m_dlg->m_unifiedProgressBar = new QProgressBar(m_dlg->m_unifiedPage);
   m_dlg->m_unifiedProgressBar->setRange(0, 100);
   m_dlg->m_unifiedProgressBar->setValue(0);
   m_dlg->m_unifiedProgressBar->setTextVisible(true);
   m_dlg->m_unifiedProgressBar->hide();
-  root->addWidget(m_dlg->m_unifiedProgressBar);
+  progressBar = m_dlg->m_unifiedProgressBar;
 
   m_dlg->m_unifiedTimingLabel = new QLabel(m_dlg->m_unifiedPage);
   m_dlg->m_unifiedTimingLabel->setWordWrap(true);
   m_dlg->m_unifiedTimingLabel->hide();
-  root->addWidget(m_dlg->m_unifiedTimingLabel);
+  timingLabel = m_dlg->m_unifiedTimingLabel;
 
   m_dlg->m_unifiedCountsLabel = new QLabel(m_dlg->m_unifiedPage);
   m_dlg->m_unifiedCountsLabel->hide();
@@ -534,7 +570,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
                                                        Qt::LinksAccessibleByKeyboard);
   connect(m_dlg->m_unifiedCountsLabel, &QLabel::linkActivated, this,
           [this](const QString &) { showScrapeErrorDetails(); });
-  root->addWidget(m_dlg->m_unifiedCountsLabel);
+  countsLabel = m_dlg->m_unifiedCountsLabel;
 
   // ScreenScraper request-quota readout. Hidden until a live scrape
   // delivers a valid quota via the service's quotaUpdated signal
@@ -542,7 +578,7 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   m_dlg->m_unifiedQuotaLabel = new QLabel(m_dlg->m_unifiedPage);
   m_dlg->m_unifiedQuotaLabel->setWordWrap(true);
   m_dlg->m_unifiedQuotaLabel->hide();
-  root->addWidget(m_dlg->m_unifiedQuotaLabel);
+  quotaLabel = m_dlg->m_unifiedQuotaLabel;
 }
 
 void ScrapeResultDialogUnified::applyScrapedItemToLive(const Scraper::ScrapedItem &item) {
@@ -681,7 +717,7 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
     if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
     // Start the 1-second live tick (the scrapeStarted handler missed
     // this run because we connected after it already fired).
-    m_dlg->m_rateSamples.clear();
+    m_rateSamples.clear();
     if (!m_dlg->m_liveTickTimerInited) {
       m_dlg->m_liveTickTimer.setInterval(1000);
       connect(&m_dlg->m_liveTickTimer, &QTimer::timeout, this,

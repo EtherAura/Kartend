@@ -158,6 +158,14 @@ private:
   };
 
   [[nodiscard]] QList<CardLayout> computeVisibleLayout() const;
+  // Center-card overlap reorder (Kartend-c91pg). When the glide has carried
+  // the carousel more than halfway toward a neighbour (|frac| > 0.5), that
+  // neighbour is geometrically closer to the stage center than the nominal
+  // center card, so it must paint on top. Reorders @p layouts in place so the
+  // center card sits second-to-last and the closer neighbour last, preserving
+  // the exact z-order the previous erase-and-re-find block produced — without
+  // the iterator-fragile erase/std::find_if dance.
+  void ensureCenterCardOnTop(QList<CardLayout> &layouts, int center, qreal frac) const;
   [[nodiscard]] int hitTestCard(const QPoint &pt) const;
   [[nodiscard]] QPixmap pixmapForIndex(int idx);
   [[nodiscard]] QPixmap buildPlaceholderPixmap(int width, int height) const;
@@ -175,6 +183,30 @@ private:
                            const QSize &targetSize);
   void cancelPendingScales();
   void cancelPendingLoads();
+
+  // paintEvent render helpers (Kartend-c91pg). Each draws one concern for a
+  // single card; paintEvent stays the orchestrator (backdrop, empty state,
+  // selection border, title strip, gallery). The painter arrives with the
+  // per-card opacity + perspective transform already applied and is restored
+  // by the caller, so these helpers do not touch the transform stack except
+  // where noted (renderCardReflection save()/restore()s its own flip).
+  //
+  // renderCardPixmap resolves the scaled pixmap for @p c from source @p pm
+  // (cache hit -> Smooth entry; miss -> @p pm scaled at draw time with
+  // FastTransformation while a worker fills the cache), draws the
+  // (corner-radius-clipped) card, and writes the resolved pixmap + its
+  // draw-size back out via @p scaled / @p scaledDrawSize so
+  // renderCardReflection reuses them. @p useFastTransform returns whether the
+  // miss path disabled SmoothPixmapTransform on @p painter.
+  void renderCardPixmap(QPainter &painter, const CardLayout &c, const QPixmap &pm, QPixmap &scaled,
+                        QSize &scaledDrawSize, bool &useFastTransform);
+  // Draws the flipped, faded reflection beneath the card using the already-
+  // resolved @p scaled pixmap, then the bottom-fade gradient toward @p bg.
+  void renderCardReflection(QPainter &painter, const CardLayout &c, const QPixmap &scaled,
+                            qreal opacity, const QColor &bg);
+  // Draws the centered card's elided title strip beneath the carousel,
+  // above the optional gallery thumbnail row.
+  void renderTitleStrip(QPainter &painter);
   void pruneScaledPixmapCache();
   void prunePixmapCache();
   void updateVideoPreviewGeometry();

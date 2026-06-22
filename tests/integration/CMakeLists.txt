@@ -146,13 +146,12 @@ set(INTEGRATION_TEST_CLASSES
   TestDetailPageManager
   TestKartManager
   TestScanService
+  # TestLaunchFlow's harness writes the per-item launcher script in a
+  # platform-appropriate form: a #!/bin/sh script on POSIX, a .cmd batch on
+  # Windows (Kartend-mhgzq). Registered on all platforms; the Windows leg
+  # exercises QProcess .cmd handling + LaunchManager launch semantics.
+  TestLaunchFlow
 )
-if(NOT WIN32)
-  # TestLaunchFlow's harness launches #!/bin/sh scripts as the per-item
-  # launcher — on Windows the child never starts and every tracked-session
-  # assertion times out. Porting to .cmd launchers is Kartend-mhgzq.
-  list(APPEND INTEGRATION_TEST_CLASSES TestLaunchFlow)
-endif()
 foreach(_integration_class IN LISTS INTEGRATION_TEST_CLASSES)
   add_test(NAME Integration.${_integration_class}
            COMMAND test_integration ${_integration_class})

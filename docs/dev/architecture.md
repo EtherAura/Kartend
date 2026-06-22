@@ -383,6 +383,55 @@ manager entirely (see settingsmanager.cpp:285's provenance comment).
 When you need a destruction-phase guard in new code, add a shutdown
 flag — don't reach for `parent()`.
 
+**Two scopes — pick deliberately (Kartend-m15wq).** The shutdown flags
+above come in two distinct *scopes* that become true at *different times*
+during teardown. Choosing the wrong one for a new slot reads a stale
+"safe" answer and touches a half-destroyed object — exactly the
+shutdown-only use-after-free class that is hard to reproduce. Match the
+scope to the question you are actually asking:
+
+- **Manager-local — "is *this specific manager* being destroyed?"**
+  Canonical shape: a per-class `bool m_destroying` set to `true` as the
+  *first* statement of that manager's destructor (see
+  `ScrollManager::~ScrollManager`, `InteractionManager::~InteractionManager`).
+  Flips early, per manager, in member-destruction order. Use it for slots
+  and callbacks that can fire *into one manager* while that manager (or its
+  owned sub-objects) is tearing down — e.g.
+  `InteractionManager::eventFilter` short-circuiting on `m_destroying`, or
+  `SelectionDisplayManager::updateSelectionForIndex` consulting its owner's
+  destruction state.
+- **App-global — "is the *whole application* shutting down?"**
+  Canonical shape: the `appNotShuttingDown()` / `m_isShuttingDown()`
+  predicate threaded through the setup struct (a `std::function<bool()>`
+  reading the app-level shutdown flag), backstopped by
+  `QApplication::closingDown()`. See
+  `SelectionRestoreCoordinator::validateSelectionRestoreContext`
+  (`selectionrestoremanager.cpp`), which gates deferred restore timers on
+  both. Flips once, late, for the entire process. Use it for deferred work
+  (timers, queued lambdas) that should abandon during application quit
+  regardless of any single manager's destruction progress.
+
+These do **not** flip together: a manager can be mid-destruction
+(`m_destroying == true`) while the app is *not* yet shutting down (e.g. a
+live theme reload or layout swap), and the app can be shutting down before
+a given manager's destructor has run. A guard chosen for the wrong scope
+is silently wrong only at teardown.
+
+**The `m_destroyingProvider` callback (manager-local, indirected).**
+`SelectionDisplayManager` is owned by `ScrollManager` but lives in a
+separate translation unit and must not cyclically `#include` it, so it
+reads its owner's manager-local `m_destroying` through a
+`std::function<bool()>` provider wired in
+`ScrollManager::setupReferences`
+(`m_selectionDisplay->setDestroyingProvider([this] { return m_destroying; })`,
+scrollmanagersetup.cpp). This is the *same* manager-local scope as a direct
+`m_destroying` read — the callback only exists to cross the TU boundary
+without exposing `ScrollManager`'s private flag as public API. Converging
+it onto a direct accessor would require adding a public destruction accessor
+to `ScrollManager` and is **not** a behavior-neutral mechanical change, so
+the callback indirection is retained intentionally (Kartend-m15wq). Treat
+`m_destroyingProvider()` as the manager-local predicate, not a fourth idiom.
+
 **Where `parent()` IS still load-bearing.** Two narrower patterns
 survive and are legitimate:
 

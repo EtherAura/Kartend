@@ -23,6 +23,18 @@ void load(QSettings &settings, InputSettings &opts) {
       settings.value(keys::kListClickHoldRepeatIntervalMs, 80).toInt();
   opts.mouseWheelRows = settings.value(keys::kMouseWheelRows, 1).toInt();
   opts.scrollAnimationDurationMs = settings.value(keys::kScrollAnimationDurationMs, 1500).toInt();
+  // Clamp timing values loaded from a hand-edited / migrated INI so an absurd
+  // or non-positive value can't reach the input/animation pipeline (e.g. a 0ms
+  // repeat interval busy-loops the navigation timer). GeneralSettings has no
+  // validateAllCollections pass, so this is the load-boundary guard (Kartend-ropjq).
+  opts.keyboardRepeatIntervalMs = qBound(1, opts.keyboardRepeatIntervalMs, 10000);
+  opts.keyboardRepeatDelayMs = qBound(0, opts.keyboardRepeatDelayMs, 10000);
+  opts.clickHoldDelayMs = qBound(0, opts.clickHoldDelayMs, 10000);
+  opts.clickHoldRepeatIntervalMs = qBound(1, opts.clickHoldRepeatIntervalMs, 10000);
+  opts.listKeyboardRepeatIntervalMs = qBound(1, opts.listKeyboardRepeatIntervalMs, 10000);
+  opts.listClickHoldRepeatIntervalMs = qBound(1, opts.listClickHoldRepeatIntervalMs, 10000);
+  opts.mouseWheelRows = qBound(1, opts.mouseWheelRows, 100);
+  opts.scrollAnimationDurationMs = qBound(0, opts.scrollAnimationDurationMs, 600000);
   opts.scrollVelocityMultiplier =
       settings
           .value(keys::kScrollVelocityMultiplier, UIConstants::Scroll::DEFAULT_VELOCITY_MULTIPLIER)

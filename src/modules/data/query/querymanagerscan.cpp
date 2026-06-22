@@ -42,6 +42,19 @@ QStringList QueryManager::loadOrScanCollection(int collectionIndex,
     if (!filePaths.isEmpty() || scanCompleted) {
       m_scanService.saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection,
                                         dirSignature);
+      // Kartend-7r821: this inline scan-apply mutated THIS worker's own items
+      // table via ScanService, but unlike a background rescan on m_scanWorker it
+      // never routes through collectionScanCompleted -> invalidateQueryCaches()
+      // (saveItemsToDatabase emits no such signal, and a single QueryManager has
+      // no self-connect). The sorted-items cache validity hash keys on
+      // (collection uuids, filter, sortMode) — NOT item contents — so without
+      // this drop a subsequent fetchItemCount/fetchItemsRange on the same worker
+      // would HIT the pre-rescan sorted order (missing added items, blank tiles
+      // for removed ones). We own both sides here, so call the existing
+      // invalidation directly rather than introducing a ScanService back-pointer.
+      // Guarded by the scan branch above, so unchanged collections (the else
+      // cached-load path) still hit the sorted cache.
+      invalidateQueryCaches();
     }
   } else {
     const QString uuid =

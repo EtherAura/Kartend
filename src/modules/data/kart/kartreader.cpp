@@ -167,12 +167,33 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
 
   QSet<QString> dirsToSync;
 
+  // Aggregate decompression-bomb guards (Kartend-4e8ku). The per-entry checks
+  // below bound each entry individually, but a crafted bundle can still exhaust
+  // inodes (millions of tiny entries) or disk (many near-max entries) in
+  // aggregate. Track entry count and cumulative written bytes and abort cleanly
+  // once either crosses its ceiling, mirroring archiverepack's kMaxEntries and
+  // launchmanagerarchive's cumulative MAX_EXTRACTION_BYTES.
+  quint64 entryCount = 0;
+  quint64 totalExtractedBytes = 0;
+
   while (!f.atEnd()) {
     if (m_cancel.loadRelaxed()) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
                                              "Kart extraction cancelled", "KartReader::extractTo");
     }
 
+    if (++entryCount > KartFormat::MAX_ENTRY_COUNT) {
+      return readError("Kart bundle has too many entries",
+                       QString("count=%1 max=%2").arg(entryCount).arg(KartFormat::MAX_ENTRY_COUNT));
+    }
+
+    // The per-entry flags byte (KartFormat::EntryFlag) is read so the entry
+    // header advances correctly and the value round-trips into ExtractedFile
+    // for forward-compatibility, but it is intentionally NOT applied to the
+    // extracted file's permissions (Kartend-gnl9q). A .kart bundle is untrusted
+    // content; honoring a stored exec bit would let a crafted bundle mark
+    // extracted payloads executable. Extracted files therefore receive
+    // umask-default permissions by design.
     auto flagsRes = readU8(f);
     if (flagsRes.isError()) return flagsRes.error();
     auto compRes = readU8(f);
@@ -296,6 +317,20 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
     }
     dirsToSync.insert(fi.absolutePath());
 
+    // Accumulate written bytes and abort if the whole-archive total crosses the
+    // generous sanity backstop (Kartend-4e8ku). Checked after the write so the
+    // ceiling reflects bytes actually committed to disk.
+    totalExtractedBytes += static_cast<quint64>(raw.value().size());
+    if (totalExtractedBytes > KartFormat::MAX_TOTAL_EXTRACTED_BYTES) {
+      return readError("Kart bundle exceeds the total extraction size limit",
+                       QString("total=%1 max=%2")
+                           .arg(totalExtractedBytes)
+                           .arg(KartFormat::MAX_TOTAL_EXTRACTED_BYTES));
+    }
+
+    // ExtractedFile::flags carries the stored per-entry flags byte for
+    // forward-compat only; it is deliberately not honored for file permissions
+    // (see the flags read site above, Kartend-gnl9q).
     ExtractedFile ef;
     ef.relPath = relPath;
     ef.absPath = cleaned;

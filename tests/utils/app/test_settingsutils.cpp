@@ -13,6 +13,7 @@
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTextStream>
 
 class TestSettingsUtils : public QObject {
   Q_OBJECT
@@ -21,6 +22,8 @@ private slots:
   void exportConfig_writesCompleteLoadableCopy();
   void exportConfig_replacesExistingDestination();
   void importConfig_installsSourceAsLiveConfig();
+  void roundTrip_adversarialValuesSurviveWriteThenRead();
+  void roundTrip_legacyPlainValueStillReadsUnescaped();
 
 private:
   void seedLiveConfig(const QString &key, const QString &value);
@@ -98,6 +101,72 @@ void TestSettingsUtils::importConfig_installsSourceAsLiveConfig() {
 
   QSettings live(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   QCOMPARE(live.value(QStringLiteral("General/imported")).toString(), QStringLiteral("yes"));
+}
+
+// Kartend-n777n: the custom "conf" writer/reader gained percent-escaping so
+// arbitrary user strings survive a write/read round-trip. Drive a real
+// QSettings (so the registered format's writeIniFile/readIniFile run) over the
+// adversarial set the issue calls out: trailing space, a fully bracket-wrapped
+// value, leading whitespace, an "--opt=val"-style embedded '=', a ';'-prefixed
+// value, and an embedded newline. Each must read back byte-identical.
+void TestSettingsUtils::roundTrip_adversarialValuesSurviveWriteThenRead() {
+  struct Case {
+    const char *key;
+    QString value;
+  };
+  const QList<Case> cases = {
+      {"General/trailingSpace", QStringLiteral("value ")},
+      {"General/bracketWrapped", QStringLiteral("[x]")},
+      {"General/leadingWhitespace", QStringLiteral(" leading")},
+      {"General/embeddedEquals", QStringLiteral("--opt=val")},
+      {"General/commentPrefix", QStringLiteral(";x")},
+      {"General/hashPrefix", QStringLiteral("#x")},
+      {"General/embeddedNewline", QStringLiteral("line1\nline2")},
+      // A plain neighbour written in the same file must be unaffected by the
+      // adversarial entries around it (guards against cascade corruption).
+      {"General/plainNeighbour", QStringLiteral("ordinary")},
+  };
+
+  const QString path = m_scratch.filePath(QStringLiteral("roundtrip.cfg"));
+  QFile::remove(path);
+  {
+    QSettings w(path, SettingsUtils::getFormat());
+    for (const Case &c : cases) {
+      w.setValue(QString::fromLatin1(c.key), c.value);
+    }
+    w.sync();
+    QCOMPARE(w.status(), QSettings::NoError);
+  }
+
+  QSettings r(path, SettingsUtils::getFormat());
+  QCOMPARE(r.status(), QSettings::NoError);
+  for (const Case &c : cases) {
+    QCOMPARE(r.value(QString::fromLatin1(c.key)).toString(), c.value);
+  }
+}
+
+// Back-compat: a config file written by an older build (no escaping at all,
+// plain "key=value" lines) must keep reading exactly as it did before. The
+// reader trims surrounding whitespace on plain values, matching the historical
+// behavior — only escaped values bypass the trim.
+void TestSettingsUtils::roundTrip_legacyPlainValueStillReadsUnescaped() {
+  const QString path = m_scratch.filePath(QStringLiteral("legacy-plain.cfg"));
+  QFile::remove(path);
+  {
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    QTextStream out(&f);
+    out << "[General]\n";
+    out << "exampleKey=exampleValue\n";
+    out << "spacedValue=  padded  \n"; // legacy reader trimmed these
+  }
+
+  QSettings r(path, SettingsUtils::getFormat());
+  QCOMPARE(r.status(), QSettings::NoError);
+  QCOMPARE(r.value(QStringLiteral("General/exampleKey")).toString(),
+           QStringLiteral("exampleValue"));
+  // Legacy plain value: surrounding whitespace stripped, exactly as before.
+  QCOMPARE(r.value(QStringLiteral("General/spacedValue")).toString(), QStringLiteral("padded"));
 }
 
 QTEST_MAIN(TestSettingsUtils)

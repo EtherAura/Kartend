@@ -125,6 +125,8 @@ private slots:
   void classifyMergeNonMergedDedupsInheritedRoms();
   void classifyMergeCyclicCloneofTerminates();
   void classifyMergeNonMergedMultiFolderSetSelfContains();
+  // content-collision crediting (Kartend-k8a3y)
+  void classifyContentCollisionCreditsBothRecords();
 
   // 1G1R / region collapse (Kartend-bmj1ko)
   void region_baseNameRegionAndRank();
@@ -449,6 +451,54 @@ void TestDatAuditRunner::classifyMergeNonMergedMultiFolderSetSelfContains() {
     QVERIFY2(!(r.status == Status::Missing && r.gameName == QStringLiteral("Clone")),
              "an inherited rom present in ANY of the set's folders must satisfy it");
   }
+}
+
+void TestDatAuditRunner::classifyContentCollisionCreditsBothRecords() {
+  // Kartend-k8a3y: two catalogue records can carry identical hashes — e.g. a
+  // non-merged clone re-lists its parent's shared rom (the MAME parser keeps
+  // every <rom>). matchByHash is first-seen-wins per content, so an on-disk file
+  // resolves only to the FIRST record's index; the second (content-equal) record
+  // used to surface as a spurious Missing even though its bytes are present.
+  Catalogue c;
+  const int src = c.addSource(QStringLiteral("TestDat"));
+  const QString crc = QStringLiteral("deadbeef");
+  const QString md5 = QStringLiteral("11111111111111111111111111111111");
+  const QString sha1 = QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  DatRecord parent =
+      makeRecord(QStringLiteral("Parent"), QStringLiteral("shared.bin"), crc, md5, sha1);
+  parent.setId = QStringLiteral("parent");
+  c.addRecord(parent, src);
+  DatRecord clone = // re-lists the SAME rom + identical content
+      makeRecord(QStringLiteral("Clone"), QStringLiteral("shared.bin"), crc, md5, sha1);
+  clone.setId = QStringLiteral("clone");
+  clone.cloneOf = QStringLiteral("parent");
+  c.addRecord(clone, src);
+
+  // One physical file holds that shared content.
+  const QList<ScannedFile> files{makeFile(QStringLiteral("/roms/shared.bin"), crc, md5, sha1)};
+  // Split mode isolates the plain per-record Missing loop (no NonMerged
+  // folder-scoped expansion, which already credited by canonical content index).
+  const AuditOutput out =
+      DatAudit::classify(c, files, {}, /*onePerGame=*/false, DatAudit::MergeMode::Split);
+
+  int have = 0;
+  int missing = 0;
+  for (const AuditRow &r : out.rows) {
+    if (r.status == Status::Have) {
+      ++have;
+    }
+    if (r.status == Status::Missing) {
+      ++missing;
+    }
+  }
+  QCOMPARE(have, 1);
+  QCOMPARE(missing, 0); // content-equal record credited, not spuriously Missing
+
+  // Per-source completeness credits BOTH records by content (was 1/2 present).
+  QCOMPARE(out.summary.perSource.size(), 1);
+  QCOMPARE(out.summary.perSource.at(0).total, 2);
+  QCOMPARE(out.summary.perSource.at(0).present, 2);
+  QCOMPARE(out.summary.perSource.at(0).missing, 0);
 }
 
 void TestDatAuditRunner::catalogueMatchesByHashPriority() {

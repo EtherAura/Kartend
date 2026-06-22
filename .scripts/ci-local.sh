@@ -254,6 +254,8 @@ case "$ARG" in
     info "running kartend-ci maintenance-check (clang-tidy + format + IWYU + cppcheck)"
     info "this matches the CI maintenance-check job exactly — same image, same Qt, same clang version"
     exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+      # clang-format pin (19) is owned by .scripts/lib/clang-format-version.sh;
+      # CI verifies this literal stays in sync (Kartend-gv2xq).
       ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
       cd /src
       rm -rf build/ninja-maintenance

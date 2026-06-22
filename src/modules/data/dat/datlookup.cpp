@@ -6,6 +6,7 @@
 #include <optional>
 #include <QFile>
 #include <QFileInfo>
+#include <QStringDecoder>
 #include <QStringView>
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
@@ -19,12 +20,65 @@ namespace DatLookup {
 
 namespace {
 
+// Defensive ingest bounds for untrusted DAT input (Kartend-4bouw). DATs arrive
+// from both the network download path and arbitrary user-selected files, so a
+// hostile or corrupt file must not be able to OOM the process or pollute the
+// cache with absurd field values.
+//
+// kMaxDatBytes caps a full-file read: MAME's listxml output tops out around
+// ~150MB, so 512MB leaves generous margin above any legitimate catalogue while
+// still rejecting a multi-gigabyte file mislabelled `.dat`.
+constexpr qint64 kMaxDatBytes = 512LL * 1024 * 1024;
+// kMaxNameLen bounds a parsed game/rom name before it reaches SQLite. Real
+// names are well under a few hundred chars; 4096 rejects megabyte-scale name
+// blobs without clipping any genuine entry.
+constexpr int kMaxNameLen = 4096;
+// kMaxRomSize bounds a parsed `size` field. 1TiB is far above any real ROM /
+// disc image while rejecting nonsensical (overflowed / garbage) values.
+constexpr qint64 kMaxRomSize = 1LL << 40;
+
+/// Decode raw DAT bytes to a QString with a UTF-8-then-Latin-1 fallback
+/// (Kartend-a3s01). clrmamepro DATs (notably TOSEC and older European
+/// catalogues) are frequently Latin-1 / Windows-1252 with no encoding
+/// declaration; forcing them through UTF-8 turns every non-ASCII byte into
+/// U+FFFD and garbles the canonical name. Latin-1 never fails (every byte maps
+/// to a code point) and is the correct interpretation for those catalogues;
+/// valid UTF-8 still decodes identically via the first attempt. Used by the
+/// clrmamepro text/tokeniser path only — the XML path lets QXmlStreamReader
+/// honour the document's encoding declaration.
+QString decodeDatText(const QByteArray &bytes) {
+  QStringDecoder utf8(QStringDecoder::Utf8);
+  QString s = utf8.decode(bytes);
+  if (utf8.hasError()) {
+    return QString::fromLatin1(bytes);
+  }
+  return s;
+}
+
 /// Lowercase + strip surrounding whitespace, leaving a clean hex
 /// digest ready for hash-map lookup. Defensive about input source —
 /// some DAT producers emit upper-case hashes, some have stray
 /// whitespace inside attribute values.
 QString normaliseHex(QStringView raw) {
-  return raw.trimmed().toString().toLower();
+  const QString s = raw.trimmed().toString().toLower();
+  if (s.isEmpty()) {
+    return QString();
+  }
+  // Reject anything that isn't a valid hex string of an expected hash length
+  // (CRC32=8, MD5=32, SHA1=40). A malformed or wrong-length value (a truncated
+  // field, or a non-hex sentinel) would otherwise become a bogus index key and
+  // mis-identify files (Kartend-23o5e).
+  if (s.size() != 8 && s.size() != 32 && s.size() != 40) {
+    return QString();
+  }
+  for (const QChar c : s) {
+    const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9')) ||
+                     (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
+    if (!hex) {
+      return QString();
+    }
+  }
+  return s;
 }
 
 /// True when a game/machine/rom carries the `mia="yes"` flag (Kartend-34lab).
@@ -58,11 +112,20 @@ std::optional<DatRecord> readRomElement(const QXmlStreamAttributes &attrs, const
   // the individual <rom>; either marks this entry MIA.
   r.mia = gameMia || miaFromAttrs(attrs);
   r.romName = attrs.value(QLatin1String("name")).toString();
+  // Reject absurd name lengths before they reach the SQLite insert (Kartend-4bouw):
+  // a megabyte-scale name blob in a hostile/corrupt DAT would bloat the cache.
+  if (r.romName.size() > kMaxNameLen || gameName.size() > kMaxNameLen) {
+    return std::nullopt;
+  }
   const QStringView sizeStr = attrs.value(QLatin1String("size"));
   if (!sizeStr.isEmpty()) {
     bool ok = false;
     const qint64 sz = sizeStr.toString().toLongLong(&ok);
-    if (ok) r.size = sz;
+    // Reject negative and absurdly large sizes (Kartend-4bouw): a corrupt DAT
+    // can carry a nonsensical or overflowed `size` that would corrupt
+    // downstream lookups. Out-of-range leaves r.size at the -1 "undeclared"
+    // sentinel.
+    if (ok && sz >= 0 && sz <= kMaxRomSize) r.size = sz;
   }
   r.crc = normaliseHex(attrs.value(QLatin1String("crc")));
   r.md5 = normaliseHex(attrs.value(QLatin1String("md5")));
@@ -184,7 +247,8 @@ std::optional<DatRecord> cmpParseRom(const QList<CmpToken> &toks, int &i) {
       else if (key == QLatin1String("size")) {
         bool ok = false;
         const qint64 sz = val.toLongLong(&ok);
-        if (ok) r.size = sz;
+        // Reject negative / absurd sizes, matching readRomElement (Kartend-4bouw).
+        if (ok && sz >= 0 && sz <= kMaxRomSize) r.size = sz;
       } else if (key == QLatin1String("crc"))
         r.crc = normaliseHex(val);
       else if (key == QLatin1String("md5"))
@@ -205,6 +269,8 @@ std::optional<DatRecord> cmpParseRom(const QList<CmpToken> &toks, int &i) {
   }
   if (i < n) ++i; // consume the rom block's ')'
   if (status == QLatin1String("nodump")) return std::nullopt;
+  // Reject absurd rom-name lengths before SQLite insert (Kartend-4bouw).
+  if (r.romName.size() > kMaxNameLen) return std::nullopt;
   if (r.crc.isEmpty() && r.md5.isEmpty() && r.sha1.isEmpty()) return std::nullopt;
   return r;
 }
@@ -252,6 +318,11 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
     }
   }
   if (i < n) ++i; // consume the game block's ')'
+  // Reject an absurd game-name length before emitting any of its roms
+  // (Kartend-4bouw) — the name would otherwise reach every record's SQLite insert.
+  if (gameName.size() > kMaxNameLen) {
+    return;
+  }
   for (auto &r : roms) {
     r.gameName = gameName;
     r.cloneOf = cloneOf;
@@ -265,7 +336,7 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
 /// parse as XML: the first word must be a known clrmamepro block keyword
 /// immediately followed by `(`.
 bool looksLikeClrMamePro(const QByteArray &bytes) {
-  const QString s = QString::fromUtf8(bytes);
+  const QString s = decodeDatText(bytes);
   const int n = s.size();
   int i = 0;
   while (i < n && s.at(i).isSpace()) ++i;
@@ -305,13 +376,17 @@ Dialect detectDialect(const QByteArray &xml) {
 }
 
 DatHeader probeHeader(const QByteArray &xml) {
+  return probeHeader(xml, detectDialect(xml));
+}
+
+DatHeader probeHeader(const QByteArray &xml, Dialect dialect) {
   DatHeader out;
 
   // clrmamepro text: read the leading `clrmamepro (`/`emulator (` block's
   // name / description / version, then stop before the game blocks.
-  if (detectDialect(xml) == Dialect::ClrMamePro) {
+  if (dialect == Dialect::ClrMamePro) {
     out.dialect = Dialect::ClrMamePro;
-    const QList<CmpToken> toks = tokenizeClrMamePro(QString::fromUtf8(xml));
+    const QList<CmpToken> toks = tokenizeClrMamePro(decodeDatText(xml));
     const int n = toks.size();
     int i = 0;
     while (i < n) {
@@ -434,10 +509,20 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   QString currentGameName;
   QString currentCloneOf;  // Logiqx exports may carry cloneof/romof (Kartend-m6qsb.13)
   bool currentMia = false; // game-level mia="yes" (Kartend-34lab)
+  // Truncation guard (Kartend-u4sdu): a well-formed-but-truncated file (a
+  // partial download cut at a tag boundary) reaches atEnd() with hasError()
+  // false, so QXmlStreamReader alone can't tell it from a complete document.
+  // Track the closing `</datafile>` root so we can reject a stream that ended
+  // without it.
+  bool sawClosingRoot = false;
 
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
     if (reader.hasError()) break;
+    if (token == QXmlStreamReader::EndElement) {
+      if (reader.name() == QLatin1String("datafile")) sawClosingRoot = true;
+      continue;
+    }
     if (token != QXmlStreamReader::StartElement) continue;
     const QStringView name = reader.name();
 
@@ -460,6 +545,15 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
 
   if (reader.hasError()) {
     return makeParseError(reader, "DatLookup::parseLogiqxDat");
+  }
+  // Reached the end without a parse error but also without the closing root:
+  // the document was truncated mid-stream (Kartend-u4sdu). Reject rather than
+  // return the partial record list as if it were complete.
+  if (!sawClosingRoot) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Logiqx DAT ended without its closing </datafile> — file is "
+                               "truncated or incomplete",
+                               "DatLookup::parseLogiqxDat");
   }
   return out;
 }
@@ -505,6 +599,11 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     currentMia = false;
   };
 
+  // Truncation guard (Kartend-u4sdu): track the closing `</mame>` so a
+  // well-formed-but-truncated listxml (cut at a tag boundary, reaching atEnd()
+  // with no error) is rejected instead of returning a partial record set.
+  bool sawClosingRoot = false;
+
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
     if (reader.hasError()) break;
@@ -534,6 +633,8 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
         currentDescription = currentDescription.trimmed();
       } else if (name == QLatin1String("machine") || name == QLatin1String("game")) {
         flushMachine();
+      } else if (name == QLatin1String("mame")) {
+        sawClosingRoot = true;
       }
     }
   }
@@ -541,11 +642,19 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   if (reader.hasError()) {
     return makeParseError(reader, "DatLookup::parseMameListXml");
   }
+  // Ended without a parse error but also without the closing root: truncated
+  // mid-stream (Kartend-u4sdu).
+  if (!sawClosingRoot) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "MAME listxml ended without its closing </mame> — file is "
+                               "truncated or incomplete",
+                               "DatLookup::parseMameListXml");
+  }
   return out;
 }
 
 ErrorUtils::Result<QList<DatRecord>> parseClrMameProDat(const QByteArray &xml) {
-  const QList<CmpToken> toks = tokenizeClrMamePro(QString::fromUtf8(xml));
+  const QList<CmpToken> toks = tokenizeClrMamePro(decodeDatText(xml));
   QList<DatRecord> out;
   const int n = toks.size();
   int i = 0;
@@ -569,7 +678,11 @@ ErrorUtils::Result<QList<DatRecord>> parseClrMameProDat(const QByteArray &xml) {
 }
 
 ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml) {
-  switch (detectDialect(xml)) {
+  return parseDat(xml, detectDialect(xml));
+}
+
+ErrorUtils::Result<QList<DatRecord>> parseDat(const QByteArray &xml, Dialect dialect) {
+  switch (dialect) {
   case Dialect::Logiqx:
     return parseLogiqxDat(xml);
   case Dialect::Mame:
@@ -661,9 +774,27 @@ QByteArray readDatFile(const QString &path, qint64 maxBytes) {
     if (!member.open(QIODevice::ReadOnly)) {
       return {};
     }
+    // Bound the extracted member too (Kartend-4bouw): a zip can decompress to a
+    // hostile multi-gigabyte member. Fail loud (empty) rather than slurp it.
+    if (member.size() > kMaxDatBytes) {
+      qWarning("DatLookup: extracted DAT member exceeds %lld-byte cap (%lld) — rejecting %s",
+               kMaxDatBytes, member.size(), qPrintable(path));
+      return {};
+    }
     return member.readAll();
   }
-  return maxBytes > 0 ? f.read(maxBytes) : f.readAll();
+  if (maxBytes > 0) {
+    return f.read(maxBytes);
+  }
+  // Full read: cap at kMaxDatBytes (Kartend-4bouw) so a multi-gigabyte file
+  // mislabelled `.dat` can't be slurped whole into memory. Reject loudly rather
+  // than truncate into a partial parse.
+  if (f.size() > kMaxDatBytes) {
+    qWarning("DatLookup: DAT file exceeds %lld-byte cap (%lld) — rejecting %s", kMaxDatBytes,
+             f.size(), qPrintable(path));
+    return {};
+  }
+  return f.readAll();
 }
 
 ErrorUtils::Result<Store> loadStoreFromFile(const QString &path) {
