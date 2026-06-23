@@ -1256,24 +1256,27 @@ void DatAuditDialog::onRun() {
   // posts per run so a 50k-file audit doesn't flood the event queue. The
   // dialog outlives the run (the controller caches it for the app's life).
   auto lastPosted = std::make_shared<std::atomic<int>>(-1);
-  auto progressFn = [this, lastPosted](const DatAudit::AuditProgress &p) {
-    const int step = qMax(1, p.filesTotal / 200);
+  // Param named `prog` (not `p`) so it doesn't shadow the `const Profile p`
+  // local above — gcc -Wshadow (-Werror in the Release+gcc / maintenance build)
+  // flags the shadow even though clang's -Wshadow does not.
+  auto progressFn = [this, lastPosted](const DatAudit::AuditProgress &prog) {
+    const int step = qMax(1, prog.filesTotal / 200);
     const int last = lastPosted->load(std::memory_order_relaxed);
-    if (p.filesDone != p.filesTotal && p.filesDone - last < step) {
+    if (prog.filesDone != prog.filesTotal && prog.filesDone - last < step) {
       return;
     }
-    lastPosted->store(p.filesDone, std::memory_order_relaxed);
+    lastPosted->store(prog.filesDone, std::memory_order_relaxed);
     QMetaObject::invokeMethod(
         this,
-        [this, p] {
-          if (m_running && p.filesTotal > 0) {
-            m_progress->setRange(0, p.filesTotal);
-            m_progress->setValue(p.filesDone);
+        [this, prog] {
+          if (m_running && prog.filesTotal > 0) {
+            m_progress->setRange(0, prog.filesTotal);
+            m_progress->setValue(prog.filesDone);
           }
           // Drive the browser's inline bar for a browser-initiated re-audit
           // (Kartend-7iqhl.3); no-op (total<=0 / not pending) otherwise.
           if (m_browserAuditPending && m_browserPage != nullptr) {
-            m_browserPage->setAuditProgress(p.filesDone, p.filesTotal);
+            m_browserPage->setAuditProgress(prog.filesDone, prog.filesTotal);
           }
         },
         Qt::QueuedConnection);

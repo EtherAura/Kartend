@@ -212,29 +212,31 @@ void handleScrollBranch(IScrollManager *scrollManager, IArtworkManager *artworkM
                         const QList<CollectionConfig> &collections, int viewingIndex,
                         bool spacingChanged, bool sidebarModeChanged, bool gridWidthChanged,
                         bool alignmentChanged, bool fontSizeChanged, bool hideTitlesChanged) {
-  auto scheduleGridWidthRefresh = [](IScrollManager *scrollManager, IArtworkManager *artworkManager,
-                                     int viewingIndex,
+  // Inner params renamed off the enclosing handleScrollBranch params
+  // (scrollManager / artworkManager / viewingIndex) — gcc -Wshadow (-Werror in
+  // the Release+gcc / maintenance build) flags a lambda param shadowing an
+  // enclosing function param even though clang's -Wshadow does not.
+  auto scheduleGridWidthRefresh = [](IScrollManager *scroll, IArtworkManager *artwork, int viewIndex,
                                      const QList<CollectionConfig> *collectionsPtr) {
-    if (!scrollManager || !collectionsPtr) {
+    if (!scroll || !collectionsPtr) {
       return;
     }
 
     // Delay layout recalculation to allow grid width change to propagate.
-    TimerUtils::singleShotGuarded(UIConstants::Timing::LONG_DELAY_MS, scrollManager, [=]() {
-      scrollManager->preCalculateLayout();
-      scrollManager->forceVirtualViewUpdate();
+    TimerUtils::singleShotGuarded(UIConstants::Timing::LONG_DELAY_MS, scroll, [=]() {
+      scroll->preCalculateLayout();
+      scroll->forceVirtualViewUpdate();
     });
 
     // Wait for the pre-calculated layout to settle before updating the
     // virtual view, refreshing artwork, and re-centering.
     TimerUtils::singleShotGuarded(
-        UIConstants::Timing::LONG_DELAY_MS + UIConstants::Timing::MEDIUM_DELAY_MS, scrollManager,
-        [=]() {
-          scrollManager->updateVirtualView();
-          if (artworkManager) {
-            artworkManager->updateViewportArtwork();
+        UIConstants::Timing::LONG_DELAY_MS + UIConstants::Timing::MEDIUM_DELAY_MS, scroll, [=]() {
+          scroll->updateVirtualView();
+          if (artwork) {
+            artwork->updateViewportArtwork();
           }
-          scrollManager->centerHorizontalScrollbar(viewingIndex, *collectionsPtr);
+          scroll->centerHorizontalScrollbar(viewIndex, *collectionsPtr);
         });
   };
 
