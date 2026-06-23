@@ -216,8 +216,8 @@ void handleScrollBranch(IScrollManager *scrollManager, IArtworkManager *artworkM
   // (scrollManager / artworkManager / viewingIndex) — gcc -Wshadow (-Werror in
   // the Release+gcc / maintenance build) flags a lambda param shadowing an
   // enclosing function param even though clang's -Wshadow does not.
-  auto scheduleGridWidthRefresh = [](IScrollManager *scroll, IArtworkManager *artwork, int viewIndex,
-                                     const QList<CollectionConfig> *collectionsPtr) {
+  auto scheduleGridWidthRefresh = [](IScrollManager *scroll, IArtworkManager *artwork,
+                                     int viewIndex, const QList<CollectionConfig> *collectionsPtr) {
     if (!scroll || !collectionsPtr) {
       return;
     }
