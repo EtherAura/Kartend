@@ -125,6 +125,32 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
+namespace {
+// Start a launcher process, routing Windows .cmd/.bat batch files through the
+// command interpreter. On Windows a batch file is not an executable image:
+// CreateProcess (hence QProcess::start, which uses no shell) cannot run it
+// directly and fails with FailedToStart — which is why launching a .cmd
+// launcher silently never started (Kartend-5i556). Invoke it via %COMSPEC%
+// (cmd.exe) /c instead. Real executables and every non-Windows launcher start
+// directly, unchanged. NOTE: full argument-quoting hardening for the cmd.exe
+// path (media names containing & ( ) % ! ^ etc.) is tracked separately under
+// Kartend-9u29e; this only ensures batch launchers start at all.
+void startLauncherProcess(QProcess *child, const QString &launcherPath, const QStringList &args) {
+#ifdef Q_OS_WIN
+  const QString suffix = QFileInfo(launcherPath).suffix().toLower();
+  if (suffix == QLatin1String("cmd") || suffix == QLatin1String("bat")) {
+    QString comspec = qEnvironmentVariable("COMSPEC");
+    if (comspec.isEmpty()) {
+      comspec = QStringLiteral("cmd.exe");
+    }
+    child->start(comspec, QStringList{QStringLiteral("/c"), launcherPath} + args);
+    return;
+  }
+#endif
+  child->start(launcherPath, args);
+}
+} // namespace
+
 auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
                                        const QString &collectionName, const QString &filePath)
     -> ErrorUtils::Result<LaunchCommand> {
@@ -821,7 +847,7 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
             child->deleteLater();
           });
 
-  child->start(launcherPath, cmd.arguments);
+  startLauncherProcess(child, launcherPath, cmd.arguments);
   window->start();
   // start() is async on Unix; FailedToStart arrives via errorOccurred. Report
   // the spawn as issued (the caller has already dismissed its cleanup guard).
@@ -906,7 +932,7 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // See the detached-start path above: pin CWD to the launcher's own
   // directory so sibling resources resolve the same way (Kartend-bmvu).
   child->setWorkingDirectory(QFileInfo(launcherPath).absolutePath());
-  child->start(launcherPath, cmd.arguments);
+  startLauncherProcess(child, launcherPath, cmd.arguments);
   // start() returns void; FailedToStart is reported via errorOccurred.
   return true;
 }
