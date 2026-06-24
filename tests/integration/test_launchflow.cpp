@@ -14,6 +14,8 @@
 #include "settingsmanager.h"
 #include "usagestatsstore.h"
 
+#include "../support/launchfakes.h"
+
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
@@ -171,9 +173,6 @@ QString scanAndResolveItemPath(MainWindow *win, const QString &uuid) {
 } // namespace
 
 void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — launchItem forks the launcher script via QProcess");
-#endif
   LaunchScenario scenario = makeScenario(noopLauncherScript());
   QVERIFY2(scenario.valid, "failed to materialize media file + launcher script");
   const CollectionConfig cfg = makeCollection(scenario);
@@ -198,6 +197,16 @@ void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
   // Pre-flight: never launched.
   QCOMPARE(db->loadItemUsageStats(uuid, scannedPath).playCount, qint64(0));
   QCOMPARE(db->historyEntryCount(), qint64(0));
+
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-dhhh6: under TSan, fork() inside QProcess aborts libtsan, so the
+  // real spawn can't run. Drive the detached-launch state machine with a
+  // non-forking spawner that emits a clean immediate exit — recordSuccessfulLaunch
+  // still fires and the same playCount/history worker writes land, exercising
+  // the launch → callback → cross-thread SQLite-write path under TSan. The real
+  // fork+exec path is still covered in non-TSan builds.
+  lm->setLauncherSpawnerForTesting(KartendTest::fakeLauncherSpawner(/*runtimeMs=*/0));
+#endif
 
   // The launch. Runtime detection is off by default, so this takes the
   // detached path: startDetached succeeds (the no-op script), then
@@ -228,13 +237,6 @@ void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
 }
 
 void TestLaunchFlow::testTrackedLaunchRecordsPlaySession() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  // GCC 13 libtsan's ForkAfter slot bookkeeping (tsan_rtl.cpp:253 CHECK
-  // "!thr->slot") aborts the whole process when QProcess forks while the
-  // MainWindow fixture's pool threads are live — same crash class as the
-  // test_launchmanager / test_romhasher skips.
-  QSKIP("libtsan fork CHECK bug — launchItem forks the tracked child via QProcess");
-#endif
   // The child must stay alive comfortably past 1s: LaunchManager measures
   // whole seconds (QDateTime::secsTo) FROM the QProcess::started signal
   // stamp, and recordPlaySession refuses non-positive durations. A `sleep 1`
@@ -266,6 +268,17 @@ void TestLaunchFlow::testTrackedLaunchRecordsPlaySession() {
 
   QSignalSpy started(lm, &LaunchManager::runtimeStarted);
   QSignalSpy finished(lm, &LaunchManager::runtimeFinished);
+
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-dhhh6: under TSan, fork() aborts libtsan. Drive the tracked-launch
+  // state machine with a non-forking spawner. The 1100 ms started→finished gap
+  // is a REAL wait so QDateTime::secsTo measures >= 1 whole second — the
+  // session-duration cross-thread bookkeeping (started stamp on one signal,
+  // elapsed read + onPlaySessionEnded worker write on the next) runs unchanged,
+  // just without a forked child. The real sleeping-launcher path stays covered
+  // in non-TSan builds.
+  lm->setLauncherSpawnerForTesting(KartendTest::fakeLauncherSpawner(/*runtimeMs=*/1100));
+#endif
 
   lm->launchItem(scannedPath, /*collectionIndex=*/0);
 

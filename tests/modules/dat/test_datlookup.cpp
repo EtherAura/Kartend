@@ -670,7 +670,14 @@ void TestDatLookup::readDatFilePlainAndPrefix() {
 
 void TestDatLookup::readDatFileUnpacksZip() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+  QSKIP(
+      "Kartend-dhhh6: this test forks an external extractor (and builds its fixture by forking "
+      "zip) on the TEST thread to exercise the real unzip path — a single-threaded fork with no "
+      "cross-thread state, so faking the decompressor would test the fake, not real unzip. "
+      "Kartend-yxco2 investigated a seam and found none worthwhile: the only cross-thread state on "
+      "the production audit-extract worker is a std::atomic cancel token (race-free by "
+      "construction) handed off via QFuture, so TSan has no real race to catch here; the DAT "
+      "parse/store logic itself is already covered under TSan by the non-forking DAT tests.");
 #endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty() ||
       (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&

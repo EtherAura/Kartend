@@ -114,6 +114,31 @@ sensible cadence is "every major Qt version bump and / or every
 Ubuntu LTS jump." Both are events likely to invalidate upstream-
 internal suppressions.
 
+### libtsan fork CHECK `QSKIP`s — quarterly re-check (Kartend-dhhh6)
+
+A class of launch/DAT tests fork a child process (`QProcess` launcher,
+archive extractor, or `zip`/`7z` fixture builder) while worker threads are
+alive. GCC 13's libtsan aborts the whole process there — its `ForkAfter`
+slot bookkeeping hits `CHECK "!thr->slot"` (`tsan_rtl.cpp:253`) — so those
+assertions are guarded by `QSKIP(...)` under `__SANITIZE_THREAD__`. These are
+**test-runner guards, not race suppressions**, so they live at the call sites
+(grep `Kartend-dhhh6` in `tests/`), not in `tsan.txt`.
+
+Kartend-dhhh6 removed the guard for the *cross-thread* launch slots by routing
+their spawn / extraction through non-forking test seams
+(`LaunchManager::setLauncherSpawnerForTesting` /
+`setArchiveExtractorForTesting`, driven by `tests/support/launchfakes.h`), so
+those now run under TSan. The remaining `QSKIP`s cover assertions whose point
+*is* the real fork (single-threaded extractor behaviour, watchdog kills, real
+unzip in `DatLookup`/`NoIntroDownloader`) — faking them would test nothing.
+
+**Re-check trigger:** when CI bumps clang / `libclang-rt-*-dev` or the GCC
+that ships libtsan, re-test whether the fork CHECK bug is fixed upstream
+(LLVM `compiler-rt`). If it is, the remaining `Kartend-dhhh6` `QSKIP`s can be
+dropped and those tests run their real-fork paths under TSan directly. A
+separate `DatLookup` extraction seam would let the DAT slots run under TSan
+without waiting on the upstream fix (tracked as a follow-up).
+
 ## Common patterns currently in the files
 
 | Pattern | Why | bd issue |

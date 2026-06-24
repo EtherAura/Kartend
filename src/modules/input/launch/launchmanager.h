@@ -195,6 +195,36 @@ public:
   /// extraction dir, and the pending launch is abandoned silently.
   void cancelExtraction();
 
+  /// Test-only seam (Kartend-dhhh6). Substitutes the launcher spawn so a test
+  /// can synthesize the QProcess started / finished / errorOccurred lifecycle
+  /// WITHOUT fork()/exec(). libtsan's fork CHECK aborts the process when
+  /// QProcess forks while worker threads are alive, so the launch-concurrency
+  /// tests inject a non-forking spawner to run the cross-thread state machine
+  /// (session-duration capture, process-tracking bookkeeping, the wired
+  /// started/finished slots) under ThreadSanitizer. The fake is handed the
+  /// SAME fully-wired QProcess the real path would have started. Null (the
+  /// default) uses the real cmd.exe-aware spawn — production is unaffected.
+  using LauncherSpawnFn =
+      std::function<void(QProcess *child, const QString &launcherPath, const QStringList &args)>;
+  void setLauncherSpawnerForTesting(LauncherSpawnFn spawner) {
+    m_launcherSpawner = std::move(spawner);
+  }
+
+  /// Test-only seam (Kartend-dhhh6). Substitutes the archive-extraction body
+  /// that runs on the QtConcurrent worker, so a test can exercise the
+  /// extraction-worker / cancel-atomic / QFutureWatcher concurrency WITHOUT
+  /// forking an extractor child (which aborts libtsan). The fake runs on the
+  /// worker thread and is handed the same cancel flag the real extractor
+  /// polls, so the GUI-thread cancelExtraction()/destructor hand-off is the
+  /// genuine cross-thread interaction TSan observes. Null (the default) uses
+  /// the real extractArchiveToTemp — production is unaffected.
+  using ArchiveExtractFn = std::function<ErrorUtils::Result<QString>(
+      const QString &archivePath, const QString &targetExtension,
+      const std::atomic_bool *cancelRequested)>;
+  void setArchiveExtractorForTesting(ArchiveExtractFn extractor) {
+    m_archiveExtractor = std::move(extractor);
+  }
+
 signals:
   /// Emitted when a launch-time archive extraction moves to the worker
   /// thread. `displayName` is a human-readable label (the archive basename)
@@ -223,6 +253,11 @@ private:
   std::function<void(const QString &, const QString &, qint64)> m_onPlaySessionEnded;
   std::function<int(const QString &, const QString &)> m_resolveLauncherOverride;
   std::function<int(const QString &, const QStringList &, int)> m_chooseLauncher;
+
+  /// Test seams (Kartend-dhhh6). Null in production — see the
+  /// setLauncherSpawnerForTesting / setArchiveExtractorForTesting docs.
+  LauncherSpawnFn m_launcherSpawner;
+  ArchiveExtractFn m_archiveExtractor;
 
   /// Tracks recent launches for debounce protection
   QHash<QString, qint64> m_lastLaunchTimes;
@@ -259,6 +294,11 @@ private:
   /// Returns true when the configured general settings request runtime
   /// detection. Safe to call before settings are wired (returns false).
   [[nodiscard]] bool runtimeDetectionEnabled() const;
+
+  /// Spawns the launcher child: the test seam (m_launcherSpawner) when set,
+  /// otherwise the real cmd.exe-aware startLauncherProcess. Single chokepoint
+  /// for both the tracked and detached spawn paths (Kartend-dhhh6).
+  void spawnLauncherProcess(QProcess *child, const QString &launcherPath, const QStringList &args);
 
   /// Spawns `cmd` as a tracked child QProcess and emits runtimeStarted /
   /// runtimeFinished. Returns true on a successful start.

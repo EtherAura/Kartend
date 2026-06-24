@@ -166,6 +166,18 @@ void startLauncherProcess(QProcess *child, const QString &launcherPath, const QS
 }
 } // namespace
 
+void LaunchManager::spawnLauncherProcess(QProcess *child, const QString &launcherPath,
+                                         const QStringList &args) {
+  // Kartend-dhhh6: a test may substitute the spawn to synthesize the
+  // started/finished lifecycle without fork()/exec() (so the launch
+  // concurrency state machine runs under ThreadSanitizer). Null in production.
+  if (m_launcherSpawner) {
+    m_launcherSpawner(child, launcherPath, args);
+    return;
+  }
+  startLauncherProcess(child, launcherPath, args);
+}
+
 auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
                                        const QString &collectionName, const QString &filePath)
     -> ErrorUtils::Result<LaunchCommand> {
@@ -644,9 +656,17 @@ void LaunchManager::startExtractionAndLaunch(const QString &filePath,
           });
 
   emit extractionStarted(filePath, QFileInfo(filePath).completeBaseName());
-  m_extractionFuture = QtConcurrent::run([filePath, targetExtension, cancelFlag]() {
-    return extractArchiveToTemp(filePath, targetExtension, cancelFlag.get());
-  });
+  // Kartend-dhhh6: a test may substitute the extraction body (which runs here
+  // on the worker) so the cancel-atomic / QFutureWatcher concurrency can run
+  // under ThreadSanitizer without forking an extractor child. The seam is
+  // captured by value so the worker holds its own copy. Null in production.
+  m_extractionFuture =
+      QtConcurrent::run([filePath, targetExtension, cancelFlag, extractor = m_archiveExtractor]() {
+        if (extractor) {
+          return extractor(filePath, targetExtension, cancelFlag.get());
+        }
+        return extractArchiveToTemp(filePath, targetExtension, cancelFlag.get());
+      });
   watcher->setFuture(m_extractionFuture);
 }
 
@@ -862,7 +882,7 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
             child->deleteLater();
           });
 
-  startLauncherProcess(child, launcherPath, cmd.arguments);
+  spawnLauncherProcess(child, launcherPath, cmd.arguments);
   window->start();
   // start() is async on Unix; FailedToStart arrives via errorOccurred. Report
   // the spawn as issued (the caller has already dismissed its cleanup guard).
@@ -947,7 +967,7 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // See the detached-start path above: pin CWD to the launcher's own
   // directory so sibling resources resolve the same way (Kartend-bmvu).
   child->setWorkingDirectory(QFileInfo(launcherPath).absolutePath());
-  startLauncherProcess(child, launcherPath, cmd.arguments);
+  spawnLauncherProcess(child, launcherPath, cmd.arguments);
   // start() returns void; FailedToStart is reported via errorOccurred.
   return true;
 }

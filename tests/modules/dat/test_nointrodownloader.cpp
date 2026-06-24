@@ -27,7 +27,14 @@ private slots:
 
 void TestNoIntroDownloader::extractDatsToPullsDatsFlattened() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+  QSKIP(
+      "Kartend-dhhh6: this test forks an external extractor (and builds its fixture by forking "
+      "zip) on the TEST thread to exercise the real unpack path — a single-threaded fork with no "
+      "cross-thread state, so faking the decompressor would test the fake, not real extraction. "
+      "Kartend-yxco2 investigated a seam and found none worthwhile: extractDatsTo's only "
+      "cross-thread state on the audit worker is a std::atomic cancel token (race-free) handed off "
+      "via QFuture, so TSan has no real race to catch; the flatten/exclusion logic asserted here "
+      "is pure post-extraction file bookkeeping.");
 #endif
   if (QStandardPaths::findExecutable(QStringLiteral("zip")).isEmpty()) {
     QSKIP("zip not available — cannot build the pack fixture");

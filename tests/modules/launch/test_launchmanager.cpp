@@ -8,6 +8,9 @@
 #include "collection/collectionconfig.h"
 #include "collection/launcherconfig.h"
 #include "launchmanager.h"
+
+#include "../../support/launchfakes.h"
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QProcess>
@@ -150,6 +153,13 @@ private:
   // archive-creation tool (zip/bsdtar/7z) is available — the QSKIP at the call
   // site keeps the suite green on minimal CI images.
   QString makeZipFixture(const QString &baseName, const QList<QPair<QString, QByteArray>> &entries);
+  // Kartend-dhhh6: a real but content-less <baseName>.zip in a fresh temp dir,
+  // written with QFile (NO QProcess fork, unlike makeZipFixture). For TSan runs
+  // where the fake-extractor seam ignores the archive bytes, so we still need a
+  // valid on-disk path for launchItem but must not fork while worker threads
+  // are live. Returns the path (empty on failure); temp dir tracked in
+  // m_fixtureDirs.
+  QString makeArchiveStub(const QString &baseName);
   // True when extractArchiveToTemp will find one of its extractors on PATH.
   static bool extractorAvailable();
   // Creates a directory holding a fake `7z` shell script that writes
@@ -298,6 +308,25 @@ QString TestLaunchManager::makeZipFixture(const QString &baseName,
     return archivePath;
   }
   return {};
+}
+
+QString TestLaunchManager::makeArchiveStub(const QString &baseName) {
+  auto *dir = new QTemporaryDir();
+  if (!dir->isValid()) {
+    delete dir;
+    return {};
+  }
+  m_fixtureDirs.append(dir);
+  const QString archivePath = dir->filePath(baseName + QStringLiteral(".zip"));
+  QFile f(archivePath);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return {};
+  }
+  // Local-file-header magic so it reads as a plausible archive path; the fake
+  // extractor seam never actually opens it.
+  f.write(QByteArrayLiteral("PK\x03\x04 kartend-dhhh6 stub"));
+  f.close();
+  return archivePath;
 }
 
 QString TestLaunchManager::makeFailingLauncher() {
@@ -1317,7 +1346,11 @@ void TestLaunchManager::testExtractArchive_rejectsUnsafeArchivePath() {
 
 void TestLaunchManager::testExtractArchive_extractsTargetFile() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
 #endif
   if (!extractorAvailable()) {
     KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
@@ -1344,7 +1377,11 @@ void TestLaunchManager::testExtractArchive_extractsTargetFile() {
 
 void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtractionDir() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
 #endif
   // The leak-relevant path: when extraction yields no file with the requested
   // extension, extractArchiveToTemp must report an error AND remove the
@@ -1372,7 +1409,11 @@ void TestLaunchManager::testExtractArchive_missingTargetExtensionCleansUpExtract
 
 void TestLaunchManager::testExtractArchive_sameBaseNameDoesNotServeWrongContent() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
 #endif
   // Regression for Kartend-nrykk: two distinct archives sharing a base name
   // (both "kartend_collide.zip", in different temp dirs) map to the same
@@ -1415,35 +1456,23 @@ void TestLaunchManager::testExtractArchive_sameBaseNameDoesNotServeWrongContent(
 }
 
 void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
-#endif
 #ifdef Q_OS_WIN
   QSKIP("The shebang-to-nonexistent-interpreter failing-launcher trick is POSIX-specific");
 #else
   // End-to-end: an archive item whose launcher fails to start must not leave
   // its extracted contents behind in /tmp. launchItem extracts the archive,
-  // builds + validates the (broken) launcher, then QProcess::startDetached
-  // fails and the qScopeGuard removes the extraction dir. Error dialogs route
-  // through ErrorPresentation (Kartend-dyu1k); with no override installed its
-  // default just logs, so this headless run doesn't hang on a modal.
-  if (!extractorAvailable()) {
-    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
-  }
+  // builds + validates the (broken) launcher, then the spawn fails and the
+  // FailedToStart handler removes the extraction dir. Error dialogs route
+  // through ErrorPresentation (Kartend-dyu1k); the default override just logs,
+  // so this headless run doesn't hang on a modal.
   const QString launcher = makeFailingLauncher();
   QVERIFY2(!launcher.isEmpty(), "could not create the failing-launcher fixture");
   QVERIFY2(LaunchManager::validateLauncherPath(launcher).isOk(),
-           "the fixture launcher must pass validation so the only failure is startDetached");
+           "the fixture launcher must pass validation so the only failure is the spawn");
 
   const QString base = QStringLiteral("kartend_launch_fail");
   const QString extractionDir = extractionDirFor(base);
   QDir(extractionDir).removeRecursively();
-  const QList<QPair<QString, QByteArray>> entries = {
-      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
-  const QString zip = makeZipFixture(base, entries);
-  if (zip.isEmpty()) {
-    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
-  }
 
   QList<CollectionConfig> collections;
   CollectionConfig collection;
@@ -1458,11 +1487,37 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
   setup.collections = &collections;
   manager.setupReferences(setup);
 
+  QString zip;
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-dhhh6: under TSan, forking the extractor (and then the launcher)
+  // aborts libtsan. Drive the SAME extract-succeeds → launch-fails → cleanup
+  // path through the non-forking seams: a fake extractor that creates the
+  // extraction dir + extracted file with no fork, then a fake spawner that
+  // emits errorOccurred(FailedToStart). The FailedToStart cleanup that removes
+  // the extraction dir — the behaviour under test — runs unchanged, now under
+  // ThreadSanitizer.
+  zip = makeArchiveStub(base);
+  QVERIFY2(!zip.isEmpty(), "could not create the archive stub");
+  manager.setArchiveExtractorForTesting(KartendTest::fakeSleepyExtractor(
+      extractionDir, QStringLiteral("disc.iso"), /*maxSleepMs=*/300));
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeFailingLauncherSpawner());
+#else
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  zip = makeZipFixture(base, entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+#endif
+
   // Runtime detection stays off (no ctx/settings wired) -> the detached path,
-  // whose startDetached failure is the branch that cleans up the extraction.
-  // Kartend-mkcak: extraction now runs on a worker thread, so launchItem
-  // returns immediately with the extraction still in flight; the failure +
-  // cleanup land in the completion callback on the GUI thread.
+  // whose failed spawn is the branch that cleans up the extraction.
+  // Kartend-mkcak: extraction runs on a worker thread, so launchItem returns
+  // immediately with it still in flight; the failure + cleanup land in the
+  // completion callback on the GUI thread.
   QSignalSpy startedSpy(&manager, &LaunchManager::extractionStarted);
   QSignalSpy finishedSpy(&manager, &LaunchManager::extractionFinished);
   manager.launchItem(zip, 0);
@@ -1484,7 +1539,9 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
 
 void TestLaunchManager::testExtractArchive_rejectsArchiveLargerThanCap() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture shells out via QProcess");
+  QSKIP("Kartend-dhhh6: makeZipFixture forks zip/7z to build the fixture — a synchronous fork "
+        "with no cross-thread state for a seam to cover. The pre-check under test runs before any "
+        "extraction, so there is nothing for the worker-path seam to exercise here.");
 #endif
   // Kartend-ijglg pre-check: compression only inflates, so an archive whose
   // on-disk size already exceeds the decompressed cap is rejected before any
@@ -1509,7 +1566,11 @@ void TestLaunchManager::testExtractArchive_rejectsArchiveLargerThanCap() {
 
 void TestLaunchManager::testExtractArchive_enforcesDecompressedSizeCap() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
 #endif
   // Kartend-ijglg: a small *compressed* archive that inflates past the cap
   // (64 KiB of zeros vs a 4 KiB cap — the zip-bomb shape) must fail with
@@ -1539,7 +1600,11 @@ void TestLaunchManager::testExtractArchive_enforcesDecompressedSizeCap() {
 
 void TestLaunchManager::testExtractArchive_sizeCapKillsRunawayExtractor() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/extractArchiveToTemp shell out via QProcess");
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
 #endif
 #ifdef Q_OS_WIN
   QSKIP("The fake shell-script extractor is POSIX-specific");
@@ -1578,7 +1643,9 @@ void TestLaunchManager::testExtractArchive_sizeCapKillsRunawayExtractor() {
 
 void TestLaunchManager::testExtractArchive_preSetCancelReturnsCancelled() {
 #if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture shells out via QProcess");
+  QSKIP("Kartend-dhhh6: makeZipFixture forks zip/7z to build the fixture — a synchronous fork "
+        "with no cross-thread state for a seam to cover. The pre-check under test runs before any "
+        "extraction, so there is nothing for the worker-path seam to exercise here.");
 #endif
   // A cancellation that lands before the worker starts must short-circuit:
   // OperationCancelled, no extractor spawned, no extraction dir created.
@@ -1600,40 +1667,23 @@ void TestLaunchManager::testExtractArchive_preSetCancelReturnsCancelled() {
 }
 
 void TestLaunchManager::testLaunchItem_cancelExtractionAbortsPendingLaunch() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
-#endif
 #ifdef Q_OS_WIN
   QSKIP("The fake shell-script extractor is POSIX-specific");
 #else
-  // Kartend-mkcak end-to-end cancel: a fake `7z` that only sleeps keeps the
-  // extraction in flight; cancelExtraction() must make the watchdog kill the
-  // child within a poll interval, clean up the partial extraction, and
-  // abandon the pending launch silently.
+  // Kartend-mkcak end-to-end cancel: a slow extractor keeps the extraction in
+  // flight; cancelExtraction() must stop it within a poll interval, clean up
+  // the partial extraction, and abandon the pending launch silently.
   const QString base = QStringLiteral("kartend_cancel_launch");
   const QString extractionDir = extractionDirFor(base);
   QDir(extractionDir).removeRecursively();
-  const QList<QPair<QString, QByteArray>> entries = {
-      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
-  const QString zip = makeZipFixture(base, entries); // before PATH is faked
-  if (zip.isEmpty()) {
-    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
-  }
-  const QString launcher = makeFailingLauncher();
-  QVERIFY2(!launcher.isEmpty(), "could not create the launcher fixture");
-  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
-  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
-
-  const QByteArray oldPath = qgetenv("PATH");
-  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
-  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
 
   QList<CollectionConfig> collections;
   CollectionConfig collection;
   collection.name = QStringLiteral("Archive Collection");
   collection.archive.extractArchives = true;
   collection.archive.extractedExtension = QStringLiteral(".iso");
-  collection.launcher.launcherPath = launcher;
+  collection.launcher.launcherPath = makeFailingLauncher();
+  QVERIFY2(!collection.launcher.launcherPath.isEmpty(), "could not create the launcher fixture");
   collections.append(collection);
 
   LaunchManager manager;
@@ -1641,9 +1691,37 @@ void TestLaunchManager::testLaunchItem_cancelExtractionAbortsPendingLaunch() {
   setup.collections = &collections;
   manager.setupReferences(setup);
 
+  QString zip;
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-dhhh6: under TSan, forking a (real or fake-script) extractor child
+  // aborts libtsan. Drive the same cancel hand-off through a non-forking
+  // extractor seam that runs on the worker thread and polls the SAME cancel
+  // atomic — so cancelExtraction()'s GUI→worker signalling, the QFutureWatcher
+  // completion, and the worker-side dir cleanup all run under ThreadSanitizer.
+  // No real archive is read, so a content-less stub stands in for the zip.
+  zip = makeArchiveStub(base);
+  QVERIFY2(!zip.isEmpty(), "could not create the archive stub");
+  manager.setArchiveExtractorForTesting(
+      KartendTest::fakeSleepyExtractor(extractionDir, QStringLiteral("disc.iso")));
+#else
+  // Real path: a fake `7z` that only sleeps keeps the extraction in flight so
+  // cancelExtraction() must make the watchdog kill the child.
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  zip = makeZipFixture(base, entries); // before PATH is faked
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
+  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
+  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+#endif
+
   QSignalSpy finishedSpy(&manager, &LaunchManager::extractionFinished);
   manager.launchItem(zip, 0);
-  QVERIFY2(manager.isExtractionRunning(), "the sleeping fake extractor must still be running");
+  QVERIFY2(manager.isExtractionRunning(), "the sleeping extractor must still be running");
 
   QElapsedTimer clock;
   clock.start();
@@ -1651,47 +1729,54 @@ void TestLaunchManager::testLaunchItem_cancelExtractionAbortsPendingLaunch() {
   QVERIFY2(finishedSpy.count() == 1 || finishedSpy.wait(15000),
            "cancel must terminate the extraction promptly");
   QVERIFY2(clock.elapsed() < 20000,
-           "cancel must kill the child within a poll interval, not wait out the sleep");
+           "cancel must stop the extractor within a poll interval, not wait out the sleep");
   QVERIFY(!manager.isExtractionRunning());
   QTRY_VERIFY2(!QDir(extractionDir).exists(), "the cancelled extraction dir must be removed");
 #endif
 }
 
 void TestLaunchManager::testLaunchManagerDtor_drainsRunningExtraction() {
-#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
-  QSKIP("libtsan fork CHECK bug — makeZipFixture/launchItem shell out via QProcess");
-#endif
 #ifdef Q_OS_WIN
   QSKIP("The fake shell-script extractor is POSIX-specific");
 #else
   // Kartend-mkcak teardown contract: destroying the manager mid-extraction
-  // must not abandon the extractor child — the dtor requests cancellation
-  // and waits (bounded by poll interval + kill grace) for the worker.
+  // must not abandon the extractor — the dtor requests cancellation and waits
+  // (bounded by poll interval + grace) for the worker.
   const QString base = QStringLiteral("kartend_dtor");
   const QString extractionDir = extractionDirFor(base);
   QDir(extractionDir).removeRecursively();
-  const QList<QPair<QString, QByteArray>> entries = {
-      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
-  const QString zip = makeZipFixture(base, entries); // before PATH is faked
-  if (zip.isEmpty()) {
-    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
-  }
-  const QString launcher = makeFailingLauncher();
-  QVERIFY2(!launcher.isEmpty(), "could not create the launcher fixture");
-  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
-  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
-
-  const QByteArray oldPath = qgetenv("PATH");
-  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
-  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
 
   QList<CollectionConfig> collections;
   CollectionConfig collection;
   collection.name = QStringLiteral("Archive Collection");
   collection.archive.extractArchives = true;
   collection.archive.extractedExtension = QStringLiteral(".iso");
-  collection.launcher.launcherPath = launcher;
+  collection.launcher.launcherPath = makeFailingLauncher();
+  QVERIFY2(!collection.launcher.launcherPath.isEmpty(), "could not create the launcher fixture");
   collections.append(collection);
+
+  QString zip;
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-dhhh6: under TSan, forking an extractor child aborts libtsan. Drive
+  // the destructor's cancel-and-drain contract through a non-forking extractor
+  // seam that runs on the worker and polls the SAME cancel atomic — so the
+  // ~LaunchManager → worker hand-off and the worker-side cleanup run under
+  // ThreadSanitizer.
+  zip = makeArchiveStub(base);
+  QVERIFY2(!zip.isEmpty(), "could not create the archive stub");
+#else
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+  zip = makeZipFixture(base, entries); // before PATH is faked
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString fakeDir = makeFakeExtractorDir(/*kibToWrite=*/0, /*sleepSecs=*/30);
+  QVERIFY2(!fakeDir.isEmpty(), "could not create the fake-extractor fixture");
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", fakeDir.toUtf8() + ":" + oldPath);
+  auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+#endif
 
   QElapsedTimer clock;
   clock.start();
@@ -1700,8 +1785,12 @@ void TestLaunchManager::testLaunchManagerDtor_drainsRunningExtraction() {
     LaunchManagerSetup setup;
     setup.collections = &collections;
     manager.setupReferences(setup);
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+    manager.setArchiveExtractorForTesting(
+        KartendTest::fakeSleepyExtractor(extractionDir, QStringLiteral("disc.iso")));
+#endif
     manager.launchItem(zip, 0);
-    QVERIFY2(manager.isExtractionRunning(), "the sleeping fake extractor must still be running");
+    QVERIFY2(manager.isExtractionRunning(), "the sleeping extractor must still be running");
   } // dtor: cancel + bounded wait for the worker
   QVERIFY2(clock.elapsed() < 20000,
            "the dtor must drain the worker promptly instead of waiting out the sleep");

@@ -254,6 +254,19 @@ race:QMetaType::destroy
 # both stacks, so the suppression anchors there.
 race:DatabaseManager::recordItemLaunch
 
+# Play-session usage-stats hop (Kartend-dhhh6): structurally identical to the
+# recordItemLaunch suppression above. DatabaseManager::recordItemPlaySession
+# constructs its write-lambda (capturing collectionUuid/path/seconds BY VALUE)
+# on the GUI thread and posts it to the DB worker via queueWorkerWrite ->
+# QMetaObject::invokeMethod(Qt::QueuedConnection); the worker's first read of
+# the captured state races the capture-construction across the event-queue
+# QMutex (futex fast path, invisible to TSan). Surfaces now that
+# Integration.TestLaunchFlow::testTrackedLaunchRecordsPlaySession runs under
+# TSan via the non-forking launcher seam — the captures are by-value copies, so
+# there is no genuine shared-mutable-state race. Re-evaluate if the futex
+# blind spot is fixed (see docs/dev/sanitizer-suppressions.md, Kartend-dhhh6).
+race:DatabaseManager::recordItemPlaySession
+
 # Placeholder-tile render: QPixmap::fromImage inside
 # ItemPlaceholderRenderer::buildTile triggers Qt Gui's multithreaded image
 # conversion, which fans segments out to global-pool threads synchronised
@@ -384,6 +397,19 @@ called_from_lib:libQt6Network.so.6
 # CREATION-side resolver frame (qtconcurrentstoredfunctioncall.h), which has
 # returned before the functor ever runs.
 race:NonPromiseTaskResolver
+# Extraction-worker task hand-off (Kartend-dhhh6): the SAME ctor-write vs
+# first-vptr-read pattern as NonPromiseTaskResolver, but on the plain
+# QtConcurrent::run<Result<QString>> StoredFunctionCall path (no QFuture
+# promise) which NonPromiseTaskResolver does not anchor. LaunchManager::
+# startExtractionAndLaunch's QtConcurrent::run allocates the task on the GUI
+# thread (futex-ordered into the QThreadPool queue, invisible to TSan); the
+# pooled worker's first read in RunFunctionTaskBase<Result<QString>>::run()
+# races that allocation. Anchored on startExtractionAndLaunch — the GUI-thread
+# launching frame, which has returned before the functor runs and so never
+# appears during the worker's user-code (extractArchiveToTemp) execution, so
+# genuine extractor races stay visible. Surfaces now that the launchItem
+# worker-path tests run under TSan via the non-forking extraction seam.
+race:LaunchManager::startExtractionAndLaunch
 # Kernel teardown vs worker wind-down (~MappedEachKernel / ~SequenceHolder1
 # vptr write vs forThreadFunction read; reached only via ThreadEngine::
 # asynchronousFinish after every iteration has completed). Iteration-time
