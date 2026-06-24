@@ -132,9 +132,18 @@ namespace {
 // directly and fails with FailedToStart — which is why launching a .cmd
 // launcher silently never started (Kartend-5i556). Invoke it via %COMSPEC%
 // (cmd.exe) /c instead. Real executables and every non-Windows launcher start
-// directly, unchanged. NOTE: full argument-quoting hardening for the cmd.exe
-// path (media names containing & ( ) % ! ^ etc.) is tracked separately under
-// Kartend-9u29e; this only ensures batch launchers start at all.
+// directly, unchanged.
+//
+// Kartend-9u29e: the QStringList overload's quoting is correct for the final
+// CommandLineToArgvW pass but NOT for the intervening cmd.exe interpreter,
+// which still acts on `& ( ) < > | % ! ^ "` — so a media name or
+// `%collection%`-expanded value like "Sonic & Knuckles (USA).rom" would be
+// mis-parsed or could inject into the batch interpreter. Build the command
+// line by hand with PathUtils::quoteForCmdExe (CommandLineToArgvW quoting +
+// cmd.exe caret-escaping) and hand it to QProcess verbatim via
+// setNativeArguments; the QStringList overload would re-quote and corrupt our
+// cmd-escaped tokens. Runtime confirmation of the cmd.exe round-trip is a
+// manual MSVC-CI check (headless Linux CI cannot exercise it).
 void startLauncherProcess(QProcess *child, const QString &launcherPath, const QStringList &args) {
 #ifdef Q_OS_WIN
   const QString suffix = QFileInfo(launcherPath).suffix().toLower();
@@ -143,7 +152,13 @@ void startLauncherProcess(QProcess *child, const QString &launcherPath, const QS
     if (comspec.isEmpty()) {
       comspec = QStringLiteral("cmd.exe");
     }
-    child->start(comspec, QStringList{QStringLiteral("/c"), launcherPath} + args);
+    QString nativeArgs = QStringLiteral("/c ") + PathUtils::quoteForCmdExe(launcherPath);
+    for (const QString &arg : args) {
+      nativeArgs += QLatin1Char(' ') + PathUtils::quoteForCmdExe(arg);
+    }
+    child->setProgram(comspec);
+    child->setNativeArguments(nativeArgs);
+    child->start();
     return;
   }
 #endif

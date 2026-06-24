@@ -38,6 +38,34 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 /// describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
+/// Escapes a single argument so it survives the Windows `cmd.exe /c batch …`
+/// parsing layer intact (Kartend-9u29e). A `.cmd`/`.bat` launcher is not an
+/// executable image, so QProcess runs it through cmd.exe; the type-safe
+/// QStringList quoting Qt applies is correct for the final CommandLineToArgvW
+/// pass but NOT for the intervening cmd.exe interpreter, which still acts on
+/// `& ( ) < > | % ! ^ "` even inside double quotes. A media filename or a
+/// `%collection%`-expanded value carrying those characters (e.g.
+/// "Sonic & Knuckles (USA).rom") would otherwise be mis-parsed by, or inject
+/// commands into, the batch interpreter.
+///
+/// Implements Daniel Colascione's canonical two-layer scheme
+/// ("Everyone quotes command line arguments the wrong way", MSDN, 2011):
+///   1. CommandLineToArgvW quoting — wrap in `"…"` and backslash-escape so the
+///      child's CRT parses it back as exactly one argument.
+///   2. cmd.exe caret-escaping — prefix every cmd metacharacter (including the
+///      quotes added by step 1) with `^` so cmd strips the carets and forwards
+///      the literal characters to the CommandLineToArgvW layer untouched.
+/// The transform is pure (platform-independent string ops) so it is unit-tested
+/// directly; whether it fully closes the cmd.exe gap on a live MSVC host is a
+/// runtime-gated check left to manual MSVC-CI verification.
+///
+/// NOTE: a literal `%` cannot be fully neutralised from the command line —
+/// caret-escaping suppresses cmd's metacharacter handling but variable
+/// expansion (`%VAR%`) runs in an earlier phase. An unset `%name%` is passed
+/// through verbatim; only a name matching a live environment variable would
+/// expand. This residual is documented for the MSVC-CI confirmation step.
+[[nodiscard]] QString quoteForCmdExe(const QString &arg);
+
 /// Validates a collection name before it is substituted into a launcher
 /// template via `%collection%`. Rejects names that could inject path
 /// traversal once substituted — i.e. names containing `/`, `\`, or any
