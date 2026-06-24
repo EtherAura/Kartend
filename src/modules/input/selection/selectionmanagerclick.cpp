@@ -92,7 +92,7 @@ void SelectionManager::resetSelectionRestoreState() {
 }
 
 void SelectionManager::processSingleClickSelection(int visualIndex, const QString &filePath) {
-  if ((!scrollMgr()) || (!m_collections) || (!m_currentCollectionIndex)) {
+  if ((!scrollData()) || (!m_collections) || (!m_currentCollectionIndex)) {
     return;
   }
   int gridWidth = getCurrentGridWidth();
@@ -160,8 +160,8 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
   state()->setHorizAnimActive(true);
   const int steps = SelectionHelpers::hopStepCount(start, target);
   constexpr int kPerHopMs = 12;
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(start);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(start);
   }
   // Animate horizontal selection by stepping through intermediate indices —
   // each hop is scheduled at i * kPerHopMs so they fire serially without
@@ -173,13 +173,13 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
       if (!state() || state()->horizAnimGen() != gen) {
         return;
       }
-      if (!scrollMgr()) {
+      if (!scrollOverlay()) {
         return;
       }
       const int nextIdx = SelectionHelpers::hopIntermediateIndex(start, target, i);
       if (nextIdx != target) {
         m_selectedItemIndex = nextIdx;
-        scrollMgr()->updateSelectionForIndex(nextIdx);
+        scrollOverlay()->updateSelectionForIndex(nextIdx);
       } else {
         if (state()) {
           state()->setHorizAnimActive(false);
@@ -208,8 +208,8 @@ void SelectionManager::handleNewRowClickSelection(int visualIndex, qint64 nowMs)
   m_selectedItemIndex = visualIndex;
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(visualIndex, subs);
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(visualIndex);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(visualIndex);
   }
   selectItemByIndex(visualIndex, true);
   emit requestCenterVertically(visualIndex, false);
@@ -244,7 +244,7 @@ int SelectionManager::handleWidgetSelectionByIndex(int visualIndex, const QPoint
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
 
-  if (visualIndex < 0 || !scrollMgr()) {
+  if (visualIndex < 0 || !scrollData()) {
     return -1;
   }
 
@@ -253,7 +253,7 @@ int SelectionManager::handleWidgetSelectionByIndex(int visualIndex, const QPoint
   cancelPendingSelectionRestore();
 
   // Get the file path for this index
-  QString filePath = scrollMgr()->filePathForVisualIndex(visualIndex);
+  QString filePath = scrollData()->filePathForVisualIndex(visualIndex);
 
   processSingleClickSelection(visualIndex, filePath);
   return visualIndex;
@@ -264,7 +264,7 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &cl
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
 
-  if (!widget || !scrollMgr()) {
+  if (!widget || !scrollData()) {
     return -1;
   }
 
@@ -276,7 +276,7 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &cl
   // which is called from selectItemByIndex during processSingleClickSelection
 
   // O(1) reverse lookup instead of scanning every active widget (Kartend-th8z).
-  const int visualIndex = scrollMgr()->indexForWidget(widget);
+  const int visualIndex = scrollData()->indexForWidget(widget);
   if (visualIndex < 0) {
     return -1;
   }
@@ -324,9 +324,11 @@ void SelectionManager::applySelectionStateForIndex(int idx) {
   m_selectedItemIndex = idx;
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(idx, subs);
-  if (scrollMgr()) {
-    scrollMgr()->updateVirtualView();
-    scrollMgr()->updateSelectionForIndex(idx);
+  if (scrollGrid()) {
+    scrollGrid()->updateVirtualView();
+  }
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(idx);
   }
 }
 

@@ -13,11 +13,13 @@
 #include <QThread>
 
 class ItemWidget;
-class IScrollManager;
+class IScrollDataSource;
+class IGridLayoutScroll;
+class ISelectionOverlayScroll;
+class ISearchStateScroll;
 class IDetailsPaneManager;
 class ISessionManager;
 class ISettingsManager;
-class INavigationManager;
 class IAnimationManager;
 class IViewportManager;
 class IArtworkManager;
@@ -220,10 +222,20 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
-  // Kartend-h1l8f: keeps the IScrollManager facade — spans four scroll roles
-  // (data, grid, overlay, search).
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-d2q3l: split the IScrollManager facade into the specific scroll
+  // roles this consumer uses (data, grid, overlay, search). Read through ctx on
+  // every call, never cached.
+  [[nodiscard]] IScrollDataSource *scrollData() const {
+    return m_ctx ? m_ctx->scrollData() : nullptr;
+  }
+  [[nodiscard]] IGridLayoutScroll *scrollGrid() const {
+    return m_ctx ? m_ctx->scrollGrid() : nullptr;
+  }
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const {
+    return m_ctx ? m_ctx->scrollOverlay() : nullptr;
+  }
+  [[nodiscard]] ISearchStateScroll *scrollSearch() const {
+    return m_ctx ? m_ctx->scrollSearch() : nullptr;
   }
   [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
@@ -233,9 +245,6 @@ private:
   }
   [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
-  }
-  [[nodiscard]] INavigationManager *navMgr() const {
-    return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
   [[nodiscard]] IAnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;

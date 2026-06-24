@@ -65,10 +65,10 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
 
   // If the double-clicked widget represents a subcollection or virtual folder,
   // allow the widget to handle the event so its signal is emitted.
-  if (scrollMgr() &&
+  if (scrollData() &&
       CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     int visualIndex = -1;
-    const auto &active = scrollMgr()->getActiveWidgets();
+    const auto &active = scrollData()->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
       if (it.value() == widget) {
         visualIndex = it.key();
@@ -77,14 +77,14 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
     }
     if (visualIndex >= 0) {
       // Convert visual index to actual index (accounts for filtering)
-      int actualIndex = scrollMgr()->getFilteredIndex(visualIndex);
+      int actualIndex = scrollSearch()->getFilteredIndex(visualIndex);
       // Use the *rendered* prefix counts: during search, the visible
       // subcollection list is filtered down (often to zero) and virtual
       // folders are suppressed. The hierarchy-cache subs list is the wrong
       // source of truth and would mis-classify media items as
       // subcollections, causing double-click to silently no-op.
-      int subCount = scrollMgr()->getSubcollectionCount();
-      int folderCount = scrollMgr()->getVirtualFolderCount();
+      int subCount = scrollData()->getSubcollectionCount();
+      int folderCount = scrollData()->getVirtualFolderCount();
       // Pass through if it's a subcollection or virtual folder
       if (actualIndex >= 0 && actualIndex < subCount + folderCount) {
         return false;
@@ -119,13 +119,13 @@ ItemWidget *EventManager::itemWidgetForObject(QObject *obj) const {
 }
 
 int EventManager::visualIndexForWidget(ItemWidget *widget) const {
-  if (!widget || !scrollMgr()) {
+  if (!widget || !scrollData()) {
     return -1;
   }
 
   // O(1) reverse lookup instead of scanning every active widget on each
   // hover / mouse-move (Kartend-th8z).
-  return scrollMgr()->indexForWidget(widget);
+  return scrollData()->indexForWidget(widget);
 }
 
 bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {

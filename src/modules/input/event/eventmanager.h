@@ -23,14 +23,16 @@ QT_END_NAMESPACE
 
 class ItemWidget;
 class IScrollManager;
+class IScrollDataSource;
+class IGridLayoutScroll;
+class ISearchStateScroll;
+class IArtworkPreviewScroll;
 class IKeyboardManager;
 class IMouseManager;
-class IAnimationManager;
 class IViewportManager;
 class ISelectionManager;
 class IArtworkManager;
 class IDatabaseManager;
-class IDetailsPaneManager;
 class InteractionStateHolder;
 class HoverScrollHandler;
 class WheelEventHandler;
@@ -144,8 +146,24 @@ private:
   // ctx is the single source of truth for sibling managers + state. Inline
   // accessors below are the canonical read path.
   const ApplicationContext *m_ctx = nullptr;
-  // Kartend-h1l8f: keeps the IScrollManager facade — spans four scroll roles
-  // (data, search, grid, preview).
+  // Kartend-d2q3l: split the IScrollManager facade into the specific scroll
+  // roles this consumer uses (data, search, grid, preview). Read through ctx on
+  // every call, never cached.
+  [[nodiscard]] IScrollDataSource *scrollData() const {
+    return m_ctx ? m_ctx->scrollData() : nullptr;
+  }
+  [[nodiscard]] IGridLayoutScroll *scrollGrid() const {
+    return m_ctx ? m_ctx->scrollGrid() : nullptr;
+  }
+  [[nodiscard]] ISearchStateScroll *scrollSearch() const {
+    return m_ctx ? m_ctx->scrollSearch() : nullptr;
+  }
+  [[nodiscard]] IArtworkPreviewScroll *scrollPreview() const {
+    return m_ctx ? m_ctx->scrollPreview() : nullptr;
+  }
+  // Kartend-d2q3l: the full facade is still needed for the one pass-through to
+  // MouseManager::findBestWidgetForClick(), whose static signature takes an
+  // IScrollManager* (a forbidden cross-module file we don't touch here).
   [[nodiscard]] IScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
@@ -153,9 +171,6 @@ private:
     return m_ctx ? m_ctx->keyboardManager() : nullptr;
   }
   [[nodiscard]] IMouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
-  [[nodiscard]] IAnimationManager *animMgr() const {
-    return m_ctx ? m_ctx->animationManager() : nullptr;
-  }
   [[nodiscard]] IViewportManager *viewportMgr() const {
     return m_ctx ? m_ctx->viewportManager() : nullptr;
   }
@@ -167,9 +182,6 @@ private:
   }
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
-  }
-  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
-    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;

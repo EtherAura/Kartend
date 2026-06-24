@@ -283,7 +283,7 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   // the previewed item). Without this bypass the application-level
   // event filter routes those keys to grid-selection navigation
   // before the overlay's own keyPressEvent ever fires.
-  if (scrollMgr() && scrollMgr()->isArtworkPreviewVisible()) {
+  if (scrollPreview() && scrollPreview()->isArtworkPreviewVisible()) {
     return false;
   }
 
@@ -326,8 +326,8 @@ bool EventManager::handleKeyReleaseEvent(QObject *obj, QEvent *event) {
 
 int EventManager::getCurrentGridWidth() const {
   // Prefer ScrollManager's value for filtered/nested views
-  if (scrollMgr()) {
-    int width = scrollMgr()->getCurrentGridWidth();
+  if (scrollGrid()) {
+    int width = scrollGrid()->getCurrentGridWidth();
     if (width > 0) {
       return width;
     }
