@@ -6,9 +6,12 @@
 // the lazily DB-fetched item cache, and each item's owning-collection
 // index (so a "shell" parent routes per item to its real owner). Drives
 // the QTreeWidget / QListWidget population and check-cascade in the
-// unified setup view. Reaches the host dialog's widgets and ScraperContext
-// through friend access; onScrapeClicked (still on the unified controller)
-// reads the picks back through the const accessors below.
+// unified setup view. Decoupled from ScrapeResultDialog (Kartend-hhv2u):
+// the host injects its view widgets via setView() and the collection
+// list + app context via setContext(), so the selection/dedup logic is
+// unit-testable with standalone widgets and a real SQLite DB. onScrapeClicked
+// (still on the unified controller) reads the picks back through the const
+// accessors below.
 
 #include <QHash>
 #include <QObject>
@@ -16,21 +19,36 @@
 #include <QStringList>
 
 QT_BEGIN_NAMESPACE
+class QLabel;
+class QListWidget;
 class QListWidgetItem;
+class QTreeWidget;
 class QTreeWidgetItem;
 QT_END_NAMESPACE
 
-class ScrapeResultDialog;
+struct ApplicationContext;
+struct CollectionConfig;
 
 class ScrapeResultSelectionModel : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScrapeResultSelectionModel)
 
 public:
-  explicit ScrapeResultSelectionModel(ScrapeResultDialog *dlg);
+  explicit ScrapeResultSelectionModel(QObject *parent = nullptr);
 
-  /// Build the collection QTreeWidget from the ScraperContext's
-  /// collection list, mirroring the parent/child hierarchy.
+  /// Inject the view widgets. Called once by
+  /// ScrapeResultDialogUnified::buildUnifiedPanel after the widgets exist
+  /// (they are created later than this model). Borrowed, not owned.
+  void setView(QTreeWidget *collectionTree, QListWidget *itemsList, QLabel *itemsHeaderLabel);
+
+  /// Inject the live collection list + application context. Called from
+  /// ScrapeResultDialog::setScraperContext (the context arrives after
+  /// construction). `collections` is borrowed (MainWindow-owned); `ctx`
+  /// supplies the IDatabaseManager for the lazy per-collection item fetch.
+  void setContext(QList<CollectionConfig> *collections, const ApplicationContext *ctx);
+
+  /// Build the collection QTreeWidget from the injected collection list,
+  /// mirroring the parent/child hierarchy.
   void populateCollectionTree();
   /// Render the items QListWidget for @p collectionIndex; fetches from
   /// the DB on first display (async) then caches for later clicks.
@@ -68,7 +86,14 @@ public slots:
   void onItemCheckChanged(QListWidgetItem *item);
 
 private:
-  ScrapeResultDialog *m_dlg = nullptr;
+  // Injected view widgets (borrowed; owned by the host dialog). Null until
+  // setView() — the model's methods run only after the unified panel is built.
+  QTreeWidget *m_collectionTree = nullptr;
+  QListWidget *m_itemsList = nullptr;
+  QLabel *m_itemsHeaderLabel = nullptr;
+  // Injected context (borrowed). Null until setContext().
+  QList<CollectionConfig> *m_collections = nullptr;
+  const ApplicationContext *m_ctx = nullptr;
 
   /// Per-collection-index inclusion sets. When a collection's tree
   /// checkbox is on, this list dictates which item paths to scrape

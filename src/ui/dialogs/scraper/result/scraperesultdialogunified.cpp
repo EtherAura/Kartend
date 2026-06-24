@@ -210,6 +210,12 @@ QWidget *ScrapeResultDialogUnified::buildCollectionAndItemsPanel() {
           &ScrapeResultSelectionModel::onItemCheckChanged);
   rightLayout->addWidget(m_dlg->m_unifiedItemsList, 1);
   splitter->addWidget(rightContainer);
+
+  // Hand the (decoupled) selection model its view widgets now that they exist
+  // (Kartend-hhv2u). The model is constructed before this panel is built, so
+  // the widgets are injected here rather than at construction.
+  m_dlg->m_selectionModel->setView(m_dlg->m_collectionTree, m_dlg->m_unifiedItemsList,
+                                   m_dlg->m_itemsHeaderLabel);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
   return splitter;

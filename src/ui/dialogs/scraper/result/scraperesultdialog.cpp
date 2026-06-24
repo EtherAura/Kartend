@@ -321,6 +321,10 @@ void ScrapeResultDialog::buildUi() {
 
 void ScrapeResultDialog::setScraperContext(const ScraperContext &ctx) {
   m_scraperCtx = ctx;
+  // Hand the selection model the live collection list + app context it needs
+  // (Kartend-hhv2u): the model is decoupled from the dialog and no longer
+  // reaches m_scraperCtx through friend access.
+  m_selectionModel->setContext(m_scraperCtx.collections, m_scraperCtx.ctx);
 }
 
 void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QString &preItemPath) {

@@ -76,16 +76,13 @@ class ScrapeResultDialog : public QDialog {
 
   // ScrapeResultDialogUnified (Kartend-izpz, 3fkz step 3) owns the
   // unified-flow logic — queue walker, live metadata panel, ScraperService
-  // signal handlers. The selection model, thumbnail loader, and marquee
-  // ticker each own a slice of the live-view state that used to sit on this
-  // host; all four controllers reach the host's widgets through these
-  // friend declarations.
+  // signal handlers. ScrapeResultDialogUnified still reaches the host's widgets
+  // through this friend declaration.
   friend class ScrapeResultDialogUnified;
-  friend class ScrapeResultSelectionModel;
-  // Kartend-kggn8: ValueMarqueeTicker and ScrapeResultThumbnailLoader no longer
-  // need friendship — each is handed the specific widget it drives (the
-  // live-metadata group / the recent-media filmstrip) plus a visibility host at
-  // construction/setup, instead of reaching through a back-pointer.
+  // Kartend-kggn8 / Kartend-hhv2u: ValueMarqueeTicker, ScrapeResultThumbnailLoader,
+  // and ScrapeResultSelectionModel no longer need friendship — each is handed the
+  // specific widgets / context it drives (the selection model via
+  // setView()/setContext()) instead of reaching through a back-pointer.
 
 public:
   /// Outcome of a successful Apply. The `media` list mirrors the

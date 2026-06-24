@@ -1,7 +1,5 @@
 #include "scraperesultselectionmodel.h"
 
-#include "scraperesultdialog.h"
-
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/collectioncontext.h"
@@ -19,14 +17,26 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
-ScrapeResultSelectionModel::ScrapeResultSelectionModel(ScrapeResultDialog *dlg)
-    : QObject(dlg), m_dlg(dlg) {}
+ScrapeResultSelectionModel::ScrapeResultSelectionModel(QObject *parent) : QObject(parent) {}
+
+void ScrapeResultSelectionModel::setView(QTreeWidget *collectionTree, QListWidget *itemsList,
+                                         QLabel *itemsHeaderLabel) {
+  m_collectionTree = collectionTree;
+  m_itemsList = itemsList;
+  m_itemsHeaderLabel = itemsHeaderLabel;
+}
+
+void ScrapeResultSelectionModel::setContext(QList<CollectionConfig> *collections,
+                                            const ApplicationContext *ctx) {
+  m_collections = collections;
+  m_ctx = ctx;
+}
 
 void ScrapeResultSelectionModel::populateCollectionTree() {
-  m_dlg->m_collectionTree->clear();
+  m_collectionTree->clear();
   m_treeItemToCollectionIndex.clear();
-  if (!m_dlg->m_scraperCtx.collections) return;
-  const auto &cols = *m_dlg->m_scraperCtx.collections;
+  if (!m_collections) return;
+  const auto &cols = *m_collections;
 
   // Build a parent-aware QTreeWidget mirroring the collection
   // hierarchy via CollectionConfig::parentCollectionIndex (root rows
@@ -35,7 +45,7 @@ void ScrapeResultSelectionModel::populateCollectionTree() {
   // topologically. Bounded by depth; orphans (out-of-range parent)
   // get re-rooted as a defensive last pass.
   QHash<int, QTreeWidgetItem *> itemByIndex;
-  QSignalBlocker b(m_dlg->m_collectionTree);
+  QSignalBlocker b(m_collectionTree);
   int remaining = cols.size();
   while (remaining > 0) {
     bool progress = false;
@@ -44,7 +54,7 @@ void ScrapeResultSelectionModel::populateCollectionTree() {
       const int pi = cols[i].parentCollectionIndex;
       QTreeWidgetItem *item = nullptr;
       if (pi < 0) {
-        item = new QTreeWidgetItem(m_dlg->m_collectionTree);
+        item = new QTreeWidgetItem(m_collectionTree);
       } else if (itemByIndex.contains(pi)) {
         item = new QTreeWidgetItem(itemByIndex.value(pi));
       } else {
@@ -62,20 +72,20 @@ void ScrapeResultSelectionModel::populateCollectionTree() {
   }
   for (int i = 0; i < cols.size(); ++i) {
     if (itemByIndex.contains(i)) continue;
-    auto *item = new QTreeWidgetItem(m_dlg->m_collectionTree);
+    auto *item = new QTreeWidgetItem(m_collectionTree);
     item->setText(0, cols[i].name);
     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
     item->setCheckState(0, Qt::Unchecked);
     m_treeItemToCollectionIndex.insert(item, i);
   }
-  m_dlg->m_collectionTree->expandAll();
+  m_collectionTree->expandAll();
 }
 
 void ScrapeResultSelectionModel::onCollectionTreeCurrentChanged(QTreeWidgetItem *current,
                                                                 QTreeWidgetItem *) {
   if (!current) {
-    m_dlg->m_itemsHeaderLabel->setText(tr("Select a collection to see its items."));
-    m_dlg->m_unifiedItemsList->clear();
+    m_itemsHeaderLabel->setText(tr("Select a collection to see its items."));
+    m_itemsList->clear();
     return;
   }
   const int idx = m_treeItemToCollectionIndex.value(current, -1);
@@ -119,7 +129,7 @@ void ScrapeResultSelectionModel::onCollectionCheckChanged(QTreeWidgetItem *item,
   // bookkeeping is applied directly instead.
   QSet<int> affected{idx};
   {
-    QSignalBlocker blocker(m_dlg->m_collectionTree);
+    QSignalBlocker blocker(m_collectionTree);
     std::function<void(QTreeWidgetItem *)> cascade = [&](QTreeWidgetItem *parent) {
       for (int i = 0; i < parent->childCount(); ++i) {
         QTreeWidgetItem *child = parent->child(i);
@@ -137,7 +147,7 @@ void ScrapeResultSelectionModel::onCollectionCheckChanged(QTreeWidgetItem *item,
 
   // Refresh the items list if the collection currently on screen is
   // one the cascade just touched.
-  const auto *cur = m_dlg->m_collectionTree->currentItem();
+  const auto *cur = m_collectionTree->currentItem();
   const int curIdx =
       cur ? m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1) : -1;
   if (curIdx >= 0 && affected.contains(curIdx)) {
@@ -146,26 +156,28 @@ void ScrapeResultSelectionModel::onCollectionCheckChanged(QTreeWidgetItem *item,
 }
 
 void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
-  if (!m_dlg->m_scraperCtx.collections || collectionIndex < 0 ||
-      collectionIndex >= m_dlg->m_scraperCtx.collections->size()) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
-  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
-  m_dlg->m_itemsHeaderLabel->setText(tr("Items in '%1'").arg(cfg.name));
+  const CollectionConfig &cfg = (*m_collections)[collectionIndex];
+  m_itemsHeaderLabel->setText(tr("Items in '%1'").arg(cfg.name));
 
   // Fetch from DB on first display per session; cache for subsequent
   // tree clicks. Fetch is async — populate cache from the response.
   if (!m_itemsCacheByCollection.contains(collectionIndex)) {
-    m_dlg->m_unifiedItemsList->clear();
-    auto *placeholder = new QListWidgetItem(tr("Loading items…"), m_dlg->m_unifiedItemsList);
+    m_itemsList->clear();
+    auto *placeholder = new QListWidgetItem(tr("Loading items…"), m_itemsList);
     placeholder->setFlags(placeholder->flags() & ~Qt::ItemIsEnabled);
     // Kartend-m02z: read DB through ctx instead of cached pointer.
-    auto *db = m_dlg->m_scraperCtx.ctx ? m_dlg->m_scraperCtx.ctx->databaseManager() : nullptr;
-    if (!db || !m_dlg->m_scraperCtx.collections) return;
+    auto *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+    if (!db || !m_collections) return;
     CollectionContext context;
     context.config = cfg;
     context.currentIndex = collectionIndex;
-    QPointer<ScrapeResultDialog> guard(m_dlg);
+    // Guard the model itself (the object whose members + injected widgets this
+    // async handler touches). The model is parented to the host dialog, so it
+    // dies with the dialog — and its borrowed widgets die with it too.
+    QPointer<ScrapeResultSelectionModel> guard(this);
     auto *connHolder = new QObject(this);
     QObject::connect(
         db, &IDatabaseManager::itemsRangeLoaded, connHolder,
@@ -182,29 +194,27 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
           if (requestedCollectionIndex != collectionIndex) return;
           connHolder->deleteLater();
           if (guard.isNull()) return;
-          guard->m_selectionModel->m_itemsCacheByCollection[collectionIndex] = filePaths;
+          guard->m_itemsCacheByCollection[collectionIndex] = filePaths;
           // Retain each item's owning-collection index so a
           // scrape of a shell parent routes per item rather
           // than dumping everything on the parent.
-          guard->m_selectionModel->m_itemOwnerByCollection[collectionIndex] = fileToCollectionIndex;
+          guard->m_itemOwnerByCollection[collectionIndex] = fileToCollectionIndex;
           // If the collection was checked before items landed,
           // populate the inclusion set with the full list now.
-          if (guard->m_selectionModel->m_itemSelectionByCollection.contains(collectionIndex) &&
-              guard->m_selectionModel->m_itemSelectionByCollection.value(collectionIndex)
-                  .isEmpty()) {
-            guard->m_selectionModel->m_itemSelectionByCollection[collectionIndex] = filePaths;
+          if (guard->m_itemSelectionByCollection.contains(collectionIndex) &&
+              guard->m_itemSelectionByCollection.value(collectionIndex).isEmpty()) {
+            guard->m_itemSelectionByCollection[collectionIndex] = filePaths;
           }
           // Only re-render if the user is still viewing this collection.
           const auto *cur = guard->m_collectionTree->currentItem();
-          const int curIdx = cur ? guard->m_selectionModel->m_treeItemToCollectionIndex.value(
-                                       const_cast<QTreeWidgetItem *>(cur), -1)
-                                 : -1;
+          const int curIdx =
+              cur ? guard->m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1)
+                  : -1;
           if (curIdx == collectionIndex) {
-            guard->m_selectionModel->rebuildItemsList(collectionIndex);
+            guard->rebuildItemsList(collectionIndex);
           }
         });
-    db->fetchItemsRange(context, *m_dlg->m_scraperCtx.collections, 0,
-                        std::numeric_limits<int>::max(), QString());
+    db->fetchItemsRange(context, *m_collections, 0, std::numeric_limits<int>::max(), QString());
     return;
   }
 
@@ -221,10 +231,10 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
   const QStringList &included = m_itemSelectionByCollection.value(collectionIndex);
   const QSet<QString> includedSet(included.begin(), included.end());
 
-  QSignalBlocker b(m_dlg->m_unifiedItemsList);
-  m_dlg->m_unifiedItemsList->clear();
+  QSignalBlocker b(m_itemsList);
+  m_itemsList->clear();
   for (const QString &path : paths) {
-    auto *row = new QListWidgetItem(QFileInfo(path).fileName(), m_dlg->m_unifiedItemsList);
+    auto *row = new QListWidgetItem(QFileInfo(path).fileName(), m_itemsList);
     row->setFlags(row->flags() | Qt::ItemIsUserCheckable);
     row->setData(Qt::UserRole, path);
     if (!collectionChecked) {
@@ -238,7 +248,7 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
 
 void ScrapeResultSelectionModel::onItemCheckChanged(QListWidgetItem *item) {
   if (!item) return;
-  const auto *cur = m_dlg->m_collectionTree->currentItem();
+  const auto *cur = m_collectionTree->currentItem();
   if (!cur) return;
   const int idx = m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1);
   if (idx < 0) return;
@@ -254,7 +264,7 @@ void ScrapeResultSelectionModel::onItemCheckChanged(QListWidgetItem *item) {
 }
 
 void ScrapeResultSelectionModel::setAllItemsChecked(bool checked) {
-  const auto *cur = m_dlg->m_collectionTree->currentItem();
+  const auto *cur = m_collectionTree->currentItem();
   if (!cur) return;
   const int idx = m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1);
   if (idx < 0) return;
@@ -262,9 +272,9 @@ void ScrapeResultSelectionModel::setAllItemsChecked(bool checked) {
   // is checked; respect that gating here so disabled rows stay off.
   if (cur->checkState(0) != Qt::Checked && checked) return;
   QStringList included;
-  QSignalBlocker b(m_dlg->m_unifiedItemsList);
-  for (int i = 0; i < m_dlg->m_unifiedItemsList->count(); ++i) {
-    auto *row = m_dlg->m_unifiedItemsList->item(i);
+  QSignalBlocker b(m_itemsList);
+  for (int i = 0; i < m_itemsList->count(); ++i) {
+    auto *row = m_itemsList->item(i);
     if (!(row->flags() & Qt::ItemIsEnabled)) continue;
     row->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
     if (checked) {
@@ -280,16 +290,15 @@ void ScrapeResultSelectionModel::preCheckSingleItem(int preCollectionIndex,
   // Right-click flow: pre-check exactly the requested collection +
   // its single item, leaving every other collection in the unchecked
   // default state.
-  if (preCollectionIndex < 0 || !m_dlg->m_scraperCtx.collections ||
-      preCollectionIndex >= m_dlg->m_scraperCtx.collections->size()) {
+  if (preCollectionIndex < 0 || !m_collections || preCollectionIndex >= m_collections->size()) {
     return;
   }
   for (auto it = m_treeItemToCollectionIndex.constBegin();
        it != m_treeItemToCollectionIndex.constEnd(); ++it) {
     if (it.value() == preCollectionIndex) {
-      QSignalBlocker b(m_dlg->m_collectionTree);
+      QSignalBlocker b(m_collectionTree);
       it.key()->setCheckState(0, Qt::Checked);
-      m_dlg->m_collectionTree->setCurrentItem(it.key());
+      m_collectionTree->setCurrentItem(it.key());
       if (!preItemPath.isEmpty()) {
         // Seed the inclusion list with the single requested path so
         // the items-list rebuild ticks only that row.

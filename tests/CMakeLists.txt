@@ -542,6 +542,14 @@ kartend_add_test(NAME ScraperSettingsPanel
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# ScrapeResultSelectionModel: tree-building, check-cascade, and per-item
+# selection/dedup logic, exercised with standalone widgets now that the model
+# is decoupled from ScrapeResultDialog (Kartend-hhv2u).
+kartend_add_test(NAME ScrapeResultSelectionModel
+  SOURCES ui/dialogs/test_scraperesultselectionmodel.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # GamepadCaptureController: capture state machine against a real
 # GamepadManager (binding capture is signal-driven, no SDL hardware needed)
 # via a stub IInteractionManager — arm/disarm UI sync, button routing,
