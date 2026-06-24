@@ -33,7 +33,7 @@ class ScrapeResultDialog;
 /// thumbnail decode/append is ScrapeResultThumbnailLoader, and the per-150-ms
 /// value marquee is ValueMarqueeTicker. Methods here read / write the host's
 /// remaining unified state (m_scraperCtx, m_service, m_unifiedPage,
-/// m_unifiedQueue, m_unifiedPhase, the live-metadata QLineEdit/QTextBrowser
+/// m_unifiedPhase, the live-metadata QLineEdit/QTextBrowser
 /// children, etc.) and host UI widgets via the friend-class privilege declared
 /// on ScrapeResultDialog. The host's other surfaces (legacy single-item
 /// candidate picker, BatchScrapeRunner progress view) remain on
@@ -79,13 +79,6 @@ public:
   void buildUnifiedPanel();
   void setUnifiedSetupEnabled(bool enabled);
   void updateUnifiedProgressLabel();
-  void startNextCollectionInQueue();
-  void runAutoCollection(int collectionIndex, const QStringList &items);
-  void runInteractiveCollection(int collectionIndex, const QStringList &items);
-  void interactiveNextItem();
-  void interactiveOnLookupResult(ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result);
-  void interactiveOnApplied();
-  void interactiveOnSkipped();
   void finishCurrentApply();
   void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
   void populateCustomFields(const QHash<QString, QString> &fields);
@@ -100,18 +93,10 @@ public:
   [[nodiscard]] QList<Scraper::MediaAsset>
   selectInteractiveMediaForApply(const Scraper::ScrapedItem &detail) const;
 
-  /// Narrow accessor for the host (Kartend-unlta). The dialog's Cancel
-  /// handler flips this flag for the legacy in-dialog orchestration path so
-  /// the next queue hop stops; the queue-walking logic that reads it lives
-  /// here, so the flag itself now lives here too. The host no longer touches
-  /// the member directly.
-  void requestUnifiedCancel() { m_unifiedCancelled = true; }
-
 private:
   /// Translates the user's media-type checkboxes (m_dlg->m_mediaTypeChecks)
   /// into the runner's lowercased filter set, splitting the synthetic
-  /// "_metadata" entry off into @p writeMetadata. Shared by onScrapeClicked
-  /// + runAutoCollection.
+  /// "_metadata" entry off into @p writeMetadata. Used by onScrapeClicked.
   [[nodiscard]] QSet<QString> buildMediaFilter(bool &writeMetadata) const;
 
   // ── buildUnifiedPanel section builders (Kartend-etbol) ──────────────────
@@ -139,42 +124,25 @@ private:
   void buildProgressLabels(QGroupBox *&thumbsGroup, QWidget *&currentLabel, QWidget *&progressBar,
                            QWidget *&timingLabel, QWidget *&countsLabel, QWidget *&quotaLabel);
 
-  // ── Unified-flow orchestration state (Kartend-unlta) ────────────────────
-  // Relocated off ScrapeResultDialog's header onto this controller, which
-  // already owns the queue walker + interactive driver that mutate it. The
-  // host used to store this state and let this class reach in via friendship;
-  // now the state lives where its logic does. The host reads none of it
-  // directly except the cancel flag, exposed via requestUnifiedCancel().
+  // ── Live-view state (Kartend-4qx7m) ─────────────────────────────────────
+  // The dialog drives a single ScraperService; the service owns the run
+  // queue, progress counters, and failure list (read back through its
+  // summary()/itemsCompleted()/etc.). Only two pieces of view-local state
+  // remain here: the download-rate sampling window and the path of the item
+  // the interactive picker is currently showing.
 
-  /// Snapshot at scrape time: queue of (collectionIndex, items) tuples
-  /// to process in sequence. AutoRunning + Interactive both walk this.
-  struct CollectionJob {
-    int collectionIndex;
-    QString collectionName;
-    QStringList items;
-  };
-  QList<CollectionJob> m_unifiedQueue;
-  int m_unifiedQueueCursor = 0;
-  qint64 m_unifiedStartMs = 0;
   /// Sliding window of (timestampMs, cumulativeBytes) samples used
   /// to compute a recent download rate for the Live view. Pruned to
   /// the last ~10 seconds of samples on every update so the rate
   /// readout reflects current activity, not the all-run average
   /// (which gets dragged down by long lookup-API idle stretches).
   QList<QPair<qint64, qint64>> m_rateSamples;
-  int m_unifiedItemsCompletedAcross = 0;
-  int m_unifiedScrapedTotal = 0;
-  int m_unifiedSkippedTotal = 0;
-  int m_unifiedErrorsTotal = 0;
-  QStringList m_unifiedFailures;
-  /// Active provider for the current collection (interactive mode).
-  std::shared_ptr<MetadataLookupProvider> m_interactiveProvider;
-  /// Iterator state for interactive mode: items list for current
-  /// collection, cursor into it.
+
+  /// The item path the service-driven interactive picker is currently on:
+  /// set in onServicePickerNeeded, read by finishCurrentApply when the user
+  /// applies. A single-element list — the service emits one pickerNeeded
+  /// per item, so this is just "the item on screen right now".
   QStringList m_interactiveItems;
-  int m_interactiveCursor = 0;
-  int m_interactiveCollectionIndex = -1;
-  bool m_unifiedCancelled = false;
 
   ScrapeResultDialog *m_dlg = nullptr;
 };

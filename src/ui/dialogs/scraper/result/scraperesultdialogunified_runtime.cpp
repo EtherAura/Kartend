@@ -3,12 +3,13 @@
 //
 // Holds the service signal handlers (onServiceScrapeStarted, onServiceItemBegan,
 // onServiceItemCompleted, onServicePickerNeeded, onServiceScrapeFinished,
-// onServiceScrapePaused, onServiceQuotaUpdated), plus the per-item /
-// per-collection orchestration that begins from onScrapeClicked
-// (startNextCollectionInQueue, runAutoCollection, runInteractiveCollection,
-// interactiveNextItem, interactiveOnLookupResult, interactiveOnApplied,
-// finishCurrentApply, interactiveOnSkipped) and the diagnostic helpers
-// (updateUnifiedProgressLabel, showScrapeErrorDetails).
+// onServiceScrapePaused, onServiceQuotaUpdated), the scrape kickoff
+// (onScrapeClicked, which hands the queue to the ScraperService) plus the
+// interactive Apply hop (finishCurrentApply) and the diagnostic helpers
+// (updateUnifiedProgressLabel, showScrapeErrorDetails). The dialog drives a
+// single ScraperService — the in-dialog fallback orchestration was removed in
+// Kartend-4qx7m (it was dead: production always wires a service, no test drove
+// it).
 //
 // All remain ScrapeResultDialogUnified members; this is purely a TU split
 // to bring the parent file out of the ~1900 LOC zone. The live-view assembly
@@ -161,10 +162,7 @@ void ScrapeResultDialogUnified::onServiceItemCompleted(int done, int total,
   if (!m_dlg->isVisible()) return;
   // Don't poke the progress bar here — updateUnifiedProgressLabel
   // (called below) is the single source of truth and reads counters
-  // straight from the service. Doing both used to race: this slot
-  // would set the value, then the helper would reset it from the
-  // legacy m_unifiedItemsCompletedAcross (always 0 in service mode),
-  // so the bar stayed at zero. Shared field-population path so auto
+  // straight from the service. Shared field-population path so auto
   // and interactive modes render to identical widgets.
   applyScrapedItemToLive(scraped);
   // Sync the "currently scraping" label with whatever just landed in
@@ -206,9 +204,7 @@ void ScrapeResultDialogUnified::onServicePickerNeeded(
   // button confirms.
   m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractivePicking;
   m_dlg->m_mode = ScrapeResultDialog::Mode::Unified;
-  m_interactiveProvider = provider;
   m_interactiveItems = {itemPath};
-  m_interactiveCursor = 0;
   m_dlg->m_singleItemView->clearMediaRows();
   // Populate the candidate combo from the lookup result. Block signals
   // during the refill so the first-row change doesn't trigger a stray
@@ -295,9 +291,9 @@ void ScrapeResultDialogUnified::onServiceQuotaUpdated(const Scraper::QuotaStatus
 }
 
 void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
-  // Service-driven path: counters live on the ScraperService, not on
-  // this controller's legacy m_unified* fields. Read from whichever is the
-  // source of truth for the active run.
+  // Counters live on the ScraperService — the single source of truth. When no
+  // run is active the totals stay zero and we bail at the `total <= 0` guard
+  // below.
   int total = 0;
   int done = 0;
   qint64 startMs = 0;
@@ -312,13 +308,6 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
     scraped = s.scraped;
     skipped = s.skipped;
     errors = s.errors;
-  } else {
-    total = m_dlg->m_selectionModel->totalCheckedItemCount();
-    done = m_unifiedItemsCompletedAcross;
-    startMs = m_unifiedStartMs;
-    scraped = m_unifiedScrapedTotal;
-    skipped = m_unifiedSkippedTotal;
-    errors = m_unifiedErrorsTotal;
   }
   if (total <= 0) return;
   m_dlg->m_unifiedProgressBar->setRange(0, total);
@@ -362,8 +351,7 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
           .arg(done)
           .arg(total)
           .arg(ScrapeResultDialog::formatDuration(elapsedMs), etaStr, rateStr));
-  int mediaWritten = 0;
-  if (m_dlg->m_service) mediaWritten = m_dlg->m_service->summary().mediaWritten;
+  const int mediaWritten = m_dlg->m_service ? m_dlg->m_service->summary().mediaWritten : 0;
   // Render the error count as a clickable link when there are errors,
   // so the user can open the recorded failure messages. Substituted
   // into the %4 slot rather than baked into the tr() string so the
@@ -378,17 +366,11 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
 }
 
 void ScrapeResultDialogUnified::showScrapeErrorDetails() {
-  // Gather failure messages from both the service summary (live /
-  // service-driven runs) and the in-dialog accumulator (the fallback
-  // orchestration path); dedupe so a message recorded by both isn't
-  // listed twice.
-  QStringList failures = m_unifiedFailures;
+  // Failure messages come straight off the service summary (the single
+  // source of truth for the run).
+  QStringList failures;
   if (m_dlg->m_service) {
-    for (const QString &failure : m_dlg->m_service->summary().firstFailures) {
-      if (!failures.contains(failure)) {
-        failures.append(failure);
-      }
-    }
+    failures = m_dlg->m_service->summary().firstFailures;
   }
 
   // The total error count comes straight off the summary; failures is
@@ -463,18 +445,6 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
   // (the service's persistence layer keys jobs by these so resume
   // can survive a config reorder).
   QList<Scraper::ScraperService::CollectionJob> serviceQueue;
-  // Legacy/test fallback queue uses the dialog's own CollectionJob
-  // shape; populated in parallel so the in-dialog orchestration still
-  // runs when no service is wired.
-  m_unifiedQueue.clear();
-  m_unifiedQueueCursor = 0;
-  m_unifiedScrapedTotal = 0;
-  m_unifiedSkippedTotal = 0;
-  m_unifiedErrorsTotal = 0;
-  m_unifiedFailures.clear();
-  m_unifiedItemsCompletedAcross = 0;
-  m_unifiedCancelled = false;
-  m_unifiedStartMs = QDateTime::currentMSecsSinceEpoch();
   // Resolve every checked item to its owning collection, then emit one
   // job per owner. A "shell" parent collection displays the items of
   // its subcollections; checking the parent row pulls those items in,
@@ -508,12 +478,6 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
     sJob.artworkDir = artworkDir;
     sJob.items = items;
     serviceQueue.append(sJob);
-
-    CollectionJob job;
-    job.collectionIndex = owner;
-    job.collectionName = cfg.name;
-    job.items = items;
-    m_unifiedQueue.append(job);
   }
   if (serviceQueue.isEmpty()) {
     QMessageBox::information(m_dlg, tr("Scraper"),
@@ -527,290 +491,44 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
                         ? Scraper::ScraperService::Mode::Auto
                         : Scraper::ScraperService::Mode::Interactive;
 
-  if (m_dlg->m_service) {
-    // Production path: hand the queue off to the long-lived service
-    // and let it drive. The dialog's signal handlers (wired in
-    // setScraperService) flip the UI into Live view + advance progress
-    // from there. Close button now relevant.
-    qCInfo(lcScrapeTimings) << "DIALOG onScrapeClicked: service path, queue size="
-                            << serviceQueue.size() << "mode="
-                            << (mode == Scraper::ScraperService::Mode::Auto ? "auto"
-                                                                            : "interactive")
-                            << "writeMetadata=" << writeMetadata << "mediaFilter=" << mediaFilter;
-    setUnifiedSetupEnabled(false);
-    if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
-    m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
-    return;
-  }
-
-  // Fallback path: no service wired — run the orchestration in the
-  // dialog itself (matches the v1 behaviour for tests / unit harnesses
-  // that haven't been migrated to the service yet). This path keeps
-  // working but does NOT survive dialog close / app exit.
+  // Hand the queue off to the long-lived service and let it drive. The
+  // dialog's signal handlers (wired in setScraperService) flip the UI into
+  // Live view + advance progress from there. Close button now relevant.
+  qCInfo(lcScrapeTimings) << "DIALOG onScrapeClicked: service path, queue size="
+                          << serviceQueue.size() << "mode="
+                          << (mode == Scraper::ScraperService::Mode::Auto ? "auto" : "interactive")
+                          << "writeMetadata=" << writeMetadata << "mediaFilter=" << mediaFilter;
   setUnifiedSetupEnabled(false);
-  m_dlg->m_unifiedProgressBar->setRange(0, m_dlg->m_selectionModel->totalCheckedItemCount());
-  m_dlg->m_unifiedProgressBar->setValue(0);
-  updateUnifiedProgressLabel();
-  startNextCollectionInQueue();
-}
-
-void ScrapeResultDialogUnified::startNextCollectionInQueue() {
-  if (m_unifiedCancelled || m_unifiedQueueCursor >= m_unifiedQueue.size()) {
-    // All done — fire summary signal, leave the dialog open with the
-    // final state visible (caller can dismiss).
-    m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::Done;
-    m_dlg->m_unifiedCurrentLabel->setText(tr("Finished."));
-    emit m_dlg->unifiedScrapeFinished(m_unifiedScrapedTotal, m_unifiedSkippedTotal,
-                                      m_unifiedErrorsTotal, m_unifiedFailures);
-    m_dlg->accept();
-    return;
-  }
-  const CollectionJob &job = m_unifiedQueue[m_unifiedQueueCursor];
-  m_dlg->m_unifiedCurrentLabel->setText(tr("Collection: %1  (%2 of %3)")
-                                            .arg(job.collectionName)
-                                            .arg(m_unifiedQueueCursor + 1)
-                                            .arg(m_unifiedQueue.size()));
-  updateUnifiedProgressLabel();
-  if (m_dlg->m_modeAutoRadio->isChecked()) {
-    m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::AutoRunning;
-    runAutoCollection(job.collectionIndex, job.items);
-  } else {
-    m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractiveLookingUp;
-    runInteractiveCollection(job.collectionIndex, job.items);
-  }
-}
-
-void ScrapeResultDialogUnified::runAutoCollection(int collectionIndex, const QStringList &items) {
-  // Kartend-m02z: ScraperContext now carries the full ApplicationContext;
-  // a missing/null ctx is treated like the legacy missing databaseManager.
-  auto *runAutoDb = m_dlg->m_scraperCtx.ctx ? m_dlg->m_scraperCtx.ctx->databaseManager() : nullptr;
-  if (!m_dlg->m_scraperCtx.providerBuilder || !runAutoDb || !m_dlg->m_scraperCtx.generalSettings ||
-      !m_dlg->m_scraperCtx.collections) {
-    ++m_unifiedErrorsTotal;
-    ++m_unifiedQueueCursor;
-    startNextCollectionInQueue();
-    return;
-  }
-  std::shared_ptr<MetadataLookupProvider> provider =
-      m_dlg->m_scraperCtx.providerBuilder(collectionIndex);
-  if (!provider) {
-    m_unifiedFailures.append(
-        tr("%1: no provider applies").arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
-    m_unifiedErrorsTotal += items.size();
-    m_unifiedItemsCompletedAcross += items.size();
-    ++m_unifiedQueueCursor;
-    updateUnifiedProgressLabel();
-    startNextCollectionInQueue();
-    return;
-  }
-  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
-  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
-  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
-  const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
-  const Scraper::RescrapeMode rescrapeMode = static_cast<Scraper::RescrapeMode>(
-      m_dlg->m_scraperCtx.generalSettings->scraper.options.rescrapeMode);
-  const int itemConcurrency =
-      m_dlg->m_scraperCtx.generalSettings->scraper.options.batchItemConcurrency;
-  const int skipRecentDays =
-      m_dlg->m_scraperCtx.generalSettings->scraper.options.skipRecentScrapeDays;
-
-  // Empty media filter → runner falls back to legacy "front only" behaviour;
-  // non-empty → runner fetches every matching type per item in parallel (see
-  // buildMediaFilter for the checkbox → filter translation + _metadata split).
-  bool writeMetadata = true;
-  const QSet<QString> mediaFilter = buildMediaFilter(writeMetadata);
-
-  auto *runner = new Scraper::BatchScrapeRunner(
-      m_dlg->m_scraperCtx.ctx, std::move(provider), uuid, items, artworkDir,
-      /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, skipRecentDays, this);
-  runner->setMediaTypeFilter(mediaFilter);
-  runner->setWriteMetadata(writeMetadata);
-  m_dlg->m_batchRunner = runner;
-
-  connect(
-      runner, &Scraper::BatchScrapeRunner::progress, this,
-      [this](int done, int total, const QString &name) {
-        // `done` is per-collection; aggregate across queue items
-        // for the dialog's outer progress. m_unifiedItemsCompletedAcross
-        // accumulates the prior queue items' completions before this
-        // collection started — the +done below is per-collection
-        // progress on top of that running total.
-        const int totalAcross = m_dlg->m_selectionModel->totalCheckedItemCount();
-        m_dlg->m_unifiedProgressBar->setRange(0, totalAcross);
-        m_dlg->m_unifiedProgressBar->setValue(m_unifiedItemsCompletedAcross + done);
-        m_dlg->m_unifiedCurrentLabel->setText(
-            tr("Scraping: %1  (item %2 of %3 in this collection)").arg(name).arg(done).arg(total));
-        updateUnifiedProgressLabel();
-      });
-  connect(runner, &Scraper::BatchScrapeRunner::finished, this,
-          [this, runner, items](const Scraper::BatchScrapeRunner::Summary &s) {
-            m_unifiedScrapedTotal += s.scraped;
-            m_unifiedSkippedTotal += s.skipped;
-            m_unifiedErrorsTotal += s.errors;
-            m_unifiedFailures.append(s.firstFailures);
-            m_unifiedItemsCompletedAcross += items.size();
-            m_dlg->m_batchRunner = nullptr;
-            runner->deleteLater();
-            ++m_unifiedQueueCursor;
-            startNextCollectionInQueue();
-          });
-  runner->start();
-}
-
-void ScrapeResultDialogUnified::runInteractiveCollection(int collectionIndex,
-                                                         const QStringList &items) {
-  if (!m_dlg->m_scraperCtx.providerBuilder) {
-    ++m_unifiedErrorsTotal;
-    ++m_unifiedQueueCursor;
-    startNextCollectionInQueue();
-    return;
-  }
-  m_interactiveProvider = m_dlg->m_scraperCtx.providerBuilder(collectionIndex);
-  m_interactiveItems = items;
-  m_interactiveCursor = 0;
-  m_interactiveCollectionIndex = collectionIndex;
-  if (!m_interactiveProvider) {
-    m_unifiedFailures.append(
-        tr("%1: no provider applies").arg(m_unifiedQueue[m_unifiedQueueCursor].collectionName));
-    m_unifiedErrorsTotal += items.size();
-    m_unifiedItemsCompletedAcross += items.size();
-    ++m_unifiedQueueCursor;
-    updateUnifiedProgressLabel();
-    startNextCollectionInQueue();
-    return;
-  }
-  interactiveNextItem();
-}
-
-void ScrapeResultDialogUnified::interactiveNextItem() {
-  if (m_unifiedCancelled || m_interactiveCursor >= m_interactiveItems.size()) {
-    // End of items for this collection — advance the outer queue.
-    ++m_unifiedQueueCursor;
-    startNextCollectionInQueue();
-    return;
-  }
-  const QString filePath = m_interactiveItems[m_interactiveCursor];
-  m_dlg->m_unifiedCurrentLabel->setText(tr("Looking up: %1").arg(QFileInfo(filePath).fileName()));
-  // Issue the lookup; once candidates land we flip to the single-item
-  // page and let the user pick.
-  const QString queryText = QFileInfo(filePath).completeBaseName();
-  MetadataLookupProvider::LookupContext ctx{queryText, filePath};
-  QPointer<ScrapeResultDialog> guard(m_dlg);
-  m_interactiveProvider->lookup(ctx,
-                                [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
-                                  if (guard.isNull()) return;
-                                  guard->m_unified->interactiveOnLookupResult(std::move(r));
-                                });
-}
-
-void ScrapeResultDialogUnified::interactiveOnLookupResult(
-    ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
-  if (m_unifiedCancelled) {
-    ++m_unifiedQueueCursor;
-    startNextCollectionInQueue();
-    return;
-  }
-  if (result.isError() || result.value().isEmpty()) {
-    if (result.isError()) {
-      ++m_unifiedErrorsTotal;
-      m_unifiedFailures.append(QStringLiteral("%1: %2").arg(
-          QFileInfo(m_interactiveItems[m_interactiveCursor]).fileName(), result.error().message));
-    } else {
-      ++m_unifiedSkippedTotal;
-    }
-    ++m_unifiedItemsCompletedAcross;
-    ++m_interactiveCursor;
-    updateUnifiedProgressLabel();
-    interactiveNextItem();
-    return;
-  }
-  // Flip to the single-item picker page for this item. Hand the
-  // candidate list to the view (Kartend-xvci step 4) — its
-  // setProviderAndCandidates populates the list widget, hides the
-  // panel on single-result responses, pre-selects row 0, and the
-  // resulting onCandidateSelected fetches detail. After the user
-  // clicks Apply or Cancel we catch the result via interactiveOnApplied
-  // / interactiveOnSkipped.
-  m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractivePicking;
-  m_dlg->m_singleItemView->clearMediaRows();
-  m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_singleItemView);
-  m_dlg->m_applyButton->show();
-  m_dlg->m_applyButton->setEnabled(false);
-  if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->hide();
-  m_dlg->m_singleItemView->setProviderAndCandidates(m_interactiveProvider.get(), result.value());
-}
-
-void ScrapeResultDialogUnified::interactiveOnApplied() {
-  // Called when the user's Apply finishes (m_dlg->m_result populated).
-  // Honour the `_metadata` checkbox by stripping textual fields when
-  // unchecked — applyResult downstream will then preserve whatever's
-  // in the DB instead of overwriting with the scrape's text.
-  ScrapeResultDialog::Result delivered = m_dlg->m_result;
-  auto *metaCheck = m_dlg->m_mediaTypeChecks.value(QStringLiteral("_metadata"));
-  if (metaCheck && !metaCheck->isChecked()) {
-    stripTextualFields(delivered.item);
-  }
-  if (m_dlg->m_scraperCtx.applyResult) {
-    m_dlg->m_scraperCtx.applyResult(m_interactiveCollectionIndex,
-                                    m_interactiveItems[m_interactiveCursor], delivered);
-  }
-  ++m_unifiedScrapedTotal;
-  ++m_unifiedItemsCompletedAcross;
-  ++m_interactiveCursor;
-  updateUnifiedProgressLabel();
-  // Switch back to the unified page for the next item's lookup phase.
-  m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
-  if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->show();
-  m_dlg->m_applyButton->hide();
-  m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractiveLookingUp;
-  interactiveNextItem();
+  if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
+  m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
 }
 
 void ScrapeResultDialogUnified::finishCurrentApply() {
-  // Unified interactive picker: don't close the dialog — advance to
-  // the next item instead.
+  // Unified interactive picker: don't close the dialog — advance to the next
+  // item instead. Persist via the caller's applyResult hook, then tell the
+  // service to advance; it emits `pickerNeeded` for the next item, which the
+  // dialog's signal handler flips us into. Stays in the same window throughout.
   if (m_dlg->m_mode == ScrapeResultDialog::Mode::Unified &&
       m_dlg->m_unifiedPhase == ScrapeResultDialog::UnifiedPhase::InteractivePicking) {
-    // Service-driven path: persist via the caller's applyResult hook,
-    // then tell the service to advance. The service emits
-    // `pickerNeeded` for the next item, which the dialog's signal
-    // handler flips us into. Stays in the same window throughout.
-    if (m_dlg->m_service) {
-      ScrapeResultDialog::Result delivered = m_dlg->m_result;
-      auto *metaCheck = m_dlg->m_mediaTypeChecks.value(QStringLiteral("_metadata"));
-      if (metaCheck && !metaCheck->isChecked()) {
-        stripTextualFields(delivered.item);
-      }
-      if (m_dlg->m_scraperCtx.applyResult && !m_interactiveItems.isEmpty()) {
-        // The service is the source of truth for which collection
-        // is being processed (the dialog may be reattached to a
-        // resumed run where m_interactiveCollectionIndex is stale).
-        const int idx = m_dlg->m_service->currentCollectionIndex();
-        m_dlg->m_scraperCtx.applyResult(idx, m_interactiveItems.first(), delivered);
-      }
-      // Stay on the unified page. Apply button hides until the next
-      // pickerNeeded signal arrives (which re-enables it with the
-      // next item's candidates). The interactive candidate row also
-      // hides momentarily — the next pickerNeeded re-shows it.
-      if (m_dlg->m_applyButton) m_dlg->m_applyButton->hide();
-      if (m_dlg->m_interactiveCandidateRow) m_dlg->m_interactiveCandidateRow->hide();
-      m_dlg->m_service->applyPick(delivered.item);
-      return;
+    ScrapeResultDialog::Result delivered = m_dlg->m_result;
+    auto *metaCheck = m_dlg->m_mediaTypeChecks.value(QStringLiteral("_metadata"));
+    if (metaCheck && !metaCheck->isChecked()) {
+      stripTextualFields(delivered.item);
     }
-    interactiveOnApplied();
+    if (m_dlg->m_scraperCtx.applyResult && !m_interactiveItems.isEmpty()) {
+      // The service is the source of truth for which collection is being
+      // processed (the dialog may be reattached to a resumed run).
+      const int idx = m_dlg->m_service->currentCollectionIndex();
+      m_dlg->m_scraperCtx.applyResult(idx, m_interactiveItems.first(), delivered);
+    }
+    // Stay on the unified page. Apply button hides until the next pickerNeeded
+    // signal arrives (which re-enables it with the next item's candidates). The
+    // interactive candidate row also hides momentarily — the next pickerNeeded
+    // re-shows it.
+    if (m_dlg->m_applyButton) m_dlg->m_applyButton->hide();
+    if (m_dlg->m_interactiveCandidateRow) m_dlg->m_interactiveCandidateRow->hide();
+    m_dlg->m_service->applyPick(delivered.item);
     return;
   }
   m_dlg->accept();
-}
-
-void ScrapeResultDialogUnified::interactiveOnSkipped() {
-  ++m_unifiedSkippedTotal;
-  ++m_unifiedItemsCompletedAcross;
-  ++m_interactiveCursor;
-  updateUnifiedProgressLabel();
-  m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
-  if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->show();
-  m_dlg->m_applyButton->hide();
-  m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::InteractiveLookingUp;
-  interactiveNextItem();
 }

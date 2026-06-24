@@ -285,26 +285,18 @@ void ScrapeResultDialog::buildUi() {
       return;
     }
     if (m_mode == Mode::Unified) {
-      // Setup phase: just reject the dialog (no scrape has started).
-      // Running phase, service-owned: ask the service to cancel;
-      //   the service drains in-flight items and emits
-      //   scrapeFinished, the dialog's signal handler flips back
-      //   to the Setup view. The dialog itself doesn't close.
-      // Running phase, legacy in-dialog orchestration: flip the
-      //   cancel flag so the next chain hop stops.
+      // Service-owned run in flight: ask the service to cancel. It drains
+      // in-flight items and emits scrapeFinished; the dialog's signal handler
+      // flips back to the Setup view, and the dialog itself stays open.
       if (m_service && m_service->isActive()) {
         m_service->cancel();
         return;
       }
-      if (m_unifiedPhase == UnifiedPhase::Setup || m_unifiedPhase == UnifiedPhase::Done) {
-        reject();
-        return;
-      }
-      // Kartend-unlta: the cancel flag now lives on the unified controller
-      // (which owns the queue walker that reads it); flip it via the narrow
-      // accessor instead of touching the relocated member directly.
-      m_unified->requestUnifiedCancel();
-      if (m_batchRunner) m_batchRunner->cancel();
+      // Not actively scraping (Setup / Done / finished-inactive) — nothing to
+      // drain, so just close the dialog. (Kartend-4qx7m: the in-dialog
+      // orchestration fallback and its cancel flag are gone; the service is
+      // the only scrape driver.)
+      reject();
       return;
     }
     if (m_downloadsTotal > 0) {
