@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QFutureWatcher>
 
+#include "datauditdownloadservice.h"
 #include "datauditlayout.h"
 #include "datauditprofile.h"
 #include "datauditrunner.h"
@@ -158,20 +159,9 @@ private:
     NoIntroParse::DailyForm form;
   };
 
-  /// Off-thread outcome of the download+import pipeline.
-  struct DownloadOutcome {
-    bool ok = false;
-    QString error;
-    QString packName;
-    int datCount = 0;
-    // Provenance for the extracted DATs (Kartend-m6qsb.26), recorded so a later
-    // "check for updates" can ask the source for a newer revision.
-    QStringList datPaths; ///< Extracted DAT file paths.
-    QString source;       ///< "nointro" / "redump".
-    QString slug;         ///< Redump system slug (empty for No-Intro).
-    int systemId = 0;     ///< No-Intro system id (0 for Redump).
-    QString version;      ///< No-Intro pack date / Redump header version at fetch time.
-  };
+  // The download + update-check outcome structs (formerly DownloadOutcome /
+  // UpdateRunResult) moved to DatAuditDownloadService (Kartend-ahf3d stage 1):
+  // DatAuditDownloadService::Outcome / ::UpdateResult.
 
   /// Off-thread outcome of the redump.org systems-list fetch.
   struct RedumpSystemsOutcome {
@@ -180,25 +170,9 @@ private:
     QList<RedumpParse::System> systems;
   };
 
-  /// Off-thread outcome of a "check for updates" run (Kartend-m6qsb.31): how
-  /// many provenanced catalogues were checked, and the re-download outcome of
-  /// each one found outdated (carrying the new provenance to persist).
-  struct UpdateRunResult {
-    int checked = 0;
-    QList<DownloadOutcome> downloads; ///< One per outdated catalogue re-downloaded.
-  };
-
-  /// Download + extract one source's DAT(s) into `lib`, returning the outcome
-  /// with provenance fields filled. Shared by the manual Download page and the
-  /// "check for updates" re-download. Static + pure-of-`this` so it runs on the
-  /// worker thread. `progress` may be null.
-  [[nodiscard]] static DownloadOutcome performDownload(bool redump, NoIntroDownload::Options niOpts,
-                                                       const QString &redumpSlug,
-                                                       const QString &packDate, const QString &lib,
-                                                       const NoIntroDownload::CancelToken &cancel,
-                                                       const NoIntroDownload::ProgressFn &progress);
-  /// Persist provenance for every DAT in a successful download outcome.
-  void recordDownloadProvenance(const DownloadOutcome &o);
+  // performDownload + recordDownloadProvenance + the update-check worker moved
+  // to DatAuditDownloadService (Kartend-ahf3d stage 1). The dialog drives the
+  // service via m_downloadService and keeps only the view concerns.
 
   /// Which download source the page is targeting.
   enum class DownloadSource { NoIntro, Redump };
@@ -343,7 +317,7 @@ private:
   QLabel *m_libraryPathLabel = nullptr;
   QPushButton *m_libraryReviewButton = nullptr;
   QPushButton *m_checkUpdatesButton = nullptr; ///< Check downloaded DATs for newer revisions (.31)
-  QFutureWatcher<UpdateRunResult> m_updateWatcher;
+  QFutureWatcher<DatAuditDownloadService::UpdateResult> m_updateWatcher;
   std::shared_ptr<std::atomic<bool>> m_updateCancel;
   QPushButton *m_importZipButton = nullptr;
   QPushButton *m_importFolderButton = nullptr;
@@ -374,9 +348,13 @@ private:
   NoIntroParse::DailyForm m_dailyForm;
   QFutureWatcher<DailyFormOutcome> m_dlFormWatcher;
   QFutureWatcher<RedumpSystemsOutcome> m_redumpSystemsWatcher;
-  QFutureWatcher<DownloadOutcome> m_dlWatcher;
+  QFutureWatcher<DatAuditDownloadService::Outcome> m_dlWatcher;
   std::shared_ptr<std::atomic<bool>> m_dlCancel;
   bool m_downloading = false;
+  /// Off-thread download + provenance + update-check orchestration extracted
+  /// from this dialog (Kartend-ahf3d stage 1). Constructed in the ctor with the
+  /// transient-connection provenance accessor; see datauditdownloadservice.h.
+  std::unique_ptr<DatAuditDownloadService> m_downloadService;
 };
 
 #endif // DATAUDITDIALOG_H

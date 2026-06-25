@@ -7,6 +7,8 @@ target_sources(kartend_data PRIVATE
   datauditbuckets.h
   datauditcatalogue.cpp
   datauditcatalogue.h
+  datauditdownloadservice.cpp
+  datauditdownloadservice.h
   datauditexport.cpp
   datauditexport.h
   datauditfix.cpp

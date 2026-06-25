@@ -156,6 +156,29 @@ void refreshDatRefMetadata(QList<DatAuditProfile::DatRef> &dats) {
 } // namespace
 
 DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
+  // Kartend-ahf3d stage 1: the download/provenance/update-check orchestration
+  // lives in DatAuditDownloadService. It never opens a QSqlDatabase itself —
+  // provenance reads/writes reach SQLite through these injected accessors, which
+  // wrap the dialog's existing transient-connection helper (withProfileDb). A
+  // later stage (DatAuditProfileStore) replaces the accessor with a real store.
+  m_downloadService =
+      std::make_unique<DatAuditDownloadService>(DatAuditDownloadService::ProvenanceAccess{
+          [] {
+            QList<DatLibraryState::Provenance> all;
+            withProfileDb([&all](QSqlDatabase &db) {
+              if (auto r = DatLibraryState::loadAllProvenance(db); r.isOk()) {
+                all = r.value();
+              }
+            });
+            return all;
+          },
+          [](const DatLibraryState::Provenance &pr) {
+            withProfileDb([&pr](QSqlDatabase &db) {
+              if (auto res = DatLibraryState::recordProvenance(db, pr); res.isError()) {
+                ErrorUtils::logError(res.error());
+              }
+            });
+          }});
   setWindowTitle(tr("DAT Manager"));
   setWindowFlag(Qt::Window, true);
   // Default opening size, and a generous minimum floor: without an explicit
@@ -588,9 +611,9 @@ void DatAuditDialog::wireDownloadActions() {
   connect(m_dlCancelButton, &QPushButton::clicked, this, &DatAuditDialog::onCancelDownload);
   connect(&m_dlFormWatcher, &QFutureWatcher<DailyFormOutcome>::finished, this,
           &DatAuditDialog::onLoadDailyFormFinished);
-  connect(&m_dlWatcher, &QFutureWatcher<DownloadOutcome>::finished, this,
+  connect(&m_dlWatcher, &QFutureWatcher<DatAuditDownloadService::Outcome>::finished, this,
           &DatAuditDialog::onDownloadFinished);
-  connect(&m_updateWatcher, &QFutureWatcher<UpdateRunResult>::finished, this,
+  connect(&m_updateWatcher, &QFutureWatcher<DatAuditDownloadService::UpdateResult>::finished, this,
           &DatAuditDialog::onCheckUpdatesFinished);
 }
 
@@ -1894,94 +1917,30 @@ void DatAuditDialog::onStartDownload() {
   };
 
   // No-Intro's revision is the daily pack date, known here on the UI thread;
-  // Redump's is read from the downloaded DAT header inside performDownload.
+  // Redump's is read from the downloaded DAT header inside the service.
   const QString packDate = redump ? QString() : m_dailyForm.packDate;
-  m_dlWatcher.setFuture(
-      QtConcurrent::run([redump, niOpts, redumpSlug, lib, packDate, cancel, progressFn] {
-        return performDownload(redump, niOpts, redumpSlug, packDate, lib, cancel, progressFn);
-      }));
-}
-
-DatAuditDialog::DownloadOutcome
-DatAuditDialog::performDownload(bool redump, NoIntroDownload::Options niOpts,
-                                const QString &redumpSlug, const QString &packDate,
-                                const QString &lib, const NoIntroDownload::CancelToken &cancel,
-                                const NoIntroDownload::ProgressFn &progress) {
-  // Download to a temp dir → extract DATs into the library, so a failed or
-  // cancelled run never leaves a partial zip behind. Shared by the manual
-  // Download page and the "check for updates" re-download (Kartend-m6qsb.31).
-  QTemporaryDir tmp;
-  const QString dest = tmp.isValid() ? tmp.path() : lib;
-  ErrorUtils::Result<NoIntroDownload::DownloadResult> dl =
-      redump ? RedumpDownload::run(redumpSlug, dest, progress, cancel) : [&] {
-        niOpts.destDir = dest;
-        return NoIntroDownload::run(niOpts, progress, cancel);
-      }();
-  if (dl.isError()) {
-    DownloadOutcome fail;
-    fail.error = dl.error().message;
-    return fail;
-  }
-  auto ex = NoIntroDownload::extractDatsTo(dl.value().zipPath, lib, cancel);
-  if (ex.isError()) {
-    DownloadOutcome fail;
-    fail.error = ex.error().message;
-    fail.packName = dl.value().packName;
-    return fail;
-  }
-  DownloadOutcome out;
-  out.ok = true;
-  out.packName = dl.value().packName;
-  out.datPaths = ex.value();
-  out.datCount = static_cast<int>(out.datPaths.size());
-  out.source = redump ? QStringLiteral("redump") : QStringLiteral("nointro");
-  out.slug = redump ? redumpSlug : QString();
-  out.systemId = redump ? 0 : niOpts.systemId;
-  // Redump has no cheap version endpoint — its revision is the DAT header
-  // version, read from the freshly-extracted file; No-Intro uses the pack date
-  // (Kartend-m6qsb.26).
-  out.version = redump ? (out.datPaths.isEmpty()
-                              ? QString()
-                              : DatLookup::probeHeaderFromFile(out.datPaths.first()).version)
-                       : packDate;
-  return out;
+  DatAuditDownloadService::Request req;
+  req.redump = redump;
+  req.niOpts = niOpts;
+  req.redumpSlug = redumpSlug;
+  req.packDate = packDate;
+  req.libraryDir = lib;
+  m_dlWatcher.setFuture(m_downloadService->startDownload(req, cancel, progressFn));
 }
 
 void DatAuditDialog::onDownloadFinished() {
-  const DownloadOutcome o = m_dlWatcher.result();
+  const auto o = m_dlWatcher.result();
   setDownloadBusy(false);
   if (!o.ok) {
     m_dlStatus->setText(o.error);
     return;
   }
   m_dlStatus->setText(tr("Imported %n DAT file(s) into the library.", nullptr, o.datCount));
-  recordDownloadProvenance(o);
+  m_downloadService->recordProvenance(o);
   // Surface matches immediately via the library review.
   if (m_libraryOpener) {
     m_libraryOpener();
   }
-}
-
-void DatAuditDialog::recordDownloadProvenance(const DownloadOutcome &o) {
-  // Record where each DAT came from so "check for updates" can later ask the
-  // source for a newer revision (Kartend-m6qsb.26).
-  if (o.datPaths.isEmpty()) {
-    return;
-  }
-  withProfileDb([&o](QSqlDatabase &db) {
-    for (const QString &path : o.datPaths) {
-      DatLibraryState::Provenance pr;
-      const QString canonical = QFileInfo(path).canonicalFilePath();
-      pr.canonicalPath = canonical.isEmpty() ? path : canonical;
-      pr.source = o.source;
-      pr.slug = o.slug;
-      pr.systemId = o.systemId;
-      pr.version = o.version;
-      if (auto res = DatLibraryState::recordProvenance(db, pr); res.isError()) {
-        ErrorUtils::logError(res.error());
-      }
-    }
-  });
 }
 
 void DatAuditDialog::onCancelDownload() {
@@ -1995,12 +1954,7 @@ void DatAuditDialog::onCheckUpdates() {
   if (m_updateWatcher.isRunning()) {
     return;
   }
-  QList<DatLibraryState::Provenance> all;
-  withProfileDb([&all](QSqlDatabase &db) {
-    if (auto r = DatLibraryState::loadAllProvenance(db); r.isOk()) {
-      all = r.value();
-    }
-  });
+  const QList<DatLibraryState::Provenance> all = m_downloadService->trackedProvenance();
   if (all.isEmpty()) {
     QMessageBox::information(
         this, tr("Check for updates"),
@@ -2021,75 +1975,17 @@ void DatAuditDialog::onCheckUpdates() {
   auto cancel = m_updateCancel;
   m_checkUpdatesButton->setEnabled(false);
   m_checkUpdatesButton->setText(tr("Checking…"));
-  m_updateWatcher.setFuture(QtConcurrent::run([all, lib, cancel]() -> UpdateRunResult {
-    UpdateRunResult r;
-    r.checked = static_cast<int>(all.size());
-    // Detect: ask each source its current revision (No-Intro pack date is cheap;
-    // Redump has no version endpoint, so this downloads the small DAT to read
-    // its header — it's re-downloaded in the apply step below, which is fine for
-    // single-system Redump DATs).
-    const auto fetchLatest = [&cancel](const DatLibraryState::Provenance &p) -> QString {
-      if (cancel && cancel->load()) {
-        return QString();
-      }
-      if (p.source == QLatin1String("nointro") && p.systemId > 0) {
-        auto f = NoIntroDownload::fetchDailyForm(p.systemId, cancel);
-        return f.isOk() ? f.value().packDate : QString();
-      }
-      if (p.source == QLatin1String("redump") && !p.slug.isEmpty()) {
-        QTemporaryDir tmp;
-        auto dl = RedumpDownload::run(p.slug, tmp.path(), nullptr, cancel);
-        if (dl.isError()) {
-          return QString();
-        }
-        auto ex = NoIntroDownload::extractDatsTo(dl.value().zipPath, tmp.path(), cancel);
-        if (ex.isError() || ex.value().isEmpty()) {
-          return QString();
-        }
-        return DatLookup::probeHeaderFromFile(ex.value().first()).version;
-      }
-      return QString();
-    };
-    const QList<DatLibraryState::Provenance> outdated =
-        DatLibraryState::outdatedAmong(all, fetchLatest);
-    // Apply: re-download each outdated catalogue into the library.
-    for (const DatLibraryState::Provenance &p : outdated) {
-      if (cancel && cancel->load()) {
-        break;
-      }
-      const bool redump = p.source == QLatin1String("redump");
-      NoIntroDownload::Options o;
-      QString packDate;
-      if (!redump) {
-        o.systemId = p.systemId;
-        o.datType = QStringLiteral("dat");
-        // The original set selection isn't stored in provenance — re-fetch the
-        // form and use its default-checked sets.
-        if (auto f = NoIntroDownload::fetchDailyForm(p.systemId, cancel); f.isOk()) {
-          packDate = f.value().packDate;
-          for (const NoIntroParse::DailySet &s : f.value().sets) {
-            if (s.checkedByDefault) {
-              o.selectedSets.append(s.field);
-            }
-          }
-        } else {
-          packDate = p.version;
-        }
-      }
-      r.downloads.append(performDownload(redump, o, p.slug, packDate, lib, cancel, nullptr));
-    }
-    return r;
-  }));
+  m_updateWatcher.setFuture(m_downloadService->checkUpdates(all, lib, cancel));
 }
 
 void DatAuditDialog::onCheckUpdatesFinished() {
   m_checkUpdatesButton->setEnabled(true);
   m_checkUpdatesButton->setText(tr("Check for updates…"));
-  const UpdateRunResult r = m_updateWatcher.result();
+  const auto r = m_updateWatcher.result();
   int updated = 0;
-  for (const DownloadOutcome &d : r.downloads) {
+  for (const auto &d : r.downloads) {
     if (d.ok) {
-      recordDownloadProvenance(d); // refresh stored version to the new revision
+      m_downloadService->recordProvenance(d); // refresh stored version to the new revision
       ++updated;
     }
   }

@@ -1236,6 +1236,13 @@ kartend_add_test(NAME DatAuditRunner
   LINK kartend_data kartend_api kartend_utils
 )
 
+# DatAuditDownloadService provenance-seam tests (Kartend-ahf3d stage 1). Real
+# in-memory SQLite via the injected accessor; network paths are runtime-gated.
+kartend_add_test(NAME DatAuditDownloadService
+  SOURCES modules/dataudit/test_datauditdownloadservice.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatAudit layout probe tests (folder-structure detection, Kartend-m6qsb.6)
 kartend_add_test(NAME DatAuditLayout
   SOURCES modules/dataudit/test_datauditlayout.cpp
