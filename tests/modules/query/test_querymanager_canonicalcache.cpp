@@ -106,6 +106,12 @@ void TestQueryManagerCanonicalCache::harvestRoundTrips() {
   if (!QFile::link(m_absPath, linkPath)) {
     QSKIP("Platform/filesystem does not support symlinks here");
   }
+  // QFile::link makes a .lnk shell shortcut on Windows, not a real symlink the
+  // filesystem canonicalizes to the target, so the symlink round-trip below is
+  // POSIX-only; skip when the link does not resolve to the target (Kartend-mhgzq).
+  if (QFileInfo(linkPath).canonicalFilePath() != QFileInfo(m_absPath).canonicalFilePath()) {
+    QSKIP("QFile::link did not produce a filesystem-resolvable symlink here (e.g. Windows .lnk)");
+  }
   const QDateTime linkMtime = QFileInfo(linkPath).lastModified(); // target's mtime
 
   QHash<QString, QDateTime> relTimestamps;
