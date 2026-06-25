@@ -730,16 +730,14 @@ kartend_add_test(NAME QueryManagerSortFiles
 # across flattened-subcollection loads via the persistent (path, mtime)-keyed
 # map on QueryManager; seed/harvest helpers validate by mtime so touched
 # files re-resolve while unchanged ones skip the per-item realpath walk.
-if(NOT WIN32)
-  # Dies at startup on the Windows CI leg (0.06s, no output — before the
-  # QtTest banner) and its subject is POSIX canonical-path/symlink
-  # semantics; QFile::link on Windows makes .lnk shortcuts, not symlinks.
-  # Root-causing + porting is Kartend-mhgzq.
-  kartend_add_test(NAME QueryManagerCanonicalCache
-    SOURCES modules/query/test_querymanager_canonicalcache.cpp
-    LINK kartend_data kartend_api kartend_utils
-  )
-endif()
+# Kartend-mhgzq: ported to Windows. The earlier startup-crash no longer
+# reproduces (MSVC 2022 / Qt 6.7.3); the only POSIX-specific bit, symlink
+# canonicalization, is guarded in-test (harvestRoundTrips QSKIPs when
+# QFile::link cannot make a filesystem-resolvable symlink, e.g. Windows .lnk).
+kartend_add_test(NAME QueryManagerCanonicalCache
+  SOURCES modules/query/test_querymanager_canonicalcache.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
 
 # DatabaseManager lifecycle / threading tests
 # Reuses the same query-stack source list as QueryManagerCancelScan and adds
