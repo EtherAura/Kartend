@@ -8,64 +8,44 @@
 #include <QDialog>
 #include <QFutureWatcher>
 
+#include "datauditauditpage.h"
+#include "datauditdownloadpage.h"
 #include "datauditdownloadservice.h"
-#include "datauditlayout.h"
-#include "datauditprofile.h"
-#include "datauditrunner.h"
-#include "datlibrarystate.h"
-#include "nointrodownloader.h"
-#include "nointroparse.h"
-#include "redumpparse.h"
+#include "datauditlibrarypage.h"
+#include "datauditprofilestore.h"
 
-class QCheckBox;
-class QComboBox;
-class QGroupBox;
+class QHideEvent;
 class QLabel;
-class QLayout;
-class QLineEdit;
 class QListWidget;
-class QProgressBar;
-class QPushButton;
 class QSplitter;
 class QStackedWidget;
-class QTableView;
-class QSortFilterProxyModel;
-class QVBoxLayout;
-class QHideEvent;
-class QModelIndex;
-class QPoint;
 class DatAuditBrowserPage;
-class DatAuditFixDialog;
 struct CollectionConfig;
 
-namespace DatAudit {
-class DatAuditModel;
-}
-
-/// The DAT manager window (Kartend-m6qsb.17). A standalone, non-modal window
-/// in the Settings dialog's visual idiom: a left nav rail + QStackedWidget
-/// content pane with a context header, native Breeze palette, QGroupBox /
-/// QFormLayout sections, and geometry persistence. Three pages:
-///   - Audit:    profile CRUD, DAT/scan-root lists (locked when collection-
-///               linked), structure detection, run/cancel + progress, results
-///               table + filter, fix + exports.
-///   - Library:  the watched DAT-library folder + the confirm-only proposal
-///               review (Kartend-m6qsb.5).
-///   - Download: fetch No-Intro daily DAT packs and import them into the
-///               library (Kartend-m6qsb.16).
+/// The DAT manager window (Kartend-m6qsb.17). A standalone, non-modal window in
+/// the Settings dialog's visual idiom: a left nav rail + QStackedWidget content
+/// pane with a context header, native Breeze palette, and geometry persistence.
+/// Four pages, each its own QWidget (Kartend-oa0lu):
+///   - Audit:    DatAuditAuditPage — profile CRUD, DAT/scan-root inputs, layout
+///               detection, run/cancel + results table, fix + exports.
+///   - Library:  DatAuditLibraryPage — the watched DAT-library folder + review.
+///   - Download: DatAuditDownloadPage — fetch No-Intro / Redump packs + import.
+///   - Browser:  DatAuditBrowserPage — the RomVault-style read-only tree.
 ///
-/// The audit/library/download engines live in their own modules; this window
-/// is the (reshelled) UI surface plus the off-thread orchestration the audit
-/// and download need.
+/// This window is now the nav shell plus the cross-page orchestration: it owns
+/// the shared DatAuditProfileStore + DatAuditDownloadService, the library-path /
+/// import / scraper hooks, the update-check watcher, and geometry; each page
+/// owns its own widgets and emits the intent the dialog wires up.
 class DatAuditDialog : public QDialog {
   Q_OBJECT
 public:
   explicit DatAuditDialog(QWidget *parent = nullptr);
   ~DatAuditDialog() override;
 
-  /// Borrow the live collection list (owned by MainWindow) so the profile
-  /// editor can offer an optional "Linked collection" picker. Null/empty is
-  /// fine. Called by DatAuditController on every open so the list stays fresh.
+  /// Borrow the live collection list (owned by MainWindow) so the audit page's
+  /// profile editor can offer an optional "Linked collection" picker and the
+  /// browser can group profiles under their collection. Null/empty is fine.
+  /// Called by DatAuditController on every open so the list stays fresh.
   void setCollections(QList<CollectionConfig> *collections);
 
   /// Aim the window at a specific collection (Kartend-4mqkof, launched from
@@ -73,7 +53,7 @@ public:
   /// @p collectionUuid if one exists; otherwise seeds an *unsaved* working
   /// profile from the collection (name + DAT files + the media dir as a scan
   /// root + the collection link) for the user to review and Save/Run. Nothing
-  /// is persisted until the user saves.
+  /// is persisted until the user saves. Delegates to the audit page.
   void openForCollection(const QString &collectionUuid, const QString &collectionName,
                          const QString &mediaDir, const QStringList &datPaths);
 
@@ -92,7 +72,7 @@ public:
   /// Provider for the global default quarantine folder (Settings → General → DAT
   /// Auditor). The Fix dialog prefills its quarantine field from the audited
   /// profile's per-collection root, falling back to this. Unset = no global
-  /// default (standalone/test).
+  /// default (standalone/test). Forwarded to the audit page.
   void setQuarantineDefaultProvider(std::function<QString()> provider);
 
   /// Hook for "Import DAT pack" (Kartend-m6qsb.22): given a chosen zip / folder
@@ -101,9 +81,9 @@ public:
   void setImportHandler(std::function<void(const QString &)> handler);
 
   /// Hook to open the scraper scoped to a collection (Kartend-m6qsb.27): after
-  /// a Fix renames files to canonical names, the dialog offers to re-scrape
+  /// a Fix renames files to canonical names, the audit page offers to re-scrape
   /// the linked collection (canonical names match far better). Unset = no
-  /// offer (standalone/test, or an unlinked audit).
+  /// offer (standalone/test, or an unlinked audit). Forwarded to the audit page.
   void setScraperOpener(std::function<void(const QString &collectionUuid)> opener);
 
 protected:
@@ -112,199 +92,33 @@ protected:
   void hideEvent(QHideEvent *event) override;
 
 private slots:
-  void onProfileSelected(int index);
-  void onNewProfile();
-  void onEditProfile();
-  void onDuplicateProfile();
-  void onRenameProfile();
-  void onDeleteProfile();
-  void onAddDat();
-  void onRemoveDat();
-  void onAddRoot();
-  void onRemoveRoot();
-  void onRun();
-  void onCancel();
-  void onAuditFinished();
-  void onFilterChanged(int index);
-  void onResultDoubleClicked(const QModelIndex &index);
-  void onResultsContextMenu(const QPoint &pos);
   void onImportZip();
   void onImportFolder();
-  void onFix();
-  // Browser write-actions (Kartend-7iqhl.2): the read-only browser asks, via its
-  // tree context menu, to re-audit / Fix a profile. The dialog owns the runner +
-  // Fix dialog, so it does the work and refreshes the browser when done.
-  void onBrowserReauditRequested(qint64 profileId);
-  void onBrowserFixRequested(qint64 profileId);
-  void onExportCsv();
-  void onExportFixdat();
-  void onExportMissList();
-  // Download page (Kartend-m6qsb.16 No-Intro, .23 Redump)
-  void onDownloadSourceChanged();
-  void onLoadDailyForm();
-  void onLoadDailyFormFinished();
-  void onRedumpSystemsFetched();
-  void onStartDownload();
-  void onDownloadFinished();
-  void onCancelDownload();
+  // Download-page update-check (Kartend-oa0lu): the download flow lives in
+  // DatAuditDownloadPage; the dialog keeps the library-button update-check.
   void onCheckUpdates();
   void onCheckUpdatesFinished();
 
 private:
-  /// Off-thread outcome of the daily-form probe (carries the parsed form or a
-  /// user-facing error).
-  struct DailyFormOutcome {
-    bool ok = false;
-    QString error;
-    NoIntroParse::DailyForm form;
-  };
-
-  // The download + update-check outcome structs (formerly DownloadOutcome /
-  // UpdateRunResult) moved to DatAuditDownloadService (Kartend-ahf3d stage 1):
-  // DatAuditDownloadService::Outcome / ::UpdateResult.
-
-  /// Off-thread outcome of the redump.org systems-list fetch.
-  struct RedumpSystemsOutcome {
-    bool ok = false;
-    QString error;
-    QList<RedumpParse::System> systems;
-  };
-
-  // performDownload + recordDownloadProvenance + the update-check worker moved
-  // to DatAuditDownloadService (Kartend-ahf3d stage 1). The dialog drives the
-  // service via m_downloadService and keeps only the view concerns.
-
-  /// Which download source the page is targeting.
-  enum class DownloadSource { NoIntro, Redump };
-  [[nodiscard]] DownloadSource currentDownloadSource() const;
-  void refreshDownloadButtonEnabled();
-
-  void setBusy(bool busy);
-
-  // Fix-flow helpers shared by the Audit page's onFix() and the browser's
-  // profile-scoped Fix (Kartend-7iqhl.2), so the two paths cannot drift.
-  void seedFixDialogDefaults(DatAuditFixDialog &dlg);
-  void offerRescrapeAfterFix(const DatAuditFixDialog &dlg);
-
   // Nav-shell assembly (Kartend-m6qsb.17).
-  QWidget *buildAuditPage();
-  QWidget *buildLibraryPage();
-  QWidget *buildDownloadPage();
-  // Audit-page section builders (Kartend-139sr) — buildAuditPage composes
-  // these instead of inlining every section. Each constructs its widgets +
-  // sub-layout against @p page and returns it for the page's root layout.
-  QLayout *buildProfileRow(QWidget *page);
-  QLayout *buildInputsSection(QWidget *page);
-  QLayout *buildLayoutBanner(QWidget *page);
-  QWidget *buildResultsTable(QWidget *page);
-  QLayout *buildExportRow(QWidget *page);
-  // Download-page source sub-forms (Kartend-139sr): the two mutually-exclusive
-  // No-Intro / Redump groups, each returned for the page's root layout.
-  QWidget *buildNoIntroSource(QWidget *page);
-  QWidget *buildRedumpSource(QWidget *page);
-  // Constructor connect grouping (Kartend-139sr): the flat connect block is
-  // split into one wire* helper per concern.
-  void wireProfileActions();
-  void wireAuditActions();
   void wireDownloadActions();
-  /// RomVault-style browser page (Kartend-34lab). Lazily refreshed the first
-  /// time the user switches to it (and on each subsequent switch).
-  DatAuditBrowserPage *m_browserPage = nullptr;
   void addNavEntry(const QString &label, const QStringList &iconNames, int pageIndex);
   void onNavRowChanged();
   void applyUniformSizing();
   void persistGeometry();
   void restoreGeometry_();
-  void setDownloadBusy(bool busy);
-  void rebuildSetCheckboxes(); // from m_dailyForm
-  void loadProfiles();
-  void syncUiFromProfile();
-  /// Overwrite m_currentProfile's DAT list + scan root from the live linked
-  /// collection (the INI is canonical for linked profiles, Kartend-m6qsb.2).
-  /// No-op when unlinked or when the link doesn't resolve (cached lists stay
-  /// as a read-only fallback).
-  void applyCollectionDerivation();
-  /// Lock the DAT/scan-root editors while a linked profile is selected —
-  /// those lists are derived, and edits here would be silently overwritten
-  /// on the next open.
-  void updateLinkedUiState();
-  /// Probe the first scan root's folder structure and surface the result as
-  /// a banner suggestion (Kartend-m6qsb.6). Confirm-based: nothing changes
-  /// until the user clicks Apply. @p autoTriggered suppresses the
-  /// nothing-to-report banner for the silent open-time probe.
-  void runLayoutDetection(bool autoTriggered);
-  void applyDetectedLayout();
-  [[nodiscard]] DatAuditProfile::Profile uiProfile() const;
-  bool persistProfile(DatAuditProfile::Profile &p); // insert when id<0, else update
-  void selectProfileById(qint64 id);
-  /// Load profile @p id from the DB into m_currentProfile and re-sync the Audit
-  /// page lists from it, unconditionally (Kartend-7iqhl.2). Unlike
-  /// selectProfileById — which only nudges the combo and is a no-op when the
-  /// index is unchanged — this guarantees the audit inputs reflect the PERSISTED
-  /// profile, not whatever (possibly unsaved-edited) lists are on screen.
-  /// Returns false when the profile id is not found.
-  bool loadProfileFromDb(qint64 id);
-  void updateSummary(const DatAudit::AuditSummary &summary);
-  [[nodiscard]] QStringList datPaths() const;
-  [[nodiscard]] QStringList scanRoots() const;
-  [[nodiscard]] bool hasResults() const;
-  /// True when the audit found something a fix would actually change in place —
-  /// a misnamed file (rename), an unknown file (quarantine), or a duplicate.
-  /// Gates the Fix button so it stays dark when there is nothing to correct
-  /// (an all-present collection); exports stay available regardless.
-  [[nodiscard]] bool hasApplicableFixes() const;
-  /// AuditRow behind a view (proxy) index, mapped back to the source model.
-  [[nodiscard]] const DatAudit::AuditRow *rowForProxyIndex(const QModelIndex &proxyIndex) const;
-  void exportTo(const QString &caption, const QString &filter, const QByteArray &bytes);
 
-  QComboBox *m_profileCombo = nullptr;
-  QPushButton *m_newProfileButton = nullptr;
-  QPushButton *m_editProfileButton = nullptr;
-  QPushButton *m_duplicateProfileButton = nullptr;
-  QPushButton *m_renameProfileButton = nullptr;
-  QPushButton *m_deleteProfileButton = nullptr;
-  QPushButton *m_libraryButton = nullptr;
+  // The four pages (Kartend-oa0lu): each owns its widgets + flow; the dialog
+  // wires their intent signals and shares the store/service.
+  DatAuditAuditPage *m_auditPage = nullptr;
+  DatAuditLibraryPage *m_libraryPage = nullptr;
+  DatAuditDownloadPage *m_downloadPage = nullptr;
+  /// RomVault-style browser page (Kartend-34lab). Lazily refreshed the first
+  /// time the user switches to it (and on each subsequent switch).
+  DatAuditBrowserPage *m_browserPage = nullptr;
+
   std::function<void()> m_libraryOpener;
-  QListWidget *m_datList = nullptr;
-  QListWidget *m_rootList = nullptr;
-  QPushButton *m_addDatButton = nullptr;
-  QPushButton *m_removeDatButton = nullptr;
-  QPushButton *m_addRootButton = nullptr;
-  QPushButton *m_removeRootButton = nullptr;
-  QLabel *m_linkedHint = nullptr;
-  QPushButton *m_detectLayoutButton = nullptr;
-  QLabel *m_layoutBanner = nullptr;
-  QPushButton *m_applyLayoutButton = nullptr;
-  QPushButton *m_dismissLayoutButton = nullptr;
-  DatAudit::LayoutDetection m_pendingDetection;
-  QPushButton *m_runButton = nullptr;
-  QPushButton *m_cancelButton = nullptr;
-  /// "Verify (ignore cache)" force-rehash for the next run (Kartend-p30ic):
-  /// bypasses the file-hash cache so a same-size/same-mtime in-place swap is
-  /// detected. Off by default; read in onRun(), disabled while a run is busy.
-  QCheckBox *m_forceRehashCheck = nullptr;
-  QProgressBar *m_progress = nullptr;
-  QLabel *m_summaryLabel = nullptr;
-  QProgressBar *m_completionBar = nullptr;
-  QComboBox *m_filterCombo = nullptr;
-  QLineEdit *m_searchEdit = nullptr;
-  QTableView *m_table = nullptr;
-  QSortFilterProxyModel *m_proxy = nullptr;
-  QPushButton *m_fixButton = nullptr;
-  QPushButton *m_exportCsvButton = nullptr;
-  QPushButton *m_exportFixdatButton = nullptr;
-  QPushButton *m_exportMissButton = nullptr;
-
-  DatAudit::DatAuditModel *m_model = nullptr;
-  QFutureWatcher<DatAudit::AuditOutput> m_watcher;
-  std::shared_ptr<std::atomic<bool>> m_cancel;
-  DatAuditProfile::Profile m_currentProfile;        ///< Settings of the selected/working profile.
   QList<CollectionConfig> *m_collections = nullptr; ///< Borrowed from MainWindow; not owned.
-  bool m_running = false;
-  /// Set when the in-flight audit was kicked off from the browser's context menu
-  /// (Kartend-7iqhl.2); onAuditFinished refreshes + re-selects the browser node
-  /// instead of leaving the result only on the (hidden) Audit page.
-  bool m_browserAuditPending = false;
 
   // Nav shell (Kartend-m6qsb.17).
   QSplitter *m_splitter = nullptr;
@@ -313,47 +127,22 @@ private:
   QLabel *m_contextIcon = nullptr;
   QLabel *m_contextTitle = nullptr;
 
-  // Library page (Kartend-m6qsb.5).
-  QLabel *m_libraryPathLabel = nullptr;
-  QPushButton *m_libraryReviewButton = nullptr;
-  QPushButton *m_checkUpdatesButton = nullptr; ///< Check downloaded DATs for newer revisions (.31)
+  // Library / update-check (Kartend-oa0lu): the widgets live on the library
+  // page; the dialog keeps the update-check watcher + the library-path/import
+  // accessors shared across pages.
   QFutureWatcher<DatAuditDownloadService::UpdateResult> m_updateWatcher;
   std::shared_ptr<std::atomic<bool>> m_updateCancel;
-  QPushButton *m_importZipButton = nullptr;
-  QPushButton *m_importFolderButton = nullptr;
   std::function<QString()> m_getLibraryPath;
-  std::function<void(const QString &)> m_saveLibraryPath;
-  std::function<QString()> m_getQuarantineDefaultDir;
   std::function<void(const QString &)> m_importPack;
-  std::function<void(const QString &)> m_openScraperForCollection;
 
-  // Download page (Kartend-m6qsb.16 No-Intro, .23 Redump).
-  QComboBox *m_dlSourceCombo = nullptr; ///< No-Intro | Redump
-  QGroupBox *m_noIntroBox = nullptr;    ///< No-Intro system/dat-type/pack widgets
-  QGroupBox *m_setsBox = nullptr;       ///< No-Intro set checkboxes
-  QGroupBox *m_redumpBox = nullptr;     ///< Redump system picker
-  QLineEdit *m_dlSystemEdit = nullptr;
-  QPushButton *m_dlLoadButton = nullptr;
-  QWidget *m_dlSetsContainer = nullptr;
-  QVBoxLayout *m_dlSetsLayout = nullptr;
-  QList<QCheckBox *> m_dlSetChecks;
-  QComboBox *m_dlDatTypeCombo = nullptr;
-  QLabel *m_dlPackLabel = nullptr;
-  QComboBox *m_redumpSystemCombo = nullptr;
-  QPushButton *m_redumpRefreshButton = nullptr;
-  QPushButton *m_dlDownloadButton = nullptr;
-  QPushButton *m_dlCancelButton = nullptr;
-  QProgressBar *m_dlProgress = nullptr;
-  QLabel *m_dlStatus = nullptr;
-  NoIntroParse::DailyForm m_dailyForm;
-  QFutureWatcher<DailyFormOutcome> m_dlFormWatcher;
-  QFutureWatcher<RedumpSystemsOutcome> m_redumpSystemsWatcher;
-  QFutureWatcher<DatAuditDownloadService::Outcome> m_dlWatcher;
-  std::shared_ptr<std::atomic<bool>> m_dlCancel;
-  bool m_downloading = false;
+  /// SQLite access for profiles / result snapshots / DAT-library provenance
+  /// (Kartend-ahf3d stage 2). Declared before m_downloadService so it is
+  /// constructed first — the download service's provenance accessor (wired in
+  /// the ctor) reads through it — and injected by reference into m_auditPage.
+  DatAuditProfileStore m_profileStore;
   /// Off-thread download + provenance + update-check orchestration extracted
   /// from this dialog (Kartend-ahf3d stage 1). Constructed in the ctor with the
-  /// transient-connection provenance accessor; see datauditdownloadservice.h.
+  /// provenance accessor backed by m_profileStore; see datauditdownloadservice.h.
   std::unique_ptr<DatAuditDownloadService> m_downloadService;
 };
 
