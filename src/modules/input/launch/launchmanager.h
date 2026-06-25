@@ -300,10 +300,11 @@ private:
   /// for both the tracked and detached spawn paths (Kartend-dhhh6).
   void spawnLauncherProcess(QProcess *child, const QString &launcherPath, const QStringList &args);
 
-  /// Spawns `cmd` as a tracked child QProcess and emits runtimeStarted /
-  /// runtimeFinished. Returns true on a successful start.
+  /// Spawns `cmd` as a tracked child QProcess, emits runtimeStarted /
+  /// runtimeFinished, and stamps the launch usage stat for `originalFilePath`
+  /// once the child actually starts. Returns true on a successful start.
   bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd, const QString &filePath,
-                     const QString &collectionUuid);
+                     const QString &originalFilePath, const QString &collectionUuid);
 
   /// Detached-path launch with a short-lived early-failure watcher
   /// (Kartend-fqsv0). Spawns `cmd` via an owned QProcess and keeps an
