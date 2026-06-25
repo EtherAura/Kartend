@@ -155,3 +155,26 @@ void DatAuditDownloadService::recordProvenance(const Outcome &o) const {
     m_access.record(pr);
   }
 }
+
+QFuture<DatAuditDownloadService::RedumpSystemsOutcome>
+DatAuditDownloadService::startRedumpSystemsFetch(const NoIntroDownload::CancelToken &cancel) const {
+  return QtConcurrent::run([cancel]() -> RedumpSystemsOutcome {
+    auto r = RedumpDownload::fetchSystems(cancel);
+    if (r.isError()) {
+      return RedumpSystemsOutcome{false, r.error().message, {}};
+    }
+    return RedumpSystemsOutcome{true, QString(), r.value()};
+  });
+}
+
+QFuture<DatAuditDownloadService::DailyFormOutcome>
+DatAuditDownloadService::startDailyFormFetch(int systemId,
+                                             const NoIntroDownload::CancelToken &cancel) const {
+  return QtConcurrent::run([systemId, cancel]() -> DailyFormOutcome {
+    auto r = NoIntroDownload::fetchDailyForm(systemId, cancel);
+    if (r.isError()) {
+      return DailyFormOutcome{false, r.error().message, {}};
+    }
+    return DailyFormOutcome{true, QString(), r.value()};
+  });
+}

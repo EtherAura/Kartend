@@ -23,7 +23,9 @@
 #include <QStringList>
 
 #include "datlibrarystate.h"   // DatLibraryState::Provenance
+#include "nointroparse.h"      // NoIntroParse::DailyForm
 #include "nointrodownloader.h" // NoIntroDownload::Options / CancelToken / ProgressFn
+#include "redumpparse.h"       // RedumpParse::System
 
 class DatAuditDownloadService {
 public:
@@ -46,6 +48,23 @@ public:
   struct UpdateResult {
     int checked = 0;
     QList<Outcome> downloads; ///< One per outdated catalogue re-downloaded.
+  };
+
+  /// Off-thread outcome of the No-Intro daily-form probe — the form the user
+  /// picks sets from, or a user-facing error. Formerly
+  /// DatAuditDialog::DailyFormOutcome (Kartend-ahf3d stage 4).
+  struct DailyFormOutcome {
+    bool ok = false;
+    QString error;
+    NoIntroParse::DailyForm form;
+  };
+
+  /// Off-thread outcome of the redump.org systems-list fetch. Formerly
+  /// DatAuditDialog::RedumpSystemsOutcome (Kartend-ahf3d stage 4).
+  struct RedumpSystemsOutcome {
+    bool ok = false;
+    QString error;
+    QList<RedumpParse::System> systems;
   };
 
   /// One download request, gathered by the dialog from the Download page widgets
@@ -89,6 +108,16 @@ public:
   [[nodiscard]] QFuture<UpdateResult>
   checkUpdates(const QList<DatLibraryState::Provenance> &tracked, const QString &libraryDir,
                const NoIntroDownload::CancelToken &cancel) const;
+
+  /// Off-thread fetch of the redump.org systems list (network-bound; runtime-
+  /// gated like performDownload). The caller owns the watcher.
+  [[nodiscard]] QFuture<RedumpSystemsOutcome>
+  startRedumpSystemsFetch(const NoIntroDownload::CancelToken &cancel) const;
+
+  /// Off-thread fetch of a No-Intro system's daily-download form (network-bound).
+  /// The caller owns the watcher.
+  [[nodiscard]] QFuture<DailyFormOutcome>
+  startDailyFormFetch(int systemId, const NoIntroDownload::CancelToken &cancel) const;
 
   /// Persist provenance for every DAT in a successful outcome, via the injected
   /// accessor (DB write stays on the caller's thread).

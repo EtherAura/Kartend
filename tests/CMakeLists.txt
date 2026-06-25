@@ -1243,6 +1243,22 @@ kartend_add_test(NAME DatAuditDownloadService
   LINK kartend_data kartend_api kartend_utils
 )
 
+# DatAuditProfileStore CRUD / snapshot / provenance tests (Kartend-ahf3d stage
+# 2). Real on-disk media.db under a sandboxed AppDataLocation, built via the
+# production DatabaseSchema::createTables path. No DB mocking.
+kartend_add_test(NAME DatAuditProfileStore
+  SOURCES modules/dataudit/test_datauditprofilestore.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# DatAuditRunController off-thread audit-run tests (Kartend-ahf3d stage 3).
+# Drives a real audit over a real DAT + scan dir and asserts the finished()
+# signal delivers the engine output on the caller's thread. No DB mocking.
+kartend_add_test(NAME DatAuditRunController
+  SOURCES modules/dataudit/test_datauditruncontroller.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatAudit layout probe tests (folder-structure detection, Kartend-m6qsb.6)
 kartend_add_test(NAME DatAuditLayout
   SOURCES modules/dataudit/test_datauditlayout.cpp
