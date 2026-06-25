@@ -732,22 +732,16 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
   // behind a "Now Playing" overlay. Otherwise fall back to the historical
   // detached launch which leaves Kartend ignorant of the child lifetime.
   if (runtimeDetectionEnabled()) {
-    if (launchTracked(launcherPath, cmd, launchFilePath, collectionUuid)) {
+    if (launchTracked(launcherPath, cmd, launchFilePath, originalFilePath, collectionUuid)) {
       // The child reads the extracted file while it runs, so the scope guard
       // must release the directory on the spawn path regardless of outcome.
       cleanupExtraction.dismiss();
       if (m_trackedChild) {
         QProcess *child = m_trackedChild;
-        // Kartend-yu1e5: stamp play_count/last_played only once the child
-        // ACTUALLY starts — QProcess::start() is asynchronous on Unix and
-        // launchTracked returning true only means the spawn was issued;
-        // FailedToStart arrives later via errorOccurred. A misconfigured
-        // launcher no longer inflates usage stats (parity with the detached
-        // path, which gates on startDetached's return).
-        connect(child, &QProcess::started, this, [this, originalFilePath, collectionUuid]() {
-          recordSuccessfulLaunch(originalFilePath, collectionUuid);
-        });
-        // And reclaim the extracted dir if the child never ran — the guard
+        // play_count/last_played are stamped inside launchTracked's own
+        // started() handler — wired BEFORE start(), so it can't miss a
+        // synchronously-delivered started() (Kartend-yu1e5/5i556).
+        // Reclaim the extracted dir if the child never ran — the cleanup guard
         // above was already dismissed, so FailedToStart used to leak it.
         if (!extractedDir.isEmpty()) {
           // By-value capture detaches the QString from the reference param,
@@ -890,7 +884,8 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
 }
 
 bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,
-                                  const QString &filePath, const QString &collectionUuid) {
+                                  const QString &filePath, const QString &originalFilePath,
+                                  const QString &collectionUuid) {
   // Only one tracked child at a time; reject overlapping launches so the
   // overlay state stays coherent.
   if (m_trackedChild) {
@@ -915,12 +910,20 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
 
   const QString displayName = QFileInfo(filePath).completeBaseName();
 
-  connect(child, &QProcess::started, this, [this, filePath, displayName]() {
-    // Capture the start moment here rather than at child->start() so the
-    // recorded duration reflects actual run time (not queueing delay).
-    m_trackedStartTime = QDateTime::currentDateTimeUtc();
-    emit runtimeStarted(filePath, displayName);
-  });
+  connect(child, &QProcess::started, this,
+          [this, filePath, displayName, originalFilePath, collectionUuid]() {
+            // Capture the start moment here rather than at child->start() so the
+            // recorded duration reflects actual run time (not queueing delay).
+            m_trackedStartTime = QDateTime::currentDateTimeUtc();
+            emit runtimeStarted(filePath, displayName);
+            // Kartend-yu1e5/5i556: stamp play_count/last_played only once the
+            // child ACTUALLY starts. Wired BEFORE start() (unlike the old
+            // connect in finishLaunch, made after launchTracked returned), so a
+            // synchronously-delivered started() is never missed — QProcess::start
+            // emits started inline on Windows (CreateProcess is synchronous),
+            // which silently dropped the stat there.
+            recordSuccessfulLaunch(originalFilePath, collectionUuid);
+          });
 
   // QProcess emits exactly one of finished() or errorOccurred()-with-FailedToStart
   // before the object is safe to delete. Funnel both through a single cleanup
