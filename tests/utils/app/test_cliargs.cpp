@@ -26,7 +26,7 @@ private slots:
   void exportOut_expandsTilde();
   void onConflict_overwriteRecognized();
   void onConflict_mergeRecognized();
-  void onConflict_unknownDefaultsToSkip();
+  void onConflict_unknownIsRejected();
 };
 
 void TestCliArgs::noOptions_returnsEmptyOverride() {
@@ -188,9 +188,14 @@ void TestCliArgs::onConflict_mergeRecognized() {
   QCOMPARE(static_cast<int>(opts.onConflict), static_cast<int>(CliArgs::KartConflictPolicy::Merge));
 }
 
-void TestCliArgs::onConflict_unknownDefaultsToSkip() {
+void TestCliArgs::onConflict_unknownIsRejected() {
+  // Kartend audit E-04: an unrecognized --on-conflict value must surface a
+  // CLI-validation error (not silently fall back to Skip).
   const auto opts = CliArgs::parseStartupArguments(
       {QStringLiteral("kartend"), QStringLiteral("--on-conflict=garbage")});
+  QVERIFY(opts.pathValidationError.isError());
+  QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidArgument);
+  // onConflict is left at its safe default; the error is what fails the run.
   QCOMPARE(static_cast<int>(opts.onConflict), static_cast<int>(CliArgs::KartConflictPolicy::Skip));
 }
 

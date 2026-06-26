@@ -28,6 +28,8 @@ private slots:
   void knownKey_overwritesPreservedDuplicate();
   void legacyBlocklistedKey_droppedNotPreserved();
   void extensions_legacyGlobFormMigratesToBare();
+  void globalSections_survivePerCollectionSave();
+  void clampedOutOfRangeValue_persistedOnLoad();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -184,6 +186,69 @@ void TestSettingsRoundtrip::extensions_legacyGlobFormMigratesToBare() {
   mgr.loadCollections(reloaded);
   QCOMPARE(reloaded.size(), 1);
   QCOMPARE(reloaded[0].extensions, expected);
+}
+
+void TestSettingsRoundtrip::globalSections_survivePerCollectionSave() {
+  // saveCollections() removes every top-level INI group that isn't a
+  // collection; the reserved-group set (now built from the same keys::kGroup*
+  // constants the writers use) is the single guard that keeps the global
+  // sections alive. If a group drops out of that set, a routine collection
+  // save silently destroys it. This also exercises the skip side: the global
+  // groups must NOT load as blank-named "ghost" collections. Kartend audit S-05.
+  writeConfigIni(QStringLiteral("[General]\n"
+                                "schemaVersion=1\n"
+                                "firstRun=false\n"
+                                "[Scrapers]\n"
+                                "screenscraperUser=alice\n"
+                                "[ScraperOptions]\n"
+                                "preset=balanced\n"
+                                "[Launchers]\n"
+                                "presetCount=0\n"
+                                "[TestCol]\n"
+                                "name=TestCol\n"
+                                "mediaDirectory=/tmp/media\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 1); // global groups must not load as ghost collections
+
+  // A routine collection mutation + save must preserve every global section.
+  collections[0].mediaDirectory = QStringLiteral("/tmp/media2");
+  mgr.saveCollections(collections);
+
+  const QString rewritten = readConfigIni();
+  for (const auto &group : {"[General]", "[Scrapers]", "[ScraperOptions]", "[Launchers]"}) {
+    QVERIFY2(rewritten.contains(QLatin1String(group)),
+             qPrintable(QStringLiteral("%1 was wiped by a collection save:\n%2")
+                            .arg(QLatin1String(group), rewritten)));
+  }
+  QVERIFY2(
+      rewritten.contains(QStringLiteral("screenscraperUser=alice")),
+      qPrintable(QStringLiteral("[Scrapers] key wiped by collection save:\n%1").arg(rewritten)));
+}
+
+void TestSettingsRoundtrip::clampedOutOfRangeValue_persistedOnLoad() {
+  // gridWidth=0 is below the MIN_WIDTH floor; clampValues() raises it in
+  // memory, and the load must also rewrite the INI so the corrected value
+  // sticks instead of re-clamping (and the on-disk file staying out of range)
+  // every launch. Kartend audit S-08.
+  writeConfigIni(QStringLiteral("[TestCol]\n"
+                                "name=TestCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "gridWidth=0\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 1);
+  QVERIFY2(collections[0].gridLayout.gridWidth >= 1,
+           "gridWidth=0 should be clamped up to the MIN_WIDTH floor in memory");
+
+  const QString rewritten = readConfigIni();
+  QVERIFY2(!rewritten.contains(QStringLiteral("gridWidth=0")),
+           qPrintable(QStringLiteral("Out-of-range gridWidth=0 was not rewritten on load:\n%1")
+                          .arg(rewritten)));
 }
 
 // Expanded QTEST_GUILESS_MAIN so the macOS HOME sandbox is installed before

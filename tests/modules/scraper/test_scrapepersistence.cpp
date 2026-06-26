@@ -440,8 +440,9 @@ void TestScrapePersistence::metadataSidecar_writesJsonWithScrapedFields() {
   item.sourceProviderId = QStringLiteral("screenscraper");
   item.customFields.insert(QStringLiteral("region"), QStringLiteral("jp"));
 
-  QVERIFY(Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
-                                        Scraper::RescrapeMode::Overwrite));
+  QCOMPARE(Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                         Scraper::RescrapeMode::Overwrite),
+           Scraper::SidecarWriteOutcome::Written);
 
   // The sidecar lands under the metadata/ subdir.
   QFile f(tmp.path() + "/metadata/game.json");
@@ -465,8 +466,9 @@ void TestScrapePersistence::metadataSidecar_skippedWhenTitleEmpty() {
   Scraper::ScrapedItem item;
   item.description = QStringLiteral("orphan description");
 
-  QVERIFY(!Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
-                                         Scraper::RescrapeMode::Overwrite));
+  QCOMPARE(Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                         Scraper::RescrapeMode::Overwrite),
+           Scraper::SidecarWriteOutcome::Skipped);
   QVERIFY(!QFile::exists(tmp.path() + "/metadata/game.json"));
 }
 
@@ -484,8 +486,9 @@ void TestScrapePersistence::metadataSidecar_fillMissingKeepsExisting() {
   Scraper::ScrapedItem item;
   item.title = QStringLiteral("Fresh Scrape Title");
 
-  QVERIFY(!Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
-                                         Scraper::RescrapeMode::FillMissing));
+  QCOMPARE(Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                         Scraper::RescrapeMode::FillMissing),
+           Scraper::SidecarWriteOutcome::Skipped);
   QFile f(tmp.path() + "/metadata/game.json");
   QVERIFY(f.open(QIODevice::ReadOnly));
   QCOMPARE(f.readAll(), original);

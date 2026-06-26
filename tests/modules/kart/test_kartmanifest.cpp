@@ -13,6 +13,7 @@ private slots:
   void testEmptyManifestRoundTrip();
   void testFullManifestRoundTrip();
   void testCollectionConfigAllFieldsRoundTrip();
+  void testImportClampsOutOfRangeLayout();
   void testItemMetadataRoundTrip();
   void testParseRejectsInvalidJson();
   void testParseRejectsNonObjectRoot();
@@ -214,6 +215,47 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   auto result = KartManifest::parse(bytes);
   QVERIFY2(result.isOk(), qPrintable(result.error().message));
   QCOMPARE(result.value().collectionConfig, c);
+}
+
+void TestKartManifest::testImportClampsOutOfRangeLayout() {
+  // An untrusted / corrupt .kart can carry absurd or negative numeric layout
+  // fields. The importer must clamp them at the boundary (Kartend audit E-03)
+  // to the same UI-enforced ranges the settings loader applies, so they can't
+  // drive a degenerate layout or a huge allocation downstream.
+  KartManifest::Manifest m;
+  m.uuid = "u";
+  m.name = "n";
+  CollectionConfig &c = m.collectionConfig;
+  c.name = "C";
+  c.gridLayout.itemWidth = 9'000'000;
+  c.gridLayout.itemHeight = -50;
+  c.gridLayout.fontSize = 100'000;
+  c.gridLayout.gridWidth = 0;
+  c.background.vignetteIntensity = 999;
+  c.background.parallaxStrength = -10;
+  c.background.backdropBlurRadius = 9999;
+  c.sidebar.sidebarWidth = -1;
+
+  const QByteArray bytes = KartManifest::serialize(m);
+  const auto result = KartManifest::parse(bytes);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  const CollectionConfig &got = result.value().collectionConfig;
+
+  // Parsed values match the canonical clamp the settings path applies.
+  CollectionConfig expected = m.collectionConfig;
+  expected.clampValues();
+  QCOMPARE(got.gridLayout.itemWidth, expected.gridLayout.itemWidth);
+  QCOMPARE(got.gridLayout.itemHeight, expected.gridLayout.itemHeight);
+  QCOMPARE(got.gridLayout.fontSize, expected.gridLayout.fontSize);
+  QCOMPARE(got.gridLayout.gridWidth, expected.gridLayout.gridWidth);
+  QCOMPARE(got.sidebar.sidebarWidth, expected.sidebar.sidebarWidth);
+
+  // The absurd inputs were actually narrowed (documented clamp bounds).
+  QVERIFY(got.gridLayout.itemWidth < 9'000'000);
+  QVERIFY(got.gridLayout.itemHeight > 0);
+  QCOMPARE(got.background.vignetteIntensity, 100);
+  QCOMPARE(got.background.parallaxStrength, 0);
+  QCOMPARE(got.background.backdropBlurRadius, 32);
 }
 
 void TestKartManifest::testItemMetadataRoundTrip() {
