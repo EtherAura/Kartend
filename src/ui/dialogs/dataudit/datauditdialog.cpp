@@ -110,7 +110,7 @@ DatAuditDialog::DatAuditDialog(QWidget *parent) : QDialog(parent) {
   m_auditPage = new DatAuditAuditPage(m_profileStore, this);
   m_pages->addWidget(m_auditPage); // index 0
   m_libraryPage = new DatAuditLibraryPage(this);
-  m_pages->addWidget(m_libraryPage);       // index 1
+  m_pages->addWidget(m_libraryPage); // index 1
   m_downloadPage = new DatAuditDownloadPage(m_downloadService.get(), this);
   m_pages->addWidget(m_downloadPage); // index 2
   // The download page (Kartend-oa0lu) writes the library-path label (which lives
@@ -286,7 +286,7 @@ void DatAuditDialog::restoreGeometry_() {
 void DatAuditDialog::setLibraryPathAccessors(std::function<QString()> getter,
                                              std::function<void(const QString &)> setter) {
   // The download page needs the destination accessors for its download flow.
-  m_downloadPage->setLibraryPathAccessors(getter, setter);
+  m_downloadPage->setLibraryPathAccessors(getter, std::move(setter));
   m_getLibraryPath = std::move(getter);
   if (m_getLibraryPath) {
     const QString path = m_getLibraryPath();

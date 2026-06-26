@@ -53,7 +53,8 @@ Result<QList<DatAuditProfile::Profile>> DatAuditProfileStore::listProfiles() {
 }
 
 Result<std::optional<DatAuditProfile::Profile>> DatAuditProfileStore::loadProfile(qint64 id) {
-  Result<std::optional<DatAuditProfile::Profile>> out = connError("DatAuditProfileStore::loadProfile");
+  Result<std::optional<DatAuditProfile::Profile>> out =
+      connError("DatAuditProfileStore::loadProfile");
   withConnection([&out, id](QSqlDatabase &db) { out = DatAuditProfile::load(db, id); });
   return out;
 }
@@ -97,16 +98,16 @@ Result<bool> DatAuditProfileStore::touchLastScan(qint64 id, qint64 whenMs) {
 Result<bool> DatAuditProfileStore::replaceResults(qint64 id,
                                                   const QList<DatAuditProfile::ResultRow> &rows) {
   Result<bool> out = connError("DatAuditProfileStore::replaceResults");
-  withConnection([&out, id, &rows](QSqlDatabase &db) {
-    out = DatAuditProfile::replaceResults(db, id, rows);
-  });
+  withConnection(
+      [&out, id, &rows](QSqlDatabase &db) { out = DatAuditProfile::replaceResults(db, id, rows); });
   return out;
 }
 
 Result<QList<DatAuditProfile::ResultRow>> DatAuditProfileStore::loadProfileResultRows(qint64 id) {
   Result<QList<DatAuditProfile::ResultRow>> out =
       connError("DatAuditProfileStore::loadProfileResultRows");
-  withConnection([&out, id](QSqlDatabase &db) { out = DatAuditProfile::loadProfileResultRows(db, id); });
+  withConnection(
+      [&out, id](QSqlDatabase &db) { out = DatAuditProfile::loadProfileResultRows(db, id); });
   return out;
 }
 
