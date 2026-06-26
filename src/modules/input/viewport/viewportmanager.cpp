@@ -191,7 +191,10 @@ void ViewportManager::clearArrowCenterSuppressionWhenDue() {
   qint64 now = QDateTime::currentMSecsSinceEpoch();
   if (until > now) {
     qint64 delay = until - now;
-    InteractionStateHolder *statePtr = state();
+    // QPointer (matching the sibling guard in setProgrammaticScrollGuarded) so
+    // the deferred lambda is lifetime-safe even if the member-declaration order
+    // in interactionmanager.h ever changes (Kartend audit L-03).
+    QPointer<InteractionStateHolder> statePtr = state();
     constexpr qint64 kMaxArrowCenterSuppressClearMs = 1000;
     // Clear arrow center suppression after calculated delay expires -
     // caps at max to prevent indefinite suppression on clock issues

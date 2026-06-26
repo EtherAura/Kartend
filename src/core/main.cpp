@@ -190,6 +190,13 @@ extern "C" auto main(int argc, char *argv[]) -> int {
           headlessChoice = kart::MergeChoice::Overwrite;
         } else if (v == "merge") {
           headlessChoice = kart::MergeChoice::Merge;
+        } else if (v != "skip") {
+          // Kartend audit E-04: don't silently treat a typo'd policy as Skip.
+          fprintf(stderr,
+                  "kart import: unknown --on-conflict policy '%s' (expected skip, "
+                  "overwrite, or merge)\n",
+                  qPrintable(parser.value(onConflictOption)));
+          return 2;
         }
       }
       kart::KartManager km;

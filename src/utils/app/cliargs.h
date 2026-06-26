@@ -27,10 +27,12 @@ struct StartupOptions {
   QString exportOutPath;
   KartConflictPolicy onConflict = KartConflictPolicy::Skip;
 
-  // Non-Success when --import-kart or --to failed CLI-layer path validation
-  // (shell metachars, NUL byte, blank-after-expansion). main.cpp must reject
-  // the run with a non-zero exit on isError() — existence is NOT checked
-  // here; KartReader handles that with its own readable errors.
+  // Non-Success when a CLI argument failed CLI-layer validation: an
+  // --import-kart / --to path issue (shell metachars, NUL byte,
+  // blank-after-expansion) or an unrecognized --on-conflict policy value.
+  // main.cpp must reject the run with a non-zero exit on isError() — path
+  // existence is NOT checked here; KartReader handles that with its own
+  // readable errors.
   ErrorUtils::ErrorContext pathValidationError;
 };
 
