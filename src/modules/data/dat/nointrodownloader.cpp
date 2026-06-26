@@ -13,6 +13,7 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
@@ -37,6 +38,14 @@ constexpr char kUserAgent[] =
 // cross this ceiling, mirroring the scraper HttpClient's downloadProgress→abort
 // pattern. 200 MiB comfortably fits real DAT packs (~tens of MiB).
 constexpr qint64 kMaxResponseBytes = 200LL * 1024 * 1024;
+
+// Decompressed-size ceiling for the pack extraction in extractDatsTo (Kartend
+// audit SEC-02): the extractor runs count-free, so a malicious pack could
+// otherwise inflate to fill the temp volume. 2 GiB is far above any real DAT
+// pack (XML, ~tens of MiB) while bounding a bomb; further capped by free space
+// minus a margin, mirroring RomHasher / LaunchManager archive extraction.
+constexpr qint64 kMaxExtractedDatBytes = 2LL * 1024 * 1024 * 1024;
+constexpr qint64 kExtractFreeSpaceMargin = 256LL * 1024 * 1024;
 
 bool cancelled(const CancelToken &c) {
   return c && c->load(std::memory_order_relaxed);
@@ -231,7 +240,19 @@ ErrorUtils::Result<DownloadResult> run(const Options &opts, const ProgressFn &pr
                                  "available for this selection, or the site changed).",
                                  "NoIntroDownload::run");
     }
-    managerUrl = QUrl(dUrl).resolved(redirect).toString();
+    const QUrl resolvedUrl = QUrl(dUrl).resolved(redirect);
+    // Security: only follow a redirect that stays on https + the no-intro.org
+    // host. An absolute redirect from a hostile/MITM response could otherwise
+    // point at http://, file://, or an internal host (Kartend audit SEC-01).
+    if (resolvedUrl.scheme() != QLatin1String("https") ||
+        !(resolvedUrl.host() == QLatin1String("no-intro.org") ||
+          resolvedUrl.host().endsWith(QLatin1String(".no-intro.org")))) {
+      return ErrorContext::error(ErrorCode::InvalidArgument,
+                                 "DAT-o-MATIC returned an unexpected redirect target",
+                                 "NoIntroDownload::run")
+          .withDetails(resolvedUrl.toString());
+    }
+    managerUrl = resolvedUrl.toString();
   }
 
   // Step 3 — confirm page; parse the one-time token.
@@ -359,13 +380,40 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
     return ErrorContext::error(ErrorCode::UnknownError, "Could not start the archive tool",
                                "NoIntroDownload::extractDatsTo");
   }
-  // Poll so a cancel kills the extractor instead of running a ~100MB unpack out.
+  // Zip-bomb guard (Kartend audit SEC-02): the extractor above runs count-free,
+  // so cap decompressed output at min(absolute cap, free space - margin) and
+  // kill the process if a malicious pack inflates past it.
+  const qint64 freeAvail = QStorageInfo(tmp.path()).bytesAvailable();
+  qint64 extractCeiling = kMaxExtractedDatBytes;
+  if (freeAvail >= 0) {
+    extractCeiling = qMin<qint64>(extractCeiling, freeAvail - kExtractFreeSpaceMargin);
+  }
+  const auto extractedBytes = [&tmp]() -> qint64 {
+    qint64 total = 0;
+    QDirIterator walk(tmp.path(), QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+    while (walk.hasNext()) {
+      walk.next();
+      total += walk.fileInfo().size();
+    }
+    return total;
+  };
+
+  // Poll so a cancel — or a zip bomb crossing the ceiling — kills the extractor
+  // instead of running a large unpack out.
   while (!proc.waitForFinished(200)) {
     if (cancelled(cancel)) {
       proc.kill();
       proc.waitForFinished(2000);
       return ErrorContext::error(ErrorCode::OperationCancelled, "Cancelled",
                                  "NoIntroDownload::extractDatsTo");
+    }
+    if (extractedBytes() > extractCeiling) {
+      proc.kill();
+      proc.waitForFinished(2000);
+      return ErrorContext::error(
+          ErrorCode::InvalidArgument,
+          "DAT pack exceeded the decompressed-size limit during extraction (possible zip bomb)",
+          "NoIntroDownload::extractDatsTo");
     }
   }
   if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
