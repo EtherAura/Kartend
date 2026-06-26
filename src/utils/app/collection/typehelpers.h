@@ -64,6 +64,24 @@ namespace CollectionUtils {
  */
 [[nodiscard]] QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
+/**
+ * @brief Convenience overload: computes the canonical uuid for @p collection,
+ * expanding its mediaDirectory through PathUtils::validateAndExpandPath — the
+ * exact pairing every call site uses (Kartend audit D-07).
+ */
+[[nodiscard]] QString computeCollectionUuid(const CollectionConfig &collection);
+
+/**
+ * @brief Locates the collection whose canonical uuid equals @p uuid.
+ * indexForUuid returns its index (or -1 when none match / @p uuid is empty);
+ * findByUuid returns a pointer into @p collections (or nullptr). These replace
+ * the hand-rolled "loop all, recompute each uuid, return the match" idiom
+ * (Kartend audit D-07).
+ */
+[[nodiscard]] int indexForUuid(const QList<CollectionConfig> &collections, const QString &uuid);
+[[nodiscard]] const CollectionConfig *findByUuid(const QList<CollectionConfig> &collections,
+                                                 const QString &uuid);
+
 } // namespace CollectionUtils
 
 #endif // KARTEND_COLLECTION_TYPEHELPERS_H

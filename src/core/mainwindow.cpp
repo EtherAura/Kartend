@@ -667,9 +667,7 @@ void MainWindow::resyncPlaylistCollections() {
   // matches a collection) falls back to root level.
   QHash<QString, int> uuidToIndex;
   for (int i = 0; i < m_collections.size(); ++i) {
-    const CollectionConfig &c = m_collections[i];
-    const QString expandedMediaDir = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, expandedMediaDir);
+    const QString uuid = CollectionUtils::computeCollectionUuid(m_collections[i]);
     if (!uuid.isEmpty()) {
       uuidToIndex.insert(uuid, i);
     }
