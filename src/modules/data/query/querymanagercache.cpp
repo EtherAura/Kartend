@@ -38,28 +38,49 @@ using QueryManagerInternal::buildFtsPrefixQuery;
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
 
-bool QueryManager::ensureQueryUuidsTempTable() {
+namespace {
+// Builds a multi-row VALUES placeholder list, e.g. "(?, ?, ?), (?, ?, ?)" for
+// `rowCount` rows of `columnsPerRow` columns each — shared by the batch INSERT
+// builders so the placeholder assembly exists once (Kartend audit D-06).
+QString buildRowPlaceholders(int rowCount, int columnsPerRow) {
+  const QString row = QStringLiteral("(") +
+                      QStringList(columnsPerRow, QStringLiteral("?")).join(QStringLiteral(", ")) +
+                      QStringLiteral(")");
+  return QStringList(rowCount, row).join(QStringLiteral(", "));
+}
+} // namespace
+
+bool QueryManager::ensureTempTable(const char *createSql, const char *failureMessage,
+                                   const char *context) {
   if (!m_db.isOpen()) {
     return false;
   }
   QSqlQuery q(m_db);
-  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY "
-              "KEY)")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to create query_uuids temp table",
-                                               "QueryManager::ensureQueryUuidsTempTable")
-                             .withDetails(q.lastError().text()));
+  if (!q.exec(createSql)) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed, failureMessage, context)
+            .withDetails(q.lastError().text()));
     return false;
   }
   return true;
 }
 
-void QueryManager::clearQueryUuidsTempTable() {
+void QueryManager::clearTempTable(const char *tableName) {
   if (!m_db.isOpen()) {
     return;
   }
   QSqlQuery q(m_db);
-  q.exec("DELETE FROM query_uuids");
+  q.exec(QStringLiteral("DELETE FROM ") + QString::fromLatin1(tableName));
+}
+
+bool QueryManager::ensureQueryUuidsTempTable() {
+  return ensureTempTable("CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY KEY)",
+                         "Failed to create query_uuids temp table",
+                         "QueryManager::ensureQueryUuidsTempTable");
+}
+
+void QueryManager::clearQueryUuidsTempTable() {
+  clearTempTable("query_uuids");
 }
 
 bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
@@ -89,13 +110,8 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
     const int batchEnd = qMin(batchStart + BATCH_SIZE, uuids.size());
     const int batchCount = batchEnd - batchStart;
 
-    QString sql = "INSERT OR IGNORE INTO query_uuids (uuid) VALUES ";
-    QStringList placeholders;
-    placeholders.reserve(batchCount);
-    for (int i = 0; i < batchCount; ++i) {
-      placeholders.append("(?)");
-    }
-    sql += placeholders.join(", ");
+    const QString sql = QStringLiteral("INSERT OR IGNORE INTO query_uuids (uuid) VALUES ") +
+                        buildRowPlaceholders(batchCount, 1);
 
     QSqlQuery ins(m_db);
     ins.prepare(sql);
@@ -173,33 +189,19 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
 // with sequential position numbers, then use position-based range queries.
 
 bool QueryManager::ensureSortedItemsCacheTable() {
-  if (!m_db.isOpen()) {
-    return false;
-  }
-  QSqlQuery q(m_db);
-  // position is the 0-based index in sorted order, used for instant BETWEEN
-  // queries
-  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS sorted_items_cache ("
-              "position INTEGER PRIMARY KEY, "
-              "path TEXT NOT NULL, "
-              "uuid TEXT NOT NULL)")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to create sorted_items_cache temp table",
-                                               "QueryManager::ensureSortedItemsCacheTable")
-                             .withDetails(q.lastError().text()));
-    return false;
-  }
-  return true;
+  // position is the 0-based index in sorted order, used for instant BETWEEN queries.
+  return ensureTempTable("CREATE TEMP TABLE IF NOT EXISTS sorted_items_cache ("
+                         "position INTEGER PRIMARY KEY, "
+                         "path TEXT NOT NULL, "
+                         "uuid TEXT NOT NULL)",
+                         "Failed to create sorted_items_cache temp table",
+                         "QueryManager::ensureSortedItemsCacheTable");
 }
 
 void QueryManager::clearSortedItemsCache() {
   m_sortedItemsCacheValid = false;
   m_sortedItemsCacheHash.clear();
-  if (!m_db.isOpen()) {
-    return;
-  }
-  QSqlQuery q(m_db);
-  q.exec("DELETE FROM sorted_items_cache");
+  clearTempTable("sorted_items_cache");
 }
 
 QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QString &filter,
@@ -381,13 +383,9 @@ bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
   auto flushBatch = [&]() -> bool {
     if (paths.isEmpty()) return true;
 
-    QString insertSql = "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
-    QStringList placeholders;
-    placeholders.reserve(paths.size());
-    for (int i = 0; i < paths.size(); ++i) {
-      placeholders.append("(?, ?, ?)");
-    }
-    insertSql += placeholders.join(", ");
+    const QString insertSql =
+        QStringLiteral("INSERT INTO sorted_items_cache (position, path, uuid) VALUES ") +
+        buildRowPlaceholders(static_cast<int>(paths.size()), 3);
 
     QSqlQuery ins(m_db);
     ins.prepare(insertSql);
@@ -637,21 +635,12 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 // signals from PlaylistManager.
 
 bool QueryManager::ensurePlaylistScopeTempTable() {
-  if (!m_db.isOpen()) {
-    return false;
-  }
-  QSqlQuery q(m_db);
-  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_playlist_scope ("
-              "uuid TEXT NOT NULL, "
-              "path TEXT NOT NULL, "
-              "PRIMARY KEY (uuid, path))")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to create query_playlist_scope temp table",
-                                               "QueryManager::ensurePlaylistScopeTempTable")
-                             .withDetails(q.lastError().text()));
-    return false;
-  }
-  return true;
+  return ensureTempTable("CREATE TEMP TABLE IF NOT EXISTS query_playlist_scope ("
+                         "uuid TEXT NOT NULL, "
+                         "path TEXT NOT NULL, "
+                         "PRIMARY KEY (uuid, path))",
+                         "Failed to create query_playlist_scope temp table",
+                         "QueryManager::ensurePlaylistScopeTempTable");
 }
 
 bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {

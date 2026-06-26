@@ -72,6 +72,26 @@ QString newPlaylistId() {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+// Shared INSERT for playlist_items — one statement string + one positional
+// bind so the four insert sites (addItem, removeItem re-densify, importFromJson,
+// importFromM3U) can't drift on column order (Kartend audit D-09). Uses
+// bindValue(pos) rather than addBindValue so it also works when a single
+// prepared query is reused across a loop (the removeItem re-densify path).
+const QString kInsertPlaylistItemSql =
+    QStringLiteral("INSERT INTO playlist_items (playlist_id, position, "
+                   "source_collection_uuid, source_path, added_at) "
+                   "VALUES (?, ?, ?, ?, ?)");
+
+void bindPlaylistItemRow(QSqlQuery &q, const QString &playlistId, int position,
+                         const QString &sourceCollectionUuid, const QString &sourcePath,
+                         const QString &addedAt) {
+  q.bindValue(0, playlistId);
+  q.bindValue(1, position);
+  q.bindValue(2, sourceCollectionUuid);
+  q.bindValue(3, sourcePath);
+  q.bindValue(4, addedAt);
+}
+
 } // namespace
 
 PlaylistManager::PlaylistManager(QObject *parent)
@@ -428,14 +448,8 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   const int nextPosition = posQuery.value(0).toInt();
 
   QSqlQuery insert(m_db);
-  insert.prepare(
-      QStringLiteral("INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
-                     "source_path, added_at) VALUES (?, ?, ?, ?, ?)"));
-  insert.addBindValue(playlistId);
-  insert.addBindValue(nextPosition);
-  insert.addBindValue(sourceCollectionUuid);
-  insert.addBindValue(sourcePath);
-  insert.addBindValue(isoNow());
+  insert.prepare(kInsertPlaylistItemSql);
+  bindPlaylistItemRow(insert, playlistId, nextPosition, sourceCollectionUuid, sourcePath, isoNow());
   if (!insert.exec()) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                      "Failed to insert playlist item", "PlaylistManager::addItem")
@@ -526,15 +540,9 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
   }
 
   QSqlQuery reinsert(m_db);
-  reinsert.prepare(
-      QStringLiteral("INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
-                     "source_path, added_at) VALUES (?, ?, ?, ?, ?)"));
+  reinsert.prepare(kInsertPlaylistItemSql);
   for (int i = 0; i < rows.size(); ++i) {
-    reinsert.bindValue(0, playlistId);
-    reinsert.bindValue(1, i);
-    reinsert.bindValue(2, rows[i].uuid);
-    reinsert.bindValue(3, rows[i].path);
-    reinsert.bindValue(4, rows[i].addedAt);
+    bindPlaylistItemRow(reinsert, playlistId, i, rows[i].uuid, rows[i].path, rows[i].addedAt);
     if (!reinsert.exec()) {
       return false; // guard dtor rolls back
     }
@@ -848,14 +856,8 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
       seen.insert(dedupKey);
 
       QSqlQuery insert(m_db);
-      insert.prepare(QStringLiteral(
-          "INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
-          "source_path, added_at) VALUES (?, ?, ?, ?, ?)"));
-      insert.addBindValue(newId);
-      insert.addBindValue(position++);
-      insert.addBindValue(uuid);
-      insert.addBindValue(path);
-      insert.addBindValue(addedAt);
+      insert.prepare(kInsertPlaylistItemSql);
+      bindPlaylistItemRow(insert, newId, position++, uuid, path, addedAt);
       if (!insert.exec()) {
         auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                        "Failed to insert imported playlist item",
@@ -992,14 +994,8 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
     int position = 0;
     for (const ResolvedEntry &entry : resolved) {
       QSqlQuery insert(m_db);
-      insert.prepare(QStringLiteral(
-          "INSERT INTO playlist_items (playlist_id, position, source_collection_uuid, "
-          "source_path, added_at) VALUES (?, ?, ?, ?, ?)"));
-      insert.addBindValue(newId);
-      insert.addBindValue(position++);
-      insert.addBindValue(entry.uuid);
-      insert.addBindValue(entry.path);
-      insert.addBindValue(addedAt);
+      insert.prepare(kInsertPlaylistItemSql);
+      bindPlaylistItemRow(insert, newId, position++, entry.uuid, entry.path, addedAt);
       if (!insert.exec()) {
         auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                        "Failed to insert imported M3U playlist item",

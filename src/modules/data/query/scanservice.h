@@ -131,6 +131,15 @@ private:
   // matching the legacy inline assembly in the scan/stage paths.
   [[nodiscard]] static QStringList buildNameFilters(const CollectionConfig &collection);
 
+  // needsRescan helpers (Kartend audit D-04): single home for the
+  // item-count-by-uuid probe, and the self-contained includeContentSubfolders
+  // dir-signature validation arm (returns true when a full rescan is needed).
+  [[nodiscard]] bool collectionHasItems(const QString &uuid);
+  [[nodiscard]] bool subfolderDirNeedsRescan(const QString &uuid,
+                                             const CollectionConfig &collection,
+                                             const QString &storedDirSignature,
+                                             const QDateTime &lastScanned);
+
   // scanMediaDirectory's two arms, split out verbatim. scanSequential walks a
   // flat directory; scanParallel dispatches the recursive directory walk across
   // the worker pool. Both append discovered relative paths to filePaths and

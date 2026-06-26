@@ -85,6 +85,47 @@ void ScanService::resetScanCancellation() {
   m_scanWork.reset();
 }
 
+bool ScanService::collectionHasItems(const QString &uuid) {
+  QSqlQuery &countQuery = m_cache.get(QuerySQL::ITEMS_COUNT_BY_UUID);
+  countQuery.bindValue(0, uuid);
+  return countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0;
+}
+
+// The includeContentSubfolders arm of needsRescan: validate (or seed) the
+// stored directory signature against the filesystem. Returns true when a full
+// rescan is required, false to continue with the cheaper modified-items check.
+bool ScanService::subfolderDirNeedsRescan(const QString &uuid, const CollectionConfig &collection,
+                                          const QString &storedDirSignature,
+                                          const QDateTime &lastScanned) {
+  // If we have items in the database, validate the stored directory signature by
+  // checking a bounded set of sampled directories (cheap, avoids deep scans).
+  if (!collectionHasItems(uuid)) {
+    return true;
+  }
+
+  if (!storedDirSignature.trimmed().isEmpty()) {
+    return !dirSignatureStillValid(collection.mediaDirectory, true, storedDirSignature);
+  }
+
+  // Older DBs may have no dir_signature. Avoid forcing a full rescan when items
+  // already exist; seed a bounded signature from the filesystem.
+  const QString seeded = seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
+  if (seeded.trimmed().isEmpty()) {
+    return true;
+  }
+
+  // Preserve the existing last_scanned value while recording the signature.
+  QSqlQuery &meta = m_cache.get(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+  const QString lastScannedIso = lastScanned.isValid()
+                                     ? lastScanned.toString(Qt::ISODate)
+                                     : QDateTime::currentDateTime().toString(Qt::ISODate);
+  meta.bindValue(0, lastScannedIso);
+  meta.bindValue(1, seeded);
+  meta.bindValue(2, uuid);
+  (void)execAndLog(meta, "Failed to seed dir_signature", "ScanService::needsRescan");
+  return false;
+}
+
 bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
@@ -130,10 +171,7 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
   // If an older DB is missing ext_signature metadata, don't force a full
   // rescan. Seed it from the current config when items already exist.
   if (storedSignature != currentSignature) {
-    QSqlQuery &countQuery = m_cache.get(QuerySQL::ITEMS_COUNT_BY_UUID);
-    countQuery.bindValue(0, uuid);
-    const bool hasItems =
-        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
+    const bool hasItems = collectionHasItems(uuid);
     if (hasItems && storedSignature.trimmed().isEmpty()) {
       QSqlQuery &update = m_cache.get(QuerySQL::UPDATE_COLLECTION_EXT_SIGNATURE);
       update.addBindValue(currentSignature);
@@ -162,48 +200,14 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
     return true;
   }
 
-  // When includeContentSubfolders is enabled, check for subdirectory
-  // modifications. For large collections, this check is expensive (iterates all
-  // subdirs). Skip deep check if collection has items in DB - trust cached data
-  // on startup. Full validation happens when user navigates into subfolders or
-  // forces refresh.
+  // When includeContentSubfolders is enabled, validate the stored directory
+  // signature (bounded sampling — see subfolderDirNeedsRescan). Otherwise the
+  // directory mtime is a sufficient cheap proxy for new/deleted files.
   if (collection.folderBrowsing.includeContentSubfolders) {
-    // If we have items in the database, validate the stored directory signature
-    // by checking a bounded set of sampled directories (cheap, avoids deep
-    // scans).
-    QSqlQuery &countQuery = m_cache.get(QuerySQL::ITEMS_COUNT_BY_UUID);
-    countQuery.bindValue(0, uuid);
-    const bool hasItems =
-        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
-    if (!hasItems) {
+    if (subfolderDirNeedsRescan(uuid, collection, storedDirSignature, lastScanned)) {
       return true;
     }
-
-    if (!storedDirSignature.trimmed().isEmpty()) {
-      if (!dirSignatureStillValid(collection.mediaDirectory, true, storedDirSignature)) {
-        return true;
-      }
-    } else {
-      // Older DBs may have no dir_signature. Avoid forcing a full rescan when
-      // items already exist; seed a bounded signature from the filesystem.
-      const QString seeded = seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
-      if (seeded.trimmed().isEmpty()) {
-        return true;
-      }
-
-      // Preserve the existing last_scanned value while recording the signature.
-      QSqlQuery &meta = m_cache.get(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
-      const QString lastScannedIso = lastScanned.isValid()
-                                         ? lastScanned.toString(Qt::ISODate)
-                                         : QDateTime::currentDateTime().toString(Qt::ISODate);
-      meta.bindValue(0, lastScannedIso);
-      meta.bindValue(1, seeded);
-      meta.bindValue(2, uuid);
-      (void)execAndLog(meta, "Failed to seed dir_signature", "ScanService::needsRescan");
-    }
   } else {
-    // Flat collections: directory mtime is a sufficient cheap proxy for
-    // new/deleted files.
     if (dirInfo.lastModified() > lastScanned) {
       return true;
     }

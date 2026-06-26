@@ -366,6 +366,13 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.customFontFamily = o["custom_font_family"].toString();
 
   c.additionalParentNames = jsonToStringList(o["additional_parent_names"]);
+
+  // Clamp every numeric layout field to the UI-enforced ranges at the import
+  // boundary — the same canonical clamp the settings loader applies — so an
+  // untrusted or corrupt .kart can't inject a degenerate layout or a huge
+  // allocation (Kartend audit E-03; complements the default_launcher_index
+  // clamp above, which clampValues() also re-applies idempotently).
+  c.clampValues();
   return c;
 }
 

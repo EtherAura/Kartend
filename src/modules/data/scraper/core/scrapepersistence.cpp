@@ -365,22 +365,22 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   return result;
 }
 
-bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
-                          const ScrapedItem &scraped, RescrapeMode rescrapeMode) {
+SidecarWriteOutcome writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
+                                         const ScrapedItem &scraped, RescrapeMode rescrapeMode) {
   if (artworkDirectory.isEmpty() || baseName.isEmpty()) {
-    return false;
+    return SidecarWriteOutcome::Skipped;
   }
   // A bare title is the minimum worth writing. An empty title also
   // covers the "user opted out of metadata" case — the batch runner
   // strips every text field in that mode, so the item arrives blank.
   if (scraped.title.trimmed().isEmpty()) {
-    return false;
+    return SidecarWriteOutcome::Skipped;
   }
 
   const QString dir = QDir(artworkDirectory).filePath(QStringLiteral("metadata"));
   if (!QDir().mkpath(dir)) {
     qCWarning(lcScrape) << "metadata sidecar: could not create" << dir;
-    return false;
+    return SidecarWriteOutcome::Failed;
   }
   const QString path = QDir(dir).filePath(baseName + QStringLiteral(".json"));
 
@@ -388,7 +388,7 @@ bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseNa
   // UpdateChanged regenerate it (a derived file — re-deriving it is
   // cheaper than a byte compare).
   if (rescrapeMode == RescrapeMode::FillMissing && QFileInfo::exists(path)) {
-    return false;
+    return SidecarWriteOutcome::Skipped;
   }
 
   QJsonObject obj;
@@ -434,10 +434,10 @@ bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseNa
 
   if (!writeBytesAtomically(path, QJsonDocument(obj).toJson(QJsonDocument::Indented))) {
     qCWarning(lcScrape) << "metadata sidecar: write failed" << path;
-    return false;
+    return SidecarWriteOutcome::Failed;
   }
   qCDebug(lcScrape) << "wrote metadata sidecar ->" << path;
-  return true;
+  return SidecarWriteOutcome::Written;
 }
 
 namespace {
@@ -559,8 +559,8 @@ ApplyResult applyScrapedItem(IDatabaseManager *databaseManager, const QString &c
   // BatchScrapeRunner uses the underlying primitives directly so the
   // file-I/O phase can run on a worker thread.
   const MediaWriteResult writes = writeMediaFiles(artworkDirectory, baseName, media, rescrapeMode);
-  const bool sidecarWritten =
-      writeMetadataSidecar(artworkDirectory, baseName, scraped, rescrapeMode);
+  const bool sidecarWritten = writeMetadataSidecar(artworkDirectory, baseName, scraped,
+                                                   rescrapeMode) == SidecarWriteOutcome::Written;
   ApplyResult result;
   result.mediaWritten = writes.mediaWritten;
   result.mediaSkipped = writes.mediaSkipped;
