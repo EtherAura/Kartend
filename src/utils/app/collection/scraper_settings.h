@@ -160,6 +160,10 @@ struct ScraperOptions {
            quarantineDefaultDir == other.quarantineDefaultDir;
   }
   bool operator!=(const ScraperOptions &other) const { return !(*this == other); }
+  // Trim the free-text quarantine dir (Kartend audit S-07; folded by
+  // GeneralSettings::normalizedForSave). datLibraryPath is intentionally left
+  // untrimmed to preserve the exact pre-S-07 trim set.
+  void normalize() { quarantineDefaultDir = quarantineDefaultDir.trimmed(); }
 };
 
 struct ScraperSettings {

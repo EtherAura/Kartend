@@ -84,15 +84,14 @@ struct GeneralSettings {
   // check, now that the dirty-check is a whole-struct compare (Kartend-6oqat).
   [[nodiscard]] GeneralSettings normalizedForSave() const {
     GeneralSettings copy = *this;
-    copy.launchers.retroarchConfigPath = copy.launchers.retroarchConfigPath.trimmed();
-    copy.splash.bootSplashTitle = copy.splash.bootSplashTitle.trimmed();
-    copy.splash.bootSplashSubtitle = copy.splash.bootSplashSubtitle.trimmed();
-    copy.splash.resumeFocusSplashTitle = copy.splash.resumeFocusSplashTitle.trimmed();
-    copy.splash.resumeFocusSplashSubtitle = copy.splash.resumeFocusSplashSubtitle.trimmed();
-    copy.startup.startupVideoPath = copy.startup.startupVideoPath.trimmed();
-    copy.startup.homeViewLabel = copy.startup.homeViewLabel.trimmed();
-    copy.startup.homeViewIcon = copy.startup.homeViewIcon.trimmed();
-    copy.scraper.options.quarantineDefaultDir = copy.scraper.options.quarantineDefaultDir.trimmed();
+    // Each leaf trims its own free-text fields (Kartend audit S-07), so adding a
+    // new trimmable field to a leaf no longer requires editing this list — the
+    // same staleness trap the operator== whole-struct refactor (Kartend-6oqat)
+    // eliminated for the dirty-check, applied here to trimming.
+    copy.launchers.normalize();
+    copy.splash.normalize();
+    copy.startup.normalize();
+    copy.scraper.options.normalize();
     return copy;
   }
 };

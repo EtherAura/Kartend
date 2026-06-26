@@ -51,8 +51,13 @@ namespace {
 // (or a collection save wipes them). One list so the skip side and the
 // preserve side can never drift apart.
 const QSet<QString> &reservedTopLevelGroups() {
-  static const QSet<QString> groups{QStringLiteral("General"), QStringLiteral("Scrapers"),
-                                    QStringLiteral("ScraperOptions"), QStringLiteral("Launchers")};
+  // Built from the same keys::kGroup* constants the writers use
+  // (saveGeneralSettings / saveScraperSection / launcher presets) so the
+  // skip+preserve set can't drift from what is actually written to the INI.
+  // Kartend audit S-05.
+  static const QSet<QString> groups{
+      QString::fromLatin1(keys::kGroupGeneral), QString::fromLatin1(keys::kGroupScrapers),
+      QString::fromLatin1(keys::kGroupScraperOptions), QString::fromLatin1(keys::kGroupLaunchers)};
   return groups;
 }
 
@@ -145,7 +150,16 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     CollectionBackgroundPersistence::load(settings, config.background, config.name, sanitize);
     ListViewOptionsPersistence::load(settings, config.listView);
 
+    const CollectionConfig preClamp = config;
     config.clampValues();
+    if (!(config == preClamp)) {
+      // An out-of-range value was clamped. Persist the corrected form (rides
+      // the existing needsRewrite -> finalizeCollections rewrite path, like the
+      // extensions/path normalization) so the on-disk INI matches the in-memory
+      // clamped state instead of re-clamping (and re-warning) every launch.
+      // Kartend audit S-08.
+      needsRewrite = true;
+    }
 
     // Kartend-qc1c: surface paths that don't exist on this host (binary
     // uninstalled, NAS unmounted, kart imported from a different machine,

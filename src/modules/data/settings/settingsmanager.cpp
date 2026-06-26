@@ -74,7 +74,11 @@ QString SettingsManager::sanitizeLoadedPath(const QString &value, const QString 
 // the scraper section manage their own groups.
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   const QString configPath = SettingsUtils::getConfigPath();
+  const bool configExists = QFile::exists(configPath);
   QSettings s(configPath, SettingsUtils::getFormat());
+  // Atomic writes (temp-file + rename) for any in-place migration persisted
+  // below, matching the save path (Kartend audit S-02).
+  s.setAtomicSyncRequired(true);
 
   // QSettings exposes parse errors through status() — a torn/corrupted INI
   // surfaces as FormatError here. Without this check, every value() below
@@ -84,7 +88,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // file under a timestamped sidecar so the next save can't erase the
   // forensic copy. The save path itself is unchanged — the user can re-save
   // intentionally; we just refuse to silently swallow corruption.
-  if (s.status() != QSettings::NoError && QFile::exists(configPath)) {
+  if (s.status() != QSettings::NoError && configExists) {
     const QString stamp =
         QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmssZ"));
     const QString backupPath = configPath + QStringLiteral(".corrupt-") + stamp;
@@ -112,26 +116,60 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   const auto schemaVersionKey = [](const char *group) {
     return QString::fromLatin1(group) + QLatin1Char('/') + QLatin1String(keys::kSchemaVersion);
   };
-  const int loadedSchemaVersion = s.value(schemaVersionKey(keys::kGroupGeneral),
-                                          s.value(schemaVersionKey(keys::kGroupScraperOptions), 0))
-                                      .toInt();
+  // A brand-new install (no config file) is at the CURRENT schema, not the
+  // legacy v0 — otherwise it would pointlessly run the legacy-migration walk
+  // (and, once a real v0->vN migration ships, run legacy transforms against
+  // keys that never existed). Kartend audit S-09.
+  const int loadedSchemaVersion =
+      configExists ? s.value(schemaVersionKey(keys::kGroupGeneral),
+                             s.value(schemaVersionKey(keys::kGroupScraperOptions), 0))
+                         .toInt()
+                   : kSettingsSchemaVersion;
 
-  s.beginGroup(keys::kGroupGeneral);
+  // Schema preflight runs at the TOP LEVEL (not inside a beginGroup — the
+  // migration steps target their own groups, per applyMigrations' contract).
   if (loadedSchemaVersion > kSettingsSchemaVersion) {
+    // The file came from a newer build. Snapshot it before any save can drop
+    // the unknown keys (mirroring the corrupt-file sidecar above) so a
+    // downgrade stays recoverable. One snapshot is enough — skip if a
+    // .newer-schema- copy already exists. Kartend audit S-03.
+    const QDir dir(QFileInfo(configPath).path());
+    const QString prefix = QFileInfo(configPath).fileName() + QStringLiteral(".newer-schema-");
+    const bool haveSnapshot = !dir.entryList({prefix + QStringLiteral("*")}, QDir::Files).isEmpty();
+    QString snapshotMsg = QStringLiteral("(snapshot already present)");
+    if (!haveSnapshot) {
+      const QString stamp =
+          QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmssZ"));
+      const QString backupPath = configPath + QStringLiteral(".newer-schema-") + stamp;
+      snapshotMsg = QFile::copy(configPath, backupPath)
+                        ? QStringLiteral("snapshotted to ") + backupPath
+                        : QStringLiteral("FAILED to snapshot to ") + backupPath;
+    }
     qCWarning(lcSettingsManager)
         << "Settings INI was written with schemaVersion" << loadedSchemaVersion
         << "but this build only understands up to" << kSettingsSchemaVersion
-        << "— unknown keys will be ignored on load and overwritten on save.";
+        << "— unknown keys will be ignored on load and overwritten on save;" << snapshotMsg;
   } else if (loadedSchemaVersion < kSettingsSchemaVersion) {
     // Drive in-place migration before any value() reads consume the
     // (potentially renamed/restructured) keys. The dispatcher is a no-op
     // when no steps are registered for the current span, so this is cheap
     // on every load until a real migration lands.
-    kartend::settings::migrations::applyMigrations(
+    const int reached = kartend::settings::migrations::applyMigrations(
         s, loadedSchemaVersion, kSettingsSchemaVersion,
         QStringLiteral("SettingsManager::loadGeneralSettings"));
+    if (reached != loadedSchemaVersion) {
+      // A migration mutated keys in `s`. Persist atomically now (temp-file +
+      // rename) and fsync the parent dir, instead of relying on the
+      // non-durable QSettings destructor flush. Kartend audit S-02.
+      s.sync();
+      if (!PathUtils::syncDirectory(QFileInfo(configPath).path())) {
+        qCWarning(lcSettingsManager)
+            << "syncDirectory failed after settings migration for" << QFileInfo(configPath).path();
+      }
+    }
   }
 
+  s.beginGroup(keys::kGroupGeneral);
   loadInputSection(s, settings);
   loadKeybindingsSection(s, settings);
   loadGamepadSection(s, settings);

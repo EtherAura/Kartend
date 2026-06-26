@@ -18,6 +18,15 @@ struct SplashSettings {
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).
   bool operator==(const SplashSettings &) const = default;
+  // Trim the free-text title/subtitle fields (Kartend audit S-07; folded by
+  // GeneralSettings::normalizedForSave so a whitespace-only edit neither marks
+  // the settings dialog dirty nor round-trips spurious surrounding spaces).
+  void normalize() {
+    bootSplashTitle = bootSplashTitle.trimmed();
+    bootSplashSubtitle = bootSplashSubtitle.trimmed();
+    resumeFocusSplashTitle = resumeFocusSplashTitle.trimmed();
+    resumeFocusSplashSubtitle = resumeFocusSplashSubtitle.trimmed();
+  }
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_SPLASH_SETTINGS_H
