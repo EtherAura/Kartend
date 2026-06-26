@@ -127,11 +127,13 @@ jobs:
         run: |
           if ! python3 -m pip install --quiet --user diff-cover && ! pip install --quiet diff-cover; then
             echo "::warning::diff-cover could not be installed; skipping patch-coverage gate"
+            echo "> ⚠️ **Patch-coverage gate skipped** — diff-cover could not be installed (infra issue, not a coverage failure)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           base="origin/${{ github.base_ref }}"
           if ! git fetch --no-tags origin "${{ github.base_ref }}"; then
             echo "::warning::could not fetch base branch; skipping patch-coverage gate"
+            echo "> ⚠️ **Patch-coverage gate skipped** — could not fetch the base branch (infra issue, not a coverage failure)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # diff-cover reads the lcov .info directly (recent versions); compare

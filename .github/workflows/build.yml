@@ -110,6 +110,9 @@ jobs:
       - name: Check bd issue ID leakage to user-facing surfaces
         run: python3 .scripts/check-bd-id-leakage.py
 
+      - name: Check required-checks path lists stay in lockstep
+        run: python3 .scripts/check-required-checks-consistency.py
+
       - name: Validate AppStream + desktop metadata
         run: |
           appstreamcli validate --pedantic packaging/*.metainfo.xml
@@ -919,8 +922,13 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/Library/Caches/ccache
-          key: ${{ runner.os }}-ccache-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          # Include the runner image label so a macOS image bump (e.g.
+          # macos-14 → macos-15) starts from a clean ccache rather than reusing
+          # objects built against the old SDK. (A runs-on change also rolls the
+          # hashFiles() component, but the literal makes the intent explicit.)
+          key: ${{ runner.os }}-macos14-ccache-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
+            ${{ runner.os }}-macos14-ccache-
             ${{ runner.os }}-ccache-
 
       - name: Configure ccache

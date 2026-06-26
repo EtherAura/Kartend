@@ -18,6 +18,15 @@ source "$script_dir/lib/quality.sh"
 # shellcheck source=lib/test.sh
 source "$script_dir/lib/test.sh"
 
+# build.sh targets Linux: it relies on GNU coreutils (stat -c, nproc) and
+# bash login shells. Fail fast with a clear pointer rather than emitting
+# cryptic errors on macOS/BSD/Windows (Kartend audit DX-15f).
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "build.sh supports Linux only (it relies on GNU coreutils: stat -c, nproc)." >&2
+  echo "For macOS/Windows, see the Manual Build section in docs/dev/building.md." >&2
+  exit 1
+fi
+
 # Parse args
 debug_build=false
 relwithdebinfo_build=false

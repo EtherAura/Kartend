@@ -43,20 +43,37 @@ STATIC would only risk dropping Qt meta-object TUs the linker sees as unused.
 Exit status: 0 = clean, 1 = violations found, 2 = usage error.
 
 Usage:
-    check-layering.py            run all guardrails (the lint); appends a
-                                 one-line ApplicationContext fan-out summary.
-    check-layering.py --fanout   print ONLY the per-manager ctx-> fan-out
-                                 table (an informational coupling metric, no
-                                 pass/fail) and exit 0.
+    check-layering.py             run all guardrails (the lint), then the
+                                  fan-out ratchet; appends a one-line
+                                  ApplicationContext fan-out summary.
+    check-layering.py --fanout    print ONLY the per-manager ctx-> fan-out
+                                  table (an informational coupling metric, no
+                                  pass/fail) and exit 0.
+    check-layering.py --write-baseline
+                                  (re)write .scripts/ctx-fanout-baseline.json
+                                  from the current tree — run this after an
+                                  intended coupling change to accept it.
+    check-layering.py --check-fanout
+                                  run ONLY the fan-out ratchet (exit 1 on a
+                                  regression) — what the default run also does.
 
-The fan-out report (Kartend-5y7zm) is a metric, not a guardrail: it counts how
+The fan-out report (Kartend-5y7zm) is an informational metric: it counts how
 many call sites reach each sibling manager through `ctx->xxxManager()` so that
-coupling growth around the ApplicationContext hub is visible in review. It does
-NOT fail the build — there is deliberately no hard cap.
+coupling growth around the ApplicationContext hub is visible in review.
+
+The fan-out RATCHET (Kartend-n1hpy.1) turns the report's OUTGOING dimension
+into a soft gate: it CAN fail the build when a single file's ctx-> breadth
+(distinct managers reached) grows past its recorded baseline, or a new file
+crosses the floor. Incoming per-manager totals are still uncapped — they grow
+naturally with features. The ratchet is inert until
+.scripts/ctx-fanout-baseline.json exists (see check_fanout_ratchet). Run
+--write-baseline to accept an intended change; lowering breadth is always
+allowed.
 """
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -80,6 +97,23 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 # controller-ctx thunks use the dotted, get-prefixed `m_ctx.getXxxManager()`
 # form and are intentionally NOT counted here). Captures the accessor name.
 CTX_FANOUT_RE = re.compile(r"\b(?:m_)?ctx\s*->\s*([a-z]\w*Manager)\s*\(\s*\)")
+
+# ── ApplicationContext fan-out RATCHET (Kartend-n1hpy.1) ─────────────────────
+# The fan-out report below is informational; the ratchet turns its OUTGOING
+# dimension into a soft gate so hub coupling can't silently grow. We gate the
+# per-file *outgoing breadth* — how many DISTINCT sibling managers a single
+# file reaches through ctx-> — because that is the actual smell the audit
+# flagged ("widest reachers ... the prime candidates for role-scoped dependency
+# structs"). A file going 9 -> 10 distinct managers is a regression; a new file
+# reaching one manager is not. INCOMING per-manager totals grow naturally as
+# features are added, so they are recorded for context but NOT gated.
+#
+# Rule: a file may reach up to max(FANOUT_FLOOR - 1, its baseline) distinct
+# managers. Crossing the floor as a brand-new hub, or growing an existing
+# baselined hub, fails — until `--write-baseline` records the intended new
+# shape. Lowering is always allowed. This is a speed-bump, not a cap.
+FANOUT_FLOOR = 3
+FANOUT_BASELINE_PATH = REPO / ".scripts" / "ctx-fanout-baseline.json"
 
 
 def header_area_map() -> dict[str, str]:
@@ -301,7 +335,10 @@ def main() -> int:
     # Informational coupling metric (Kartend-5y7zm) — never fails the lint.
     by_manager, _ = compute_ctx_fanout()
     print(ctx_fanout_summary_line(by_manager))
-    return 0
+    # Soft ratchet on the OUTGOING dimension (Kartend-n1hpy.1): this CAN fail
+    # the lint when a single file's ctx-> breadth grows past its baseline.
+    # Inert until a baseline exists (see check_fanout_ratchet).
+    return check_fanout_ratchet()
 
 
 # Manager/Service pointer detector for setup structs. We scan all setup struct
@@ -461,8 +498,13 @@ def check_imainwindow_manager_methods() -> list[tuple[int, str, str]]:
 # that distinguishes them stays accurate.
 APPCONTEXT_STRUCT_RE = re.compile(r"struct\s+ApplicationContext\s*\{")
 CONTROLLER_CTX_STRUCT_RE = re.compile(r"struct\s+(\w*ControllerContext)\s*\{")
-# A get-prefixed member function: `getXxx(` with an uppercase letter after get.
-CTX_GET_METHOD_RE = re.compile(r"\bget[A-Z]\w*\s*\(")
+# A get-prefixed member function DECLARATION: `getXxx(` with an uppercase
+# letter after get. The negative lookbehind excludes qualified *calls*
+# (`obj.getX()`, `ptr->getX()`, `Ns::getX()`) so an inline accessor body that
+# legitimately calls a get* helper isn't misread as a forbidden declaration —
+# a member declaration is never preceded by `.`, `>` (from `->`), or `:`
+# (Kartend audit DX-09).
+CTX_GET_METHOD_RE = re.compile(r"(?<![.>:])\bget[A-Z]\w*\s*\(")
 STD_FUNCTION_RE = re.compile(r"std::function\s*<")
 GET_PREFIX_RE = re.compile(r"get[A-Z]")
 
@@ -662,7 +704,115 @@ def report_ctx_fanout() -> int:
     return 0
 
 
+def _fanout_snapshot() -> dict:
+    """Build the serializable fan-out snapshot used by the baseline + ratchet.
+
+    by_file_outgoing records only files at or above FANOUT_FLOOR (the ones the
+    ratchet actually gates); by_manager_incoming is recorded for context only.
+    Both dicts are key-sorted so the baseline file diffs cleanly.
+    """
+    by_manager, by_file = compute_ctx_fanout()
+    outgoing = {
+        rel: len(managers)
+        for rel, managers in by_file.items()
+        if len(managers) >= FANOUT_FLOOR
+    }
+    incoming = {mgr: len(sites) for mgr, sites in by_manager.items()}
+    return {
+        "_comment": (
+            "Soft ratchet for ApplicationContext ctx-> OUTGOING fan-out (how many "
+            "DISTINCT sibling managers a single file reaches). Regenerate after an "
+            "intended change with: python3 .scripts/check-layering.py --write-baseline. "
+            "The lint FAILS when a file's outgoing breadth rises above its baseline, "
+            "or a new file crosses the floor. Lowering is always allowed (re-baseline "
+            "to lock the win). by_manager_incoming is context only and is NOT gated."
+        ),
+        "floor": FANOUT_FLOOR,
+        "by_file_outgoing": dict(sorted(outgoing.items())),
+        "by_manager_incoming": dict(sorted(incoming.items())),
+    }
+
+
+def write_fanout_baseline() -> int:
+    """Write .scripts/ctx-fanout-baseline.json from the current tree. Returns 0."""
+    snapshot = _fanout_snapshot()
+    FANOUT_BASELINE_PATH.write_text(
+        json.dumps(snapshot, indent=2) + "\n", encoding="utf-8"
+    )
+    gated = snapshot["by_file_outgoing"]
+    print(
+        f"check-layering: wrote {FANOUT_BASELINE_PATH.relative_to(REPO)} — "
+        f"{len(gated)} file(s) at/above the floor of {snapshot['floor']} "
+        f"distinct managers are now ratcheted."
+    )
+    return 0
+
+
+def check_fanout_ratchet() -> int:
+    """Fail (1) if any file's outgoing ctx-> breadth exceeds its allowance.
+
+    Allowance per file = max(FANOUT_FLOOR - 1, baseline[file]). So a file may
+    freely reach up to FANOUT_FLOOR-1 managers; crossing the floor as a new hub
+    or growing a baselined hub fails until re-baselined. Missing baseline file
+    is a soft pass with a hint (so the ratchet is inert until adopted).
+    """
+    if not FANOUT_BASELINE_PATH.exists():
+        print(
+            "check-layering: ctx fan-out ratchet inactive — no "
+            f"{FANOUT_BASELINE_PATH.relative_to(REPO)} yet. Create it with "
+            "`python3 .scripts/check-layering.py --write-baseline`."
+        )
+        return 0
+
+    baseline = json.loads(FANOUT_BASELINE_PATH.read_text(encoding="utf-8"))
+    base_files: dict[str, int] = baseline.get("by_file_outgoing", {})
+    floor = int(baseline.get("floor", FANOUT_FLOOR))
+
+    _, by_file = compute_ctx_fanout()
+    current = {rel: len(mgrs) for rel, mgrs in by_file.items()}
+
+    regressions: list[tuple[str, int, int]] = []  # (file, allowed, current)
+    for rel, count in sorted(current.items()):
+        allowed = max(floor - 1, base_files.get(rel, 0))
+        if count > allowed:
+            regressions.append((rel, allowed, count))
+
+    if regressions:
+        print(
+            "\ncheck-layering: ApplicationContext ctx-> fan-out RATCHET — a file's "
+            "outgoing breadth grew beyond its baseline:"
+        )
+        for rel, allowed, count in regressions:
+            print(f"  {rel}: reaches {count} distinct managers (allowed {allowed})")
+        print(
+            "\nThis hub coupling is what the role-scoped dependency-struct effort "
+            "is unwinding — prefer narrowing the file onto a role interface (see "
+            "IScrollManager's six role views) over widening it. If the growth is "
+            "intentional, accept it with:\n"
+            "  python3 .scripts/check-layering.py --write-baseline"
+        )
+        return 1
+
+    # Note (non-failing) when a baselined hub shrank, so the win can be locked.
+    improved = [
+        rel for rel, base in base_files.items() if current.get(rel, 0) < base
+    ]
+    if improved:
+        print(
+            f"check-layering: ctx fan-out ratchet OK — {len(improved)} hub(s) "
+            "narrowed below baseline; re-run --write-baseline to lock the win."
+        )
+    else:
+        print("check-layering: ctx fan-out ratchet OK — no hub grew past its baseline.")
+    return 0
+
+
 if __name__ == "__main__":
-    if "--fanout" in sys.argv[1:]:
+    args = sys.argv[1:]
+    if "--fanout" in args:
         sys.exit(report_ctx_fanout())
+    if "--write-baseline" in args:
+        sys.exit(write_fanout_baseline())
+    if "--check-fanout" in args:
+        sys.exit(check_fanout_ratchet())
     sys.exit(main())

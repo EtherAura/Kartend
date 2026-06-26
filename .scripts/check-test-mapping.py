@@ -72,6 +72,31 @@ INTEGRATION_ONLY: set[str] = {
     # so no INTEGRATION_ONLY entry is needed.
 }
 
+# src/chrome .cpp that are intentionally NOT unit-tested — headless-hostile
+# QWidget paint/lifecycle shells and decode paths (docs/dev/testing.md: "test
+# the extractable helpers, leave the QWidget shell"). Keyed by repo-relative
+# path with a one-line reason. The advisory coverage report below segregates
+# these from not-yet-triaged gaps, so anything still printed as an "unexempted
+# gap" is a NEW, unexamined hole rather than a known-accepted one. Scoped to
+# src/chrome for now; src/core UI-coordinator gaps stay listed (a broader
+# category, much of it integration-tested — left visible deliberately).
+COVERAGE_EXEMPT: dict[str, str] = {
+    "src/chrome/items/itemwidget.cpp": "QWidget item shell; paint/lifecycle, no extractable logic",
+    "src/chrome/items/itemwidgetlifecycle.cpp": "QWidget lifecycle partial of itemwidget",
+    "src/chrome/items/itemwidgetpaint.cpp": "QPainter paint partial of itemwidget",
+    "src/chrome/items/itemwidgetplaceholder.cpp": "placeholder-paint partial of itemwidget",
+    "src/chrome/items/itemwidgetsetters.cpp": "trivial property setters partial of itemwidget",
+    "src/chrome/items/itemwidgetindicator.cpp": "QWidget overlay indicator; paint-only",
+    "src/chrome/items/itemplaceholderrenderer.cpp": "QPainter placeholder renderer; paint-only",
+    "src/chrome/items/coverflowgallerystrip.cpp": "QWidget coverflow strip; paint/layout shell",
+    "src/chrome/items/coverflowwidget_artwork.cpp": "artwork paint partial of coverflowwidget",
+    "src/chrome/items/coverflowwidget_input.cpp": "input-handling partial of coverflowwidget",
+    "src/chrome/media/videopreviewwidget.cpp": "QWidget video surface; needs a live decoder",
+    "src/chrome/media/videothumbnailextractor.cpp": "FFmpeg/GPU decode path; not headless-testable",
+    "src/chrome/overlays/artworkpreviewoverlay.cpp": "QWidget hover overlay; paint/geometry shell",
+    "src/chrome/overlays/overlaylayermanager.cpp": "QWidget z-order/layout manager; runtime-only",
+}
+
 
 def check_modules() -> bool:
     """src/modules <-> tests/modules, bidirectional. Returns True if clean."""
@@ -158,7 +183,8 @@ def check_utils() -> bool:
 
 
 def check_test_registration() -> bool:
-    """Every tests/**/test_*.cpp must be referenced by a tests/**/CMakeLists.txt.
+    """Every tests/**/test_*.cpp must be referenced by a tests/**/CMakeLists.txt
+    or a tests/cmake/*.cmake include() fragment.
 
     tests/CMakeLists.txt registers ~100 tests with hand-written
     add_executable/add_test triples and tests/integration/CMakeLists.txt lists
@@ -167,15 +193,32 @@ def check_test_registration() -> bool:
     Returns True if clean.
     """
     cpps = sorted(TESTS.rglob("test_*.cpp"))
-    cmake_text = "\n".join(
-        p.read_text(encoding="utf-8", errors="replace")
-        for p in TESTS.rglob("CMakeLists.txt")
+    # CMakeLists.txt *and* *.cmake include() fragments (Kartend-n1hpy.8): the
+    # unit registrations were split out of the 1800-line tests/CMakeLists.txt
+    # into ordered tests/cmake/*.cmake fragments, so a basename can now live in
+    # either. Scan both, or every moved test reads as "unregistered".
+    cmake_files = sorted(TESTS.rglob("CMakeLists.txt")) + sorted(TESTS.rglob("*.cmake"))
+
+    def _strip_cmake_comments(text: str) -> str:
+        # Drop `# ...` line comments so a test referenced ONLY in a comment is
+        # not counted as registered — otherwise a commented-out add_executable
+        # would mask a test that compiles into nothing, the exact silent-loss
+        # this backstop exists to catch (Kartend audit DX-05).
+        out = []
+        for line in text.splitlines():
+            hash_idx = line.find("#")
+            out.append(line if hash_idx < 0 else line[:hash_idx])
+        return "\n".join(out)
+
+    cmake_text = _strip_cmake_comments(
+        "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in cmake_files)
     )
     # Test-file basenames are unique across the tree, and every CMakeLists
     # reference ends in the literal basename (whether `sub/dir/test_x.cpp` or
     # `test_x.cpp`), so an exact-basename substring test is unambiguous and
     # prefix-collision-safe — `test_x.cpp` cannot match inside `test_xy.cpp`
-    # because the trailing `.cpp` must line up.
+    # because the trailing `.cpp` must line up. Comments are stripped first
+    # (DX-05) so a `# test_x.cpp` mention can't pass an otherwise-unregistered test.
     unregistered = [str(p.relative_to(REPO)) for p in cpps if p.name not in cmake_text]
 
     if unregistered:
@@ -210,24 +253,69 @@ def report_core_chrome_coverage() -> None:
     of these are genuinely hard to unit-test (UI-coordinator code exercised via
     tests/integration/), so failing CI on the whole set would be all noise.
     Raising real coverage here is incremental work, not a gate.
+
+    Files in COVERAGE_EXEMPT (headless-hostile QWidget shells) are listed under
+    a separate "[exempt]" bucket with their reason, so anything still printed
+    as an "unexempted gap" is a NEW, unexamined hole — not a known-accepted one.
+    A COVERAGE_EXEMPT entry that no longer matches an untested .cpp (renamed,
+    removed, or newly tested) is flagged as stale so the allowlist can't rot.
+    Both the bucketing and the stale check stay advisory.
     """
     test_stems = {p.stem for p in TESTS.rglob("test_*.cpp")}  # e.g. "test_foo"
 
     def covered(cpp: pathlib.Path) -> bool:
         return f"test_{cpp.stem}" in test_stems
 
+    # DX-05/T-02: make the name-match limitation explicit so a green count is
+    # not over-trusted. This report credits src/foo.cpp iff a test_foo.cpp
+    # exists by name — it does NOT credit cross-cutting suites that exercise
+    # foo under a different name, and does NOT verify the test asserts anything
+    # about foo. Read 'covered' as "has a same-named test file", not "tested".
+    print(
+        "check-test-mapping: NOTE — core/chrome coverage below is name-match "
+        "only (src/foo.cpp <-> test_foo.cpp); it does not credit cross-cutting "
+        "suites or verify assertions."
+    )
+
+    seen_exempt: set[str] = set()
     for area, label in ((SRC_CORE, "src/core"), (SRC_CHROME, "src/chrome")):
         if not area.is_dir():
             continue
         cpps = sorted(area.rglob("*.cpp"))
-        untested = [p for p in cpps if not covered(p)]
-        covered_n = len(cpps) - len(untested)
+        untested: list[pathlib.Path] = []
+        exempt: list[pathlib.Path] = []
+        for p in cpps:
+            if covered(p):
+                continue
+            rel = str(p.relative_to(REPO))
+            if rel in COVERAGE_EXEMPT:
+                exempt.append(p)
+                seen_exempt.add(rel)
+            else:
+                untested.append(p)
+        covered_n = len(cpps) - len(untested) - len(exempt)
         print(
             f"\ncheck-test-mapping: {label} coverage report (advisory) — "
-            f"{covered_n}/{len(cpps)} .cpp have a matching test_<name>.cpp"
+            f"{covered_n}/{len(cpps)} .cpp have a matching test_<name>.cpp, "
+            f"{len(exempt)} intentionally exempt, {len(untested)} unexempted gap(s)"
         )
         for p in untested:
             print(f"  {p.relative_to(REPO)}  ->  no test_{p.stem}.cpp")
+        for p in exempt:
+            rel = str(p.relative_to(REPO))
+            print(f"  [exempt] {rel}  ->  {COVERAGE_EXEMPT[rel]}")
+
+    # Stale-exemption guard: a COVERAGE_EXEMPT key that matched no scanned,
+    # still-untested .cpp (file renamed/removed, or it gained a test) would
+    # silently rot the allowlist. Advisory only — never changes exit status.
+    stale = sorted(set(COVERAGE_EXEMPT) - seen_exempt)
+    if stale:
+        print(
+            "\ncheck-test-mapping: stale COVERAGE_EXEMPT entries "
+            "(no longer an untested src .cpp):"
+        )
+        for rel in stale:
+            print(f"  {rel}  ->  remove from COVERAGE_EXEMPT (renamed/removed, or now tested)")
 
 
 def main() -> int:

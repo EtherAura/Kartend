@@ -284,6 +284,18 @@ test suite. A few tests need Windows-specific portability work and are
 currently excluded in CI (see the build.yml's `windows-build-test`
 job for the up-to-date exclude list).
 
+## Adding a new `Q_OBJECT` class
+
+`CMAKE_AUTOMOC` is on and module `CMakeLists.txt` files list their sources
+explicitly. When you add a **new** header containing `Q_OBJECT` to an existing
+target *in an existing build dir*, AUTOMOC may not regenerate its `moc_*.cpp`
+until the dir is reconfigured — the `.cpp` compiles but linking fails with
+`undefined reference to vtable for <Class>` / `<Class>::staticMetaObject`.
+Reconfigure to fix it: re-run `.scripts/build.sh` after touching the module's
+`CMakeLists.txt`, or do a clean build (`.scripts/build.sh --clean`). A fresh
+CI configure always moc's it correctly — this is purely an incremental
+build-dir artifact, not a code or `CMakeLists` bug.
+
 ## CMake Options
 
 | Option | Default | Description |
@@ -293,6 +305,7 @@ job for the up-to-date exclude list).
 | `KARTEND_BUILD_TESTS` | `OFF` | Build unit test executables |
 | `KARTEND_ENABLE_CCACHE` | `ON` | Use `ccache` if available (faster rebuilds) |
 | `KARTEND_ENABLE_SANITIZERS` | `OFF` | Enable ASan+UBSan (requires `Debug`; configure errors otherwise) |
+| `KARTEND_ENABLE_TSAN` | `OFF` | Enable ThreadSanitizer (requires `Debug`; **mutually exclusive** with `KARTEND_ENABLE_SANITIZERS`) |
 | `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
 | `KARTEND_PORTABLE_RELEASE` | `OFF` | Drop `-march=native`/`-O3`/fast-math for distro packaging; keeps LTO + hardening |
 | `KARTEND_LINKER_MAP` | `OFF` | Emit `kartend.map` next to `.backups/reports/` in Debug builds |
@@ -300,11 +313,22 @@ job for the up-to-date exclude list).
 | `KARTEND_PGO_GENERATE` | `OFF` | Generate PGO profile data |
 | `KARTEND_PGO_USE` | `OFF` | Use existing PGO profile data |
 | `KARTEND_PGO_PROFILE_DIR` | `build/pgo_profiles` | Directory for PGO profile data |
+| `KARTEND_ENABLE_QT_GAMEPAD` | `ON` | Allow auto-detecting the Qt6::Gamepad input backend |
+| `KARTEND_ENABLE_SDL2_GAMEPAD` | `ON` | Allow auto-detecting the SDL2 gamepad fallback |
+| `KARTEND_ENABLE_ZSTD` | `ON` | Allow auto-detecting libzstd for kart compression |
+| `KARTEND_ENABLE_LIBARCHIVE` | `ON` | Allow auto-detecting libarchive for in-process archive hashing |
 
 Example with options:
 
 ```bash
 cmake ../.. -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DKARTEND_MAINTENANCE=ON
+```
+
+Reproduce a CI ThreadSanitizer failure locally (Debug only; cannot be
+combined with ASan/UBSan):
+
+```bash
+cmake ../.. -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON
 ```
 
 ### ccache

@@ -103,16 +103,20 @@ notice otherwise; the `script-lint` CI job is the backstop).
 
 ### 1. `check-layering.py`
 
-Enforces the architectural layering rule:
+Enforces the architectural layering rule. The canonical layer DAG is
+defined in [layering.md](layering.md) (the source of truth); the short
+form is:
 
 ```
-api → chrome → modules → ui → core
+utils → chrome → modules/{data,input,media} → ui → core
 ```
 
 The foundation layers (`src/utils/`, `src/chrome/`) **must not**
 reach upward into `src/modules/`, `src/ui/`, or `src/core/`. The
 script walks `#include` directives and fails on any upward
-reference.
+reference. (`src/modules/behavior/` is the one module area allowed to
+depend on `ui/` — it owns ui-layer controllers — but still may not
+reach into `src/core/`.)
 
 Common failure modes and fixes are in
 [docs/layering.md](layering.md) (when written) — the short version
