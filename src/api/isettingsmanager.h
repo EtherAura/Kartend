@@ -6,6 +6,7 @@
 #include "errorutils.h"
 #include <QList>
 #include <QObject>
+#include <QStringList>
 
 /**
  * @brief Abstract interface to the settings/configuration layer.
@@ -21,6 +22,13 @@ public:
   ~ISettingsManager() override = default;
 
   virtual void loadCollections(QList<CollectionConfig> &collections) = 0;
+  /// UUID collisions from the most recent loadCollections() — two collections
+  /// sharing one DB key (the data-corruption case). Empty when none. The GUI
+  /// startup path surfaces these as a modal warning so a collision is not
+  /// buried in a log line (Kartend audit cj462). Missing paths and other
+  /// non-fatal validation issues are deliberately excluded — they are common
+  /// and handled elsewhere — to keep the modal to genuine corruption risks.
+  [[nodiscard]] virtual QStringList lastCollectionUuidCollisions() const = 0;
   // Returns Result<void>::success() on a clean QSettings::sync, or an
   // ErrorContext describing the FileWriteError otherwise. Dialog callers
   // surface the error via ErrorDialog and keep the dialog open; non-dialog

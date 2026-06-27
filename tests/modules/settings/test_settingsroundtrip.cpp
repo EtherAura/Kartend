@@ -30,6 +30,7 @@ private slots:
   void extensions_legacyGlobFormMigratesToBare();
   void globalSections_survivePerCollectionSave();
   void clampedOutOfRangeValue_persistedOnLoad();
+  void uuidCollisionCapturedForStartupWarning();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -97,6 +98,35 @@ void TestSettingsRoundtrip::unknownPerCollectionKey_preservedThroughLoadSave() {
   QVERIFY2(rewritten.contains(QStringLiteral("experimentalScrollMode=trampoline")),
            qPrintable(
                QStringLiteral("Unknown string key was dropped on round-trip:\n%1").arg(rewritten)));
+}
+
+void TestSettingsRoundtrip::uuidCollisionCapturedForStartupWarning() {
+  // Two collections with the same name + mediaDirectory compute the same
+  // canonical UUID — the data-corruption case validateAllCollections flags.
+  // loadCollections must CAPTURE it (not just log it) so the GUI startup path
+  // can raise a modal warning (Kartend audit cj462).
+  writeConfigIni(QStringLiteral("[ColA]\n"
+                                "name=Dup\n"
+                                "mediaDirectory=/tmp/dup\n"
+                                "[ColB]\n"
+                                "name=Dup\n"
+                                "mediaDirectory=/tmp/dup\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+
+  const QStringList errors = mgr.lastCollectionUuidCollisions();
+  QVERIFY2(!errors.isEmpty(), "UUID collision must be captured for the startup warning");
+  QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("UUID collision")));
+
+  // A subsequent clean load clears the captured errors (no stale warning).
+  writeConfigIni(QStringLiteral("[Solo]\nname=Solo\nmediaDirectory=/tmp/solo\n"));
+  QList<CollectionConfig> clean;
+  mgr.loadCollections(clean);
+  QVERIFY(mgr.lastCollectionUuidCollisions().isEmpty());
+  // (Solo's media dir is missing — an error, but NOT a collision — so the
+  // collision channel stays empty, proving the missing-path noise is excluded.)
 }
 
 void TestSettingsRoundtrip::knownKey_overwritesPreservedDuplicate() {

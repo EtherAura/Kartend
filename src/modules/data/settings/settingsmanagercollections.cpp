@@ -210,6 +210,11 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
   // Validate loaded collections and log any issues
   auto validation = ConfigValidation::validateAllCollections(collections);
   ConfigValidation::logValidationResult(validation, "loadCollections");
+  // Capture UUID collisions (the data-corruption subset) so the GUI startup
+  // path can surface them in a modal warning rather than only logging them
+  // (Kartend audit cj462). Reset every load; missing paths and other
+  // non-fatal errors are intentionally not surfaced through this channel.
+  m_collectionUuidCollisions = validation.collisions;
 
   // refresh the title-exclusion registry whenever the on-disk
   // collection list is reloaded so QueryManager / scroll consumers see the

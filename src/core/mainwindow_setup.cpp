@@ -102,6 +102,22 @@ void MainWindow::setupUI() {
   // Load settings (INI is small — keep eager).
   m_appManager->getSettingsManager()->loadCollections(m_collections);
 
+  // Surface UUID collisions — two collections sharing one DB key, so they
+  // silently read and write each other's items, history, and play counts — as
+  // a modal warning at startup; loading still proceeds (Kartend audit cj462).
+  // GUI path only; the headless main.cpp loader just logs.
+  const QStringList uuidCollisions =
+      m_appManager->getSettingsManager()->lastCollectionUuidCollisions();
+  if (!uuidCollisions.isEmpty()) {
+    QMessageBox::warning(
+        this, tr("Collection configuration problem"),
+        tr("Problems were found in your collection configuration:\n\n%1\n\n"
+           "The app will still load, but please fix these — collections that share an "
+           "identifier read and write each other's items, history, and play counts under "
+           "one database key.")
+            .arg(uuidCollisions.join(QStringLiteral("\n"))));
+  }
+
   // Kartend-s241: full resyncPlaylistCollections is deferred to a post-
   // showEvent QTimer below, because PlaylistManager::loadAll() hits SQLite
   // on the GUI thread (~70ms typical, way worse on cold cache). The
