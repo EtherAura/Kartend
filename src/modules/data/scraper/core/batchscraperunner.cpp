@@ -574,11 +574,18 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
   // caller deletes us after cancel(). The lambda checks the pointer
   // before touching member state.
   QPointer<BatchScrapeRunner> self(this);
-  m_provider->lookup(
-      ctx, [self, state](const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
-        if (self.isNull()) return;
-        self->onLookupComplete(state, result);
-      });
+  // Stall guard for the lookup leg (Kartend audit xnm8a): the provider reads
+  // and hashes the ROM before the HTTP query, and that file read has no
+  // timeout — on a wedged mount it would otherwise hang this item, and the
+  // whole batch, indefinitely. The watchdog shares `lookupDone` with the
+  // callback so whichever fires first wins and the other no-ops.
+  auto lookupDone = armStepWatchdog(state, QStringLiteral("metadata lookup"));
+  m_provider->lookup(ctx, [self, state, lookupDone](
+                              const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
+    if (self.isNull() || *lookupDone) return;
+    *lookupDone = true;
+    self->onLookupComplete(state, result);
+  });
 }
 
 bool BatchScrapeRunner::cancelledFinish() {
@@ -791,10 +798,16 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
   // writeCompleted signal back here.
   auto *watcher = new QFutureWatcher<Scraper::MediaWriteResult>(this);
   QPointer<BatchScrapeRunner> self(this);
+  // Stall guard for the artwork/sidecar write (Kartend audit xnm8a): the
+  // QtConcurrent task below blocks in write()/fsync() on a wedged mount with no
+  // timeout. Share `writeDone` with the watcher so the watchdog and the normal
+  // completion race cleanly — whichever fires first wins; the other no-ops.
+  auto writeDone = armStepWatchdog(state, QStringLiteral("artwork/metadata write"));
   connect(watcher, &QFutureWatcher<Scraper::MediaWriteResult>::finished, this,
-          [self, watcher, state, effective, baseName]() {
+          [self, watcher, writeDone, state, effective, baseName]() {
             watcher->deleteLater();
-            if (self.isNull()) return;
+            if (self.isNull() || *writeDone) return;
+            *writeDone = true;
             self->onMediaWriteFinished(state, effective, baseName, watcher->result());
           });
   // Track the task and hand it the runner-lifetime cancel token
@@ -962,6 +975,58 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
   emit itemCompleted(m_summary.scraped + m_summary.skipped + m_summary.errors, totalItemCount(),
                      pending.scraped, pending.writtenPaths);
   itemFinished();
+}
+
+int BatchScrapeRunner::stepWatchdogMs() {
+  // Read fresh (a getenv + parse, ~2x per item — negligible) rather than
+  // cached, so a test can drive the budget to a few milliseconds per case and
+  // a user can retune it without a restart. 10min default; env override lets a
+  // user with multi-GB images on a slow mount raise it if a legitimate hash
+  // ever approaches the ceiling (Kartend audit xnm8a).
+  bool ok = false;
+  const int v = qEnvironmentVariableIntValue("KARTEND_SCRAPE_STEP_TIMEOUT_MS", &ok);
+  return (ok && v > 0) ? v : 600000;
+}
+
+std::shared_ptr<bool> BatchScrapeRunner::armStepWatchdog(const std::shared_ptr<ItemState> &state,
+                                                         const QString &stageLabel) {
+  auto done = std::make_shared<bool>(false);
+  // Parented to `this`, so a runner torn down before the timer fires destroys
+  // it cleanly (it never fires post-dtor — same guarantee as the media-write
+  // watchers). On a normal completion the step's callback sets *done; this
+  // timer still fires once at the budget, sees *done, and only deleteLater()s
+  // itself. The self-clean keeps the call sites to a single `if (*done)` check.
+  auto *timer = new QTimer(this);
+  timer->setSingleShot(true);
+  QPointer<BatchScrapeRunner> self(this);
+  connect(timer, &QTimer::timeout, this, [self, timer, done, state, stageLabel]() {
+    timer->deleteLater();
+    if (self.isNull() || *done) return; // step already completed normally
+    *done = true;
+    self->onStepTimedOut(state, stageLabel);
+  });
+  timer->start(stepWatchdogMs());
+  return done;
+}
+
+void BatchScrapeRunner::onStepTimedOut(const std::shared_ptr<ItemState> &state,
+                                       const QString &stageLabel) {
+  // An unbounded local step (provider ROM hash-read / artwork+sidecar write)
+  // didn't finish within the watchdog budget — almost always a slow or wedged
+  // storage mount. The blocked syscall can't be interrupted, so the worker
+  // thread / QtConcurrent future is left to drain on its own (value-captures
+  // only, like the destructor's abandon path) while we free this item's slot
+  // and let the batch advance instead of freezing forever (Kartend audit
+  // xnm8a).
+  if (m_cancelled) {
+    itemFinished();
+    return;
+  }
+  qCWarning(lcBatchScrape) << "BatchScrapeRunner:" << stageLabel << "for"
+                           << QFileInfo(state->path).fileName() << "exceeded" << stepWatchdogMs()
+                           << "ms; erroring the item and advancing (storage may be unresponsive)";
+  recordError(QStringLiteral("%1: %2 timed out (storage unresponsive?)")
+                  .arg(QFileInfo(state->path).fileName(), stageLabel));
 }
 
 void BatchScrapeRunner::recordError(const QString &reason) {
