@@ -247,10 +247,34 @@ ScreenScraperProvider::~ScreenScraperProvider() {
   // RomHasher / the archive extractor poll it, so this turns a close-mid-hash
   // from a multi-second (multi-GB ROM) / multi-minute (archive extract) main-
   // thread block into a prompt teardown. No-op when no hash is in flight.
-  if (m_activeHashCancelToken) {
-    m_activeHashCancelToken->store(true, std::memory_order_release);
+  // Cancel + drain + delete EVERY in-flight hash (concurrent lookups can have
+  // several; Kartend audit vrqzk — this was a single watcher). Flip all tokens
+  // first so the off-thread hashes exit promptly, then wait on each future so
+  // none outlives us touching shared state, then delete each watcher to sever
+  // its continuation before our members tear down (the provider is not a
+  // QObject, so nothing auto-deletes them). A watcher whose hash already
+  // finished removed itself in the continuation, so it isn't here.
+  const QList<QFutureWatcher<RomHasher::Result> *> watchers = m_inFlightHashes.keys();
+  for (auto *w : watchers) {
+    if (const std::shared_ptr<std::atomic<bool>> &tok = m_inFlightHashes.value(w)) {
+      tok->store(true, std::memory_order_release);
+    }
   }
-  m_hashWatcher.waitForFinished();
+  for (auto *w : watchers) {
+    w->waitForFinished();
+    delete w;
+  }
+  m_inFlightHashes.clear();
+
+  // Stop + delete every pending transient-failure retry timer (Kartend audit
+  // vrqzk — was a single shared m_retryTimer). Their lambdas capture `this`
+  // raw, so they must not fire after we're gone. A retry that already fired
+  // removed itself in its lambda, so it isn't here.
+  for (auto *t : m_inFlightRetryTimers) {
+    t->stop();
+    delete t;
+  }
+  m_inFlightRetryTimers.clear();
 }
 
 ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() const {
@@ -388,26 +412,31 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
     m_stageReporter(isArchive ? QObject::tr("Extracting archive for hash ID…")
                               : QObject::tr("Hashing ROM…"));
   }
-  // Bind the continuation to the provider via the member watcher (NOT qApp):
-  // if we're destroyed mid-hash the watcher dies with us and severs this
-  // connection, so the slot can't deref a freed `this`. disconnect() drops any
-  // prior lookup's continuation before we re-arm (lookups are sequential).
-  // ~ScreenScraperProvider() waits for the task so it can't outlive us.
-  // (Kartend-s1s98)
-  m_hashWatcher.disconnect();
-  QObject::connect(&m_hashWatcher, &QFutureWatcher<RomHasher::Result>::finished, &m_hashWatcher,
-                   [this, trimmed, callback = std::move(callback)]() mutable {
-                     const RomHasher::Result hashes = m_hashWatcher.result();
+  // Per-lookup watcher (Kartend audit vrqzk). A SINGLE shared m_hashWatcher
+  // made each concurrent lookup's disconnect()+setFuture() clobber the prior
+  // in-flight lookup's continuation, so all but the last concurrent lookup's
+  // callback was lost and its batch item leaked forever (scrape hung at <100%,
+  // never emitting finished). Each hash now owns its watcher. The provider is
+  // NOT a QObject, so the watcher gets no parent and uses itself as the
+  // connection context (as the old member watcher did with &m_hashWatcher); it
+  // is tracked in m_inFlightHashes so the destructor can cancel + drain + delete
+  // every in-flight hash before our members tear down — severing the
+  // continuation so it can't deref a freed `this` (Kartend-s1s98). The cancel
+  // token is the map value so the destructor can flip it for a prompt
+  // close-mid-hash teardown instead of a multi-minute block (Kartend-37ei3).
+  auto *watcher = new QFutureWatcher<RomHasher::Result>();
+  m_inFlightHashes.insert(watcher, cancelToken);
+  QObject::connect(watcher, &QFutureWatcher<RomHasher::Result>::finished, watcher,
+                   [this, watcher, trimmed, callback = std::move(callback)]() mutable {
+                     const RomHasher::Result hashes = watcher->result();
+                     m_inFlightHashes.remove(watcher);
+                     watcher->deleteLater();
                      if (m_stageReporter) {
                        m_stageReporter(QString());
                      }
                      runLookupAfterHash(trimmed, hashes, std::move(callback));
                    });
-  // Remember this task's cancel token so ~ScreenScraperProvider() can flip it
-  // before waiting, turning a close-mid-hash into a prompt cancel rather than
-  // a multi-minute main-thread block (Kartend-37ei3).
-  m_activeHashCancelToken = cancelToken;
-  m_hashWatcher.setFuture(
+  watcher->setFuture(
       QtConcurrent::run([wantInnerHash, filePath, cancelToken]() -> RomHasher::Result {
         auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
                      ? RomHasher::hashArchiveInnerRom(filePath, cancelToken)
@@ -582,17 +611,26 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
               << ", code=" << static_cast<int>(response.error().code) << "); retry "
               << (attempt + 1) << "/" << Scraper::RetryPolicy::kDefaultMaxRetries << " in "
               << delayMs << "ms";
-          // m_retryTimer is a provider member: destroyed with `this`, so a
-          // pending retry can't fire after free. disconnect() drops any prior
-          // schedule before re-arming (lookups are sequential).
-          m_retryTimer.stop();
-          m_retryTimer.disconnect();
-          m_retryTimer.setSingleShot(true);
-          m_retryTimer.callOnTimeout([this, url, filenameRegionOverride,
-                                      callback = std::move(callback), attempt]() mutable {
-            fetchJeuInfos(url, filenameRegionOverride, std::move(callback), attempt + 1);
-          });
-          m_retryTimer.start(delayMs);
+          // Per-retry timer (Kartend audit vrqzk): a single shared m_retryTimer
+          // made two concurrent lookups' retries clobber each other (stop() +
+          // disconnect() dropped the prior schedule), losing the dropped retry's
+          // callback and leaking its batch item — the same class of bug as the
+          // hash watcher. Each retry owns a timer, tracked in m_inFlightRetryTimers
+          // so the destructor stops + deletes it (the lambda captures `this` raw,
+          // so it must not fire after free). Uses the timer as its own connection
+          // context (the provider is not a QObject).
+          auto *retryTimer = new QTimer();
+          retryTimer->setSingleShot(true);
+          m_inFlightRetryTimers.insert(retryTimer);
+          QObject::connect(retryTimer, &QTimer::timeout, retryTimer,
+                           [this, retryTimer, url, filenameRegionOverride,
+                            callback = std::move(callback), attempt]() mutable {
+                             m_inFlightRetryTimers.remove(retryTimer);
+                             retryTimer->deleteLater();
+                             fetchJeuInfos(url, filenameRegionOverride, std::move(callback),
+                                           attempt + 1);
+                           });
+          retryTimer->start(delayMs);
           return;
         }
         handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);

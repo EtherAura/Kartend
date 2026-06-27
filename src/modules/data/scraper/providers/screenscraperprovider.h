@@ -19,6 +19,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -220,25 +221,32 @@ private:
   GeneralSettingsAccessor m_settingsAccessor;
   CollectionAccessor m_collectionAccessor;
   StageReporter m_stageReporter;
-  /// Bounds an in-flight ROM-hash task to this provider's lifetime. The hash
-  /// runs off-thread (QtConcurrent) and its main-thread continuation touches
-  /// `this`; binding the watcher to the provider (not qApp) severs that
-  /// continuation when we're destroyed, and ~ScreenScraperProvider() waits for
-  /// the task so it can't outlive us (Kartend-s1s98).
-  QFutureWatcher<RomHasher::Result> m_hashWatcher;
-  /// The cooperative cancel token of the in-flight ROM-hash task (set just
-  /// before it is launched). ~ScreenScraperProvider() flips it before
-  /// m_hashWatcher.waitForFinished() so closing the app mid-hash cancels the
-  /// (potentially multi-minute) hash/extract instead of blocking the main
-  /// thread for its full duration (Kartend-37ei3). Only touched on the owner
-  /// (GUI) thread — lookups are sequential — while the worker reads the
-  /// pointed-to atomic. Null when no hash is in flight.
-  std::shared_ptr<std::atomic<bool>> m_activeHashCancelToken;
-  /// Single-shot timer driving Kartend-1rtrt's transient-failure retry.
-  /// A value member so it's destroyed with the provider, severing any
-  /// pending retry (the lambda captures `this` raw) — no fire-after-free.
-  /// Lookups are sequential, so one timer suffices; each schedule resets it.
-  QTimer m_retryTimer;
+  /// In-flight ROM-hash tasks, each keyed by its own per-lookup QFutureWatcher
+  /// and mapped to that task's cooperative cancel token. Each hash runs
+  /// off-thread (QtConcurrent) and its main-thread continuation touches `this`;
+  /// parenting each watcher to the provider severs its continuation on
+  /// destruction, and ~ScreenScraperProvider() flips every token then waits on
+  /// every future so no task outlives us (Kartend-s1s98 / Kartend-37ei3).
+  ///
+  /// Kartend audit vrqzk: this was a SINGLE shared watcher + token, on the
+  /// (false) assumption that "lookups are sequential". BatchScrapeRunner runs
+  /// up to batchItemConcurrency lookups concurrently through one shared
+  /// provider, so each new lookup's disconnect()+setFuture() clobbered the
+  /// previous in-flight lookup's continuation — its callback was never invoked
+  /// and the batch item leaked forever (the scrape hung at <100% and never
+  /// emitted finished). Per-lookup watchers let concurrent hashes coexist.
+  QHash<QFutureWatcher<RomHasher::Result> *, std::shared_ptr<std::atomic<bool>>> m_inFlightHashes;
+  /// In-flight single-shot timers driving Kartend-1rtrt's transient-failure
+  /// retries, one per scheduled retry. Each timer's lambda captures `this` raw;
+  /// the destructor stops + deletes every entry so none fires after free.
+  ///
+  /// Kartend audit vrqzk: this was a SINGLE shared QTimer m_retryTimer on the
+  /// (false) "lookups are sequential" assumption — two concurrent lookups both
+  /// retrying clobbered each other (stop()+disconnect() dropped the prior
+  /// schedule), so the dropped retry never fired and its lookup callback was
+  /// lost (same leak class as the per-lookup hash watcher above). One timer per
+  /// retry lets concurrent retries coexist.
+  QSet<QTimer *> m_inFlightRetryTimers;
   /// SS's jeuInfos.php returns the candidate AND the full detail in one
   /// response — there's no separate detail endpoint. We cache the full
   /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so
