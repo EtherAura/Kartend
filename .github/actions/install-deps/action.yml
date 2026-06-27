@@ -40,6 +40,12 @@ runs:
       # into a fast failure that the retry can route around, instead of a hang
       # that only the job's timeout-minutes eventually kills.
       run: |
+        # Kartend audit xm8wu: the hosted ubuntu-24.04 image ships azure-cli /
+        # microsoft-prod apt repos that intermittently 403 or report "no longer
+        # signed", which fails this update outright (it took build-no-zstd red on
+        # main). Nothing here needs them, so drop the sources before refreshing
+        # the index. -f keeps it a no-op when they are absent (e.g. act's image).
+        sudo rm -f /etc/apt/sources.list.d/microsoft* /etc/apt/sources.list.d/azure-cli*
         sudo apt-get $APT_OPTS update -qq || { sleep 5; sudo apt-get $APT_OPTS update -qq; }
       env:
         APT_OPTS: >-

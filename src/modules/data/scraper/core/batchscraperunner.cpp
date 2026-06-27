@@ -574,11 +574,11 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
   // caller deletes us after cancel(). The lambda checks the pointer
   // before touching member state.
   QPointer<BatchScrapeRunner> self(this);
-  m_provider->lookup(ctx,
-                     [self, state](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
-                       if (self.isNull()) return;
-                       self->onLookupComplete(state, result);
-                     });
+  m_provider->lookup(
+      ctx, [self, state](const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
+        if (self.isNull()) return;
+        self->onLookupComplete(state, result);
+      });
 }
 
 bool BatchScrapeRunner::cancelledFinish() {
@@ -613,7 +613,7 @@ void BatchScrapeRunner::onLookupComplete(
     recordError(QFileInfo(state->path).fileName(), result.error());
     return;
   }
-  const auto candidates = result.value();
+  const auto &candidates = result.value();
   if (candidates.isEmpty()) {
     skipAndFinish();
     return;
@@ -638,11 +638,12 @@ void BatchScrapeRunner::onLookupComplete(
   // as the provider's lookup callback is the one that calls
   // fetchDetail (which it is, here).
   QPointer<BatchScrapeRunner> self(this);
-  m_provider->fetchDetail(candidates.first(),
-                          [self, state](ErrorUtils::Result<Scraper::ScrapedItem> detailResult) {
-                            if (self.isNull()) return;
-                            self->onDetailComplete(state, detailResult);
-                          });
+  m_provider->fetchDetail(
+      candidates.first(),
+      [self, state](const ErrorUtils::Result<Scraper::ScrapedItem> &detailResult) {
+        if (self.isNull()) return;
+        self->onDetailComplete(state, detailResult);
+      });
 }
 
 void BatchScrapeRunner::onDetailComplete(
@@ -654,7 +655,7 @@ void BatchScrapeRunner::onDetailComplete(
     recordError(QFileInfo(state->path).fileName(), detailResult.error());
     return;
   }
-  const auto scraped = detailResult.value();
+  const auto &scraped = detailResult.value();
   if (m_quotaStopped) {
     // Kartend-fv3yr: quota was exhausted by a sibling between this
     // item's detail fetch and now. Keep the metadata we already have
@@ -696,7 +697,7 @@ void BatchScrapeRunner::fetchMediaAndFinish(const std::shared_ptr<ItemState> &st
   QPointer<BatchScrapeRunner> self(this);
   for (const auto &asset : wantedAssets) {
     m_provider->fetchMediaBytes(
-        asset.url, [self, state, scraped, asset, agg](ErrorUtils::Result<QByteArray> r) {
+        asset.url, [self, state, scraped, asset, agg](const ErrorUtils::Result<QByteArray> &r) {
           if (self.isNull()) return;
           self->onMediaBytesComplete(state, scraped, asset, agg, r);
         });
