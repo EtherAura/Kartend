@@ -76,17 +76,23 @@ set(KARTEND_MIN_QT_VERSION 6.4)
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets Network LinguistTools)
 find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
-# MSVC + Ninja Debug PDB contention (Kartend audit h4j5s). Debug emits
-# separate-PDB debug info (/Zi) and Ninja compiles a target's TUs in parallel,
+# MSVC + Ninja Debug PDB contention (Kartend audit h4j5s). Debug/RelWithDebInfo
+# default to /Zi (separate .pdb) and Ninja compiles a target's TUs in parallel,
 # so multiple cl.exe race to open one .pdb -> "fatal error C1041 ... if multiple
-# CL.EXE write to the same .PDB file, please use /FS". /FS serializes those PDB
-# writes so they can share it. Set globally and BEFORE the qtkeychain
-# FetchContent below so the dependency inherits it too — qt6keychain.dir was
-# exactly where CI's new Debug Windows leg first hit C1041. Additive and a no-op
-# for Release (no /Zi -> no PDB); CMAKE_MSVC_DEBUG_INFORMATION_FORMAT would be
-# cleaner but needs CMake 3.25 and we floor at 3.20.
+# CL.EXE write to the same .PDB file, please use /FS". An earlier add_compile_options(/FS)
+# attempt did NOT reach the qtkeychain FetchContent dependency (a directory
+# COMPILE_OPTIONS property doesn't propagate into the sub-build), so qt6keychain
+# kept failing. Switch /Zi -> /Z7 (debug info embedded in each .obj, no .pdb at
+# all -> contention is impossible) in the GLOBAL per-config flag strings, which
+# every target inherits including FetchContent deps. Done before the qtkeychain
+# FetchContent below. CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded is the modern
+# spelling but needs CMake 3.25 and we floor at 3.20.
 if (MSVC)
-  add_compile_options(/FS)
+  foreach(_flagvar
+      CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
+      CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+    string(REPLACE "/Zi" "/Z7" ${_flagvar} "${${_flagvar}}")
+  endforeach()
 endif()
 
 # Optional-backend discovery (gamepad / zstd / libarchive / QtKeychain incl.
