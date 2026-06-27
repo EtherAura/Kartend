@@ -655,6 +655,17 @@ jobs:
     # ~45 min observed warm; a cold vcpkg cache rebuilds deps from source and
     # runs much longer, so 90 avoids false failures while bounding a true hang.
     timeout-minutes: 90
+    # h4j5s: matrix Release + Debug so Q_ASSERT / debug checks run on Windows
+    # too, not just the Release pipeline. fail-fast off so one leg's failure
+    # doesn't cancel the other; the staging/packaging steps below are gated to
+    # Release only.
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        include:
+          - build_type: Release
+            cmake_extra: -DKARTEND_PORTABLE_RELEASE=ON
 
     steps:
       - uses: actions/checkout@v7
@@ -726,10 +737,10 @@ jobs:
           SCCACHE_GHA_ENABLED: 'true'
         run: |
           cmake -S . -B build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DKARTEND_BUILD_TESTS=ON `
             -DKARTEND_ENABLE_CCACHE=OFF `
-            -DKARTEND_PORTABLE_RELEASE=ON `
+            ${{ matrix.cmake_extra }} `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
@@ -767,6 +778,7 @@ jobs:
         run: python .scripts/print-failed-tests.py --build-dir build
 
       - name: Stage with windeployqt + bundled runtime DLLs
+        if: matrix.build_type == 'Release'
         # windeployqt walks the exe's import table and copies Qt DLLs
         # and the platforms/sqldrivers/imageformats/multimedia/... plugin
         # set into the exe's directory. --release picks release-mode
@@ -785,6 +797,7 @@ jobs:
           if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
 
       - name: Package preview .zip
+        if: matrix.build_type == 'Release'
         # Compress-Archive is PowerShell-native and avoids pulling in 7z.
         # The artifact name carries the run number so multiple downloads
         # from the same branch are distinguishable.
@@ -794,6 +807,7 @@ jobs:
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
 
       - name: Upload preview artifact
+        if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ZIP_NAME }}
@@ -902,6 +916,16 @@ jobs:
   macos-build-test:
     runs-on: macos-14
     timeout-minutes: 45
+    # h4j5s: also build+test Debug so Q_ASSERT and debug-iterator checks run on
+    # macOS, not just the Release pipeline. fail-fast off so a Debug-only failure
+    # doesn't cancel the Release leg (or vice versa).
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        include:
+          - build_type: Release
+            cmake_extra: -DKARTEND_PORTABLE_RELEASE=ON
 
     steps:
       - uses: actions/checkout@v7
@@ -929,8 +953,9 @@ jobs:
           # macos-14 → macos-15) starts from a clean ccache rather than reusing
           # objects built against the old SDK. (A runs-on change also rolls the
           # hashFiles() component, but the literal makes the intent explicit.)
-          key: ${{ runner.os }}-macos14-ccache-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
+            ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-
             ${{ runner.os }}-macos14-ccache-
             ${{ runner.os }}-ccache-
 
@@ -944,9 +969,9 @@ jobs:
       - name: Configure CMake
         run: |
           cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DKARTEND_BUILD_TESTS=ON \
-            -DKARTEND_PORTABLE_RELEASE=ON \
+            ${{ matrix.cmake_extra }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
