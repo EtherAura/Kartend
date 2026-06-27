@@ -198,11 +198,14 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build benchmark targets
-        # Derive the target list from the add_executable(bench_*) entries in
-        # tests/CMakeLists.txt so a newly-added benchmark is picked up here
-        # without anyone remembering to edit this workflow.
+        # Derive the target list from the add_executable(bench_*) entries under
+        # tests/ — tests/CMakeLists.txt plus the tests/cmake/*.cmake fragments it
+        # include()s (Kartend-n1hpy.8 split the monolith) — so a newly-added
+        # benchmark is picked up here without anyone remembering to edit this
+        # workflow, regardless of which fragment defines it.
         run: |
-          BENCH_TARGETS=$(grep -oP 'add_executable\(\Kbench_\w+' tests/CMakeLists.txt | sort -u)
+          BENCH_TARGETS=$(grep -rhoP 'add_executable\(\Kbench_\w+' \
+            --include='*.cmake' --include='CMakeLists.txt' tests/ | sort -u)
           echo "Benchmark targets: $BENCH_TARGETS"
           test -n "$BENCH_TARGETS"
           cd build/bench

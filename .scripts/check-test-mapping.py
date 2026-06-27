@@ -41,10 +41,18 @@ Exit status: 0 = clean, 1 = drift detected, 2 = usage error.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+# REPO is overridable via the KARTEND_REPO env var so the script can run against
+# fixture trees in tests (Kartend audit b7phb); unset, it resolves to the repo
+# this script lives in.
+REPO = (
+    pathlib.Path(os.environ["KARTEND_REPO"]).resolve()
+    if os.environ.get("KARTEND_REPO")
+    else pathlib.Path(__file__).resolve().parent.parent
+)
 SRC_MODULES = REPO / "src" / "modules"
 TESTS_MODULES = REPO / "tests" / "modules"
 SRC_UTILS = REPO / "src" / "utils"
