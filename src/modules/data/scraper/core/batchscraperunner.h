@@ -107,6 +107,11 @@ public:
     /// to the next collection and burning the rest of the queue
     /// against an exhausted quota.
     bool quotaExhausted = false;
+    /// Items whose DB metadata saved but whose human-readable JSON
+    /// sidecar write failed (disk full / permissions). The sidecar is a
+    /// derived copy — authoritative metadata still landed — so these are
+    /// counted separately from `errors` (Kartend audit hhr5x).
+    int sidecarFailures = 0;
   };
 
   /// `db` may be nullptr — the runner still drives the scrape but
@@ -166,6 +171,20 @@ public:
   /// roll up into the dialog's Live view without waiting for the
   /// `finished` signal at end-of-collection.
   [[nodiscard]] Summary currentSummary() const { return m_summary; }
+
+  /// Resolved inputs to the pure already-scraped skip decision.
+  struct SkipDecisionInputs {
+    Scraper::RescrapeMode mode = Scraper::RescrapeMode::Overwrite;
+    bool writeMetadata = true;
+    bool metaPresent = false;          ///< Metadata exists (DB row or sidecar).
+    bool metaWithinWindow = true;      ///< ...and within the refresh window (or no window).
+    bool allWantedMediaCovered = true; ///< Every wanted media type already on disk.
+  };
+  /// The Skip / FillMissing / time-window decision, factored out of
+  /// shouldSkipScrapedItem so its branches are unit-testable without DB or
+  /// filesystem context (Kartend audit 2w4wz). Returns true when the item is
+  /// already covered and should be dropped from the queue.
+  [[nodiscard]] static bool decideScrapeSkip(const SkipDecisionInputs &in);
 
   /// Total media bytes fetched so far in this collection. Used by
   /// the Live view to compute and display a rolling download rate
@@ -285,6 +304,17 @@ private:
   /// rescrape-mode / write-metadata / artwork-dir members.
   [[nodiscard]] bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) const;
 
+  /// Basename indexes of media-on-disk for the coverage check, pre-built once
+  /// per run so the per-item probe is an O(1) hash lookup (Kartend audit 2w4wz).
+  struct MediaCoverageIndex {
+    /// Per-wanted-type basename index of media files on disk (lowercase).
+    QHash<QString, QSet<QString>> presentByType;
+    /// `front` basenames in the flat artwork-dir mirror (lowercase).
+    QSet<QString> frontFlatBases;
+  };
+  [[nodiscard]] MediaCoverageIndex buildMediaCoverageIndex(const QSet<QString> &wantedTypes,
+                                                           bool sidecarCheckPossible) const;
+
   /// Top of the worker loop. Fills empty in-flight slots from the
   /// queue until either the queue is empty or the in-flight count
   /// equals the concurrency cap. Emits `finished` exactly once when
@@ -294,6 +324,14 @@ private:
   /// callback in the chain owns a copy of `state` so per-item data
   /// survives interleaving with other items.
   void startItem(const std::shared_ptr<ItemState> &state);
+  /// Lookup-callback body for startItem: cancel/skip/error/quota guards,
+  /// then auto-picks the first candidate and dispatches fetchDetail.
+  void onLookupComplete(const std::shared_ptr<ItemState> &state,
+                        const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result);
+  /// fetchDetail-callback body: cancel/skip/error/quota guards, then the
+  /// media-fetch decision (legacy front-cover vs filtered set vs none).
+  void onDetailComplete(const std::shared_ptr<ItemState> &state,
+                        const ErrorUtils::Result<Scraper::ScrapedItem> &detailResult);
   /// Resolve which media assets to fetch for `scraped`, extracted from
   /// `startItem`'s fetchDetail callback. With a non-empty
   /// `m_mediaTypeFilter` returns every asset whose type matches;
@@ -302,11 +340,47 @@ private:
   /// returned assets in parallel.
   [[nodiscard]] QList<Scraper::MediaAsset>
   resolveWantedMediaAssets(const Scraper::ScrapedItem &scraped) const;
+  /// Per-item media aggregator: each parallel fetch decrements `pending`;
+  /// the last to return commits the item via applyAndFinish exactly once.
+  struct MediaAggregator {
+    int pending = 0;
+    QList<Scraper::PendingMediaWrite> writes;
+  };
+  /// Dispatch every wanted asset in parallel onto a shared MediaAggregator.
+  void fetchMediaAndFinish(const std::shared_ptr<ItemState> &state,
+                           const Scraper::ScrapedItem &scraped,
+                           const QList<Scraper::MediaAsset> &wantedAssets);
+  /// One fetchMediaBytes callback: records bytes/quota, decrements the
+  /// aggregator, and commits when the last parallel fetch returns.
+  void onMediaBytesComplete(const std::shared_ptr<ItemState> &state,
+                            const Scraper::ScrapedItem &scraped, const Scraper::MediaAsset &asset,
+                            const std::shared_ptr<MediaAggregator> &agg,
+                            const ErrorUtils::Result<QByteArray> &r);
+  /// Cancel guard for the lookup/detail callbacks: if cancelled, finish the
+  /// item and return true so the caller bails out of the chain.
+  [[nodiscard]] bool cancelledFinish();
+  /// Skip-token guard for the lookup/detail callbacks: if the user skipped
+  /// this item, count + finish it and return true.
+  [[nodiscard]] bool skippedByToken(const std::shared_ptr<ItemState> &state);
+  /// The "++skipped; itemFinished()" pair shared by the no-candidate,
+  /// quota-stopped, and skip-token paths.
+  void skipAndFinish();
   /// Final step shared between the cover-fetched path and the
   /// cover-skipped fallback. Persists via `applyScrapedItem`, marks
   /// the slot as free, and pumps the queue.
   void applyAndFinish(const std::shared_ptr<ItemState> &state, const Scraper::ScrapedItem &scraped,
                       const QList<Scraper::PendingMediaWrite> &writes);
+  /// Main-thread continuation of applyAndFinish (Kartend audit 2w4wz): runs
+  /// when the QtConcurrent media write finishes — resolves the thumbnail
+  /// paths and dispatches the DB save (or takes the null-DB synchronous path).
+  void onMediaWriteFinished(const std::shared_ptr<ItemState> &state,
+                            const Scraper::ScrapedItem &effective, const QString &baseName,
+                            const Scraper::MediaWriteResult &writeRes);
+  /// Thumbnail paths for the dialog's per-item ping: the freshly-written
+  /// paths, or — when nothing was written this run — a probe of the canonical
+  /// cover subdirs for an existing file (Kartend audit 2w4wz).
+  [[nodiscard]] QStringList resolveThumbnailPaths(const QString &baseName,
+                                                  const QStringList &writtenPaths) const;
   /// Record a per-item failure, mark the slot free, and pump.
   void recordError(const QString &reason);
   /// Per-item failure overload that also inspects the error's HTTP
@@ -415,6 +489,9 @@ private:
     QStringList writtenPaths;
     int mediaWritten = 0;
     QString baseName;
+    /// Carried from MediaWriteResult so onWriteCompleted can fold a
+    /// failed sidecar write into the summary (Kartend audit hhr5x).
+    bool sidecarFailed = false;
     /// Wall-clock when performWrite was queued onto the worker thread.
     /// Used by the perf-trace path (KARTEND_PERF_TRACE=1) to compute
     /// the dispatch→writeCompleted latency the user's main thread no

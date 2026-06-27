@@ -135,6 +135,10 @@ struct MediaWriteResult {
   /// non-standard images. The DB phase saves one `item_artwork` row
   /// per entry so the sidebar gallery surfaces them.
   NonStandardArtworkList nonStandardArtwork;
+  /// True when the human-readable JSON sidecar write FAILED (mkpath or
+  /// atomic-write error) — distinct from a deliberate Skipped outcome.
+  /// Threaded per-item into the batch summary (Kartend audit hhr5x).
+  bool sidecarFailed = false;
 };
 
 /// File-I/O phase of applyScrapedItem. Thread-safe — never touches a

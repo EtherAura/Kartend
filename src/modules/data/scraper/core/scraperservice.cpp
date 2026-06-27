@@ -385,6 +385,8 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
   m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
   m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
   m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+  m_summary.sidecarFailures =
+      m_summaryAtCollectionStart.sidecarFailures + runnerSummary.sidecarFailures;
   m_summary.firstFailures = m_summaryAtCollectionStart.firstFailures;
   for (const QString &f : runnerSummary.firstFailures) {
     if (m_summary.firstFailures.size() >= kMaxReportedFailures) break;

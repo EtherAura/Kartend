@@ -261,6 +261,8 @@ private slots:
   void coverFetchDisabledSkipsMediaCall();
   void coverFetchFailureLeavesMetadataSavedAndCountsAsScraped();
   void coverFetchSkippedWhenNoFrontAsset();
+  void sidecarWriteFailureCountedInSummary();
+  void decideScrapeSkipBranches();
   void skipModeCountsAlreadyScrapedItemsAsSkipped();
   void skipModeAlsoSkipsItemsWithSidecarButNoDbRow();
   void skipModeWindowKeepsRecentScrapesSkipped();
@@ -536,6 +538,60 @@ void TestBatchScrapeRunner::coverFetchFailureLeavesMetadataSavedAndCountsAsScrap
   QCOMPARE(summary.scraped, 1);
   QCOMPARE(summary.errors, 0);
   QCOMPARE(stub->mediaRequestLog.size(), 1);
+}
+
+void TestBatchScrapeRunner::sidecarWriteFailureCountedInSummary() {
+  // A failed sidecar (.json) write is auxiliary — the DB metadata still
+  // saves, so it is not an item error — but it must be counted in the
+  // summary, not silently dropped (Kartend audit hhr5x). Force the failure
+  // by occupying the sidecar's "metadata" subdir path with a regular file,
+  // so writeMetadataSidecar's mkpath fails.
+  QTemporaryDir artworkRoot;
+  QVERIFY(artworkRoot.isValid());
+  const QString artworkDir = artworkRoot.path();
+  QFile blocker(QDir(artworkDir).filePath(QStringLiteral("metadata")));
+  QVERIFY(blocker.open(QIODevice::WriteOnly)); // occupy {artworkDir}/metadata as a file
+  blocker.close();
+
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha"); // title set, no media
+
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, artworkDir);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+
+  QCOMPARE(summary.scraped, 1);         // DB-metadata path still succeeds
+  QCOMPARE(summary.errors, 0);          // a failed sidecar is not an item error
+  QCOMPARE(summary.sidecarFailures, 1); // ...but it IS surfaced
+}
+
+void TestBatchScrapeRunner::decideScrapeSkipBranches() {
+  // The skip decision, factored out of shouldSkipScrapedItem so its branches
+  // are testable without DB/filesystem context (Kartend audit 2w4wz). Field
+  // order: {mode, writeMetadata, metaPresent, metaWithinWindow, allMediaCovered}.
+  using Inputs = Scraper::BatchScrapeRunner::SkipDecisionInputs;
+  using Mode = Scraper::RescrapeMode;
+  const auto skip = [](Inputs in) { return Scraper::BatchScrapeRunner::decideScrapeSkip(in); };
+
+  // Skip mode: any present marker within the window is enough; stale or absent
+  // markers release the item back for a re-scrape.
+  QVERIFY(skip({Mode::Skip, true, /*present=*/true, /*within=*/true, /*media=*/true}));
+  QVERIFY(!skip({Mode::Skip, true, true, /*within=*/false, true}));  // stale → released
+  QVERIFY(!skip({Mode::Skip, true, /*present=*/false, true, true})); // never scraped
+
+  // FillMissing (metadata + media wanted): skip only when everything is covered.
+  QVERIFY(skip({Mode::FillMissing, true, true, true, true}));
+  QVERIFY(!skip({Mode::FillMissing, true, /*present=*/false, true, true})); // metadata missing
+  QVERIFY(!skip({Mode::FillMissing, true, true, true, /*media=*/false}));   // a media type missing
+  QVERIFY(!skip({Mode::FillMissing, true, true, /*within=*/false, true}));  // metadata stale
+
+  // FillMissing media-only (writeMetadata=false): media coverage decides, but a
+  // stale freshness anchor (sidecar/DB timestamp) still releases the item.
+  QVERIFY(skip({Mode::FillMissing, /*writeMeta=*/false, true, true, true}));
+  QVERIFY(!skip({Mode::FillMissing, false, true, true, /*media=*/false})); // media missing
+  QVERIFY(
+      !skip({Mode::FillMissing, false, /*present=*/true, /*within=*/false, true})); // stale anchor
 }
 
 void TestBatchScrapeRunner::coverFetchSkippedWhenNoFrontAsset() {
