@@ -861,7 +861,9 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
         }
         // Human-readable JSON sidecar alongside the artwork. `effective`
         // is blank when the user opted out of metadata, so the sidecar
-        // helper self-skips in that case.
+        // helper returns Skipped in that case. The outcome is intentionally
+        // discarded here — a Failed write is already logged by the helper;
+        // surfacing it in the batch summary is tracked as Kartend audit E-01.
         (void)Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
         return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, mediaCancel);
       });

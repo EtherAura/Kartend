@@ -85,7 +85,7 @@ if [ -f VERSION ]; then
 
   METAINFO="packaging/io.github.EtherAura.Kartend.metainfo.xml"
   if [ -f "$METAINFO" ]; then
-    METAVER="$(awk 'match($0, /<release[[:space:]]+version="([^"]+)"/, a) { print a[1]; exit }' "$METAINFO")"
+    METAVER="$(grep -oE '<release[[:space:]]+version="[^"]+"' "$METAINFO" | head -1 | sed -E 's/.*version="([^"]+)".*/\1/')"
     if [ "$METAVER" != "$CANONICAL" ]; then
       red "AppStream metainfo most-recent <release> version='$METAVER' but VERSION='$CANONICAL'"
       yellow "  Run '.scripts/bump-version.sh ${CANONICAL}' to add the missing entry."

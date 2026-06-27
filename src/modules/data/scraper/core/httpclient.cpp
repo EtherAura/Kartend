@@ -428,7 +428,12 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                 // the user sees what the server actually said, not just
                 // the generic "request failed" Qt produces from the
                 // status code alone.
-                const QByteArray body = reply->readAll();
+                // Bound the error-body read as defense-in-depth: the success
+                // path is capped via downloadProgress, but the error path has
+                // no independent guard. 64 KiB is ample for a server error
+                // message (Kartend audit SEC-03).
+                constexpr qint64 kMaxErrorBodyBytes = 64 * 1024;
+                const QByteArray body = reply->read(kMaxErrorBodyBytes);
                 QString details = reply->errorString();
                 if (!body.isEmpty()) {
                   details += QStringLiteral("\nResponse: ") + QString::fromUtf8(body).trimmed();

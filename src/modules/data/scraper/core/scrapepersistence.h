@@ -154,17 +154,22 @@ writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
                 RescrapeMode rescrapeMode = RescrapeMode::Overwrite,
                 const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
+/// Outcome of writeMetadataSidecar — distinguishes a deliberate skip (empty
+/// scrape, or a FillMissing run that found an existing sidecar) from a real
+/// filesystem failure (mkpath / atomic write), so a caller can surface a
+/// failure without mistaking the common skip for one (Kartend audit E-02).
+enum class SidecarWriteOutcome { Written, Skipped, Failed };
+
 /// Write a human-readable JSON metadata sidecar for the scraped item
 /// at `{artworkDirectory}/metadata/{baseName}.json` — the scraped
 /// title / description / genre / etc. plus any provider customFields.
-/// Thread-safe (file I/O only, no DB). Returns true when the file was
-/// written this call; false when skipped — an empty scrape (no title,
-/// e.g. the user opted out of metadata), a FillMissing run that found
-/// an existing sidecar, or a write failure. `rescrapeMode` mirrors the
-/// per-asset policy writeMediaFiles applies.
-[[nodiscard]] bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
-                                        const ScrapedItem &scraped,
-                                        RescrapeMode rescrapeMode = RescrapeMode::Overwrite);
+/// Thread-safe (file I/O only, no DB). `rescrapeMode` mirrors the per-asset
+/// policy writeMediaFiles applies. Returns Written on a fresh write, Skipped
+/// for an empty scrape / FillMissing-existing, Failed on mkpath / write error.
+[[nodiscard]] SidecarWriteOutcome
+writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
+                     const ScrapedItem &scraped,
+                     RescrapeMode rescrapeMode = RescrapeMode::Overwrite);
 
 /// DB-write phase. Saves the merged metadata row (existing × scraped)
 /// plus one `item_artwork` row per entry in `nonStandardArtwork`.

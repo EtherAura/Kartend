@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -31,6 +32,7 @@ private slots:
   void legacyIni_loadsAllKnownKeysWithoutWarning();
   void v1Ini_loadsCleanlyWithCurrentSchemaVersion();
   void futureIni_warnsButStillLoadsAllKnownKeys();
+  void futureIni_snapshotsConfigBeforeOverwrite();
   void legacyIni_invokesV0ToV1Migration();
   void v1Ini_doesNotInvokeAnyMigration();
   void misfiledSchemaIni_recognisedViaScraperOptionsFallback();
@@ -110,6 +112,24 @@ void TestSettingsMigration::futureIni_warnsButStillLoadsAllKnownKeys() {
   QCOMPARE(settings.input.rememberSelection, false);
   QCOMPARE(settings.media.pixmapCacheSizeMB, 200);
   QCOMPARE(settings.appearance.titleTintSaturation, 50);
+}
+
+void TestSettingsMigration::futureIni_snapshotsConfigBeforeOverwrite() {
+  // A newer-schema INI must be copied to a `.newer-schema-*` sidecar before
+  // any save can drop its unknown keys, so a downgrade stays recoverable
+  // (mirrors the corrupt-file snapshot). Kartend audit S-03.
+  installFixture(QStringLiteral("future.ini"));
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("schemaVersion 99")));
+
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings settings;
+  mgr.loadGeneralSettings(settings);
+
+  const QFileInfo cfg(SettingsUtils::getConfigPath());
+  const QStringList snaps =
+      QDir(cfg.path()).entryList({cfg.fileName() + QStringLiteral(".newer-schema-*")}, QDir::Files);
+  QVERIFY2(!snaps.isEmpty(),
+           "A future-schema INI should be snapshotted to a .newer-schema-* sidecar on load.");
 }
 
 void TestSettingsMigration::legacyIni_invokesV0ToV1Migration() {

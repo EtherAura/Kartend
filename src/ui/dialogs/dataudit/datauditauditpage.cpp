@@ -37,7 +37,6 @@
 #include "datauditmodel.h"
 #include "datauditprofile.h"
 #include "datauditprofiledialog.h"
-#include "datauditprofilestore.h"
 #include "datauditresultdelegate.h"
 #include "datcache.h"
 #include "datlookup.h"
@@ -52,7 +51,7 @@ using DatAudit::DatAuditModel;
 using DatAudit::Status;
 
 DatAuditAuditPage::DatAuditAuditPage(DatAuditProfileStore &profileStore, QWidget *parent)
-    : QWidget(parent), m_profileStore(profileStore) {
+    : QWidget(parent), m_profileController(profileStore) {
   m_model = new DatAuditModel(this);
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
@@ -110,38 +109,9 @@ QList<FilterEntry> filterEntries() {
 // renamed before the uuid migration ran, or no list was injected.
 const CollectionConfig *resolveLinkedCollection(const QList<CollectionConfig> *collections,
                                                 const QString &uuid) {
-  if (collections == nullptr || uuid.isEmpty()) {
-    return nullptr;
-  }
-  for (const CollectionConfig &c : *collections) {
-    const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-    if (CollectionUtils::computeCollectionUuid(c.name, expanded) == uuid) {
-      return &c;
-    }
-  }
-  return nullptr;
-}
-
-// Fill each DatRef's staleness-hint columns (mtime + dialect/record count)
-// before the rows are written. The mtime comes from a stat; dialect/record
-// count come from a cheap DatCache peek — never an ingest, so attaching a
-// huge never-parsed DAT stays instant and its counts simply stay 0 until the
-// first audit ingests it.
-void refreshDatRefMetadata(QList<DatAuditProfile::DatRef> &dats) {
-  if (dats.isEmpty()) {
-    return;
-  }
-  DatCache::Store cache(DatCache::defaultPath());
-  for (DatAuditProfile::DatRef &d : dats) {
-    const QFileInfo fi(d.path);
-    if (fi.isFile()) {
-      d.mtimeMs = fi.lastModified().toMSecsSinceEpoch();
-    }
-    if (const auto src = cache.peek(d.path)) {
-      d.dialect = static_cast<int>(src->dialect);
-      d.recordCount = src->recordCount;
-    }
-  }
+  // CollectionUtils::findByUuid does the loop-and-match and the empty-uuid
+  // guard; the null-list guard stays here (Kartend audit D-07).
+  return collections ? CollectionUtils::findByUuid(*collections, uuid) : nullptr;
 }
 
 } // namespace
@@ -321,7 +291,8 @@ void DatAuditAuditPage::wireAuditActions() {
   connect(m_addRootButton, &QPushButton::clicked, this, &DatAuditAuditPage::onAddRoot);
   connect(m_removeRootButton, &QPushButton::clicked, this, &DatAuditAuditPage::onRemoveRoot);
   connect(m_detectLayoutButton, &QPushButton::clicked, this, [this] { runLayoutDetection(false); });
-  connect(m_applyLayoutButton, &QPushButton::clicked, this, &DatAuditAuditPage::applyDetectedLayout);
+  connect(m_applyLayoutButton, &QPushButton::clicked, this,
+          &DatAuditAuditPage::applyDetectedLayout);
   connect(m_dismissLayoutButton, &QPushButton::clicked, this, [this] {
     m_pendingDetection = DatAudit::LayoutDetection{};
     m_layoutBanner->setVisible(false);
@@ -330,7 +301,8 @@ void DatAuditAuditPage::wireAuditActions() {
   });
   connect(m_runButton, &QPushButton::clicked, this, &DatAuditAuditPage::onRun);
   connect(m_cancelButton, &QPushButton::clicked, this, &DatAuditAuditPage::onCancel);
-  connect(m_filterCombo, &QComboBox::currentIndexChanged, this, &DatAuditAuditPage::onFilterChanged);
+  connect(m_filterCombo, &QComboBox::currentIndexChanged, this,
+          &DatAuditAuditPage::onFilterChanged);
   connect(m_fixButton, &QPushButton::clicked, this, &DatAuditAuditPage::onFix);
   connect(m_exportCsvButton, &QPushButton::clicked, this, &DatAuditAuditPage::onExportCsv);
   connect(m_exportFixdatButton, &QPushButton::clicked, this, &DatAuditAuditPage::onExportFixdat);
@@ -345,7 +317,7 @@ void DatAuditAuditPage::loadProfiles() {
   const QSignalBlocker block(m_profileCombo);
   m_profileCombo->clear();
   m_profileCombo->addItem(tr("(unsaved)"), QVariant(qlonglong(-1)));
-  if (auto all = m_profileStore.listProfiles(); all.isOk()) {
+  if (auto all = m_profileController.list(); all.isOk()) {
     for (const DatAuditProfile::Profile &p : all.value()) {
       m_profileCombo->addItem(p.name, QVariant(qlonglong(p.id)));
     }
@@ -368,12 +340,18 @@ void DatAuditAuditPage::onProfileSelected(int index) {
 
 bool DatAuditAuditPage::loadProfileFromDb(qint64 id) {
   bool loaded = false;
-  auto res = m_profileStore.loadProfile(id);
-  if (res.isOk() && res.value().has_value()) {
-    m_currentProfile = *res.value();
-    applyCollectionDerivation();
-    syncUiFromProfile();
-    loaded = true;
+  auto res = m_profileController.load(id);
+  if (res.isOk()) {
+    // Bind the success-payload optional once so the has_value() guard and the
+    // dereference act on the same object (a second res.value() call reads as an
+    // unchecked access to clang-tidy's flow analysis).
+    const auto &profileOpt = res.value();
+    if (profileOpt.has_value()) {
+      m_currentProfile = *profileOpt;
+      applyCollectionDerivation();
+      syncUiFromProfile();
+      loaded = true;
+    }
   } else if (res.isError()) {
     ErrorUtils::logError(res.error());
   }
@@ -528,27 +506,19 @@ DatAuditProfile::Profile DatAuditAuditPage::uiProfile() const {
 }
 
 bool DatAuditAuditPage::persistProfile(DatAuditProfile::Profile &p) {
-  refreshDatRefMetadata(p.dats);
-  bool ok = false;
-  if (p.id < 0) {
-    auto res = m_profileStore.insertProfile(p);
-    if (res.isOk()) {
-      p.id = res.value();
-      ok = true;
-    } else {
-      QMessageBox::warning(this, tr("DAT Audit"),
-                           tr("Could not save profile: %1").arg(res.error().message));
-    }
-  } else {
-    auto res = m_profileStore.updateProfile(p);
-    if (res.isOk()) {
-      ok = true;
-    } else {
-      QMessageBox::warning(this, tr("DAT Audit"),
-                           tr("Could not update profile: %1").arg(res.error().message));
-    }
+  // The insert-vs-update decision + DatRef metadata refresh live in the
+  // controller (headlessly tested); the page keeps only the user-facing error
+  // report. Capture the insert-vs-update intent before persist() assigns p.id.
+  const bool inserting = p.id < 0;
+  auto res = m_profileController.persist(p);
+  if (res.isError()) {
+    QMessageBox::warning(
+        this, tr("DAT Audit"),
+        (inserting ? tr("Could not save profile: %1") : tr("Could not update profile: %1"))
+            .arg(res.error().message));
+    return false;
   }
-  return ok;
+  return true;
 }
 
 void DatAuditAuditPage::selectProfileById(qint64 id) {
@@ -640,23 +610,29 @@ void DatAuditAuditPage::onDeleteProfile() {
       QMessageBox::Yes) {
     return;
   }
-  auto res = m_profileStore.removeProfile(id);
+  auto res = m_profileController.remove(id);
   Q_UNUSED(res);
   m_currentProfile = DatAuditProfile::Profile{};
   loadProfiles();
 }
 
-void DatAuditAuditPage::openForCollection(const QString &collectionUuid, const QString &collectionName,
-                                       const QString &mediaDir, const QStringList &datPaths) {
+void DatAuditAuditPage::openForCollection(const QString &collectionUuid,
+                                          const QString &collectionName, const QString &mediaDir,
+                                          const QStringList &datPaths) {
   loadProfiles(); // refresh the combo so a newly-linked profile is selectable
 
   qint64 linkedId = -1;
   if (!collectionUuid.isEmpty()) {
     // Deterministic: most-recently-updated linked profile wins (the old
     // listAll() scan picked whatever sorted first by name).
-    auto linked = m_profileStore.loadProfileByCollectionUuid(collectionUuid);
-    if (linked.isOk() && linked.value().has_value()) {
-      linkedId = linked.value()->id;
+    auto linked = m_profileController.loadByCollectionUuid(collectionUuid);
+    if (linked.isOk()) {
+      // Same single-bind guard as loadProfileFromDb: check and dereference the
+      // one optional, not two separate value() calls.
+      const auto &linkedOpt = linked.value();
+      if (linkedOpt.has_value()) {
+        linkedId = linkedOpt->id;
+      }
     }
   }
 
@@ -871,10 +847,10 @@ void DatAuditAuditPage::onAuditFinished(const DatAudit::AuditOutput &out) {
       rows.append(row);
     }
     const qint64 profileId = m_currentProfile.id;
-    if (auto stamped = m_profileStore.touchLastScan(profileId, now); stamped.isError()) {
+    if (auto stamped = m_profileController.touchLastScan(profileId, now); stamped.isError()) {
       ErrorUtils::logError(stamped.error());
     }
-    if (auto replaced = m_profileStore.replaceResults(profileId, rows); replaced.isError()) {
+    if (auto replaced = m_profileController.replaceResults(profileId, rows); replaced.isError()) {
       ErrorUtils::logError(replaced.error());
     }
     m_currentProfile.lastScanAtMs = now;
@@ -1102,7 +1078,7 @@ void DatAuditAuditPage::fixProfile(qint64 profileId) {
   // from the stored result rows rather than running a fresh audit first.
   QList<DatAuditProfile::ResultRow> rows;
   bool readOk = false;
-  if (auto r = m_profileStore.loadProfileResultRows(profileId); r.isOk()) {
+  if (auto r = m_profileController.loadResultRows(profileId); r.isOk()) {
     rows = r.value();
     readOk = true;
   } else {
@@ -1135,7 +1111,7 @@ void DatAuditAuditPage::fixProfile(qint64 profileId) {
 }
 
 void DatAuditAuditPage::exportTo(const QString &caption, const QString &filter,
-                              const QByteArray &bytes) {
+                                 const QByteArray &bytes) {
   const QString path = QFileDialog::getSaveFileName(this, caption, QString(), filter);
   if (path.isEmpty()) {
     return;

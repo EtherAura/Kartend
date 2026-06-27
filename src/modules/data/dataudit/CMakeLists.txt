@@ -17,6 +17,8 @@ target_sources(kartend_data PRIVATE
   datauditlayout.h
   datauditmodel.cpp
   datauditmodel.h
+  datauditprofilecontroller.cpp
+  datauditprofilecontroller.h
   datauditprofilestore.cpp
   datauditprofilestore.h
   datauditregion.cpp

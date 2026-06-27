@@ -2,8 +2,9 @@
 #
 # Pre-push hook for Kartend.
 #
-# Runs the four fast Python lint scripts that gate the CI build job, and
-# (when installed locally) also lints .scripts/ with ShellCheck — mirrors CI.
+# Runs the four fast Python lint scripts that gate the CI build job, plus
+# (when installed locally) a clang-format drift check and ShellCheck on
+# .scripts/ — all mirroring CI.
 # The Python checks are pure-Python, no Docker, no Qt — they finish in well
 # under a second combined, so the cost-per-push is negligible compared to the
 # round-trip of letting CI catch them.
@@ -17,7 +18,13 @@
 #   4. check-bd-id-leakage.py       — no Kartend-XXXX issue IDs in
 #                                     user-facing surfaces (readme,
 #                                     docs/user/, AppStream metadata)
-#   5. shellcheck (if installed)    — lint .scripts/*.sh + lib/*.sh; mirrors
+#   5. check-required-checks-       — build.yml/coverage.yml `paths-ignore`
+#      consistency.py                 and required-checks-noop.yml `paths`
+#                                     stay byte-identical (branch-protection)
+#   6. clang-format (if installed)  — .cpp/.h in the push range must match
+#                                     the pinned clang-format (mirrors
+#                                     pre-commit + the CI format-check)
+#   7. shellcheck (if installed)    — lint .scripts/*.sh + lib/*.sh; mirrors
 #                                     the script-lint CI job (-x follows
 #                                     `source` into lib/)
 #
@@ -36,6 +43,11 @@ red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
 
+# Shared pinned clang-format version + resolver (Kartend-gv2xq): provides
+# KARTEND_CLANG_FORMAT_VERSION, resolve_clang_format, clang_format_missing_hint.
+# shellcheck source=.scripts/lib/clang-format-version.sh
+. "$ROOT/.scripts/lib/clang-format-version.sh"
+
 if ! command -v python3 >/dev/null 2>&1; then
   yellow "Skipping pre-push lints: python3 not on PATH."
   exit 0
@@ -43,7 +55,7 @@ fi
 
 fail=0
 
-for check in check-layering.py check-singleshot-comments.py check-test-mapping.py check-bd-id-leakage.py; do
+for check in check-layering.py check-singleshot-comments.py check-test-mapping.py check-bd-id-leakage.py check-required-checks-consistency.py; do
   script=".scripts/${check}"
   if [ ! -f "$script" ]; then
     yellow "Skipping ${check}: not found."
@@ -54,16 +66,68 @@ for check in check-layering.py check-singleshot-comments.py check-test-mapping.p
   fi
 done
 
+# clang-format mirrors pre-commit + the CI format-check. Checks the .cpp/.h
+# that differ from the upstream (or origin/main) so a --no-verify commit — or
+# one made when the pinned clang-format was absent (pre-commit skips silently
+# then) — can't reach CI with format drift (Kartend audit DX-07). Skipped
+# gracefully when the pinned binary is absent; CI remains the backstop.
+if CF=$(resolve_clang_format); then
+  base=""
+  if up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
+    base="$up"
+  elif git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+    base="origin/main"
+  fi
+  if [ -n "$base" ]; then
+    mapfile -d '' CF_SRC < <(
+      git diff --name-only --diff-filter=ACM -z "${base}...HEAD" -- '*.cpp' '*.h' 2>/dev/null
+    )
+    if [ ${#CF_SRC[@]} -gt 0 ]; then
+      cf_drift=()
+      for file in "${CF_SRC[@]}"; do
+        [ -n "$file" ] || continue
+        [ -f "$file" ] || continue
+        if ! "$CF" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+          cf_drift+=("$file")
+        fi
+      done
+      if [ ${#cf_drift[@]} -gt 0 ]; then
+        red "clang-format drift in $(printf '%d' "${#cf_drift[@]}") file(s) being pushed:"
+        printf '  %s\n' "${cf_drift[@]}"
+        yellow "Run '.scripts/build.sh --maintenance --format-apply' to auto-fix, then re-commit."
+        yellow "  (using $CF)"
+        fail=1
+      fi
+    fi
+  fi
+else
+  yellow "Skipping clang-format check: no clang-format-${KARTEND_CLANG_FORMAT_VERSION} found."
+  clang_format_missing_hint | while IFS= read -r _line; do yellow "  $_line"; done
+fi
+
 # Shellcheck mirrors the script-lint CI job. Skipped when shellcheck isn't
 # installed locally — CI remains the backstop. -x follows the `source`
 # directives in build.sh into .scripts/lib/*.sh.
 if command -v shellcheck >/dev/null 2>&1; then
-  if ! shellcheck -x .scripts/*.sh .scripts/lib/*.sh .scripts/git-hooks/pre-commit \
-       .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh; then
+  # Glob the hook dir (all files there are shell scripts) so a newly added
+  # hook is shellchecked automatically instead of needing a manual list
+  # update (Kartend audit DX-15d).
+  if ! shellcheck -x .scripts/*.sh .scripts/lib/*.sh .scripts/git-hooks/*; then
     fail=1
   fi
 else
   yellow "Skipping shellcheck: not installed (the script-lint CI job still runs it)."
+fi
+
+# Graphify freshness — advisory only, never blocks the push. If the knowledge
+# graph (graphify-out/graph.json) predates the newest src/ file, `graphify
+# query` may mislead the next session. The post-commit hook normally keeps it
+# fresh; this is the backstop for when that hook isn't installed or hasn't run.
+if [ -f graphify-out/graph.json ]; then
+  newer="$(find src \( -name '*.cpp' -o -name '*.h' \) -newer graphify-out/graph.json -print -quit 2>/dev/null || true)"
+  if [ -n "$newer" ]; then
+    yellow "Note: graphify-out/ looks stale (src changed since the graph was built). Run 'graphify update .' to refresh."
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then

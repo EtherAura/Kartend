@@ -1,10 +1,21 @@
 # Module layering
 
-`src/` is split into layers, but the build links everything into one
-object library — there's no `target_link_libraries` boundary forcing
-the layering at link time. The
-[.scripts/check-layering.py](../../.scripts/check-layering.py) pre-push
-lint catches violations before they hit CI.
+`src/` is split into per-area OBJECT libraries (`kartend_utils`, `_api`,
+`_chrome`, `_data`, `_input`, `_media`, `_behavior`, `_ui`, `_core`) wired
+bottom-up with an explicit `target_link_libraries` DAG ([src/CMakeLists.txt](../../src/CMakeLists.txt)).
+Each area publishes only its **own** directories on its PUBLIC include path
+and inherits lower layers through the DAG, and there is no global
+`include_directories()` umbrella — so an upward `#include "foo.h"` by basename
+**already fails to compile**: the header simply isn't on that layer's include
+path. That compile-time scoping is the first line of defence.
+
+The [.scripts/check-layering.py](../../.scripts/check-layering.py) pre-push
+lint is the **residual backstop**, not the only guardrail. It catches what
+include-scoping cannot — a subpath-style upward include that resolves through
+a directory placed on a lower layer's PUBLIC path, and basename collisions
+that would silently mask a real violation — plus several DI / ctx-accessor
+invariants that aren't about include paths at all. It runs locally on push so
+violations are caught before CI.
 
 ## The layers
 
@@ -95,11 +106,12 @@ manager can't accidentally pin its siblings through a setup field.
 
 **3. MainWindow accessor routing.** No file outside
 `src/core/mainwindow*` may call `mainWindow->getXxxManager()` directly.
-The documented paths are `mainWindow->applicationManager()->getXxxManager()`
-(fallback) or one of the three `IMainWindow` forwarders
-(`settingsManager()`, `scrollManager()`, `interactionManager()`) used by
-ui-layer settings dialogs. `getApplicationManager()` itself is the
-canonical hop and is always allowed.
+The canonical path is `mainWindow->getApplicationManager()->getXxxManager()`;
+ui-layer dialogs reach siblings through an injected `ApplicationContext`.
+`IMainWindow` exposes **only** `applicationManager()` (the former
+`settingsManager()` / `scrollManager()` / `interactionManager()` forwarders
+were removed in Kartend-qjtz) — the lint **fails the build** if any other
+`*Manager` accessor is re-added to it.
 
 (The script also enforces two further guardrails not detailed here —
 IMainWindow exposing only `applicationManager()`, and the two distinct
@@ -112,15 +124,15 @@ The lint runs:
   [pre-push hook](git-hooks.md#pre-push).
 - **In CI** as the `lint` job, before the build job starts.
 
-## ApplicationContext fan-out metric (not a guardrail)
+## ApplicationContext fan-out metric + ratchet
 
 The include DAG is enforced *vertically*, but `ApplicationContext` is a
-*horizontal* back-channel: any manager holding `ctx` can reach ~17
-siblings through `ctx->xxxManager()`, and the guardrails above say
-nothing about it. To keep that hub coupling visible, the lint reports a
-**fan-out metric** — it is a measurement, **not** a pass/fail check, so
-it never fails the build (capping it would only grandfather today's
-state or block unrelated work).
+*horizontal* back-channel: any manager holding `ctx` can reach most of its
+sibling managers through `ctx->xxxManager()`, and the include guardrails say
+nothing about it. The lint keeps that hub coupling visible (a metric) and
+keeps its worst dimension from silently growing (a soft ratchet).
+
+**Metric (informational).**
 
 - A normal `check-layering.py` run appends a one-line summary
   (total sibling reads, manager count, widest consumer).
@@ -129,8 +141,25 @@ state or block unrelated work).
   *widest reachers* (files touching the most distinct managers — the
   prime candidates for role-scoped dependency structs).
 
-This feeds the longer-term effort to thin `ctx` into per-consumer
-dependency structs rather than passing the whole hub everywhere.
+**Ratchet (soft gate, Kartend-n1hpy.1).** The normal run also gates the
+**outgoing** dimension against a checked-in baseline
+([.scripts/ctx-fanout-baseline.json](../../.scripts/ctx-fanout-baseline.json)):
+it **fails** when a single file's distinct-manager breadth grows past its
+baseline, or a new file crosses the floor (currently 3 distinct managers).
+That outgoing breadth is the actual smell — a file going 9 → 10 managers is
+a regression; many files each reaching one manager is not — so *incoming*
+per-manager totals stay **uncapped** (they grow naturally with features).
+
+- The ratchet is **inert until the baseline exists**, so it never blocks a
+  fresh checkout that hasn't opted in.
+- Lowering breadth always passes; after an intentional change run
+  `check-layering.py --write-baseline` to accept the new shape.
+- `check-layering.py --check-fanout` runs only the ratchet.
+
+The right response to a ratchet failure is usually to narrow the file onto
+a **role interface** (see `IScrollManager`'s six role views) rather than
+re-baseline upward. This feeds the longer-term effort to thin `ctx` into
+per-consumer dependency structs rather than passing the whole hub everywhere.
 
 ## Common violations and fixes
 
@@ -165,18 +194,39 @@ in from the call site at the ui/ layer.
 
 ### "But it builds locally"
 
-The build doesn't enforce layering — it's all one library. The
-lint is the only guardrail. Fix the include, don't bypass the lint.
+If you added an upward **basename** include, it usually *won't* build — the
+header isn't on your layer's PUBLIC include path (see the per-area OBJECT-lib
+DAG above). What can still slip past the compiler is a subpath-style include
+that resolves via a lower layer's PUBLIC path, or a basename collision masking
+a real violation — and that's exactly what the lint catches. So if the lint
+fails on something the build accepted, the lint is right: fix the include,
+don't bypass the lint.
 
-## Long-term direction
+## What enforces the layering today
 
-The eventual goal is to split each layer into its own CMake target
-with explicit `target_link_libraries`, so the compiler enforces what
-the lint does today. Initial steps have landed (the DetailsPaneManager
-move to `ui/`, the deletion of the `kartend_lib` INTERFACE aggregator
-in favour of per-area OBJECT libraries); the remaining work is
-incremental. Until each layer is its own CMake target with no
-back-doors, the lint is load-bearing.
+The per-area split has **already landed** — this is not future work. Each
+layer is its own CMake OBJECT library with PUBLIC include-scoping and a
+`target_link_libraries` DAG ([src/CMakeLists.txt](../../src/CMakeLists.txt)),
+the `kartend_lib` INTERFACE aggregator is gone, and the `ui/` controllers
+(e.g. DetailsPaneManager) sit at their proper layer. Two mechanisms guard
+the DAG:
+
+1. **Compile-time include-scoping** (primary) — an upward basename
+   `#include` doesn't resolve on the consumer's PUBLIC include path and
+   fails to build.
+2. **The pre-push / CI lint** (residual backstop) — catches the subpath /
+   collision cases the compiler can't, plus the setup-struct DI and
+   ctx-accessor-style invariants.
+
+A road **not** taken: converting the OBJECT libs to STATIC to get *link-time*
+layering enforcement was investigated and **declined** (Kartend-q3vfq). It
+wouldn't help — every area links into one executable
+(`target_link_libraries(kartend PRIVATE ${KARTEND_AREA_LIBS})`,
+[CMakeLists.txt](../../CMakeLists.txt)) and usage requirements propagate
+identically for OBJECT and STATIC, so all symbols resolve at the final link
+regardless; STATIC would only risk dropping Qt meta-object TUs the linker
+sees as unused. The compile-time scoping above is the real enforcement, and
+the lint stays load-bearing for the residual cases it can't see.
 
 ## Other discoverability gotchas
 

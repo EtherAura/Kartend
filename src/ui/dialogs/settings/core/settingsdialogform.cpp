@@ -438,6 +438,20 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     m_generalSettings = m_generalSettings.normalizedForSave();
     mwSettings = m_generalSettings;
 
+    // Persist FIRST and bail on failure. Applying the live side-effects below
+    // before checking the disk-write result meant a failed save (read-only
+    // config dir, full disk, demoted keychain) left the running app showing
+    // settings that silently revert on the next launch. saveGeneralSettings
+    // may also mutate mwSettings (e.g. credential demotion), so capture it back
+    // only once it is durably written. Kartend audit S-01.
+    auto saveResult = settingsManager->saveGeneralSettings(mwSettings);
+    if (saveResult.isError()) {
+      // Live managers + the dirty-check baseline stay untouched; the caller
+      // surfaces saveResult so the dialog can't claim a successful save.
+      return saveResult;
+    }
+    m_generalSettings = mwSettings;
+
     // applyPixmapCacheBudget propagates the new size to QPixmapCache and the
     // CacheManager artworkCache in lockstep (Kartend-10pb).
     mainWindow->applyPixmapCacheBudget(m_generalSettings.media.pixmapCacheSizeMB);
@@ -449,9 +463,6 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     ItemWidget::setTitleTintSaturation(m_generalSettings.appearance.titleTintSaturation);
     ItemWidget::setTitleTintLightness(m_generalSettings.appearance.titleTintLightness);
     ItemWidget::setTitleBaseColor(m_generalSettings.appearance.titleBaseColor);
-
-    auto saveResult = settingsManager->saveGeneralSettings(mwSettings);
-    m_generalSettings = mwSettings;
 
     // Apply showTitleInPlaceholder to ItemWidget + repaint visible widgets,
     // since this used to be a live-apply side-effect and the panel pattern

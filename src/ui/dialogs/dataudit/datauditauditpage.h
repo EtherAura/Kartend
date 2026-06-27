@@ -6,12 +6,13 @@
 #include <QList>
 #include <QWidget>
 
-#include "datauditlayout.h"        // DatAudit::LayoutDetection (value member)
-#include "datauditprofile.h"       // DatAuditProfile::Profile (value member)
-#include "datauditruncontroller.h" // DatAuditRunController (value member)
-#include "datauditrunner.h"        // DatAudit::AuditProgress / AuditOutput / AuditSummary / AuditRow
+#include "datauditlayout.h"            // DatAudit::LayoutDetection (value member)
+#include "datauditprofile.h"           // DatAuditProfile::Profile (value member)
+#include "datauditprofilecontroller.h" // DatAuditProfileController (value member)
+#include "datauditruncontroller.h"     // DatAuditRunController (value member)
+#include "datauditrunner.h" // DatAudit::AuditProgress / AuditOutput / AuditSummary / AuditRow
 
-class CollectionConfig;
+struct CollectionConfig; // defined as a struct in collectionconfig.h (-Wmismatched-tags)
 class DatAuditFixDialog;
 class DatAuditProfileStore;
 class QCheckBox;
@@ -150,7 +151,9 @@ private:
 
   DatAudit::DatAuditModel *m_model = nullptr;
   DatAuditRunController m_runController; ///< owns the QFutureWatcher + worker.
-  DatAuditProfileStore &m_profileStore;  ///< Shared (dialog-owned; download service reads it too).
+  /// Profile CRUD/persist + audit-result snapshots over the dialog-owned store
+  /// (shared by ref; the download service reads the same store). Kartend-n1hpy.3.
+  DatAuditProfileController m_profileController;
   DatAuditProfile::Profile m_currentProfile;
   QList<CollectionConfig> *m_collections = nullptr; ///< Borrowed from MainWindow; not owned.
   bool m_running = false;

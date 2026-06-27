@@ -21,6 +21,9 @@ struct LauncherSettings {
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).
   bool operator==(const LauncherSettings &) const = default;
+  // Trim the free-text RetroArch config path (Kartend audit S-07; folded by
+  // GeneralSettings::normalizedForSave).
+  void normalize() { retroarchConfigPath = retroarchConfigPath.trimmed(); }
 };
 
 #endif // KARTEND_UTILS_APP_COLLECTION_LAUNCHER_SETTINGS_H

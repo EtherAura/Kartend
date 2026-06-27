@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Post-commit hook for Kartend.
+#
+# Refreshes the graphify knowledge graph (graphify-out/) after a commit that
+# touched src/ or docs/, so `graphify query` stays accurate for the next
+# session (CLAUDE.md tells agents to query graphify first — a stale graph
+# actively misleads). graphify update is AST-only here (no API cost) but still
+# CPU-heavy, and this box can live-stream its desktop via Sunshine — so the
+# update is launched at idle CPU + IO priority, fully detached, and NEVER
+# blocks the commit or hitches a live encode.
+#
+# Best-effort and opt-in: skipped silently when graphify isn't installed or
+# there's no existing graphify-out/graph.json to refresh (graphify-out/ is
+# gitignored / per-checkout, like the hooks themselves). The pre-push hook
+# carries an advisory staleness warning as the backstop when this hook isn't
+# installed or hasn't run yet.
+#
+# Install with: .scripts/git-hooks/install.sh  (re-run after adding this hook).
+#
+# This script runs from any cwd; it cd's to the repo root itself.
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Nothing to do unless graphify is available and a graph already exists.
+command -v graphify >/dev/null 2>&1 || exit 0
+[ -f graphify-out/graph.json ] || exit 0
+
+# Only refresh when the just-made commit actually changed graphed content
+# (src/ or docs/). Skips churn on commits that only touch CI / packaging.
+if ! git diff-tree --no-commit-id --name-only -r HEAD | grep -qE '^(src|docs)/'; then
+  exit 0
+fi
+
+# Launch detached at idle CPU (+ IO, where ionice exists) priority so a live
+# Sunshine encode never hitches. nohup + & fully background it past the hook's
+# exit; output goes to a log inside the gitignored graph dir, not the terminal.
+LOG="graphify-out/.update.log"
+if command -v ionice >/dev/null 2>&1; then
+  nohup ionice -c3 nice -n 19 graphify update . >"$LOG" 2>&1 &
+else
+  nohup nice -n 19 graphify update . >"$LOG" 2>&1 &
+fi
+
+exit 0

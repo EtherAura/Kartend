@@ -317,6 +317,12 @@ private:
   static constexpr int MAX_UUIDS_FOR_IN_CLAUSE = 500;
   [[nodiscard]] bool ensureQueryUuidsTempTable();
   void clearQueryUuidsTempTable();
+  // Shared bodies for the CREATE-TEMP-TABLE ensurers and the void temp-table
+  // clears, so the open-guard + exec + error / DELETE pattern exists once
+  // (Kartend audit D-06). createSql / failureMessage / context are literals.
+  [[nodiscard]] bool ensureTempTable(const char *createSql, const char *failureMessage,
+                                     const char *context);
+  void clearTempTable(const char *tableName);
   [[nodiscard]] bool populateQueryUuidsTempTable(const QStringList &uuids);
   // Returns SQL fragment: either "IN (?,...)" for small lists or "IN (SELECT
   // uuid FROM query_uuids)" for large

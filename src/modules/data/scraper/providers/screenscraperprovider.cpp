@@ -77,6 +77,47 @@ constexpr const char *SS_FIELD_DEV_PASSWORD = "dev_password";
 constexpr const char *SS_FIELD_USER_ID = "user_id";
 constexpr const char *SS_FIELD_USER_PASSWORD = "user_password";
 
+// Resolve ScreenScraper credentials from settings, falling back to the bundled
+// dev key when the user hasn't set their own (dev fields only; user fields are
+// strictly opt-in). Single source of truth keyed off the SS_* constants so
+// currentCredentials() and the user/infra/health helpers can't drift on field
+// names or the literal "screenscraper" key (Kartend audit D-03).
+struct SsCredentials {
+  QString devId;
+  QString devPassword;
+  QString userId;
+  QString userPassword;
+};
+
+SsCredentials resolveSsCredentials(const GeneralSettings *settings) {
+  SsCredentials c;
+  if (settings) {
+    const auto blob = settings->scraper.credentials.value(QString::fromLatin1(SS_PROVIDER_ID));
+    c.devId = blob.value(QString::fromLatin1(SS_FIELD_DEV_ID));
+    c.devPassword = blob.value(QString::fromLatin1(SS_FIELD_DEV_PASSWORD));
+    c.userId = blob.value(QString::fromLatin1(SS_FIELD_USER_ID));
+    c.userPassword = blob.value(QString::fromLatin1(SS_FIELD_USER_PASSWORD));
+  }
+  // Bundled dev fallback (empty until the SS forum application is approved,
+  // which the caller treats as "credentials not configured").
+  if (c.devId.isEmpty() || c.devPassword.isEmpty()) {
+    const auto bundled = BundledCredentials::screenscraper();
+    if (c.devId.isEmpty()) c.devId = bundled.devId;
+    if (c.devPassword.isEmpty()) c.devPassword = bundled.devPassword;
+  }
+  return c;
+}
+
+// The four base api2 query params every SS endpoint needs. Type-agnostic on the
+// dev creds so both the member Credentials path (buildJeuInfosUrl) and the free
+// helpers (fetchUserInfo/fetchInfraInfo) share one definition (Kartend audit D-03).
+void addCommonQueryParams(QUrlQuery &q, const QString &devId, const QString &devPassword) {
+  q.addQueryItem(QStringLiteral("devid"), devId);
+  q.addQueryItem(QStringLiteral("devpassword"), devPassword);
+  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
+  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+}
+
 // Re-applied on every fetchMediaBytes so the user can change the
 // concurrency/throttle settings live. API host stays at compile-time
 // defaults; the media host honors `mediaConcurrency` + `mediaThrottleMs`
@@ -213,25 +254,12 @@ ScreenScraperProvider::~ScreenScraperProvider() {
 }
 
 ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() const {
+  const SsCredentials r = resolveSsCredentials(m_settingsAccessor ? m_settingsAccessor() : nullptr);
   Credentials c;
-  if (m_settingsAccessor) {
-    if (const GeneralSettings *settings = m_settingsAccessor()) {
-      const auto blob = settings->scraper.credentials.value(QString::fromLatin1(SS_PROVIDER_ID));
-      c.devId = blob.value(QString::fromLatin1(SS_FIELD_DEV_ID));
-      c.devPassword = blob.value(QString::fromLatin1(SS_FIELD_DEV_PASSWORD));
-      c.userId = blob.value(QString::fromLatin1(SS_FIELD_USER_ID));
-      c.userPassword = blob.value(QString::fromLatin1(SS_FIELD_USER_PASSWORD));
-    }
-  }
-  // Fall back to bundled dev credentials when the user hasn't supplied
-  // their own. Empty bundled values (the default until the SS forum
-  // application is approved) leave the dev fields empty, which the
-  // caller treats as "credentials not configured".
-  if (c.devId.isEmpty() || c.devPassword.isEmpty()) {
-    const auto bundled = BundledCredentials::screenscraper();
-    if (c.devId.isEmpty()) c.devId = bundled.devId;
-    if (c.devPassword.isEmpty()) c.devPassword = bundled.devPassword;
-  }
+  c.devId = r.devId;
+  c.devPassword = r.devPassword;
+  c.userId = r.userId;
+  c.userPassword = r.userPassword;
   return c;
 }
 
@@ -729,10 +757,7 @@ QUrl ScreenScraperProvider::buildJeuInfosUrl(const Credentials &creds, const QSt
   // devpassword/sspassword/ssid/devid before anything is written. Upstream
   // proxy access logs remain the only unmitigated sink and are outside our
   // control. Same constraint applies to every other api2 builder below.
-  q.addQueryItem(QStringLiteral("devid"), creds.devId);
-  q.addQueryItem(QStringLiteral("devpassword"), creds.devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+  addCommonQueryParams(q, creds.devId, creds.devPassword);
   q.addQueryItem(QStringLiteral("romnom"), romnom);
   q.addQueryItem(QStringLiteral("systemeid"), QString::number(systemeid));
   if (!hashes.md5.isEmpty()) {
@@ -840,24 +865,14 @@ namespace ScreenScraperProviderHelpers {
 
 void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
   if (!callback) return;
-  // Build credentials from the same path as the main provider so the
-  // detected user-info exactly matches what scrapes will actually
-  // send. dev_id / dev_password fall back to the bundled `cedar` key
-  // when the user hasn't set their own; user_id / user_password are
-  // strictly opt-in (no fallback).
-  QString devId, devPassword, userId, userPassword;
-  if (settings) {
-    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
-    devId = blob.value(QStringLiteral("dev_id"));
-    devPassword = blob.value(QStringLiteral("dev_password"));
-    userId = blob.value(QStringLiteral("user_id"));
-    userPassword = blob.value(QStringLiteral("user_password"));
-  }
-  if (devId.isEmpty() || devPassword.isEmpty()) {
-    const auto bundled = BundledCredentials::screenscraper();
-    if (devId.isEmpty()) devId = bundled.devId;
-    if (devPassword.isEmpty()) devPassword = bundled.devPassword;
-  }
+  // Build credentials from the same path as the main provider so the detected
+  // user-info exactly matches what scrapes will actually send (Kartend audit
+  // D-03). user_id / user_password are strictly opt-in (no fallback).
+  const SsCredentials creds = resolveSsCredentials(settings);
+  const QString &devId = creds.devId;
+  const QString &devPassword = creds.devPassword;
+  const QString &userId = creds.userId;
+  const QString &userPassword = creds.userPassword;
   if (devId.isEmpty() || devPassword.isEmpty()) {
     callback(
         ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
@@ -873,10 +888,7 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
   }
   QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/ssuserInfos.php"));
   QUrlQuery q;
-  q.addQueryItem(QStringLiteral("devid"), devId);
-  q.addQueryItem(QStringLiteral("devpassword"), devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+  addCommonQueryParams(q, devId, devPassword);
   q.addQueryItem(QStringLiteral("ssid"), userId);
   q.addQueryItem(QStringLiteral("sspassword"), userPassword);
   url.setQuery(q);
@@ -899,23 +911,15 @@ void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
 
 void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback) {
   if (!callback) return;
-  // Mirror fetchUserInfo's credential resolution so the probe runs
-  // with exactly what subsequent scrapes will use. Dev creds are
-  // required (SS rejects unauthenticated infra polls); user creds
-  // are optional and only add the tier boost.
-  QString devId, devPassword, userId, userPassword;
-  if (settings) {
-    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
-    devId = blob.value(QStringLiteral("dev_id"));
-    devPassword = blob.value(QStringLiteral("dev_password"));
-    userId = blob.value(QStringLiteral("user_id"));
-    userPassword = blob.value(QStringLiteral("user_password"));
-  }
-  if (devId.isEmpty() || devPassword.isEmpty()) {
-    const auto bundled = BundledCredentials::screenscraper();
-    if (devId.isEmpty()) devId = bundled.devId;
-    if (devPassword.isEmpty()) devPassword = bundled.devPassword;
-  }
+  // Mirror fetchUserInfo's credential resolution so the probe runs with exactly
+  // what subsequent scrapes will use (Kartend audit D-03). Dev creds are
+  // required (SS rejects unauthenticated infra polls); user creds are optional
+  // and only add the tier boost.
+  const SsCredentials creds = resolveSsCredentials(settings);
+  const QString &devId = creds.devId;
+  const QString &devPassword = creds.devPassword;
+  const QString &userId = creds.userId;
+  const QString &userPassword = creds.userPassword;
   if (devId.isEmpty() || devPassword.isEmpty()) {
     callback(
         ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
@@ -925,10 +929,7 @@ void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback)
   }
   QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/ssinfraInfos.php"));
   QUrlQuery q;
-  q.addQueryItem(QStringLiteral("devid"), devId);
-  q.addQueryItem(QStringLiteral("devpassword"), devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+  addCommonQueryParams(q, devId, devPassword);
   if (!userId.isEmpty() && !userPassword.isEmpty()) {
     q.addQueryItem(QStringLiteral("ssid"), userId);
     q.addQueryItem(QStringLiteral("sspassword"), userPassword);
@@ -957,12 +958,8 @@ void fetchHealthStatus(const GeneralSettings *settings,
   // Whether the caller has user creds wired up — drives whether the
   // `closeforleecher` flag should refuse the scrape (anonymous tier is
   // the leecher tier in SS parlance) vs just warn.
-  bool hasUserCreds = false;
-  if (settings) {
-    const auto blob = settings->scraper.credentials.value(QStringLiteral("screenscraper"));
-    hasUserCreds = !blob.value(QStringLiteral("user_id")).isEmpty() &&
-                   !blob.value(QStringLiteral("user_password")).isEmpty();
-  }
+  const SsCredentials creds = resolveSsCredentials(settings);
+  const bool hasUserCreds = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
   fetchInfraInfo(settings, [callback = std::move(callback), hasUserCreds](
                                ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
     using HealthStatus = MetadataLookupProvider::HealthStatus;

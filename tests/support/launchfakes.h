@@ -91,6 +91,12 @@ inline LaunchManager::ArchiveExtractFn fakeSleepyExtractor(const QString &extrac
           maxSleepMs](const QString &, const QString &,
                       const std::atomic_bool *cancel) -> ErrorUtils::Result<QString> {
     QDir().mkpath(extractionDir);
+    // Deliberately model a slow extraction so the launch path's cancel-token
+    // polling is exercisable: sleep in 50ms steps (the cancel-check granularity)
+    // up to the caller-supplied maxSleepMs, returning the instant cancel is
+    // observed. This is bounded latency simulation, NOT a synchronization wait —
+    // a consumer either cancels deterministically or runs the full bounded
+    // maxSleepMs, so it can't flake under parallel ctest load (Kartend audit T-07).
     const int steps = maxSleepMs / 50;
     for (int i = 0; i < steps; ++i) {
       if (cancel != nullptr && cancel->load()) {

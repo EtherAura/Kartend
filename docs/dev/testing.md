@@ -160,6 +160,25 @@ to factor the lift-able part into a small helper (mirroring
 the surrounding `MainWindow`/controller wiring through
 `tests/integration/` instead.
 
+#### Advisory coverage report (`src/core` / `src/chrome`)
+
+`check-test-mapping.py` also prints a non-fatal coverage report for
+`src/core` and `src/chrome` — every `.cpp` with no matching
+`tests/**/test_<stem>.cpp`. It never changes the exit status (much of this
+is genuinely hard to unit-test), but it keeps the gap visible.
+
+The headless-hostile `src/chrome` QWidget shells (paint/lifecycle partials,
+the video surface, the FFmpeg/GPU thumbnail path, overlays) are listed in
+the `COVERAGE_EXEMPT` allowlist in `check-test-mapping.py`, each with a
+one-line reason, and are reported under a separate `[exempt]` bucket. The
+semantics: **anything still printed as an "unexempted gap" is a NEW,
+unexamined hole** — a freshly added untested `.cpp` stands out instead of
+hiding in a wall of known-accepted entries. The check also flags a
+*stale* exemption (a `COVERAGE_EXEMPT` key that gained a test or was
+renamed/removed) so the allowlist can't rot. `src/core` UI-coordinator
+gaps are deliberately left in the plain list (a broader category, much of
+it integration-tested) rather than exempted.
+
 **Enforcement: `src/core/` is NOT mapping-tracked, by design.** Unlike
 `src/modules/` (bidirectional per-feature mapping) and `tests/utils/`
 (cluster mirror), `check-test-mapping.py` enforces **no** structural rule
@@ -288,7 +307,7 @@ sandbox:
 
 void TestNavigationManager::testCollectionSelected() {
   KartendTest::MainWindowFixture fixture;
-  auto *nav = fixture.window()->getNavigationManager();
+  auto *nav = fixture.window()->getApplicationManager()->getNavigationManager();
   QSignalSpy spy(nav, &NavigationManager::collectionChanged);
   nav->onCollectionSelected(0);
   QCOMPARE(spy.count(), 1);

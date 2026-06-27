@@ -11,12 +11,37 @@
 #include <QCryptographicHash>
 #include <QSet>
 
+#include "pathutils.h"
+
 namespace CollectionUtils {
 
 QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
   QByteArray norm = (name + "|" + mediaDir).trimmed().toLower().toUtf8();
   QByteArray digest = QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
   return QString::fromLatin1(digest);
+}
+
+QString computeCollectionUuid(const CollectionConfig &collection) {
+  return computeCollectionUuid(collection.name, PathUtils::validateAndExpandPath(
+                                                    collection.mediaDirectory, collection.name));
+}
+
+int indexForUuid(const QList<CollectionConfig> &collections, const QString &uuid) {
+  if (uuid.isEmpty()) {
+    return -1;
+  }
+  for (int i = 0; i < collections.size(); ++i) {
+    if (computeCollectionUuid(collections[i]) == uuid) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+const CollectionConfig *findByUuid(const QList<CollectionConfig> &collections,
+                                   const QString &uuid) {
+  const int idx = indexForUuid(collections, uuid);
+  return idx < 0 ? nullptr : &collections[idx];
 }
 
 QString effectiveCollectionType(int collectionIndex, const QList<CollectionConfig> &collections) {

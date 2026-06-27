@@ -23,8 +23,8 @@
 #include <QStringList>
 
 #include "datlibrarystate.h"   // DatLibraryState::Provenance
-#include "nointroparse.h"      // NoIntroParse::DailyForm
 #include "nointrodownloader.h" // NoIntroDownload::Options / CancelToken / ProgressFn
+#include "nointroparse.h"      // NoIntroParse::DailyForm
 #include "redumpparse.h"       // RedumpParse::System
 
 class DatAuditDownloadService {

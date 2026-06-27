@@ -30,7 +30,9 @@ DatAuditRunController::~DatAuditRunController() {
   }
 }
 
-bool DatAuditRunController::isRunning() const { return m_watcher.isRunning(); }
+bool DatAuditRunController::isRunning() const {
+  return m_watcher.isRunning();
+}
 
 void DatAuditRunController::cancel() {
   if (m_cancel) {
@@ -55,8 +57,7 @@ void DatAuditRunController::start(const Request &req) {
       return;
     }
     lastPosted->store(prog.filesDone, std::memory_order_relaxed);
-    QMetaObject::invokeMethod(
-        this, [this, prog] { emit progress(prog); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, [this, prog] { emit progress(prog); }, Qt::QueuedConnection);
   };
 
   const QStringList dats = req.datPaths;
@@ -115,4 +116,6 @@ void DatAuditRunController::start(const Request &req) {
   m_watcher.setFuture(future);
 }
 
-void DatAuditRunController::onWatcherFinished() { emit finished(m_watcher.result()); }
+void DatAuditRunController::onWatcherFinished() {
+  emit finished(m_watcher.result());
+}

@@ -21,9 +21,9 @@
 #include <QObject>
 #include <QStringList>
 
-#include "datauditlayout.h"  // DatAudit::Layout
-#include "datauditrunner.h"  // DatAudit::AuditOutput / AuditProgress
-#include "dataudittypes.h"   // DatAudit::MergeMode
+#include "datauditlayout.h" // DatAudit::Layout
+#include "datauditrunner.h" // DatAudit::AuditOutput / AuditProgress
+#include "dataudittypes.h"  // DatAudit::MergeMode
 
 class DatAuditRunController : public QObject {
   Q_OBJECT

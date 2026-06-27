@@ -101,8 +101,18 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
       options.onConflict = KartConflictPolicy::Overwrite;
     } else if (v == "merge") {
       options.onConflict = KartConflictPolicy::Merge;
-    } else {
+    } else if (v == "skip") {
       options.onConflict = KartConflictPolicy::Skip;
+    } else if (!options.pathValidationError.isError()) {
+      // Kartend audit E-04: an unrecognized --on-conflict value must not
+      // silently fall back to Skip — surface it on the CLI-validation channel
+      // (main.cpp exits non-zero on it), naming the valid policies. onConflict
+      // is left at its safe Skip default; the error is what fails the run.
+      options.pathValidationError = ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::InvalidArgument,
+          QStringLiteral("unknown --on-conflict policy '%1' (expected skip, overwrite, or merge)")
+              .arg(parser.value(onConflictOption)),
+          QStringLiteral("CliArgs::parseStartupArguments"));
     }
   }
   return options;

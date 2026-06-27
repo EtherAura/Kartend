@@ -3,6 +3,10 @@ build-*/
 /Testing/
 *.tar.gz
 
+# Local code-review scratch output (e.g. `/code-review --comment` writes a
+# review-body.md at the repo root). Not shared — it's a per-run artifact.
+/review-body.md
+
 *.o
 *.a
 *.so

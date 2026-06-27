@@ -36,6 +36,10 @@ constexpr int kMaxNameLen = 4096;
 // kMaxRomSize bounds a parsed `size` field. 1TiB is far above any real ROM /
 // disc image while rejecting nonsensical (overflowed / garbage) values.
 constexpr qint64 kMaxRomSize = 1LL << 40;
+// kProbeHeaderBytes caps the cheap header sniff used to pick a DAT dialect
+// before a full parse — a 256 KiB window is ample for the root element plus a
+// handful of entries (Kartend audit D-10).
+constexpr qint64 kProbeHeaderBytes = 256 * 1024;
 
 /// Decode raw DAT bytes to a QString with a UTF-8-then-Latin-1 fallback
 /// (Kartend-a3s01). clrmamepro DATs (notably TOSEC and older European
@@ -156,6 +160,27 @@ ErrorContext makeParseError(const QXmlStreamReader &reader, const char *context)
                        .arg(reader.columnNumber()));
 }
 
+// Post-parse truncation guard shared by the Logiqx / MAME-listxml readers:
+// surface a QXmlStreamReader error, else reject a stream that reached atEnd()
+// without its closing root tag — a mid-stream truncation a well-formed prefix
+// can't otherwise be told apart from (Kartend-u4sdu). nullopt when the parse is
+// clean (Kartend audit D-10).
+std::optional<ErrorContext> datParseTailError(const QXmlStreamReader &reader, bool sawClosingRoot,
+                                              const char *formatLabel, const char *rootTag,
+                                              const char *context) {
+  if (reader.hasError()) {
+    return makeParseError(reader, context);
+  }
+  if (!sawClosingRoot) {
+    return ErrorContext::error(
+        ErrorCode::InvalidArgument,
+        QStringLiteral("%1 ended without its closing %2 — file is truncated or incomplete")
+            .arg(QString::fromLatin1(formatLabel), QString::fromLatin1(rootTag)),
+        context);
+  }
+  return std::nullopt;
+}
+
 // --- clrmamepro text dialect ----------------------------------------------
 //
 // The clrmamepro format is a flat token soup of words, quoted strings, and
@@ -170,6 +195,15 @@ struct CmpToken {
   QString text; // Word / String payload; empty for Open / Close
 };
 
+// Bounded-memory note (Kartend audit SEC-04): unlike the XML path — which
+// streams via QXmlStreamReader and never pins the whole document — the
+// clrmamepro path decodes the entire buffer to a QString (decodeDatText) and
+// materializes a full QList<CmpToken> before parsing. Both are bounded by the
+// kMaxDatBytes (512 MiB) read cap in readDatFile, so the worst case is a
+// bounded transient spike (~2-3x the file size) on a pathologically large
+// clrmamepro DAT; real clrmamepro catalogues (TOSEC / European sets) are small,
+// so this is a worst-case-input concern, not a runtime one. If it ever matters,
+// stream-tokenise here or apply a smaller dialect-specific cap before decode.
 QList<CmpToken> tokenizeClrMamePro(const QString &s) {
   QList<CmpToken> toks;
   const int n = s.size();
@@ -489,7 +523,7 @@ DatHeader probeHeaderFromFile(const QString &path) {
   // cheap. A header truncated mid-element just yields the fields captured up to
   // the cut — fine for a suggestion signal. A .zip-packed DAT is unpacked whole
   // (small) by readDatFile regardless of the cap (Kartend-m6qsb.28).
-  const QByteArray head = readDatFile(path, 256 * 1024);
+  const QByteArray head = readDatFile(path, kProbeHeaderBytes);
   if (head.isEmpty()) {
     return DatHeader{};
   }
@@ -543,17 +577,9 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
     // handling needed.
   }
 
-  if (reader.hasError()) {
-    return makeParseError(reader, "DatLookup::parseLogiqxDat");
-  }
-  // Reached the end without a parse error but also without the closing root:
-  // the document was truncated mid-stream (Kartend-u4sdu). Reject rather than
-  // return the partial record list as if it were complete.
-  if (!sawClosingRoot) {
-    return ErrorContext::error(ErrorCode::InvalidArgument,
-                               "Logiqx DAT ended without its closing </datafile> — file is "
-                               "truncated or incomplete",
-                               "DatLookup::parseLogiqxDat");
+  if (auto err = datParseTailError(reader, sawClosingRoot, "Logiqx DAT", "</datafile>",
+                                   "DatLookup::parseLogiqxDat")) {
+    return *err;
   }
   return out;
 }
@@ -639,16 +665,9 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     }
   }
 
-  if (reader.hasError()) {
-    return makeParseError(reader, "DatLookup::parseMameListXml");
-  }
-  // Ended without a parse error but also without the closing root: truncated
-  // mid-stream (Kartend-u4sdu).
-  if (!sawClosingRoot) {
-    return ErrorContext::error(ErrorCode::InvalidArgument,
-                               "MAME listxml ended without its closing </mame> — file is "
-                               "truncated or incomplete",
-                               "DatLookup::parseMameListXml");
+  if (auto err = datParseTailError(reader, sawClosingRoot, "MAME listxml", "</mame>",
+                                   "DatLookup::parseMameListXml")) {
+    return *err;
   }
   return out;
 }

@@ -347,12 +347,15 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
     }
   };
 
-  auto onRescanRequired = [navigationManager](int collectionIndex) {
+  auto onRescanRequired = [this, navigationManager](int collectionIndex) {
     if (navigationManager) {
       // Defer rescan past the dialog's tear-down: forceRescanCollection
       // grabs the database connection, and racing it against QDialog::done()
       // queuing destroy events trips a reentrancy assertion under TSan.
-      QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
+      // `this` (a QObject) as context so Qt cancels the deferred call if the
+      // controller is destroyed during the ~100ms window — navigationManager is
+      // a raw non-QObject pointer that can't self-guard (Kartend audit L-01).
+      QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                          [navigationManager, collectionIndex]() {
                            navigationManager->forceRescanCollection(collectionIndex);
                          });
@@ -587,7 +590,9 @@ auto SettingsDialogController::handleReloadRequired(
 
     // Delay collection reload to allow cleanup operations to complete -
     // prevents race conditions with ongoing artwork loads or animations
-    QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
+    // `this` (a QObject) as context so Qt cancels the deferred call if the
+    // controller is destroyed during the delay window (Kartend audit L-01).
+    QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                        [navigationManager, viewingCollectionIndex]() {
                          if (navigationManager) {
                            navigationManager->safeReloadCollection(viewingCollectionIndex);

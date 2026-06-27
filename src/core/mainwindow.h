@@ -115,6 +115,13 @@ public:
   void updateWindowTitleForCollection(int collectionIndex) override;
   void rebuildHierarchyCache();
 
+  // Append a freshly-created collection, persist it, rebuild the hierarchy
+  // cache, and (when navigate) switch to it. Single home for the
+  // append→save→rebuild→navigate sequence the first-run/new-library wizards and
+  // the DAT-library flow share — skipping any step leaves the new collection
+  // invisible until restart (Kartend audit D-08).
+  void appendCollectionAndPersist(const CollectionConfig &config, bool navigate);
+
   // IMainWindow — neutral role interface for the data-layer coordinators.
   [[nodiscard]] const QList<CollectionConfig> &collections() const override {
     return m_collections;

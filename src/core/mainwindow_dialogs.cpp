@@ -151,24 +151,27 @@ void MainWindow::showAbout() {
   msgBox.exec();
 }
 
+void MainWindow::appendCollectionAndPersist(const CollectionConfig &config, bool navigate) {
+  // append → save → rebuild hierarchy → (optionally) navigate. Skipping any
+  // step leaves the freshly-created collection invisible until restart.
+  m_collections.append(config);
+  if (m_appManager->getSettingsManager()) {
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
+  }
+  rebuildHierarchyCache();
+  if (navigate && m_appManager->getNavigationManager()) {
+    currentCollectionIndex = m_collections.size() - 1;
+    m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
+  }
+}
+
 void MainWindow::showFirstRunWizard() {
   const auto result = m_dialogController->runFirstRunWizard();
 
   if (result.accepted && !result.pickedConfig.mediaDirectory.isEmpty()) {
-    // Mirrors the post-add sequence in setupInitialTimersEmptyCollections:
-    // append → save → rebuild hierarchy → navigate. Skipping any of these
-    // would leave the freshly-created collection invisible until the next
-    // restart.
-    m_collections.append(result.pickedConfig);
-    if (m_appManager->getSettingsManager()) {
-      ErrorPresentation::reportSaveResult(
-          m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
-    }
-    rebuildHierarchyCache();
-    if (m_appManager->getNavigationManager()) {
-      currentCollectionIndex = m_collections.size() - 1;
-      m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
-    }
+    // Mirrors the post-add sequence in setupInitialTimersEmptyCollections.
+    appendCollectionAndPersist(result.pickedConfig, /*navigate=*/true);
   }
 
   // Always flip firstRunComplete — even when the user skipped without
@@ -325,8 +328,7 @@ void MainWindow::withActiveCollectionItems(
   const CollectionConfig &cfg = m_collections[currentCollectionIndex];
   // Resolve the uuid the same way every other per-item code path does so
   // the item enumeration finds the rows the rest of the app sees.
-  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
-  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg);
   if (uuid.isEmpty()) {
     QMessageBox::warning(this, title,
                          tr("Could not resolve this collection's identity. "
@@ -779,18 +781,8 @@ void MainWindow::runNewLibraryWizard() {
   if (!result.accepted || result.pickedConfig.mediaDirectory.isEmpty()) {
     return;
   }
-  // Same persist-and-navigate sequence the first-run wizard uses:
-  // append → save → rebuild hierarchy → navigate.
-  m_collections.append(result.pickedConfig);
-  if (m_appManager->getSettingsManager()) {
-    ErrorPresentation::reportSaveResult(
-        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
-  }
-  rebuildHierarchyCache();
-  if (m_appManager->getNavigationManager()) {
-    currentCollectionIndex = m_collections.size() - 1;
-    m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
-  }
+  // Same persist-and-navigate sequence the first-run wizard uses.
+  appendCollectionAndPersist(result.pickedConfig, /*navigate=*/true);
 }
 
 QString MainWindow::createCollectionForDat(const QString &datPath) {
@@ -810,9 +802,7 @@ QString MainWindow::createCollectionForDat(const QString &datPath) {
     if (existing.isPlaylist) {
       continue;
     }
-    const QString expandedExisting =
-        PathUtils::validateAndExpandPath(existing.mediaDirectory, existing.name);
-    const QString uuid = CollectionUtils::computeCollectionUuid(existing.name, expandedExisting);
+    const QString uuid = CollectionUtils::computeCollectionUuid(existing);
     parentOptions.append({existing.name, uuid});
     uuidToIndex.insert(uuid, i);
   }
@@ -856,17 +846,11 @@ QString MainWindow::createCollectionForDat(const QString &datPath) {
     c.hideSubcollectionTitles = parent.hideSubcollectionTitles;
   }
 
-  // append → save → rebuild, the same persist sequence runNewLibraryWizard
-  // uses. No navigate: the user is mid DAT-library review.
-  m_collections.append(c);
-  if (m_appManager->getSettingsManager()) {
-    ErrorPresentation::reportSaveResult(
-        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
-  }
-  rebuildHierarchyCache();
+  // Same persist sequence runNewLibraryWizard uses, but no navigate: the user
+  // is mid DAT-library review.
+  appendCollectionAndPersist(c, /*navigate=*/false);
 
-  const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-  return CollectionUtils::computeCollectionUuid(c.name, expanded);
+  return CollectionUtils::computeCollectionUuid(c);
 }
 
 void MainWindow::managePresentationProfilesInteractive() {

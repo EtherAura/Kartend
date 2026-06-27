@@ -25,13 +25,17 @@ src/
 │   │   ├── cache/       # In-memory pixmap cache, disk persistence
 │   │   ├── database/    # SQLite coordination via worker thread
 │   │   ├── dat/         # Offline DAT-file identification + on-disk parse cache
+│   │   ├── dataudit/    # DAT-based collection audit (scan vs DAT catalogue,
+│   │   │                # missing/unknown report, fix-list export)
 │   │   ├── kart/        # Kart (collection bundle) import/export
 │   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
 │   │   ├── query/       # Worker thread SQL queries
 │   │   ├── restore/     # Selection state restoration during navigation
 │   │   ├── scraper/     # Metadata scraping (core/ + parsers/ + providers/)
 │   │   ├── session/     # Selection state persistence
-│   │   └── settings/    # Config file I/O, collection settings persistence
+│   │   ├── settings/    # Config file I/O, collection settings persistence
+│   │   └── watcher/     # Debounced filesystem watch → rescan for collections
+│   │                    # with watchFilesystem enabled
 │   ├── input/           # User input, navigation, and input-driven behavior
 │   │   ├── animation/   # Scroll animations, easing curves
 │   │   ├── attract/     # Attract-mode idle scroll/advance
@@ -441,11 +445,13 @@ survive and are legitimate:
   `LoadingOverlay`, `VignetteOverlay`) — when the overlay has been
   re-parented away from the original chrome, the event is no longer
   theirs to handle.
-- **Dialog host derivation**: `ShortcutsDialog` and the settings dialog
-  form re-derive their host via `dynamic_cast<IMainWindow *>(parent())`
-  at point of use; headless contexts (tests, CLI flows) get `nullptr`
-  and skip MainWindow-specific wiring. (Known fragility: the failure
-  mode is a silent no-op — tracked as an audit follow-up.)
+- **Dialog host derivation**: `ShortcutsDialog` and `SettingsDialog`
+  re-derive their host via `dynamic_cast<IMainWindow *>(parent())`
+  (`SettingsDialog` caches it once in its constructor). A *non-null*
+  parent that isn't an `IMainWindow` now **warns** — and `SettingsDialog`
+  additionally `Q_ASSERT_X`s — so the cast no longer fails silently
+  (Kartend-rn0ym). Genuine headless contexts (tests, CLI flows) pass
+  `nullptr` and skip MainWindow-specific wiring by design.
 
 **Rule for changing constructor parents.** Before flipping a
 constructor's parent from `this` to `nullptr` (or removing a parent

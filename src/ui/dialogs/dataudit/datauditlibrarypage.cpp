@@ -68,7 +68,9 @@ void DatAuditLibraryPage::setLibraryPathText(const QString &path) {
   m_pathLabel->setText(path.isEmpty() ? tr("No library folder set.") : path);
 }
 
-void DatAuditLibraryPage::setReviewEnabled(bool enabled) { m_reviewButton->setEnabled(enabled); }
+void DatAuditLibraryPage::setReviewEnabled(bool enabled) {
+  m_reviewButton->setEnabled(enabled);
+}
 
 void DatAuditLibraryPage::setCheckUpdatesVisible(bool visible) {
   m_checkUpdatesButton->setVisible(visible);
