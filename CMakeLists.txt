@@ -76,6 +76,19 @@ set(KARTEND_MIN_QT_VERSION 6.4)
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets Network LinguistTools)
 find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
+# MSVC + Ninja Debug PDB contention (Kartend audit h4j5s). Debug emits
+# separate-PDB debug info (/Zi) and Ninja compiles a target's TUs in parallel,
+# so multiple cl.exe race to open one .pdb -> "fatal error C1041 ... if multiple
+# CL.EXE write to the same .PDB file, please use /FS". /FS serializes those PDB
+# writes so they can share it. Set globally and BEFORE the qtkeychain
+# FetchContent below so the dependency inherits it too — qt6keychain.dir was
+# exactly where CI's new Debug Windows leg first hit C1041. Additive and a no-op
+# for Release (no /Zi -> no PDB); CMAKE_MSVC_DEBUG_INFORMATION_FORMAT would be
+# cleaner but needs CMake 3.25 and we floor at 3.20.
+if (MSVC)
+  add_compile_options(/FS)
+endif()
+
 # Optional-backend discovery (gamepad / zstd / libarchive / QtKeychain incl.
 # the MSVC FetchContent + header-shim block) lives in a dedicated module
 # (Kartend-9fdsd). Behaviour-identical: include()d here in the same scope and
