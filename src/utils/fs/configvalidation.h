@@ -22,6 +22,11 @@ struct ValidationResult {
   bool valid = true;
   QStringList warnings; // Non-critical issues
   QStringList errors;   // Critical issues that prevent operation
+  /// The data-corruption subset of `errors`: UUID collisions (two
+  /// collections sharing one DB key). Tracked apart from missing-path and
+  /// other quality errors so the startup path can warn about genuine
+  /// corruption risks without nagging about a common unmounted NAS (cj462).
+  QStringList collisions;
 
   void addWarning(const QString &msg) { warnings << msg; }
 

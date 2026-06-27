@@ -327,10 +327,12 @@ ValidationResult validateAllCollections(const QList<CollectionConfig> &collectio
       for (int idx : it.value()) {
         collisionNames << QString("'%1' (index %2)").arg(collections[idx].name).arg(idx);
       }
-      result.addError(QString("UUID collision detected: collections %1 have identical "
-                              "name+mediaDirectory combination. This will cause data "
-                              "corruption. Please rename one of the collections.")
-                          .arg(collisionNames.join(", ")));
+      const QString collisionMsg = QString("UUID collision detected: collections %1 have identical "
+                                           "name+mediaDirectory combination. This will cause data "
+                                           "corruption. Please rename one of the collections.")
+                                       .arg(collisionNames.join(", "));
+      result.addError(collisionMsg);
+      result.collisions << collisionMsg; // data-corruption subset (cj462)
     }
   }
 

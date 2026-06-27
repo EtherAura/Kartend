@@ -34,6 +34,14 @@ kartend_add_test(NAME ItemMetadataActionController
 target_include_directories(test_itemmetadataactioncontroller PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 
+# ArrowNavigationHandler — arrow-key grid-traversal orchestration wiring
+# (Kartend audit 0ta4e). The selection math itself is covered by
+# test_keyboardmanager / test_selectionhelpers.
+kartend_add_test(NAME ArrowNavigationHandler
+  SOURCES modules/interaction/test_arrownavigationhandler.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # EventHelpers tests (pure helpers extracted from EventManager)
 kartend_add_test(NAME EventHelpers
   SOURCES modules/event/test_eventhelpers.cpp

@@ -20,6 +20,7 @@ public:
   using ISettingsManager::ISettingsManager;
 
   void loadCollections(QList<CollectionConfig> &) override {}
+  [[nodiscard]] QStringList lastCollectionUuidCollisions() const override { return {}; }
   ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &) override {
     return ErrorUtils::Result<void>::success();
   }

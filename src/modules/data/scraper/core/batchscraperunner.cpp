@@ -296,43 +296,9 @@ void BatchScrapeRunner::filterAlreadyScraped() {
     return;
   }
 
-  // Build a basename-set per wanted type so the per-item check is an
-  // O(1) hash lookup instead of a directory scan per item. Files in
-  // each type's subdir are indexed by lowercase complete base name
-  // (the runner uses completeBaseName when assembling per-item paths,
-  // so the same key roundtrips).
-  QHash<QString, QSet<QString>> presentByType;
-  if (sidecarCheckPossible) {
-    for (const QString &type : wantedTypes) {
-      const QString subdir = QDir(m_artworkDir).filePath(type);
-      QDir d(subdir);
-      if (!d.exists()) continue;
-      QSet<QString> bases;
-      const auto files = d.entryList(QDir::Files | QDir::NoDotAndDotDot);
-      bases.reserve(files.size());
-      for (const QString &f : files) {
-        bases.insert(QFileInfo(f).completeBaseName().toLower());
-      }
-      // operator[] returns T& so the assignment is a real move; QHash's
-      // (const Key&, const T&) insert overload would have copied.
-      presentByType[type] = std::move(bases);
-    }
-  }
-  // `front` also mirrors to the flat artwork directory ({base}.<ext>)
-  // for the grid tile — that is the slot the auto-discoverer reads.
-  // Treat either location as "front covered".
-  QSet<QString> frontFlatBases;
-  if (sidecarCheckPossible && wantedTypes.contains(QStringLiteral("front"))) {
-    static const QStringList kImageGlobs = {QStringLiteral("*.png"),  QStringLiteral("*.jpg"),
-                                            QStringLiteral("*.jpeg"), QStringLiteral("*.webp"),
-                                            QStringLiteral("*.gif"),  QStringLiteral("*.bmp")};
-    QDir d(m_artworkDir);
-    const auto files = d.entryList(kImageGlobs, QDir::Files | QDir::NoDotAndDotDot);
-    frontFlatBases.reserve(files.size());
-    for (const QString &f : files) {
-      frontFlatBases.insert(QFileInfo(f).completeBaseName().toLower());
-    }
-  }
+  // Media-on-disk coverage indexes, pre-built once so the per-item skip check
+  // is an O(1) hash lookup (Kartend audit 2w4wz).
+  MediaCoverageIndex coverage = buildMediaCoverageIndex(wantedTypes, sidecarCheckPossible);
   // updated_at is stored UTC ISO; compute the cutoff in UTC so the
   // comparison stays timezone-agnostic regardless of how the parsed
   // QDateTime's TimeSpec ends up after fromString().
@@ -355,8 +321,8 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   skipCtx.sidecarCheckPossible = sidecarCheckPossible;
   skipCtx.wantedTypes = std::move(wantedTypes);
   skipCtx.metadataByPath = metadataByPath;
-  skipCtx.presentByType = std::move(presentByType);
-  skipCtx.frontFlatBases = std::move(frontFlatBases);
+  skipCtx.presentByType = std::move(coverage.presentByType);
+  skipCtx.frontFlatBases = std::move(coverage.frontFlatBases);
   skipCtx.hasWindow = hasWindow;
   skipCtx.cutoff = cutoff;
 
@@ -375,6 +341,71 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   m_preSkippedCount = static_cast<int>(m_paths.size() - kept.size());
   m_summary.skipped += m_preSkippedCount;
   m_paths = std::move(kept);
+}
+
+BatchScrapeRunner::MediaCoverageIndex
+BatchScrapeRunner::buildMediaCoverageIndex(const QSet<QString> &wantedTypes,
+                                           bool sidecarCheckPossible) const {
+  // Build a basename-set per wanted type so the per-item check is an O(1) hash
+  // lookup instead of a directory scan per item. Files in each type's subdir
+  // are indexed by lowercase complete base name (the runner uses
+  // completeBaseName when assembling per-item paths, so the key roundtrips).
+  MediaCoverageIndex index;
+  if (sidecarCheckPossible) {
+    for (const QString &type : wantedTypes) {
+      const QString subdir = QDir(m_artworkDir).filePath(type);
+      QDir d(subdir);
+      if (!d.exists()) continue;
+      QSet<QString> bases;
+      const auto files = d.entryList(QDir::Files | QDir::NoDotAndDotDot);
+      bases.reserve(files.size());
+      for (const QString &f : files) {
+        bases.insert(QFileInfo(f).completeBaseName().toLower());
+      }
+      // operator[] returns T& so the assignment is a real move; QHash's
+      // (const Key&, const T&) insert overload would have copied.
+      index.presentByType[type] = std::move(bases);
+    }
+  }
+  // `front` also mirrors to the flat artwork directory ({base}.<ext>) for the
+  // grid tile — that is the slot the auto-discoverer reads. Treat either
+  // location as "front covered".
+  if (sidecarCheckPossible && wantedTypes.contains(QStringLiteral("front"))) {
+    static const QStringList kImageGlobs = {QStringLiteral("*.png"),  QStringLiteral("*.jpg"),
+                                            QStringLiteral("*.jpeg"), QStringLiteral("*.webp"),
+                                            QStringLiteral("*.gif"),  QStringLiteral("*.bmp")};
+    QDir d(m_artworkDir);
+    const auto files = d.entryList(kImageGlobs, QDir::Files | QDir::NoDotAndDotDot);
+    index.frontFlatBases.reserve(files.size());
+    for (const QString &f : files) {
+      index.frontFlatBases.insert(QFileInfo(f).completeBaseName().toLower());
+    }
+  }
+  return index;
+}
+
+bool BatchScrapeRunner::decideScrapeSkip(const SkipDecisionInputs &in) {
+  if (in.mode == Scraper::RescrapeMode::Skip) {
+    // Skip mode: any metadata marker is enough — "if scraped, leave it alone."
+    // The refresh window optionally releases stale items back for a re-scrape.
+    return in.metaPresent && in.metaWithinWindow;
+  }
+  // FillMissing: only burn a request when at least one ticked field is missing
+  // or stale. If every ticked field (metadata + each wanted media type) is
+  // covered and within the window, there is nothing to fetch — skip.
+  bool fullyCovered = true;
+  if (in.writeMetadata && (!in.metaPresent || !in.metaWithinWindow)) {
+    fullyCovered = false;
+  }
+  if (fullyCovered && !in.allWantedMediaCovered) {
+    fullyCovered = false;
+  }
+  // Media-only runs still honour the refresh window via any available
+  // timestamp (sidecar mtime or DB row).
+  if (fullyCovered && !in.writeMetadata && in.metaPresent && !in.metaWithinWindow) {
+    fullyCovered = false;
+  }
+  return fullyCovered;
 }
 
 bool BatchScrapeRunner::shouldSkipScrapedItem(const QString &path,
@@ -452,46 +483,19 @@ bool BatchScrapeRunner::shouldSkipScrapedItem(const QString &path,
   const QString baseNameLower = baseName.toLower();
   const MetaPresence meta = metadataPresenceFor(path, baseName);
 
-  bool skipThis = false;
-  if (m_rescrapeMode == Scraper::RescrapeMode::Skip) {
-    // Skip mode: any metadata marker is enough — the user told us
-    // "if scraped, leave it alone." The time window optionally
-    // releases stale items back for refresh.
-    if (meta.present && withinWindow(meta)) {
-      skipThis = true;
+  // FillMissing media coverage: every wanted media type must already be on
+  // disk for the item to count as fully covered (the metadata + window halves
+  // are folded in by decideScrapeSkip).
+  bool allWantedMediaCovered = true;
+  for (const QString &type : ctx.wantedTypes) {
+    if (!typeCoveredFor(baseNameLower, type)) {
+      allWantedMediaCovered = false;
+      break;
     }
-  } else { // FillMissing
-    // FillMissing only burns a request when there is at least one
-    // missing field for this item. Walk the user's ticked
-    // checkboxes (_metadata implicit via m_writeMetadata, plus the
-    // resolved mediaTypeFilter). If every ticked field is already
-    // covered AND the existing data is within the refresh window,
-    // there is nothing the provider could give us — skip.
-    bool fullyCovered = true;
-    if (m_writeMetadata) {
-      if (!meta.present || !withinWindow(meta)) {
-        fullyCovered = false;
-      }
-    }
-    if (fullyCovered) {
-      for (const QString &type : ctx.wantedTypes) {
-        if (!typeCoveredFor(baseNameLower, type)) {
-          fullyCovered = false;
-          break;
-        }
-      }
-    }
-    // Media-only runs (m_writeMetadata == false) still want to
-    // honour the refresh window when *any* timestamp is available
-    // (sidecar or DB row). If the only signal of staleness is the
-    // sidecar mtime, treat that as the run's freshness anchor.
-    if (fullyCovered && !m_writeMetadata && meta.present && !withinWindow(meta)) {
-      fullyCovered = false;
-    }
-    skipThis = fullyCovered;
   }
 
-  return skipThis;
+  return decideScrapeSkip(
+      {m_rescrapeMode, m_writeMetadata, meta.present, withinWindow(meta), allWantedMediaCovered});
 }
 
 void BatchScrapeRunner::pump() {
@@ -570,151 +574,179 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
   // caller deletes us after cancel(). The lambda checks the pointer
   // before touching member state.
   QPointer<BatchScrapeRunner> self(this);
-  m_provider->lookup(ctx, [self,
-                           state](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
-    if (self.isNull()) return;
-    if (self->m_cancelled) {
-      self->itemFinished();
-      return;
-    }
-    if (state->cancelToken->load(std::memory_order_acquire)) {
-      // User skipped this item (its token flipped, m_cancelled still false):
-      // count it as skipped and free the slot so the batch carries on.
-      ++self->m_summary.skipped;
-      self->itemFinished();
-      return;
-    }
-    if (result.isError()) {
-      self->recordError(QFileInfo(state->path).fileName(), result.error());
-      return;
-    }
-    const auto candidates = result.value();
-    if (candidates.isEmpty()) {
-      ++self->m_summary.skipped;
-      self->itemFinished();
-      return;
-    }
-    if (self->m_quotaStopped) {
-      // Kartend-fv3yr: a sibling item hit SS quota exhaustion (430/431) while
-      // this item's lookup was in flight. Don't fire the detail request — it
-      // would just burn another request against the exhausted quota (deepening a
-      // 431 ban). Skip it; pump()'s drain still finishes the batch.
-      ++self->m_summary.skipped;
-      self->itemFinished();
-      return;
-    }
-    // Auto-pick the first candidate. The provider ranks candidates
-    // by relevance, so the first one is what an interactive scrape
-    // would default to.
-    // NOTE on shared provider state: ScreenScraperProvider keeps a
-    // single-entry detail cache (m_lastDetail). fetchDetail reads
-    // it synchronously, so the cache survives interleaving — the
-    // lookup-callback writes m_lastDetail and immediately calls
-    // fetchDetail which reads it, all before the Qt event loop
-    // can dispatch another item's lookup-completion. Safe so long
-    // as the provider's lookup callback is the one that calls
-    // fetchDetail (which it is, here).
-    self->m_provider->fetchDetail(
-        candidates.first(), [self, state](ErrorUtils::Result<Scraper::ScrapedItem> detailResult) {
+  m_provider->lookup(ctx,
+                     [self, state](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
+                       if (self.isNull()) return;
+                       self->onLookupComplete(state, result);
+                     });
+}
+
+bool BatchScrapeRunner::cancelledFinish() {
+  if (m_cancelled) {
+    itemFinished();
+    return true;
+  }
+  return false;
+}
+
+void BatchScrapeRunner::skipAndFinish() {
+  ++m_summary.skipped;
+  itemFinished();
+}
+
+bool BatchScrapeRunner::skippedByToken(const std::shared_ptr<ItemState> &state) {
+  // User skipped this item (its token flipped, m_cancelled still false):
+  // count it as skipped and free the slot so the batch carries on.
+  if (state->cancelToken->load(std::memory_order_acquire)) {
+    skipAndFinish();
+    return true;
+  }
+  return false;
+}
+
+void BatchScrapeRunner::onLookupComplete(
+    const std::shared_ptr<ItemState> &state,
+    const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
+  if (cancelledFinish()) return;
+  if (skippedByToken(state)) return;
+  if (result.isError()) {
+    recordError(QFileInfo(state->path).fileName(), result.error());
+    return;
+  }
+  const auto candidates = result.value();
+  if (candidates.isEmpty()) {
+    skipAndFinish();
+    return;
+  }
+  if (m_quotaStopped) {
+    // Kartend-fv3yr: a sibling item hit SS quota exhaustion (430/431) while
+    // this item's lookup was in flight. Don't fire the detail request — it
+    // would just burn another request against the exhausted quota (deepening a
+    // 431 ban). Skip it; pump()'s drain still finishes the batch.
+    skipAndFinish();
+    return;
+  }
+  // Auto-pick the first candidate. The provider ranks candidates
+  // by relevance, so the first one is what an interactive scrape
+  // would default to.
+  // NOTE on shared provider state: ScreenScraperProvider keeps a
+  // single-entry detail cache (m_lastDetail). fetchDetail reads
+  // it synchronously, so the cache survives interleaving — the
+  // lookup-callback writes m_lastDetail and immediately calls
+  // fetchDetail which reads it, all before the Qt event loop
+  // can dispatch another item's lookup-completion. Safe so long
+  // as the provider's lookup callback is the one that calls
+  // fetchDetail (which it is, here).
+  QPointer<BatchScrapeRunner> self(this);
+  m_provider->fetchDetail(candidates.first(),
+                          [self, state](ErrorUtils::Result<Scraper::ScrapedItem> detailResult) {
+                            if (self.isNull()) return;
+                            self->onDetailComplete(state, detailResult);
+                          });
+}
+
+void BatchScrapeRunner::onDetailComplete(
+    const std::shared_ptr<ItemState> &state,
+    const ErrorUtils::Result<Scraper::ScrapedItem> &detailResult) {
+  if (cancelledFinish()) return;
+  if (skippedByToken(state)) return;
+  if (detailResult.isError()) {
+    recordError(QFileInfo(state->path).fileName(), detailResult.error());
+    return;
+  }
+  const auto scraped = detailResult.value();
+  if (m_quotaStopped) {
+    // Kartend-fv3yr: quota was exhausted by a sibling between this
+    // item's detail fetch and now. Keep the metadata we already have
+    // (free) but skip the media downloads, which would burn more
+    // requests against the exhausted quota.
+    applyAndFinish(state, scraped, {});
+    return;
+  }
+  // Media-fetch pass. Two modes depending on whether the
+  // user supplied an explicit media-type filter:
+  //   • filter empty → legacy "front cover only" path
+  //     (gated by m_fetchPrimaryCover). Backwards-compat
+  //     for callers that pre-date the per-type checkbox UI.
+  //   • filter non-empty → fetch every asset whose `type`
+  //     matches one of the requested types, in parallel.
+  //     Pending-fetch count tracked on a shared aggregator
+  //     so the final applyScrapedItem fires exactly once
+  //     per item, with all successful bytes attached.
+  if (!m_fetchPrimaryCover) {
+    applyAndFinish(state, scraped, {});
+    return;
+  }
+  const QList<Scraper::MediaAsset> wantedAssets = resolveWantedMediaAssets(scraped);
+  if (wantedAssets.isEmpty()) {
+    applyAndFinish(state, scraped, {});
+    return;
+  }
+  fetchMediaAndFinish(state, scraped, wantedAssets);
+}
+
+void BatchScrapeRunner::fetchMediaAndFinish(const std::shared_ptr<ItemState> &state,
+                                            const Scraper::ScrapedItem &scraped,
+                                            const QList<Scraper::MediaAsset> &wantedAssets) {
+  // Shared aggregator: every parallel fetch decrements `pending` on
+  // completion; the last one out commits. shared_ptr because the lambdas
+  // outlive any one fetch.
+  auto agg = std::make_shared<MediaAggregator>();
+  agg->pending = wantedAssets.size();
+  QPointer<BatchScrapeRunner> self(this);
+  for (const auto &asset : wantedAssets) {
+    m_provider->fetchMediaBytes(
+        asset.url, [self, state, scraped, asset, agg](ErrorUtils::Result<QByteArray> r) {
           if (self.isNull()) return;
-          if (self->m_cancelled) {
-            self->itemFinished();
-            return;
-          }
-          if (state->cancelToken->load(std::memory_order_acquire)) {
-            ++self->m_summary.skipped;
-            self->itemFinished();
-            return;
-          }
-          if (detailResult.isError()) {
-            self->recordError(QFileInfo(state->path).fileName(), detailResult.error());
-            return;
-          }
-          const auto scraped = detailResult.value();
-          if (self->m_quotaStopped) {
-            // Kartend-fv3yr: quota was exhausted by a sibling between this
-            // item's detail fetch and now. Keep the metadata we already have
-            // (free) but skip the media downloads, which would burn more
-            // requests against the exhausted quota.
-            self->applyAndFinish(state, scraped, {});
-            return;
-          }
-          // Media-fetch pass. Two modes depending on whether the
-          // user supplied an explicit media-type filter:
-          //   • filter empty → legacy "front cover only" path
-          //     (gated by m_fetchPrimaryCover). Backwards-compat
-          //     for callers that pre-date the per-type checkbox UI.
-          //   • filter non-empty → fetch every asset whose `type`
-          //     matches one of the requested types, in parallel.
-          //     Pending-fetch count tracked on a shared aggregator
-          //     so the final applyScrapedItem fires exactly once
-          //     per item, with all successful bytes attached.
-          if (!self->m_fetchPrimaryCover) {
-            self->applyAndFinish(state, scraped, {});
-            return;
-          }
-          const QList<Scraper::MediaAsset> wantedAssets = self->resolveWantedMediaAssets(scraped);
-          if (wantedAssets.isEmpty()) {
-            self->applyAndFinish(state, scraped, {});
-            return;
-          }
-          // Shared aggregator: every parallel fetch decrements
-          // `pending` on completion; the last one out commits.
-          // shared_ptr because the lambdas outlive any one fetch.
-          struct Aggregator {
-            int pending = 0;
-            QList<Scraper::PendingMediaWrite> writes;
-          };
-          auto agg = std::make_shared<Aggregator>();
-          agg->pending = wantedAssets.size();
-          for (const auto &asset : wantedAssets) {
-            self->m_provider->fetchMediaBytes(
-                asset.url, [self, state, scraped, asset, agg](ErrorUtils::Result<QByteArray> r) {
-                  if (self.isNull()) return;
-                  if (self->m_cancelled) {
-                    if (--agg->pending == 0) {
-                      self->itemFinished();
-                    }
-                    return;
-                  }
-                  if (state->cancelToken->load(std::memory_order_acquire)) {
-                    // Skipped mid media-fetch: drop the in-flight assets and
-                    // count the item as skipped once the last fetch returns
-                    // (it never reaches applyAndFinish, so nothing is written).
-                    if (--agg->pending == 0) {
-                      ++self->m_summary.skipped;
-                      self->itemFinished();
-                    }
-                    return;
-                  }
-                  if (r.isOk() && !r.value().isEmpty()) {
-                    // Track byte count regardless of write success
-                    // — the user's bandwidth was already spent.
-                    self->m_totalBytesDownloaded += r.value().size();
-                    Scraper::PendingMediaWrite w;
-                    w.asset = asset;
-                    w.bytes = r.value();
-                    agg->writes.append(w);
-                  } else if (r.isError() &&
-                             (r.error().httpStatus == 430 || r.error().httpStatus == 431)) {
-                    // A quota-exhausted media fetch is still
-                    // non-fatal for THIS item (it keeps its
-                    // metadata + whatever assets already landed),
-                    // but it must stop new items from dispatching
-                    // — same stop signal as the lookup/detail path.
-                    self->m_summary.quotaExhausted = true;
-                    self->m_quotaStopped = true;
-                  }
-                  // Asset fetch failures are non-fatal — partial
-                  // success is better than failing the whole item
-                  // because one 404'd asset.
-                  if (--agg->pending == 0) {
-                    self->applyAndFinish(state, scraped, agg->writes);
-                  }
-                });
-          }
+          self->onMediaBytesComplete(state, scraped, asset, agg, r);
         });
-  });
+  }
+}
+
+void BatchScrapeRunner::onMediaBytesComplete(const std::shared_ptr<ItemState> &state,
+                                             const Scraper::ScrapedItem &scraped,
+                                             const Scraper::MediaAsset &asset,
+                                             const std::shared_ptr<MediaAggregator> &agg,
+                                             const ErrorUtils::Result<QByteArray> &r) {
+  if (m_cancelled) {
+    if (--agg->pending == 0) {
+      itemFinished();
+    }
+    return;
+  }
+  if (state->cancelToken->load(std::memory_order_acquire)) {
+    // Skipped mid media-fetch: drop the in-flight assets and
+    // count the item as skipped once the last fetch returns
+    // (it never reaches applyAndFinish, so nothing is written).
+    if (--agg->pending == 0) {
+      ++m_summary.skipped;
+      itemFinished();
+    }
+    return;
+  }
+  if (r.isOk() && !r.value().isEmpty()) {
+    // Track byte count regardless of write success
+    // — the user's bandwidth was already spent.
+    m_totalBytesDownloaded += r.value().size();
+    Scraper::PendingMediaWrite w;
+    w.asset = asset;
+    w.bytes = r.value();
+    agg->writes.append(w);
+  } else if (r.isError() && (r.error().httpStatus == 430 || r.error().httpStatus == 431)) {
+    // A quota-exhausted media fetch is still
+    // non-fatal for THIS item (it keeps its
+    // metadata + whatever assets already landed),
+    // but it must stop new items from dispatching
+    // — same stop signal as the lookup/detail path.
+    m_summary.quotaExhausted = true;
+    m_quotaStopped = true;
+  }
+  // Asset fetch failures are non-fatal — partial
+  // success is better than failing the whole item
+  // because one 404'd asset.
+  if (--agg->pending == 0) {
+    applyAndFinish(state, scraped, agg->writes);
+  }
 }
 
 void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
@@ -762,88 +794,7 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
           [self, watcher, state, effective, baseName]() {
             watcher->deleteLater();
             if (self.isNull()) return;
-            if (self->m_cancelled) {
-              self->itemFinished();
-              return;
-            }
-            const Scraper::MediaWriteResult writeRes = watcher->result();
-
-            // Probe for an existing primary-cover file on disk and append
-            // it to the thumbnail-strip paths when no fresh write
-            // happened — FillMissing / UpdateChanged commonly skip
-            // writing if the file already exists, but the user still
-            // wants a visual ping for each item. Probes the canonical
-            // subdirs the persistence layer can use (top-level mirror,
-            // /front/, /covers/, /box-2D/, /screenshot/).
-            QStringList thumbPaths = writeRes.writtenPaths;
-            if (thumbPaths.isEmpty() && !self->m_artworkDir.isEmpty()) {
-              static const QStringList kProbeDirs = {
-                  QString(), QStringLiteral("front"), QStringLiteral("covers"),
-                  QStringLiteral("box-2D"), QStringLiteral("screenshot")};
-              static const QStringList kProbeExts = {QStringLiteral("png"), QStringLiteral("jpg"),
-                                                     QStringLiteral("jpeg"),
-                                                     QStringLiteral("webp")};
-              for (const QString &dir : kProbeDirs) {
-                QString prefix = self->m_artworkDir;
-                if (!dir.isEmpty()) prefix += QLatin1Char('/') + dir;
-                prefix += QLatin1Char('/') + baseName + QLatin1Char('.');
-                bool found = false;
-                for (const QString &ext : kProbeExts) {
-                  const QString p = prefix + ext;
-                  if (QFileInfo::exists(p)) {
-                    thumbPaths.append(p);
-                    found = true;
-                    break;
-                  }
-                }
-                if (found) break;
-              }
-            }
-
-            // ── DB-write phase: dispatch ──────────────────────
-            // Stash everything onWriteCompleted needs (the original
-            // ItemState for cancellation/error context, the effective
-            // ScrapedItem for the itemCompleted signal payload, the
-            // thumbPaths the dialog renders) keyed on a fresh
-            // requestId. The worker emits writeCompleted(requestId,
-            // ok) once the SQLite save returns.
-            //
-            // Null-DB carve-out: the test fixture and a few
-            // metadata-only callers pass nullptr. With no worker thread
-            // we keep the legacy synchronous "treat as success" path so
-            // existing tests keep passing.
-            if (!self->dbMgr() || !self->m_writeWorker) {
-              ++self->m_summary.scraped;
-              self->m_summary.mediaWritten += writeRes.mediaWritten;
-              emit self->itemCompleted(self->m_summary.scraped + self->m_summary.skipped +
-                                           self->m_summary.errors,
-                                       self->totalItemCount(), effective, thumbPaths);
-              self->itemFinished();
-              return;
-            }
-
-            const quint64 requestId = ++self->m_nextWriteId;
-            PendingWrite pending;
-            pending.state = state;
-            pending.scraped = effective;
-            pending.writtenPaths = thumbPaths;
-            pending.mediaWritten = writeRes.mediaWritten;
-            pending.baseName = baseName;
-            if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-              pending.dispatchedAtMs = QDateTime::currentMSecsSinceEpoch();
-            }
-            // QHash::insert takes const T&, so std::move was a no-op here.
-            self->m_pendingWrites.insert(requestId, pending);
-
-            // Queued cross-thread invocation. The worker handles the
-            // load → merge → save against its own connection and
-            // queues the writeCompleted signal back to the runner's
-            // (main) thread.
-            QMetaObject::invokeMethod(
-                self->m_writeWorker, "performWrite", Qt::QueuedConnection,
-                Q_ARG(quint64, requestId), Q_ARG(QString, self->m_collectionUuid),
-                Q_ARG(QString, state->path), Q_ARG(Scraper::ScrapedItem, effective),
-                Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
+            self->onMediaWriteFinished(state, effective, baseName, watcher->result());
           });
   // Track the task and hand it the runner-lifetime cancel token
   // (Kartend-vi76q): the global pool has no per-runner drain, so the
@@ -861,14 +812,105 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
         }
         // Human-readable JSON sidecar alongside the artwork. `effective`
         // is blank when the user opted out of metadata, so the sidecar
-        // helper returns Skipped in that case. The outcome is intentionally
-        // discarded here — a Failed write is already logged by the helper;
-        // surfacing it in the batch summary is tracked as Kartend audit E-01.
-        (void)Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
-        return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, mediaCancel);
+        // helper returns Skipped in that case. A genuine Failed write
+        // (mkpath / atomic-write error) is carried back on the result so
+        // the batch summary can count it (Kartend audit hhr5x); Skipped
+        // and Written are silent.
+        const Scraper::SidecarWriteOutcome sidecarOutcome =
+            Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
+        Scraper::MediaWriteResult mediaRes =
+            Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, mediaCancel);
+        mediaRes.sidecarFailed = (sidecarOutcome == Scraper::SidecarWriteOutcome::Failed);
+        return mediaRes;
       });
   m_inFlightMediaWrites.append(writeFuture);
   watcher->setFuture(writeFuture);
+}
+
+void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &state,
+                                             const Scraper::ScrapedItem &effective,
+                                             const QString &baseName,
+                                             const Scraper::MediaWriteResult &writeRes) {
+  if (m_cancelled) {
+    itemFinished();
+    return;
+  }
+
+  const QStringList thumbPaths = resolveThumbnailPaths(baseName, writeRes.writtenPaths);
+
+  // ── DB-write phase: dispatch ──────────────────────
+  // Null-DB carve-out: the test fixture and a few metadata-only callers pass
+  // nullptr. With no worker thread we keep the legacy synchronous "treat as
+  // success" path so existing tests keep passing.
+  if (!dbMgr() || !m_writeWorker) {
+    ++m_summary.scraped;
+    m_summary.mediaWritten += writeRes.mediaWritten;
+    if (writeRes.sidecarFailed) ++m_summary.sidecarFailures;
+    emit itemCompleted(m_summary.scraped + m_summary.skipped + m_summary.errors, totalItemCount(),
+                       effective, thumbPaths);
+    itemFinished();
+    return;
+  }
+
+  // Stash everything onWriteCompleted needs (the original ItemState for
+  // cancellation/error context, the effective ScrapedItem for the
+  // itemCompleted payload, the thumbPaths the dialog renders) keyed on a fresh
+  // requestId. The worker emits writeCompleted(requestId, ok) once the SQLite
+  // save returns.
+  const quint64 requestId = ++m_nextWriteId;
+  PendingWrite pending;
+  pending.state = state;
+  pending.scraped = effective;
+  pending.writtenPaths = thumbPaths;
+  pending.mediaWritten = writeRes.mediaWritten;
+  pending.baseName = baseName;
+  pending.sidecarFailed = writeRes.sidecarFailed;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    pending.dispatchedAtMs = QDateTime::currentMSecsSinceEpoch();
+  }
+  m_pendingWrites.insert(requestId, pending);
+
+  // Queued cross-thread invocation. The worker handles the load → merge → save
+  // against its own connection and queues writeCompleted back to the (main)
+  // thread.
+  QMetaObject::invokeMethod(m_writeWorker, "performWrite", Qt::QueuedConnection,
+                            Q_ARG(quint64, requestId), Q_ARG(QString, m_collectionUuid),
+                            Q_ARG(QString, state->path), Q_ARG(Scraper::ScrapedItem, effective),
+                            Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
+}
+
+QStringList BatchScrapeRunner::resolveThumbnailPaths(const QString &baseName,
+                                                     const QStringList &writtenPaths) const {
+  // Probe for an existing primary-cover file on disk and append it to the
+  // thumbnail-strip paths when no fresh write happened — FillMissing /
+  // UpdateChanged commonly skip writing if the file already exists, but the
+  // user still wants a visual ping for each item. Probes the canonical subdirs
+  // the persistence layer can use (top-level mirror, /front/, /covers/,
+  // /box-2D/, /screenshot/).
+  QStringList thumbPaths = writtenPaths;
+  if (thumbPaths.isEmpty() && !m_artworkDir.isEmpty()) {
+    static const QStringList kProbeDirs = {QString(), QStringLiteral("front"),
+                                           QStringLiteral("covers"), QStringLiteral("box-2D"),
+                                           QStringLiteral("screenshot")};
+    static const QStringList kProbeExts = {QStringLiteral("png"), QStringLiteral("jpg"),
+                                           QStringLiteral("jpeg"), QStringLiteral("webp")};
+    for (const QString &dir : kProbeDirs) {
+      QString prefix = m_artworkDir;
+      if (!dir.isEmpty()) prefix += QLatin1Char('/') + dir;
+      prefix += QLatin1Char('/') + baseName + QLatin1Char('.');
+      bool found = false;
+      for (const QString &ext : kProbeExts) {
+        const QString p = prefix + ext;
+        if (QFileInfo::exists(p)) {
+          thumbPaths.append(p);
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+  }
+  return thumbPaths;
 }
 
 void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
@@ -902,6 +944,7 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
 
   ++m_summary.scraped;
   m_summary.mediaWritten += pending.mediaWritten;
+  if (pending.sidecarFailed) ++m_summary.sidecarFailures;
 
   if (pending.dispatchedAtMs > 0) {
     // Perf trace: dispatch→writeCompleted latency = the window during

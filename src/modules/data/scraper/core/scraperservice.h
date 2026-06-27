@@ -82,6 +82,9 @@ public:
     /// stops walking the queue and leaves the persisted resume point
     /// intact so the user can continue after the quota resets.
     bool quotaExhausted = false;
+    /// Sidecar (.json) writes that failed across the whole queue —
+    /// mirrors BatchScrapeRunner::Summary::sidecarFailures (audit hhr5x).
+    int sidecarFailures = 0;
   };
 
   /// Persistence snapshot returned by loadPendingState(). Empty

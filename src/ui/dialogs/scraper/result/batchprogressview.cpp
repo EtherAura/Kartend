@@ -106,10 +106,16 @@ void BatchScrapeProgressView::setRunner(Scraper::BatchScrapeRunner *runner,
                 std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_startMs);
             m_timingLabel->setText(
                 tr("Elapsed %1 · ETA —").arg(DurationFormat::formatDurationMs(elapsedMs)));
-            m_countsLabel->setText(tr("Scraped %1  ·  Skipped %2  ·  Errors %3")
-                                       .arg(s.scraped)
-                                       .arg(s.skipped)
-                                       .arg(s.errors));
+            QString counts = tr("Scraped %1  ·  Skipped %2  ·  Errors %3")
+                                 .arg(s.scraped)
+                                 .arg(s.skipped)
+                                 .arg(s.errors);
+            if (s.sidecarFailures > 0) {
+              // Auxiliary failure: the DB metadata still saved — only the
+              // on-disk JSON copy failed (Kartend audit hhr5x).
+              counts += tr("  ·  %n sidecar write(s) failed", nullptr, s.sidecarFailures);
+            }
+            m_countsLabel->setText(counts);
             emit finished(s);
           });
 }

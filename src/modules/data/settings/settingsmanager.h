@@ -24,6 +24,9 @@ public:
   ~SettingsManager() override;
 
   void loadCollections(QList<CollectionConfig> &collections) override;
+  [[nodiscard]] QStringList lastCollectionUuidCollisions() const override {
+    return m_collectionUuidCollisions;
+  }
   // emits collectionsModified so observers (toolbar type filter, hierarchy
   // cache, sidebar summary) refresh after any save — not just
   // settings-dialog-driven ones. Non-const for that reason; the disk write
@@ -48,6 +51,11 @@ private:
   // ArtworkManager, CacheManager).
   const ApplicationContext *m_ctx = nullptr;
   GeneralSettings m_generalSettings;
+
+  // UUID collisions captured by the last loadCollections() so the GUI startup
+  // path can surface them in a modal warning instead of only logging them
+  // (Kartend audit cj462). Excludes missing-path / other non-fatal errors.
+  QStringList m_collectionUuidCollisions;
 
   // Kartend-ztc64: mirror of the [Scrapers]/credentialDemotionReason meta key.
   // Non-empty while a failed keychain write left plaintext credential(s) in
