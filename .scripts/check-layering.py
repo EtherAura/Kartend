@@ -74,11 +74,19 @@ allowed.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import sys
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+# REPO is overridable via the KARTEND_REPO env var so the script can run against
+# fixture trees in tests (Kartend audit b7phb); unset, it resolves to the repo
+# this script lives in.
+REPO = (
+    pathlib.Path(os.environ["KARTEND_REPO"]).resolve()
+    if os.environ.get("KARTEND_REPO")
+    else pathlib.Path(__file__).resolve().parent.parent
+)
 SRC = REPO / "src"
 
 # Headers a foundation-layer file is allowed to include even though they

@@ -113,6 +113,9 @@ jobs:
       - name: Check required-checks path lists stay in lockstep
         run: python3 .scripts/check-required-checks-consistency.py
 
+      - name: Self-test the gatekeeper lint scripts
+        run: python3 .scripts/tests/test_lint_scripts.py
+
       - name: Validate AppStream + desktop metadata
         run: |
           appstreamcli validate --pedantic packaging/*.metainfo.xml
