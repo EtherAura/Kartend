@@ -73,6 +73,12 @@ public:
   /// against the call shape to verify the fetchPrimaryCover toggle.
   mutable QList<QUrl> mediaRequestLog;
 
+  /// Queries whose lookup() should silently drop the callback instead of
+  /// answering — simulates a wedged ROM hash-read that never returns, so the
+  /// per-item stall watchdog (Kartend audit xnm8a) is the only thing that can
+  /// free the slot.
+  QSet<QString> hangLookupQueries;
+
   QString id() const override { return QStringLiteral("stub"); }
   QString displayName() const override { return QStringLiteral("Stub"); }
   QStringList categories() const override { return {QStringLiteral("games")}; }
@@ -83,6 +89,11 @@ public:
     // Async-emulate by posting back on the event loop. Without this
     // the test's QSignalSpy on `progress` only sees the final state
     // because everything synchronously chains.
+    if (hangLookupQueries.contains(query)) {
+      // Drop the callback on the floor: the lookup leg never completes, the
+      // way a blocked read()/hash on a wedged mount would.
+      return;
+    }
     QTimer::singleShot(0, [this, query, cb = std::move(cb)]() {
       const Canned &c = byQuery.value(query);
       if (!c.lookupError.isEmpty()) {
@@ -251,6 +262,7 @@ private slots:
   void scrapesAllItemsThatHaveCandidates();
   void skipsItemsWithNoCandidates();
   void countsErrorsOnLookupFailure();
+  void stalledStepTimesOutAndAdvancesBatch();
   void countsErrorsOnFetchDetailFailure();
   void firstFailuresRecordsEveryFailure();
   void cancelStopsAfterInFlightItem();
@@ -354,6 +366,44 @@ void TestBatchScrapeRunner::countsErrorsOnLookupFailure() {
   QCOMPARE(summary.errors, 1);
   QCOMPARE(summary.firstFailures.size(), 1);
   QVERIFY(summary.firstFailures.first().contains(QStringLiteral("HTTP 500")));
+}
+
+void TestBatchScrapeRunner::stalledStepTimesOutAndAdvancesBatch() {
+  // Regression for the live 99%-frozen scrape (Kartend audit xnm8a): a wedged
+  // storage mount makes an unbounded local step — the provider's ROM hash-read
+  // inside lookup(), here, or the QtConcurrent artwork write — block with no
+  // timeout. Pre-fix the item's concurrency slot never freed, pump() couldn't
+  // advance, and the batch hung below 100% indefinitely. The per-item stall
+  // watchdog must error the stalled item(s) and still reach `finished`.
+  //
+  // The env guard scopes the tiny budget to this case so a QtTest early-return
+  // on a failed QCOMPARE can't leak a 60ms watchdog into later tests.
+  struct EnvGuard {
+    ~EnvGuard() { qunsetenv("KARTEND_SCRAPE_STEP_TIMEOUT_MS"); }
+  } guard;
+  qputenv("KARTEND_SCRAPE_STEP_TIMEOUT_MS", "60");
+
+  auto stub = std::make_shared<StubProvider>();
+  // Both items "have" candidates, but their lookups never answer — the slot
+  // can only be freed by the watchdog.
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+  stub->hangLookupQueries.insert(QStringLiteral("Alpha"));
+  stub->hangLookupQueries.insert(QStringLiteral("Beta"));
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  // Without the watchdog `finished` never fires and this returns a default
+  // (zeroed) summary at the 5s timeout, failing the QCOMPAREs below.
+  const auto summary = waitForFinish(&runner);
+
+  QCOMPARE(summary.errors, 2);
+  QCOMPARE(summary.scraped, 0);
+  QCOMPARE(summary.skipped, 0);
+  // The message names the stall rather than a generic provider error.
+  QVERIFY(!summary.firstFailures.isEmpty());
+  QVERIFY(summary.firstFailures.first().contains(QStringLiteral("timed out")));
 }
 
 void TestBatchScrapeRunner::countsErrorsOnFetchDetailFailure() {

@@ -393,6 +393,35 @@ private:
   /// gated on `m_quotaStopped` — only new dispatch stops; whatever is
   /// already mid-chain runs to completion.
   void recordError(const QString &itemName, const ErrorUtils::ErrorContext &err);
+
+  /// Per-item stall guard (Kartend audit xnm8a). The per-item chain only
+  /// bounds its HTTP legs (HttpClient's 30s transfer timeout). The two local
+  /// file-I/O stages — the provider's ROM hash-read inside lookup(), and the
+  /// QtConcurrent media/sidecar write — have no timeout, so a slow or wedged
+  /// storage mount blocks read()/write()/fsync() with no interrupt: the item
+  /// never completes, its concurrency slot never frees, and the whole batch
+  /// hangs forever at <100%.
+  ///
+  /// armStepWatchdog arms a single-shot timer racing one such step's
+  /// completion and returns a shared "done" flag. The step's own completion
+  /// callback must, before doing anything else, `if (*done) return; *done =
+  /// true;` so a watchdog that already fired is a no-op. If the watchdog fires
+  /// first it sets *done and calls onStepTimedOut, which errors that one item
+  /// and frees the slot so the batch advances — exactly like the HTTP timeout.
+  /// The wedged future/callback is left to drain on its own (value-captures
+  /// only), the same contract as the destructor's abandon-after-1s drain.
+  [[nodiscard]] std::shared_ptr<bool> armStepWatchdog(const std::shared_ptr<ItemState> &state,
+                                                      const QString &stageLabel);
+  /// Watchdog-fire continuation: count the stalled item as an error (or just
+  /// drain it if the run was cancelled) and pump the queue.
+  void onStepTimedOut(const std::shared_ptr<ItemState> &state, const QString &stageLabel);
+  /// Watchdog budget in ms. Default 10min — long enough that a legitimate hash
+  /// of a multi-GB image over a slow network mount won't false-trip, short
+  /// enough that a genuine wedge bounds the stall to minutes instead of
+  /// freezing the batch. Overridable via KARTEND_SCRAPE_STEP_TIMEOUT_MS (tests
+  /// set it tiny; pathological large-file setups can raise it).
+  [[nodiscard]] static int stepWatchdogMs();
+
   /// Mark one item complete (success / skip / error). When the queue
   /// is drained and the in-flight count returns to 0, emits
   /// `finished` exactly once.
