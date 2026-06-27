@@ -16,6 +16,9 @@
 #include <QStringList>
 
 class PreparedStatementCache;
+namespace QueryManagerInternal {
+struct DirectoryScanResult;
+}
 
 /**
  * @brief Owns QueryManager's collection-rescan subsystem.
@@ -149,8 +152,22 @@ private:
                       QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
                       QString *dirSignatureOut);
   void scanParallel(const QDir &dir, const QStringList &nameFilters,
-                    const CollectionConfig &collection, QHash<QString, QDateTime> &timestamps,
-                    QStringList &filePaths, QString *dirSignatureOut);
+                    QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
+                    QString *dirSignatureOut);
+
+  // Shared parallel directory-walk scaffolding for scanParallel (in-memory
+  // accumulate) and stageRecursiveScan (stream into the batch stager): owns the
+  // bounded-in-flight queue / cancel / thread setup, the QDirIterator fill loop,
+  // the dir-signature sampling, and worker shutdown. Invokes onResult(result)
+  // for each completed directory's scan result; the caller decides how to
+  // consume it (accumulate vs. stage) and how to report progress. Writes the
+  // directory-signature JSON to dirSignatureOut. Returns false only when the
+  // scan-work cancel token is unavailable (controller torn down); mid-walk
+  // cancellation is observable via isScanCancelled() (Kartend audit 1jwfk).
+  bool walkDirectoriesParallel(
+      const QDir &dir, const QStringList &nameFilters,
+      const std::function<void(QueryManagerInternal::DirectoryScanResult &&)> &onResult,
+      QString &dirSignatureOut);
 
   // Per-file staging primitive shared by stageFilesystemScan's flat and
   // recursive arms: appends (relativePath, mtime) to the pending batch and

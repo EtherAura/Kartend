@@ -259,7 +259,7 @@ QStringList ScanService::scanMediaDirectory(const CollectionConfig &collection,
   if (!collection.folderBrowsing.includeContentSubfolders) {
     scanSequential(dir, nameFilters, timestamps, filePaths, dirSignatureOut);
   } else {
-    scanParallel(dir, nameFilters, collection, timestamps, filePaths, dirSignatureOut);
+    scanParallel(dir, nameFilters, timestamps, filePaths, dirSignatureOut);
   }
 
   if (scanCompletedOut) {
@@ -328,13 +328,13 @@ void ScanService::scanSequential(const QDir &dir, const QStringList &nameFilters
   }
 }
 
-void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
-                               const CollectionConfig &collection,
-                               QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
-                               QString *dirSignatureOut) {
-  // Parallel scanning for recursive directory structures
+bool ScanService::walkDirectoriesParallel(
+    const QDir &dir, const QStringList &nameFilters,
+    const std::function<void(DirectoryScanResult &&)> &onResult, QString &dirSignatureOut) {
   // Scan directories in parallel with bounded in-flight tasks and consume
-  // results as they complete to avoid head-of-line blocking.
+  // results as they complete to avoid head-of-line blocking. The per-result
+  // consumption (in-memory accumulate vs. streaming into the batch stager) is
+  // the caller's job, handed back through onResult.
   QElapsedTimer scanTimer;
   scanTimer.start();
 
@@ -342,7 +342,7 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
   const QDir rootDir(rootPath);
   const auto cancelToken = m_scanWork.token();
   if (!cancelToken) {
-    return;
+    return false;
   }
   const std::atomic<bool> &cancelFlag = *cancelToken;
 
@@ -382,21 +382,8 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
   QDirIterator dirIterator(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
                            QDirIterator::Subdirectories);
 
-  int totalItemsScanned = 0;
-  // Per-loop override of the file-static PROGRESS_REPORT_INTERVAL = 50000 —
-  // parallel recursive scans report on a 500-item delta cadence so the
-  // progress bar stays live without the throttle eating every report.
-  constexpr int RECURSIVE_PROGRESS_REPORT_INTERVAL = 500;
-  int lastReportedCount = 0;
   int directoriesEnqueued = 1; // root
   int directoryResultsConsumed = 0;
-
-  // Throttle scan progress emissions to avoid spamming the UI event loop.
-  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
-                                [this](int p, int t) { emit scanItemsProgress(p, t); });
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
-    throttle.report(processed, total, force);
-  };
 
   while (!cancelFlag.load(std::memory_order_acquire)) {
     // Fill in-flight queue.
@@ -414,6 +401,10 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
       const QString dirPath = dirIterator.filePath();
       enqueue(dirPath);
       {
+        // Reuse the once-built rootDir + the iterator's already-stat'd
+        // QFileInfo rather than rebuilding QDir(rootPath) / QFileInfo(dirPath)
+        // per directory — the two arms had drifted to different (equivalent
+        // but redundantly-stat'ing) forms here (Kartend audit 1jwfk).
         const QString relPath = rootDir.relativeFilePath(dirPath);
         const qint64 mtimeSec = dirInfo.lastModified().toSecsSinceEpoch();
         addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
@@ -455,24 +446,7 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
     }
 
     ++directoryResultsConsumed;
-
-    if (result.relativePaths.isEmpty()) {
-      continue;
-    }
-
-    filePaths.reserve(filePaths.size() + result.relativePaths.size());
-    filePaths.append(result.relativePaths);
-
-    timestamps.reserve(timestamps.size() + result.timestamps.size());
-    for (auto it = result.timestamps.constBegin(); it != result.timestamps.constEnd(); ++it) {
-      timestamps.insert(it.key(), it.value());
-    }
-
-    totalItemsScanned += result.relativePaths.size();
-    if (totalItemsScanned - lastReportedCount >= RECURSIVE_PROGRESS_REPORT_INTERVAL) {
-      lastReportedCount = totalItemsScanned;
-      maybeEmitScanProgress(totalItemsScanned, -1);
-    }
+    onResult(std::move(result));
   }
 
   // Ensure all worker tasks have finished before destroying the queue.
@@ -486,16 +460,59 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
   }
 
   if (lcQueryManager().isDebugEnabled()) {
-    qCDebug(lcQueryManager) << "Recursive scan done"
-                            << "collection=" << collection.name << "cancelled="
+    qCDebug(lcQueryManager) << "Parallel directory walk done"
+                            << "cancelled="
                             << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
                             << "dirsEnqueued=" << directoriesEnqueued
                             << "dirResults=" << directoryResultsConsumed
-                            << "filesFound=" << totalItemsScanned
                             << "elapsedMs=" << scanTimer.elapsed();
   }
 
-  // Check if cancelled during parallel scan
+  dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
+  return true;
+}
+
+void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
+                               QHash<QString, QDateTime> &timestamps, QStringList &filePaths,
+                               QString *dirSignatureOut) {
+  int totalItemsScanned = 0;
+  // Override of the file-static PROGRESS_REPORT_INTERVAL = 50000 — parallel
+  // recursive scans report on a 500-item delta cadence so the progress bar
+  // stays live without the throttle eating every report.
+  constexpr int RECURSIVE_PROGRESS_REPORT_INTERVAL = 500;
+  int lastReportedCount = 0;
+
+  // Throttle scan progress emissions to avoid spamming the UI event loop.
+  ScanProgressThrottle throttle(UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS,
+                                [this](int p, int t) { emit scanItemsProgress(p, t); });
+
+  QString signature;
+  const bool walked = walkDirectoriesParallel(
+      dir, nameFilters,
+      [&](DirectoryScanResult &&result) {
+        if (result.relativePaths.isEmpty()) {
+          return;
+        }
+        filePaths.reserve(filePaths.size() + result.relativePaths.size());
+        filePaths.append(result.relativePaths);
+
+        timestamps.reserve(timestamps.size() + result.timestamps.size());
+        for (auto it = result.timestamps.constBegin(); it != result.timestamps.constEnd(); ++it) {
+          timestamps.insert(it.key(), it.value());
+        }
+
+        totalItemsScanned += result.relativePaths.size();
+        if (totalItemsScanned - lastReportedCount >= RECURSIVE_PROGRESS_REPORT_INTERVAL) {
+          lastReportedCount = totalItemsScanned;
+          throttle.report(totalItemsScanned, -1, false);
+        }
+      },
+      signature);
+  if (!walked) {
+    return; // scan-work cancel token unavailable
+  }
+
+  // Check if cancelled during parallel scan.
   if (isScanCancelled()) {
     filePaths.clear();
     timestamps.clear();
@@ -503,12 +520,12 @@ void ScanService::scanParallel(const QDir &dir, const QStringList &nameFilters,
   }
 
   if (dirSignatureOut) {
-    *dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
+    *dirSignatureOut = signature;
   }
 
-  // Emit final progress
+  // Emit final progress.
   if (totalItemsScanned > 0) {
-    maybeEmitScanProgress(totalItemsScanned, -1, true);
+    throttle.report(totalItemsScanned, -1, true);
   }
 }
 
@@ -579,152 +596,32 @@ bool ScanService::stageRecursiveScan(const QDir &dir, const QStringList &nameFil
                                      const std::function<bool()> &flushBatch,
                                      const std::function<void(int, int)> &reportProgress,
                                      QString &dirSignatureOut) {
-  QElapsedTimer scanTimer;
-  scanTimer.start();
-
-  const QString rootPath = dir.absolutePath();
-  const auto cancelToken = m_scanWork.token();
-  if (!cancelToken) {
-    return false;
-  }
-  const std::atomic<bool> &cancelFlag = *cancelToken;
-
-  const int maxThreads = m_scanWork.maxThreadCount();
-  const int maxInFlight = std::max(1, maxThreads * 2);
-
-  // Heap-own the queue (shared_ptr) so a worker still finishing its final
-  // QMutexLocker teardown can't touch a destroyed mutex after this frame
-  // returns and reuses the stack (Kartend-bl8w0). `queue` aliases the owned
-  // object so the accesses below read unchanged; each DirectoryScanTask
-  // co-owns it by value, so the last finisher frees it.
-  auto queuePtr = std::make_shared<ScanCompletionQueue>();
-  ScanCompletionQueue &queue = *queuePtr;
-
-  QVector<DirSignatureSample> signatureSamples;
-  signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
-  {
-    QFileInfo rootInfo(rootPath);
-    addDirSignatureSample(signatureSamples,
-                          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-                          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
-  }
-
-  auto enqueue = [&](const QString &dirPath) {
-    if (cancelFlag.load(std::memory_order_acquire)) {
-      return;
-    }
-    {
-      QMutexLocker locker(&queue.mutex);
-      ++queue.inFlight;
-    }
-    m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, queuePtr));
-  };
-
-  // Always scan the root directory.
-  enqueue(rootPath);
-
-  QDirIterator dirIterator(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
-                           QDirIterator::Subdirectories);
-
   int totalItemsScanned = 0;
   int lastReportedCount = 0;
-  int directoriesEnqueued = 1; // root
-  int directoryResultsConsumed = 0;
 
-  while (!cancelFlag.load(std::memory_order_acquire)) {
-    // Keep the number of outstanding tasks bounded.
-    while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
-      int inFlight = 0;
-      {
-        QMutexLocker locker(&queue.mutex);
-        inFlight = queue.inFlight;
-      }
-      if (inFlight >= maxInFlight) {
-        break;
-      }
-      dirIterator.next();
-      const QString dirPath = dirIterator.filePath();
-      enqueue(dirPath);
-      {
-        const QString relPath = QDir(rootPath).relativeFilePath(dirPath);
-        const qint64 mtimeSec = QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
-        addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
-                              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
-      }
-      ++directoriesEnqueued;
-    }
-
-    DirectoryScanResult result;
-    bool gotResult = false;
-    bool done = false;
-
-    {
-      QMutexLocker locker(&queue.mutex);
-      while (queue.ready.isEmpty() && queue.inFlight > 0 &&
-             !cancelFlag.load(std::memory_order_acquire)) {
-        queue.hasResult.wait(&queue.mutex, 50);
-      }
-
-      if (!queue.ready.isEmpty()) {
-        result = std::move(queue.ready.back());
-        queue.ready.removeLast();
-        // Acquire-load pairs with the worker's release-store in pushChunk so
-        // TSan sees this chunk's payload as synchronized across the lossy
-        // QWaitCondition epoch (ScanCompletionQueue::handoffSeq).
-        (void)queue.handoffSeq.load(std::memory_order_acquire);
-        queue.hasSpace.wakeOne();
-        gotResult = true;
-      } else if (queue.inFlight == 0 && !dirIterator.hasNext()) {
-        done = true;
-      }
-    }
-
-    if (done) {
-      break;
-    }
-    if (!gotResult) {
-      continue;
-    }
-
-    ++directoryResultsConsumed;
-
-    if (!result.relativePaths.isEmpty()) {
-      for (const QString &p : result.relativePaths) {
-        if (!stageScannedFile(batchPaths, batchTimestamps, p, result.timestamps.value(p),
-                              flushBatch)) {
-          break;
+  const bool walked = walkDirectoriesParallel(
+      dir, nameFilters,
+      [&](DirectoryScanResult &&result) {
+        if (result.relativePaths.isEmpty()) {
+          return;
         }
-      }
+        for (const QString &p : result.relativePaths) {
+          if (!stageScannedFile(batchPaths, batchTimestamps, p, result.timestamps.value(p),
+                                flushBatch)) {
+            break;
+          }
+        }
 
-      totalItemsScanned += result.relativePaths.size();
-      if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
-        lastReportedCount = totalItemsScanned;
-        reportProgress(totalItemsScanned, -1);
-      }
-    }
+        totalItemsScanned += result.relativePaths.size();
+        if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
+          lastReportedCount = totalItemsScanned;
+          reportProgress(totalItemsScanned, -1);
+        }
+      },
+      dirSignatureOut);
+  if (!walked) {
+    return false; // scan-work cancel token unavailable (controller torn down)
   }
-
-  // Ensure all worker tasks have finished before destroying the queue.
-  // This is critical on cancellation, where we may exit early.
-  {
-    QMutexLocker locker(&queue.mutex);
-    while (queue.inFlight > 0) {
-      queue.hasResult.wait(&queue.mutex, 50);
-    }
-    queue.ready.clear();
-  }
-
-  if (lcQueryManager().isDebugEnabled()) {
-    qCDebug(lcQueryManager) << "Recursive scan+stream done"
-                            << "cancelled="
-                            << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-                            << "dirsEnqueued=" << directoriesEnqueued
-                            << "dirResults=" << directoryResultsConsumed
-                            << "filesFound=" << totalItemsScanned
-                            << "elapsedMs=" << scanTimer.elapsed();
-  }
-
-  dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
 
   (void)flushBatch();
   return true;
