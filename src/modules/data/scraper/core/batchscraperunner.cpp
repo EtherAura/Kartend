@@ -636,14 +636,18 @@ void BatchScrapeRunner::onLookupComplete(
   // Auto-pick the first candidate. The provider ranks candidates
   // by relevance, so the first one is what an interactive scrape
   // would default to.
-  // NOTE on shared provider state: ScreenScraperProvider keeps a
-  // single-entry detail cache (m_lastDetail). fetchDetail reads
-  // it synchronously, so the cache survives interleaving — the
-  // lookup-callback writes m_lastDetail and immediately calls
-  // fetchDetail which reads it, all before the Qt event loop
-  // can dispatch another item's lookup-completion. Safe so long
-  // as the provider's lookup callback is the one that calls
-  // fetchDetail (which it is, here).
+  // NOTE on shared provider state: ScreenScraperProvider stashes
+  // each full ScrapedItem in m_detailCache (an id-keyed, 64-entry
+  // FIFO bounded by kMaxDetailCacheEntries) during lookup, and
+  // fetchDetail returns it by providerSpecificId. The safety
+  // invariant isn't synchronous read-after-write — it's threading:
+  // lookup, fetchDetail, and the underlying HTTP-completion
+  // callbacks all run on the main-thread event loop (HttpClient::get
+  // asserts main-thread affinity), so there is no concurrent access
+  // to the cache even with itemConcurrency > 1. Because the cache is
+  // id-keyed and bounded rather than single-entry, the entry is safe
+  // across event-loop turns: an interleaved lookup for another item
+  // can't displace this item's detail before fetchDetail reads it.
   QPointer<BatchScrapeRunner> self(this);
   m_provider->fetchDetail(
       candidates.first(),
