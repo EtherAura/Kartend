@@ -95,7 +95,7 @@ jobs:
           lcov --directory build/coverage \
                --capture \
                --output-file build/coverage/coverage.info \
-               --ignore-errors mismatch,unused,inconsistent,gcov \
+               --ignore-errors mismatch,unused,inconsistent,gcov,negative \
                --no-external \
                --base-directory $GITHUB_WORKSPACE
           lcov --remove build/coverage/coverage.info \
