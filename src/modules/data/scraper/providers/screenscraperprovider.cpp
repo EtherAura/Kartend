@@ -530,8 +530,24 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // CACHE_TTL_DAYS afterward); subsequent scrapes hit the disk
   // cache and skip straight to the real query.
   m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
+                                  alive = std::weak_ptr<int>(m_lifetimeToken),
                                   callback = std::move(callback)](
                                      const QList<ScreenScraperSystems::System> &systems) mutable {
+    // Kartend audit cr950: this systemesListe reply is delivered on the
+    // qApp-lifetime HttpClient, which holds this lambda (capturing the provider's
+    // `this`) with no QObject connection to sever on teardown. The provider can
+    // be destroyed first — e.g. the user cancels a cold-start scrape, the runner
+    // finishes and deleteLater-destroys itself, dropping the only shared_ptr to
+    // this provider — so guard with a liveness token before touching any member.
+    // Still invoke the lookup callback (cancelled) so the batch item resolves
+    // instead of hanging, preserving the finished-emission invariant.
+    if (alive.expired()) {
+      callback(ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::OperationCancelled,
+          QStringLiteral("ScreenScraper provider destroyed during catalog lookup"),
+          "ScreenScraperProvider::runLookup"));
+      return;
+    }
     // Kartend-5l9ow: datCanonicalName is hash-derived — findDatCanonicalName
     // looks the DAT up by this ROM's md5/sha1/crc, so the canonical name
     // belongs to a record whose hash matches the ROM. It is therefore already
@@ -598,7 +614,21 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
   Scraper::HttpClient::instance()->get(
       url, userAgentHeader(),
       [this, url, filenameRegionOverride, callback = std::move(callback),
+       alive = std::weak_ptr<int>(m_lifetimeToken),
        attempt](ErrorUtils::Result<QByteArray> response) mutable {
+        // Kartend audit cr950: the provider can be destroyed (cancel during a
+        // scrape) while this jeuInfos reply is in flight on the qApp-lifetime
+        // HttpClient, which holds this lambda's raw `this` with no QObject
+        // connection to sever on teardown. Bail before any member access, but
+        // invoke the callback (cancelled) so the batch item resolves instead of
+        // hanging — the finished-emission invariant.
+        if (alive.expired()) {
+          callback(ErrorUtils::ErrorContext::error(
+              ErrorUtils::ErrorCode::OperationCancelled,
+              QStringLiteral("ScreenScraper provider destroyed during jeuInfos lookup"),
+              "ScreenScraperProvider::fetchJeuInfos"));
+          return;
+        }
         // Kartend-1rtrt: bounded retry for transient transport/server faults.
         // The GET is idempotent, so re-issuing the same URL is safe. Permanent
         // failures (auth/quota/404/parse) and successes are handled inline.

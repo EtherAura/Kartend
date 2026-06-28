@@ -247,6 +247,18 @@ private:
   /// lost (same leak class as the per-lookup hash watcher above). One timer per
   /// retry lets concurrent retries coexist.
   QSet<QTimer *> m_inFlightRetryTimers;
+  /// Liveness token (Kartend audit cr950). The provider's async HTTP
+  /// continuations — the ensureSystemsCatalog cold-start callback and the
+  /// fetchJeuInfos reply — capture raw `this` and are held by the qApp-lifetime
+  /// HttpClient with NO QObject connection to sever on teardown (unlike the hash
+  /// watcher + retry timers above), so they can outlive the provider, which is
+  /// owned only by BatchScrapeRunner::m_provider — a cancel mid-cold-start
+  /// destroys it before the reply lands. Those callbacks capture
+  /// weak_ptr(m_lifetimeToken) and, if it has expired, invoke their callback with
+  /// a cancelled error and bail before touching any member. Same discipline
+  /// ScreenScraperCatalogManager already uses; the token expires automatically
+  /// when the provider is destroyed.
+  std::shared_ptr<int> m_lifetimeToken = std::make_shared<int>(0);
   /// SS's jeuInfos.php returns the candidate AND the full detail in one
   /// response — there's no separate detail endpoint. We cache the full
   /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so
