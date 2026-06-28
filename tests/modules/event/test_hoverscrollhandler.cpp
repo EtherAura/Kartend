@@ -49,6 +49,10 @@ private slots:
   void clearPendingScrollResetsStateAndFlag();
   void commitPendingScrollWithDestroyedWidgetBailsCleanly();
 
+  void mouseMoveStagesDwellAnchorAndSelectsHoveredItem();
+  void mouseMoveWithinRadiusKeepsDwellBeyondReArms();
+  void pollCursorForContinueShortCircuitsBeforeCursorReads();
+
 private:
   /// Wire the handler with all guards satisfiable: real (un-laid-out)
   /// QScrollArea + grid container + a stacked widget whose current page is the
@@ -265,6 +269,82 @@ void TestHoverScrollHandler::commitPendingScrollWithDestroyedWidgetBailsCleanly(
 
   QCOMPARE(m_handler->m_pendingIndex, -1);
   QVERIFY(!m_state.scroll().hoverScrollPending);
+  QCOMPARE(m_sel.selectItemByHoverCalls, 0);
+}
+
+// ─── dwell staging + re-arm + poll guards (Kartend audit 8ipd4) ────────────────
+
+void TestHoverScrollHandler::mouseMoveStagesDwellAnchorAndSelectsHoveredItem() {
+  // A MouseMove over an ItemWidget the cursor hasn't selected yet immediately
+  // hover-selects it AND stages the dwell anchor (widget + index + global pos),
+  // arming the dwell timer. The global pos comes from the synthetic event, so
+  // this is deterministic; only the dwell *firing* path is manual.
+  wireAllGuardsPass();
+  auto *widget = new ItemWidget(m_gridContainer.get());
+  m_gridContainer->show(); // offscreen: realize the child so isVisible()
+  m_scroll.activeWidgets = {{7, widget}};
+  m_sel.index = 0; // current selection != 7 -> the hover selects 7
+
+  QMouseEvent move(QEvent::MouseMove, QPointF(100, 100), QPointF(100, 100), Qt::NoButton,
+                   Qt::NoButton, Qt::NoModifier);
+  (void)m_handler->handleEvent(widget, &move, false);
+
+  QCOMPARE(m_handler->m_pendingIndex, 7);
+  QCOMPARE(m_handler->m_pendingWidget.data(), widget);
+  QCOMPARE(m_handler->m_pendingGlobalPos, QPoint(100, 100));
+  QVERIFY(m_state.scroll().hoverScrollPending);
+  QVERIFY(m_handler->m_dwellTimer.isActive());
+  QCOMPARE(m_sel.selectItemByHoverCalls, 1);
+}
+
+void TestHoverScrollHandler::mouseMoveWithinRadiusKeepsDwellBeyondReArms() {
+  // Once a dwell is staged, a tiny jitter inside HOVER_SCROLL_STABILITY_RADIUS_PX
+  // (4px) leaves the anchor untouched and does not re-select; a larger move
+  // re-arms the anchor to the new position.
+  wireAllGuardsPass();
+  auto *widget = new ItemWidget(m_gridContainer.get());
+  m_gridContainer->show();
+  m_scroll.activeWidgets = {{7, widget}};
+  m_sel.index = 0; // first move selects + stages
+
+  auto move = [&](int x, int y) {
+    QMouseEvent e(QEvent::MouseMove, QPointF(x, y), QPointF(x, y), Qt::NoButton, Qt::NoButton,
+                  Qt::NoModifier);
+    (void)m_handler->handleEvent(widget, &e, false);
+  };
+
+  move(100, 100); // anchor at (100,100), selects 7
+  QCOMPARE(m_handler->m_pendingGlobalPos, QPoint(100, 100));
+  QCOMPARE(m_sel.selectItemByHoverCalls, 1);
+  m_sel.index = 7; // the hover-selection has taken effect
+
+  move(102, 100); // manhattan 2 <= 4 -> anchor unchanged, no re-select
+  QCOMPARE(m_handler->m_pendingGlobalPos, QPoint(100, 100));
+  QCOMPARE(m_sel.selectItemByHoverCalls, 1);
+
+  move(150, 100); // manhattan 50 > 4 -> anchor re-armed
+  QCOMPARE(m_handler->m_pendingGlobalPos, QPoint(150, 100));
+  QVERIFY(m_handler->m_dwellTimer.isActive());
+}
+
+void TestHoverScrollHandler::pollCursorForContinueShortCircuitsBeforeCursorReads() {
+  // pollCursorForContinue's early guards must return before the un-fakeable
+  // QCursor::pos()/QApplication::widgetAt() reads, so neither short-circuit
+  // re-selects anything.
+  wireAllGuardsPass();
+
+  // (a) a hover scroll is already staged -> the m_pendingWidget guard returns.
+  auto *widget = new ItemWidget(m_gridContainer.get());
+  m_handler->m_pendingWidget = widget;
+  m_handler->pollCursorForContinue();
+  QCOMPARE(m_sel.selectItemByHoverCalls, 0);
+
+  // (b) the stack's current page is not the items page -> the stack guard returns.
+  m_handler->m_pendingWidget.clear();
+  auto *otherPage = new QWidget;
+  m_stack->addWidget(otherPage);
+  m_stack->setCurrentWidget(otherPage);
+  m_handler->pollCursorForContinue();
   QCOMPARE(m_sel.selectItemByHoverCalls, 0);
 }
 

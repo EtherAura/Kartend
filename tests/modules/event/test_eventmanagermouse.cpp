@@ -1,18 +1,26 @@
 // Unit coverage for EventManager's mouse-dispatch core (Kartend audit 4yktu):
 // handleMouseDoubleClick, the right/middle-click branches of handleMousePress,
 // the handleWheelEvent modal + foreign-window gates, and the
-// itemWidgetForObject / visualIndexForWidget helpers. These are signal-emission
+// itemWidgetForObject / visualIndexForWidget helpers. Most are signal-emission
 // or QObject-parent-chain logic reachable with real (un-laid-out) ItemWidgets +
-// stubs — no widget geometry. The LEFT-click selection path
-// (findBestWidgetForClick) is geometry-gated and already covered in
-// test_mousemanager, so its two signal outcomes stay in the manual tier.
+// stubs — no widget geometry.
+//
+// The LEFT-click selection path (Kartend audit 8ipd4) is covered here too: a
+// real grid tree (gridContainer > virtual container > geometry-set ItemWidget
+// tiles, mirroring test_mousemanager) under QT_QPA_PLATFORM=offscreen drives
+// findBestWidgetForClick deterministically — the click coordinates come from the
+// synthetic QMouseEvent, not QCursor::pos(), so the widgetClicked /
+// clearSelection / items-top-bar-collision outcomes are headless-stable. Only
+// the eventBelongsToSidebar cursor hit-test (QCursor::pos()) stays manual.
 //
 // EventManager's handle* methods are private; this test is a declared friend
 // (see eventmanager.h) so it drives them directly, mirroring the friend-access
 // pattern test_mousemanager uses.
 #include <QMouseEvent>
 #include <QPointF>
+#include <QScrollArea>
 #include <QSignalSpy>
+#include <QStackedWidget>
 #include <QTest>
 #include <QWidget>
 
@@ -65,6 +73,11 @@ private slots:
   void middleClickWithCycleModifierEmitsArtworkCycle();
   void middleClickWithoutModifierEmitsMediaPreview();
   void mousePressDuringSelectionRestoreIsAcceptedNoOp();
+
+  void leftClickInsideTileEmitsWidgetClicked();
+  void leftClickOnEmptyAreaEmitsClearSelection();
+  void leftClickOnItemsTopBarIsRejected();
+
   void handleWheelEventBlockedWhileModalScrapeDialogVisible();
   void handleWheelEventRejectsTargetInForeignWindow();
   void itemWidgetForObjectWalksParentChain();
@@ -76,6 +89,11 @@ private:
   /// the right / middle / double-click branches return before the left-click
   /// geometry block reads them.
   void wire();
+  /// Wire with a real items UI tree so the left-click geometry path runs:
+  /// itemScrollArea / gridContainer / stackedWidget / itemsPage (and optionally
+  /// itemsTopBar) are all set, with the stack's current page = itemsPage.
+  void wireWithUi(QScrollArea *scrollArea, QWidget *gridContainer, QStackedWidget *stack,
+                  QWidget *itemsPage, QWidget *itemsTopBar = nullptr);
 
   GeneralSettings m_settings;
   ApplicationContext m_ctx;
@@ -115,6 +133,25 @@ void TestEventManagerMouse::wire() {
   m_mgr.setupReferences(setup);
 }
 
+void TestEventManagerMouse::wireWithUi(QScrollArea *scrollArea, QWidget *gridContainer,
+                                       QStackedWidget *stack, QWidget *itemsPage,
+                                       QWidget *itemsTopBar) {
+  m_ctx.managers.seedScrollRoles(&m_scroll);
+  m_ctx.managers.selectionManager = &m_sel;
+
+  EventManagerSetup setup;
+  setup.ctx = &m_ctx;
+  setup.itemScrollArea = scrollArea;
+  setup.gridContainer = gridContainer;
+  setup.stackedWidget = stack;
+  setup.itemsPage = itemsPage;
+  setup.itemsTopBar = itemsTopBar;
+  setup.collections = &m_collections;
+  setup.currentCollectionIndex = &m_viewIndex;
+  setup.generalSettings = &m_settings;
+  m_mgr.setupReferences(setup);
+}
+
 // ─── double-click ────────────────────────────────────────────────────────────
 
 void TestEventManagerMouse::doubleClickOnMediaItemEmitsWidgetDoubleClicked() {
@@ -148,8 +185,9 @@ void TestEventManagerMouse::doubleClickUsesDatabaseCollectionIndexWhenAvailable(
 
   QSignalSpy spy(&m_mgr, &EventManager::widgetDoubleClicked);
   auto evt = makeMouseEvent(QEvent::MouseButtonDblClick, Qt::LeftButton);
-  m_mgr.handleMouseDoubleClick(&widget, &evt);
+  const bool consumed = m_mgr.handleMouseDoubleClick(&widget, &evt);
 
+  QVERIFY(consumed);
   QCOMPARE(spy.count(), 1);
   QCOMPARE(spy.at(0).at(1).toInt(), 7); // db path wins over current index
 }
@@ -325,6 +363,117 @@ void TestEventManagerMouse::visualIndexForWidgetReturnsScrollDataLookup() {
   ItemWidget unknown;
   QCOMPARE(m_mgr.visualIndexForWidget(&unknown), -1);
   QCOMPARE(m_mgr.visualIndexForWidget(nullptr), -1);
+}
+
+// ─── left-click selection (geometry, Kartend audit 8ipd4) ──────────────────────
+
+void TestEventManagerMouse::leftClickInsideTileEmitsWidgetClicked() {
+  // Real grid tree mirroring test_mousemanager's find* setup: gridContainer >
+  // virtual container (offset 5,5) > 100x100 tiles. A left-click at (60,60) in
+  // gridContainer coords maps to (55,55) inside tile0 -> widgetClicked(index 0).
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget; // owned by the stack after addWidget()
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+  auto *gridContainer = new QWidget(itemsPage);
+  gridContainer->resize(400, 400);
+  auto *virtualContainer = new QWidget(gridContainer);
+  virtualContainer->move(5, 5);
+  virtualContainer->resize(300, 300);
+  auto *tile0 = new ItemWidget(virtualContainer);
+  tile0->setGeometry(0, 0, 100, 100);
+  QScrollArea scrollArea;
+  stack.show(); // offscreen QPA: realize the page so the tile is isVisible()
+
+  m_scroll.activeWidgets = {{0, tile0}};
+  m_scroll.totalItems = 1;
+  m_scroll.metrics.itemWidth = 100;
+  m_scroll.metrics.itemHeight = 100;
+  m_scroll.metrics.horizontalSpacing = 10;
+  m_scroll.metrics.verticalSpacing = 10;
+  m_scroll.metrics.itemsPerRow = 2;
+  wireWithUi(&scrollArea, gridContainer, &stack, itemsPage);
+
+  QSignalSpy clicked(&m_mgr, &EventManager::widgetClicked);
+  QSignalSpy clearSel(&m_mgr, &EventManager::clearSelectionRequested);
+  // obj == gridContainer, so handleMousePress consults pos() directly (no remap).
+  QMouseEvent evt(QEvent::MouseButtonPress, QPointF(60, 60), QPointF(60, 60), Qt::LeftButton,
+                  Qt::LeftButton, Qt::NoModifier);
+  const bool consumed = m_mgr.handleMousePress(gridContainer, &evt);
+
+  QVERIFY(consumed);
+  QVERIFY(evt.isAccepted());
+  QCOMPARE(clicked.count(), 1);
+  QCOMPARE(clicked.at(0).at(1).toInt(), 0); // visualIndex
+  QCOMPARE(clearSel.count(), 0);
+}
+
+void TestEventManagerMouse::leftClickOnEmptyAreaEmitsClearSelection() {
+  // Same UI tree but no active widgets: findBestWidgetForClick returns
+  // {nullptr,-1}, so a left-click resolves to clearSelectionRequested.
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget;
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+  auto *gridContainer = new QWidget(itemsPage);
+  gridContainer->resize(400, 400);
+  QScrollArea scrollArea;
+  stack.show();
+
+  m_scroll.activeWidgets.clear();
+  m_scroll.totalItems = 0;
+  wireWithUi(&scrollArea, gridContainer, &stack, itemsPage);
+
+  QSignalSpy clicked(&m_mgr, &EventManager::widgetClicked);
+  QSignalSpy clearSel(&m_mgr, &EventManager::clearSelectionRequested);
+  QMouseEvent evt(QEvent::MouseButtonPress, QPointF(60, 60), QPointF(60, 60), Qt::LeftButton,
+                  Qt::LeftButton, Qt::NoModifier);
+  const bool consumed = m_mgr.handleMousePress(gridContainer, &evt);
+
+  QVERIFY(consumed);
+  QVERIFY(evt.isAccepted());
+  QCOMPARE(clearSel.count(), 1);
+  QCOMPARE(clicked.count(), 0);
+}
+
+void TestEventManagerMouse::leftClickOnItemsTopBarIsRejected() {
+  // A visible items top bar swallows left-clicks two ways: (a) the clicked object
+  // is the toolbar or a descendant (parent-chain walk), and (b) the click's
+  // global position falls within the toolbar's global geometry. Both return false
+  // (let Qt handle the toolbar) and emit neither widgetClicked nor
+  // clearSelectionRequested.
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget;
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+  auto *gridContainer = new QWidget(itemsPage);
+  gridContainer->resize(400, 400);
+  auto *itemsTopBar = new QWidget(itemsPage);
+  itemsTopBar->setGeometry(0, 0, 400, 40);
+  auto *toolbarChild = new QWidget(itemsTopBar);
+  QScrollArea scrollArea;
+  stack.show(); // realize so itemsTopBar->isVisible() and mapToGlobal are valid
+  QVERIFY(itemsTopBar->isVisible());
+
+  m_scroll.activeWidgets.clear();
+  wireWithUi(&scrollArea, gridContainer, &stack, itemsPage, itemsTopBar);
+
+  QSignalSpy clicked(&m_mgr, &EventManager::widgetClicked);
+  QSignalSpy clearSel(&m_mgr, &EventManager::clearSelectionRequested);
+
+  // (a) clicked object is inside the toolbar -> parent-chain walk rejects.
+  QMouseEvent childEvt(QEvent::MouseButtonPress, QPointF(0, 0), QPointF(0, 0), Qt::LeftButton,
+                       Qt::LeftButton, Qt::NoModifier);
+  QVERIFY(!m_mgr.handleMousePress(toolbarChild, &childEvt));
+
+  // (b) object is outside the toolbar but the click's global pos is over it.
+  const QPoint overToolbar = itemsPage->mapToGlobal(itemsTopBar->geometry().center());
+  QMouseEvent posEvt(QEvent::MouseButtonPress, QPointF(0, 0), QPointF(overToolbar), Qt::LeftButton,
+                     Qt::LeftButton, Qt::NoModifier);
+  QVERIFY(!m_mgr.handleMousePress(gridContainer, &posEvt));
+
+  QCOMPARE(clicked.count(), 0);
+  QCOMPARE(clearSel.count(), 0);
 }
 
 QTEST_MAIN(TestEventManagerMouse)
