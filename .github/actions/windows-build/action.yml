@@ -63,7 +63,7 @@ runs:
     # per-package binary outputs keyed on the manifest hash so a no-change CI
     # re-run skips the SDL2 + zstd builds.
     - name: Cache vcpkg downloads and binary artifacts
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           C:\vcpkg\downloads
