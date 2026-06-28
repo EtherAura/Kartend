@@ -3,6 +3,7 @@
 // TitleFilter is the per-collection title-cleanup engine consumed by the
 // DatabaseManager interception path. These tests exercise the public surface:
 // rebuildFromCollections() / apply() / clearForTests().
+#include <algorithm>
 #include <atomic>
 
 #include <QElapsedTimer>
@@ -283,16 +284,29 @@ void TestTitleFilter::concurrentApplyAndRebuildIsRaceFree() {
   }
   stop.store(true, std::memory_order_release);
 
-  // Watchdog: join every worker with a generous per-thread budget. A real
-  // deadlock (e.g. a refactor re-widening the read lock so a writer starves)
-  // makes wait() time out → the QVERIFY fails loudly instead of the whole
-  // ctest run hanging on an unbounded join.
-  constexpr int kJoinTimeoutMs = 15000;
+  // Watchdog: join every worker against one shared, finite wall-clock budget.
+  // A real deadlock (e.g. a refactor re-widening the read lock across the regex
+  // loop so the writer starves) never completes and still trips this loudly via
+  // the QVERIFY2 below — it does not hang the whole ctest run on an unbounded
+  // join. The budget is one shared 60s deadline, not five independent 15s
+  // windows, on purpose: the join is wall-clock, and on a heavily oversubscribed
+  // CI runner a runnable-but-descheduled worker can miss a tight per-thread
+  // window with no thread actually blocked on the lock (Kartend audit qzwan —
+  // TitleFilter uses a single non-recursive QReadWriteLock, holds no lock across
+  // the stop check, and runs the regex/compile work unlocked, so a post-stop
+  // hang is a scheduler artifact, never a deadlock). A shared deadline also keeps
+  // a slow early join from granting later joins a fresh full window.
+  constexpr int kJoinBudgetMs = 60000;
+  QElapsedTimer joinDeadline;
+  joinDeadline.start();
+  const auto remainingJoinMs = [&] {
+    return std::max(1, kJoinBudgetMs - static_cast<int>(joinDeadline.elapsed()));
+  };
   bool joinedClean = true;
   for (ApplyHammer *r : readers) {
-    joinedClean = r->wait(kJoinTimeoutMs) && joinedClean;
+    joinedClean = r->wait(remainingJoinMs()) && joinedClean;
   }
-  joinedClean = writer.wait(kJoinTimeoutMs) && joinedClean;
+  joinedClean = writer.wait(remainingJoinMs()) && joinedClean;
   QVERIFY2(joinedClean, "TitleFilter apply/rebuild worker failed to finish — possible deadlock");
 
   qDeleteAll(readers);
