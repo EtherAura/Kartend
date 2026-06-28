@@ -11,9 +11,13 @@
 // The handler's selection-math + cleanup methods are private; this test is a
 // declared friend (see wheeleventhandler.h) so it drives them directly,
 // mirroring the friend-access pattern test_mousemanager uses.
+#include <QApplication>
 #include <QScrollArea>
 #include <QSignalSpy>
+#include <QStackedWidget>
 #include <QTest>
+#include <QWheelEvent>
+#include <QWidget>
 
 // WheelEventHandler holds a QPointer<QScrollArea> member with QScrollArea only
 // forward-declared in its header. Constructing the handler here instantiates
@@ -25,6 +29,8 @@
 #include "collection/generalsettings.h"
 #include "collection/validationhelpers.h"
 #include "fakescrollmanager.h"
+#include "idetailspane.h"
+#include "idetailspanemanager.h"
 #include "interactionstateholder.h"
 #include "stubselectionmanager.h"
 #include "wheeleventhandler.h"
@@ -40,6 +46,39 @@ namespace {
 int gridWidthFor(const CollectionConfig &config) {
   return CollectionUtils::effectiveGridWidth(config, /*sidebarShrinkingActive=*/false);
 }
+
+/// Fake IDetailsPane whose asWidget() hands back a caller-owned QWidget, so
+/// eventBelongsToSidebar()'s visibility short-circuit can run without a real
+/// sidebar (Kartend audit 8ipd4).
+class FakeDetailsPane : public IDetailsPane {
+public:
+  explicit FakeDetailsPane(QWidget *widget) : m_widget(widget) {}
+  void clearMetadata() override {}
+  [[nodiscard]] QList<DetailsPaneGalleryEntry> currentGalleryEntries() const override { return {}; }
+  [[nodiscard]] QWidget *asWidget() override { return m_widget; }
+  [[nodiscard]] const QWidget *asWidget() const override { return m_widget; }
+
+private:
+  QWidget *m_widget;
+};
+
+/// Fake IDetailsPaneManager: eventBelongsToSidebar() only consults
+/// sidebarWidget(); the rest are no-ops.
+class FakeDetailsPaneManager : public IDetailsPaneManager {
+public:
+  void toggleSidebar() override {}
+  void updateSidebarMetadata(ItemWidget *) override {}
+  void updateSidebarMetadata(const QString &, const QString &) override {}
+  void refreshSidebarMetadataImmediate() override {}
+  void applySidebarStateForCollection(int, bool) override {}
+  void updateSidebarLayout(int) override {}
+  [[nodiscard]] bool isSidebarVisible() const override { return false; }
+  [[nodiscard]] IDetailsPane *sidebarWidget() const override { return pane; }
+  [[nodiscard]] const ItemContext &currentItemContext() const override { return ctx; }
+
+  IDetailsPane *pane = nullptr;
+  ItemContext ctx;
+};
 
 } // namespace
 
@@ -60,6 +99,9 @@ private slots:
   void deltaZeroTotalItemsBailsSafely();
   void deltaNoScrollManagerBails();
   void onAnimationFinishedClearsFlagsAndEmitsScrollEnded();
+
+  void modalWidgetActiveBailsBeforeSelectionMoves();
+  void eventBelongsToSidebarBailsOnNullAndHiddenPane();
 
 private:
   /// Wire the handler against a fresh ctx for a Grid home view (-1 sentinel)
@@ -290,6 +332,82 @@ void TestWheelEventHandler::onAnimationFinishedClearsFlagsAndEmitsScrollEnded() 
   QCOMPARE(spy.count(), 1);
   QVERIFY(!m_state.scroll().userScrollActive);
   QVERIFY(!m_state.scroll().programmaticScroll);
+}
+
+// ─── handleEvent gates (Kartend audit 8ipd4) ───────────────────────────────────
+
+void TestWheelEventHandler::modalWidgetActiveBailsBeforeSelectionMoves() {
+  // handleEvent's modal-widget gate swallows wheel input while any application-
+  // modal widget is up, so a modal dialog's scroll never leaks into grid
+  // selection. Wire the full proceed path (canProceed passes) so the no-modal
+  // control case observably moves selection and the modal case does not.
+  QScrollArea scrollArea;
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget; // owned by the stack after addWidget()
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+
+  m_viewIndex = -1; // synthetic home view: interactive, no backing collection
+  m_ctx.managers.seedScrollRoles(&m_scroll);
+  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.interactionState = &m_state;
+  WheelEventHandler::Setup setup;
+  setup.ctx = &m_ctx;
+  setup.itemScrollArea = &scrollArea;
+  setup.stackedWidget = &stack;
+  setup.itemsPage = itemsPage;
+  setup.collections = &m_collections;
+  setup.currentCollectionIndex = &m_viewIndex;
+  setup.generalSettings = &m_settings;
+  m_handler.setupReferences(setup);
+  m_scroll.totalItems = 100;
+  m_sel.index = 20;
+
+  auto makeWheel = [] {
+    return QWheelEvent(QPointF(0, 0), QPointF(0, 0), QPoint(), QPoint(0, 120), Qt::NoButton,
+                       Qt::NoModifier, Qt::NoScrollPhase, false);
+  };
+
+  // Control: no modal -> proceeds past the gate and moves the selection.
+  QWheelEvent control = makeWheel();
+  const bool controlConsumed = m_handler.handleEvent(&scrollArea, &control);
+  QVERIFY(controlConsumed);
+  QCOMPARE(m_sel.setSelectedIndexCalls, 1);
+
+  // An application-modal widget up -> handleEvent bails at the modal gate and
+  // never reaches applySelectionDelta.
+  QWidget modal;
+  modal.setWindowModality(Qt::ApplicationModal);
+  modal.show();
+  QVERIFY(QApplication::activeModalWidget() == &modal);
+
+  QWheelEvent blocked = makeWheel();
+  QVERIFY(!m_handler.handleEvent(&scrollArea, &blocked));
+  QCOMPARE(m_sel.setSelectedIndexCalls, 1); // unchanged: the modal swallowed it
+}
+
+void TestWheelEventHandler::eventBelongsToSidebarBailsOnNullAndHiddenPane() {
+  // The sidebar wheel guard's null/visibility branches — everything before the
+  // QCursor::pos() hit-test, which stays manual — all return false.
+  wire(/*viewIndex=*/-1);
+
+  // (b1) no details-pane manager wired at all.
+  QVERIFY(!m_handler.eventBelongsToSidebar());
+
+  // (b2) manager present but sidebarWidget() is null.
+  FakeDetailsPaneManager mgr;
+  m_ctx.managers.detailsPaneManager = &mgr;
+  mgr.pane = nullptr;
+  QVERIFY(!m_handler.eventBelongsToSidebar());
+
+  // (b3) sidebar pane present but its widget is hidden -> isVisible() short-
+  // circuits before the cursor hit-test.
+  QWidget hiddenSidebar;
+  hiddenSidebar.hide();
+  FakeDetailsPane pane(&hiddenSidebar);
+  mgr.pane = &pane;
+  QVERIFY(!hiddenSidebar.isVisible());
+  QVERIFY(!m_handler.eventBelongsToSidebar());
 }
 
 QTEST_MAIN(TestWheelEventHandler)
