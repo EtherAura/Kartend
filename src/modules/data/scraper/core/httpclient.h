@@ -128,9 +128,11 @@ public:
   /// set) is unlimited. Idempotent.
   void setRateLimit(const QString &host, int intervalMs, int maxConcurrent = 1);
 
-  /// Cancels any pending requests in the queue (in-flight requests
-  /// still complete and fire their callbacks). Useful for test
-  /// teardown.
+  /// Cancels any queued (not-yet-dispatched) requests, invoking each one's
+  /// callback once with ErrorCode::OperationCancelled so a caller waiting on it
+  /// always resolves rather than hanging (Kartend audit nujso). Already
+  /// in-flight requests are left alone — they still complete and fire their
+  /// callbacks. Useful for test teardown.
   void clearPending();
 
 private:
