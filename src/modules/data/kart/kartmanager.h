@@ -19,6 +19,7 @@
 
 QT_BEGIN_NAMESPACE
 class QWidget;
+class QFutureWatcherBase;
 QT_END_NAMESPACE
 
 class ISettingsManager;
@@ -209,6 +210,14 @@ private:
   KartManagerSetup m_setup;
   std::unique_ptr<KartReader::Extractor> m_activeReader;
   std::unique_ptr<KartWriter::Writer> m_activeWriter;
+  /// The QFutureWatcher of an in-flight export/import (null when idle).
+  /// Kartend audit jpit3: the QtConcurrent task captures the active
+  /// Writer/Extractor (and `this`) by raw pointer; ~KartManager must JOIN it
+  /// before those members are destroyed, or a close during a long .kart
+  /// export/import frees them mid-run (use-after-free). Set on launch, cleared
+  /// in each finished slot; the destructor flips the cooperative cancel flag
+  /// then waits on it. Base-class pointer so the header needs no template type.
+  QFutureWatcherBase *m_activeWatcher = nullptr;
 
   void runImport(const QString &kartPath, const QString &destDir);
   void runExport(int collectionIndex, const QString &outPath);
