@@ -1,0 +1,136 @@
+name: 'Build Kartend (Windows / MSVC)'
+description: >-
+  Shared Windows build pipeline for build.yml's windows-build-test and
+  release.yml's windows-release. Installs Qt 6.7 LTS, sets up the MSVC dev
+  environment, restores the vcpkg cache and syncs its baseline, configures with
+  Ninja + the vcpkg toolchain, builds, and optionally stages a portable
+  dist\kartend via windeployqt + co-located vcpkg DLLs.
+
+  Extracted (Kartend-wa4ia) so the two jobs can't drift — the Qt install, vcpkg
+  cache/baseline sync, cmake configure, and windeployqt staging were previously
+  duplicated across both workflows and kept in sync only by comments. The caller
+  must check out the repo first (a local `uses: ./.github/actions/...` needs the
+  tree present) and keeps its own divergent tail: tests + preview upload in
+  build.yml; SignPath signing + release packaging in release.yml.
+
+inputs:
+  build-type:
+    description: 'CMAKE_BUILD_TYPE — Release or Debug.'
+    default: 'Release'
+  build-tests:
+    description: 'KARTEND_BUILD_TESTS (ON/OFF). Release job builds without tests.'
+    default: 'OFF'
+  portable-release:
+    description: >-
+      KARTEND_PORTABLE_RELEASE (ON/OFF). Default OFF matches the CMake option
+      default; release + the build.yml Release leg pass ON.
+    default: 'OFF'
+  compiler-launcher:
+    description: >-
+      Value for CMAKE_C/CXX_COMPILER_LAUNCHER (e.g. "sccache"), or empty for
+      none. When "sccache" the caller must have run mozilla-actions/sccache-action
+      first; this action then also sets SCCACHE_GHA_ENABLED for configure + build.
+    default: ''
+  stage:
+    description: >-
+      When "true", stage a portable dist\kartend (kartend.exe + LICENSE +
+      readme.md + windeployqt Qt runtime + vcpkg SDL2/zstd DLLs).
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Qt 6.7 LTS
+      uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+      with:
+        version: '6.7.*'
+        host: windows
+        target: desktop
+        arch: win64_msvc2019_64
+        # Only aqt-recognized addons go here. qttools / qtsvg / qttranslations
+        # ship inside the qtbase tarball by default — listing them as modules
+        # makes install-qt-action fail with "packages ... not found while
+        # parsing XML". qttest (Qt6::Test) also lives in qtbase.
+        modules: 'qtmultimedia qtimageformats'
+        cache: true
+
+    - name: Setup MSVC developer environment
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch: x64
+
+    # vcpkg is preinstalled on windows-latest at C:\vcpkg. Cache the downloads +
+    # per-package binary outputs keyed on the manifest hash so a no-change CI
+    # re-run skips the SDL2 + zstd builds.
+    - name: Cache vcpkg downloads and binary artifacts
+      uses: actions/cache@v5
+      with:
+        path: |
+          C:\vcpkg\downloads
+          ${{ github.workspace }}\vcpkg-cache
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-
+
+    # The manifest pins builtin-baseline (supply-chain audit); the preinstalled
+    # C:\vcpkg clone on the runner image is often older than that commit, and
+    # vcpkg then fails with "failed to git show versions/baseline.json".
+    # Baselines are always master commits, so a sha-agnostic fetch of master
+    # keeps this valid across future baseline bumps.
+    - name: Sync vcpkg clone to the manifest baseline
+      shell: pwsh
+      run: git -C C:\vcpkg fetch origin master
+
+    - name: Configure CMake (MSVC + Ninja + vcpkg)
+      # -G Ninja over the Visual Studio generator: msbuild's parallelism doesn't
+      # reliably wait for AUTOUIC to emit ui_*.h before compiling headers that
+      # #include them (C1083); Ninja honors autogen edges correctly, same as
+      # every Linux job. VCPKG_BINARY_SOURCES uses the workspace-local cache
+      # populated by the cache step above. CMAKE_TOOLCHAIN_FILE makes cmake
+      # discover Qt6 and the vcpkg deps through one entry point; install-qt-action's
+      # QT_ROOT_DIR still steers Qt6 lookup to the official binaries, so the vcpkg
+      # toolchain only resolves SDL2 and zstd. KARTEND_MAINTENANCE is omitted
+      # (defaults OFF) on both callers.
+      shell: pwsh
+      env:
+        VCPKG_BINARY_SOURCES: 'clear;files,${{ github.workspace }}\vcpkg-cache,readwrite'
+        SCCACHE_GHA_ENABLED: ${{ inputs.compiler-launcher == 'sccache' && 'true' || '' }}
+      run: |
+        $cmakeArgs = @(
+          '-S', '.', '-B', 'build', '-G', 'Ninja',
+          "-DCMAKE_BUILD_TYPE=${{ inputs.build-type }}",
+          "-DKARTEND_BUILD_TESTS=${{ inputs.build-tests }}",
+          '-DKARTEND_ENABLE_CCACHE=OFF',
+          "-DKARTEND_PORTABLE_RELEASE=${{ inputs.portable-release }}",
+          '-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake'
+        )
+        if ('${{ inputs.compiler-launcher }}' -ne '') {
+          $cmakeArgs += "-DCMAKE_C_COMPILER_LAUNCHER=${{ inputs.compiler-launcher }}"
+          $cmakeArgs += "-DCMAKE_CXX_COMPILER_LAUNCHER=${{ inputs.compiler-launcher }}"
+        }
+        cmake @cmakeArgs
+
+    - name: Build
+      shell: pwsh
+      env:
+        SCCACHE_GHA_ENABLED: ${{ inputs.compiler-launcher == 'sccache' && 'true' || '' }}
+      run: cmake --build build --parallel
+
+    - name: Stage with windeployqt + bundled runtime DLLs
+      if: inputs.stage == 'true'
+      # windeployqt walks the exe's import table and copies Qt DLLs + the
+      # platforms/sqldrivers/imageformats/multimedia/... plugin set into the
+      # exe's directory. --release picks release-mode DLLs; --no-translations
+      # drops Qt's own qm files (kartend ships its own under translations/). The
+      # vcpkg-built SDL2 and zstd DLLs aren't on Qt's import-table walk, so copy
+      # them by name from the vcpkg installed/ tree.
+      shell: pwsh
+      run: |
+        mkdir dist\kartend
+        Copy-Item build\kartend.exe dist\kartend\
+        Copy-Item LICENSE dist\kartend\
+        Copy-Item readme.md dist\kartend\
+        windeployqt --release --no-translations dist\kartend\kartend.exe
+        $vcpkgBin = "${{ github.workspace }}\build\vcpkg_installed\x64-windows\bin"
+        if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
+        if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }

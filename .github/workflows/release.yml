@@ -298,67 +298,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install Qt 6.7 LTS
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+      # Shared Windows build pipeline (Kartend-wa4ia): Qt install, MSVC, vcpkg
+      # cache + baseline sync, configure, build, and windeployqt staging into
+      # dist\kartend — the SAME composite action build.yml's windows-build-test
+      # uses, so the two can't drift (they were previously kept in sync only by
+      # comments). No tests (the release job doesn't gate on them; build.yml
+      # already did, saving ~7 min here) and no sccache; PORTABLE_RELEASE=ON.
+      # The SignPath signing + packaging tail below operates on the staged
+      # dist\kartend.
+      - name: Build + stage kartend
+        uses: ./.github/actions/windows-build
         with:
-          version: '6.7.*'
-          host: windows
-          target: desktop
-          arch: win64_msvc2019_64
-          modules: 'qtmultimedia qtimageformats'
-          cache: true
-
-      - name: Setup MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-        with:
-          arch: x64
-
-      - name: Cache vcpkg downloads and binary artifacts
-        uses: actions/cache@v5
-        with:
-          path: |
-            C:\vcpkg\downloads
-            ${{ github.workspace }}\vcpkg-cache
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            ${{ runner.os }}-vcpkg-
-
-      # Same fix as build.yml's windows-build-test job: the manifest pins
-      # builtin-baseline and the runner image's preinstalled C:\vcpkg clone
-      # is often older than that commit (GH006-era v0.0.13 retag failed
-      # here). Baselines are always master commits, so fetching master is
-      # sha-agnostic across future baseline bumps.
-      - name: Sync vcpkg clone to the manifest baseline
-        run: git -C C:\vcpkg fetch origin master
-
-      - name: Configure CMake (MSVC + Ninja + vcpkg)
-        # KARTEND_BUILD_TESTS=OFF — the release job doesn't gate on tests
-        # (build.yml's windows-build-test already gated this commit). Drops
-        # roughly 7 min off this job vs. the test-running build.yml cell.
-        env:
-          VCPKG_BINARY_SOURCES: 'clear;files,${{ github.workspace }}\vcpkg-cache,readwrite'
-        run: |
-          cmake -S . -B build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DKARTEND_BUILD_TESTS=OFF `
-            -DKARTEND_ENABLE_CCACHE=OFF `
-            -DKARTEND_MAINTENANCE=OFF `
-            -DKARTEND_PORTABLE_RELEASE=ON `
-            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-      - name: Build
-        run: cmake --build build --parallel
-
-      - name: Stage with windeployqt + bundled runtime DLLs
-        run: |
-          mkdir dist\kartend
-          Copy-Item build\kartend.exe dist\kartend\
-          Copy-Item LICENSE dist\kartend\
-          Copy-Item readme.md dist\kartend\
-          windeployqt --release --no-translations dist\kartend\kartend.exe
-          $vcpkgBin = "${{ github.workspace }}\build\vcpkg_installed\x64-windows\bin"
-          if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
-          if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
+          build-type: Release
+          build-tests: 'OFF'
+          portable-release: 'ON'
+          stage: 'true'
 
       # ─── SignPath code-signing (kartend.exe) ─────────────────────────
       # SignPath Foundation signs OSS projects' release artifacts with
