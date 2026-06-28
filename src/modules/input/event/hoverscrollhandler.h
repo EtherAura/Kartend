@@ -41,6 +41,12 @@ class IViewportManager;
 class HoverScrollHandler : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(HoverScrollHandler)
+  // Test seam: grants the unit test private access to commitPendingScroll plus
+  // the pending-dwell state so the deterministic guard / clear paths can be
+  // driven directly without waiting on the real dwell timer, matching the
+  // friend-access convention test_mousemanager uses.
+  friend class TestHoverScrollHandler;
+
 public:
   explicit HoverScrollHandler(QObject *parent = nullptr);
   ~HoverScrollHandler() override;

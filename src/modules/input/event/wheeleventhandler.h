@@ -41,6 +41,12 @@ class IViewportManager;
 class WheelEventHandler : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(WheelEventHandler)
+  // Test seam: grants the unit test private access to applySelectionDelta /
+  // onAnimationFinished so the deterministic selection-math + cleanup paths can
+  // be driven directly, matching the friend-access convention test_mousemanager
+  // uses for MouseManager's private slots.
+  friend class TestWheelEventHandler;
+
 public:
   explicit WheelEventHandler(QObject *parent = nullptr);
   ~WheelEventHandler() override;

@@ -28,6 +28,7 @@
 #include "applicationcontext.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "fakescrollmanager.h"
 #include "gridlayoutcalculator.h"
 #include "interactionstateholder.h"
 #include "iscrollmanager.h"
@@ -49,86 +50,11 @@
 
 namespace {
 
-/// Minimal IScrollManager fake: MouseManager only reads getTotalItems(),
-/// getActiveWidgets() and getMetrics() (plus a non-null check), so those
-/// three are configurable members and everything else is an inert stub.
-class FakeScrollManager : public IScrollManager {
-public:
-  int totalItems = 0;
-  QHash<int, ItemWidget *> activeWidgets;
-  GridMetrics metrics;
-
-  [[nodiscard]] int getTotalItems() const override { return totalItems; }
-  [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const override {
-    return activeWidgets;
-  }
-  [[nodiscard]] const GridMetrics &getMetrics() const override { return metrics; }
-
-  // --- inert stubs below ---
-  void setupVirtualScrolling(int, const CollectionContext &) override {}
-  void updateMediaItemCount(int) override {}
-  void receiveItemsRange(int, const QStringList &, const QHash<QString, QString> &,
-                         const QHash<QString, QString> &) override {}
-  void cleanup() override {}
-  void updateGridWidth(int) override {}
-  void updateHorizontalGridHeight(int) override {}
-  void setSidebarShrinkingActive(bool) override {}
-  [[nodiscard]] bool sidebarShrinkingActive() const override { return false; }
-  void updateViewType(ViewType) override {}
-  void updateVirtualView() override {}
-  [[nodiscard]] int getEffectiveHorizontalSpacing() const override { return 0; }
-  [[nodiscard]] QString getSubcollectionName(int) const override { return {}; }
-  void updateSelectionForIndex(int) override {}
-  void refreshSelectionOverlayState() override {}
-  void setForceSelectionOverlayVisible(bool) override {}
-  void applyFilter(const QString &) override {}
-  void cleanupActiveWidgets() override {}
-  void clearFilter() override {}
-  void showSearchLoadingOverlay() override {}
-  void hideSearchLoadingOverlay() override {}
-  void savePreSearchState() override {}
-  void restorePreSearchState() override {}
-  [[nodiscard]] bool hasPreSearchState() const override { return false; }
-  [[nodiscard]] int getFilteredIndex(int visualIndex) const override { return visualIndex; }
-  void recreateLayout() override {}
-  void setPendingSelectionRestoreByPath(const QString &) override {}
-  [[nodiscard]] bool hasPendingSelectionRestoreByPath() const override { return false; }
-  [[nodiscard]] bool isArtworkPreviewVisible() const override { return false; }
-  bool hideArtworkPreview() override { return false; }
-  bool showMediaPreview(const QString &, const QString &, const QString &) override {
-    return false;
-  }
-  void centerHorizontalScrollbar(int, const QList<CollectionConfig> &) override {}
-  void recenterVirtualContainer() override {}
-  void handleLayoutChange() override {}
-  [[nodiscard]] int getCurrentGridWidth() const override { return 0; }
-  void updateContextForSubcollection(int) override {}
-  void applySubcollectionFilter(int) override {}
-  void recalculateContainerMetrics() override {}
-  void forceVirtualViewUpdate() override {}
-  void preCalculateLayout() override {}
-  [[nodiscard]] int indexForWidget(ItemWidget *) const override { return -1; }
-  void injectCachedItems(int, const QStringList &, const QHash<QString, QString> &,
-                         const QHash<QString, QString> &) override {}
-  [[nodiscard]] bool getCurrentViewportForCache(int &, int &, QStringList &,
-                                                QHash<QString, QString> &,
-                                                QHash<QString, QString> &) const override {
-    return false;
-  }
-  [[nodiscard]] const QStringList &getFilePaths() const override { return m_filePaths; }
-  [[nodiscard]] const QHash<QString, QString> &getFileNames() const override { return m_fileNames; }
-  [[nodiscard]] int getSubcollectionCount() const override { return 0; }
-  [[nodiscard]] int getVirtualFolderCount() const override { return 0; }
-  [[nodiscard]] QString filePathForVisualIndex(int) const override { return {}; }
-  [[nodiscard]] QString virtualFolderPathForVisualIndex(int) const override { return {}; }
-  void primeLayoutFor(const CollectionConfig &) override {}
-  void setInitialScrollIndex(int) override {}
-  [[nodiscard]] int subcollectionIndexFromActual(int) const override { return -1; }
-
-private:
-  QStringList m_filePaths;
-  QHash<QString, QString> m_fileNames;
-};
+/// FakeScrollManager (the full IScrollManager fake MouseManager drives) was
+/// promoted to tests/integration/mocks/fakescrollmanager.h so the wheel /
+/// event-manager / hover handler tests share one ~63-method stub. Alias it
+/// here so the rest of this file is unchanged.
+using KartendTest::FakeScrollManager;
 
 } // namespace
 
