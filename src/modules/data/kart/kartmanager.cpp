@@ -50,7 +50,22 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
 // translation unit. The declaration stays in kartmanager.h.
 
 KartManager::KartManager(QObject *parent) : QObject(parent) {}
-KartManager::~KartManager() = default;
+
+KartManager::~KartManager() {
+  // Kartend audit jpit3: an in-flight export/import runs on the global
+  // QThreadPool and its task body captures the active Writer/Extractor (and, in
+  // runExport, `this`) by raw pointer. QtConcurrent futures can't be cancelled
+  // and ~QObject does not wait, so without an explicit join the worker would
+  // touch freed state after we're gone — a use-after-free on close-during-
+  // export/import (the progress dialog is non-modal, so the window can close
+  // mid-run). Flip the cooperative cancel flag, then JOIN the future before the
+  // members it captured (m_activeReader / m_activeWriter, destroyed after this
+  // body) are freed. The Writer/Extractor poll the flag, so the wait is bounded.
+  cancelActiveKartOperation();
+  if (m_activeWatcher) {
+    m_activeWatcher->waitForFinished();
+  }
+}
 
 QSet<QString> KartManager::previouslyTrustedLauncherPaths() const {
   QSet<QString> out;
@@ -539,10 +554,12 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
           &KartManager::kartProgressEntry, Qt::QueuedConnection);
 
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>(this);
+  m_activeWatcher = watcher; // Kartend audit jpit3: ~KartManager joins on this.
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>::finished, this,
           [this, watcher]() {
             const auto extracted = watcher->result();
             watcher->deleteLater();
+            m_activeWatcher = nullptr;
             m_activeReader.reset();
             if (extracted.isError()) {
               emit importFailed(extracted.error());
@@ -607,10 +624,12 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
           &KartManager::kartProgressFraction, Qt::QueuedConnection);
 
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<void>>(this);
+  m_activeWatcher = watcher; // Kartend audit jpit3: ~KartManager joins on this.
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<void>>::finished, this,
           [this, watcher, outPath]() {
             const auto res = watcher->result();
             watcher->deleteLater();
+            m_activeWatcher = nullptr;
             m_activeWriter.reset();
             if (res.isError()) {
               emit exportFailed(res.error());
