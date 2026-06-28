@@ -79,6 +79,12 @@ struct EventManagerSetup {
 class EventManager : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(EventManager)
+  // Test seam: grants the unit test private access to the mouse-dispatch
+  // handlers (handleMousePress / handleMouseDoubleClick / handleWheelEvent) and
+  // the itemWidgetForObject / visualIndexForWidget helpers so the
+  // signal-emission + parent-chain logic can be driven directly, matching the
+  // friend-access convention test_mousemanager uses.
+  friend class TestEventManagerMouse;
 
 public:
   explicit EventManager(QObject *parent = nullptr);

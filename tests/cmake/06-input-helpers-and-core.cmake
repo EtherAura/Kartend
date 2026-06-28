@@ -48,6 +48,43 @@ kartend_add_test(NAME EventHelpers
   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# WheelEventHandler — selection-delta math + onAnimationFinished cleanup /
+# scrollEnded contract (Kartend audit 4yktu). Pure index arithmetic via the
+# shared FakeScrollManager + StubSelectionManager (header-only against the api/
+# interfaces); friend-drives the private applySelectionDelta / onAnimationFinished.
+kartend_add_test(NAME WheelEventHandler
+  SOURCES modules/event/test_wheeleventhandler.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_wheeleventhandler PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
+# EventManagerMouse — mouse-dispatch signal-emission + parent-chain logic
+# (Kartend audit 4yktu): double-click / right / middle click, the wheel modal +
+# foreign-window gates, itemWidgetForObject / visualIndexForWidget. The
+# MockDatabaseManager is a Q_OBJECT, so list its header in SOURCES so AUTOMOC
+# picks it up (same as the ItemMetadataActionController / TitleCountsHelpers
+# blocks); needed only for the db-collection-index double-click case.
+kartend_add_test(NAME EventManagerMouse
+  SOURCES modules/event/test_eventmanagermouse.cpp
+          integration/mocks/mockdatabasemanager.h
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_eventmanagermouse PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
+# HoverScrollHandler — deterministic guard / state surface only (Kartend audit
+# 4yktu): handleEvent early gates, button-held-MouseMove skip, non-ItemWidget
+# keep-dwell branch, clearPendingScroll reset, destroyed-widget commit guard.
+# The dwell -> commit -> continuous-scroll core is cursor/geometry-gated and
+# stays in the manual-verification tier.
+kartend_add_test(NAME HoverScrollHandler
+  SOURCES modules/event/test_hoverscrollhandler.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_hoverscrollhandler PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
 # SettingsHelpers tests (pure helpers extracted from SettingsManager)
 kartend_add_test(NAME SettingsHelpers
   SOURCES modules/settings/test_settingshelpers.cpp
@@ -162,6 +199,8 @@ kartend_add_test(NAME MouseManager
   SOURCES modules/mouse/test_mousemanager.cpp
   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
+target_include_directories(test_mousemanager PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 
 # SelectionHelpers tests (pure helpers extracted)
 kartend_add_test(NAME SelectionHelpers
