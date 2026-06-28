@@ -18,6 +18,7 @@
 #include "metadataprovider.h"
 #include "musicbrainzprovider.h"
 #include "openlibraryprovider.h"
+#include "providerbase.h"
 #include "tmdbprovider.h"
 #include "websearchprovider.h"
 
@@ -26,6 +27,8 @@ using Capability = MetadataProvider::Capability;
 class TestProviderRequests : public QObject {
   Q_OBJECT
 private slots:
+  void cleanup();
+
   void tmdb_searchUrl_buildsEncodedQuery();
   void tmdb_searchUrl_trimsBeforeEncoding();
   void tmdb_searchUrl_blankQueryIsInvalid();
@@ -43,6 +46,10 @@ private slots:
   void webSearch_searchUrl_emptyTemplateIsInvalid();
   void webSearch_searchUrl_blankQueryIsInvalid();
   void webSearch_metadata_passesThroughAndIsWebSearchOnly();
+
+  void tmdb_fetchMediaBytes_pinsImageHost();
+  void openLibrary_fetchMediaBytes_pinsCoverHost();
+  void musicBrainz_fetchMediaBytes_pinsCoverArtHosts();
 
   void allProviders_specialCharactersArePercentEncoded();
 };
@@ -158,6 +165,62 @@ void TestProviderRequests::allProviders_specialCharactersArePercentEncoded() {
   QVERIFY(makeTmdb().searchUrl(query).toString(QUrl::FullyEncoded).contains(encoded));
   QVERIFY(OpenLibraryProvider().searchUrl(query).toString(QUrl::FullyEncoded).contains(encoded));
   QVERIFY(MusicBrainzProvider().searchUrl(query).toString(QUrl::FullyEncoded).contains(encoded));
+}
+
+// ─── media-fetch host pinning (SSRF defence, Kartend audit faz4r) ───────────────
+
+void TestProviderRequests::cleanup() {
+  // Restore the live fetch path so a capturing seam never leaks into a later
+  // test.
+  ProviderBase::setFetchFunctionForTesting({});
+}
+
+namespace {
+// Capture the allowedHostSuffixes a provider's fetchMediaBytes hands to the HTTP
+// layer. The test seam intercepts synchronously (before any network), so the
+// suffixes are available the moment doFetch() returns.
+QStringList capturedMediaHostSuffixes(const std::function<void()> &doFetch) {
+  QStringList captured;
+  bool called = false;
+  ProviderBase::setFetchFunctionForTesting(
+      [&](const QUrl &, const Scraper::HttpClient::RawHeaders &,
+          Scraper::HttpClient::ResponseCallback, const QStringList &suffixes) {
+        captured = suffixes;
+        called = true;
+      });
+  doFetch();
+  ProviderBase::setFetchFunctionForTesting({});
+  return called ? captured : QStringList{QStringLiteral("<seam-not-invoked>")};
+}
+} // namespace
+
+void TestProviderRequests::tmdb_fetchMediaBytes_pinsImageHost() {
+  const QStringList suffixes = capturedMediaHostSuffixes([] {
+    makeTmdb().fetchMediaBytes(QUrl(QStringLiteral("https://image.tmdb.org/t/p/w500/x.jpg")),
+                               [](ErrorUtils::Result<QByteArray>) {});
+  });
+  QCOMPARE(suffixes, QStringList{QStringLiteral("image.tmdb.org")});
+}
+
+void TestProviderRequests::openLibrary_fetchMediaBytes_pinsCoverHost() {
+  const QStringList suffixes = capturedMediaHostSuffixes([] {
+    OpenLibraryProvider().fetchMediaBytes(
+        QUrl(QStringLiteral("https://covers.openlibrary.org/b/id/1-L.jpg")),
+        [](ErrorUtils::Result<QByteArray>) {});
+  });
+  QCOMPARE(suffixes, QStringList{QStringLiteral("covers.openlibrary.org")});
+}
+
+void TestProviderRequests::musicBrainz_fetchMediaBytes_pinsCoverArtHosts() {
+  // CAA 307-redirects cover requests to its archive.org storage, so both hosts
+  // must be allow-listed or the pin would abort legitimate cover fetches.
+  const QStringList suffixes = capturedMediaHostSuffixes([] {
+    MusicBrainzProvider().fetchMediaBytes(
+        QUrl(QStringLiteral("https://coverartarchive.org/release/x/front-500.jpg")),
+        [](ErrorUtils::Result<QByteArray>) {});
+  });
+  QCOMPARE(suffixes,
+           (QStringList{QStringLiteral("coverartarchive.org"), QStringLiteral("archive.org")}));
 }
 
 QTEST_MAIN(TestProviderRequests)

@@ -93,6 +93,8 @@ void OpenLibraryProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   }
   // getImageBytes pins the response to image/* — a misconfigured cover URL
   // that 200s with text/html or application/json must not be fed straight
-  // into the image decoder.
-  getImageBytes(userAgentHeader(), url, std::move(callback));
+  // into the image decoder — and pins the fetch + any redirect to
+  // covers.openlibrary.org so a hostile/MITM'd upstream can't 3xx-redirect it
+  // to an internal host (SSRF, Kartend audit faz4r).
+  getImageBytes(userAgentHeader(), url, std::move(callback), {QString::fromLatin1(OL_COVERS_HOST)});
 }
