@@ -95,6 +95,10 @@ void MusicBrainzProvider::fetchMediaBytes(const QUrl &url, MediaCallback callbac
   // Cover Art Archive doesn't require a User-Agent but accepting one
   // keeps the audit trail consistent with the MB API requests. The
   // image/* guard in getImageBytes matters here: CAA occasionally
-  // returns HTML error pages on 502/503.
-  getImageBytes(userAgentHeader(), url, std::move(callback));
+  // returns HTML error pages on 502/503. Pin the fetch to CAA and to
+  // archive.org — CAA legitimately 307-redirects cover requests to its
+  // archive.org storage backend — so a hostile/MITM'd upstream can't
+  // 3xx-redirect it to an internal host (SSRF, Kartend audit faz4r).
+  getImageBytes(userAgentHeader(), url, std::move(callback),
+                {QString::fromLatin1(COVER_ART_HOST), QStringLiteral("archive.org")});
 }

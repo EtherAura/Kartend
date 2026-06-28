@@ -224,7 +224,8 @@ void TestProviderOrchestration::respondWith(ErrorUtils::Result<QByteArray> respo
   ProviderBase::setFetchFunctionForTesting(
       [this, response = std::move(response)](const QUrl &url,
                                              const Scraper::HttpClient::RawHeaders &headers,
-                                             Scraper::HttpClient::ResponseCallback callback) {
+                                             Scraper::HttpClient::ResponseCallback callback,
+                                             const QStringList & /*allowedHostSuffixes*/) {
         m_requests.append({url, headers});
         callback(response);
       });

@@ -153,6 +153,9 @@ void TmdbProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   if (!callback) return;
   // Image host doesn't require auth — public CDN. User-Agent kept for
   // audit-trail consistency. getImageBytes scopes the response to image/*
-  // so a misrouted or hostile CDN response can't reach the decoder.
-  getImageBytes(userAgentHeader(), url, std::move(callback));
+  // so a misrouted or hostile CDN response can't reach the decoder, and pins
+  // the fetch + any redirect to image.tmdb.org so a hostile/MITM'd CDN can't
+  // 3xx-redirect it to an internal host (SSRF, Kartend audit faz4r).
+  getImageBytes(userAgentHeader(), url, std::move(callback),
+                {QString::fromLatin1(TMDB_IMAGE_HOST)});
 }

@@ -7,6 +7,7 @@
 
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include "errorutils.h"
@@ -45,9 +46,9 @@ public:
   /// Pass {} to restore live behaviour. Not thread-safe — set it from
   /// the test's init/cleanup on the main thread, never while a request
   /// is in flight. Production code must never call this.
-  using TestFetchFunction =
-      std::function<void(const QUrl &url, const Scraper::HttpClient::RawHeaders &headers,
-                         Scraper::HttpClient::ResponseCallback callback)>;
+  using TestFetchFunction = std::function<void(
+      const QUrl &url, const Scraper::HttpClient::RawHeaders &headers,
+      Scraper::HttpClient::ResponseCallback callback, const QStringList &allowedHostSuffixes)>;
   static void setFetchFunctionForTesting(TestFetchFunction fetch);
 
 protected:
@@ -77,7 +78,7 @@ protected:
           callback(parse(response.value()));
         };
     if (s_testFetch) {
-      s_testFetch(url, headers, std::move(onResponse));
+      s_testFetch(url, headers, std::move(onResponse), {});
       return;
     }
     Scraper::HttpClient::instance()->get(url, headers, std::move(onResponse));
@@ -87,15 +88,24 @@ protected:
   /// guard): cover / fanart hosts occasionally answer 200-OK with an HTML
   /// error page, which must surface as a structured error rather than
   /// reach the image decoder.
+  ///
+  /// @p allowedHostSuffixes pins the fetch — and every redirect it follows —
+  /// to the caller's trusted media host(s) (SSRF defence, Kartend audit
+  /// faz4r). It is required, not defaulted: a media URL is fetched from an
+  /// upstream treated as untrusted, which can answer with a 3xx to an
+  /// internal host; without a non-empty allowlist HttpClient runs under
+  /// NoLessSafeRedirectPolicy and auto-follows it. Pass the provider's own
+  /// image host plus any legitimate redirect target (e.g. coverartarchive.org
+  /// redirects covers to archive.org).
   static void getImageBytes(const Scraper::HttpClient::RawHeaders &headers, const QUrl &url,
-                            MediaCallback callback) {
+                            MediaCallback callback, const QStringList &allowedHostSuffixes) {
     if (s_testFetch) {
-      s_testFetch(url, headers, std::move(callback));
+      s_testFetch(url, headers, std::move(callback), allowedHostSuffixes);
       return;
     }
     Scraper::HttpClient::instance()->get(url, headers, std::move(callback),
                                          Scraper::HttpClient::kDefaultMaxResponseBytes,
-                                         QStringLiteral("image/"));
+                                         QStringLiteral("image/"), allowedHostSuffixes);
   }
 
 private:
