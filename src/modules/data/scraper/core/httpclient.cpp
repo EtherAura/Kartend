@@ -132,9 +132,27 @@ void HttpClient::setRateLimit(const QString &host, int intervalMs, int maxConcur
 }
 
 void HttpClient::clearPending() {
-  m_queues.clear();
-  // Don't touch m_inFlight — the in-flight replies will still fire and
-  // we want drainHost() to see the right count after they decrement.
+  // Fire each queued (not-yet-dispatched) request's callback with a cancelled
+  // error before dropping it, so a caller waiting on the callback — e.g. a
+  // BatchScrapeRunner media-aggregator's --pending count or any in-flight tally
+  // — always resolves instead of hanging on a silently-discarded request
+  // (Kartend audit nujso). Move the queues out first so a callback that
+  // re-enters (enqueues a new request, or calls clearPending again) operates on
+  // the already-emptied member instead of the container being iterated.
+  //
+  // m_inFlight is deliberately untouched — already-dispatched replies still
+  // complete and fire their callbacks, and drainHost() sees the right count
+  // after they decrement it.
+  const QHash<QString, QQueue<PendingRequest>> dropped = std::exchange(m_queues, {});
+  for (const QQueue<PendingRequest> &queue : dropped) {
+    for (const PendingRequest &req : queue) {
+      if (req.callback) {
+        req.callback(ErrorContext::error(ErrorCode::OperationCancelled,
+                                         "Request cancelled: HTTP queue cleared",
+                                         "Scraper::HttpClient::clearPending"));
+      }
+    }
+  }
 }
 
 namespace {

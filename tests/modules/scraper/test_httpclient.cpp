@@ -353,6 +353,7 @@ private slots:
   void responseExceedingCap_returnsResponseTooLargeError();
   void responseUnderCap_returnsBodySuccessfully();
   void requestHeaders_rideInHeaderBlockNotUrl();
+  void clearPending_cancelsQueuedRequestsViaCallback();
 };
 
 void TestHttpClient::initTestCase() {
@@ -668,6 +669,48 @@ void TestHttpClient::requestHeaders_rideInHeaderBlockNotUrl() {
   const QByteArray requestLine = head.left(head.indexOf("\r\n"));
   QVERIFY2(!requestLine.contains("secret-token-123"),
            "Bearer token leaked into the request target / URL");
+}
+
+// Kartend audit nujso: clearPending() must invoke each queued (not-yet-
+// dispatched) request's callback with a cancelled error, not silently drop it —
+// otherwise a caller waiting on the callback (e.g. a media-aggregator
+// pending-count) would hang. Driven deterministically: cap a host at one
+// in-flight request and fire two; with no event-loop turn in between the second
+// stays queued, so clearPending must fire its callback synchronously.
+void TestHttpClient::clearPending_cancelsQueuedRequestsViaCallback() {
+  auto *client = Scraper::HttpClient::instance();
+  client->clearPending();
+
+  // A closed loopback port: the first request occupies the single in-flight
+  // slot, then fails fast with connection-refused (drained at the end so no
+  // reply outlives the test).
+  const QString host = QStringLiteral("127.0.0.1");
+  const QUrl url(QStringLiteral("https://127.0.0.1:1/x"));
+  client->setRateLimit(host, /*intervalMs=*/0, /*maxConcurrent=*/1);
+
+  bool inflightFired = false;
+  bool queuedFired = false;
+  std::optional<ErrorUtils::Result<QByteArray>> queuedResult;
+  client->get(url, {{"User-Agent", "test-agent"}},
+              [&](ErrorUtils::Result<QByteArray>) { inflightFired = true; });
+  client->get(url, {{"User-Agent", "test-agent"}}, [&](ErrorUtils::Result<QByteArray> r) {
+    queuedFired = true;
+    queuedResult = std::move(r);
+  });
+
+  // No event loop has run, so the second request is still queued. Clearing it
+  // must fire its callback (cancelled), not silently discard it.
+  client->clearPending();
+  QVERIFY(queuedFired);
+  QVERIFY(queuedResult.has_value());
+  QVERIFY(queuedResult->isError());
+  QCOMPARE(queuedResult->error().code, ErrorCode::OperationCancelled);
+
+  // Drain the in-flight request (fast connection-refused) so no reply lingers
+  // past the test, then drop the per-host rule to leave the singleton clean.
+  QTRY_VERIFY_WITH_TIMEOUT(inflightFired, 10000);
+  client->clearPending();
+  client->setRateLimit(host, 0, 0);
 }
 
 QTEST_MAIN(TestHttpClient)
