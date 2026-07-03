@@ -2,7 +2,6 @@
 // field extraction, change detection, browse helpers, load/save.
 #include <algorithm>
 #include <functional>
-#include <limits>
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColorDialog>
@@ -350,15 +349,6 @@ void SettingsDialog::updateExtractArchivesVisibility() {
 void SettingsDialog::onExtractArchivesToggled(bool checked) {
   Q_UNUSED(checked)
   updateExtractArchivesVisibility();
-}
-
-void SettingsDialog::updateGridWidthLimits() {
-  if (!ui->appearanceLayoutPanel->gridWidthSpinBox()) {
-    return;
-  }
-  int preservedValue = ui->appearanceLayoutPanel->gridWidthSpinBox()->value();
-  ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(std::numeric_limits<int>::max());
-  ui->appearanceLayoutPanel->gridWidthSpinBox()->setValue(preservedValue);
 }
 
 // Kartend-vy1xs: onGridWidthChanged() removed — its only extra duty over
