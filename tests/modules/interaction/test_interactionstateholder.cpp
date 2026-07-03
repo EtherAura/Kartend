@@ -38,8 +38,6 @@ private slots:
 
   // Scroll state tests
   void testScrollState_programmatic();
-  void testScrollState_continuousActive();
-  void testScrollState_hoverScrollPendingCountsAsContinuous();
 
   // Search state tests
   void testSearchState_clearedByEscape();
@@ -186,34 +184,6 @@ void TestInteractionStateHolder::testScrollState_programmatic() {
   m_state->endProgrammaticScroll();
 
   QVERIFY(!m_state->scroll().programmaticScroll);
-}
-
-void TestInteractionStateHolder::testScrollState_continuousActive() {
-  QVERIFY(!m_state->scroll().isAnyContinuousActive());
-
-  m_state->scroll().clickContinuous = true;
-  QVERIFY(m_state->scroll().isAnyContinuousActive());
-
-  m_state->scroll().clickContinuous = false;
-  m_state->scroll().keyContinuous = true;
-  QVERIFY(m_state->scroll().isAnyContinuousActive());
-
-  m_state->scroll().keyContinuous = false;
-  QVERIFY(!m_state->scroll().isAnyContinuousActive());
-}
-
-void TestInteractionStateHolder::testScrollState_hoverScrollPendingCountsAsContinuous() {
-  QVERIFY(!m_state->scroll().hoverScrollPending);
-  QVERIFY(!m_state->scroll().isAnyContinuousActive());
-
-  m_state->scroll().hoverScrollPending = true;
-
-  QVERIFY(m_state->scroll().isAnyContinuousActive());
-
-  m_state->scroll().resetScrollFlags();
-
-  QVERIFY(!m_state->scroll().hoverScrollPending);
-  QVERIFY(!m_state->scroll().isAnyContinuousActive());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

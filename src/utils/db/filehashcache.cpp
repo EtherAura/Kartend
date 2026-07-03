@@ -230,17 +230,4 @@ ErrorUtils::Result<bool> storeMembers(QSqlDatabase &db, const QString &container
   return true;
 }
 
-void clearAll(QSqlDatabase &db) {
-  if (!db.isOpen()) {
-    return;
-  }
-  QSqlQuery q(db);
-  if (!q.exec(QStringLiteral("DELETE FROM file_hash_cache"))) {
-    qWarning("FileHashCache: clearAll failed: %s", qPrintable(q.lastError().text()));
-  }
-  if (!q.exec(QStringLiteral("DELETE FROM archive_member_hash_cache"))) {
-    qWarning("FileHashCache: clearAll (members) failed: %s", qPrintable(q.lastError().text()));
-  }
-}
-
 } // namespace FileHashCache

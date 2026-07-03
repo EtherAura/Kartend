@@ -27,7 +27,6 @@ private slots:
 
   // alias-parent links via CollectionHierarchyCache
   void hierarchyCache_directChildren_includesLinkedParent();
-  void hierarchyCache_linkedDirectChildren_returnsLinkedOnly();
   void hierarchyCache_directChildren_primaryFirstThenLinked();
   void hierarchyCache_directChildren_skipsSelfLink();
   void hierarchyCache_directChildren_skipsUnknownLinkName();
@@ -169,23 +168,6 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_duplicateNameRes
   QVERIFY(cache.directChildren(1).isEmpty());
 }
 
-void TestCollectionUtilsAncestry::hierarchyCache_linkedDirectChildren_returnsLinkedOnly() {
-  QList<CollectionConfig> cs;
-  cs << makeCollection("Video", /*isSub=*/false, -1);     // 0
-  cs << makeCollection("Reference", /*isSub=*/false, -1); // 1
-  CollectionConfig movies = makeCollection("Movies", /*isSub=*/true, 0);
-  movies.additionalParentNames << QStringLiteral("Reference");
-  cs << movies; // 2
-
-  CollectionHierarchyCache cache;
-  cache.rebuild(cs);
-
-  // Video is the primary parent — no linked entry there.
-  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
-  // Reference holds the alias.
-  QCOMPARE(cache.linkedDirectChildren(1), QList<int>{2});
-}
-
 void TestCollectionUtilsAncestry::hierarchyCache_directChildren_primaryFirstThenLinked() {
   QList<CollectionConfig> cs;
   cs << makeCollection("Reference", /*isSub=*/false, -1); // 0
@@ -214,7 +196,6 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsSelfLink() 
   cache.rebuild(cs);
 
   QVERIFY(cache.directChildren(0).isEmpty());
-  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
 }
 
 void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsUnknownLinkName() {
@@ -259,7 +240,6 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsLinkEqualTo
   cache.rebuild(cs);
 
   QCOMPARE(cache.directChildren(0), QList<int>{1});
-  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
 }
 
 void TestCollectionUtilsAncestry::hierarchyCache_allDescendants_handlesMutualLinkCycle() {

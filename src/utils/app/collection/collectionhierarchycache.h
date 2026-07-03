@@ -48,20 +48,6 @@ public:
     return it.value();
   }
 
-  /// Subset of directChildren(@p parentIndex) reachable only via the
-  /// CollectionConfig::additionalParentNames link list — i.e. the
-  /// "see-also" appearances. Used by the settings tree (
-  /// stage 2) to render linked appearances in italics. Does NOT include
-  /// the primary children.
-  [[nodiscard]] const QList<int> &linkedDirectChildren(int parentIndex) const {
-    auto it = m_linkedDirectChildren.constFind(parentIndex);
-    if (it == m_linkedDirectChildren.cend()) {
-      static const QList<int> kEmpty;
-      return kEmpty;
-    }
-    return it.value();
-  }
-
   /// All descendants of @p parentIndex via the merged child graph
   /// (primary + linked). Deduped and cycle-bounded — even mutual links
   /// resolve to a finite set. The starting node itself is excluded.
@@ -176,8 +162,9 @@ private:
   // collection list (Kartend-5zxk) — the cache never dereferenced it, so the
   // pointer was a latent UAF with no upside.
   bool m_built = false;
-  QHash<int, QList<int>> m_directChildren;       // primary ∪ linked, primary first
-  QHash<int, QList<int>> m_linkedDirectChildren; // linked-only subset
+  QHash<int, QList<int>> m_directChildren; // primary ∪ linked, primary first
+  QHash<int, QList<int>>
+      m_linkedDirectChildren; // internal: dedup key while merging links into m_directChildren
   QHash<int, QList<int>> m_allDescendants;
 
   // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)

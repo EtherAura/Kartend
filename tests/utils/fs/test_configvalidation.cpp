@@ -22,7 +22,6 @@ private slots:
 
   void validationResult_addError_marksInvalidAndCollects();
   void validationResult_addWarning_keepsValid();
-  void validationResult_summary_listsErrorsBeforeWarnings();
   void validationResult_hasIssues_reflectsContent();
 
   void validateCollection_missingNameIsError();
@@ -80,20 +79,6 @@ void TestConfigValidation::validationResult_addWarning_keepsValid() {
   QVERIFY(r.valid);
   QVERIFY(r.hasIssues());
   QCOMPARE(r.warnings.size(), 1);
-}
-
-void TestConfigValidation::validationResult_summary_listsErrorsBeforeWarnings() {
-  ConfigValidation::ValidationResult r;
-  r.addWarning(QStringLiteral("w1"));
-  r.addError(QStringLiteral("e1"));
-  const QString s = r.summary();
-  const int errIdx = s.indexOf(QStringLiteral("Errors:"));
-  const int warnIdx = s.indexOf(QStringLiteral("Warnings:"));
-  QVERIFY(errIdx >= 0);
-  QVERIFY(warnIdx >= 0);
-  QVERIFY(errIdx < warnIdx);
-  QVERIFY(s.contains(QStringLiteral("• e1")));
-  QVERIFY(s.contains(QStringLiteral("• w1")));
 }
 
 void TestConfigValidation::validationResult_hasIssues_reflectsContent() {

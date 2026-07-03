@@ -73,10 +73,6 @@ struct ScrollState {
     clickHoldAdvancing = false;
     hoverScrollPending = false;
   }
-
-  [[nodiscard]] bool isAnyContinuousActive() const {
-    return clickContinuous || keyContinuous || clickHoldAdvancing || hoverScrollPending;
-  }
 };
 
 /**

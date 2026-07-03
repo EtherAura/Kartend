@@ -64,11 +64,9 @@ private slots:
   void storeReplacesStaleRow();
   void hashFileCachedComputesThenServesFromCache();
   void hashFileCachedReHashesWhenFileChanges();
-  void clearAllEmptiesTable();
   void memberStoreThenLookupRoundTrips();
   void memberLookupMissOnStaleContainer();
   void memberStoreReplacesWholeContainer();
-  void clearAllAlsoEmptiesMemberTable();
 
 private:
   QSqlDatabase m_db;
@@ -210,14 +208,6 @@ void TestFileHashCache::hashFileCachedReHashesWhenFileChanges() {
   QVERIFY2(second.value().crc != crc1, "changed file content should yield a different CRC");
 }
 
-void TestFileHashCache::clearAllEmptiesTable() {
-  QVERIFY(FileHashCache::store(m_db, QStringLiteral("/a"), 1, 1, QStringLiteral("c"),
-                               QStringLiteral("m"), QStringLiteral("s"))
-              .isOk());
-  FileHashCache::clearAll(m_db);
-  QCOMPARE(rowCount(m_db), 0);
-}
-
 namespace {
 
 QList<FileHashCache::MemberEntry> twoMembers() {
@@ -279,13 +269,6 @@ void TestFileHashCache::memberStoreReplacesWholeContainer() {
   auto hit = FileHashCache::lookupMembers(m_db, container, 5500, 6500);
   QVERIFY(hit.has_value());
   QCOMPARE(hit->size(), 1);
-}
-
-void TestFileHashCache::clearAllAlsoEmptiesMemberTable() {
-  QVERIFY(FileHashCache::storeMembers(m_db, QStringLiteral("/media/set.zip"), 1, 2, twoMembers())
-              .isOk());
-  FileHashCache::clearAll(m_db);
-  QVERIFY(!FileHashCache::lookupMembers(m_db, QStringLiteral("/media/set.zip"), 1, 2).has_value());
 }
 
 QTEST_MAIN(TestFileHashCache)

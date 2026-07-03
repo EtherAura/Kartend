@@ -93,20 +93,6 @@ public:
     return m_currentBatchSize;
   }
 
-  /// Get average time per item (for diagnostics)
-  [[nodiscard]] double avgTimePerItem() const {
-    QMutexLocker lock(&m_mutex);
-    return m_avgTimePerItem;
-  }
-
-  /// Reset to initial configuration
-  void reset() {
-    QMutexLocker lock(&m_mutex);
-    m_currentBatchSize = m_config.initialBatchSize;
-    m_avgTimePerItem = 0.0;
-    m_history.clear();
-  }
-
   /// Get performance statistics as JSON-like struct
   struct Stats {
     int currentBatchSize;

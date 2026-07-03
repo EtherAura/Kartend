@@ -26,8 +26,6 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 [[nodiscard]] QString expandPathWithoutExistenceCheck(const QString &path,
                                                       const QString &collectionName = QString());
 
-[[nodiscard]] QString truncatePathForDisplay(const QString &path, int maxLength = 50);
-
 /// Validates that a path doesn't contain unsupported shell metacharacters, null
 /// bytes, newlines, backslashes, or a `..` traversal segment — characters that
 /// could enable command injection or let the path escape its intended directory

@@ -115,11 +115,6 @@ lookupMembers(QSqlDatabase &db, const QString &containerPath, qint64 currentSize
                                                     qint64 size, qint64 mtimeMs,
                                                     const QList<MemberEntry> &members);
 
-/// Drop every cached row (outer files AND archive members). Wired into the
-/// same "clear caches" UI as the DAT cache; regenerable data, so this only
-/// costs a re-hash on the next audit.
-void clearAll(QSqlDatabase &db);
-
 } // namespace FileHashCache
 
 #endif // FILEHASHCACHE_H
