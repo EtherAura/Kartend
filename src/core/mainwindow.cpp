@@ -88,10 +88,10 @@
 Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(std::make_unique<Ui::MainWindow>()), stackedWidget(nullptr),
-      itemsPage(nullptr), gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
-      m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
-      currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
+    : QMainWindow(parent), ui(std::make_unique<Ui::MainWindow>()), m_stackedWidget(nullptr),
+      m_itemsPage(nullptr), m_gridContainer(nullptr), m_mainContentWidget(nullptr),
+      m_itemGrid(nullptr), m_mainHorizontalLayout(nullptr), m_searchBar(nullptr),
+      m_loadingLabel(nullptr), m_currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   // unique_ptr is the sole owner; QObject parent stays null (Kartend-d70s,
   // re-attempted after Kartend-3v92 replaced NavigationManager's parent()
   // lifetime guards with the appNotShuttingDown() helper). Destruction is driven
@@ -206,8 +206,8 @@ void MainWindow::reapplyDerivedThemingFromSystemPalette() {
   // baked into HTML. Skipped on the root/home view (no active collection);
   // its surfaces are palette-driven and update on repaint.
   if (auto *nav = m_appManager->getNavigationManager()) {
-    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-      nav->reapplyActiveCollectionTheming(currentCollectionIndex);
+    if (m_currentCollectionIndex >= 0 && m_currentCollectionIndex < m_collections.size()) {
+      nav->reapplyActiveCollectionTheming(m_currentCollectionIndex);
     }
   }
   // The search-bar placeholder tint is pinned via an explicit setPalette on
@@ -505,8 +505,8 @@ auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
 }
 
 void MainWindow::refreshTitleCounts() {
-  TitleCountsHelpers::refreshTitleCounts(this, m_appContext, m_collections, currentCollectionIndex,
-                                         m_loadingOverlay);
+  TitleCountsHelpers::refreshTitleCounts(this, m_appContext, m_collections,
+                                         m_currentCollectionIndex, m_loadingOverlay);
 }
 
 // Wires managers and signals; ensures sidebar metadata is refreshed when the
@@ -531,8 +531,8 @@ void MainWindow::setupManagerConnections() {
 }
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
-  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-    QString base = m_collections[currentCollectionIndex].name;
+  if (m_currentCollectionIndex >= 0 && m_currentCollectionIndex < m_collections.size()) {
+    QString base = m_collections[m_currentCollectionIndex].name;
     if (visible < total) {
       setWindowTitle(QString("%1 (%2/%3 items)").arg(base).arg(visible).arg(total));
     } else {
@@ -593,8 +593,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
       ui->itemScrollArea->viewport()->removeEventFilter(m_appManager->getInteractionManager());
     }
   }
-  if (gridContainer) {
-    gridContainer->removeEventFilter(m_appManager->getInteractionManager());
+  if (m_gridContainer) {
+    m_gridContainer->removeEventFilter(m_appManager->getInteractionManager());
   }
 
   // Persist current viewport/selection state before blocking signals.
@@ -613,7 +613,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     m_appManager->getScrollManager()->blockSignals(true);
   }
 
-  currentCollectionIndex = -1;
+  m_currentCollectionIndex = -1;
 
   // Delegate shutdown to ApplicationManager for coordinated cleanup
   if (m_appManager) {

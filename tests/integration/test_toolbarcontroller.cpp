@@ -157,7 +157,7 @@ void TestToolbarController::refreshCollectionWarningBadge_hiddenWhenLauncherPath
   videos.name = QStringLiteral("Videos");
   // Empty launcher paths are "unconfigured", not "broken" — no badge.
   win->m_collections = {videos};
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
 
   QWidget host;
   auto *badge = new QToolButton(&host);
@@ -173,7 +173,7 @@ void TestToolbarController::refreshCollectionWarningBadge_hiddenWhenLauncherPath
   QVERIFY(badge->toolTip().isEmpty());
 
   // Out-of-range collection index → no issues either.
-  win->currentCollectionIndex = 5;
+  win->m_currentCollectionIndex = 5;
   badge->setVisible(true);
   controller.refreshCollectionWarningBadge();
   QVERIFY(badge->isHidden());
@@ -191,7 +191,7 @@ void TestToolbarController::refreshCollectionWarningBadge_missingLauncherShowsIs
   videos.name = QStringLiteral("Videos");
   videos.launcher.launcherPath = missing;
   win->m_collections = {videos};
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
 
   QWidget host;
   auto *badge = new QToolButton(&host);
@@ -238,7 +238,7 @@ void TestToolbarController::refreshCollectionWarningBadge_placeholderPathExpands
   videos.name = QStringLiteral("Videos");
   videos.launcher.launcherPath = dir.filePath(QStringLiteral("%collection%/") + scriptName);
   win->m_collections = {videos};
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
 
   QWidget host;
   auto *badge = new QToolButton(&host);
@@ -283,7 +283,7 @@ void TestToolbarController::refreshCollectionWarningBadge_brokenPresetBackedEntr
   entry.presetId = preset.id; // inline path left empty — the preset supplies it
   videos.launcher.additionalLaunchers.append(entry);
   win->m_collections = {videos};
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
 
   QWidget host;
   auto *badge = new QToolButton(&host);
@@ -313,7 +313,7 @@ void TestToolbarController::refreshFilterToolbar_buildsTypeRadiosAndTitleEntries
   albums.filter.titleExclusionEnabled = true;
   albums.filter.titleExclusionPatterns = {QStringLiteral("\\s*\\(demo\\)$")};
   win->m_collections = {films, albums};
-  win->currentCollectionIndex = 1; // Albums drives the title-pattern toggle
+  win->m_currentCollectionIndex = 1; // Albums drives the title-pattern toggle
   win->m_generalSettings.view.collectionTypeFilter = QStringLiteral("Video");
 
   QWidget host;
@@ -359,7 +359,7 @@ void TestToolbarController::refreshFilterToolbar_staleTypeFilterFallsBackToAllTy
   films.name = QStringLiteral("Films");
   films.type = QStringLiteral("Video");
   win->m_collections = {films};
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   // The persisted filter names a type that no collection carries anymore
   // (collection deleted / retagged since the filter was saved).
   win->m_generalSettings.view.collectionTypeFilter = QStringLiteral("Slides");

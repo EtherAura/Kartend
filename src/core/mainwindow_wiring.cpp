@@ -318,7 +318,7 @@ void MainWindow::connectDatabaseManager() {
   dec.getLoadingOverlay = [this]() { return m_loadingOverlay; };
   dec.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
   dec.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
-  dec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  dec.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
   dec.getCollections = [this]() -> const QList<CollectionConfig> * { return &m_collections; };
   dec.refreshTitleCounts = [this]() { refreshTitleCounts(); };
   dec.refreshFilterToolbar = [this]() { refreshFilterToolbar(); };
@@ -408,7 +408,7 @@ void MainWindow::connectDatabaseManager() {
     sc.getParentWindow = [this]() -> QWidget * { return this; };
     sc.getCollections = [this]() { return &m_collections; };
     sc.getGeneralSettings = [this]() { return &m_generalSettings; };
-    sc.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+    sc.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
     sc.getApplicationContext = [this]() -> const ApplicationContext * { return &m_appContext; };
     sc.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
     sc.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
@@ -482,7 +482,7 @@ void MainWindow::connectDatabaseManager() {
     LibraryToolsControllerContext lt;
     lt.getParentWindow = [this]() -> QWidget * { return this; };
     lt.getCollections = [this]() { return &m_collections; };
-    lt.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+    lt.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
     lt.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
     lt.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
     lt.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
@@ -537,7 +537,7 @@ void MainWindow::connectScrollManager() {
   sec.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
   sec.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
   sec.getGeneralSettings = [this]() { return &m_generalSettings; };
-  sec.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  sec.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
   m_scrollEventsController->setContext(sec);
 
   auto *secCtl = m_scrollEventsController.get();
@@ -597,7 +597,7 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
   if (!m_appManager->getScrollManager() || !m_appManager->getDetailsPaneManager()) {
     return;
   }
-  // Use DetailsPaneManager's tracked index rather than MainWindow::currentCollectionIndex
+  // Use DetailsPaneManager's tracked index rather than MainWindow::m_currentCollectionIndex
   // because this can be called from inside applySidebarStateForCollection (via
   // its sidebarVisibilityChanged emission) before MainWindow has caught up to
   // the new index after a collection switch.
@@ -653,11 +653,11 @@ void MainWindow::refreshFilterToolbar() {
 }
 
 void MainWindow::refreshItemStateFlagsRegistry() {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     ItemWidget::clearStateFlagsRegistry();
     return;
   }
-  const CollectionConfig &cfg = m_collections.at(currentCollectionIndex);
+  const CollectionConfig &cfg = m_collections.at(m_currentCollectionIndex);
   const QString expanded = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
   const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expanded);
   IDatabaseManager *db = m_appManager ? m_appManager->getDatabaseManager() : nullptr;

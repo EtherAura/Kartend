@@ -97,17 +97,17 @@ public:
   // freed later still by ~QObject. Destroyed out-of-line in mainwindow.cpp where
   // Ui_MainWindow is complete.
   std::unique_ptr<Ui_MainWindow> ui;
-  QStackedWidget *stackedWidget;
-  QWidget *itemsPage;
-  QWidget *gridContainer;
+  QStackedWidget *m_stackedWidget;
+  QWidget *m_itemsPage;
+  QWidget *m_gridContainer;
   QWidget *m_mainContentWidget;
-  QGridLayout *itemGrid;
+  QGridLayout *m_itemGrid;
   QHBoxLayout *m_mainHorizontalLayout;
-  QLineEdit *searchBar;
-  EmptyStateWidget *loadingLabel;
+  QLineEdit *m_searchBar;
+  EmptyStateWidget *m_loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
-  int currentCollectionIndex;
+  int m_currentCollectionIndex;
   QList<CollectionConfig> m_collections;
   CollectionHierarchyCache m_hierarchyCache;
   ApplicationContext m_appContext; // Shared context for manager setup
