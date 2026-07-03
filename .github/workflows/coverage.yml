@@ -34,6 +34,47 @@ jobs:
     # without one a test hung under gcov instrumentation burns the 6h default.
     # Coverage build+test runs slower than plain Debug — pad accordingly.
     timeout-minutes: 45
+    env:
+      # Coverage floors — job-level so both the enforcing step and the
+      # ratchet-nudge step read the same constants.
+      #
+      # Floors track the observed local-gcov baseline minus a tolerance
+      # that absorbs the CI-vs-local gcov measurement drift plus small
+      # benign refactors. History:
+      # post integration-test-harness 27.2% lines / 39.6% functions;
+      # per-manager integration suites -> 2026-05-22 showed 35.79% / 46.87%
+      # (floor 35 / 46). The 2026-06-03 module test-gap pass raised it to
+      # 38.3% lines / 54.1% functions (lcov 2.3.1, local gcov-15).
+      # 2026-06-04: local is still 38.4% / 54.0% (no real regression), but
+      # CI's older gcov then read ~38% lines / 47.7% functions — the
+      # FUNCTION drift widened to ~6pp (the earlier <=0.8pp assumption no
+      # longer holds) because the merged async/lambda/inline-heavy code is
+      # attributed very differently by CI's gcov; the function floor was
+      # pinned just under that worst-case CI reading (47). Floors still
+      # catch gross regressions (deleted suite, disabled job, half a
+      # manager going untested), not drift.
+      # Kartend-en8mj: tightened to ~1pp under the CI-measured actual so
+      # hard-won gains are locked in, while keeping a small non-zero margin
+      # so normal CI-vs-local gcov drift / benign refactors don't flap.
+      # 2026-07: functions floor ratcheted 47 -> 52 (owner-approved): the
+      # old floor left ~7pp of silent-regression slack against the local
+      # ~54% reading. Enforcement is fatal only on PUSH (main/develop); on
+      # pull_request the floor is report-only (see the enforce step) — CI's
+      # gcov attributes functions several points below local (the 2026-06-04
+      # ~47.7% reading), so gating every PR on 52% would red-wall PRs on a
+      # measurement artifact. A push-leg trip is the measurement-drift signal
+      # for the maintainer to resolve deliberately (fix attribution or lower
+      # the floor), not a coverage regression.
+      # This is a MANUAL RATCHET, not a hard ceiling: when a PR lands that
+      # improves coverage, bump these floors to capture the gain (still no
+      # automated per-run rewrite — keep it a deliberate edit; the
+      # ratchet-nudge step warns when the slack exceeds
+      # KARTEND_COVERAGE_RATCHET_SLACK points).
+      # Set either MIN var to 0 to disable that metric's enforcement
+      # (report-only).
+      KARTEND_COVERAGE_MIN_LINES: '37'
+      KARTEND_COVERAGE_MIN_FUNCTIONS: '52'
+      KARTEND_COVERAGE_RATCHET_SLACK: '3'
 
     steps:
       - uses: actions/checkout@v7
@@ -153,34 +194,7 @@ jobs:
           exit "$status"
 
       - name: Surface coverage in step summary + enforce floor
-        env:
-          # Floors track the observed local-gcov baseline minus a tolerance
-          # that absorbs the CI-vs-local gcov measurement drift plus small
-          # benign refactors. History:
-          # post integration-test-harness 27.2% lines / 39.6% functions;
-          # per-manager integration suites -> 2026-05-22 showed 35.79% / 46.87%
-          # (floor 35 / 46). The 2026-06-03 module test-gap pass raised it to
-          # 38.3% lines / 54.1% functions (lcov 2.3.1, local gcov-15).
-          # 2026-06-04: local is still 38.4% / 54.0% (no real regression), but
-          # CI's older gcov now reads ~38% lines / 47.7% functions — the
-          # FUNCTION drift widened to ~6pp (the earlier <=0.8pp assumption no
-          # longer holds) because the merged async/lambda/inline-heavy code is
-          # attributed very differently by CI's gcov. The function floor is
-          # therefore pinned just under the worst-case CI reading rather than
-          # chasing local; real coverage is healthy. Floors still catch gross
-          # regressions (deleted suite, disabled job, half a manager going
-          # untested), not drift.
-          # Kartend-en8mj: tightened to ~1pp under the current CI-measured
-          # actual (~38% lines / ~47.7% functions) so hard-won gains are
-          # locked in, while keeping a small non-zero margin so normal
-          # CI-vs-local gcov drift / benign refactors don't flap. This is a
-          # MANUAL RATCHET, not a hard ceiling: when a PR lands that improves
-          # coverage, bump these floors opportunistically to capture the gain
-          # (still no automated per-run rewrite — keep it a deliberate edit).
-          # Set either var to 0 to disable that metric's enforcement
-          # (report-only).
-          KARTEND_COVERAGE_MIN_LINES: '37'
-          KARTEND_COVERAGE_MIN_FUNCTIONS: '47'
+        # Floor constants + rationale live in the job-level env block above.
         run: |
           # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
           # Capture the percentage and write a GitHub step summary.
@@ -202,18 +216,55 @@ jobs:
           # awk handles the float comparison; bash arithmetic can't.
           below() { awk -v p="$1" -v f="$2" 'BEGIN { print (p+0 < f+0) ? "1" : "0" }'; }
 
+          # Enforcement is fatal only on push (main/develop); on pull_request the
+          # floor is report-only. CI's gcov attributes functions several points
+          # below a local run (the 2026-06-04 ~47.7% reading vs ~54% local), so
+          # gating every PR on the ratcheted 52% floor would red-wall PRs on a
+          # measurement artifact rather than a real regression. The push legs
+          # still hard-enforce, and the step summary shows the numbers on PRs.
+          level="warning"; enforce=0
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then level="error"; enforce=1; fi
+
           failed=0
           line_floor="${KARTEND_COVERAGE_MIN_LINES:-0}"
           if [ "$line_floor" -gt 0 ] && [ -n "$line_pct" ] && [ "$(below "$line_pct" "$line_floor")" = "1" ]; then
-            echo "::error::Line coverage $line_pct% is below floor $line_floor%"
+            echo "::${level}::Line coverage $line_pct% is below floor $line_floor%"
             failed=1
           fi
           fn_floor="${KARTEND_COVERAGE_MIN_FUNCTIONS:-0}"
           if [ "$fn_floor" -gt 0 ] && [ -n "$fn_pct" ] && [ "$(below "$fn_pct" "$fn_floor")" = "1" ]; then
-            echo "::error::Function coverage $fn_pct% is below floor $fn_floor%"
+            echo "::${level}::Function coverage $fn_pct% is below floor $fn_floor%"
             failed=1
           fi
-          [ "$failed" -eq 0 ]
+          if [ "$failed" -ne 0 ] && [ "$enforce" = "0" ]; then
+            echo "::notice::Coverage below floor — report-only on ${GITHUB_EVENT_NAME}; enforced on push to main/develop."
+          fi
+          [ "$failed" -eq 0 ] || [ "$enforce" = "0" ]
+
+      - name: Nudge the function-coverage floor ratchet (non-fatal)
+        # Companion to the manual-ratchet policy above, mirroring the
+        # ctx-fanout soft ratchet (.scripts/check-layering.py): lowering a
+        # floor is always a deliberate decision, but silent slack — observed
+        # coverage sitting far above the floor — lets hard-won gains erode
+        # invisibly. When observed FUNCTION coverage beats the floor by more
+        # than KARTEND_COVERAGE_RATCHET_SLACK points, emit a ::warning asking
+        # for a floor bump. Never fails the job, and never rewrites the floor
+        # itself — the bump stays a reviewed edit to this file.
+        run: |
+          fn_pct="$(lcov --summary build/coverage/coverage.filtered.info \
+                        --ignore-errors inconsistent 2>&1 \
+                    | awk '/^[[:space:]]+functions/ { gsub("%","",$2); print $2; exit }')"
+          fn_floor="${KARTEND_COVERAGE_MIN_FUNCTIONS:-0}"
+          slack="${KARTEND_COVERAGE_RATCHET_SLACK:-3}"
+          if [ -z "$fn_pct" ] || [ "$fn_floor" -le 0 ]; then
+            echo "Ratchet nudge skipped (no measured value, or function-floor enforcement disabled)."
+            exit 0
+          fi
+          if [ "$(awk -v p="$fn_pct" -v f="$fn_floor" -v s="$slack" 'BEGIN { print (p - f > s) ? "1" : "0" }')" = "1" ]; then
+            echo "::warning::Function coverage ${fn_pct}% exceeds the ${fn_floor}% floor by more than ${slack} points — ratchet KARTEND_COVERAGE_MIN_FUNCTIONS up in coverage.yml to lock in the gain (deliberate edit; lowering is always allowed, silent slack is not)."
+          else
+            echo "Function coverage ${fn_pct}% is within ${slack} points of the ${fn_floor}% floor — no ratchet nudge."
+          fi
 
       - name: Generate HTML report
         run: |

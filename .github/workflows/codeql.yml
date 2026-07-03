@@ -1,0 +1,94 @@
+name: CodeQL
+
+# Security static analysis (taint-flow bug classes: SSRF, path traversal from
+# scraped filenames, injection) over the C++ tree. The scraper parses
+# attacker-influencable HTTP payloads, so CodeQL's dataflow queries complement
+# the advisory clang-tidy/cppcheck lint, which has no taint tracking.
+#
+# Cadence: push-to-main + weekly cron ONLY — deliberately NOT per-PR. A traced
+# C++ build plus analysis costs on the order of an hour of runner time, and
+# putting that on the PR critical path was rejected; a new finding therefore
+# surfaces post-merge as a code-scanning alert rather than a red PR check.
+# The weekly cron also refreshes the baseline against updated query packs
+# even when main is quiet, and backstops the paths-ignore skip below.
+# workflow_dispatch covers re-runs and the first confirming run.
+
+on:
+  push:
+    branches: [ main ]
+    # Docs-only pushes can't change the analyzed C++ (same rationale as the
+    # equivalent lists in build.yml / coverage.yml); the weekly cron
+    # guarantees a fresh full analysis regardless. This list is NOT part of
+    # the required-checks lockstep set (check-required-checks-consistency.py
+    # covers build.yml / coverage.yml / required-checks-noop.yml only, and
+    # nothing here is a required check).
+    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', '.gitignore' ]
+  schedule:
+    # Weekly, Monday 04:53 UTC. Off-the-hour minute avoids the congested
+    # GitHub-hosted runner queue windows (same rationale as nightly-tsan's
+    # 03:17).
+    - cron: '53 4 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  # Upload SARIF results to the repo's code-scanning alerts.
+  security-events: write
+  # Read the workflow run for tool-status reporting.
+  actions: read
+
+concurrency:
+  # Only main pushes + cron land here; never cancel a run mid-upload — a
+  # cancelled analysis leaves the alert state stale.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    name: CodeQL (c-cpp)
+    runs-on: ubuntu-24.04
+    # A traced build runs without ccache (see the configure step) and CodeQL
+    # analysis adds its own tens of minutes on top; pad well beyond the plain
+    # build job's 30.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        # Mirrors the build matrix's Ubuntu Release+gcc leg (apt qt6-base-dev
+        # = the Qt 6.4.2 minimum-version floor), minus the test/runtime-only
+        # extras (pulseaudio, unzip, p7zip-full) — tests are neither built
+        # nor run here.
+        uses: ./.github/actions/install-deps
+        with:
+          packages: g++ cmake ninja-build qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          # Manual build mode: CodeQL's autobuild can't be trusted to pick
+          # the same configure flags as CI; the explicit steps below mirror
+          # the build matrix's Release leg.
+          build-mode: manual
+
+      - name: Configure CMake
+        # Same shape as build.yml's Release cell, WITHOUT a compiler
+        # launcher: CodeQL's tracer must observe every real compiler
+        # invocation, and a ccache hit skips the compile (nothing would be
+        # extracted). Release + no tests keeps the traced build as cheap as
+        # a full compile can be while still covering all of src/.
+        run: |
+          cmake -S . -B build/codeql -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=OFF \
+            -DKARTEND_PORTABLE_RELEASE=ON
+
+      - name: Build (traced)
+        run: cmake --build build/codeql --parallel "$(nproc)"
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:c-cpp'

@@ -53,6 +53,14 @@ force_clang=false
 uninstall_only=false
 install_prefix=""
 build_jobs=""
+# --analysis gates the advisory static-analysis trio in --maintenance mode:
+#   full (default)  clang-tidy + IWYU + cppcheck (local runs, nightly CI sweep)
+#   tidy            clang-tidy only (CI pull_request runs pair this with
+#                   KARTEND_TIDY_ONLY_FILES for a diff-scoped pass)
+#   off             none of the three (CI push-to-main runs an enforcing
+#                   curated-check clang-tidy gate in the workflow instead;
+#                   the full advisory sweep runs nightly)
+analysis_mode="full"
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
@@ -83,6 +91,7 @@ for arg in "$@"; do
     --keep-builds) keep_builds=true ;;
     --no-ccache)   use_ccache=false ;;
     --clang)       force_clang=true ;;
+    --analysis=*)  analysis_mode="${arg#--analysis=}" ;;
     *)
       printf 'Error: unknown option: %s\n' "$arg" >&2
       usage >&2
@@ -154,6 +163,17 @@ if $format_check && ! $maintenance_build; then
   echo "Error: --format-check is only supported with --maintenance."
   exit 1
 fi
+case "$analysis_mode" in
+  full|tidy|off) ;;
+  *)
+    echo "Error: --analysis must be one of full|tidy|off (got '$analysis_mode')." >&2
+    exit 2
+    ;;
+esac
+if [ "$analysis_mode" != "full" ] && ! $maintenance_build; then
+  echo "Error: --analysis is only supported with --maintenance."
+  exit 1
+fi
 
 if $run_tests && ! $build_tests; then
   echo "Error: --run-tests requires --tests (KARTEND_BUILD_TESTS=ON)."
@@ -167,6 +187,10 @@ fi
 if [ -n "${KARTEND_TIDY_ONLY_FILES:-}" ]; then
   if ! $maintenance_build; then
     echo "Error: KARTEND_TIDY_ONLY_FILES is only honored with --maintenance." >&2
+    exit 1
+  fi
+  if [ "$analysis_mode" = "off" ]; then
+    echo "Error: KARTEND_TIDY_ONLY_FILES is set but --analysis=off skips clang-tidy entirely; drop one of the two." >&2
     exit 1
   fi
   if [ ! -f "$KARTEND_TIDY_ONLY_FILES" ]; then
@@ -380,9 +404,13 @@ if $maintenance_build; then
     plan_step "clang-tidy (apply fixes)"
     plan_step "Rebuild after clang-tidy fixes"
   fi
-  plan_step "clang-tidy analysis"
-  plan_step "IWYU analysis"
-  plan_step "cppcheck analysis"
+  if [ "$analysis_mode" != "off" ]; then
+    plan_step "clang-tidy analysis"
+  fi
+  if [ "$analysis_mode" = "full" ]; then
+    plan_step "IWYU analysis"
+    plan_step "cppcheck analysis"
+  fi
   plan_step "Heuristic duplicate checks"
   plan_step "Raw Qt logging guard"
   plan_step "Export symbols (nm)"
@@ -505,34 +533,40 @@ EOF
     run_step "Rebuild after clang-tidy fixes" "$logs_dir/cmake_build_after_fixes.log" "$cmake_bin" --build "$build_dir" -j"$build_jobs"
   fi
 
-  checks="-*,clang-analyzer-*,modernize-*,performance-*,readability-*,-readability-static-accessed-through-instance,google-*"
   TIDY_PROMOTED_FAILED=false
-  # Kartend-z4ev0: do_clang_tidy honors KARTEND_TIDY_ONLY_FILES (validated at
-  # startup) — CI sets it on pull_request events to tidy only the changed TUs;
-  # unset (local runs, push-to-main) means the full src/ sweep.
-  if ! run_quality_check "clang-tidy analysis" "$logs_dir/clang-tidy.log" do_clang_tidy "$COMPDB_FILE" "$root_dir/src" "$checks"; then
-    # do_clang_tidy returns non-zero only when WarningsAsErrors-promoted
-    # checks (.clang-tidy:WarningsAsErrors) trigger. The remaining advisory
-    # warnings exit clang-tidy 0 so they don't fall into this branch.
-    if grep -qE 'error:.*\[(bugprone|clang-analyzer)' "$logs_dir/clang-tidy.log"; then
-      TIDY_PROMOTED_FAILED=true
+  if [ "$analysis_mode" != "off" ]; then
+    checks="-*,clang-analyzer-*,modernize-*,performance-*,readability-*,-readability-static-accessed-through-instance,google-*"
+    # Kartend-z4ev0: do_clang_tidy honors KARTEND_TIDY_ONLY_FILES (validated at
+    # startup) — CI sets it on pull_request events to tidy only the changed TUs;
+    # unset (local runs, the nightly lint sweep) means the full src/ sweep.
+    # CI push-to-main runs pass --analysis=off and skip this advisory pass in
+    # favor of the workflow's enforcing curated-check clang-tidy gate.
+    if ! run_quality_check "clang-tidy analysis" "$logs_dir/clang-tidy.log" do_clang_tidy "$COMPDB_FILE" "$root_dir/src" "$checks"; then
+      # do_clang_tidy returns non-zero only when WarningsAsErrors-promoted
+      # checks (.clang-tidy:WarningsAsErrors) trigger. The remaining advisory
+      # warnings exit clang-tidy 0 so they don't fall into this branch.
+      if grep -qE 'error:.*\[(bugprone|clang-analyzer)' "$logs_dir/clang-tidy.log"; then
+        TIDY_PROMOTED_FAILED=true
+      fi
     fi
   fi
-  # IWYU is quality check; detect failure and suggestions for end-of-run notice
-  if ! run_quality_check "IWYU analysis" "$logs_dir/iwyu.log" do_iwyu "$COMPDB_FILE" "$root_dir/src"; then
-    IWYU_FAILED=true
-  fi
-  if [ -s "$logs_dir/iwyu.log" ]; then
-    if grep -qE 'should add these lines:|should remove these lines:' "$logs_dir/iwyu.log"; then
-      IWYU_SUGGESTED=true
+  if [ "$analysis_mode" = "full" ]; then
+    # IWYU is quality check; detect failure and suggestions for end-of-run notice
+    if ! run_quality_check "IWYU analysis" "$logs_dir/iwyu.log" do_iwyu "$COMPDB_FILE" "$root_dir/src"; then
+      IWYU_FAILED=true
     fi
-  fi
-  
-  run_quality_check "cppcheck analysis" "$logs_dir/cppcheck.log" do_cppcheck "$root_dir/src" "$root_dir/tests"
-  # Check for cppcheck warnings
-  if [ -s "$logs_dir/cppcheck.log" ]; then
-    if grep -qE ': (error|warning|style|performance|portability):' "$logs_dir/cppcheck.log"; then
-      CPPCHECK_WARNED=true
+    if [ -s "$logs_dir/iwyu.log" ]; then
+      if grep -qE 'should add these lines:|should remove these lines:' "$logs_dir/iwyu.log"; then
+        IWYU_SUGGESTED=true
+      fi
+    fi
+
+    run_quality_check "cppcheck analysis" "$logs_dir/cppcheck.log" do_cppcheck "$root_dir/src" "$root_dir/tests"
+    # Check for cppcheck warnings
+    if [ -s "$logs_dir/cppcheck.log" ]; then
+      if grep -qE ': (error|warning|style|performance|portability):' "$logs_dir/cppcheck.log"; then
+        CPPCHECK_WARNED=true
+      fi
     fi
   fi
   

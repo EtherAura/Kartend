@@ -67,6 +67,12 @@ Maintenance-only:
                      loud if no clang-format-19 binary is found)
   --format-apply     Apply clang-format in place (requires --maintenance;
                      refuses to run on a dirty git tree)
+  --analysis=MODE    Scope the advisory static-analysis passes (requires
+                     --maintenance): 'full' (default) = clang-tidy + IWYU +
+                     cppcheck; 'tidy' = clang-tidy only (CI pull_request runs
+                     pair it with KARTEND_TIDY_ONLY_FILES); 'off' = skip all
+                     three (CI push-to-main runs the enforcing curated-check
+                     clang-tidy gate in the workflow instead)
 
 Environment (maintenance-only):
   KARTEND_TIDY_ONLY_FILES=PATH

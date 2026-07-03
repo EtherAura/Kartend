@@ -1,0 +1,122 @@
+name: Nightly Lint Sweep
+
+# Full advisory static-analysis sweep, demoted here from build.yml's
+# maintenance-check job: the all-checks clang-tidy pass over every TU plus
+# IWYU and cppcheck cost >2 CPU-hours per run and produce advisory output
+# only, so running them on every push to main bought latency, not
+# enforcement. Pushes to main now run a cheap(er) ENFORCING curated-check
+# clang-tidy gate inside maintenance-check instead; this nightly keeps the
+# full breadth — the modernize/readability/misc/google clang-tidy families,
+# IWYU, and cppcheck — visible without taxing every merge. Its logs are the
+# feedstock for the quarterly lint review.
+#
+# Advisory by design: this sweep runs build.sh WITHOUT --format-check, so it
+# exits 0 on all lint findings — including a promoted (WarningsAsErrors) check
+# firing in the advisory pass. Only compile errors or infra failures turn it
+# red. Enforcement of the promoted checks lives in the ENFORCING curated-check
+# gate on every push to main (build.yml maintenance-check), which is where a
+# promoted-check regression is actually caught; this nightly's job is breadth
+# and trend data, surfaced via the step-summary counts and the uploaded log
+# artifact for the quarterly review.
+
+on:
+  schedule:
+    # 04:37 UTC daily. Off-the-hour minute avoids the congested GitHub-hosted
+    # runner queue windows (same rationale as nightly-tsan's 03:17), and the
+    # offset from that run keeps the two nightlies from queueing at once.
+    - cron: '37 4 * * *'
+  # Manual trigger for on-demand sweeps (e.g. before a quarterly review, or
+  # to validate a .clang-tidy change without waiting a day).
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-lint
+  cancel-in-progress: false
+
+jobs:
+  lint-sweep:
+    runs-on: ubuntu-24.04
+    # The full sweep was the slowest job in build.yml (150-min budget there);
+    # give the nightly a little extra cold-cache headroom on top.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        # Same toolchain set as build.yml's maintenance-check job.
+        uses: ./.github/actions/install-deps
+        with:
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
+
+      - name: Cache ccache
+        # Content-addressed primary key; restore-keys deliberately fall back
+        # to the maintenance-check caches so the nightly compile phase is
+        # mostly warm (mirrors nightly-tsan's reuse of the per-PR tsan
+        # cache). No github.run_id keys — a unique-per-run key would force a
+        # fresh cache write each night and evict PR caches.
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-maintenance-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/nightly-lint.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-maintenance-nightly-
+            ${{ runner.os }}-ccache-maintenance-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=2G
+          # PCH-using compiles need this sloppiness to be cacheable (same
+          # setting as every other ccache-using job).
+          ccache --set-config=sloppiness=pch_defines,time_macros
+          ccache --zero-stats
+
+      - name: Run full maintenance sweep (advisory)
+        # --analysis=full is the build.sh default; spelled out so the
+        # contrast with maintenance-check's --analysis=tidy / --analysis=off
+        # invocations is greppable. --tests keeps the ~430 test TUs in the
+        # compdb so the analysis covers the hand-maintained test tree too.
+        run: bash .scripts/build.sh --maintenance --tests --analysis=full
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Summarize finding counts
+        if: ${{ always() }}
+        run: |
+          LOGS=build/ninja-maintenance/logs
+          {
+            echo "## Nightly lint sweep"
+            echo
+            echo "Advisory finding counts (full logs in the run artifact):"
+            echo
+            echo '| tool | finding lines |'
+            echo '|---|---|'
+            for tool in clang-tidy iwyu cppcheck; do
+              log="$LOGS/$tool.log"
+              if [ -f "$log" ]; then
+                case "$tool" in
+                  clang-tidy) n="$(grep -cE '^/.*\.(cpp|h):[0-9]+:[0-9]+: warning:' "$log" || true)" ;;
+                  iwyu)       n="$(grep -cE 'should (add|remove) these lines:' "$log" || true)" ;;
+                  cppcheck)   n="$(grep -cE ': (error|warning|style|performance|portability):' "$log" || true)" ;;
+                esac
+                echo "| $tool | ${n:-0} |"
+              else
+                echo "| $tool | (log missing) |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload analysis logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-lint-logs-${{ github.run_id }}
+          path: build/ninja-maintenance/logs/
+          retention-days: 90
+          if-no-files-found: warn

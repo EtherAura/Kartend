@@ -522,15 +522,18 @@ jobs:
 
   maintenance-check:
     runs-on: ubuntu-24.04
-    # clang-tidy maintenance build is the slowest Linux job (~52 min observed
-    # for src/ alone; Kartend-rni3g added the ~430 test TUs, roughly doubling
-    # the analyzed set). 150 absorbs the grown run + cold-ccache variance;
-    # tighten once a few post-rni3g runs establish the new baseline.
+    # Maintenance build (clang, KARTEND_MAINTENANCE=ON -Werror) + scoped
+    # static analysis. What runs on top of the build depends on the event:
     # Kartend-z4ev0: on pull_request the clang-tidy pass is diff-scoped to the
     # changed .cpp TUs (see the "Compute clang-tidy diff scope" step), so PR
-    # runs are dominated by the build, not the analysis; the full ~1430-TU
-    # sweep still runs on every push to main. The timeout stays sized for the
-    # full-sweep push runs.
+    # runs are dominated by the build, not the analysis. On push / dispatch
+    # the advisory analysis trio is skipped entirely (--analysis=off) and the
+    # ENFORCING curated-check clang-tidy gate below runs instead; the full
+    # advisory sweep (all check families + IWYU + cppcheck, formerly >2
+    # CPU-hours on every push to main) now lives in nightly-lint.yml. The
+    # timeout keeps full-sweep-era headroom: the curated gate still runs the
+    # clang-analyzer machinery over every src/ TU. Tighten once a few
+    # post-demotion push runs establish the new baseline.
     timeout-minutes: 150
 
     steps:
@@ -543,15 +546,17 @@ jobs:
       - name: Compute clang-tidy diff scope (PRs only)
         # Kartend-z4ev0: restrict the PR clang-tidy pass to the .cpp TUs the
         # PR actually changed (vs the merge base). The list is consumed by
-        # .scripts/build.sh via KARTEND_TIDY_ONLY_FILES; push-to-main runs
-        # skip this step, leave the env unset, and keep the full sweep.
+        # .scripts/build.sh via KARTEND_TIDY_ONLY_FILES; push/dispatch runs
+        # skip this step and run the curated fatal gate below instead.
         # KNOWN LIMITATION (kept simple on purpose): a changed header does
         # NOT pull its including TUs into the scope — header-only regressions
-        # are caught by the full sweep on main after merge. An empty list
-        # (e.g. a docs-only PR reaching this job) short-circuits cleanly
-        # inside do_clang_tidy. cppcheck and IWYU intentionally stay
-        # full-scope: cppcheck runs off the compdb project view and IWYU off
-        # iwyu_tool, so per-file scoping is not a trivial drop-in for either.
+        # are caught by the nightly full sweep (nightly-lint.yml) after
+        # merge. An empty list (e.g. a docs-only PR reaching this job)
+        # short-circuits cleanly inside do_clang_tidy. cppcheck and IWYU no
+        # longer run here at all — per-file scoping was never a trivial
+        # drop-in for either (cppcheck runs off the compdb project view and
+        # IWYU off iwyu_tool), so they moved wholesale to the nightly sweep
+        # (--analysis=tidy below).
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags origin "${GITHUB_BASE_REF}"
@@ -610,14 +615,95 @@ jobs:
 
       - name: Run maintenance build script
         # --tests (Kartend-rni3g): configure with KARTEND_BUILD_TESTS=ON so
-        # compile_commands.json includes the ~430 test TUs and clang-tidy /
-        # cppcheck / IWYU analyze the hand-maintained test tree too (it was a
-        # complete static-analysis blind spot). Expected cost: the analysis
-        # roughly doubles its TU count; the timeout below already
-        # accommodates it. --format-check moved to script-lint
+        # compile_commands.json includes the ~430 test TUs and the analysis
+        # passes can see the hand-maintained test tree (it was a complete
+        # static-analysis blind spot). --format-check moved to script-lint
         # (Kartend-cifqk).
+        # Analysis scoping: pull_request runs keep the diff-scoped advisory
+        # clang-tidy pass (--analysis=tidy + KARTEND_TIDY_ONLY_FILES above);
+        # push / dispatch runs skip the advisory trio (--analysis=off) — the
+        # enforcing curated-check gate in the next step replaces it, and the
+        # full advisory sweep (clang-tidy all-families + IWYU + cppcheck)
+        # runs nightly in nightly-lint.yml instead of on every push to main.
         run: |
-          bash .scripts/build.sh --maintenance --tests
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            bash .scripts/build.sh --maintenance --tests --analysis=tidy
+          else
+            bash .scripts/build.sh --maintenance --tests --analysis=off
+          fi
+
+      - name: Enforce curated clang-tidy checks (fatal, non-PR runs)
+        # ENFORCING clang-tidy gate for pushes to main/develop and manual
+        # dispatch: any finding from a check listed in
+        # KARTEND_TIDY_FATAL_CHECKS fails the job (--warnings-as-errors).
+        # The list mirrors .clang-tidy's WarningsAsErrors set — every entry
+        # was verified zero-hit on the tree when promoted there — so a green
+        # run is EXPECTED; the FIRST run of this gate must still be watched,
+        # and if it fires on pre-existing findings either fix them or trim
+        # the env var below (it is the single knob for the fatal set).
+        # concurrency-* is deliberately absent: .clang-tidy never enabled
+        # that family, so there is no zero-hit evidence — add it here only
+        # after a clean observation in the nightly sweep.
+        # clang-analyzer-* stays enabled wholesale (advisory) rather than
+        # curated-only: the analyzer's checkers share path-sensitive
+        # machinery, and running the promoted subset under the same
+        # enablement as the .clang-tidy baseline keeps findings comparable
+        # with the runs that established "zero hits". Non-analyzer families
+        # run curated-only, which is what makes this pass cheaper than the
+        # demoted full sweep. Scope is src/ (matching the sweep the baseline
+        # was verified on); tests/ stays advisory-only in the nightly.
+        if: github.event_name != 'pull_request'
+        env:
+          # Single knob: comma-separated clang-tidy checks promoted to fatal.
+          # Keep in lockstep with .clang-tidy's WarningsAsErrors when
+          # promoting or demoting a check. Whitespace is stripped in the run
+          # script, so the folded YAML scalar may wrap freely.
+          KARTEND_TIDY_FATAL_CHECKS: >-
+            bugprone-unchecked-optional-access, bugprone-integer-division,
+            bugprone-assignment-in-if-condition, bugprone-chained-comparison,
+            bugprone-dangling-handle, bugprone-fold-init-type,
+            bugprone-inaccurate-erase, bugprone-multiple-new-in-one-expression,
+            bugprone-shared-ptr-array-mismatch, bugprone-sizeof-container,
+            bugprone-sizeof-expression, bugprone-string-constructor,
+            bugprone-suspicious-memory-comparison,
+            bugprone-suspicious-memset-usage, bugprone-suspicious-semicolon,
+            bugprone-swapped-arguments, bugprone-throw-keyword-missing,
+            bugprone-undefined-memory-manipulation,
+            bugprone-unique-ptr-array-mismatch, bugprone-unused-raii,
+            bugprone-use-after-move, bugprone-virtual-near-miss,
+            performance-move-const-arg, performance-noexcept-destructor,
+            performance-noexcept-move-constructor,
+            performance-unnecessary-value-param,
+            performance-unnecessary-copy-initialization,
+            performance-implicit-conversion-in-loop,
+            clang-analyzer-core.NullDereference, clang-analyzer-core.DivideZero,
+            clang-analyzer-core.UndefinedBinaryOperatorResult,
+            clang-analyzer-core.uninitialized.*,
+            clang-analyzer-core.StackAddressEscape,
+            clang-analyzer-cplusplus.PlacementNew,
+            clang-analyzer-cplusplus.PureVirtualCall,
+            clang-analyzer-cplusplus.SelfAssignment,
+            clang-analyzer-cplusplus.StringChecker,
+            clang-analyzer-deadcode.*, clang-analyzer-security.*,
+            clang-analyzer-unix.*
+        run: |
+          set -o pipefail
+          checks="$(printf '%s' "$KARTEND_TIDY_FATAL_CHECKS" | tr -d '[:space:]')"
+          compdb_dir="build/ninja-maintenance/cc-sanitized"
+          if [ ! -f "$compdb_dir/compile_commands.json" ]; then
+            echo "::error::sanitized compile_commands.json missing at $compdb_dir — did the maintenance build change its build dir? Update this step's path."
+            exit 1
+          fi
+          mkdir -p build/ninja-maintenance/logs
+          # xargs -n1 -P: same fan-out shape as do_clang_tidy in
+          # .scripts/lib/quality.sh; xargs exits non-zero (123) if any TU's
+          # clang-tidy invocation reports a promoted error, failing the step.
+          find src -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
+            -p="$compdb_dir" \
+            --checks="-*,clang-analyzer-*,${checks}" \
+            --warnings-as-errors="${checks}" \
+            --header-filter='.*/src/.*' \
+            2>&1 | tee build/ninja-maintenance/logs/clang-tidy-fatal.log
 
       - name: Surface promoted-error clang-tidy findings
         if: ${{ failure() }}
@@ -629,6 +715,11 @@ jobs:
           if [ -f build/ninja-maintenance/logs/clang-tidy.log ]; then
             echo "::group::clang-tidy promoted errors"
             grep -E 'error:.*\[(bugprone|clang-analyzer)' build/ninja-maintenance/logs/clang-tidy.log || echo "(no matching error lines)"
+            echo "::endgroup::"
+          fi
+          if [ -f build/ninja-maintenance/logs/clang-tidy-fatal.log ]; then
+            echo "::group::curated fatal-gate errors"
+            grep -E 'error:.*\[' build/ninja-maintenance/logs/clang-tidy-fatal.log || echo "(no matching error lines)"
             echo "::endgroup::"
           fi
           if [ -f build/ninja-maintenance/logs/clang-format.log ]; then
@@ -659,10 +750,20 @@ jobs:
     # too, not just the Release pipeline. fail-fast off so one leg's failure
     # doesn't cancel the other; the staging/packaging steps below are gated to
     # Release only.
+    # The Debug leg is gated off pull_request events: at ~45 min per leg the
+    # two Windows legs set the PR wall-clock critical path, and the Debug
+    # leg's Q_ASSERT coverage does not need per-PR cadence. Debug still runs
+    # on every push to main/develop and on workflow_dispatch (preserving the
+    # manual full-matrix re-run). Release stays per-PR — it is the shipping
+    # configuration and feeds the preview artifact. fromJSON because a matrix
+    # axis takes an expression, not a YAML conditional. release.yml is
+    # deliberately untouched: it shares the windows-build composite action
+    # (incl. the vcpkg baseline sync step), not this matrix, and keeps its
+    # own cadence.
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        build_type: ${{ github.event_name == 'pull_request' && fromJSON('["Release"]') || fromJSON('["Release", "Debug"]') }}
 
     steps:
       - uses: actions/checkout@v7

@@ -73,10 +73,13 @@ sanitize_compdb() {
 # newline-delimited list of .cpp paths, relative to the repo root or
 # absolute), do_clang_tidy analyzes only the listed TUs that exist under
 # $srcdir instead of fanning out over every .cpp. CI sets this on
-# pull_request events so a PR only pays for the TUs it touched; push-to-main
-# runs leave it unset and keep the full sweep. KNOWN LIMITATION: a changed
-# header does not pull its including TUs into the scoped set — header-only
-# regressions surface in the post-merge full sweep on main, not on the PR.
+# pull_request events so a PR only pays for the TUs it touched; local runs
+# and the nightly lint sweep leave it unset and keep the full sweep
+# (push-to-main maintenance runs skip this advisory pass entirely via
+# --analysis=off — the workflow's curated enforcing gate covers them).
+# KNOWN LIMITATION: a changed header does not pull its including TUs into
+# the scoped set — header-only regressions surface in the nightly full
+# sweep, not on the PR.
 do_clang_tidy() {
   local compdb="$1" srcdir="$2" checks="$3"
   if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
