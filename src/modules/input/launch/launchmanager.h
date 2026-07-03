@@ -62,10 +62,11 @@ struct LaunchManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
-struct LaunchCommand {
-  QString program;
-  QStringList arguments;
-};
+// LaunchCommand and the pure command-construction functions live in
+// launchcommandbuilder.h (the pure half of the launchmanager.cpp
+// pure/process TU split); included here because LaunchManager's API returns
+// LaunchCommand by value and the statics below delegate to the builder.
+#include "launchcommandbuilder.h"
 
 // LaunchPreview moved to its own leaf header (launchpreview.h,
 // Kartend-rq33v) so struct-only consumers no longer drag in this manager
@@ -114,7 +115,8 @@ public:
   /// validate that the launcher exists/is executable (use validateLauncherPath
   /// for that); it only constructs and validates the argument semantics.
   /// `collectionName` is used solely for diagnostic messages and `%collection%`
-  /// substitution.
+  /// substitution. Thin delegation to LaunchCommandBuilder::buildLaunchCommand,
+  /// where the implementation lives.
   [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
   buildLaunchCommand(const LauncherConfig &launcher, const QString &collectionName,
                      const QString &filePath);
@@ -132,12 +134,14 @@ public:
   /// arg is taken pre-resolved (preset resolution is the caller's
   /// responsibility — InteractionManager already does this for the real
   /// launch path) so the preview shows exactly what would be executed.
+  /// Thin delegation to LaunchCommandBuilder::previewLaunchCommand.
   [[nodiscard]] static LaunchPreview previewLaunchCommand(const CollectionConfig &collection,
                                                           const LauncherConfig &launcher,
                                                           const QString &filePath);
 
   /// Parses command-line parameters handling quoted strings
   /// Returns error if quotes are unclosed (potential injection vector)
+  /// Thin delegation to LaunchCommandBuilder::parseParameters.
   [[nodiscard]] static ErrorUtils::Result<QStringList> parseParameters(const QString &paramString);
 
   /// Validates a launcher path for security and resolves it to an absolute,
@@ -225,6 +229,13 @@ public:
     m_archiveExtractor = std::move(extractor);
   }
 
+  /// Test-only: live entry count of the double-launch debounce map, so the
+  /// bounded pruning in recordLaunch (entries lapse after
+  /// kDoubleLaunchGuardMs) is assertable without exposing the map itself.
+  [[nodiscard]] int debounceEntryCountForTesting() const {
+    return static_cast<int>(m_lastLaunchTimes.size());
+  }
+
 signals:
   /// Emitted when a launch-time archive extraction moves to the worker
   /// thread. `displayName` is a human-readable label (the archive basename)
@@ -273,9 +284,23 @@ private:
 
   /// The currently-tracked child process when runtime detection is enabled.
   /// Only one tracked child at a time — a second launch attempt while one is
-  /// already running is rejected.
+  /// already running is rejected. Ownership decision: a tracked child stays
+  /// parented to this manager and therefore DIES with the frontend — a
+  /// tracked session is supervised (now-playing overlay, play-time
+  /// accounting), so the frontend closing ends the session by design. The
+  /// detached path below makes the opposite choice.
   QPointer<QProcess> m_trackedChild;
   QString m_trackedFilePath;
+
+  /// Fire-and-forget children that survived the early-failure window.
+  /// launchDetachedWatched reparents them away from this manager at settle
+  /// time: a still-owned QProcess would be destroyed in ~LaunchManager, and
+  /// ~QProcess SIGKILLs a running child — closing the frontend must not take
+  /// the user's launched program down with it (the historical startDetached
+  /// contract). QPointer entries null out when a child exits and its
+  /// finished→deleteLater fires; the destructor deletes only already-exited
+  /// stragglers and intentionally abandons running ones to the OS.
+  QList<QPointer<QProcess>> m_survivedDetachedChildren;
 
   /// In-flight archive-extraction state (Kartend-mkcak). The cancel flag is
   /// shared with the worker lambda so it stays valid even if this manager
@@ -295,6 +320,12 @@ private:
   /// detection. Safe to call before settings are wired (returns false).
   [[nodiscard]] bool runtimeDetectionEnabled() const;
 
+  // The three process-plumbing members below (spawnLauncherProcess,
+  // launchTracked, launchDetachedWatched) are defined in
+  // launchmanager_process.cpp — the QProcess spawn/track/watch half of the
+  // pure/process TU split (same partials convention as
+  // launchmanagerarchive.cpp).
+
   /// Spawns the launcher child: the test seam (m_launcherSpawner) when set,
   /// otherwise the real cmd.exe-aware startLauncherProcess. Single chokepoint
   /// for both the tracked and detached spawn paths (Kartend-dhhh6).
@@ -302,9 +333,15 @@ private:
 
   /// Spawns `cmd` as a tracked child QProcess, emits runtimeStarted /
   /// runtimeFinished, and stamps the launch usage stat for `originalFilePath`
-  /// once the child actually starts. Returns true on a successful start.
+  /// once the child actually starts. `extractedDir` (empty for non-archive
+  /// launches) is reclaimed on FailedToStart via a connect wired BEFORE
+  /// start() — Windows delivers that error synchronously inside start(), so
+  /// a post-spawn hook would miss it and orphan the extraction. Returns true
+  /// when the spawn was issued (false only when another tracked child is
+  /// already running).
   bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd, const QString &filePath,
-                     const QString &originalFilePath, const QString &collectionUuid);
+                     const QString &originalFilePath, const QString &extractedDir,
+                     const QString &collectionUuid);
 
   /// Detached-path launch with a short-lived early-failure watcher
   /// (Kartend-fqsv0). Spawns `cmd` via an owned QProcess and keeps an

@@ -73,6 +73,20 @@ inline LaunchManager::LauncherSpawnFn fakeFailingLauncherSpawner() {
   };
 }
 
+/// Non-forking launcher spawner that fails to start SYNCHRONOUSLY: emits
+/// errorOccurred(FailedToStart) before the spawn call returns — the Windows
+/// shape, where CreateProcess fails inside QProcess::start() and the signal
+/// is delivered inline (the same synchronous delivery documented for
+/// started()). Exercises failure hooks that must be wired BEFORE start();
+/// the queued fakeFailingLauncherSpawner above would let a post-spawn
+/// connect pass unnoticed.
+inline LaunchManager::LauncherSpawnFn fakeSyncFailingLauncherSpawner() {
+  return [](QProcess *child, const QString &, const QStringList &) {
+    QMetaObject::invokeMethod(child, "errorOccurred",
+                              Q_ARG(QProcess::ProcessError, QProcess::FailedToStart));
+  };
+}
+
 /// Non-forking archive extractor. Runs on the QtConcurrent worker thread (the
 /// same place the real extractArchiveToTemp runs) and busy-waits in bounded
 /// 50 ms steps while polling the SAME cancel atomic the real extractor polls —

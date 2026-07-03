@@ -103,8 +103,8 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestLoadItemDetail, m_worker, &QueryManager::loadItemDetail);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
           &QueryManager::invalidateCollectionCache);
-  connect(this, &DatabaseManager::requestInvalidateSmartPlaylistScope, m_worker,
-          &QueryManager::invalidateSmartPlaylistScope);
+  connect(this, &DatabaseManager::requestInvalidateUsageSensitiveCaches, m_worker,
+          &QueryManager::invalidateUsageSensitiveCaches);
 
   // Background scanning is handled by the scan worker.
   connect(this, &DatabaseManager::requestEnsureScannedForContext, m_scanWorker,

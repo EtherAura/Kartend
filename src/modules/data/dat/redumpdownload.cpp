@@ -35,20 +35,48 @@ bool cancelled(const CancelToken &c) {
   return c && c->load(std::memory_order_relaxed);
 }
 
+// True when a redirect target stays on https + redump.org (or a subdomain).
+// The leading-dot boundary is load-bearing — a plain endsWith("redump.org")
+// would also accept look-alikes like "evilredump.org" (mirrors the scraper
+// HttpClient's hostMatchesAllowlist).
+bool isAllowedRedirectTarget(const QUrl &target) {
+  if (target.scheme() != QLatin1String("https")) {
+    return false;
+  }
+  const QString host = target.host();
+  return host == QLatin1String("redump.org") || host.endsWith(QLatin1String(".redump.org"));
+}
+
 // Blocking GET driven by a local event loop (so the caller runs it on a worker
-// thread). Follows redirects (no token/session to preserve, unlike No-Intro).
+// thread). Follows redirects (no token/session to preserve, unlike No-Intro),
+// but only within https + redump.org: like the No-Intro flow's SEC-01 check
+// and the scraper HttpClient's host pinning, a 3xx from a compromised
+// upstream must not be able to steer the download — whose body feeds the
+// archive extractor — to an arbitrary HTTPS host. UserVerifiedRedirectPolicy
+// makes QNAM pause on each hop until redirectAllowed(), so an off-host target
+// is aborted before it is ever contacted.
 // Returns the owned reply; caller inspects error()/headers/body.
 QNetworkReply *blockingGet(QNetworkAccessManager &nam, const QUrl &url, const CancelToken &cancel,
                            const std::function<void(qint64, qint64)> &onProgress) {
   QNetworkRequest req(url);
   req.setRawHeader("User-Agent", kUserAgent);
   req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                   QNetworkRequest::NoLessSafeRedirectPolicy);
+                   QNetworkRequest::UserVerifiedRedirectPolicy);
   // Bound a stalled/slowloris server so the download worker can't hang
   // indefinitely (the cancel token only fires on explicit user cancel).
   // Matches the scraper HttpClient's 30s transfer timeout (Kartend-vu8io).
   req.setTransferTimeout(30000);
   QNetworkReply *reply = nam.get(req);
+  QObject::connect(reply, &QNetworkReply::redirected, reply, [reply](const QUrl &target) {
+    if (isAllowedRedirectTarget(target)) {
+      emit reply->redirectAllowed();
+      return;
+    }
+    // Off-host/off-scheme redirect: abort before the target is contacted.
+    // Surfaces as OperationCanceledError, which the callers report as a
+    // download failure.
+    reply->abort();
+  });
 
   QEventLoop loop;
   QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);

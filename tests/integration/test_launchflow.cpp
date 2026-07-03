@@ -16,6 +16,7 @@
 
 #include "../support/launchfakes.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
@@ -137,27 +138,35 @@ QString scanAndResolveItemPath(MainWindow *win, const QString &uuid) {
   }
   db->loadAllCollections(win->m_collections);
 
-  // The scan runs on the DB worker thread; poll until the item row exists.
-  QString itemPath;
-  for (int waited = 0; waited < 10000 && itemPath.isEmpty(); waited += 50) {
-    const auto rows = db->loadAllItemPathsForCollection(uuid);
-    if (!rows.isEmpty()) {
-      itemPath = rows.first().path;
-      break;
-    }
-    QTest::qWait(50);
-  }
-  if (itemPath.isEmpty()) {
+  // The startup rescan runs on the DB worker thread; its items rows become
+  // visible mid-scan (the staging pipeline commits in batches), so "row
+  // exists" alone can leave the tail of the scan holding the SQLite write
+  // lock. Launch writes issued inside that window survive via the bounded
+  // runWrite retry ladder (regression-tested in test_databasemanager), but
+  // this test asserts the launch landed within a fixed timeout — so wait on
+  // the condition that actually ends the scan: the apply transaction's
+  // commit, which stamps collections.last_scanned past its epoch-0 creation
+  // seed and releases the write lock. A state query rather than a signal
+  // spy / fixed quiet window: the scan can finish before a spy could be
+  // armed, and the previous 1.5s-quiet loop just masked this condition with
+  // wall-clock time.
+  const bool scanCommitted = QTest::qWaitFor(
+      [&]() {
+        const QDateTime lastScanned = db->loadCollectionLastScanned(uuid);
+        return lastScanned.isValid() && lastScanned.toSecsSinceEpoch() > 0;
+      },
+      30000);
+  if (!scanCommitted) {
     return {};
   }
 
-  // Wait for scan quiescence before handing the path back. The startup
-  // rescan can still hold the SQLite write lock after the row appears;
-  // launch writes issued inside that window now survive via the bounded
-  // runWrite retry ladder (Kartend-cbtml, regression-tested in
-  // test_databasemanager), but this test asserts the launch landed with a
-  // fixed timeout, so keep the deterministic quiet window anyway.
-  // Quiet = 1.5s with no collectionScanCompleted emission, bounded at 20s.
+  // The stamp only ends the FIRST scan. This fixture's watcher/count-reload
+  // plumbing triggers several follow-up rescans, and each one re-takes the
+  // SQLite write lock — the launch write's retry ladder is bounded
+  // (Kartend-cbtml), so a launch issued into sustained churn can be dropped.
+  // On top of the stamp, wait for scan QUIESCENCE: no collectionScanCompleted
+  // for 1.5s, bounded at 20s. This window is genuinely time-gated — "no
+  // further scan is coming" has no positive signal to wait on.
   QSignalSpy scanCompleted(db, &IDatabaseManager::collectionScanCompleted);
   int settledCount = scanCompleted.count();
   for (int waited = 0; waited < 20000; waited += 1500) {
@@ -167,7 +176,9 @@ QString scanAndResolveItemPath(MainWindow *win, const QString &uuid) {
     }
     settledCount = scanCompleted.count();
   }
-  return itemPath;
+
+  const auto rows = db->loadAllItemPathsForCollection(uuid);
+  return rows.isEmpty() ? QString{} : rows.first().path;
 }
 
 } // namespace

@@ -251,13 +251,15 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
       },
       [this, collectionUuid, path]() {
         m_metadataCache.invalidateUsage(collectionUuid, path);
-        emit requestInvalidateSmartPlaylistScope();
+        emit requestInvalidateUsageSensitiveCaches();
       },
       QStringLiteral("DatabaseManager::recordItemLaunch"));
   m_metadataCache.invalidateUsage(collectionUuid, path);
   // play_count / last_played changed -> smart playlists like "Recently
-  // launched" / "Most played" must re-evaluate (Kartend-s9jw).
-  emit requestInvalidateSmartPlaylistScope();
+  // launched" / "Most played" must re-evaluate (Kartend-s9jw), and a
+  // played:/unplayed-filtered sorted-items cache must rebuild rather than
+  // serve the pre-launch result set for the rest of the session.
+  emit requestInvalidateUsageSensitiveCaches();
 }
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
@@ -348,7 +350,7 @@ bool DatabaseManager::resetAllUsageStats() {
   m_metadataCache.clear();
   // All play_count / last_played values just changed -> drop smart-playlist
   // scope so play-data-keyed playlists re-evaluate (Kartend-s9jw).
-  emit requestInvalidateSmartPlaylistScope();
+  emit requestInvalidateUsageSensitiveCaches();
   return true;
 }
 

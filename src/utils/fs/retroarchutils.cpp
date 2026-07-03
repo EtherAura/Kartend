@@ -43,15 +43,10 @@ const QStringList &coreExtensions() {
 
 // retroarch.cfg routinely stores paths with a leading `~` for the home
 // directory; QDir / QFileInfo do NOT expand it, so a `~`-rooted core
-// directory would look non-existent. Expand it here.
+// directory would look non-existent. Delegate to the canonical PathUtils
+// expansion (only "~/" and a bare "~" expand) so the rules can't drift.
 QString expandHome(const QString &path) {
-  if (path == QStringLiteral("~")) {
-    return QDir::homePath();
-  }
-  if (path.startsWith(QStringLiteral("~/"))) {
-    return QDir::homePath() + path.mid(1);
-  }
-  return path;
+  return PathUtils::expandPathWithoutExistenceCheck(path);
 }
 
 } // namespace

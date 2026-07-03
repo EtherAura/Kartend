@@ -147,6 +147,11 @@ public:
   /// rewrote it. Cheap and idempotent.
   void invalidateMetadataCacheItem(const QString &collectionUuid, const QString &path) override;
 
+  /// Relays to the query worker via requestInvalidateUsageSensitiveCaches
+  /// (queued). See IDatabaseManager — used by playlist-membership mutations
+  /// that live outside this manager's write path.
+  void invalidateUsageSensitiveCaches() override { emit requestInvalidateUsageSensitiveCaches(); }
+
   // ──────────────────────────────────────────────────────────────────────────
   // Usage statistics
   // ──────────────────────────────────────────────────────────────────────────
@@ -213,10 +218,12 @@ signals:
                              const QString &filePath, const QString &artworkDir,
                              const QString &videoDir, const QString &manualDir);
   void requestInvalidateCache(const QString &collectionUuid);
-  // Queued -> QueryManager::invalidateSmartPlaylistScope on the worker thread,
-  // fired after usage-stat writes (launch / reset) so smart playlists keyed on
-  // play data re-evaluate instead of staying stale (Kartend-s9jw).
-  void requestInvalidateSmartPlaylistScope();
+  // Queued -> QueryManager::invalidateUsageSensitiveCaches on the worker
+  // thread. Fired after usage-stat writes (launch / reset — Kartend-s9jw) and
+  // relayed from playlist-membership changes (favorite toggles) so smart
+  // playlists keyed on play data re-evaluate AND a played:/favorite:-filtered
+  // sorted cache rebuilds instead of serving stale ranges for the session.
+  void requestInvalidateUsageSensitiveCaches();
 
   // Internal signal to trigger background scan on dedicated scan worker.
   void requestEnsureScannedForContext(const CollectionContext &context,

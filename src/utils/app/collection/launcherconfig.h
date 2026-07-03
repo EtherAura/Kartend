@@ -175,6 +175,17 @@ inline size_t qHash(const LauncherProfile &key, size_t seed = 0) {
 
 namespace LauncherUtils {
 
+/// Expands the %collection% placeholder (case-insensitive) in a stored
+/// launcher/core path and trims the result — the exact expansion
+/// LaunchManager::buildLaunchCommand applies before executing. Shared so
+/// pre-launch validation judges the same path the launch itself will run.
+[[nodiscard]] inline QString expandCollectionPlaceholder(const QString &text,
+                                                         const QString &collectionName) {
+  QString out = text;
+  out.replace(QStringLiteral("%collection%"), collectionName, Qt::CaseInsensitive);
+  return out.trimmed();
+}
+
 /// Walk the profile's primary + additionalLaunchers slots and return a
 /// user-facing string per slot whose launcherPath fails PathUtils::
 /// checkLauncherPath. Empty paths skip silently (they're "unconfigured", not
@@ -182,6 +193,22 @@ namespace LauncherUtils {
 /// localized status description, matching the sidebar's `⚠ Launcher path`
 /// rows so the items-toolbar warning badge can reuse the strings verbatim.
 [[nodiscard]] QStringList launcherPathIssues(const LauncherProfile &profile);
+
+/// Launch-time overload: judges the paths a launch would actually execute.
+/// Each slot is first resolved through resolvePreset — so a preset-backed
+/// entry is checked against the preset's stored path instead of being
+/// skipped as "unconfigured" — and %collection% is then expanded exactly
+/// like buildLaunchCommand does, so a path routed through the placeholder
+/// isn't misread as relative/unfindable. A slot whose presetId no longer
+/// matches any preset AND whose inline fallback path is empty is flagged as
+/// unresolvable naming the missing preset (it used to skip silently and
+/// only fail later at buildLaunchCommand); a dangling presetId with a
+/// usable inline path is judged on that fallback, since that is what would
+/// launch. Labels and formatting match the raw overload above; the
+/// reported path is the expanded one (what runs).
+[[nodiscard]] QStringList launcherPathIssues(const LauncherProfile &profile,
+                                             const QList<LauncherPreset> &presets,
+                                             const QString &collectionName);
 
 } // namespace LauncherUtils
 

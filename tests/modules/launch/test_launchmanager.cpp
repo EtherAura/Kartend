@@ -5,7 +5,9 @@
  * Tests the security validation functions for launcher paths and parameters.
  */
 
+#include "applicationcontext.h"
 #include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "collection/launcherconfig.h"
 #include "launchmanager.h"
 
@@ -80,6 +82,8 @@ private slots:
   void testBuildLaunchCommand_substitutesFilePlaceholder();
   void testBuildLaunchCommand_filePlaceholderKeepsSingleArgWithSpaces();
   void testBuildLaunchCommand_substitutesCorePlaceholderInPlainLauncher();
+  void testBuildLaunchCommand_filePlaceholderIgnoresLongerTokens();
+  void testBuildLaunchCommand_corePlaceholderIgnoresLongerTokens();
   void testBuildLaunchCommand_noPlaceholderStillAppendsFilePath();
   void testBuildLaunchCommand_retroArch_usesCorePath();
   void testBuildLaunchCommand_retroArch_includesLaunchParameters();
@@ -129,6 +133,28 @@ private slots:
 
   // launchItem extracted-dir cleanup when the launcher fails to start (Kartend-dyu1k).
   void testLaunchItem_failedStartRemovesExtractedDir();
+
+  // Tracked-path variant: a FailedToStart delivered SYNCHRONOUSLY inside the
+  // spawn (the Windows shape) must still reclaim the extraction dir. The old
+  // post-spawn reclaim wiring in finishLaunch ran after the failure had
+  // already cleared m_trackedChild, so the hook was never installed.
+  void testLaunchItem_trackedSyncFailedStartReclaimsExtractedDir();
+
+  // The double-launch debounce map must not grow one entry per ever-launched
+  // path: recordLaunch prunes entries whose 500ms guard window has lapsed.
+  void testRecordLaunch_prunesLapsedDebounceEntries();
+
+  // launchItem must snapshot the collection by value before the launcher
+  // chooser runs: the chooser's modal loop still services timers and queued
+  // slots, and one of them mutating m_collections used to dangle the
+  // reference the post-chooser reads went through.
+  void testLaunchItem_chooserMutatingCollectionsLaunchesSnapshot();
+
+  // A fire-and-forget child that survives its early-failure window must be
+  // reparented away from the manager: a still-owned QProcess is destroyed by
+  // ~LaunchManager, and ~QProcess kills a running child — closing the
+  // frontend used to take the user's launched program down with it.
+  void testDetachedChildReparentedAfterWatchWindow();
 
   // Kartend-ijglg: decompressed-size bound on launch-time extraction.
   void testExtractArchive_rejectsArchiveLargerThanCap();
@@ -237,6 +263,7 @@ void TestLaunchManager::cleanupTestCase() {
   QDir(extractionDirFor("kartend_cancel_pre")).removeRecursively();
   QDir(extractionDirFor("kartend_cancel_launch")).removeRecursively();
   QDir(extractionDirFor("kartend_dtor")).removeRecursively();
+  QDir(extractionDirFor("kartend_tracked_sync_fail")).removeRecursively();
   qDeleteAll(m_fixtureDirs);
   m_fixtureDirs.clear();
 }
@@ -358,22 +385,47 @@ QString TestLaunchManager::makeFakeExtractorDir(int kibToWrite, int sleepSecs) {
   }
   m_fixtureDirs.append(dir);
 
-  const QString path = dir->filePath(QStringLiteral("7z"));
-  QFile f(path);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return {};
+  // The production extractor prefers bsdtar, then 7z — fake whichever exist
+  // so the runaway behaviour is exercised regardless of preference order.
+  // The pre-extraction safety scan lists the archive with the same binaries
+  // (bsdtar -tf / 7z l), so list-mode invocations delegate to the REAL tool
+  // (resolved now, before the caller prepends this dir to PATH); only the
+  // extract mode misbehaves.
+  const QString realBsdtar = QStandardPaths::findExecutable(QStringLiteral("bsdtar"));
+  const QString real7z = QStandardPaths::findExecutable(QStringLiteral("7z"));
+
+  const auto writeFake = [&](const QString &name, const QByteArray &listDelegate) -> bool {
+    const QString path = dir->filePath(name);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+      return false;
+    }
+    // extractArchiveToTemp runs the extractor with CWD == the extraction dir,
+    // so payload.bin lands exactly where the size watchdog measures.
+    QByteArray script = "#!/bin/sh\n";
+    script += listDelegate;
+    if (kibToWrite > 0) {
+      script += "dd if=/dev/zero of=payload.bin bs=1024 count=" + QByteArray::number(kibToWrite) +
+                " 2>/dev/null\n";
+    }
+    script += "sleep " + QByteArray::number(sleepSecs) + "\n";
+    f.write(script);
+    f.close();
+    return QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+  };
+
+  if (!realBsdtar.isEmpty()) {
+    const QByteArray delegate =
+        "case \"$1\" in -t*) exec \"" + realBsdtar.toUtf8() + "\" \"$@\" ;; esac\n";
+    if (!writeFake(QStringLiteral("bsdtar"), delegate)) {
+      return {};
+    }
   }
-  // extractArchiveToTemp runs the extractor with CWD == the extraction dir,
-  // so payload.bin lands exactly where the size watchdog measures.
-  QByteArray script = "#!/bin/sh\n";
-  if (kibToWrite > 0) {
-    script += "dd if=/dev/zero of=payload.bin bs=1024 count=" + QByteArray::number(kibToWrite) +
-              " 2>/dev/null\n";
+  QByteArray sevenDelegate;
+  if (!real7z.isEmpty()) {
+    sevenDelegate = "case \"$1\" in l) exec \"" + real7z.toUtf8() + "\" \"$@\" ;; esac\n";
   }
-  script += "sleep " + QByteArray::number(sleepSecs) + "\n";
-  f.write(script);
-  f.close();
-  if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
+  if (!writeFake(QStringLiteral("7z"), sevenDelegate)) {
     return {};
   }
   return dir->path();
@@ -776,6 +828,44 @@ void TestLaunchManager::testBuildLaunchCommand_substitutesCorePlaceholderInPlain
   auto result = LaunchManager::buildLaunchCommand(launcher, "Retro", filePath);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/cores/snes9x.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_filePlaceholderIgnoresLongerTokens() {
+  // %f is only the standalone token, never the prefix of a longer one:
+  // substring replacement used to corrupt `%file%` into "<path>ile%" AND set
+  // sawFilePlaceholder, suppressing the append-media-path fallback. The
+  // unknown token must pass through verbatim (previewLaunchCommand flags it
+  // as unresolved via the same \b boundary) and the media path still lands
+  // at the end. `%10` likewise stays literal — its digit run is not the %1
+  // token, so no partial "<path>0" substitution.
+  const QString filePath = "/tmp/clip.mp4";
+  LauncherConfig launcher{"mpv", "mpv", "", "--playlist=%file% --seek=%10"};
+  auto result = LaunchManager::buildLaunchCommand(launcher, "Video", filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, (QStringList{"--playlist=%file%", "--seek=%10", filePath}));
+
+  // A genuine standalone %f still substitutes — lowercase here; the
+  // uppercase %F alias is covered by
+  // testBuildLaunchCommand_substitutesFilePlaceholder.
+  LauncherConfig lower{"mpv", "mpv", "", "--input %f"};
+  auto lowerResult = LaunchManager::buildLaunchCommand(lower, "Video", filePath);
+  QVERIFY2(lowerResult.isOk(),
+           qPrintable(lowerResult.isError() ? lowerResult.error().message : QString()));
+  QCOMPARE(lowerResult.value().arguments, (QStringList{"--input", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_corePlaceholderIgnoresLongerTokens() {
+  // Same boundary rule for %core: a longer %coreopts%-style token must not
+  // be corrupted into "<core path>opts%". The standalone %core in the same
+  // template still substitutes, and with no %1/%f present the media path is
+  // appended at the end as usual.
+  const QString filePath = "/tmp/episode.mkv";
+  LauncherConfig launcher{"libretro-fe", "/usr/bin/libretro-fe", "/cores/engine.so",
+                          "-L %core --extra %coreopts%"};
+  auto result = LaunchManager::buildLaunchCommand(launcher, "Video", filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"-L", "/cores/engine.so", "--extra", "%coreopts%", filePath}));
 }
 
 void TestLaunchManager::testBuildLaunchCommand_noPlaceholderStillAppendsFilePath() {
@@ -1535,6 +1625,255 @@ void TestLaunchManager::testLaunchItem_failedStartRemovesExtractedDir() {
   QTRY_VERIFY2(!QDir(extractionDir).exists(),
                "the extracted archive dir must be removed when the launcher fails to start");
 #endif
+}
+
+void TestLaunchManager::testLaunchItem_trackedSyncFailedStartReclaimsExtractedDir() {
+  // Windows delivers QProcess signals synchronously inside start()
+  // (CreateProcess fails inline) — model that with a spawner that emits
+  // errorOccurred(FailedToStart) BEFORE returning. On the tracked path the
+  // synchronous failure runs launchTracked's cleanup, which clears
+  // m_trackedChild before launchTracked even returns; the old reclaim hook
+  // in finishLaunch (wired post-spawn behind an `if (m_trackedChild)`) was
+  // therefore never installed and the extraction dir was orphaned into the
+  // reusable cache. The reclaim connect now rides in launchTracked itself,
+  // wired before the spawn, so even the synchronous shape removes the dir.
+  // Everything here is seam-driven (fake extractor + fake spawner): no fork,
+  // so the slot also runs under ThreadSanitizer.
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+
+  const QString base = QStringLiteral("kartend_tracked_sync_fail");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+
+  const QString zip = makeArchiveStub(base);
+  QVERIFY2(!zip.isEmpty(), "could not create the archive stub");
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".iso");
+  // Passes validateLauncherPath (exists + executable); the fake spawner
+  // below means it is never actually run.
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  // Route through the tracked path: runtime detection reads
+  // ctx->collection.generalSettings, so wire a minimal context.
+  GeneralSettings settings;
+  settings.runtimeDetection.runtimeDetectionEnabled = true;
+  ApplicationContext ctx;
+  ctx.collection.generalSettings = &settings;
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  manager.setArchiveExtractorForTesting(KartendTest::fakeSleepyExtractor(
+      extractionDir, QStringLiteral("disc.iso"), /*maxSleepMs=*/100));
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeSyncFailingLauncherSpawner());
+
+  QSignalSpy extractionFinishedSpy(&manager, &LaunchManager::extractionFinished);
+  QSignalSpy runtimeFinishedSpy(&manager, &LaunchManager::runtimeFinished);
+  manager.launchItem(zip, 0);
+
+  QVERIFY2(extractionFinishedSpy.count() == 1 || extractionFinishedSpy.wait(15000),
+           "extractionFinished must fire once the worker completes");
+  // The synchronous FailedToStart settles the tracked session before
+  // launchTracked returns: no tracked child lingers and the balanced
+  // runtimeFinished still fires.
+  QTRY_COMPARE(runtimeFinishedSpy.count(), 1);
+  QVERIFY(!manager.isRuntimeChildRunning());
+  QTRY_VERIFY2(!QDir(extractionDir).exists(),
+               "a synchronously-failed tracked spawn must reclaim the extraction dir");
+}
+
+void TestLaunchManager::testRecordLaunch_prunesLapsedDebounceEntries() {
+  LaunchManager manager;
+  manager.recordLaunch(QStringLiteral("/tmp/items/alpha.mp4"));
+  manager.recordLaunch(QStringLiteral("/tmp/items/beta.mp4"));
+  // Both entries sit inside their 500ms window: nothing is prunable and the
+  // guard still holds per path (recording beta must not evict alpha).
+  QCOMPARE(manager.debounceEntryCountForTesting(), 2);
+  QVERIFY(!manager.canLaunch(QStringLiteral("/tmp/items/alpha.mp4")));
+  QVERIFY(!manager.canLaunch(QStringLiteral("/tmp/items/beta.mp4")));
+  QVERIFY(manager.canLaunch(QStringLiteral("/tmp/items/gamma.mp4")));
+
+  // Wait out the 500ms guard window (extra headroom only makes the entries
+  // MORE lapsed — no flake direction under load).
+  QTest::qWait(600);
+  QVERIFY(manager.canLaunch(QStringLiteral("/tmp/items/alpha.mp4")));
+
+  // The next record prunes the lapsed entries instead of accumulating one
+  // per ever-launched path for the life of the session.
+  manager.recordLaunch(QStringLiteral("/tmp/items/gamma.mp4"));
+  QCOMPARE(manager.debounceEntryCountForTesting(), 1);
+  QVERIFY(!manager.canLaunch(QStringLiteral("/tmp/items/gamma.mp4")));
+}
+
+void TestLaunchManager::testLaunchItem_chooserMutatingCollectionsLaunchesSnapshot() {
+  // The chooser callback stands in for the modal LauncherChooserDialog: its
+  // nested event loop still services timers and queued slots, and any of them
+  // mutating the owner's collections list reallocates it under launchItem's
+  // feet. The post-chooser reads (chosen launcher entry, archive options,
+  // collection name) used to go through a reference into that list — freed
+  // memory right before the spawn. Mutate the list from inside the callback
+  // and verify the launch still uses the values captured when it opened.
+  auto *dir = new QTemporaryDir();
+  QVERIFY(dir->isValid());
+  m_fixtureDirs.append(dir);
+
+#ifdef Q_OS_WIN
+  static constexpr const char *kLauncherExt = ".bat";
+  static constexpr const char *kLauncherContent = "@echo off\r\nexit /b 0\r\n";
+#else
+  static constexpr const char *kLauncherExt = "";
+  static constexpr const char *kLauncherContent = "#!/bin/sh\nexit 0\n";
+#endif
+  // Two distinct on-disk launchers so the chooser genuinely has a pick to
+  // make; the fake spawner below never runs them, they only need to pass
+  // validateLauncherPath (exists + executable).
+  auto makeLauncher = [&](const QString &baseName) -> QString {
+    const QString path = dir->filePath(baseName + QLatin1String(kLauncherExt));
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+      return {};
+    }
+    f.write(kLauncherContent);
+    f.close();
+    if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
+      return {};
+    }
+    return path;
+  };
+  const QString primaryLauncher = makeLauncher(QStringLiteral("primary_launcher"));
+  const QString alternateLauncher = makeLauncher(QStringLiteral("alternate_launcher"));
+  QVERIFY2(!primaryLauncher.isEmpty() && !alternateLauncher.isEmpty(),
+           "could not create the launcher fixtures");
+
+  const QString mediaFile = dir->filePath(QStringLiteral("item.bin"));
+  {
+    QFile f(mediaFile);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write("MEDIA");
+  }
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Snapshot Collection");
+  collection.launcher.launcherPath = primaryLauncher;
+  LauncherConfig alternate;
+  alternate.name = QStringLiteral("Alternate");
+  alternate.launcherPath = alternateLauncher;
+  collection.launcher.additionalLaunchers.append(alternate);
+  collections.append(collection);
+  // capacity == size, so the append inside the chooser must reallocate.
+  collections.squeeze();
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  QString chooserSawCollection;
+  QStringList chooserSawNames;
+  setup.chooseLauncher = [&](const QString &collectionName, const QStringList &launcherNames,
+                             int) -> int {
+    chooserSawCollection = collectionName;
+    chooserSawNames = launcherNames;
+    // What a settings edit landing mid-modal does: replace the launching
+    // collection, then grow the list past its capacity so it reallocates
+    // and the old buffer is freed.
+    CollectionConfig replacement;
+    replacement.name = QStringLiteral("Replaced");
+    replacement.launcher.launcherPath = QStringLiteral("/nonexistent/replaced_launcher");
+    collections[0] = replacement;
+    for (int i = 0; i < 32; ++i) {
+      collections.append(CollectionConfig{});
+    }
+    return 1; // pick the alternate launcher
+  };
+  manager.setupReferences(setup);
+
+  // Runtime detection stays off (no ctx/settings wired) -> the detached path,
+  // which hands the validated program + args to the spawner seam synchronously
+  // inside launchItem. Recording them is the whole assertion; nothing forks.
+  QString spawnedProgram;
+  QStringList spawnedArgs;
+  manager.setLauncherSpawnerForTesting(
+      [&spawnedProgram, &spawnedArgs](QProcess *, const QString &program, const QStringList &args) {
+        spawnedProgram = program;
+        spawnedArgs = args;
+      });
+
+  manager.launchItem(mediaFile, 0);
+
+  QCOMPARE(chooserSawCollection, QStringLiteral("Snapshot Collection"));
+  QCOMPARE(chooserSawNames.size(), 2);
+  QCOMPARE(collections.size(), 33); // the mid-chooser mutation really ran
+  // The spawn must use the launcher the user picked as it existed when the
+  // chooser opened — not the replaced element 0, and not freed memory.
+  QCOMPARE(spawnedProgram, QFileInfo(alternateLauncher).canonicalFilePath());
+  QVERIFY2(spawnedArgs.contains(mediaFile),
+           "the launched item must ride along as an argument to the snapshotted launcher");
+}
+
+void TestLaunchManager::testDetachedChildReparentedAfterWatchWindow() {
+  auto *dir = new QTemporaryDir();
+  QVERIFY(dir->isValid());
+  m_fixtureDirs.append(dir);
+
+#ifdef Q_OS_WIN
+  static constexpr const char *kLauncherExt = ".bat";
+  static constexpr const char *kLauncherContent = "@echo off\r\nexit /b 0\r\n";
+#else
+  static constexpr const char *kLauncherExt = "";
+  static constexpr const char *kLauncherContent = "#!/bin/sh\nexit 0\n";
+#endif
+  const QString launcher = dir->filePath(QStringLiteral("launcher") + QLatin1String(kLauncherExt));
+  {
+    QFile f(launcher);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(kLauncherContent);
+  }
+  QVERIFY(QFile::setPermissions(launcher, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+  const QString mediaFile = dir->filePath(QStringLiteral("item.bin"));
+  {
+    QFile f(mediaFile);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write("MEDIA");
+  }
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Detached Collection");
+  collection.launcher.launcherPath = launcher;
+  collections.append(collection);
+
+  QPointer<QProcess> child;
+  {
+    LaunchManager manager;
+    LaunchManagerSetup setup;
+    setup.collections = &collections;
+    manager.setupReferences(setup);
+    // The fake spawner never forks; the QProcess stays NotRunning, so neither
+    // errorOccurred nor finished fires and only the watch window can settle.
+    manager.setLauncherSpawnerForTesting([](QProcess *, const QString &, const QStringList &) {});
+
+    manager.launchItem(mediaFile, 0);
+
+    const QList<QProcess *> ownedBefore = manager.findChildren<QProcess *>();
+    QCOMPARE(ownedBefore.size(), 1);
+    child = ownedBefore.first();
+
+    // Wait out the early-failure window: the settle handler must orphan the
+    // child (no QProcess children left on the manager) without deleting it.
+    QTRY_VERIFY_WITH_TIMEOUT(manager.findChildren<QProcess *>().isEmpty(), 5000);
+    QVERIFY(child);
+    QVERIFY2(!child->parent(), "a settled fire-and-forget child must not stay QObject-owned");
+  }
+  // ~LaunchManager must reap the never-started (NotRunning) orphan rather
+  // than leaking it — and must not have crashed doing so.
+  QVERIFY(child.isNull());
 }
 
 void TestLaunchManager::testExtractArchive_rejectsArchiveLargerThanCap() {

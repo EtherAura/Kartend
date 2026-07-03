@@ -1,4 +1,5 @@
 // Archive extraction helpers split out from launchmanager.cpp.
+#include "archivesafety.h"
 #include "errorutils.h"
 #include "launchmanager.h"
 #include "pathutils.h"
@@ -213,33 +214,33 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   // Dismissed on the successful return so the cache directory persists.
   auto cleanupTargetDir = qScopeGuard([&uniqueDir]() { QDir(uniqueDir).removeRecursively(); });
 
-  // Use system tools to extract. unzip reads only .zip, so gate it on the
-  // extension — handing a non-zip archive (gz/xz/bz2/tar/...) to unzip fails even
-  // when bsdtar, which handles them, is installed (Kartend-9ys3w; mirrors the
-  // RomHasher::extractorCandidates fix in Kartend-akaww). 7z stays first.
-  QStringList extractors;
-  extractors << "7z";
-  if (archivePath.toLower().endsWith(QStringLiteral(".zip"))) {
-    extractors << "unzip";
+  // Use system tools to extract. bsdtar leads: libarchive's default extract
+  // mode refuses ".." components and refuses to write through a symlink, so
+  // it is the safest against crafted archives. 7z sanitizes entry paths but
+  // its symlink behaviour varies by version, so it only runs behind the
+  // symlink-rejecting pre-scan. unzip is gone entirely — it recreates symlink
+  // entries and then happily writes through them (the classic
+  // zip-slip-via-symlink primitive), and bsdtar/7z cover .zip anyway.
+  //
+  // Each candidate tool is scanned AND extracted with the SAME tool, and on a
+  // pure format failure (the tool cannot read the archive — e.g.
+  // bsdtar/libarchive on some RAR5 / solid / multi-volume variants that 7z
+  // handles) we fall through to the next available tool. A security rejection
+  // from the scan, a size-cap breach, a timeout, or a cancel aborts outright:
+  // those must never be retried with another tool.
+  const QStringList candidateTools{QStringLiteral("bsdtar"), QStringLiteral("7z")};
+  QStringList availableTools;
+  for (const QString &cmd : candidateTools) {
+    if (!QStandardPaths::findExecutable(cmd).isEmpty()) availableTools << cmd;
   }
-  extractors << "bsdtar";
-  QString extractor;
-
-  for (const QString &cmd : extractors) {
-    if (!QStandardPaths::findExecutable(cmd).isEmpty()) {
-      extractor = cmd;
-      break;
-    }
-  }
-
-  if (extractor.isEmpty()) {
+  if (availableTools.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails("Install 7z or bsdtar to extract archives (unzip handles only .zip)");
+        .withDetails("Install bsdtar or 7z to extract archives");
   }
 
-  // The archive path is a positional operand for 7z/unzip; a leading '-'
-  // would be misparsed as an option (argv-flag injection — no shell involved).
+  // The archive path is a positional operand for 7z; a leading '-' would be
+  // misparsed as an option (argv-flag injection — no shell involved).
   // Extraction already requires an absolute path (the child CWD is the temp
   // dir), so this never fires for real inputs; it is defense-in-depth. We use
   // a leading-dash guard rather than a `--` separator because bsdtar passes
@@ -251,80 +252,131 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails(archivePath);
   }
 
-  QProcess process;
-  process.setWorkingDirectory(uniqueDir);
+  ErrorContext lastFailure =
+      ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed",
+                          "LaunchManager::extractArchiveToTemp");
+  bool extracted = false;
+  for (int toolIdx = 0; toolIdx < availableTools.size() && !extracted; ++toolIdx) {
+    const QString &extractor = availableTools.at(toolIdx);
 
-  QStringList args;
-  if (extractor == "7z") {
-    args << "x" << "-y" << archivePath;
-  } else if (extractor == "unzip") {
-    args << "-o" << archivePath;
-  } else if (extractor == "bsdtar") {
-    args << "-xf" << archivePath;
+    // Start every attempt from a clean extraction dir — a prior tool may have
+    // written partial output before failing.
+    if (toolIdx > 0) {
+      QDir(uniqueDir).removeRecursively();
+      if (!QDir().mkpath(uniqueDir)) {
+        return ErrorContext::error(ErrorCode::FileWriteError,
+                                   "Failed to create extraction subdirectory",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(uniqueDir);
+      }
+    }
+
+    // Refuse archives whose listing shows symlink/hardlink entries or
+    // path-escape attempts BEFORE anything is written — scanned with THIS
+    // tool so the security verdict matches what will actually extract. The
+    // post-extraction NoSymLinks walks below only choose which file gets
+    // launched; a write routed through a symlink entry lands OUTSIDE uniqueDir
+    // where those walks never look, so the only effective defense runs up
+    // front. A security rejection aborts (never retried with another tool); a
+    // tool that simply can't list the format falls through to the next tool.
+    if (const auto scan = ArchiveSafety::scanArchiveEntriesWithTool(archivePath, extractor);
+        scan.isError()) {
+      if (ArchiveSafety::isSecurityRejection(scan.error())) {
+        return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                   "Archive failed the pre-extraction safety scan",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(QString("%1 — %2").arg(archivePath, scan.error().userFacingSummary()));
+      }
+      lastFailure = scan.error();
+      continue; // this tool can't list the format — try the next
+    }
+
+    QProcess process;
+    process.setWorkingDirectory(uniqueDir);
+
+    QStringList args;
+    if (extractor == "7z") {
+      args << "x" << "-y" << archivePath;
+    } else if (extractor == "bsdtar") {
+      args << "-xf" << archivePath;
+    }
+
+    qCDebug(lcLaunchManager) << "Extracting with" << extractor << args;
+
+    process.start(extractor, args);
+    if (!process.waitForStarted(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS)) {
+      lastFailure =
+          ErrorContext::error(ErrorCode::UnknownError, "Failed to start archive extractor",
+                              "LaunchManager::extractArchiveToTemp")
+              .withDetails(QString("%1: %2").arg(extractor, process.errorString()));
+      continue; // maybe the next tool starts
+    }
+
+    // Kartend-mkcak / Kartend-ijglg: poll instead of a single blocking
+    // waitForFinished so the extraction (running on a worker thread) stays
+    // cancellable and the decompressed-size watchdog can kill a zip bomb
+    // mid-flight instead of letting it fill tmpfs. Each pass blocks at most
+    // one poll interval, then re-checks cancel flag, size cap, and the
+    // overall timeout.
+    QElapsedTimer extractionClock;
+    extractionClock.start();
+    enum class Abort { None, Cancelled, SizeExceeded, TimedOut };
+    Abort abort = Abort::None;
+    while (!process.waitForFinished(UIConstants::Launch::EXTRACTION_WATCHDOG_POLL_MS)) {
+      if (cancelRequested && cancelRequested->load()) {
+        abort = Abort::Cancelled;
+        break;
+      }
+      if (extractionSizeExceeds(uniqueDir, maxBytes)) {
+        abort = Abort::SizeExceeded;
+        break;
+      }
+      if (extractionClock.elapsed() >= UIConstants::Launch::EXTRACTION_TIMEOUT_MS) {
+        abort = Abort::TimedOut;
+        break;
+      }
+    }
+    if (abort != Abort::None) {
+      // Never abandon the child: kill it and give it a bounded grace period to
+      // die so the cleanupTargetDir guard below removes a quiescent tree.
+      // These are hard aborts — user cancel or a resource/security cap — so we
+      // do NOT fall through to another tool.
+      process.kill();
+      process.waitForFinished(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS);
+      switch (abort) {
+      case Abort::Cancelled:
+        return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(archivePath);
+      case Abort::SizeExceeded:
+        return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                   "Archive extraction exceeded the decompressed size limit",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
+      case Abort::TimedOut:
+      default:
+        return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(archivePath);
+      }
+    }
+
+    if (process.exitCode() != 0) {
+      QString errorOutput = QString::fromUtf8(process.readAllStandardError());
+      lastFailure = ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed",
+                                        "LaunchManager::extractArchiveToTemp")
+                        .withDetails(QString("%1 exit code: %2, Error: %3")
+                                         .arg(extractor)
+                                         .arg(process.exitCode())
+                                         .arg(errorOutput.left(200)));
+      continue; // extraction/format failure — try the next tool
+    }
+
+    extracted = true;
   }
 
-  qCDebug(lcLaunchManager) << "Extracting with" << extractor << args;
-
-  process.start(extractor, args);
-  if (!process.waitForStarted(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS)) {
-    return ErrorContext::error(ErrorCode::UnknownError, "Failed to start archive extractor",
-                               "LaunchManager::extractArchiveToTemp")
-        .withDetails(QString("%1: %2").arg(extractor, process.errorString()));
-  }
-
-  // Kartend-mkcak / Kartend-ijglg: poll instead of a single blocking
-  // waitForFinished so the extraction (running on a worker thread) stays
-  // cancellable and the decompressed-size watchdog can kill a zip bomb
-  // mid-flight instead of letting it fill tmpfs. Each pass blocks at most
-  // one poll interval, then re-checks cancel flag, size cap, and the
-  // overall timeout.
-  QElapsedTimer extractionClock;
-  extractionClock.start();
-  enum class Abort { None, Cancelled, SizeExceeded, TimedOut };
-  Abort abort = Abort::None;
-  while (!process.waitForFinished(UIConstants::Launch::EXTRACTION_WATCHDOG_POLL_MS)) {
-    if (cancelRequested && cancelRequested->load()) {
-      abort = Abort::Cancelled;
-      break;
-    }
-    if (extractionSizeExceeds(uniqueDir, maxBytes)) {
-      abort = Abort::SizeExceeded;
-      break;
-    }
-    if (extractionClock.elapsed() >= UIConstants::Launch::EXTRACTION_TIMEOUT_MS) {
-      abort = Abort::TimedOut;
-      break;
-    }
-  }
-  if (abort != Abort::None) {
-    // Never abandon the child: kill it and give it a bounded grace period to
-    // die so the cleanupTargetDir guard below removes a quiescent tree.
-    process.kill();
-    process.waitForFinished(UIConstants::Launch::EXTRACTION_KILL_GRACE_MS);
-    switch (abort) {
-    case Abort::Cancelled:
-      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
-                                 "LaunchManager::extractArchiveToTemp")
-          .withDetails(archivePath);
-    case Abort::SizeExceeded:
-      return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
-                                 "Archive extraction exceeded the decompressed size limit",
-                                 "LaunchManager::extractArchiveToTemp")
-          .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
-    case Abort::TimedOut:
-    default:
-      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
-                                 "LaunchManager::extractArchiveToTemp")
-          .withDetails(archivePath);
-    }
-  }
-
-  if (process.exitCode() != 0) {
-    QString errorOutput = QString::fromUtf8(process.readAllStandardError());
-    return ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed",
-                               "LaunchManager::extractArchiveToTemp")
-        .withDetails(
-            QString("Exit code: %1, Error: %2").arg(process.exitCode()).arg(errorOutput.left(200)));
+  if (!extracted) {
+    return lastFailure;
   }
 
   // Kartend-ijglg: a fast extraction can finish inside the first poll window

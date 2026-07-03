@@ -2,6 +2,8 @@
 // NoIntroParse; this file is the request dance + cookie jar + cancellation.
 #include "nointrodownloader.h"
 
+#include "archivesafety.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QEventLoop>
@@ -346,18 +348,33 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
     QStringList args; // before the temp-dir-cwd extraction
   };
   const QString abs = QFileInfo(zipPath).absoluteFilePath();
+  // bsdtar first (libarchive's extract defaults refuse ".." and writes
+  // through symlinks); unzip is dropped — it recreates symlink entries and
+  // then writes through them, the zip-slip-via-symlink primitive the safety
+  // scan below exists to stop.
   QString tool;
-  for (const QString &cmd :
-       {QStringLiteral("7z"), QStringLiteral("unzip"), QStringLiteral("bsdtar")}) {
+  for (const QString &cmd : {QStringLiteral("bsdtar"), QStringLiteral("7z")}) {
     if (!QStandardPaths::findExecutable(cmd).isEmpty()) {
       tool = cmd;
       break;
     }
   }
   if (tool.isEmpty()) {
-    return ErrorContext::error(ErrorCode::FileNotFound,
-                               "No archive tool found to unpack the DAT pack (install 7z or unzip)",
-                               "NoIntroDownload::extractDatsTo");
+    return ErrorContext::error(
+        ErrorCode::FileNotFound,
+        "No archive tool found to unpack the DAT pack (install bsdtar or 7z)",
+        "NoIntroDownload::extractDatsTo");
+  }
+
+  // Refuse packs whose listing shows symlink/hardlink entries or path-escape
+  // attempts before anything is written: the .dat copy-out below walks with
+  // NoSymLinks, but a write routed THROUGH a symlink entry during extraction
+  // lands outside the temp dir where that walk never looks.
+  if (const auto scan = ArchiveSafety::scanArchiveEntries(abs); scan.isError()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "DAT pack failed the pre-extraction safety scan",
+                               "NoIntroDownload::extractDatsTo")
+        .withDetails(scan.error().userFacingSummary());
   }
 
   QTemporaryDir tmp;
@@ -368,8 +385,6 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
   QStringList args;
   if (tool == QLatin1String("7z")) {
     args << QStringLiteral("x") << QStringLiteral("-y") << abs;
-  } else if (tool == QLatin1String("unzip")) {
-    args << QStringLiteral("-o") << abs;
   } else { // bsdtar
     args << QStringLiteral("-xf") << abs;
   }
