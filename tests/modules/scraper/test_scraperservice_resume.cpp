@@ -602,6 +602,11 @@ void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
   // again — never finishing the run with the entity unscraped.
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
   QCOMPARE(provider->fetchEntityCalls, 2);
+
+  // Break the provider<->parked-callback cycle: ParkedEntityProvider stores a
+  // production callback that captures the provider shared_ptr, so the provider
+  // transitively owns itself and never frees (LSan flags the closure captures).
+  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
@@ -642,6 +647,9 @@ void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   staleCallback(Scraper::ScrapedItem{});
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningAuto);
+
+  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
+  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
@@ -692,6 +700,14 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
   staleCallback(QByteArray("\x89PNG-bytes"));
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+
+  // Break the provider<->parked-callback cycle before the local provider
+  // shared_ptr drops. The production media callback captures the provider
+  // shared_ptr by value (deliberate lifetime management), and the stub parked
+  // that callback INTO the provider — so the provider transitively owns a
+  // strong ref to itself and never reaches refcount 0 (LSan flags every object
+  // the closure holds). Clearing the parked member releases the cycle.
+  provider->lastMediaCallback = {};
 }
 
 void TestScraperServiceResume::entityFetchQuotaStopsQueueWithResumePoint() {
@@ -909,6 +925,9 @@ void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
   // The provider must have been built for Beta's LIVE index, not the stale 0.
   QCOMPARE(requestedIndices.size(), 1);
   QCOMPARE(requestedIndices.first(), 1);
+
+  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
+  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
@@ -1044,6 +1063,9 @@ void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
   QCOMPARE(failed.value(QStringLiteral("collection_uuid")).toString(),
            QStringLiteral("uuid-failing"));
   QCOMPARE(failed.value(QStringLiteral("collection_index")).toInt(), 0);
+
+  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
+  parkedProvider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::entityFailureRecordsEntityDiscriminator() {

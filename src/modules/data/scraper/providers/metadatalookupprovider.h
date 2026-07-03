@@ -100,7 +100,14 @@ public:
   /// The default reports "not supported" so existing Game-only providers need
   /// no change; providers that advertise the entity type in supportedEntities()
   /// override this. Fleshed out by the entity-scraping sub-tasks
-  /// (Kartend-ckepd.4 / .5). Reuses DetailCallback (same Result<ScrapedItem>).
+  /// Reuses DetailCallback (same Result<ScrapedItem>).
+  ///
+  /// By-value DetailCallback (not const-ref): providers that support entity
+  /// scraping std::move the callback into async work in their override, so the
+  /// signature must stay by-value to match. This default body only reports
+  /// "unsupported" and never moves, so the analyzer sees an avoidable copy here
+  /// — suppressed, same as setStageReporter below.
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
   virtual void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) {
     Q_UNUSED(target);
     if (callback) {

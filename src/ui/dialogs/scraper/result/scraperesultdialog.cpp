@@ -160,7 +160,14 @@ void ScrapeResultDialog::hideEvent(QHideEvent *event) {
   // slot also short-circuits its pixmap-scale work via isVisible().
   m_liveTickTimer.stop();
   m_marqueeTicker->pause();
-  if (g_visibleInstanceCount > 0) {
+  // Only decrement what THIS instance added. Qt does not guarantee one
+  // hideEvent per showEvent across versions — Qt 6.8 delivers an extra
+  // unpaired showEvent when show()/activateWindow() is called on an
+  // already-visible window — so a raw ++/-- pair drifts. The per-instance
+  // guard keeps the global count == the number of visible instances on every
+  // Qt version.
+  if (m_countedVisible) {
+    m_countedVisible = false;
     --g_visibleInstanceCount;
   }
   QDialog::hideEvent(event);
@@ -168,7 +175,10 @@ void ScrapeResultDialog::hideEvent(QHideEvent *event) {
 
 void ScrapeResultDialog::showEvent(QShowEvent *event) {
   QDialog::showEvent(event);
-  ++g_visibleInstanceCount;
+  if (!m_countedVisible) {
+    m_countedVisible = true;
+    ++g_visibleInstanceCount;
+  }
   // Resume periodic UI updates when the dialog becomes visible again.
   // Only restart while the service is still actively scraping —
   // ticks at idle are pure waste. Note startUnifiedScrape also restarts

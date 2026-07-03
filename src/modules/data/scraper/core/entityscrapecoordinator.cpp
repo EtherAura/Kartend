@@ -111,7 +111,7 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
     finishEntityItem();
     return;
   }
-  const Scraper::ScrapedItem item = result.value();
+  const Scraper::ScrapedItem &item = result.value();
   m_svc->m_lastScrapedItem = item;
   if (item.media.isEmpty() || !provider) {
     // No art to download (or no provider for the media fetch) — count the

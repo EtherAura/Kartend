@@ -22,6 +22,21 @@
 #include <QTimer>
 #include <QWidget>
 
+// These cases read modal-dialog / window-visibility state synchronously right
+// after show()/close()/open(), which relies on the Linux offscreen QPA plugin
+// delivering show/hide/modal events inline. macOS defers that delivery (and
+// returns empty QMessageBox window titles), so the assertions race the event
+// loop there. Skip them on macOS; the same behaviours stay covered on Linux
+// (offscreen) and Windows. Mirrors SKIP_LOCAL_TLS_SERVER_ON_MACOS in
+// test_httpclient.cpp.
+#if defined(Q_OS_MACOS)
+#define SKIP_MODAL_WIDGET_ON_MACOS()                                                               \
+  QSKIP("modal-dialog/window show-hide events aren't delivered synchronously under the macOS "     \
+        "offscreen QPA plugin; covered on Linux + Windows")
+#else
+#define SKIP_MODAL_WIDGET_ON_MACOS() ((void)0)
+#endif
+
 namespace {
 
 /// One controller + the borrowed state its context closures serve. The
@@ -201,6 +216,7 @@ void TestScraperController::providerBuilder_invalidIndexOrNullListReturnsNull() 
 }
 
 void TestScraperController::openScraperDialog_withoutDatabaseWarnsAndCreatesNoDialog() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
   ControllerHarness h(/*withDatabase=*/false);
 
   // The guard branch pops a MODAL QMessageBox::warning (a nested exec loop),
@@ -229,6 +245,7 @@ void TestScraperController::openScraperDialog_withoutDatabaseWarnsAndCreatesNoDi
 }
 
 void TestScraperController::openScraperDialog_createsThenReusesOneDialog() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
   ControllerHarness h;
 
   h.controller.openScraperDialog();
@@ -288,6 +305,7 @@ void TestScraperController::promptResume_noPendingStateShowsNothing() {
 }
 
 void TestScraperController::promptResume_keepForLaterLeavesStateOnDisk() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
   ControllerHarness h;
   writePendingSnapshot();
 
@@ -310,6 +328,7 @@ void TestScraperController::promptResume_keepForLaterLeavesStateOnDisk() {
 }
 
 void TestScraperController::promptResume_discardRemovesStateWithoutOpeningDialog() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
   ControllerHarness h;
   writePendingSnapshot();
 
@@ -327,6 +346,7 @@ void TestScraperController::promptResume_discardRemovesStateWithoutOpeningDialog
 }
 
 void TestScraperController::promptResume_resumeConsumesStateAndOpensDialog() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
   ControllerHarness h;
   writePendingSnapshot();
 

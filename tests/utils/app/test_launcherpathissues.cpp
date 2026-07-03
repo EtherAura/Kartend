@@ -126,12 +126,16 @@ void TestLauncherPathIssues::mixedSlots_returnsOneIssuePerBrokenSlot() {
 }
 
 namespace {
-// Creates <root>/<collection>/runner with +x and returns its absolute path.
-// Used to prove a %collection%-placeholder path resolves once expanded.
+// Creates <root>/<collection>/runner.exe with +x and returns its absolute
+// path. Used to prove a %collection%-placeholder path resolves once expanded.
+// The .exe suffix is load-bearing on Windows: QFileInfo::isExecutable() there
+// keys off the extension (PATHEXT), not the POSIX exe bit, so an extensionless
+// file reads as non-executable and the "healthy path" cases would wrongly flag
+// a NotExecutable issue. On Linux the exe bit still governs, so .exe is inert.
 QString makeExecutableUnder(const QString &root, const QString &collection) {
   const QString dir = root + QLatin1Char('/') + collection;
   QDir().mkpath(dir);
-  const QString exe = dir + QStringLiteral("/runner");
+  const QString exe = dir + QStringLiteral("/runner.exe");
   QFile f(exe);
   f.open(QIODevice::WriteOnly);
   f.write("#!/bin/sh\n");
@@ -147,7 +151,7 @@ void TestLauncherPathIssues::launchTime_collectionPlaceholderPathResolvesAfterEx
   makeExecutableUnder(tmp.path(), QStringLiteral("Videos"));
 
   LauncherProfile profile;
-  profile.launcherPath = tmp.path() + QStringLiteral("/%collection%/runner");
+  profile.launcherPath = tmp.path() + QStringLiteral("/%collection%/runner.exe");
 
   // The raw overload misreads the stored template — the literal %collection%
   // segment doesn't exist on disk — which is exactly the false positive that

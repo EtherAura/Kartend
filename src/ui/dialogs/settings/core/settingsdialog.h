@@ -338,6 +338,10 @@ private:
   /// m_originalGeneralSettings (Kartend-9cngh). Stays set after an interim Save;
   /// the rollback is then a no-op because the baseline already matches.
   bool m_liveSettingsApplied = false;
+  /// Per-instance guard so this dialog contributes to
+  /// g_settingsVisibleInstanceCount at most once under unpaired Qt show/hide
+  /// events (Qt 6.8 double-fires showEvent). See showEvent.
+  bool m_countedVisible = false;
   /// Tracks collection indices that need a rescan due to database-affecting
   /// changes
   QSet<int> m_rescanRequired;

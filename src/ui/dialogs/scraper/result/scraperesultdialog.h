@@ -403,6 +403,10 @@ private:
   Scraper::RescrapeMode m_rescrapeMode = Scraper::RescrapeMode::Overwrite;
 
   Mode m_mode = Mode::SingleItem;
+  /// Per-instance guard so this dialog contributes to g_visibleInstanceCount
+  /// at most once, even if Qt delivers unpaired show/hide events (Qt 6.8
+  /// double-fires showEvent on an already-visible window). See showEvent.
+  bool m_countedVisible = false;
   /// Non-owning — caller's BatchScrapeRunner. Lifetime extends past
   /// the dialog's exec() because the caller wires deletion to the
   /// runner's `finished` signal after the dialog handles it.

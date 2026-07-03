@@ -688,14 +688,21 @@ bool SettingsDialog::isAnyInstanceVisible() {
 
 void SettingsDialog::showEvent(QShowEvent *event) {
   QDialog::showEvent(event);
-  ++g_settingsVisibleInstanceCount;
+  // Per-instance guard: Qt does not guarantee one hideEvent per showEvent
+  // across versions (Qt 6.8 double-fires showEvent on an already-visible
+  // window), so a raw ++/-- pair drifts. Count this instance at most once.
+  if (!m_countedVisible) {
+    m_countedVisible = true;
+    ++g_settingsVisibleInstanceCount;
+  }
   // Delay grid width calculation until dialog geometry is finalized
   QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this,
                      &SettingsDialog::updateGridWidthLimits);
 }
 
 void SettingsDialog::hideEvent(QHideEvent *event) {
-  if (g_settingsVisibleInstanceCount > 0) {
+  if (m_countedVisible) {
+    m_countedVisible = false;
     --g_settingsVisibleInstanceCount;
   }
   // Persist dialog geometry + rail splitter position so the layout the user

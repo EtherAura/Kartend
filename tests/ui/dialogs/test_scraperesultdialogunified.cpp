@@ -774,6 +774,12 @@ void TestScrapeResultDialogUnified::errorDetailsRescrapeRebuildsEntityFailureAsE
   QVERIFY(entityJob.value(QStringLiteral("remaining")).toArray().isEmpty());
 
   service.cancel();
+  // Break the provider<->parked-callback cycle: the parked entity callback
+  // captures the provider shared_ptr by value, and the stub parked it into the
+  // provider, so the provider transitively owns itself and never frees (LSan
+  // flags the closure's captures). Clear the parked member before the local
+  // provider shared_ptr drops.
+  provider->lastEntityCallback = {};
 }
 
 void TestScrapeResultDialogUnified::errorDetailsWithoutFailuresOmitsRescrapeButton() {
