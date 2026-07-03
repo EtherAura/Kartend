@@ -112,6 +112,12 @@ kartend_add_test(NAME ArchiveRepack
   LINK kartend_utils
 )
 
+# ArchiveSafety tests (pre-extraction symlink / path-escape scan)
+kartend_add_test(NAME ArchiveSafety
+  SOURCES utils/fs/test_archivesafety.cpp
+  LINK kartend_utils
+)
+
 # RetroArchUtils tests (retroarch.cfg parsing + libretro core discovery)
 kartend_add_test(NAME RetroArchUtils
   SOURCES utils/fs/test_retroarchutils.cpp
@@ -167,6 +173,13 @@ kartend_add_test(NAME UsageStatsStore
 # KartendDb::DbTransaction contract tests against real SQLite (Kartend-c0dwd):
 # commit/rollback, nested-guard deferral via a shared depth counter, the
 # depth-less always-outermost ctor, and failed-BEGIN reporting.
+# MigratedDb fixture self-test (the shared "open a migrated, sandboxed
+# SQLite" one-liner for suites; production bootstrap, no DB mocking).
+kartend_add_test(NAME MigratedDb
+  SOURCES support/test_migrateddb.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 kartend_add_test(NAME DbTxn
   SOURCES utils/db/test_dbtxn.cpp
   LINK kartend_utils
@@ -193,6 +206,17 @@ kartend_add_test(NAME HistoryStore
 # returned StatsSnapshot is asserted field-by-field. No DB mocking.
 kartend_add_test(NAME StatisticsService
   SOURCES utils/db/test_statisticsservice.cpp
+  LINK kartend_utils
+)
+
+# BulkEditService tests: the off-thread bulk-edit pipeline behind the bulk-edit
+# tool. run() opens its own connection to a db FILE and commits every row write
+# inside one transaction, so like StatisticsService these run against a real
+# on-disk SQLite database (QTemporaryDir) — writer seeds via the migration
+# chain, run() writes the same file, and the Outcome + persisted rows +
+# cancel-rollback atomicity are asserted. No DB mocking.
+kartend_add_test(NAME BulkEditService
+  SOURCES utils/db/test_bulkeditservice.cpp
   LINK kartend_utils
 )
 

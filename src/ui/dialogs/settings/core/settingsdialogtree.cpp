@@ -11,8 +11,8 @@
 #include <QComboBox>
 #include <QSignalBlocker>
 
-#include "collection/hierarchyhelpers.h"
 #include "settingsdialog.h"
+#include "settingsdialogtreehelpers.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
 
@@ -36,32 +36,24 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
     return;
   }
 
+  // Row-model computation (self/cycle exclusion + current-parent row) lives in
+  // the tested helper; the cycle check itself stays on the TreeManager
+  // controller, threaded through as a callable (unset when no manager, which
+  // disables cycle filtering — matching the pre-controller behaviour).
+  SettingsTreeHelpers::CycleCheck cycleCheck;
+  if (m_treeManager) {
+    cycleCheck = [this](int childIndex, int potentialParentIndex) {
+      return m_treeManager->wouldCreateCircularReference(childIndex, potentialParentIndex);
+    };
+  }
+  const SettingsTreeHelpers::ParentComboModel model = SettingsTreeHelpers::buildParentComboModel(
+      collections, currentIndex, QStringLiteral("None"), cycleCheck);
+
   QSignalBlocker blocker(ui->configurationPanel->parentCollectionComboBox());
   ui->configurationPanel->parentCollectionComboBox()->clear();
-  ui->configurationPanel->parentCollectionComboBox()->addItem("None");
-  m_parentCollectionMapping.clear();
-  m_parentCollectionMapping.append(-1);
-
-  for (int i = 0; i < collections.size(); ++i) {
-    if (i == currentIndex) {
-      continue;
-    }
-    // Kartend-ook62: cycle check now lives on the TreeManager controller.
-    if (m_treeManager && m_treeManager->wouldCreateCircularReference(currentIndex, i)) {
-      continue;
-    }
-    ui->configurationPanel->parentCollectionComboBox()->addItem(collections[i].name);
-    m_parentCollectionMapping.append(i);
-  }
-
-  int desiredParentIndex = (currentIndex >= 0 && currentIndex < collections.size())
-                               ? collections[currentIndex].parentCollectionIndex
-                               : -1;
-  int targetDropdownIndex = m_parentCollectionMapping.indexOf(desiredParentIndex);
-  if (targetDropdownIndex < 0) {
-    targetDropdownIndex = 0;
-  }
-  ui->configurationPanel->parentCollectionComboBox()->setCurrentIndex(targetDropdownIndex);
+  ui->configurationPanel->parentCollectionComboBox()->addItems(model.labels);
+  m_parentCollectionMapping = model.mapping;
+  ui->configurationPanel->parentCollectionComboBox()->setCurrentIndex(model.selectedRow);
 }
 
 // Kartend-ook62: wouldCreateCircularReference moved to the TreeManager

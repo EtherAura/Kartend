@@ -6,21 +6,12 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
-#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFormLayout>
-#include <QGroupBox>
-#include <QHBoxLayout>
-#include <QHeaderView>
-#include <QIcon>
-#include <QInputDialog>
 #include <QLabel>
-#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPalette>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSaveFile>
@@ -36,14 +27,10 @@
 #include "datauditfixdialog.h"
 #include "datauditmodel.h"
 #include "datauditprofile.h"
-#include "datauditprofiledialog.h"
-#include "datauditresultdelegate.h"
+#include "datauditprofilepanel.h"
 #include "datcache.h"
-#include "datlookup.h"
 #include "errorutils.h"
-#include "formbuilders.h"
 #include "pathutils.h"
-#include "uiconstants/icons.h"
 
 using DatAudit::AuditOutput;
 using DatAudit::AuditSummary;
@@ -55,15 +42,17 @@ DatAuditAuditPage::DatAuditAuditPage(DatAuditProfileStore &profileStore, QWidget
   m_model = new DatAuditModel(this);
   auto *root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
-  root->addWidget(buildAuditPage());
-  wireProfileActions();
+  // buildAuditPage (sibling TU datauditauditpage_build.cpp) constructs the
+  // profile panel too; the panel loads the saved-profile combo itself.
+  root->addWidget(buildAuditPage(profileStore));
+  wireProfilePanel();
   wireAuditActions();
   setBusy(false);
-  loadProfiles();
 }
 
 void DatAuditAuditPage::setCollections(QList<CollectionConfig> *collections) {
   m_collections = collections;
+  m_profilePanel->setCollections(collections);
 }
 
 void DatAuditAuditPage::setQuarantineDefaultProvider(std::function<QString()> provider) {
@@ -116,173 +105,30 @@ const CollectionConfig *resolveLinkedCollection(const QList<CollectionConfig> *c
 
 } // namespace
 
-QWidget *DatAuditAuditPage::buildAuditPage() {
-  auto *page = new QWidget(this);
-  auto *root = new QVBoxLayout(page);
-  root->setContentsMargins(0, 0, 0, 0);
-
-  // Composed from the per-section builders below (Kartend-139sr); the
-  // add-order here is the construction order the page has always had.
-  root->addLayout(buildProfileRow(page));
-
-  // DAT files + scan folders. Locked + derived for a linked profile
-  // (Kartend-m6qsb.2); updateLinkedUiState() drives the hint + lock.
-  m_linkedHint =
-      new QLabel(tr("The scan folder and DAT files are seeded from the linked collection "
-                    "(its content folder and configured DATs), then managed here — add or "
-                    "remove them freely to override."),
-                 page);
-  m_linkedHint->setWordWrap(true);
-  m_linkedHint->setVisible(false);
-  root->addWidget(m_linkedHint);
-  root->addLayout(buildInputsSection(page));
-
-  root->addLayout(buildLayoutBanner(page));
-
-  // Run / cancel / progress / filter.
-  auto *controls = new QHBoxLayout();
-  m_runButton = new QPushButton(tr("Run audit"), page);
-  m_cancelButton = new QPushButton(tr("Cancel"), page);
-  m_cancelButton->setEnabled(false);
-  m_progress = new QProgressBar(page);
-  m_progress->setVisible(false);
-  // "Verify (ignore cache)" force-rehash (Kartend-p30ic): off by default keeps
-  // the fast cached path; when ticked, this run bypasses every file-hash-cache
-  // hit and recomputes, catching an in-place same-size/same-mtime replacement
-  // (rsync --times / cp -p) the (size, mtime) cache key cannot detect.
-  m_forceRehashCheck = new QCheckBox(tr("Verify (ignore cache)"), page);
-  m_forceRehashCheck->setToolTip(
-      tr("Re-hash every file this run instead of trusting the cache. Use after a file may "
-         "have been replaced in place while keeping the same size and modified time "
-         "(e.g. rsync --times, cp -p), which the cache would otherwise miss. Slower."));
-  controls->addWidget(m_runButton);
-  controls->addWidget(m_cancelButton);
-  controls->addWidget(m_forceRehashCheck);
-  controls->addWidget(m_progress, 1);
-  controls->addWidget(new QLabel(tr("View:"), page));
-  m_filterCombo = new QComboBox(page);
+void DatAuditAuditPage::populateFilterCombo() {
+  // Called from buildAuditPage (sibling TU); the entries stay file-local here,
+  // next to onFilterChanged's use of the same list.
   for (const auto &e : filterEntries()) {
     m_filterCombo->addItem(tr(e.label));
   }
-  controls->addWidget(m_filterCombo);
-  m_searchEdit = new QLineEdit(page);
-  m_searchEdit->setPlaceholderText(tr("Search results…"));
-  m_searchEdit->setClearButtonEnabled(true);
-  controls->addWidget(m_searchEdit);
-  root->addLayout(controls);
-
-  // Summary line + at-a-glance completeness bar (Kartend-m6qsb.20).
-  auto *summaryRow = new QHBoxLayout();
-  m_summaryLabel = new QLabel(tr("No audit run yet."), page);
-  summaryRow->addWidget(m_summaryLabel, 1);
-  m_completionBar = new QProgressBar(page);
-  m_completionBar->setFormat(tr("%p% present"));
-  m_completionBar->setMaximumWidth(220);
-  m_completionBar->setVisible(false);
-  summaryRow->addWidget(m_completionBar);
-  root->addLayout(summaryRow);
-
-  root->addWidget(buildResultsTable(page), 1);
-
-  root->addLayout(buildExportRow(page));
-  return page;
 }
 
-QLayout *DatAuditAuditPage::buildProfileRow(QWidget *page) {
-  // Saved profiles.
-  auto *profileRow = new QHBoxLayout();
-  profileRow->addWidget(new QLabel(tr("Profile:"), page));
-  m_profileCombo = new QComboBox(page);
-  m_newProfileButton = new QPushButton(tr("New…"), page);
-  m_editProfileButton = new QPushButton(tr("Edit…"), page);
-  m_duplicateProfileButton = new QPushButton(tr("Duplicate"), page);
-  m_renameProfileButton = new QPushButton(tr("Rename"), page);
-  m_deleteProfileButton = new QPushButton(tr("Delete"), page);
-  profileRow->addWidget(m_profileCombo, 1);
-  profileRow->addWidget(m_newProfileButton);
-  profileRow->addWidget(m_editProfileButton);
-  profileRow->addWidget(m_duplicateProfileButton);
-  profileRow->addWidget(m_renameProfileButton);
-  profileRow->addWidget(m_deleteProfileButton);
-  return profileRow;
-}
-
-QLayout *DatAuditAuditPage::buildInputsSection(QWidget *page) {
-  Q_UNUSED(page);
-  auto *inputs = new QHBoxLayout();
-  inputs->addWidget(FormBuilders::makePathListGroup(tr("DAT files"), m_datList, m_addDatButton,
-                                                    m_removeDatButton, tr("Add DAT…")));
-  inputs->addWidget(FormBuilders::makePathListGroup(tr("Scan folders"), m_rootList, m_addRootButton,
-                                                    m_removeRootButton, tr("Add folder…")));
-  return inputs;
-}
-
-QLayout *DatAuditAuditPage::buildLayoutBanner(QWidget *page) {
-  // Folder-structure detection banner (Kartend-m6qsb.6).
-  auto *layoutRow = new QHBoxLayout();
-  m_detectLayoutButton = new QPushButton(tr("Detect structure"), page);
-  layoutRow->addWidget(m_detectLayoutButton);
-  m_layoutBanner = new QLabel(page);
-  m_layoutBanner->setVisible(false);
-  layoutRow->addWidget(m_layoutBanner, 1);
-  m_applyLayoutButton = new QPushButton(tr("Apply"), page);
-  m_applyLayoutButton->setVisible(false);
-  m_dismissLayoutButton = new QPushButton(tr("Dismiss"), page);
-  m_dismissLayoutButton->setVisible(false);
-  layoutRow->addWidget(m_applyLayoutButton);
-  layoutRow->addWidget(m_dismissLayoutButton);
-  return layoutRow;
-}
-
-QWidget *DatAuditAuditPage::buildResultsTable(QWidget *page) {
-  // Status-tinted, sortable, searchable results (Kartend-m6qsb.20). The status
-  // combo still filters the source model; the proxy adds sort + a text search
-  // on top. The delegate paints the per-status tint + icon.
-  m_table = new QTableView(page);
-  m_proxy = new QSortFilterProxyModel(this);
-  m_proxy->setSourceModel(m_model);
-  m_proxy->setFilterCaseSensitivity(Qt::CaseInsensitive);
-  m_proxy->setFilterKeyColumn(-1); // match across all columns
-  m_proxy->setSortRole(Qt::DisplayRole);
-  m_table->setModel(m_proxy);
-  m_table->setItemDelegate(new DatAudit::DatAuditResultDelegate(this));
-  m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-  m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-  m_table->setSortingEnabled(true);
-  m_table->setContextMenuPolicy(Qt::CustomContextMenu);
-  m_table->horizontalHeader()->setStretchLastSection(true);
-  m_table->verticalHeader()->setVisible(false);
-  connect(m_searchEdit, &QLineEdit::textChanged, m_proxy,
-          &QSortFilterProxyModel::setFilterFixedString);
-  connect(m_table, &QTableView::customContextMenuRequested, this,
-          &DatAuditAuditPage::onResultsContextMenu);
-  connect(m_table, &QTableView::doubleClicked, this, &DatAuditAuditPage::onResultDoubleClicked);
-  return m_table;
-}
-
-QLayout *DatAuditAuditPage::buildExportRow(QWidget *page) {
-  auto *exports = new QHBoxLayout();
-  m_fixButton = new QPushButton(tr("Fix…"), page);
-  exports->addWidget(m_fixButton);
-  exports->addStretch();
-  m_exportCsvButton = new QPushButton(tr("Export CSV…"), page);
-  m_exportFixdatButton = new QPushButton(tr("Export fixdat…"), page);
-  m_exportMissButton = new QPushButton(tr("Export miss list…"), page);
-  exports->addWidget(m_exportCsvButton);
-  exports->addWidget(m_exportFixdatButton);
-  exports->addWidget(m_exportMissButton);
-  return exports;
-}
-
-void DatAuditAuditPage::wireProfileActions() {
-  connect(m_profileCombo, &QComboBox::currentIndexChanged, this,
-          &DatAuditAuditPage::onProfileSelected);
-  connect(m_newProfileButton, &QPushButton::clicked, this, &DatAuditAuditPage::onNewProfile);
-  connect(m_editProfileButton, &QPushButton::clicked, this, &DatAuditAuditPage::onEditProfile);
-  connect(m_duplicateProfileButton, &QPushButton::clicked, this,
-          &DatAuditAuditPage::onDuplicateProfile);
-  connect(m_renameProfileButton, &QPushButton::clicked, this, &DatAuditAuditPage::onRenameProfile);
-  connect(m_deleteProfileButton, &QPushButton::clicked, this, &DatAuditAuditPage::onDeleteProfile);
+void DatAuditAuditPage::wireProfilePanel() {
+  // The panel owns the profile combo + CRUD flows; the page adopts each
+  // announced outcome into its working profile. The providers hand the flows
+  // their inputs: Edit/Duplicate seed from the full on-screen state
+  // (uiProfile()), while Rename persists the working profile WITHOUT unsaved
+  // list edits — the post-persist reload has always reverted those.
+  m_profilePanel->setWorkingProfileProvider([this] { return uiProfile(); });
+  m_profilePanel->setBaseProfileProvider([this] { return m_currentProfile; });
+  connect(m_profilePanel, &DatAuditProfilePanel::profileChanged, this,
+          &DatAuditAuditPage::adoptProfile);
+  connect(m_profilePanel, &DatAuditProfilePanel::unsavedSelected, this, [this] {
+    m_currentProfile = DatAuditProfile::Profile{}; // "(unsaved)" — keep the ad-hoc lists
+    updateLinkedUiState();
+  });
+  connect(m_profilePanel, &DatAuditProfilePanel::profileDeleted, this,
+          [this] { m_currentProfile = DatAuditProfile::Profile{}; });
 }
 
 void DatAuditAuditPage::wireAuditActions() {
@@ -313,28 +159,12 @@ void DatAuditAuditPage::wireAuditActions() {
           &DatAuditAuditPage::onAuditFinished);
 }
 
-void DatAuditAuditPage::loadProfiles() {
-  const QSignalBlocker block(m_profileCombo);
-  m_profileCombo->clear();
-  m_profileCombo->addItem(tr("(unsaved)"), QVariant(qlonglong(-1)));
-  if (auto all = m_profileController.list(); all.isOk()) {
-    for (const DatAuditProfile::Profile &p : all.value()) {
-      m_profileCombo->addItem(p.name, QVariant(qlonglong(p.id)));
-    }
-  }
-}
-
-void DatAuditAuditPage::onProfileSelected(int index) {
-  if (index < 0) {
-    return;
-  }
-  const qint64 id = m_profileCombo->itemData(index).toLongLong();
-  if (id < 0) {
-    m_currentProfile = DatAuditProfile::Profile{}; // "(unsaved)" — keep the ad-hoc lists
-    updateLinkedUiState();
-    return;
-  }
-  loadProfileFromDb(id);
+void DatAuditAuditPage::adoptProfile(const DatAuditProfile::Profile &profile) {
+  // The panel announced a loaded/created/edited profile: it becomes the
+  // working profile, and the input lists re-sync from it.
+  m_currentProfile = profile;
+  applyCollectionDerivation();
+  syncUiFromProfile();
   updateLinkedUiState();
 }
 
@@ -451,7 +281,7 @@ void DatAuditAuditPage::applyDetectedLayout() {
     // Through uiProfile() so the on-screen DAT/root lists ride along — writing
     // m_currentProfile directly would silently revert unsaved list edits.
     DatAuditProfile::Profile p = uiProfile();
-    persistProfile(p);
+    m_profilePanel->persistProfile(p);
   }
   m_layoutBanner->setVisible(false);
   m_applyLayoutButton->setVisible(false);
@@ -505,121 +335,11 @@ DatAuditProfile::Profile DatAuditAuditPage::uiProfile() const {
   return p;
 }
 
-bool DatAuditAuditPage::persistProfile(DatAuditProfile::Profile &p) {
-  // The insert-vs-update decision + DatRef metadata refresh live in the
-  // controller (headlessly tested); the page keeps only the user-facing error
-  // report. Capture the insert-vs-update intent before persist() assigns p.id.
-  const bool inserting = p.id < 0;
-  auto res = m_profileController.persist(p);
-  if (res.isError()) {
-    QMessageBox::warning(
-        this, tr("DAT Audit"),
-        (inserting ? tr("Could not save profile: %1") : tr("Could not update profile: %1"))
-            .arg(res.error().message));
-    return false;
-  }
-  return true;
-}
-
-void DatAuditAuditPage::selectProfileById(qint64 id) {
-  for (int i = 0; i < m_profileCombo->count(); ++i) {
-    if (m_profileCombo->itemData(i).toLongLong() == id) {
-      m_profileCombo->setCurrentIndex(i);
-      return;
-    }
-  }
-}
-
-void DatAuditAuditPage::onNewProfile() {
-  DatAuditProfileDialog dlg(DatAuditProfile::Profile{}, m_collections, this);
-  if (dlg.exec() != QDialog::Accepted) {
-    return;
-  }
-  DatAuditProfile::Profile p = dlg.profile();
-  if (!persistProfile(p)) {
-    return;
-  }
-  m_currentProfile = p;
-  applyCollectionDerivation();
-  loadProfiles();
-  selectProfileById(p.id);
-  syncUiFromProfile();
-  updateLinkedUiState();
-}
-
-void DatAuditAuditPage::onEditProfile() {
-  DatAuditProfileDialog dlg(uiProfile(), m_collections, this);
-  if (dlg.exec() != QDialog::Accepted) {
-    return;
-  }
-  m_currentProfile = dlg.profile();
-  applyCollectionDerivation(); // the editor may have linked/unlinked a collection
-  syncUiFromProfile();
-  updateLinkedUiState();
-  if (m_currentProfile.id >= 0) {
-    persistProfile(m_currentProfile);
-    loadProfiles();
-    selectProfileById(m_currentProfile.id);
-  }
-}
-
-void DatAuditAuditPage::onDuplicateProfile() {
-  DatAuditProfile::Profile seed = uiProfile();
-  seed.id = -1;
-  seed.name = seed.name.isEmpty() ? tr("New profile") : tr("%1 (copy)").arg(seed.name);
-  DatAuditProfileDialog dlg(seed, m_collections, this);
-  if (dlg.exec() != QDialog::Accepted) {
-    return;
-  }
-  DatAuditProfile::Profile p = dlg.profile();
-  if (!persistProfile(p)) {
-    return;
-  }
-  m_currentProfile = p;
-  applyCollectionDerivation();
-  loadProfiles();
-  selectProfileById(p.id);
-  syncUiFromProfile();
-  updateLinkedUiState();
-}
-
-void DatAuditAuditPage::onRenameProfile() {
-  if (m_currentProfile.id < 0) {
-    QMessageBox::information(this, tr("DAT Audit"), tr("Select a saved profile to rename."));
-    return;
-  }
-  bool ok = false;
-  const QString name = QInputDialog::getText(this, tr("Rename profile"), tr("New name:"),
-                                             QLineEdit::Normal, m_currentProfile.name, &ok);
-  if (!ok || name.trimmed().isEmpty()) {
-    return;
-  }
-  m_currentProfile.name = name.trimmed();
-  persistProfile(m_currentProfile);
-  loadProfiles();
-  selectProfileById(m_currentProfile.id);
-}
-
-void DatAuditAuditPage::onDeleteProfile() {
-  const qint64 id = m_profileCombo->itemData(m_profileCombo->currentIndex()).toLongLong();
-  if (id < 0) {
-    return;
-  }
-  if (QMessageBox::question(this, tr("Delete profile"),
-                            tr("Delete profile \"%1\"?").arg(m_profileCombo->currentText())) !=
-      QMessageBox::Yes) {
-    return;
-  }
-  auto res = m_profileController.remove(id);
-  Q_UNUSED(res);
-  m_currentProfile = DatAuditProfile::Profile{};
-  loadProfiles();
-}
-
 void DatAuditAuditPage::openForCollection(const QString &collectionUuid,
                                           const QString &collectionName, const QString &mediaDir,
                                           const QStringList &datPaths) {
-  loadProfiles(); // refresh the combo so a newly-linked profile is selectable
+  // Refresh the combo so a newly-linked profile is selectable.
+  m_profilePanel->reloadProfiles();
 
   qint64 linkedId = -1;
   if (!collectionUuid.isEmpty()) {
@@ -637,10 +357,11 @@ void DatAuditAuditPage::openForCollection(const QString &collectionUuid,
   }
 
   if (linkedId >= 0) {
-    selectProfileById(linkedId); // → onProfileSelected loads, derives, and syncs the UI
+    // → the panel announces the load; adoptProfile derives and syncs the UI.
+    m_profilePanel->selectProfileById(linkedId);
     // The settings panel hands over its WORKING copy — unsaved media-dir /
     // DAT-list edits included (Kartend-6wn0p) — so it overrides the
-    // saved-collection derivation onProfileSelected just applied. Same
+    // saved-collection derivation adoptProfile just applied. Same
     // derivation rule, fresher inputs; nothing is persisted by opening.
     if (!mediaDir.isEmpty()) {
       m_currentProfile.scanRoots = QStringList{mediaDir};
@@ -662,9 +383,9 @@ void DatAuditAuditPage::openForCollection(const QString &collectionUuid,
   }
 
   // No linked profile yet: seed an unsaved working profile aimed at the
-  // collection so the audit is pre-populated. Select the "(unsaved)" row with
-  // the combo signal blocked first — onProfileSelected would otherwise clear
-  // m_currentProfile back to an empty profile and discard the seed.
+  // collection so the audit is pre-populated. Select the "(unsaved)" row
+  // silently first — the panel's selection flow would otherwise announce a
+  // cleared profile and discard the seed.
   DatAuditProfile::Profile seed;
   seed.name = collectionName;
   seed.collectionUuid = collectionUuid;
@@ -678,10 +399,7 @@ void DatAuditAuditPage::openForCollection(const QString &collectionUuid,
       seed.dats.append(ref);
     }
   }
-  {
-    const QSignalBlocker block(m_profileCombo);
-    selectProfileById(-1); // the "(unsaved)" row
-  }
+  m_profilePanel->selectUnsavedSilently();
   m_currentProfile = seed;
   syncUiFromProfile(); // reflect the seeded DAT + scan-root lists on screen
   updateLinkedUiState();
@@ -1049,7 +767,8 @@ void DatAuditAuditPage::reauditProfile(qint64 profileId) {
     QMessageBox::information(this, tr("DAT Audit"), tr("Couldn't load that profile."));
     return;
   }
-  selectProfileById(profileId); // keep the combo display in sync (no-op-safe)
+  // Keep the combo display in sync (no-op-safe).
+  m_profilePanel->selectProfileById(profileId);
   if (scanRoots().isEmpty() || datPaths().isEmpty()) {
     QMessageBox::information(this, tr("DAT Audit"),
                              tr("This profile has no folders or DAT files to audit."));
@@ -1072,7 +791,8 @@ void DatAuditAuditPage::fixProfile(qint64 profileId) {
     QMessageBox::information(this, tr("DAT Audit"), tr("Couldn't load that profile."));
     return;
   }
-  selectProfileById(profileId); // keep the combo display in sync (no-op-safe)
+  // Keep the combo display in sync (no-op-safe).
+  m_profilePanel->selectProfileById(profileId);
 
   // Fix from the persisted snapshot (Kartend-7iqhl.2): reconstruct AuditRows
   // from the stored result rows rather than running a fresh audit first.

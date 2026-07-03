@@ -88,11 +88,9 @@ void ArtworkTabPanel::setModel(SettingsModel *model) {
 }
 
 void ArtworkTabPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->artworkDirLineEdit, config.artworkDirectory);
   SettingsFormBinding::loadInto(ui->placeholderArtworkLineEdit, config.placeholderArtwork);
   SettingsFormBinding::loadInto(ui->customArtworkTypesLineEdit,
@@ -111,11 +109,9 @@ void ArtworkTabPanel::clear() {
 }
 
 void ArtworkTabPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   // Asset directory paths preserve the user's exact text (no trim) — matches
   // the prior extractUIFieldValues behavior for these fields. videoDirectory
   // and manualDirectory are no longer surfaced here (the scraper auto-routes
@@ -164,15 +160,13 @@ void ArtworkTabPanel::onBrowseArtworkDir() {
 }
 
 void ArtworkTabPanel::onExportPlaceholderPngs() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
   // Read the working CollectionConfig for media dir + extensions + tile
   // dimensions (those live on tabs the user might not have opened). The
   // artwork dir is read from the live line edit so unsaved edits on THIS
   // tab still drive the warm — matches the tooltip's promise.
-  const CollectionConfig &cfg = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig &cfg = *current;
   const QString liveArtworkDir = ui->artworkDirLineEdit->text();
 
   const auto pre = PlaceholderWarmer::preflight(cfg, liveArtworkDir);

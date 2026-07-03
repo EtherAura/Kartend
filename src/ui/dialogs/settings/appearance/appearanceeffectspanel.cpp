@@ -28,11 +28,9 @@ void AppearanceEffectsPanel::setModel(SettingsModel *model) {
 }
 
 void AppearanceEffectsPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->wallpaperParallaxCheckBox, config.background.wallpaperParallax);
   SettingsFormBinding::loadInto(ui->parallaxStrengthSpinBox, config.background.parallaxStrength);
   SettingsFormBinding::loadInto(ui->toolbarBackdropBlurCheckBox,
@@ -49,11 +47,9 @@ void AppearanceEffectsPanel::clear() {
 }
 
 void AppearanceEffectsPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.background.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
   config.background.parallaxStrength = ui->parallaxStrengthSpinBox->value();
   config.background.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();

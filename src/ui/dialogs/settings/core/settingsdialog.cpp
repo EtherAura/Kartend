@@ -195,8 +195,10 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // list-row colors / vignette plus three global title-tint fields. Pointer
   // install gives the panel a handle on m_generalSettings so it can refresh
   // / writeBack the title fields. baseColorChanged() is the live-save signal
-  // — host mirrors to mainWindow + saves + applies ItemWidget side effect
-  // immediately to preserve the picker's instant-feedback UX.
+  // — host mirrors to mainWindow + applies the ItemWidget side effect
+  // immediately to preserve the picker's instant-feedback UX; the disk write
+  // is debounced through scheduleLiveSettingsSave so a picker drag doesn't
+  // rewrite the whole INI once per tick.
   ui->appearanceColorsPanel->setModel(&m_model);
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::changed, this,
           &SettingsDialog::checkForChanges);
@@ -206,7 +208,6 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
             auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
             if (!mainWindow || !sm) return;
             mainWindow->generalSettings().appearance.titleBaseColor = c;
-            auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
             ItemWidget::setTitleBaseColor(c);
             // Repaint visible items so the new base color shows immediately
             // rather than only on the next incidental repaint (Kartend-f3ivg) —
@@ -218,15 +219,14 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
               }
             }
             m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
-            if (result.isError()) {
-              ErrorDialog::showError(this, result.error());
-            }
+            scheduleLiveSettingsSave();
           });
 
   // Application-font panel: live-save semantics — panel mutates the
-  // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
-  // persist via SettingsManager, and apply the font to the running app, all
-  // without going through the deferred-save path.
+  // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow
+  // and apply the font to the running app per edit, all without going
+  // through the deferred-save path; the disk write is debounced (a font-size
+  // spinbox scrub used to rewrite the whole INI once per step).
   ui->fontsPanel->setModel(&m_model);
   connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
     auto *mainWindow = m_host;
@@ -235,17 +235,14 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;
-    auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
     mainWindow->applyGlobalUiFontFromSettings();
     m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
-    if (result.isError()) {
-      ErrorDialog::showError(this, result.error());
-    }
+    scheduleLiveSettingsSave();
   });
 
   // Splash (boot + resume-focus) panel: same live-save shape as FontsPanel
   // minus the apply step — splashes are shown on next startup / focus event,
-  // so persisting is sufficient.
+  // so the (debounced) persist is sufficient.
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
     auto *mainWindow = m_host;
@@ -254,11 +251,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
       return;
     }
     mainWindow->generalSettings() = m_generalSettings;
-    auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
     m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
-    if (result.isError()) {
-      ErrorDialog::showError(this, result.error());
-    }
+    scheduleLiveSettingsSave();
   });
 
   // Attract-mode panel: deferred-save — panel keeps m_generalSettings live;
@@ -483,7 +477,38 @@ void SettingsDialog::reject() {
   QDialog::reject();
 }
 
+void SettingsDialog::scheduleLiveSettingsSave() {
+  // Lazily constructed: most dialog sessions never touch a live-save panel.
+  if (!m_liveSaveTimer) {
+    m_liveSaveTimer = new QTimer(this);
+    m_liveSaveTimer->setSingleShot(true);
+    m_liveSaveTimer->setInterval(UIConstants::Timing::SETTINGS_LIVE_SAVE_DEBOUNCE_MS);
+    connect(m_liveSaveTimer, &QTimer::timeout, this, [this]() {
+      auto *mainWindow = m_host;
+      auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
+      if (!mainWindow || !sm) {
+        return;
+      }
+      // The per-edit handlers already mirrored their state onto MainWindow's
+      // live struct; this flush only pays the disk write. Errors surface the
+      // same ErrorDialog the per-edit save used to show — just once per
+      // settled burst instead of once per edit signal.
+      auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
+      if (result.isError()) {
+        ErrorDialog::showError(this, result.error());
+      }
+    });
+  }
+  m_liveSaveTimer->start(); // restart: the burst's last edit wins the window
+}
+
 void SettingsDialog::restoreLiveAppliedSettings() {
+  // Cancel a pending debounced live-save first — this path re-persists the
+  // baseline below (or intentionally leaves disk untouched when nothing was
+  // live-applied), and a late timer fire would redundantly rewrite it.
+  if (m_liveSaveTimer) {
+    m_liveSaveTimer->stop();
+  }
   if (!m_liveSettingsApplied) {
     return;
   }

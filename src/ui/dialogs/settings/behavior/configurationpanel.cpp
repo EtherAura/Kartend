@@ -121,15 +121,10 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
   // unsaved) media-dir + DAT-list edits overlaid, so the audit reflects what is
   // on screen rather than the last-Applied state (Kartend-6wn0p).
   connect(ui->openDatAuditButton, &QPushButton::clicked, this, [this]() {
-    if (!m_model || !m_model->openDatAudit || !m_model->workingCollections ||
-        !m_model->currentIndex) {
-      return;
-    }
-    const int idx = *m_model->currentIndex;
-    if (idx < 0 || idx >= m_model->workingCollections->size()) {
-      return;
-    }
-    CollectionConfig collection = (*m_model->workingCollections)[idx];
+    if (!m_model || !m_model->openDatAudit) return;
+    const CollectionConfig *current = m_model->currentWorkingCollection();
+    if (!current) return;
+    CollectionConfig collection = *current;
     collection.mediaDirectory = ui->mediaDirLineEdit->text();
     collection.scraperOverrides.datFilePaths.clear();
     for (int i = 0; i < ui->datFilesListWidget->count(); ++i) {
@@ -211,11 +206,9 @@ void ConfigurationPanel::setModel(SettingsModel *model) {
 }
 
 void ConfigurationPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   // collectionTypeComboBox is populated separately via setKnownTypes; just
   // set the current text here.
   {
@@ -275,13 +268,11 @@ void ConfigurationPanel::autodetectScreenscraperSystem() {
   if (m_systemManuallySet) {
     return;
   }
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
   // The collection name carries the platform tag autodetect scores
   // against; the editable type + extension fields refine it.
-  const QString name = (*m_model->workingCollections)[*m_model->currentIndex].name;
+  const QString name = current->name;
   const QStringList extensions =
       ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
   const int detected = ScreenScraperSystems::autodetect(
@@ -315,11 +306,9 @@ void ConfigurationPanel::clear() {
 }
 
 void ConfigurationPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   // Read free-form type label from the editable combobox. currentText()
   // (rather than currentIndex()) lets a freshly typed value not yet
   // committed via Enter round-trip; trimming prevents accidental padding

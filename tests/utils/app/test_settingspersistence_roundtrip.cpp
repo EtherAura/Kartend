@@ -415,9 +415,17 @@ void TestSettingsPersistenceRoundtrip::marqueeSettings() {
 void TestSettingsPersistenceRoundtrip::mediaSettings() {
   MediaSettings in;
   in.pixmapCacheSizeMB += 1;
+  in.artworkDiskCacheBudgetMB += 256; // inside the [256, 32768] clamp, non-default
   in.videoThumbnailExtractionTimeoutMs += 1;
   in.previewVideoVolume -= 1; // the default (100) IS the upper clamp
   verifyRoundTrip("MediaSettings", in, MediaSettingsPersistence::save,
+                  MediaSettingsPersistence::load);
+
+  // The 0 = unlimited sentinel must survive the load clamp — it is the one
+  // value below MIN_ARTWORK_DISK_CACHE_MB that is NOT snapped up.
+  MediaSettings unlimited;
+  unlimited.artworkDiskCacheBudgetMB = 0;
+  verifyRoundTrip("MediaSettings/unlimitedDiskBudget", unlimited, MediaSettingsPersistence::save,
                   MediaSettingsPersistence::load);
 }
 

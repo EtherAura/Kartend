@@ -32,6 +32,11 @@ inline constexpr int LAYOUT_DELAY_MS = 100;
 inline constexpr int VIEWPORT_DELAY_MS = 300;
 /// Base interval for settings dialog retry operations
 inline constexpr int SETTINGS_RETRY_BASE_MS = 50;
+/// Debounce window for the settings dialog's live-save panels (base color /
+/// fonts / splash): each edit applies to the running app immediately, but the
+/// GeneralSettings disk write is coalesced so a color-picker drag or spinbox
+/// scrub produces one INI write instead of one per edit signal.
+inline constexpr int SETTINGS_LIVE_SAVE_DEBOUNCE_MS = 500;
 /// Time without interaction before triggering idle behavior
 inline constexpr int USER_IDLE_THRESHOLD_MS = 2000;
 /// Delay after resize before re-centering selection

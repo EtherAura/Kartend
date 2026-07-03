@@ -14,6 +14,7 @@
 
 struct CollectionConfig; // defined as a struct in collectionconfig.h (-Wmismatched-tags)
 class DatAuditFixDialog;
+class DatAuditProfilePanel;
 class DatAuditProfileStore;
 class QCheckBox;
 class QComboBox;
@@ -32,11 +33,15 @@ namespace DatAudit {
 class DatAuditModel;
 }
 
-/// The "Audit" stacked page of the DAT Manager (Kartend-oa0lu): profile
-/// selection + CRUD, the scan/DAT inputs + layout detection, the off-thread run
-/// (owns DatAuditRunController), the results table + filter/export, and the Fix
-/// flow. The dialog injects the shared DatAuditProfileStore + the collection
-/// list + the quarantine/scraper providers, and mediates the browser page via
+/// The "Audit" stacked page of the DAT Manager (Kartend-oa0lu): the scan/DAT
+/// inputs + layout detection, the off-thread run (owns DatAuditRunController),
+/// the results table + filter/export, and the Fix flow. Profile selection +
+/// CRUD live in the embedded DatAuditProfilePanel — the page adopts each
+/// announced profile as its working copy (adoptProfile) and hands the panel its
+/// on-screen state back through provider callbacks. Construction is split into
+/// the sibling TU datauditauditpage_build.cpp (the build* helpers). The dialog
+/// injects the shared DatAuditProfileStore + the collection list + the
+/// quarantine/scraper providers, and mediates the browser page via
 /// reauditProfile/fixProfile + the browserNodeRefreshRequested signal.
 class DatAuditAuditPage : public QWidget {
   Q_OBJECT
@@ -65,16 +70,18 @@ signals:
   void browserAuditRunningChanged(bool running);
 
 private:
-  QWidget *buildAuditPage();
-  QLayout *buildProfileRow(QWidget *page);
+  // Construction (sibling TU datauditauditpage_build.cpp).
+  QWidget *buildAuditPage(DatAuditProfileStore &profileStore);
   QLayout *buildInputsSection(QWidget *page);
   QLayout *buildLayoutBanner(QWidget *page);
   QWidget *buildResultsTable(QWidget *page);
   QLayout *buildExportRow(QWidget *page);
-  void wireProfileActions();
+  void populateFilterCombo();
+  void wireProfilePanel();
   void wireAuditActions();
-  void loadProfiles();
-  void onProfileSelected(int index);
+  /// Adopt a profile the panel announced (selection / New / Edit / Duplicate)
+  /// as the working profile: derive from the linked collection + re-sync UI.
+  void adoptProfile(const DatAuditProfile::Profile &profile);
   bool loadProfileFromDb(qint64 id);
   void applyCollectionDerivation();
   void updateLinkedUiState();
@@ -82,13 +89,6 @@ private:
   void applyDetectedLayout();
   void syncUiFromProfile();
   [[nodiscard]] DatAuditProfile::Profile uiProfile() const;
-  bool persistProfile(DatAuditProfile::Profile &p);
-  void selectProfileById(qint64 id);
-  void onNewProfile();
-  void onEditProfile();
-  void onDuplicateProfile();
-  void onRenameProfile();
-  void onDeleteProfile();
   [[nodiscard]] QStringList datPaths() const;
   [[nodiscard]] QStringList scanRoots() const;
   [[nodiscard]] bool hasResults() const;
@@ -116,12 +116,9 @@ private:
   void onExportMissList();
 
   // Widgets + state (moved from DatAuditDialog, Kartend-oa0lu).
-  QComboBox *m_profileCombo = nullptr;
-  QPushButton *m_newProfileButton = nullptr;
-  QPushButton *m_editProfileButton = nullptr;
-  QPushButton *m_duplicateProfileButton = nullptr;
-  QPushButton *m_renameProfileButton = nullptr;
-  QPushButton *m_deleteProfileButton = nullptr;
+  /// Profile combo + CRUD row (owns the profile-CRUD controller; announces
+  /// outcomes via profileChanged / unsavedSelected / profileDeleted).
+  DatAuditProfilePanel *m_profilePanel = nullptr;
   QListWidget *m_datList = nullptr;
   QListWidget *m_rootList = nullptr;
   QPushButton *m_addDatButton = nullptr;
@@ -151,8 +148,10 @@ private:
 
   DatAudit::DatAuditModel *m_model = nullptr;
   DatAuditRunController m_runController; ///< owns the QFutureWatcher + worker.
-  /// Profile CRUD/persist + audit-result snapshots over the dialog-owned store
-  /// (shared by ref; the download service reads the same store). Kartend-n1hpy.3.
+  /// Profile loads + audit-result snapshots over the dialog-owned store (shared
+  /// by ref; the download service reads the same store). Kartend-n1hpy.3. The
+  /// CRUD/persist flows use the panel's own controller instance — the
+  /// controller is a stateless facade, so the two instances can't diverge.
   DatAuditProfileController m_profileController;
   DatAuditProfile::Profile m_currentProfile;
   QList<CollectionConfig> *m_collections = nullptr; ///< Borrowed from MainWindow; not owned.

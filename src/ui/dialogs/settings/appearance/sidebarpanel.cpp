@@ -66,11 +66,9 @@ void SidebarPanel::setModel(SettingsModel *model) {
 }
 
 void SidebarPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarMode));
   ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarPosition));
   ui->sidebarWidthSpinBox->setValue(config.sidebar.sidebarWidth);
@@ -124,11 +122,9 @@ void SidebarPanel::clear() {
 }
 
 void SidebarPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.sidebar.sidebarMode =
       static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
   config.sidebar.sidebarPosition =

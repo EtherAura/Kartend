@@ -278,6 +278,16 @@ private:
   /// unless a live-save actually fired (m_liveSettingsApplied).
   void restoreLiveAppliedSettings();
 
+  /// Coalesced disk write for the live-save panels. Each edit signal applies
+  /// its in-memory mirror + repaint side effects immediately (preserving the
+  /// instant-feedback UX), then calls this instead of saveGeneralSettings —
+  /// a color-picker drag or spinbox scrub used to rewrite the whole
+  /// GeneralSettings INI per edit. The single-shot timer restarts on every
+  /// call; the pending write is superseded by saveGeneralSettingsFromUI
+  /// (Save/OK persist the same struct) and cancelled by
+  /// restoreLiveAppliedSettings (Cancel re-persists the baseline instead).
+  void scheduleLiveSettingsSave();
+
   /// silent variant used by the Settings Mode auto-propagation
   /// path. Skips the per-category dialog and the post-apply summary because
   /// the user already opted in by selecting a non-`Current` mode — and the
@@ -386,6 +396,10 @@ private:
   /// resizeEvent so only the last resize recalculates, not one singleShot per
   /// tick (Kartend-20utj). Lazily constructed on first resize.
   QTimer *m_gridWidthLimitsTimer = nullptr;
+  /// Coalesces the live-save panels' GeneralSettings disk writes (see
+  /// scheduleLiveSettingsSave). Lazily constructed on the first live edit;
+  /// parented to the dialog so an in-flight debounce dies with it.
+  QTimer *m_liveSaveTimer = nullptr;
 
   bool eventFilter(QObject *obj, QEvent *event) override;
 

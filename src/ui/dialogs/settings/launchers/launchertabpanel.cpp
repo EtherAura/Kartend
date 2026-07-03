@@ -58,14 +58,12 @@ void LauncherTabPanel::setModel(SettingsModel *model) {
 }
 
 void LauncherTabPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
   // Refresh the detected-cores list — the RetroArch override may have
   // changed in General settings since the panel was constructed.
   populateCoreCombo();
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->launcherLineEdit, config.launcher.launcherPath);
   SettingsFormBinding::loadInto(ui->coreLineEdit, config.launcher.corePath);
   SettingsFormBinding::loadInto(ui->launchParamsLineEdit, config.launcher.launchParameters);
@@ -92,11 +90,9 @@ void LauncherTabPanel::clear() {
 }
 
 void LauncherTabPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   // launcherPath / corePath / launchParameters preserve exact text (no
   // trim) — paths might legitimately contain trailing spaces in obscure
   // setups.

@@ -11,11 +11,13 @@ target_sources(kartend_ui PRIVATE
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
+  settingsdialogtreehelpers.cpp
   settingsdialogtreemutation.cpp
   settingsdialogtreesync.cpp
   treemanager.cpp
   applysettingsdialog.h
   settingsdialog.h
+  settingsdialogtreehelpers.h
   settingsformbinding.h
   settingsmodel.h
   treemanager.h

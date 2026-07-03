@@ -19,8 +19,8 @@
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "errordialog.h"
-#include "pathutils.h"
 #include "settingsdialog.h"
+#include "settingsdialogtreehelpers.h"
 #include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants/grid.h"
@@ -79,27 +79,8 @@ void SettingsDialog::addCollection() {
           ? currentCollectionIndex
           : -1;
   if (parentIdx >= 0) {
-    const CollectionConfig &parent = m_workingCollections[parentIdx];
-    newCollection.parentCollectionIndex = parentIdx;
-    newCollection.isSubcollection = true;
-    newCollection.gridLayout.gridWidth = parent.gridLayout.gridWidth;
-    newCollection.gridLayout.horizontalGridHeight = parent.gridLayout.horizontalGridHeight;
-    newCollection.gridLayout.gridWidthSidebarHidden = parent.gridLayout.gridWidthSidebarHidden;
-    newCollection.gridLayout.horizontalGridHeightSidebarHidden =
-        parent.gridLayout.horizontalGridHeightSidebarHidden;
-    newCollection.gridLayout.horizontalSpacing = parent.gridLayout.horizontalSpacing;
-    newCollection.gridLayout.verticalSpacing = parent.gridLayout.verticalSpacing;
-    newCollection.gridLayout.itemWidth = parent.gridLayout.itemWidth;
-    newCollection.gridLayout.itemHeight = parent.gridLayout.itemHeight;
-    newCollection.gridLayout.fontSize = parent.gridLayout.fontSize;
-    newCollection.gridLayout.hideHorizontalScrollbar = parent.gridLayout.hideHorizontalScrollbar;
-    newCollection.gridLayout.hideVerticalScrollbar = parent.gridLayout.hideVerticalScrollbar;
-    newCollection.sidebar.sidebarMode = parent.sidebar.sidebarMode;
-    newCollection.viewType = parent.viewType;
-    newCollection.showAllSubcollectionItems = parent.showAllSubcollectionItems;
-    newCollection.horizontalAlignment = parent.horizontalAlignment;
-    newCollection.hideTitles = parent.hideTitles;
-    newCollection.hideSubcollectionTitles = parent.hideSubcollectionTitles;
+    SettingsTreeHelpers::applySubcollectionDefaults(newCollection, m_workingCollections[parentIdx],
+                                                    parentIdx);
   }
 
   collections.append(newCollection);
@@ -196,111 +177,17 @@ void SettingsDialog::ensureRootCollectionExists() {
 //     show*SubcollectionItems, hideSubfolderTitles, showHiddenFolders,
 //     showAllSubfolderItems) — propagating these would silently trigger
 //     rescans on unrelated collections.
-
-namespace {
-
-// copy a per-category subset from @p src onto @p dst. Each flag in @p
-// categories enables one logical group of fields. Categories not in the
-// mask leave @p dst's existing values untouched. Identity, paths, launcher
-// list, and scan-affecting flags are never copied regardless of the mask —
-// those still require an explicit per-collection edit.
 //
-// Kartend-fybhy: the per-field copies below are deliberately an explicit,
-// opt-in allowlist — NOT a whole-leaf `dst.background = src.background` /
-// `dst.listView = src.listView` assignment. Today the Colors block happens to
-// cover every CollectionBackground field and the ListView block every
-// ListViewOptions field, so collapsing them would be field-equivalent *right
-// now*. It is intentionally left expanded so that a future leaf field which
-// should NOT propagate (e.g. a runtime-only member, as FolderBrowsingOptions::
-// currentSubfolder already is) does not start propagating silently the moment
-// it is added. The flip side — a propagatable field added to a leaf but
-// forgotten here — is the drift this issue tracks; when migrating propagation
-// onto a per-leaf "propagatable" descriptor, do it leaf-by-leaf rather than by
-// swapping these in for raw whole-leaf assignment.
-void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst,
-                                   ApplySettingsDialog::FieldCategories categories) {
-  if (categories.testFlag(ApplySettingsDialog::GridLayout)) {
-    dst.gridLayout.gridWidth = src.gridLayout.gridWidth;
-    dst.gridLayout.horizontalGridHeight = src.gridLayout.horizontalGridHeight;
-    dst.gridLayout.gridWidthSidebarHidden = src.gridLayout.gridWidthSidebarHidden;
-    dst.gridLayout.horizontalGridHeightSidebarHidden =
-        src.gridLayout.horizontalGridHeightSidebarHidden;
-    dst.gridLayout.horizontalSpacing = src.gridLayout.horizontalSpacing;
-    dst.gridLayout.verticalSpacing = src.gridLayout.verticalSpacing;
-    dst.gridLayout.itemWidth = src.gridLayout.itemWidth;
-    dst.gridLayout.itemHeight = src.gridLayout.itemHeight;
-    dst.gridLayout.cornerRadius = src.gridLayout.cornerRadius;
-    dst.horizontalAlignment = src.horizontalAlignment;
-    dst.viewType = src.viewType;
-  }
-  if (categories.testFlag(ApplySettingsDialog::ItemText)) {
-    dst.gridLayout.fontSize = src.gridLayout.fontSize;
-    dst.customFontFamily = src.customFontFamily;
-  }
-  if (categories.testFlag(ApplySettingsDialog::Visibility)) {
-    dst.hideTitles = src.hideTitles;
-    dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
-    dst.gridLayout.hideHorizontalScrollbar = src.gridLayout.hideHorizontalScrollbar;
-    dst.gridLayout.hideVerticalScrollbar = src.gridLayout.hideVerticalScrollbar;
-    dst.sidebar.sidebarMode = src.sidebar.sidebarMode;
-  }
-  if (categories.testFlag(ApplySettingsDialog::Colors)) {
-    dst.background.backgroundType = src.background.backgroundType;
-    dst.background.backgroundColor = src.background.backgroundColor;
-    dst.background.backgroundImage = src.background.backgroundImage;
-    dst.background.backgroundVideo = src.background.backgroundVideo;
-    dst.background.primaryColor = src.background.primaryColor;
-    dst.background.tileColor = src.background.tileColor;
-    dst.background.selectionColor = src.background.selectionColor;
-    // / qbp3 / y25g / eq8r: header logo + vignette + parallax
-    // + backdrop blur ride along with the Colors category since they're
-    // presented in the same dialog area and users intuitively expect
-    // "apply theme" to cover them too.
-    dst.background.headerLogoImage = src.background.headerLogoImage;
-    dst.background.headerLogoPosition = src.background.headerLogoPosition;
-    dst.background.vignetteEnabled = src.background.vignetteEnabled;
-    dst.background.vignetteIntensity = src.background.vignetteIntensity;
-    dst.background.wallpaperParallax = src.background.wallpaperParallax;
-    dst.background.parallaxStrength = src.background.parallaxStrength;
-    dst.background.toolbarBackdropBlur = src.background.toolbarBackdropBlur;
-    dst.background.backdropBlurRadius = src.background.backdropBlurRadius;
-  }
-  if (categories.testFlag(ApplySettingsDialog::ListView)) {
-    dst.listView.listFontSize = src.listView.listFontSize;
-    dst.listView.listRowHeight = src.listView.listRowHeight;
-    dst.listView.listRowColor = src.listView.listRowColor;
-    dst.listView.listAltRowColor = src.listView.listAltRowColor;
-  }
-  dst.clampValues();
-}
-
-} // namespace
+// The per-category field copy itself lives in
+// SettingsTreeHelpers::copyAppearanceAndLayoutFields (settingsdialogtreehelpers.cpp)
+// so the allowlist is unit-testable; the deliberate field-by-field (never
+// whole-leaf) copying rationale is documented there.
 
 int SettingsDialog::applyCategoriesToIndices(const QList<int> &targetIndices,
                                              ApplySettingsDialog::FieldCategories categories,
                                              int sourceIndex) {
-  if (categories == ApplySettingsDialog::None) {
-    return 0;
-  }
-  if (!CollectionUtils::isValidIndex(sourceIndex, collections)) {
-    return 0;
-  }
-  const CollectionConfig source = collections[sourceIndex];
-  int applied = 0;
-  for (int idx : targetIndices) {
-    if (idx < 0 || idx >= collections.size()) {
-      continue;
-    }
-    if (idx == sourceIndex) {
-      continue;
-    }
-    copyAppearanceAndLayoutFields(source, collections[idx], categories);
-    if (idx < m_workingCollections.size()) {
-      copyAppearanceAndLayoutFields(source, m_workingCollections[idx], categories);
-    }
-    ++applied;
-  }
-  return applied;
+  return SettingsTreeHelpers::applyCategoriesToLists(collections, m_workingCollections,
+                                                     targetIndices, categories, sourceIndex);
 }
 
 void SettingsDialog::duplicateCollection() {
@@ -346,22 +233,12 @@ void SettingsDialog::duplicateCollection() {
   layout->addRow(tr("Name:"), nameEdit);
 
   auto *parentCombo = new QComboBox(&dlg);
-  QList<int> parentMapping;
-  parentCombo->addItem(tr("None"));
-  parentMapping.append(-1);
-  for (int i = 0; i < collections.size(); ++i) {
-    if (collections[i].isPlaylist) {
-      // Playlists can't be parents — they're not real persisted collections.
-      continue;
-    }
-    parentCombo->addItem(collections[i].name);
-    parentMapping.append(i);
-  }
-  int defaultMapIndex = parentMapping.indexOf(source.parentCollectionIndex);
-  if (defaultMapIndex < 0) {
-    defaultMapIndex = 0;
-  }
-  parentCombo->setCurrentIndex(defaultMapIndex);
+  const SettingsTreeHelpers::ParentComboModel comboModel =
+      SettingsTreeHelpers::buildDuplicateParentModel(collections, source.parentCollectionIndex,
+                                                     tr("None"));
+  parentCombo->addItems(comboModel.labels);
+  const QList<int> parentMapping = comboModel.mapping;
+  parentCombo->setCurrentIndex(comboModel.selectedRow);
   layout->addRow(tr("Parent collection:"), parentCombo);
 
   auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -374,40 +251,28 @@ void SettingsDialog::duplicateCollection() {
   }
 
   const QString name = nameEdit->text().trimmed();
-  if (name.isEmpty()) {
+  switch (SettingsTreeHelpers::validateDuplicateName(name, collections)) {
+  case SettingsTreeHelpers::DuplicateNameError::Empty:
     QMessageBox::warning(this, tr("Duplicate Collection"), tr("Collection name cannot be empty."));
     return;
-  }
-  auto nameValidation = PathUtils::validateCollectionNameForSubstitution(name);
-  if (nameValidation.isError()) {
+  case SettingsTreeHelpers::DuplicateNameError::Unsafe:
     QMessageBox::warning(
         this, tr("Invalid Collection Name"),
         tr("Collection names cannot contain '/', '\\\\', or '..' — those would inject a "
            "traversal segment into the launcher path when '%%collection%%' is substituted."));
     return;
-  }
-  for (const auto &existing : collections) {
-    if (existing.name == name) {
-      QMessageBox::warning(
-          this, tr("Duplicate Collection"),
-          tr("A collection named \"%1\" already exists. Pick a different name.").arg(name));
-      return;
-    }
+  case SettingsTreeHelpers::DuplicateNameError::Duplicate:
+    QMessageBox::warning(
+        this, tr("Duplicate Collection"),
+        tr("A collection named \"%1\" already exists. Pick a different name.").arg(name));
+    return;
+  case SettingsTreeHelpers::DuplicateNameError::Ok:
+    break;
   }
 
   const int parentIdx = parentMapping.value(parentCombo->currentIndex(), -1);
 
-  // Full copy. Override only the fields that must differ on a fresh
-  // collection: name + parent linkage + runtime state.
-  CollectionConfig copy = source;
-  copy.name = name;
-  copy.parentCollectionIndex = parentIdx;
-  copy.isSubcollection = (parentIdx >= 0);
-  copy.folderBrowsing.currentSubfolder.clear();
-  copy.isPlaylist = false;
-  copy.playlistId.clear();
-  copy.playlistReservedKind.clear();
-  copy.clampValues();
+  const CollectionConfig copy = SettingsTreeHelpers::makeDuplicateConfig(source, name, parentIdx);
 
   collections.append(copy);
   m_workingCollections.append(copy);

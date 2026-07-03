@@ -18,6 +18,9 @@ void SettingsManager::saveMediaSection(QSettings &s, const GeneralSettings &sett
   m_generalSettings.media.pixmapCacheSizeMB =
       qBound(UIConstants::Cache::MIN_PIXMAP_CACHE_MB, m_generalSettings.media.pixmapCacheSizeMB,
              UIConstants::Cache::MAX_PIXMAP_CACHE_MB);
+  m_generalSettings.media.artworkDiskCacheBudgetMB =
+      MediaSettingsPersistence::clampArtworkDiskCacheBudgetMB(
+          m_generalSettings.media.artworkDiskCacheBudgetMB);
   m_generalSettings.media.videoThumbnailExtractionTimeoutMs =
       qBound(UIConstants::Timing::MIN_VIDEO_THUMBNAIL_TIMEOUT_MS,
              m_generalSettings.media.videoThumbnailExtractionTimeoutMs,

@@ -7,6 +7,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h" // CollectionUtils::wouldCreateCircularReference
 #include "collection/validationhelpers.h"
+#include "settingsdialogtreehelpers.h"
 #include "settingstreehost.h"
 
 #include "collectiontreewidget.h"
@@ -111,28 +112,10 @@ void TreeManager::expandPathTo(int collectionIndex) {
 }
 
 void TreeManager::propagateNameChange(const QString &oldName, const QString &newName) {
-  if (oldName == newName || !m_collections) {
+  if (!m_collections) {
     return;
   }
-  auto &live = *m_collections;
-  for (int i = 0; i < live.size(); ++i) {
-    QStringList &names = live[i].additionalParentNames;
-    if (!names.contains(oldName)) {
-      continue;
-    }
-    if (newName.isEmpty()) {
-      names.removeAll(oldName);
-    } else {
-      for (QString &n : names) {
-        if (n == oldName) {
-          n = newName;
-        }
-      }
-    }
-    if (m_workingCollections && i < m_workingCollections->size()) {
-      (*m_workingCollections)[i].additionalParentNames = names;
-    }
-  }
+  SettingsTreeHelpers::propagateNameChange(*m_collections, m_workingCollections, oldName, newName);
 }
 
 void TreeManager::setSubtreeExpanded(QTreeWidgetItem *item, bool expanded) {
@@ -481,30 +464,13 @@ void TreeManager::onWidgetRearranged() {
   }
   // Walk the post-drop tree and resync parentCollectionIndex / isSubcollection
   // on every collection. Linked mirrors aren't draggable but can shuffle along
-  // with their primary parent, so skip them when resolving the canonical parent
-  // and recurse through them so their children are still visited.
-  std::function<void(QTreeWidgetItem *, int)> walk = [&](QTreeWidgetItem *item, int parentIdx) {
-    if (!item) {
-      return;
-    }
-    const bool isLinked = item->data(0, Qt::UserRole).toBool();
-    int idx = indexOf(item);
-    if (!isLinked && CollectionUtils::isValidIndex(idx, m_collections)) {
-      (*m_collections)[idx].parentCollectionIndex = parentIdx;
-      (*m_collections)[idx].isSubcollection = (parentIdx >= 0);
-      if (idx < m_workingCollections->size()) {
-        (*m_workingCollections)[idx].parentCollectionIndex = parentIdx;
-        (*m_workingCollections)[idx].isSubcollection = (parentIdx >= 0);
-      }
-    }
-    const int childParentIdx = isLinked ? parentIdx : idx;
-    for (int i = 0; i < item->childCount(); ++i) {
-      walk(item->child(i), childParentIdx);
-    }
-  };
-  for (int i = 0; i < m_widget->topLevelItemCount(); ++i) {
-    walk(m_widget->topLevelItem(i), -1);
-  }
+  // with their primary parent, so the walk (extracted for unit coverage) skips
+  // them when resolving the canonical parent and recurses through them so
+  // their children are still visited.
+  SettingsTreeHelpers::resyncParentIndicesFromTree(
+      m_widget,
+      [this](const QTreeWidgetItem *item) { return indexOf(const_cast<QTreeWidgetItem *>(item)); },
+      *m_collections, *m_workingCollections);
 
   // Persist immediately so the rearranged tree survives a Cancel of the outer
   // dialog; the host re-emits SettingsDialog::collectionSaved.

@@ -32,11 +32,9 @@ void SubfoldersPanel::setModel(SettingsModel *model) {
 }
 
 void SubfoldersPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->includeContentSubfoldersCheckBox,
                                 config.folderBrowsing.includeContentSubfolders);
   SettingsFormBinding::loadInto(ui->showAllSubfolderItemsCheckBox,
@@ -60,11 +58,9 @@ void SubfoldersPanel::clear() {
 }
 
 void SubfoldersPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.folderBrowsing.includeContentSubfolders =
       ui->includeContentSubfoldersCheckBox->isChecked();
   config.folderBrowsing.showAllSubfolderItems = ui->showAllSubfolderItemsCheckBox->isChecked();

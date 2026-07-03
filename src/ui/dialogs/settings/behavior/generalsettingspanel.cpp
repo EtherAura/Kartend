@@ -80,6 +80,7 @@ void GeneralSettingsPanel::load() {
 
   // Performance & History
   SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, s->media.pixmapCacheSizeMB);
+  SettingsFormBinding::loadInto(ui->artworkDiskCacheSpinBox, s->media.artworkDiskCacheBudgetMB);
   SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox,
                                 s->runtimeDetection.runtimeDetectionEnabled);
   SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, s->history.historyEnabled);
@@ -172,6 +173,9 @@ void GeneralSettingsPanel::save() {
 
   // Performance & History
   s->media.pixmapCacheSizeMB = ui->pixmapCacheSpinBox->value();
+  // 0 = unlimited; other values are clamped to the supported range by the
+  // persistence layer on save (MediaSettingsPersistence).
+  s->media.artworkDiskCacheBudgetMB = ui->artworkDiskCacheSpinBox->value();
   s->runtimeDetection.runtimeDetectionEnabled = ui->runtimeDetectionCheckBox->isChecked();
   s->history.historyEnabled = ui->historyEnabledCheckBox->isChecked();
   s->history.historyMaxEntries = ui->historyMaxEntriesSpinBox->value();
@@ -217,6 +221,7 @@ void GeneralSettingsPanel::connectChangeSignals() {
 
   // Performance & History
   connect(ui->pixmapCacheSpinBox, onSpin, this, [this](int) { save(); });
+  connect(ui->artworkDiskCacheSpinBox, onSpin, this, [this](int) { save(); });
   connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->historyEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->historyMaxEntriesSpinBox, onSpin, this, [this](int) { save(); });

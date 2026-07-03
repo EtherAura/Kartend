@@ -33,11 +33,9 @@ void AppearanceTitlesPanel::setModel(SettingsModel *model) {
 }
 
 void AppearanceTitlesPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->fontSizeSpinBox, config.gridLayout.fontSize);
   SettingsFormBinding::loadInto(ui->customFontEdit, config.customFontFamily);
   SettingsFormBinding::loadInto(ui->hideTitlesCheckBox, config.hideTitles);
@@ -53,11 +51,9 @@ void AppearanceTitlesPanel::clear() {
 }
 
 void AppearanceTitlesPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.gridLayout.fontSize = ui->fontSizeSpinBox->value();
   config.customFontFamily = ui->customFontEdit->text().trimmed();
   config.hideTitles = ui->hideTitlesCheckBox->isChecked();

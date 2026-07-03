@@ -105,11 +105,9 @@ void AppearanceColorsPanel::setModel(SettingsModel *model) {
 }
 
 void AppearanceColorsPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   if (config.background.backgroundType == BackgroundType::Video) {
     ui->backgroundVideoRadio->setChecked(true);
     ui->backgroundValueEdit->setText(config.background.backgroundVideo);
@@ -145,11 +143,9 @@ void AppearanceColorsPanel::clear() {
 }
 
 void AppearanceColorsPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   if (ui->backgroundVideoRadio->isChecked()) {
     config.background.backgroundType = BackgroundType::Video;
   } else if (ui->backgroundImageRadio->isChecked()) {
@@ -361,8 +357,7 @@ void AppearanceColorsPanel::onBrowseListAltRowColor() {
 }
 
 void AppearanceColorsPanel::onLoadColorScheme() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
+  if (!m_model || !m_model->currentWorkingCollection()) {
     return;
   }
 
@@ -407,8 +402,11 @@ void AppearanceColorsPanel::onLoadColorScheme() {
   // the UI line edits so the user sees the new values without an
   // intermediate Save+Reload. Per-field changed() signals are emitted
   // automatically by setText() so the dirty-tracking machinery picks
-  // the swap up.
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  // the swap up. Re-fetch after the modal pickers rather than caching the
+  // pointer across their event loops.
+  CollectionConfig *current = m_model->currentWorkingCollection();
+  if (!current) return;
+  CollectionConfig &config = *current;
   KdeColorScheme::applyToCollection(scheme, config);
   if (m_model->generalSettings) {
     KdeColorScheme::applyToGeneralSettings(scheme, *m_model->generalSettings);

@@ -417,6 +417,13 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 }
 
 ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
+  // A pending debounced live-save (scheduleLiveSettingsSave) is superseded:
+  // this full save persists the same struct the flush would have written, and
+  // on failure it surfaces its own ErrorDialog — a trailing timer fire would
+  // only duplicate the write (or the error).
+  if (m_liveSaveTimer) {
+    m_liveSaveTimer->stop();
+  }
   auto *mainWindow = m_host;
   auto *settingsManager = m_ctx ? m_ctx->settingsManager() : nullptr;
   if (mainWindow && settingsManager) {

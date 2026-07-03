@@ -31,6 +31,20 @@ struct SettingsModel {
   /// Negative when no row is selected — panels guard their accessors.
   int *currentIndex = nullptr;
 
+  /// The working-copy row the user is currently editing, or nullptr when no
+  /// editable row exists. Folds the validity checks every panel's load()/save()
+  /// path needs; returns nullptr when any of them fails:
+  ///   - workingCollections is unset (model not fully wired, e.g. bare tests),
+  ///   - currentIndex is unset,
+  ///   - *currentIndex is negative (no row selected),
+  ///   - *currentIndex is past the end of workingCollections (stale index).
+  /// Callers still null-check their own m_model pointer before calling.
+  CollectionConfig *currentWorkingCollection() const {
+    if (!workingCollections || !currentIndex) return nullptr;
+    if (*currentIndex < 0 || *currentIndex >= workingCollections->size()) return nullptr;
+    return &(*workingCollections)[*currentIndex];
+  }
+
   /// Optional bridges to the DAT-audit feature, wired by SettingsDialog from its
   /// IMainWindow parent (null in tests / when there is no main window). The
   /// configuration panel uses them to launch an audit for the current

@@ -31,11 +31,9 @@ void AppearanceToolbarPanel::setModel(SettingsModel *model) {
 }
 
 void AppearanceToolbarPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadInto(ui->headerLogoEdit, config.background.headerLogoImage);
   SettingsFormBinding::loadIntoIndex(ui->headerLogoPositionComboBox,
                                      static_cast<int>(config.background.headerLogoPosition));
@@ -47,11 +45,9 @@ void AppearanceToolbarPanel::clear() {
 }
 
 void AppearanceToolbarPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.background.headerLogoImage = ui->headerLogoEdit->text().trimmed();
   config.background.headerLogoPosition =
       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());

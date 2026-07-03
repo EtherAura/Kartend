@@ -19,6 +19,7 @@ inline constexpr auto kAdditionalLaunchers = "additionalLaunchers";
 inline constexpr auto kAdditionalParents = "additionalParents";
 inline constexpr auto kArtworkCycleModifier = "artworkCycleModifier";
 inline constexpr auto kArtworkDirectory = "artworkDirectory";
+inline constexpr auto kArtworkDiskCacheBudgetMB = "artworkDiskCacheBudgetMB";
 inline constexpr auto kAttractModeAdvanceSelectionEnabled = "attractModeAdvanceSelectionEnabled";
 inline constexpr auto kAttractModeAdvanceSelectionIntervalSec =
     "attractModeAdvanceSelectionIntervalSec";

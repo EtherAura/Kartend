@@ -38,11 +38,9 @@ void AppearanceLayoutPanel::setModel(SettingsModel *model) {
 }
 
 void AppearanceLayoutPanel::load() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  const CollectionConfig &config = *current;
   SettingsFormBinding::loadIntoIndex(ui->viewTypeComboBox, static_cast<int>(config.viewType));
   SettingsFormBinding::loadIntoIndex(ui->horizontalAlignmentComboBox,
                                      static_cast<int>(config.horizontalAlignment));
@@ -77,11 +75,9 @@ void AppearanceLayoutPanel::clear() {
 }
 
 void AppearanceLayoutPanel::save() {
-  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
-    return;
-  }
-  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
+  if (!current) return;
+  CollectionConfig &config = *current;
   config.viewType = static_cast<ViewType>(ui->viewTypeComboBox->currentIndex());
   config.horizontalAlignment =
       static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex());
