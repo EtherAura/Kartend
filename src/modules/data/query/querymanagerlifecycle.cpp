@@ -119,10 +119,17 @@ void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
   emit cacheInvalidated(collectionUuid);
 }
 
-void QueryManager::invalidateSmartPlaylistScope() {
+void QueryManager::invalidateUsageSensitiveCaches() {
   assertOwnerThread();
-  // Clearing the key alone is enough: the next ensurePlaylistScopePopulated
-  // sees a key mismatch and re-evaluates the filter against current item data.
+  // A launch / usage reset / favorite toggle mutates per-item usage or
+  // playlist-membership rows without changing the item set. The sorted-items
+  // cache baked the played:/favorite:/tag: token clauses into its result set
+  // at build time, so a filtered grid (and its counts) would otherwise stay
+  // stale for the whole session. Launches and toggles are rare; the rebuild
+  // is cheap.
+  clearSortedItemsCache();
+  // Scope key: the next ensurePlaylistScopePopulated sees a key mismatch and
+  // re-evaluates the filter against current item data.
   m_cachedPlaylistScopeKey.clear();
 }
 

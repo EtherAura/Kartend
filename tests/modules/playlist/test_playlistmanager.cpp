@@ -16,6 +16,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "databaseschema.h"
 #include "playlistmanager.h"
 #include "smartfilter.h"
 
@@ -31,6 +32,8 @@ private slots:
   void cleanup();
 
   void initialize_opensConnection();
+  void initialize_addsSmartColumnsToV10Table();
+  void initialize_preservesSchemaVersionOnBootstrappedDb();
   void createPlaylist_returnsIdAndPersists();
   void createPlaylist_rejectsBlankName();
   void renamePlaylist_updatesName();
@@ -93,6 +96,110 @@ void TestPlaylistManager::initialize_opensConnection() {
   // initialize() has been called in init(); a second call should be a no-op
   // and still return true (idempotency contract callers rely on).
   QVERIFY(m_pm->initialize());
+}
+
+void TestPlaylistManager::initialize_addsSmartColumnsToV10Table() {
+  // A long-lived install whose media.db last saw the v10 migration has a
+  // playlists table without is_smart/smart_filter. The standalone
+  // initialize() must bring it to the v11 shape via the migration ladder's
+  // probe-first ensureColumn — the previous blind ALTERs discarded their
+  // results, conflating the benign duplicate-column case with real
+  // locked-database/IO failures.
+  delete m_pm; // release the connection init() opened so the file can be replaced
+  m_pm = nullptr;
+  const QString dbPath =
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/media.db";
+  QFile::remove(dbPath);
+  QFile::remove(dbPath + "-wal");
+  QFile::remove(dbPath + "-shm");
+
+  {
+    auto seed = QSqlDatabase::addDatabase("QSQLITE", "seed_v10");
+    seed.setDatabaseName(dbPath);
+    QVERIFY(seed.open());
+    QSqlQuery q(seed);
+    // The exact v10 playlists shape (no smart-playlist columns).
+    QVERIFY(q.exec("CREATE TABLE playlists ("
+                   "id TEXT PRIMARY KEY, "
+                   "name TEXT NOT NULL, "
+                   "icon TEXT NOT NULL DEFAULT '', "
+                   "parent_collection_uuid TEXT NOT NULL DEFAULT '', "
+                   "reserved_kind TEXT NOT NULL DEFAULT '', "
+                   "created_at TEXT NOT NULL DEFAULT '', "
+                   "updated_at TEXT NOT NULL DEFAULT ''"
+                   ")"));
+    QVERIFY(q.exec("INSERT INTO playlists (id, name) VALUES ('pre', 'Pre-upgrade')"));
+    seed.close();
+  }
+  QSqlDatabase::removeDatabase("seed_v10");
+
+  m_pm = new PlaylistManager();
+  QVERIFY(m_pm->initialize());
+
+  // The columns were added…
+  {
+    QSqlQuery info(QSqlDatabase::database("kartend_playlists_main"));
+    QVERIFY(info.exec("PRAGMA table_info(playlists)"));
+    QStringList columns;
+    while (info.next()) {
+      columns << info.value(1).toString();
+    }
+    QVERIFY(columns.contains("is_smart"));
+    QVERIFY(columns.contains("smart_filter"));
+  }
+
+  // …the pre-existing row survived as a static playlist (loadAll selects the
+  // new columns, so it would fail outright without the upgrade)…
+  const auto rows = m_pm->loadAll();
+  QCOMPARE(rows.size(), 1);
+  QCOMPARE(rows.first().id, QString("pre"));
+  QCOMPARE(rows.first().name, QString("Pre-upgrade"));
+  QVERIFY(!rows.first().isSmart);
+
+  // …and the upgraded table supports smart playlists end-to-end.
+  SmartFilter::Filter filter;
+  filter.kind = SmartFilter::Kind::TopPlayed;
+  filter.limit = 5;
+  QVERIFY(m_pm->createSmartPlaylist("Top 5", filter).isOk());
+}
+
+void TestPlaylistManager::initialize_preservesSchemaVersionOnBootstrappedDb() {
+  // Production startup order: DatabaseManager bootstraps + migrates media.db,
+  // THEN the standalone playlist connection opens the same file. Its local
+  // DDL must be a pure no-op there — the probe helper sees the v11 columns
+  // already in place — and it must never touch user_version (it does not run
+  // the migration ladder). Runs the production bootstrap directly: the same
+  // sequence as the shared MigratedDb fixture, which cannot be used here
+  // because PlaylistManager resolves the AppDataLocation path itself.
+  delete m_pm;
+  m_pm = nullptr;
+  const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  QFile::remove(dataDir + "/media.db");
+  QFile::remove(dataDir + "/media.db-wal");
+  QFile::remove(dataDir + "/media.db-shm");
+
+  int migratedVersion = 0;
+  {
+    auto boot = QSqlDatabase::addDatabase("QSQLITE", "boot_bootstrap");
+    QVERIFY(DatabaseSchema::openConnection(boot, dataDir));
+    DatabaseSchema::applyConnectionPragmas(boot);
+    DatabaseSchema::createTables(boot); // runs the migration ladder internally
+    DatabaseSchema::createIndexes(boot);
+    QSqlQuery q(boot);
+    QVERIFY(q.exec("PRAGMA user_version") && q.next());
+    migratedVersion = q.value(0).toInt();
+    QVERIFY(migratedVersion > 0);
+    boot.close();
+  }
+  QSqlDatabase::removeDatabase("boot_bootstrap");
+
+  m_pm = new PlaylistManager();
+  QVERIFY(m_pm->initialize());
+  QVERIFY(m_pm->createPlaylist("After bootstrap").isOk());
+
+  QSqlQuery check(QSqlDatabase::database("kartend_playlists_main"));
+  QVERIFY(check.exec("PRAGMA user_version") && check.next());
+  QCOMPARE(check.value(0).toInt(), migratedVersion);
 }
 
 void TestPlaylistManager::createPlaylist_returnsIdAndPersists() {

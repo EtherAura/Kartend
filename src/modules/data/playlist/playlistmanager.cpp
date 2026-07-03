@@ -1,28 +1,21 @@
 #include "playlistmanager.h"
 
+#include "playlistio.h"
 #include "playlistserializer.h"
 
-#include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSaveFile>
-#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
-#include <QTextStream>
 #include <QUuid>
 
 #include <optional>
 
 #include "connectionpragmas.h"
+#include "dbmigrations.h"
 #include "dbtxn.h"
 #include "errorutils.h"
-#include "pathutils.h"
 #include "uiconstants/database.h"
 
 using ErrorUtils::ErrorCode;
@@ -30,66 +23,17 @@ using ErrorUtils::ErrorContext;
 
 namespace {
 
-// Upper bounds on user-/file-supplied strings before they reach the TEXT NOT
-// NULL columns. A crafted or corrupt JSON envelope could otherwise carry
-// megabyte-sized paths or garbage UUID strings straight into playlist_items /
-// playlists (Kartend-2sg2t). These caps are generous relative to any real
-// filesystem path or display name but bound worst-case row size.
-constexpr int kMaxSourcePathLength = 4096;
-// source_collection_uuid is NOT a QUuid: collection identity is a 40-char SHA-1
-// hex digest (CollectionUtils::computeCollectionUuid). A QUuid::fromString
-// round-trip would therefore reject every real ref, so we bound the length only
-// — generous over the 40-char digest while still capping worst-case row size.
-constexpr int kMaxUuidLength = 128;
+// Upper bound on the user-supplied playlist name before it reaches the TEXT
+// NOT NULL name column (Kartend-2sg2t). Generous relative to any real display
+// name but bounds worst-case row size. The (uuid, path) item-ref caps live
+// with PlaylistIo::validateItemRef.
 constexpr int kMaxPlaylistNameLength = 512;
-
-// Validate a (uuid, path) item ref before it is persisted. Caps both string
-// lengths so a crafted/corrupt envelope cannot inject megabyte-sized values
-// into the TEXT NOT NULL columns. Returns true when the ref is acceptable.
-// Empty path/uuid handling stays with the callers (path-empty is a skip; an
-// empty uuid is a legitimate "no source collection" ref), so this only rejects
-// over-long values (Kartend-2sg2t). Note: collection uuids are SHA-1 hex
-// digests, not RFC-4122 UUIDs, so no QUuid::fromString well-formedness check is
-// applied — it would reject every production ref.
-bool validateItemRef(const QString &uuid, const QString &path) {
-  if (path.length() > kMaxSourcePathLength) {
-    return false;
-  }
-  if (uuid.length() > kMaxUuidLength) {
-    return false;
-  }
-  return true;
-}
-
-QString isoNow() {
-  return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-}
 
 QString newPlaylistId() {
   // QUuid::createUuid() is the same RNG everything else in the codebase uses
   // for opaque ids; trim the curly braces so the value plays nicely as a
   // foreign key value in URLs / debug logs.
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
-}
-
-// Shared INSERT for playlist_items — one statement string + one positional
-// bind so the four insert sites (addItem, removeItem re-densify, importFromJson,
-// importFromM3U) can't drift on column order (Kartend audit D-09). Uses
-// bindValue(pos) rather than addBindValue so it also works when a single
-// prepared query is reused across a loop (the removeItem re-densify path).
-const QString kInsertPlaylistItemSql =
-    QStringLiteral("INSERT INTO playlist_items (playlist_id, position, "
-                   "source_collection_uuid, source_path, added_at) "
-                   "VALUES (?, ?, ?, ?, ?)");
-
-void bindPlaylistItemRow(QSqlQuery &q, const QString &playlistId, int position,
-                         const QString &sourceCollectionUuid, const QString &sourcePath,
-                         const QString &addedAt) {
-  q.bindValue(0, playlistId);
-  q.bindValue(1, position);
-  q.bindValue(2, sourceCollectionUuid);
-  q.bindValue(3, sourcePath);
-  q.bindValue(4, addedAt);
 }
 
 } // namespace
@@ -182,13 +126,21 @@ bool PlaylistManager::initialize() {
             .withDetails(ddl.lastError().text());
     ErrorUtils::logError(err);
   }
-  // Mirror the v11 ensureColumn calls so a long-lived install that already
-  // has a v10 playlists table picks up the smart-playlist columns when the
-  // standalone PlaylistManager opens its connection (the full migration
-  // suite normally handles this via DatabaseManager, but the standalone
-  // path stays schema-compatible by repeating the additive columns here).
-  ddl.exec("ALTER TABLE playlists ADD COLUMN is_smart INTEGER NOT NULL DEFAULT 0");
-  ddl.exec("ALTER TABLE playlists ADD COLUMN smart_filter TEXT NOT NULL DEFAULT ''");
+  // Mirror the v11 migration so a long-lived install that already has a v10
+  // playlists table picks up the smart-playlist columns when the standalone
+  // PlaylistManager opens its connection (the full migration suite normally
+  // handles this via DatabaseManager, but the standalone path stays
+  // schema-compatible by repeating the additive columns here). Routed through
+  // the ladder's shared probe-first helper: the previous blind ALTERs
+  // discarded their results, which conflated the benign duplicate-column case
+  // with a locked-database / I/O failure that leaves the table without
+  // is_smart/smart_filter — silently breaking every later playlist query in
+  // the session with only unrelated-looking downstream errors. A genuine
+  // failure now logs here, at the root cause.
+  DbMigrations::ensureColumn(m_db, "playlists", "is_smart", "INTEGER NOT NULL DEFAULT 0",
+                             "PlaylistManager::initialize");
+  DbMigrations::ensureColumn(m_db, "playlists", "smart_filter", "TEXT NOT NULL DEFAULT ''",
+                             "PlaylistManager::initialize");
   if (!ddl.exec("CREATE TABLE IF NOT EXISTS playlist_items ("
                 "playlist_id TEXT NOT NULL, "
                 "position INTEGER NOT NULL, "
@@ -204,10 +156,17 @@ bool PlaylistManager::initialize() {
                    .withDetails(ddl.lastError().text());
     ErrorUtils::logError(err);
   }
-  ddl.exec("CREATE INDEX IF NOT EXISTS idx_playlist_items_lookup "
-           "ON playlist_items(source_collection_uuid, source_path)");
-  ddl.exec("CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist "
-           "ON playlist_items(playlist_id)");
+  // Checked for the same reason as the columns above: an unchecked CREATE
+  // INDEX failure degrades every playlist lookup for the session without any
+  // log pointing here.
+  DbMigrations::ensureIndex(m_db,
+                            "CREATE INDEX IF NOT EXISTS idx_playlist_items_lookup "
+                            "ON playlist_items(source_collection_uuid, source_path)",
+                            "PlaylistManager::initialize", "idx_playlist_items_lookup");
+  DbMigrations::ensureIndex(m_db,
+                            "CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist "
+                            "ON playlist_items(playlist_id)",
+                            "PlaylistManager::initialize", "idx_playlist_items_playlist");
   return true;
 }
 
@@ -229,7 +188,7 @@ ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
   }
 
   const QString id = newPlaylistId();
-  const QString now = isoNow();
+  const QString now = PlaylistIo::isoNow();
 
   QSqlQuery q(m_db);
   q.prepare(QStringLiteral(
@@ -273,7 +232,7 @@ PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Fil
   }
 
   const QString id = newPlaylistId();
-  const QString now = isoNow();
+  const QString now = PlaylistIo::isoNow();
   const QString filterJson = SmartFilter::toJsonString(filter);
 
   QSqlQuery q(m_db);
@@ -308,7 +267,7 @@ bool PlaylistManager::updateSmartFilter(const QString &id, const SmartFilter::Fi
   q.prepare(QStringLiteral(
       "UPDATE playlists SET smart_filter = ?, updated_at = ? WHERE id = ? AND is_smart = 1"));
   q.addBindValue(filterJson);
-  q.addBindValue(isoNow());
+  q.addBindValue(PlaylistIo::isoNow());
   q.addBindValue(id);
   if (!q.exec() || q.numRowsAffected() <= 0) {
     auto err =
@@ -350,7 +309,7 @@ bool PlaylistManager::renamePlaylist(const QString &id, const QString &newName) 
   QSqlQuery q(m_db);
   q.prepare(QStringLiteral("UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?"));
   q.addBindValue(newName.trimmed());
-  q.addBindValue(isoNow());
+  q.addBindValue(PlaylistIo::isoNow());
   q.addBindValue(id);
   if (!q.exec() || q.numRowsAffected() <= 0) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to rename playlist",
@@ -406,7 +365,7 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   if (!m_db.isOpen() || playlistId.isEmpty() || sourcePath.isEmpty()) {
     return false;
   }
-  if (!validateItemRef(sourceCollectionUuid, sourcePath)) {
+  if (!PlaylistIo::validateItemRef(sourceCollectionUuid, sourcePath)) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::InvalidArgument,
                                                "Rejecting over-long playlist item ref",
                                                "PlaylistManager::addItem")
@@ -448,8 +407,9 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   const int nextPosition = posQuery.value(0).toInt();
 
   QSqlQuery insert(m_db);
-  insert.prepare(kInsertPlaylistItemSql);
-  bindPlaylistItemRow(insert, playlistId, nextPosition, sourceCollectionUuid, sourcePath, isoNow());
+  insert.prepare(PlaylistIo::insertPlaylistItemSql());
+  PlaylistIo::bindPlaylistItemRow(insert, playlistId, nextPosition, sourceCollectionUuid,
+                                  sourcePath, PlaylistIo::isoNow());
   if (!insert.exec()) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                      "Failed to insert playlist item", "PlaylistManager::addItem")
@@ -463,7 +423,7 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   // transaction in SQLite, and the stamp is non-essential.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
-  touch.addBindValue(isoNow());
+  touch.addBindValue(PlaylistIo::isoNow());
   touch.addBindValue(playlistId);
   touch.exec();
 
@@ -540,9 +500,10 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
   }
 
   QSqlQuery reinsert(m_db);
-  reinsert.prepare(kInsertPlaylistItemSql);
+  reinsert.prepare(PlaylistIo::insertPlaylistItemSql());
   for (int i = 0; i < rows.size(); ++i) {
-    bindPlaylistItemRow(reinsert, playlistId, i, rows[i].uuid, rows[i].path, rows[i].addedAt);
+    PlaylistIo::bindPlaylistItemRow(reinsert, playlistId, i, rows[i].uuid, rows[i].path,
+                                    rows[i].addedAt);
     if (!reinsert.exec()) {
       return false; // guard dtor rolls back
     }
@@ -556,7 +517,7 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
 
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
-  touch.addBindValue(isoNow());
+  touch.addBindValue(PlaylistIo::isoNow());
   touch.addBindValue(playlistId);
   touch.exec();
 
@@ -694,69 +655,30 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
 }
 
 // ============================================================================
-// Import / export
+// Import / export — thin delegations. The DB halves (row loads, transactional
+// item inserts, path→collection resolution) live in PlaylistIo; format + file
+// I/O in PlaylistSerializer (Kartend-k4alv). This class keeps thread affinity,
+// the signal-emitting CRUD the imports orchestrate, and the playlistsChanged
+// emissions.
 // ============================================================================
-
-namespace {
-
-PlaylistRow loadPlaylistRow(QSqlDatabase &db, const QString &id) {
-  PlaylistRow row;
-  QSqlQuery q(db);
-  q.prepare("SELECT id, name, icon, parent_collection_uuid, reserved_kind, "
-            "created_at, updated_at, is_smart, smart_filter FROM playlists WHERE id = ?");
-  q.addBindValue(id);
-  if (q.exec() && q.next()) {
-    row.id = q.value(0).toString();
-    row.name = q.value(1).toString();
-    row.icon = q.value(2).toString();
-    row.parentCollectionUuid = q.value(3).toString();
-    row.reservedKind = q.value(4).toString();
-    row.createdAt = q.value(5).toString();
-    row.updatedAt = q.value(6).toString();
-    row.isSmart = q.value(7).toInt() != 0;
-    row.smartFilterJson = q.value(8).toString();
-  }
-  return row;
-}
-
-} // namespace
 
 ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
                                                       const QString &outPath) const {
   assertOwnerThread();
-  if (!m_db.isOpen()) {
-    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
-                               "PlaylistManager::exportToJson");
-  }
-  if (playlistId.isEmpty() || outPath.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "playlistId and outPath are required",
-                               "PlaylistManager::exportToJson");
-  }
-  // const_cast: loadPlaylistRow takes a non-const QSqlDatabase& because Qt's
+  // const_cast: PlaylistIo takes a non-const QSqlDatabase& because Qt's
   // QSqlQuery constructor wants a mutable reference, but the operation is
-  // logically a read.
-  PlaylistRow row = loadPlaylistRow(const_cast<QSqlDatabase &>(m_db), playlistId);
-  if (row.id.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist not found",
-                               "PlaylistManager::exportToJson");
-  }
-  // Format + file I/O live in PlaylistSerializer (Kartend-k4alv); this method
-  // keeps only the DB reads feeding it.
-  return PlaylistSerializer::exportJson(row, loadItems(playlistId), outPath);
+  // logically a read. Items are loaded eagerly — harmless on the validation
+  // failure paths (loadItems returns empty without logging when the db is
+  // closed or the id is empty).
+  return PlaylistIo::exportToJson(const_cast<QSqlDatabase &>(m_db), playlistId, outPath,
+                                  loadItems(playlistId));
 }
 
 ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
                                                      const QString &outPath) const {
   assertOwnerThread();
-  if (!m_db.isOpen()) {
-    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
-                               "PlaylistManager::exportToM3U");
-  }
-  if (playlistId.isEmpty() || outPath.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "playlistId and outPath are required",
-                               "PlaylistManager::exportToM3U");
-  }
-  return PlaylistSerializer::exportM3U(loadItems(playlistId), outPath);
+  return PlaylistIo::exportToM3U(const_cast<QSqlDatabase &>(m_db), playlistId, outPath,
+                                 loadItems(playlistId));
 }
 
 ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPath,
@@ -770,8 +692,9 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::importFromJson");
   }
-  // Envelope parsing lives in PlaylistSerializer (Kartend-k4alv); this method
-  // keeps the CRUD + transactional item insert.
+  // Envelope parsing lives in PlaylistSerializer (Kartend-k4alv) and the
+  // transactional item insert in PlaylistIo; this method keeps the CRUD
+  // (playlist creation, failure cleanup) and the playlistsChanged emission.
   auto parsed = PlaylistSerializer::parseJsonFile(inPath);
   if (parsed.isError()) {
     return parsed.error();
@@ -802,79 +725,18 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   }
   const QString &newId = created.value();
 
-  // Kartend-fd7xl: insert all items in a SINGLE transaction so a mid-loop
-  // failure or crash can't leave a half-populated playlist the user sees as
-  // "imported". On any failure we roll the items back AND drop the freshly
+  // Kartend-fd7xl: PlaylistIo inserts all items in a SINGLE transaction so a
+  // mid-loop failure or crash can't leave a half-populated playlist the user
+  // sees as "imported". On any failure the transaction has already rolled
+  // back inside PlaylistIo (its guard is scoped to the call, so the rollback
+  // runs BEFORE deletePlaylist issues its own DELETE) and we drop the freshly
   // created (now-empty) playlist so the import fails cleanly rather than
-  // leaving an orphan. (addItem opens its own per-item transaction, so we
-  // insert directly here instead of looping it — positions are a dense 0-based
-  // sequence for the fresh playlist, and an in-memory set reproduces addItem's
-  // idempotent (uuid,path) de-duplication.)
-  //
-  // The DbTransaction guard (Kartend-l94tw) lives inside the immediately
-  // invoked lambda so its rollback runs BEFORE the deletePlaylist cleanup —
-  // deletePlaylist issues its own DELETE, which must not execute inside the
-  // still-open (about to be rolled back) import transaction.
-  //
-  // Kartend-2sg2t: mirror importFromM3U's skip accounting — empty-path,
-  // duplicate, and over-long/invalid item refs are counted so the caller can
-  // surface "N items skipped" instead of the import silently dropping them
-  // while still reporting success.
+  // leaving an orphan. Skipped items (empty-path, duplicate, over-long/
+  // invalid refs) are counted so the caller can surface "N items skipped"
+  // (Kartend-2sg2t).
   int skipped = 0;
-  const auto insertFailure = [&]() -> std::optional<ErrorUtils::ErrorContext> {
-    KartendDb::DbTransaction txn(m_db, "PlaylistManager::importFromJson");
-    if (!txn.active()) {
-      return txn.beginError("Failed to begin playlist import transaction", nullptr,
-                            ErrorUtils::Severity::Error);
-    }
-    const QString addedAt = isoNow();
-    QSet<QString> seen;
-    int position = 0;
-    for (const PlaylistSerializer::ParsedPlaylist::Item &entry : parsed.value().items) {
-      const QString &uuid = entry.sourceCollectionUuid;
-      const QString &path = entry.sourcePath;
-      if (path.isEmpty()) {
-        ++skipped;
-        continue;
-      }
-      if (!validateItemRef(uuid, path)) {
-        ++skipped;
-        ErrorUtils::logError(
-            ErrorContext::warning(ErrorCode::InvalidArgument,
-                                  "Skipping over-long/invalid imported playlist item ref",
-                                  "PlaylistManager::importFromJson")
-                .withDetails(QStringLiteral("path length: %1, uuid length: %2")
-                                 .arg(path.length())
-                                 .arg(uuid.length())));
-        continue;
-      }
-      const QString dedupKey = uuid + QLatin1Char('\x1f') + path;
-      if (seen.contains(dedupKey)) {
-        ++skipped;
-        continue;
-      }
-      seen.insert(dedupKey);
-
-      QSqlQuery insert(m_db);
-      insert.prepare(kInsertPlaylistItemSql);
-      bindPlaylistItemRow(insert, newId, position++, uuid, path, addedAt);
-      if (!insert.exec()) {
-        auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to insert imported playlist item",
-                                       "PlaylistManager::importFromJson")
-                       .withDetails(insert.lastError().text());
-        ErrorUtils::logError(err);
-        return err; // guard dtor rolls back
-      }
-    }
-    if (!txn.commit()) {
-      auto err =
-          txn.commitError("Failed to commit playlist import", nullptr, ErrorUtils::Severity::Error);
-      ErrorUtils::logError(err);
-      return err;
-    }
-    return std::nullopt;
-  }();
+  const auto insertFailure =
+      PlaylistIo::insertImportedJsonItems(m_db, newId, parsed.value().items, skipped);
   if (insertFailure) {
     (void)deletePlaylist(newId);
     return *insertFailure;
@@ -915,104 +777,17 @@ ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath
   }
   const QString &newId = created.value();
 
-  // Resolve each path via the live items table — playlist_items is keyed by
-  // (source_collection_uuid, source_path), so we have to know which source
-  // collection owns the path to round-trip correctly. Paths the items table
-  // doesn't recognise are skipped (counted in *outSkipped) rather than
-  // stored as broken refs; the user can re-import once collections have
-  // been rescanned and the paths become resolvable.
-  //
-  // Kartend-o84pt: M3U carries no collection identity (unlike the lossless JSON
-  // format, which stores source_collection_uuid), so a path that exists in more
-  // than one collection is genuinely ambiguous on import. ORDER BY makes the
-  // pick DETERMINISTIC (lowest uuid) instead of letting SQLite's row order
-  // decide, and we log the ambiguity so the round-trip's lossiness is visible
-  // rather than silent.
-  QSqlQuery resolve(m_db);
-  resolve.prepare("SELECT collection_uuid FROM items WHERE path = ? ORDER BY collection_uuid");
-
-  // Kartend-k695z: resolve everything FIRST, then insert in one transaction —
-  // mirroring importFromJson (Kartend-fd7xl). The old per-line addItem() loop
-  // opened one transaction + one MAX(position) probe + one playlistsChanged
-  // emission per line, and a mid-loop DB failure left a half-imported
-  // playlist presented as success.
-  struct ResolvedEntry {
-    QString uuid;
-    QString path;
-  };
-  QList<ResolvedEntry> resolved;
-  resolved.reserve(paths.value().size());
-  QSet<QString> seen;
+  // Path→collection resolution and the single-transaction insert live in
+  // PlaylistIo (resolve everything FIRST, then insert once — Kartend-k695z);
+  // this method keeps the CRUD and the playlistsChanged emission. On insert
+  // failure the transaction has already rolled back inside PlaylistIo before
+  // deletePlaylist drops the freshly created (now-empty) playlist.
   int skipped = 0;
   int ambiguous = 0;
-  for (const QString &line : paths.value()) {
-    // Kartend-2sg2t: bound the file-supplied path before it reaches the DB so a
-    // crafted M3U cannot inject a megabyte-sized source_path. (The resolved
-    // uuid comes from the trusted items table, so the path is the only
-    // attacker-controlled half here.)
-    if (!validateItemRef(QString(), line)) {
-      ++skipped;
-      ErrorUtils::logError(ErrorContext::warning(ErrorCode::InvalidArgument,
-                                                 "M3U import: skipping over-long path",
-                                                 "PlaylistManager::importFromM3U")
-                               .withDetails(QStringLiteral("path length: %1").arg(line.length())));
-      continue;
-    }
-    resolve.bindValue(0, line);
-    if (!resolve.exec() || !resolve.next()) {
-      ++skipped;
-      continue;
-    }
-    const QString uuid = resolve.value(0).toString();
-    if (resolve.next()) {
-      ++ambiguous;
-      ErrorUtils::logError(
-          ErrorContext::warning(ErrorCode::InvalidArgument,
-                                "M3U import: path exists in multiple collections; M3U can't "
-                                "disambiguate, using the lowest collection uuid",
-                                "PlaylistManager::importFromM3U")
-              .withDetails(line));
-    }
-    // Reproduce addItem's idempotent (uuid, path) de-duplication in memory.
-    const QString dedupKey = uuid + QLatin1Char('\x1f') + line;
-    if (seen.contains(dedupKey)) {
-      continue;
-    }
-    seen.insert(dedupKey);
-    resolved.append(ResolvedEntry{uuid, line});
-  }
+  const QList<PlaylistIo::ResolvedM3UEntry> resolved =
+      PlaylistIo::resolveM3UEntries(m_db, paths.value(), skipped, ambiguous);
 
-  // Guard scoped inside the immediately invoked lambda for the same reason as
-  // importFromJson above: its rollback must run before deletePlaylist.
-  const auto insertFailure = [&]() -> std::optional<ErrorUtils::ErrorContext> {
-    KartendDb::DbTransaction txn(m_db, "PlaylistManager::importFromM3U");
-    if (!txn.active()) {
-      return txn.beginError("Failed to begin M3U import transaction", nullptr,
-                            ErrorUtils::Severity::Error);
-    }
-    const QString addedAt = isoNow();
-    int position = 0;
-    for (const ResolvedEntry &entry : resolved) {
-      QSqlQuery insert(m_db);
-      insert.prepare(kInsertPlaylistItemSql);
-      bindPlaylistItemRow(insert, newId, position++, entry.uuid, entry.path, addedAt);
-      if (!insert.exec()) {
-        auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                       "Failed to insert imported M3U playlist item",
-                                       "PlaylistManager::importFromM3U")
-                       .withDetails(insert.lastError().text());
-        ErrorUtils::logError(err);
-        return err; // guard dtor rolls back
-      }
-    }
-    if (!txn.commit()) {
-      auto err = txn.commitError("Failed to commit M3U playlist import", nullptr,
-                                 ErrorUtils::Severity::Error);
-      ErrorUtils::logError(err);
-      return err;
-    }
-    return std::nullopt;
-  }();
+  const auto insertFailure = PlaylistIo::insertResolvedM3UItems(m_db, newId, resolved);
   if (insertFailure) {
     (void)deletePlaylist(newId);
     return *insertFailure;

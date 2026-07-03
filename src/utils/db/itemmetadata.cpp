@@ -20,6 +20,7 @@
 #include <QSqlQuery>
 
 #include "errorutils.h"
+#include "pathutils.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -358,9 +359,13 @@ QString findManualForBaseName(const QString &baseName, const QString &manualDire
   if (baseName.isEmpty() || manualDirectory.isEmpty()) {
     return {};
   }
-  QString expanded = manualDirectory;
-  if (expanded.startsWith('~')) {
-    expanded = QDir::homePath() + expanded.mid(1);
+  // Canonical tilde rules: only "~/" and a bare "~" expand, so a directory
+  // literally named "~backup" (or a "~user" form) stays literal.
+  const QString expanded = PathUtils::expandPathWithoutExistenceCheck(manualDirectory);
+  if (expanded.isEmpty()) {
+    // Whitespace-only input trims to empty; QDir("") would mean the current
+    // directory, which must not be silently probed for manuals.
+    return {};
   }
   QDir dir(expanded);
   if (!dir.exists()) {
@@ -381,13 +386,12 @@ QString findManualForBaseName(const QString &baseName, const QString &manualDire
 
 QString resolveManualFile(const QString &overridePath, const QString &baseName,
                           const QString &manualDirectory) {
-  QString trimmed = overridePath.trimmed();
-  if (!trimmed.isEmpty()) {
-    if (trimmed.startsWith('~')) {
-      trimmed = QDir::homePath() + trimmed.mid(1);
-    }
-    if (QFile::exists(trimmed)) {
-      return trimmed;
+  // Trims and applies the canonical tilde rules (only "~/" and a bare "~"
+  // expand; a file literally named "~backup" stays literal).
+  const QString expanded = PathUtils::expandPathWithoutExistenceCheck(overridePath);
+  if (!expanded.isEmpty()) {
+    if (QFile::exists(expanded)) {
+      return expanded;
     }
     // Override is set but missing on disk — don't silently fall back to
     // auto-discovery, since that would mask a stale/typo'd override. The

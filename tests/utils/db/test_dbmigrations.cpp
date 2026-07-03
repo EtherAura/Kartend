@@ -1,14 +1,21 @@
 // Tests for DbMigrations::applySchemaMigrations.
 //
-// Uses an in-memory SQLite database — no filesystem, no Qt event loop.
+// Mostly in-memory SQLite databases — no Qt event loop. The reopen and
+// version-read-failure tests use on-disk files (a reopen needs a file; the
+// read failure is injected by pointing SQLite at a non-database file, which
+// opens lazily and fails on the first statement — real SQLite, no mocking).
 // Verifies idempotency, version progression, and column/index creation.
 
+#include <QFile>
+#include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTest>
 
+#include "../../support/migrateddb.h"
 #include "dbmigrations.h"
 
 namespace {
@@ -126,9 +133,12 @@ private slots:
   void v24AddsZipIndexColumns();
   void v24ClearsPopulatedMemberCache();
   void v25AddsProfileCategoryColumn();
+  void v27ScaffoldsEntityMetadataTable();
   void preservesExistingDataAcrossUpgrade();
   void failedBlockRollsBackAndKeepsVersion();
   void newerSchemaVersionIsLeftUntouched();
+  void userVersionSurvivesReopen();
+  void versionReadFailureAbortsMigrationLadder();
 };
 
 void TestDbMigrations::noopOnClosedDb() {
@@ -148,7 +158,7 @@ void TestDbMigrations::appliesToCurrentVersion() {
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
   // Must equal CURRENT_SCHEMA_VERSION in dbmigrations.cpp.
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
 
   closeAndRemove(db, conn);
 }
@@ -324,7 +334,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -340,9 +350,45 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v27ScaffoldsEntityMetadataTable() {
+  // Kartend-ckepd.3: v27 scaffolds the entity_metadata table (no producer yet)
+  // keyed by (entity_type, entity_identity, collection_uuid).
+  const QString conn = "test_v27_entity_metadata";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 27);
+  QVERIFY(tableExists(db, "entity_metadata"));
+  QVERIFY(tableHasColumn(db, "entity_metadata", "entity_type"));
+  QVERIFY(tableHasColumn(db, "entity_metadata", "entity_identity"));
+  QVERIFY(tableHasColumn(db, "entity_metadata", "collection_uuid"));
+  QVERIFY(tableHasColumn(db, "entity_metadata", "art_path"));
+
+  // No separate key index: it would exactly duplicate the implicit index
+  // SQLite creates for the UNIQUE constraint, doubling write-time index
+  // maintenance for zero query benefit.
+  QVERIFY(!indexExists(db, "idx_entity_metadata_key"));
+
+  // The UNIQUE(entity_type, entity_identity, collection_uuid) constraint (and
+  // therefore its implicit index) is real: exact-key duplicates are rejected,
+  // while rows differing in any key component are allowed.
+  QSqlQuery q(db);
+  QVERIFY(q.exec("INSERT INTO entity_metadata (entity_type, entity_identity, collection_uuid, "
+                 "updated_at) VALUES ('platform', 'ident-1', 'u1', '2026-01-01')"));
+  const bool dupAccepted =
+      q.exec("INSERT INTO entity_metadata (entity_type, entity_identity, collection_uuid, "
+             "updated_at) VALUES ('platform', 'ident-1', 'u1', '2026-01-02')");
+  QVERIFY(!dupAccepted);
+  QVERIFY(q.exec("INSERT INTO entity_metadata (entity_type, entity_identity, collection_uuid, "
+                 "updated_at) VALUES ('platform', 'ident-1', 'u2', '2026-01-02')"));
 
   closeAndRemove(db, conn);
 }
@@ -353,7 +399,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -382,7 +428,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -416,7 +462,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -432,7 +478,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -445,7 +491,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -480,7 +526,7 @@ void TestDbMigrations::v10AddsPlaylistTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "playlists"));
   QVERIFY(tableHasColumn(db, "playlists", "id"));
   QVERIFY(tableHasColumn(db, "playlists", "name"));
@@ -512,7 +558,7 @@ void TestDbMigrations::v12AddsDateAddedColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "items", "date_added"));
   QVERIFY(indexExists(db, "idx_items_date_added"));
 
@@ -560,7 +606,7 @@ void TestDbMigrations::v13AddsRelPathColumn() {
 
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "items", "rel_path"));
 
   // The pre-existing row survives and its rel_path defaults to NULL — the
@@ -583,7 +629,7 @@ void TestDbMigrations::v14AddsCurationColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "item_metadata", "notes"));
   QVERIFY(tableHasColumn(db, "item_metadata", "rating"));
   QVERIFY(tableHasColumn(db, "item_metadata", "source_url"));
@@ -613,7 +659,7 @@ void TestDbMigrations::v15AddsStateFlagColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "item_metadata", "is_pinned"));
   QVERIFY(tableHasColumn(db, "item_metadata", "is_hidden"));
   QVERIFY(tableHasColumn(db, "item_metadata", "continue_later"));
@@ -641,7 +687,7 @@ void TestDbMigrations::v16AddsFileHashCacheTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "file_hash_cache"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "path"));
   QVERIFY(tableHasColumn(db, "file_hash_cache", "file_size"));
@@ -662,7 +708,7 @@ void TestDbMigrations::v17AddsDatAuditProfileTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "dat_audit_profile"));
   QVERIFY(tableExists(db, "dat_audit_profile_dat"));
   QVERIFY(tableExists(db, "dat_audit_result"));
@@ -684,7 +730,7 @@ void TestDbMigrations::v11AddsSmartPlaylistColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "playlists", "is_smart"));
   QVERIFY(tableHasColumn(db, "playlists", "smart_filter"));
 
@@ -702,7 +748,7 @@ void TestDbMigrations::v18DropsEagerFtsSyncTriggers() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(!triggerExists(db, "items_fts_ai"));
   QVERIFY(!triggerExists(db, "items_fts_ad"));
   QVERIFY(!triggerExists(db, "items_fts_au"));
@@ -719,7 +765,7 @@ void TestDbMigrations::v19AddsDatAuditProfileCollectionIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(indexExists(db, "idx_dat_audit_profile_collection"));
   // Folder-structure probe persistence (Kartend-m6qsb.6) ships in the same
   // version block.
@@ -746,7 +792,7 @@ void TestDbMigrations::v20DropsInertMergeModeColumn() {
     auto db = openMemoryDb(conn);
     createBaseSchema(db);
     DbMigrations::applySchemaMigrations(db, "test");
-    QCOMPARE(getUserVersion(db), 26);
+    QCOMPARE(getUserVersion(db), 27);
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "merge_mode")); // dropped v20, re-added v26
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "collection_uuid"));
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "detected_layout"));
@@ -771,7 +817,7 @@ void TestDbMigrations::v20DropsInertMergeModeColumn() {
                    "file_path TEXT, detail TEXT, PRIMARY KEY (profile_id, entry_key))"));
     QVERIFY(q.exec("PRAGMA user_version = 19"));
     DbMigrations::applySchemaMigrations(db, "test");
-    QCOMPARE(getUserVersion(db), 26);
+    QCOMPARE(getUserVersion(db), 27);
     // Re-added at v26; the old 'merged' value was lost at the v20 drop, so it is
     // back at the 'split' default.
     QVERIFY(tableHasColumn(db, "dat_audit_profile", "merge_mode"));
@@ -791,7 +837,7 @@ void TestDbMigrations::v21AddsDatLibraryProvenanceTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableExists(db, "dat_library_provenance"));
   QVERIFY(tableHasColumn(db, "dat_library_provenance", "canonical_path"));
   QVERIFY(tableHasColumn(db, "dat_library_provenance", "source"));
@@ -811,7 +857,7 @@ void TestDbMigrations::v22AddsAuditResultIdentityColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "dat_audit_result", "source_name"));
   QVERIFY(tableHasColumn(db, "dat_audit_result", "game_name"));
   QVERIFY(tableHasColumn(db, "dat_audit_result", "mia"));
@@ -828,7 +874,7 @@ void TestDbMigrations::v23AddsProfileQuarantineRootColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "dat_audit_profile", "quarantine_root"));
 
   closeAndRemove(db, conn);
@@ -842,7 +888,7 @@ void TestDbMigrations::v24AddsZipIndexColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "dat_audit_result", "zip_index"));
   QVERIFY(tableHasColumn(db, "archive_member_hash_cache", "zip_index"));
 
@@ -871,7 +917,7 @@ void TestDbMigrations::v24ClearsPopulatedMemberCache() {
 
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "archive_member_hash_cache", "zip_index"));
   // The stale row is gone — the next audit re-hashes and stores real indices.
   QVERIFY(q.exec("SELECT COUNT(*) FROM archive_member_hash_cache"));
@@ -888,7 +934,7 @@ void TestDbMigrations::v25AddsProfileCategoryColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 26);
+  QCOMPARE(getUserVersion(db), 27);
   QVERIFY(tableHasColumn(db, "dat_audit_profile", "category"));
 
   closeAndRemove(db, conn);
@@ -968,6 +1014,76 @@ void TestDbMigrations::newerSchemaVersionIsLeftUntouched() {
   QVERIFY(!tableHasColumn(db, "items", "collection_uuid"));
 
   closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::userVersionSurvivesReopen() {
+  // The stamped user_version must persist in the file, not just the
+  // connection: a fresh connection to a fully-migrated database reads the
+  // final version back and a re-run of the ladder is a pure no-op. Uses the
+  // shared MigratedDb fixture (production bootstrap, on-disk backing).
+  KartendTest::MigratedDb fixture;
+  QVERIFY(fixture.isOpen());
+  {
+    auto bootstrapped = fixture.database();
+    QCOMPARE(getUserVersion(bootstrapped), 27);
+  }
+
+  // Reopen the same FILE on a fresh connection (the fixture stays alive so
+  // its temp dir — and the db file — survive the reopen).
+  const QString conn = "test_reopen";
+  auto db = QSqlDatabase::addDatabase("QSQLITE", conn);
+  db.setDatabaseName(fixture.databasePath());
+  QVERIFY(db.open());
+
+  QCOMPARE(getUserVersion(db), 27);
+  DbMigrations::applySchemaMigrations(db, "test");
+  QCOMPARE(getUserVersion(db), 27);
+  // Spot-check the schema came along with the version stamp.
+  QVERIFY(tableExists(db, "entity_metadata"));
+  QVERIFY(tableHasColumn(db, "dat_audit_profile", "merge_mode"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::versionReadFailureAbortsMigrationLadder() {
+  // A failed PRAGMA user_version read used to be reported as version 0 —
+  // indistinguishable from a fresh database — which restarted the ladder from
+  // v0 against a database of unknown version (re-running destructive blocks
+  // such as the v20 column drop). The ladder must now log the read failure
+  // loudly and abort without attempting any block.
+  //
+  // Injection without mocking: SQLite opens files lazily, so a non-database
+  // file opens fine and the version read is the first statement to fail
+  // (SQLITE_NOTADB) — a genuine read failure on an open connection.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString path = dir.filePath("not-a-db.sqlite");
+  const QByteArray garbage("definitely not a sqlite database, padded well past the header size");
+  {
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    QCOMPARE(f.write(garbage), qint64(garbage.size()));
+  }
+
+  const QString conn = "test_version_read_failure";
+  auto db = QSqlDatabase::addDatabase("QSQLITE", conn);
+  db.setDatabaseName(path);
+  QVERIFY(db.open()); // lazy open: succeeds even though the file is garbage
+
+  // Both halves of the loud abort must fire; ignoreMessage fails the test if
+  // either never appears (the pre-fix code emitted neither — it treated the
+  // failed read as version 0 and walked into the v1 block).
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Failed to read database schema version"));
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Skipping schema migrations"));
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  closeAndRemove(db, conn);
+
+  // Nothing was attempted: the file's bytes are exactly as seeded (no journal
+  // activity, no partial DDL, no version stamp).
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  QCOMPARE(f.readAll(), garbage);
 }
 
 QTEST_MAIN(TestDbMigrations)

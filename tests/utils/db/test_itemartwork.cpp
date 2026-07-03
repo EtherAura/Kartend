@@ -1,7 +1,9 @@
 // Tests for ItemArtworkStore::load / save / remove and the standard-type
 // resolution helpers against an in-memory SQLite database with the v6 schema
 // applied via DbMigrations.
+#include <QDir>
 #include <QFile>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -69,6 +71,7 @@ private slots:
   void resolveArtworkPathFallsBackForStandardTypes();
   void resolveArtworkPathMissingOverrideReturnsEmpty();
   void resolveArtworkPathCustomTypeOnlyHonoursOverride();
+  void resolveArtworkPathTildeOnlyExpandsHomePrefix();
 };
 
 void TestItemArtwork::standardTypesAreOrderedAndStable() {
@@ -418,6 +421,45 @@ void TestItemArtwork::resolveArtworkPathCustomTypeOnlyHonoursOverride() {
   QVERIFY(touchFile(overridePath));
   QCOMPARE(ItemArtworkStore::resolveArtworkPath(overridePath, "Sonic", dir.path(), "concept_art"),
            overridePath);
+}
+
+void TestItemArtwork::resolveArtworkPathTildeOnlyExpandsHomePrefix() {
+#ifdef Q_OS_WIN
+  QSKIP("QDir::homePath() resolves via USERPROFILE on Windows; the HOME override has no effect.");
+#else
+  // Point HOME at a private directory inside a temp root so the "~/" case can
+  // plant a real file without touching the developer's home directory (Unix
+  // QDir::homePath() re-reads HOME on every call, so a scoped override works).
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString home = root.filePath("home");
+  QVERIFY(QDir().mkpath(home));
+  const QByteArray oldHome = qgetenv("HOME");
+  qputenv("HOME", home.toUtf8());
+  const auto restoreHome = qScopeGuard([&oldHome]() { qputenv("HOME", oldHome); });
+
+  QVERIFY(touchFile(home + "/Cover.png"));
+  // A "~/" override expands to the home directory.
+  QCOMPARE(ItemArtworkStore::resolveArtworkPath("~/Cover.png", "Guide", QString(), "box"),
+           home + "/Cover.png");
+
+  // Regression: the old expandTilde turned ANY leading '~' into the home
+  // path, so "~backup/..." wrongly resolved to "<home>backup/...". Plant a
+  // file at exactly that wrong location and verify the override does NOT
+  // resolve: a tilde not followed by a slash is a literal file name.
+  const QString wrongDir = home + "backup";
+  QVERIFY(QDir().mkpath(wrongDir));
+  QVERIFY(touchFile(wrongDir + "/Cover.png"));
+  QVERIFY(ItemArtworkStore::resolveArtworkPath("~backup/Cover.png", "Guide", QString(), "box")
+              .isEmpty());
+
+  // Same rules apply to the artwork directory used for auto-discovery.
+  QVERIFY(QDir().mkpath(home + "/artwork/box"));
+  QVERIFY(touchFile(home + "/artwork/box/Guide.png"));
+  QCOMPARE(ItemArtworkStore::resolveArtworkPath(QString(), "Guide", "~/artwork", "box"),
+           home + "/artwork/box/Guide.png");
+  QVERIFY(ItemArtworkStore::resolveArtworkPath(QString(), "Guide", "~artwork", "box").isEmpty());
+#endif
 }
 
 QTEST_MAIN(TestItemArtwork)

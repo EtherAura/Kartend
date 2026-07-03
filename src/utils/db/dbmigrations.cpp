@@ -9,12 +9,23 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
 namespace {
-static auto getUserVersion(QSqlDatabase &db) -> int {
+// Returns the schema version from PRAGMA user_version, or -1 when the read
+// itself failed (logged here with the SQL error). The caller must treat -1 as
+// "unknown version" and abort — NOT as version 0: a fresh database and a
+// failed read were previously indistinguishable, so an I/O-level PRAGMA
+// failure on a fully-migrated database silently restarted the ladder from v0,
+// replaying destructive blocks (e.g. the v20 column drop destroys data the
+// v26 block re-created) against a schema the code no longer understands.
+static auto getUserVersion(QSqlDatabase &db, const QString &origin) -> int {
   QSqlQuery q(db);
   if (q.exec("PRAGMA user_version") && q.next()) {
     return q.value(0).toInt();
   }
-  return 0;
+  ErrorUtils::logError(
+      ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                            "Failed to read database schema version (PRAGMA user_version)", origin)
+          .withDetails(q.lastError().text()));
+  return -1;
 }
 
 static auto setUserVersion(QSqlDatabase &db, int version) -> bool {
@@ -48,26 +59,6 @@ static auto tableExists(QSqlDatabase &db, const QString &table) -> bool {
   q.prepare(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"));
   q.addBindValue(table);
   return q.exec() && q.next();
-}
-
-// Returns true if the column is present after the call (already existed, or was
-// added). Returns false if the ALTER TABLE failed — the caller must abort the
-// migration block so user_version is not advanced past a column that does not
-// exist (Kartend-o58ur).
-static auto ensureColumn(QSqlDatabase &db, const QString &table, const QString &column,
-                         const QString &definition, const QString &origin) -> bool {
-  if (tableHasColumn(db, table, column)) {
-    return true;
-  }
-  QSqlQuery q(db);
-  if (!q.exec(QString("ALTER TABLE %1 ADD COLUMN %2 %3").arg(table, column, definition))) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to migrate database schema", origin)
-                   .withDetails(q.lastError().text());
-    ErrorUtils::logError(err);
-    return false;
-  }
-  return true;
 }
 
 // Returns true if the column is absent after the call (already gone, or
@@ -145,10 +136,20 @@ static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &orig
   }
 
   // Keep the first row (min(rowid)) for each (collection_uuid, path); its
-  // user-data columns now hold the merged values.
+  // user-data columns now hold the merged values. Checked with its own error
+  // report: an unchecked failure here surfaced only as the retry index-create
+  // failing below, misattributing the root cause to the index rather than the
+  // DELETE. Duplicates would still be present, so abort outright instead of
+  // letting the retry fail with a misleading message.
   QSqlQuery dedupe(db);
-  dedupe.exec("DELETE FROM items WHERE rowid NOT IN (SELECT MIN(rowid) FROM "
-              "items GROUP BY collection_uuid, path)");
+  if (!dedupe.exec("DELETE FROM items WHERE rowid NOT IN (SELECT MIN(rowid) FROM "
+                   "items GROUP BY collection_uuid, path)")) {
+    ErrorUtils::logError(
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to delete duplicate items during de-duplication", origin)
+            .withDetails(dedupe.lastError().text()));
+    return false;
+  }
   QSqlQuery retry(db);
   if (!retry.exec("CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON "
                   "items(collection_uuid, path)")) {
@@ -159,21 +160,6 @@ static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &orig
     return false;
   }
   return true;
-}
-
-// Returns false if the statement failed; callers that treat the index/table as
-// required chain these with && so a failure aborts the migration block.
-static auto ensureIndex(QSqlDatabase &db, const QString &sql, const QString &origin,
-                        const QString &what) -> bool {
-  QSqlQuery q(db);
-  if (q.exec(sql)) {
-    return true;
-  }
-  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                   "Failed to ensure database index", origin)
-                 .withDetails(QString("%1: %2").arg(what, q.lastError().text()));
-  ErrorUtils::logError(err);
-  return false;
 }
 
 // Runs one migration block inside a single transaction. `apply` performs the
@@ -211,6 +197,35 @@ static auto runBlock(QSqlDatabase &db, int version, const QString &origin, Apply
 
 namespace DbMigrations {
 
+auto ensureColumn(QSqlDatabase &db, const QString &table, const QString &column,
+                  const QString &definition, const QString &origin) -> bool {
+  if (tableHasColumn(db, table, column)) {
+    return true;
+  }
+  QSqlQuery q(db);
+  if (!q.exec(QString("ALTER TABLE %1 ADD COLUMN %2 %3").arg(table, column, definition))) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to migrate database schema", origin)
+                   .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+    return false;
+  }
+  return true;
+}
+
+auto ensureIndex(QSqlDatabase &db, const QString &sql, const QString &origin, const QString &what)
+    -> bool {
+  QSqlQuery q(db);
+  if (q.exec(sql)) {
+    return true;
+  }
+  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                   "Failed to ensure database index", origin)
+                 .withDetails(QString("%1: %2").arg(what, q.lastError().text()));
+  ErrorUtils::logError(err);
+  return false;
+}
+
 void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   if (!db.isOpen()) {
     return;
@@ -220,8 +235,19 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 26;
-  const int version = getUserVersion(db);
+  constexpr int CURRENT_SCHEMA_VERSION = 27;
+  const int version = getUserVersion(db, origin);
+
+  // A failed version read (already logged with its SQL error by
+  // getUserVersion) must abort, not restart the ladder: treating it as
+  // version 0 defeats both the early-return gate and the newer-schema guard
+  // below, re-running every block against a database of unknown version.
+  if (version < 0) {
+    ErrorUtils::logError(ErrorContext::warning(
+        ErrorCode::DatabaseQueryFailed,
+        "Skipping schema migrations: the database schema version could not be read", origin));
+    return;
+  }
 
   // Downgrade / future-version guard: a database written by a newer build
   // carries a user_version this build does not understand. Running our older
@@ -1011,9 +1037,40 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 26; // read by the v27 block below
+  }
+
+  if (mutableVersion < 27) {
+    // v27 (Kartend-ckepd.3): scaffold the entity_metadata table for non-game
+    // (platform / collection / category) scrape results. No producer wires to
+    // it yet — the entity-scraping sub-task ckepd.5 populates it; platform art
+    // is stored on the collection config + _shared instead. Keyed by
+    // (entity_type, entity_identity, collection_uuid); key lookups are served
+    // by the implicit index SQLite creates for the UNIQUE constraint, so no
+    // separate index is declared (one would only double write-time index
+    // maintenance for zero query benefit).
+    if (!runBlock(db, 27, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS entity_metadata ("
+                             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                             "entity_type TEXT NOT NULL DEFAULT '', "
+                             "entity_identity TEXT NOT NULL DEFAULT '', "
+                             "collection_uuid TEXT NOT NULL DEFAULT '', "
+                             "title TEXT, "
+                             "description TEXT, "
+                             "art_path TEXT, "
+                             "custom_fields TEXT, "
+                             "source TEXT, "
+                             "updated_at TEXT NOT NULL DEFAULT '', "
+                             "UNIQUE(entity_type, entity_identity, collection_uuid)"
+                             ")",
+                             origin, "entity_metadata");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v27 block stays a pure copy-paste.
-    mutableVersion = 26; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v28 block stays a pure copy-paste.
+    mutableVersion = 27; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 

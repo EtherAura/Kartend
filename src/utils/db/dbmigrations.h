@@ -12,6 +12,24 @@ namespace DbMigrations {
 // `origin` is used for structured ErrorContext logging.
 void applySchemaMigrations(QSqlDatabase &db, const QString &origin);
 
+// Probe-first ADD COLUMN, shared by the migration ladder and by secondary
+// connections that must keep an already-migrated table schema-compatible
+// without re-running the full ladder (e.g. the standalone playlist
+// connection). Returns true when the column is present after the call
+// (already existed, or was added); logs and returns false when the ALTER
+// TABLE genuinely failed. Unlike a blind `ALTER TABLE ... ADD COLUMN` whose
+// result is discarded, this distinguishes "column already there" (benign)
+// from a locked-database / I/O failure that leaves the schema incomplete.
+auto ensureColumn(QSqlDatabase &db, const QString &table, const QString &column,
+                  const QString &definition, const QString &origin) -> bool;
+
+// Executes one idempotent DDL statement (CREATE INDEX / CREATE TABLE / DROP
+// ... IF [NOT] EXISTS), logging `what` plus the SQL error and returning false
+// on failure. Named for its dominant use; the ladder routes its CREATE TABLE
+// statements through it too.
+auto ensureIndex(QSqlDatabase &db, const QString &sql, const QString &origin, const QString &what)
+    -> bool;
+
 // ── items_fts sync trigger DDL (Kartend-4i5e4) ──────────────────────────────
 // Single source of truth for the items -> items_fts sync triggers. Historically
 // created by the v3 migration block alongside the (empty) FTS table; that let

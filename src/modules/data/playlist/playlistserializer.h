@@ -14,10 +14,10 @@
  * Extracted from PlaylistManager so the four serializers no longer share a
  * file with row CRUD and smart-filter persistence — adding a format or
  * changing the JSON envelope now touches only this TU. Everything here is
- * format + file I/O: no QSqlDatabase, no transactions, no signals. The
- * manager keeps the DB halves (row/item loads feeding the exporters; CRUD,
- * the single-transaction item insert, and path→collection resolution
- * consuming the parsers).
+ * format + file I/O: no QSqlDatabase, no transactions, no signals. The DB
+ * halves live in PlaylistIo (row loads feeding the exporters, the
+ * single-transaction item inserts, and path→collection resolution consuming
+ * the parsers); PlaylistManager keeps the CRUD and signal emissions.
  */
 namespace PlaylistSerializer {
 

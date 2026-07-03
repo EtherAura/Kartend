@@ -155,7 +155,9 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
 /// Resolves the manual file for an item: prefers a non-empty `overridePath`
 /// (the per-item override stored in `item_metadata.manual_path`), falling
 /// back to auto-discovery in `manualDirectory`. Tilde expansion is applied
-/// to the override so paths saved as `~/manuals/foo.pdf` resolve at runtime.
+/// to the override so paths saved as `~/manuals/foo.pdf` resolve at runtime
+/// (canonical PathUtils rules: only `~/` and a bare `~` expand — a file
+/// literally named `~backup` stays literal).
 /// Returns an empty string when nothing exists on disk.
 [[nodiscard]] QString resolveManualFile(const QString &overridePath, const QString &baseName,
                                         const QString &manualDirectory);

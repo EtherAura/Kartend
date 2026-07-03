@@ -1,6 +1,8 @@
 // Tests for ItemMetadataStore::load / save / remove against an in-memory
 // SQLite database with the v5 schema applied via DbMigrations.
+#include <QDir>
 #include <QFile>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -70,6 +72,7 @@ private slots:
   void resolveManualFilePrefersValidOverride();
   void resolveManualFileFallsBackToAutoDiscovery();
   void resolveManualFileMissingOverrideReturnsEmpty();
+  void resolveManualFileTildeOnlyExpandsHomePrefix();
 };
 
 void TestItemMetadata::isEmptyOnDefaultConstructed() {
@@ -620,6 +623,52 @@ void TestItemMetadata::resolveManualFileMissingOverrideReturnsEmpty() {
   f.close();
   const QString stale = dir.filePath("MissingManual.pdf");
   QVERIFY(ItemMetadataStore::resolveManualFile(stale, "Sonic", dir.path()).isEmpty());
+}
+
+void TestItemMetadata::resolveManualFileTildeOnlyExpandsHomePrefix() {
+#ifdef Q_OS_WIN
+  QSKIP("QDir::homePath() resolves via USERPROFILE on Windows; the HOME override has no effect.");
+#else
+  // Point HOME at a private directory inside a temp root so the "~/" case can
+  // plant a real file without touching the developer's home directory (Unix
+  // QDir::homePath() re-reads HOME on every call, so a scoped override works).
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString home = root.filePath("home");
+  QVERIFY(QDir().mkpath(home));
+  const QByteArray oldHome = qgetenv("HOME");
+  qputenv("HOME", home.toUtf8());
+  const auto restoreHome = qScopeGuard([&oldHome]() { qputenv("HOME", oldHome); });
+
+  QFile manual(home + "/Manual.pdf");
+  QVERIFY(manual.open(QIODevice::WriteOnly));
+  manual.close();
+  // A "~/" override expands to the home directory.
+  QCOMPARE(ItemMetadataStore::resolveManualFile("~/Manual.pdf", "Guide", QString()),
+           home + "/Manual.pdf");
+
+  // Regression: the old inline expansion turned ANY leading '~' into the home
+  // path, so "~backup/..." wrongly resolved to "<home>backup/...". Plant a
+  // file at exactly that wrong location and verify the override does NOT
+  // resolve: a tilde not followed by a slash is a literal file name.
+  const QString wrongDir = home + "backup";
+  QVERIFY(QDir().mkpath(wrongDir));
+  QFile wrong(wrongDir + "/Manual.pdf");
+  QVERIFY(wrong.open(QIODevice::WriteOnly));
+  wrong.close();
+  QVERIFY(ItemMetadataStore::resolveManualFile("~backup/Manual.pdf", "Guide", QString()).isEmpty());
+
+  // Same rules apply to the auto-discovery directory: "~/manuals" expands...
+  const QString manualsDir = home + "/manuals";
+  QVERIFY(QDir().mkpath(manualsDir));
+  QFile autoManual(manualsDir + "/Guide.pdf");
+  QVERIFY(autoManual.open(QIODevice::WriteOnly));
+  autoManual.close();
+  QCOMPARE(ItemMetadataStore::resolveManualFile(QString(), "Guide", "~/manuals"),
+           manualsDir + "/Guide.pdf");
+  // ...while a tilde-prefixed directory name stays literal and matches nothing.
+  QVERIFY(ItemMetadataStore::resolveManualFile(QString(), "Guide", "~manuals").isEmpty());
+#endif
 }
 
 QTEST_MAIN(TestItemMetadata)

@@ -13,6 +13,7 @@
 
 #include "errorutils.h"
 #include "extensionutils.h"
+#include "pathutils.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -48,10 +49,10 @@ QVariant nullableString(const QString &value) {
 }
 
 QString expandTilde(const QString &path) {
-  if (path.startsWith('~')) {
-    return QDir::homePath() + path.mid(1);
-  }
-  return path;
+  // Delegate to the canonical expansion so the rules can't drift: only "~/"
+  // and a bare "~" expand — a directory literally named "~backup" (or a
+  // "~user" form) stays literal.
+  return PathUtils::expandPathWithoutExistenceCheck(path);
 }
 
 } // namespace
@@ -262,7 +263,13 @@ QString findStandardArtwork(const QString &baseName, const QString &artworkDirec
   if (baseName.isEmpty() || artworkDirectory.isEmpty() || !isStandardType(artworkType)) {
     return {};
   }
-  QDir typeDir(QDir(expandTilde(artworkDirectory)).absoluteFilePath(artworkType));
+  const QString artworkRoot = expandTilde(artworkDirectory);
+  if (artworkRoot.isEmpty()) {
+    // Whitespace-only input trims to empty; QDir("") would mean the current
+    // directory, which must not be silently probed for artwork.
+    return {};
+  }
+  QDir typeDir(QDir(artworkRoot).absoluteFilePath(artworkType));
   if (!typeDir.exists()) {
     return {};
   }

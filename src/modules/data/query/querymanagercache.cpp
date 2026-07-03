@@ -14,6 +14,7 @@
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
@@ -170,6 +171,13 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   }
 
   if (!populateQueryUuidsTempTable(uuids)) {
+    // A failed repopulation leaves query_uuids in an unknown state: the
+    // pre-transaction DELETE is durable when the populate ran standalone, and
+    // a populate joined to an outer transaction can be rolled back later. The
+    // memo must not keep claiming the previous uuid set is resident — a
+    // subsequent query for that set would skip repopulation and silently
+    // filter against the wrong (or empty) uuid scope.
+    m_cachedQueryUuidsHash.clear();
     return false;
   }
 
@@ -517,9 +525,23 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   const QString freeText = parsedQuery.freeText.trimmed();
 
   bool useTempTable = uuids.size() > MAX_UUIDS_FOR_IN_CLAUSE;
+  // A repopulation of query_uuids below runs INSIDE this build's outer
+  // transaction, so its rows are only durable once that transaction commits.
+  // If any later step fails, the guard's rollback restores the previous uuid
+  // set while the memo would keep claiming the new one is loaded — every
+  // subsequent fetchItemCount/fetchItemsRange/load would then skip
+  // repopulation and silently filter against the wrong uuid scope. Detect a
+  // real repopulation (a memo hit doesn't touch the table, so it stays valid
+  // across a rollback) and clear the memo on every failure path; the flag is
+  // settled once the commit lands.
+  const QByteArray uuidMemoBefore = m_cachedQueryUuidsHash;
   if (useTempTable && !ensureQueryUuidsPopulated(uuids)) {
     return false;
   }
+  bool uuidMemoSettled = !useTempTable || m_cachedQueryUuidsHash == uuidMemoBefore;
+  const auto uuidMemoGuard = qScopeGuard([this, &uuidMemoSettled] {
+    if (!uuidMemoSettled) m_cachedQueryUuidsHash.clear();
+  });
 
   // Some sort modes need columns that are only available on the items table.
   const bool needsItemsTable =
@@ -613,6 +635,8 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   if (!txn.commitOrReport("Failed to commit sorted items cache", ErrorUtils::Severity::Warning)) {
     return false;
   }
+  // Commit landed — the repopulated uuid set is durable, the memo may stand.
+  uuidMemoSettled = true;
 
   m_sortedItemsCacheValid = true;
   m_sortedItemsCacheHash = newHash;

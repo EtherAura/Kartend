@@ -99,12 +99,15 @@ public slots:
   /// sorted-cache hash keys on the uuid list, not item contents (Kartend-6r4g2).
   void invalidateQueryCaches();
 
-  /// Drops the cached smart-playlist scope key so the next fetch re-evaluates
-  /// the filter against current item data. Cheap (in-memory) — wired to launch
-  /// / usage-reset events so smart playlists like "Recently launched" refresh
-  /// mid-session instead of staying frozen on their first evaluation
-  /// (Kartend-s9jw).
-  void invalidateSmartPlaylistScope();
+  /// Narrow invalidation for usage / playlist-membership mutations (launch
+  /// recorded, usage reset, favorite toggled): drops the sorted-items cache —
+  /// whose cached result set folds the played:/favorite:/tag: token clauses
+  /// while its validity hash keys only on (uuids, filter, sortMode) — plus
+  /// the smart-playlist scope key so play-data-keyed playlists re-evaluate
+  /// (Kartend-s9jw). The uuid temp table and canonical-path caches key on the
+  /// item SET, which these mutations don't change, so they survive (unlike a
+  /// rescan's full invalidateQueryCaches).
+  void invalidateUsageSensitiveCaches();
 
   /// Runs a write closure against this worker's connection, on the worker
   /// thread. DatabaseManager queues frequent GUI-thread media.db writes

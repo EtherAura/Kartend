@@ -1,6 +1,7 @@
 // Playlist JSON / M3U serializers, moved verbatim from playlistmanager.cpp
-// (Kartend-k4alv). Pure format + file I/O — the DB halves (row/item loads,
-// CRUD, transactional inserts, path resolution) stay on PlaylistManager.
+// (Kartend-k4alv). Pure format + file I/O — the DB halves live in PlaylistIo
+// (row loads, transactional inserts, path resolution) and PlaylistManager
+// (item loads, CRUD).
 
 #include "playlistserializer.h"
 

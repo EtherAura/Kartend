@@ -1,5 +1,6 @@
 target_sources(kartend_utils PRIVATE
   bulkedit.cpp
+  bulkeditservice.cpp
   collectionhealth.cpp
   datauditprofile.cpp
   datlibrarystate.cpp
@@ -17,6 +18,7 @@ target_sources(kartend_utils PRIVATE
   variantgrouping.cpp
   batchsizes.h
   bulkedit.h
+  bulkeditservice.h
   collectionhealth.h
   datauditprofile.h
   datlibrarystate.h

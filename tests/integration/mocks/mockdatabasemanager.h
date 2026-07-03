@@ -73,6 +73,7 @@ public:
     return true;
   }
   void invalidateMetadataCacheItem(const QString &, const QString &) override {}
+  void invalidateUsageSensitiveCaches() override {}
 
   [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &,
                                                                    const QString &) const override {

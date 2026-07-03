@@ -13,6 +13,7 @@
 #include "querymanager.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
+#include "stringutils.h"
 #include <algorithm>
 #include <QDateTime>
 #include <QDir>
@@ -205,10 +206,10 @@ void QueryManagerInternal::sortFiles(QStringList &allFilePaths, SortMode mode,
   for (const QString &path : allFilePaths) {
     const QFileInfo info(path);
     const QString baseName = info.completeBaseName();
-    QString sortKey = PathUtils::normalizeDisplayName(baseName);
+    QString sortKey = StringUtils::normalizeDisplayName(baseName);
     if (baseName.startsWith('\'') && baseName.length() > 1 &&
         (baseName[1].isDigit() || baseName[1].isLetter())) {
-      sortKey = PathUtils::normalizeDisplayName(baseName.mid(1));
+      sortKey = StringUtils::normalizeDisplayName(baseName.mid(1));
     }
 
     // Kartend-m9r1s: prefer the caller-supplied metadata (already in hand
@@ -330,12 +331,21 @@ void QueryManagerInternal::clearCollectionFromDatabaseByUuid(QSqlDatabase &db,
         throw std::runtime_error(query.lastError().text().toStdString());
       }
 
-      // Use cached prepared statement for deleting collection
+      // Use cached prepared statement for deleting collection. Checked like
+      // every other statement in this ladder: an unchecked BUSY here used to
+      // commit items-gone-but-collection-row-alive — a ghost empty collection
+      // that resurrected on the next reload.
       QSqlQuery &delc = cache.get(QuerySQL::DELETE_COLLECTION_BY_UUID);
       delc.bindValue(0, collectionUuid);
-      delc.exec();
+      if (!delc.exec()) {
+        throw std::runtime_error(delc.lastError().text().toStdString());
+      }
 
-      (void)txn.commit();
+      // A failed COMMIT (a BUSY_SNAPSHOT can lose the lock upgrade at commit
+      // time too) must re-enter the retry ladder, not silently report success.
+      if (!txn.commit()) {
+        throw std::runtime_error(db.lastError().text().toStdString());
+      }
       return; // Success - exit retry loop
     } catch (const std::exception &e) {
       // guard dtor rolls back at iteration end, before the next attempt

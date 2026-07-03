@@ -101,6 +101,15 @@ public:
   /// without a cache may no-op.
   virtual void invalidateMetadataCacheItem(const QString &collectionUuid, const QString &path) = 0;
 
+  /// Notify the query layer that per-item usage or playlist-membership rows
+  /// changed WITHOUT the item set changing (favorite toggled, playlist
+  /// edited). Drops the played:/favorite:-sensitive query caches so a
+  /// filtered grid refreshes immediately instead of on the next rescan.
+  /// Usage-stat writes recorded through this manager invalidate internally;
+  /// this hook exists for mutations that happen outside it (PlaylistManager
+  /// owns its own connection). Implementations without query caches may no-op.
+  virtual void invalidateUsageSensitiveCaches() = 0;
+
   [[nodiscard]] virtual QList<ItemArtworkStore::ItemArtwork>
   loadItemArtwork(const QString &collectionUuid, const QString &path) const = 0;
   virtual bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) = 0;
