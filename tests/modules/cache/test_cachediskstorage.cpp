@@ -18,7 +18,10 @@
 // suppression + ~QThreadPool's blocking reap. (Kartend-3qyih)
 #include "cachediskstorage.h"
 
+#include <thread>
+
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -43,6 +46,11 @@ const QString kArtworkKey = QStringLiteral("/collections/Video/artwork/clip.png"
 // and a .migrated leftover.
 void removeStoreFiles() {
   const QString db = CacheDiskStorage::databasePath();
+  // A failure-injection slot may have replaced the store file with a
+  // directory of the same name — clean either shape.
+  if (QFileInfo(db).isDir()) {
+    QDir(db).removeRecursively();
+  }
   QFile::remove(db);
   QFile::remove(db + QStringLiteral("-wal"));
   QFile::remove(db + QStringLiteral("-shm"));
@@ -104,9 +112,14 @@ private slots:
   void writeTimestampsDeletesRemovedRowsInSameBatch();
   void removalsOnlyBatchDoesNotCreateStore();
   void scheduledAsyncSaveAppliesRemovals();
+  // Failed / dropped removal batches stay staged for retry
+  void cancelledBatchKeepsRemovalsStaged();
+  void failedRemovalWriteIsRestagedForRetry();
   void pruneDeletesOnlyDeadRows();
   void pruneIsBoundedAndCursorRotates();
   void fullRoundTripManyRows();
+  // cacheDirectory() hot-path memoization
+  void cacheDirectoryMemoizesEnsuredLayout();
 
 private:
   // Per-process HOME so this test's Qt test-mode QStandardPaths tree — and
@@ -363,6 +376,59 @@ void TestCacheDiskStorage::scheduledAsyncSaveAppliesRemovals() {
   const QHash<QString, qint64> rows = readStoreDirectly();
   QVERIFY2(!rows.contains(kArtworkKey),
            "a scheduled async save must delete the invalidated row from the store");
+  QVERIFY2(storage.pendingRemovals().isEmpty(),
+           "a committed removals batch must not stay staged for retry");
+}
+
+void TestCacheDiskStorage::cancelledBatchKeepsRemovalsStaged() {
+  // scheduleAsyncSave stages removals BEFORE dispatching, so a batch whose
+  // task bails at the cancellation check (or is dropped by clearQueue)
+  // keeps its deletions queued for the shutdown flush instead of losing
+  // them — previously they were gone the moment the dirty sets were
+  // snapshotted.
+  QHash<QString, qint64> seed;
+  seed.insert(kArtworkKey, kRoundSecondMs);
+  QVERIFY(CacheDiskStorage::writeTimestamps(seed));
+
+  CacheDiskStorage storage;
+  storage.cancel();
+  storage.scheduleAsyncSave(/*shouldWriteMetadata=*/true, {}, {kArtworkKey}, {});
+  QVERIFY(storage.drainWithBudget(5000));
+
+  // The bailed task must not have touched the store...
+  QVERIFY(readStoreDirectly().contains(kArtworkKey));
+  // ...but the batch stays staged, and applying it (as the shutdown flush
+  // does via takePendingRemovals) deletes the row.
+  const QStringList staged = storage.takePendingRemovals();
+  QCOMPARE(staged, QStringList{kArtworkKey});
+  QVERIFY2(storage.takePendingRemovals().isEmpty(), "take must drain the staged set");
+  QVERIFY(CacheDiskStorage::writeTimestamps({}, staged));
+  QVERIFY(!readStoreDirectly().contains(kArtworkKey));
+}
+
+void TestCacheDiskStorage::failedRemovalWriteIsRestagedForRetry() {
+  // Force the store write itself to fail by replacing the SQLite file with
+  // a DIRECTORY of the same name (deterministic open failure — works even
+  // when the test runs as root, unlike permission tricks). The task must
+  // re-stage its removals batch so a later write can still apply it.
+  const QString dbPath = CacheDiskStorage::databasePath();
+  QVERIFY(QDir().mkpath(dbPath));
+
+  CacheDiskStorage storage;
+  storage.scheduleAsyncSave(/*shouldWriteMetadata=*/true, {}, {kArtworkKey}, {});
+  QVERIFY(storage.drainWithBudget(5000));
+
+  const QStringList retained = storage.takePendingRemovals();
+  QCOMPARE(retained, QStringList{kArtworkKey});
+
+  // Unblock the store, materialize the row, and apply the retained batch —
+  // exactly what the next flush (or the shutdown write) does.
+  QVERIFY(QDir().rmdir(dbPath));
+  QHash<QString, qint64> seed;
+  seed.insert(kArtworkKey, kRoundSecondMs);
+  QVERIFY(CacheDiskStorage::writeTimestamps(seed));
+  QVERIFY(CacheDiskStorage::writeTimestamps({}, retained));
+  QVERIFY(!readStoreDirectly().contains(kArtworkKey));
 }
 
 void TestCacheDiskStorage::pruneDeletesOnlyDeadRows() {
@@ -386,6 +452,19 @@ void TestCacheDiskStorage::pruneDeletesOnlyDeadRows() {
   seed.insert(deadB, 3);
   CacheDiskStorage::writeTimestamps(seed);
 
+  // Cached PNGs for one dead and the live row: the prune must delete the
+  // dead row's PNG together with the row (the row holds the only way to
+  // re-derive the hashed filename — deleting the row alone strands the PNG
+  // as a permanent orphan) and leave the live row's PNG untouched.
+  const QString deadCachePng = CacheDiskStorage::artworkCachePath(deadA);
+  const QString liveCachePng = CacheDiskStorage::artworkCachePath(livePath);
+  QVERIFY(QDir().mkpath(QFileInfo(deadCachePng).absolutePath()));
+  for (const QString &png : {deadCachePng, liveCachePng}) {
+    QFile f(png);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("png-bytes");
+  }
+
   QString cursor;
   const QStringList removed = CacheDiskStorage::pruneDeadTimestamps(100, &cursor);
   QCOMPARE(removed.size(), 2);
@@ -396,6 +475,8 @@ void TestCacheDiskStorage::pruneDeletesOnlyDeadRows() {
   const QHash<QString, qint64> rows = readStoreDirectly();
   QCOMPARE(rows.size(), 1);
   QCOMPARE(rows.value(livePath), qint64(1));
+  QVERIFY2(!QFile::exists(deadCachePng), "dead row's cached PNG must be deleted with the row");
+  QVERIFY2(QFile::exists(liveCachePng), "live row's cached PNG must survive the prune");
 }
 
 void TestCacheDiskStorage::pruneIsBoundedAndCursorRotates() {
@@ -452,6 +533,29 @@ void TestCacheDiskStorage::fullRoundTripManyRows() {
   QCOMPARE(loaded.value(QStringLiteral("/roundtrip/first_42.png")), kRoundSecondMs + 42);
   QCOMPARE(loaded.value(QStringLiteral("/roundtrip/second_199.png")), kRoundSecondMs - 199);
   QVERIFY(storage.drainWithBudget(1000));
+}
+
+void TestCacheDiskStorage::cacheDirectoryMemoizesEnsuredLayout() {
+  // This thread already ensured the layout (init() resolves databasePath(),
+  // which routes through cacheDirectory()), so subsequent same-thread calls
+  // must take the memoized fast path — no re-stat, no re-mkpath. Observable
+  // negative: a subdirectory deleted after the ensure is NOT healed by a
+  // same-thread call...
+  const QString root = CacheDiskStorage::cacheDirectory();
+  const QString artworkDir = root + QStringLiteral("/artwork");
+  QVERIFY(QFileInfo::exists(artworkDir));
+  QVERIFY(QDir(artworkDir).removeRecursively());
+  QCOMPARE(CacheDiskStorage::cacheDirectory(), root);
+  QVERIFY2(!QFileInfo::exists(artworkDir),
+           "same-thread calls must take the memoized fast path (no re-ensure)");
+
+  // ...while a thread that never ensured the layout re-verifies once and
+  // heals it (worker-pool threads are reaped and recreated over a session,
+  // so each fresh thread pays exactly one verification round).
+  std::thread freshThread([]() { (void)CacheDiskStorage::cacheDirectory(); });
+  freshThread.join();
+  QVERIFY2(QFileInfo::exists(artworkDir),
+           "a fresh thread's first call must re-ensure the cache layout");
 }
 
 QTEST_GUILESS_MAIN(TestCacheDiskStorage)

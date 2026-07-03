@@ -24,6 +24,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSaveFile>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -38,10 +39,13 @@ namespace {
 
 // Encode `image` to PNG in memory, then write it to `cachePath` via QSaveFile so
 // a crash mid-encode can't leave a truncated PNG on disk (which later loads as a
-// corrupt / blank thumbnail). Mirrors CacheDiskStorage::writeTimestamps, down to
-// the parent-directory fsync that makes the rename durable. Logs + returns false
-// on any failure; the caller skips to the next image (Kartend-6n5r).
-bool saveImageAtomically(const QString &cachePath, const QString &parentDir, const QImage &image) {
+// corrupt / blank thumbnail). Mirrors CacheDiskStorage::writeTimestamps, EXCEPT
+// the parent-directory fsync that makes the rename durable: the batch loop in
+// scheduleAsyncSave issues that once per distinct directory per batch instead —
+// per-file it was hundreds of redundant fsyncs per second against the same
+// artwork directory during silent precache. Logs + returns false on any
+// failure; the caller skips to the next image (Kartend-6n5r).
+bool saveImageAtomically(const QString &cachePath, const QImage &image) {
   QByteArray pngBytes;
   {
     QBuffer buffer(&pngBytes);
@@ -88,10 +92,6 @@ bool saveImageAtomically(const QString &cachePath, const QString &parentDir, con
             .withDetails(QString("Path: %1, Error: %2").arg(cachePath, cacheFile.errorString())));
     return false;
   }
-
-  // fsync the parent directory so the rename is durable across crash / power
-  // loss.
-  PathUtils::syncDirectory(parentDir);
   return true;
 }
 
@@ -249,7 +249,16 @@ public:
       : m_connectionName(QStringLiteral("kartend-artwork-ts-%1")
                              .arg(g_timestampConnectionCounter.fetchAndAddRelaxed(1))) {
     m_db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), m_connectionName);
-    m_db.setDatabaseName(CacheDiskStorage::databasePath());
+    const QString dbPath = CacheDiskStorage::databasePath();
+    // Ensure the metadata/ parent exists independently of cacheDirectory()'s
+    // thread_local ensured-root memo: that memo skips mkpath after the first
+    // success, so a cache dir wiped mid-session would otherwise leave metadata/
+    // gone and every timestamp-store open failing for the rest of the session.
+    // The per-batch mkpath in scheduleAsyncSave only recreates artwork/, not
+    // metadata/, so heal it here at the open boundary.
+    const QString parentDir = QFileInfo(dbPath).absolutePath();
+    if (!parentDir.isEmpty()) QDir().mkpath(parentDir);
+    m_db.setDatabaseName(dbPath);
     if (!m_db.open()) {
       ErrorUtils::logError(
           ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::DatabaseNotOpen,
@@ -323,7 +332,8 @@ private:
 } // namespace
 
 CacheDiskStorage::CacheDiskStorage()
-    : m_cancelToken(std::make_shared<std::atomic_bool>(false)), m_pool(new QThreadPool()) {
+    : m_cancelToken(std::make_shared<std::atomic_bool>(false)),
+      m_pendingRemovals(std::make_shared<PendingRemovals>()), m_pool(new QThreadPool()) {
   // Single-thread pool: keep flushes sequential and reduce contention
   // with other QtConcurrent users.
   m_pool->setMaxThreadCount(1);
@@ -343,12 +353,31 @@ CacheDiskStorage::~CacheDiskStorage() {
 QString CacheDiskStorage::cacheDirectory() {
   const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
                            QStringLiteral("/kartend");
+  // Memoize the ensured-ok state per thread: artworkCachePath() lands here
+  // 1-3x per item on the worker decode path (hundreds of calls/s during
+  // silent precache), and every call re-paid two directory-exists stats for
+  // a layout that only needs verifying once. thread_local keeps the fast
+  // path lock-free; a reaped-and-recreated pool thread merely re-verifies
+  // once. Keyed on the resolved root so a mid-process QStandardPaths change
+  // (tests flip test mode / HOME) re-ensures instead of lying. Nothing is
+  // memoized on failure, so every call retries mkpath until it succeeds.
+  // NOTE: once memoized, a cache dir deleted externally is NOT re-created by
+  // this function — write paths that need a subdir to exist mkpath it
+  // themselves at their write boundary (scheduleAsyncSave for artwork/,
+  // ScopedTimestampDb's ctor for metadata/) rather than relying on the memo.
+  thread_local QString ensuredRoot;
+  if (ensuredRoot == cacheDir) {
+    return cacheDir;
+  }
+
   QDir dir(cacheDir);
   const QString artworkDirPath = cacheDir + QStringLiteral("/artwork");
   const QString metadataDirPath = cacheDir + QStringLiteral("/metadata");
   static bool loggedMkpathFailure = false;
 
+  bool ensured = true;
   if (!dir.exists("artwork") && !dir.mkpath(artworkDirPath)) {
+    ensured = false;
     if (!loggedMkpathFailure) {
       loggedMkpathFailure = true;
       ErrorUtils::logError(
@@ -359,6 +388,7 @@ QString CacheDiskStorage::cacheDirectory() {
     }
   }
   if (!dir.exists("metadata") && !dir.mkpath(metadataDirPath)) {
+    ensured = false;
     if (!loggedMkpathFailure) {
       loggedMkpathFailure = true;
       ErrorUtils::logError(
@@ -367,6 +397,9 @@ QString CacheDiskStorage::cacheDirectory() {
                                             "CacheDiskStorage::cacheDirectory")
               .withDetails(QString("Path: %1").arg(metadataDirPath)));
     }
+  }
+  if (ensured) {
+    ensuredRoot = cacheDir;
   }
   return cacheDir;
 }
@@ -427,23 +460,23 @@ void CacheDiskStorage::readTimestampsInto(QHash<QString, qint64> &outTimestamps)
   }
 }
 
-void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+bool CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
                                        const QStringList &removedPaths) {
   if (dirtyTimestamps.isEmpty() && removedPaths.isEmpty()) {
-    return;
+    return true;
   }
   // A removals-only batch against a store that doesn't exist yet has nothing
   // to delete — don't create an empty store just to run the DELETEs
-  // (mirrors pruneDeadTimestamps).
+  // (mirrors pruneDeadTimestamps). Vacuous success: the rows are gone.
   if (dirtyTimestamps.isEmpty() && !QFileInfo::exists(databasePath())) {
-    return;
+    return true;
   }
 
   // databasePath() routes through cacheDirectory(), which creates metadata/
   // on demand; if that failed, the open below fails and logs.
   ScopedTimestampDb store;
   if (!store.isOpen()) {
-    return;
+    return false;
   }
 
   // One transaction for the whole dirty batch (removals + upserts): atomic
@@ -456,7 +489,7 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                           "Failed to begin timestamp upsert transaction",
                                           "CacheDiskStorage::writeTimestamps")
             .withDetails(store.db().lastError().text()));
-    return;
+    return false;
   }
   // Invalidation deletions FIRST, so a key that was invalidated and then
   // re-cached within the same debounce window (present in both batches)
@@ -469,7 +502,7 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                             "Failed to prepare invalidated timestamp delete",
                                             "CacheDiskStorage::writeTimestamps")
               .withDetails(del.lastError().text()));
-      return; // txn dtor rolls back
+      return false; // txn dtor rolls back
     }
     for (const QString &path : removedPaths) {
       del.addBindValue(path);
@@ -479,7 +512,7 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                               "Failed to delete invalidated timestamp row",
                                               "CacheDiskStorage::writeTimestamps")
                 .withDetails(del.lastError().text()));
-        return; // txn dtor rolls back the batch
+        return false; // txn dtor rolls back the batch
       }
     }
   }
@@ -492,7 +525,7 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                           "Failed to prepare timestamp upsert",
                                           "CacheDiskStorage::writeTimestamps")
             .withDetails(upsert.lastError().text()));
-    return; // txn dtor rolls back
+    return false; // txn dtor rolls back
   }
   for (auto it = dirtyTimestamps.begin(); it != dirtyTimestamps.end(); ++it) {
     upsert.addBindValue(it.key());
@@ -503,7 +536,7 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                             "Failed to upsert artwork timestamp row",
                                             "CacheDiskStorage::writeTimestamps")
               .withDetails(upsert.lastError().text()));
-      return; // txn dtor rolls back the batch
+      return false; // txn dtor rolls back the batch
     }
   }
   if (!txn.commit()) {
@@ -512,7 +545,21 @@ void CacheDiskStorage::writeTimestamps(const QHash<QString, qint64> &dirtyTimest
                                           "Failed to commit timestamp upsert batch",
                                           "CacheDiskStorage::writeTimestamps")
             .withDetails(store.db().lastError().text()));
+    return false;
   }
+  return true;
+}
+
+QStringList CacheDiskStorage::takePendingRemovals() {
+  QMutexLocker locker(&m_pendingRemovals->mutex);
+  const QStringList out(m_pendingRemovals->paths.cbegin(), m_pendingRemovals->paths.cend());
+  m_pendingRemovals->paths.clear();
+  return out;
+}
+
+QStringList CacheDiskStorage::pendingRemovals() const {
+  QMutexLocker locker(&m_pendingRemovals->mutex);
+  return {m_pendingRemovals->paths.cbegin(), m_pendingRemovals->paths.cend()};
 }
 
 QStringList CacheDiskStorage::pruneDeadTimestamps(int maxRowsToExamine, QString *cursorPath) {
@@ -568,6 +615,18 @@ QStringList CacheDiskStorage::pruneDeadTimestamps(int maxRowsToExamine, QString 
   }
 
   if (!removed.isEmpty()) {
+    // Delete each dead row's cached PNG FIRST, while the source path (and thus
+    // the hashed cache filename) is still known — once the row is gone the
+    // hash can never be re-derived and the PNG becomes a permanently
+    // unreferenceable orphan. If the row delete below then fails or rolls
+    // back, the surviving rows merely point at a missing cache file (the
+    // ordinary not-yet-cached state) and a later pass retries.
+    for (const QString &path : std::as_const(removed)) {
+      const QString cachePath = artworkCachePath(path);
+      if (QFile::exists(cachePath) && !QFile::remove(cachePath)) {
+        qCWarning(lcCacheManager) << "Failed to remove orphaned artwork cache file" << cachePath;
+      }
+    }
     // Any failure below reports "nothing removed" so the caller's in-memory
     // sweep can't outrun the store (the txn dtor rolls back partial work).
     constexpr const char *ctx = "CacheDiskStorage::pruneDeadTimestamps";
@@ -615,18 +674,34 @@ void CacheDiskStorage::scheduleAsyncSave(bool shouldWriteMetadata,
                                          const QHash<QString, qint64> &dirtyTimestamps,
                                          const QStringList &removedTimestampPaths,
                                          const QList<QPair<QString, QImage>> &dirtyImages) {
+  // Stage the removals BEFORE any early-out or dispatch: CacheManager's
+  // flush clears its dirty sets at snapshot time, so a batch this call
+  // drops (pool already drained), one clearQueue()/cancel() discards, or
+  // one whose store write fails would otherwise lose its deletions for
+  // good — leaving invalidated keys' stale rows in the store into the next
+  // session. The staged set survives all three: the task below takes it,
+  // re-stages it on write failure, and the shutdown flush drains whatever
+  // is left into its own synchronous write.
+  if (!removedTimestampPaths.isEmpty()) {
+    QMutexLocker locker(&m_pendingRemovals->mutex);
+    for (const QString &path : removedTimestampPaths) {
+      m_pendingRemovals->paths.insert(path);
+    }
+  }
   if (!m_pool) {
     return;
   }
   if (!shouldWriteMetadata && dirtyImages.isEmpty()) {
     return;
   }
-  // Capture shared_ptr to cancellation flag so the lambda can safely
-  // check it even after this storage instance is destroyed (the
-  // QThreadPool destructor blocks; the bounded-drain helper either
-  // cleans up cleanly or abandons the pool and lets the OS reclaim).
+  // Capture shared_ptrs to the cancellation flag and the staged-removals
+  // set so the lambda can safely use both even after this storage instance
+  // is destroyed (the QThreadPool destructor blocks; the bounded-drain
+  // helper either cleans up cleanly or abandons the pool and lets the OS
+  // reclaim).
   auto cancelToken = m_cancelToken;
-  m_pool->start([cancelToken, shouldWriteMetadata, dirtyTimestamps, removedTimestampPaths,
+  auto pendingRemovals = m_pendingRemovals;
+  m_pool->start([cancelToken, pendingRemovals, shouldWriteMetadata, dirtyTimestamps,
                  dirtyImages]() {
     if (cancelToken->load(std::memory_order_acquire) || QApplication::closingDown()) {
       return;
@@ -636,9 +711,28 @@ void CacheDiskStorage::scheduleAsyncSave(bool shouldWriteMetadata,
     timer.start();
 
     if (shouldWriteMetadata) {
-      writeTimestamps(dirtyTimestamps, removedTimestampPaths);
+      // Take the staged removals — this batch's plus any earlier failed
+      // ones (the pool is single-threaded, so takes never race) — and
+      // re-stage them if the write fails so no deletion is ever dropped.
+      QStringList removals;
+      {
+        QMutexLocker locker(&pendingRemovals->mutex);
+        removals = QStringList(pendingRemovals->paths.cbegin(), pendingRemovals->paths.cend());
+        pendingRemovals->paths.clear();
+      }
+      if (!writeTimestamps(dirtyTimestamps, removals) && !removals.isEmpty()) {
+        QMutexLocker locker(&pendingRemovals->mutex);
+        for (const QString &path : std::as_const(removals)) {
+          pendingRemovals->paths.insert(path);
+        }
+      }
     }
 
+    // Parent directories of the files actually written this batch. Every
+    // entry hashes into the same artwork dir today, but derive the set from
+    // the writes rather than assuming — a future layout change (e.g.
+    // fan-out subdirectories) keeps its durability for free.
+    QSet<QString> dirsToSync;
     for (const auto &entry : dirtyImages) {
       if (cancelToken->load(std::memory_order_acquire) || QApplication::closingDown()) {
         break;
@@ -660,7 +754,20 @@ void CacheDiskStorage::scheduleAsyncSave(bool shouldWriteMetadata,
                 .withDetails(QString("Path: %1").arg(parentDir)));
         continue;
       }
-      saveImageAtomically(cachePath, parentDir, image);
+      if (saveImageAtomically(cachePath, image)) {
+        dirsToSync.insert(parentDir);
+      }
+    }
+    // fsync each distinct parent directory ONCE per batch so the renames are
+    // durable across crash / power loss. Hoisted out of saveImageAtomically:
+    // at ~100 images/s the per-file sync was hundreds of directory fsyncs per
+    // second on one directory. A crash inside the batch can now lose the
+    // rename durability of this batch's earlier files — acceptable for a
+    // rebuildable cache (worst case the PNG is re-encoded next session).
+    // Runs even after a cancellation break so already-committed files still
+    // get their durability.
+    for (const QString &dir : std::as_const(dirsToSync)) {
+      PathUtils::syncDirectory(dir);
     }
 
     if (lcCacheManager().isDebugEnabled()) {

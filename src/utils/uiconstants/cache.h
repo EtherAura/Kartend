@@ -22,6 +22,19 @@ inline constexpr int LAZY_LOAD_INTERVAL_MS = 500;
 inline constexpr int LAZY_LOAD_BATCH_SIZE = 10;
 /// Maximum entries in memory cache (LRU eviction)
 inline constexpr int MAX_MEMORY_CACHE_SIZE = 256;
+/// Default disk artwork-cache budget (MB). The background cache-size walk
+/// evicts the oldest-touched cached PNGs once the on-disk artwork cache
+/// exceeds the configured budget — without a cap the directory grows by one
+/// PNG per artwork ever decoded. User-configurable via
+/// MediaSettings::artworkDiskCacheBudgetMB (0 = unlimited); this constant is
+/// the default and the fallback before the setting is wired.
+inline constexpr int ARTWORK_DISK_CACHE_BUDGET_MB = 2048;
+/// Minimum non-zero user-configurable disk artwork-cache budget (MB). Values
+/// below this (other than the 0 = unlimited sentinel) clamp up so a typo
+/// can't turn the cache into a permanent evict-everything churn.
+inline constexpr int MIN_ARTWORK_DISK_CACHE_MB = 256;
+/// Maximum user-configurable disk artwork-cache budget (MB).
+inline constexpr int MAX_ARTWORK_DISK_CACHE_MB = 32768;
 /// Minimum pixmap dimension to cache
 inline constexpr int MIN_PIXMAP_SIZE = 200;
 /// Delay after scroll stops before triggering silent load

@@ -105,7 +105,8 @@ void CacheManager::saveToDisk() {
   bool shouldWriteMetadata = false;
   QHash<QString, qint64> dirtyTimestampsCopy;
   QStringList removedPathsCopy;
-  QList<QPair<QString, QPixmap>> dirtyPixmaps;
+  QList<QPair<QString, QImage>> dirtyImages;
+  QList<QPair<QString, QPixmap>> pixmapFallbacks;
 
   {
     QMutexLocker locker(&m_mutex);
@@ -127,22 +128,35 @@ void CacheManager::saveToDisk() {
     }
     for (const QString &path : std::as_const(dirtyArtwork)) {
       if (QPixmap *pix = artworkCache.object(path)) {
-        dirtyPixmaps.append(qMakePair(path, *pix));
+        // Prefer the worker-decoded QImage retained at cacheArtwork time —
+        // snapshotting it is an implicitly-shared copy, not a deep one, so
+        // the flush window's 50-300 dirty entries cost refcounts here
+        // instead of one QPixmap::toImage() deep copy (0.6–2.5 MB) each.
+        const QImage retained = m_dirtyImages.value(path);
+        if (!retained.isNull()) {
+          dirtyImages.append(qMakePair(path, retained));
+        } else {
+          pixmapFallbacks.append(qMakePair(path, *pix));
+        }
       }
     }
     dirtyArtwork.clear();
+    // The snapshot owns the images now (shared refs); dropping the store
+    // here keeps retained decodes bounded to one dirty window.
+    m_dirtyImages.clear();
     m_firstDirtyAtMs = 0;
   }
 
-  if (!shouldWriteMetadata && dirtyPixmaps.isEmpty()) {
+  if (!shouldWriteMetadata && dirtyImages.isEmpty() && pixmapFallbacks.isEmpty()) {
     return;
   }
 
-  // Convert pixmaps → images on the main thread (QPixmap is GUI-thread
-  // bound) before handing the snapshot to the worker pool.
-  QList<QPair<QString, QImage>> dirtyImages;
-  dirtyImages.reserve(dirtyPixmaps.size());
-  for (const auto &entry : dirtyPixmaps) {
+  // Fallback for pixmap-only inserts (no retained decode image): convert on
+  // the main thread (QPixmap is GUI-thread bound) before handing the
+  // snapshot to the worker pool. The hot delivery paths pass the QImage
+  // through cacheArtwork, so this loop is normally empty.
+  dirtyImages.reserve(dirtyImages.size() + pixmapFallbacks.size());
+  for (const auto &entry : pixmapFallbacks) {
     dirtyImages.append(qMakePair(entry.first, entry.second.toImage()));
   }
 
@@ -167,9 +181,18 @@ void CacheManager::saveToDiskForShutdown() {
     timestampsCopy = fileTimestamps;
     removedPathsCopy = QStringList(dirtyRemovals.cbegin(), dirtyRemovals.cend());
     dirtyArtwork.clear();
+    m_dirtyImages.clear();
     dirtyTimestamps.clear();
     dirtyRemovals.clear();
   }
+  // Fold in removal batches whose async write failed or never ran (the
+  // queue was cleared above; scheduleAsyncSave stages removals before
+  // dispatching) so invalidated keys' store rows finally get deleted
+  // instead of surviving into the next session. Residual window: a task
+  // that already took the staged set and is still mid-write past this point
+  // re-stages on failure after this take — the next session's bounded prune
+  // remains the backstop for that sliver.
+  removedPathsCopy += m_diskStorage->takePendingRemovals();
 
   // Deletions run before the upserts, so a key that was invalidated and then
   // re-seeded into fileTimestamps still lands with its current value.

@@ -7,6 +7,7 @@
 
 #include "cachediskstorage.h"
 #include "cachemanager.h"
+#include "uiconstants/cache.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -14,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QImage>
 #include <QPixmap>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -58,15 +60,37 @@ private slots:
   // Budget resize (Kartend-c7mb regression coverage)
   void testSetArtworkCacheBudgetMB_resizesCeiling();
   void testSetArtworkCacheBudgetMB_clampsBelowOneMB();
+  void testSetArtworkDiskCacheBudgetMB_clampsAndKeepsUnlimitedSentinel();
 
   // Timestamp-store persistence + bookkeeping sweep (Kartend-0ldg2)
   void testShutdownSnapshotPersistsAllTimestamps();
   void testPruneSweepsDeadBookkeeping();
 
+  // Disk-budget eviction (piggybacked on the getCacheSize walk)
+  void testEvictArtworkOverDiskBudget();
+
   // Invalidation propagation to the timestamp store (Kartend-9lm54)
   void testInvalidationDeletesStoreRowOnDebouncedSave();
   void testShutdownFlushDeletesInvalidatedRow();
   void testSnapshotCarriesPendingRemovalThroughShutdownWrite();
+
+  // Retained decode images (flush without GUI-thread QPixmap::toImage)
+  void testCacheArtworkWithSourceImage_flushWritesRetainedImage();
+  void testDirtyImageStore_clearsWithDirtySet();
+
+  // Missing-timestamp-row disk hits must not serve stale PNGs (and must not
+  // mask the staleness by stamping the current source mtime)
+  void testTryLoadDiskCache_missingRow_stalePngDeletedNotServed();
+  void testTryLoadDiskCache_missingRow_freshPngServedAndRowRepersisted();
+  void testTryLoadDiskCache_hitTouchesCachePngForEviction();
+  void testGetArtwork_diskHitInvalidatesOnRecordedMismatch();
+  void testGetArtwork_missingRow_stalePngDeletedNotServed();
+
+  // Insert paths stat the source outside the cache mutex; semantics pin
+  void testCacheArtwork_missingSourceAddsNoTimestampRow();
+
+  // Failed removal batches must survive into the shutdown flush
+  void testFailedRemovalWriteIsRetriedByShutdownFlush();
 
 private:
   CacheManager *m_cacheManager;
@@ -495,6 +519,34 @@ void TestCacheManager::testSetArtworkCacheBudgetMB_clampsBelowOneMB() {
   QCOMPARE(m_cacheManager->artworkCacheMaxCostForTesting(), 1 * 1024 * 1024);
 }
 
+void TestCacheManager::testSetArtworkDiskCacheBudgetMB_clampsAndKeepsUnlimitedSentinel() {
+  // Construction default is the compile-time budget — the walk enforces it
+  // even before the user setting is wired.
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(),
+           UIConstants::Cache::ARTWORK_DISK_CACHE_BUDGET_MB);
+
+  // In-range values pass through.
+  m_cacheManager->setArtworkDiskCacheBudgetMB(512);
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(), 512);
+
+  // 0 is the "unlimited" sentinel and must NOT be snapped up to the minimum —
+  // evictArtworkOverDiskBudget treats a non-positive budget as eviction-off.
+  m_cacheManager->setArtworkDiskCacheBudgetMB(0);
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(), 0);
+
+  // Everything else clamps into [MIN, MAX] — a sub-minimum typo or negative
+  // hand-edit can't configure a permanent evict-everything churn.
+  m_cacheManager->setArtworkDiskCacheBudgetMB(100);
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(),
+           UIConstants::Cache::MIN_ARTWORK_DISK_CACHE_MB);
+  m_cacheManager->setArtworkDiskCacheBudgetMB(-5);
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(),
+           UIConstants::Cache::MIN_ARTWORK_DISK_CACHE_MB);
+  m_cacheManager->setArtworkDiskCacheBudgetMB(1000000);
+  QCOMPARE(m_cacheManager->artworkDiskCacheBudgetMBForTesting(),
+           UIConstants::Cache::MAX_ARTWORK_DISK_CACHE_MB);
+}
+
 // ─── Timestamp-store persistence + bookkeeping sweep (Kartend-0ldg2) ─────────
 
 void TestCacheManager::testShutdownSnapshotPersistsAllTimestamps() {
@@ -561,6 +613,44 @@ void TestCacheManager::testPruneSweepsDeadBookkeeping() {
 }
 
 // ─── Invalidation propagation to the timestamp store (Kartend-9lm54) ─────────
+
+void TestCacheManager::testEvictArtworkOverDiskBudget() {
+  // Three fabricated cache files with staggered (fabricated) mtimes and a
+  // budget that forces evicting the two oldest: the pass must delete exactly
+  // those, report the freed bytes, and leave the newest file alone.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const auto makeFile = [&dir](const QString &name) {
+    const QString path = dir.path() + QLatin1Char('/') + name;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly)) return QString();
+    f.write(QByteArray(1000, 'x'));
+    return path;
+  };
+  const QString oldest = makeFile(QStringLiteral("oldest.png"));
+  const QString middle = makeFile(QStringLiteral("middle.png"));
+  const QString newest = makeFile(QStringLiteral("newest.png"));
+  QVERIFY(!oldest.isEmpty() && !middle.isEmpty() && !newest.isEmpty());
+
+  // Deliberately unsorted input — the eviction must order by mtime itself.
+  QList<CacheManager::DiskCacheFile> files{
+      {newest, 1000, 3000},
+      {oldest, 1000, 1000},
+      {middle, 1000, 2000},
+  };
+  // Budget 1500 → hysteresis target 1350: 3000 total needs two evictions
+  // (3000→2000→1000 ≤ 1350).
+  const qint64 freed = m_cacheManager->evictArtworkOverDiskBudget(files, 3000, 1500);
+  QCOMPARE(freed, qint64(2000));
+  QVERIFY(!QFile::exists(oldest));
+  QVERIFY(!QFile::exists(middle));
+  QVERIFY(QFile::exists(newest));
+
+  // Already within budget → strict no-op.
+  QList<CacheManager::DiskCacheFile> remaining{{newest, 1000, 3000}};
+  QCOMPARE(m_cacheManager->evictArtworkOverDiskBudget(remaining, 1000, 1500), qint64(0));
+  QVERIFY(QFile::exists(newest));
+}
 
 void TestCacheManager::testInvalidationDeletesStoreRowOnDebouncedSave() {
   // tryLoadArtworkImageFromDiskCache invalidation flavor, end-to-end through
@@ -685,6 +775,308 @@ void TestCacheManager::testSnapshotCarriesPendingRemovalThroughShutdownWrite() {
   QVERIFY2(!persisted.contains(stalePath),
            "the shutdown snapshot write must delete the invalidated key's store row");
   QVERIFY(persisted.contains(m_testArtworkPath));
+  QVERIFY(storage.drainWithBudget(1000));
+}
+
+// ─── Retained decode images (flush without GUI-thread QPixmap::toImage) ──────
+
+void TestCacheManager::testCacheArtworkWithSourceImage_flushWritesRetainedImage() {
+  // The delivery paths hand cacheArtwork the worker-decoded QImage alongside
+  // the pixmap; the flush must snapshot that retained image (implicitly
+  // shared — the old path deep-copied every dirty pixmap back to a QImage on
+  // the GUI thread) and produce the same cache PNG as before.
+  const QString path = m_tempDir->path() + "/image_passthrough.png";
+  QImage image(300, 300, QImage::Format_ARGB32);
+  image.fill(Qt::darkCyan);
+  QVERIFY(image.save(path, "PNG"));
+  // Clean slate in case an earlier slot's flush already cached this key.
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QFile::remove(cachePath);
+
+  m_cacheManager->cacheArtwork(path, QPixmap::fromImage(image), image);
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 1);
+
+  // Flush deterministically instead of waiting out the debounce. The
+  // snapshot must empty the retained-image store (the flush batch owns
+  // shared refs from here on), so nothing pins decodes past their dirty
+  // window.
+  m_cacheManager->saveToDisk();
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 0);
+  QVERIFY(m_cacheManager->drainPendingIoForTesting(5000));
+
+  QVERIFY2(QFile::exists(cachePath), "flush must write the cache PNG for the dirty entry");
+  const QImage written(cachePath);
+  QCOMPARE(written.convertToFormat(QImage::Format_ARGB32),
+           image.convertToFormat(QImage::Format_ARGB32));
+}
+
+void TestCacheManager::testDirtyImageStore_clearsWithDirtySet() {
+  // The retained-image store must track dirtyArtwork's lifecycle exactly:
+  // pixmap-only inserts never populate it, clearCollectionCache drops the
+  // cleared prefix's entries, and releaseGuiResources empties it wholesale.
+  QImage image(300, 300, QImage::Format_ARGB32);
+  image.fill(Qt::magenta);
+  const QPixmap pixmap = QPixmap::fromImage(image);
+
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 0);
+
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap, image);
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 1);
+  m_cacheManager->clearCollectionCache(m_tempDir->path());
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 0);
+
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap, image);
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 1);
+  m_cacheManager->releaseGuiResources();
+  QCOMPARE(m_cacheManager->dirtyImageCountForTesting(), 0);
+}
+
+// ─── Missing-timestamp-row disk hits (stale-PNG masking fix) ─────────────────
+
+void TestCacheManager::testTryLoadDiskCache_missingRow_stalePngDeletedNotServed() {
+  // A cached PNG whose timestamp row is missing (lost dirty batch, or a
+  // store wipe on schema mismatch) and whose own mtime is OLDER than the
+  // source is provably stale. The old path served it anyway and stamped the
+  // CURRENT source mtime, erasing the mismatch forever. It must now be
+  // deleted and reported as a miss so the re-encode path repopulates both
+  // the PNG and the store row.
+  const QString path = m_tempDir->path() + "/missing_row_stale.png";
+  QImage source(300, 300, QImage::Format_ARGB32);
+  source.fill(Qt::red);
+  QVERIFY(source.save(path, "PNG"));
+
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QImage staleCached(300, 300, QImage::Format_ARGB32);
+  staleCached.fill(Qt::blue);
+  QVERIFY(staleCached.save(cachePath, "PNG"));
+  // Backdate the cached PNG well past the source's mtime.
+  {
+    QFile file(cachePath);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                             QFileDevice::FileModificationTime));
+  }
+
+  // No row was ever recorded for this key — the manager was initialized
+  // before the key existed and never cached it.
+  QVERIFY2(m_cacheManager->tryLoadArtworkImageFromDiskCache(path).isNull(),
+           "an unvalidatable stale PNG must not be served");
+  QVERIFY2(!QFile::exists(cachePath), "the stale PNG must be deleted so the re-encode "
+                                      "path repopulates it");
+  QCOMPARE(m_cacheManager->metrics().invalidations, qint64(1));
+
+  // End-to-end healing: a re-cache + flush restores a servable disk entry.
+  QPixmap fresh(300, 300);
+  fresh.fill(Qt::red);
+  m_cacheManager->cacheArtwork(path, fresh);
+  m_cacheManager->saveToDisk();
+  QVERIFY(m_cacheManager->drainPendingIoForTesting(5000));
+  QVERIFY2(!m_cacheManager->tryLoadArtworkImageFromDiskCache(path).isNull(),
+           "the re-encode path must repopulate the disk entry");
+}
+
+void TestCacheManager::testTryLoadDiskCache_missingRow_freshPngServedAndRowRepersisted() {
+  // The benign flavor: row missing but the cached PNG is NEWER than the
+  // source, so the mtime heuristic validates it. It must be served, the
+  // recovered row must land in the in-memory map, and — unlike the old
+  // silent stamp — it must be marked dirty so the store row is repopulated
+  // and the next session validates by exact row match again.
+  const QString path = m_tempDir->path() + "/missing_row_fresh.png";
+  QImage source(300, 300, QImage::Format_ARGB32);
+  source.fill(Qt::red);
+  QVERIFY(source.save(path, "PNG"));
+  // Backdate the SOURCE so the cache PNG (written now) is newer.
+  {
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                             QFileDevice::FileModificationTime));
+  }
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QImage cached(300, 300, QImage::Format_ARGB32);
+  cached.fill(Qt::blue);
+  QVERIFY(cached.save(cachePath, "PNG"));
+
+  const int rowsBefore = m_cacheManager->fileTimestampCountForTesting();
+  const QImage served = m_cacheManager->tryLoadArtworkImageFromDiskCache(path);
+  QVERIFY2(!served.isNull(), "a heuristically-validated PNG must be served");
+  QCOMPARE(served.convertToFormat(QImage::Format_ARGB32).pixelColor(10, 10), QColor(Qt::blue));
+  QCOMPARE(m_cacheManager->metrics().invalidations, qint64(0));
+  QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), rowsBefore + 1);
+
+  // The recovered row must reach the store on the next flush.
+  m_cacheManager->saveToDisk();
+  QVERIFY(m_cacheManager->drainPendingIoForTesting(5000));
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY2(persisted.contains(path), "the recovered timestamp row must be re-persisted");
+  QCOMPARE(persisted.value(path), QFileInfo(path).lastModified().toMSecsSinceEpoch());
+  QVERIFY(storage.drainWithBudget(1000));
+}
+
+void TestCacheManager::testTryLoadDiskCache_hitTouchesCachePngForEviction() {
+  // The worker read path serves most viewport loads, so a served hit must
+  // refresh the cache PNG's mtime the same way getArtwork does — otherwise
+  // the mtime-ordered disk-budget eviction ranks worker-served entries as
+  // cold and drops hot artwork first.
+  const QString path = m_tempDir->path() + "/touch_on_worker_read.png";
+  QImage source(300, 300, QImage::Format_ARGB32);
+  source.fill(Qt::red);
+  QVERIFY(source.save(path, "PNG"));
+  // Backdate the source below the cache PNG so the missing-row heuristic
+  // validates the entry, then backdate the cache PNG too — still newer than
+  // the source, but old enough that only an explicit touch can explain a
+  // fresh mtime afterwards.
+  {
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                             QFileDevice::FileModificationTime));
+  }
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QImage cached(300, 300, QImage::Format_ARGB32);
+  cached.fill(Qt::blue);
+  QVERIFY(cached.save(cachePath, "PNG"));
+  {
+    QFile file(cachePath);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-1800),
+                             QFileDevice::FileModificationTime));
+  }
+
+  const QDateTime beforeRead = QDateTime::currentDateTime().addSecs(-60);
+  QVERIFY(!m_cacheManager->tryLoadArtworkImageFromDiskCache(path).isNull());
+  QVERIFY2(QFileInfo(cachePath).lastModified() >= beforeRead,
+           "a worker-path disk hit must touch the cache PNG so eviction sees it as hot");
+}
+
+void TestCacheManager::testGetArtwork_diskHitInvalidatesOnRecordedMismatch() {
+  // getArtwork's disk-hit path (memory miss, cached PNG present) previously
+  // served without consulting the recorded timestamp at all and then
+  // overwrote the row with the current source mtime — masking a stale PNG
+  // exactly like the missing-row case. With a recorded row that mismatches
+  // the source, the disk hit must invalidate instead of serving.
+  const QString path = m_tempDir->path() + "/disk_mismatch.png";
+  QImage source(300, 300, QImage::Format_ARGB32);
+  source.fill(Qt::red);
+  QVERIFY(source.save(path, "PNG"));
+
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QImage cached(300, 300, QImage::Format_ARGB32);
+  cached.fill(Qt::blue);
+  QVERIFY(cached.save(cachePath, "PNG"));
+
+  // Seed a deliberately mismatching store row, then initialize a fresh
+  // manager so it reads the row into fileTimestamps.
+  const qint64 staleTs = QFileInfo(path).lastModified().toMSecsSinceEpoch() - 12345;
+  CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{path, staleTs}});
+  CacheManager manager;
+  manager.initialize();
+
+  QVERIFY2(manager.getArtwork(path).isNull(),
+           "a disk hit with a mismatching recorded timestamp must not be served");
+  QVERIFY2(!QFile::exists(cachePath), "the stale PNG must be deleted");
+  QCOMPARE(manager.metrics().invalidations, qint64(1));
+  QCOMPARE(manager.metrics().diskHits, qint64(0));
+}
+
+void TestCacheManager::testGetArtwork_missingRow_stalePngDeletedNotServed() {
+  // Same missing-row staleness as the tryLoad flavor, through getArtwork's
+  // disk-hit path (the QPixmap-returning cold reader).
+  const QString path = m_tempDir->path() + "/getartwork_missing_row.png";
+  QImage source(300, 300, QImage::Format_ARGB32);
+  source.fill(Qt::red);
+  QVERIFY(source.save(path, "PNG"));
+
+  const QString cachePath = CacheDiskStorage::artworkCachePath(path);
+  QImage staleCached(300, 300, QImage::Format_ARGB32);
+  staleCached.fill(Qt::blue);
+  QVERIFY(staleCached.save(cachePath, "PNG"));
+  {
+    QFile file(cachePath);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                             QFileDevice::FileModificationTime));
+  }
+
+  QVERIFY(m_cacheManager->getArtwork(path).isNull());
+  QVERIFY(!QFile::exists(cachePath));
+  QCOMPARE(m_cacheManager->metrics().invalidations, qint64(1));
+  QCOMPARE(m_cacheManager->metrics().misses, qint64(1));
+}
+
+// ─── Insert-path stat semantics (stat taken outside the cache mutex) ─────────
+
+void TestCacheManager::testCacheArtwork_missingSourceAddsNoTimestampRow() {
+  // The source stat now happens before m_mutex is taken; the recorded
+  // semantics must be unchanged — a nonexistent source file still gets its
+  // pixmap cached but must not grow the timestamp map (nothing to
+  // revalidate against).
+  const QString ghostPath = m_tempDir->path() + "/ghost_source.png"; // never created
+  const int rowsBefore = m_cacheManager->fileTimestampCountForTesting();
+
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(ghostPath, pixmap);
+  QVERIFY(!m_cacheManager->getArtworkFromMemoryOnly(ghostPath).isNull());
+  QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), rowsBefore);
+
+  const QString ghostPath2 = m_tempDir->path() + "/ghost_source2.png";
+  m_cacheManager->cacheArtworkInMemoryOnly(ghostPath2, pixmap);
+  QVERIFY(!m_cacheManager->getArtworkFromMemoryOnly(ghostPath2).isNull());
+  QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), rowsBefore);
+}
+
+// ─── Failed removal batches reach the store via the shutdown flush ──────────
+
+void TestCacheManager::testFailedRemovalWriteIsRetriedByShutdownFlush() {
+  // The debounced flush snapshots-and-clears dirtyRemovals before the async
+  // batch outcome is known. A batch whose store write fails used to be gone
+  // for good — the invalidated key kept its stale store row into the next
+  // session. The failed batch must now be re-staged and folded into the
+  // shutdown flush.
+  const QString path = m_tempDir->path() + "/failed_removal.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::green);
+  QVERIFY(onDisk.save(path, "PNG"));
+
+  // Seed a mismatching store row and initialize a fresh manager from it.
+  const qint64 staleTs = QFileInfo(path).lastModified().toMSecsSinceEpoch() - 12345;
+  QVERIFY(CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{path, staleTs}}));
+  CacheManager manager;
+  manager.initialize();
+
+  // Invalidate: the mismatch queues the key into dirtyRemovals.
+  QVERIFY(manager.tryLoadArtworkImageFromDiskCache(path).isNull());
+  QCOMPARE(manager.metrics().invalidations, qint64(1));
+
+  // Block the store: replace the SQLite file with a DIRECTORY of the same
+  // name so the async write's open fails deterministically (works even when
+  // the test runs as root, unlike permission tricks).
+  const QString dbPath = CacheDiskStorage::databasePath();
+  QVERIFY(QFile::remove(dbPath));
+  QFile::remove(dbPath + QStringLiteral("-wal"));
+  QFile::remove(dbPath + QStringLiteral("-shm"));
+  QVERIFY(QDir().mkpath(dbPath));
+
+  manager.saveToDisk(); // snapshot cleared dirtyRemovals; async write fails
+  QVERIFY(manager.drainPendingIoForTesting(5000));
+
+  // Unblock the store and re-materialize the stale row the failed batch was
+  // supposed to delete.
+  QVERIFY(QDir().rmdir(dbPath));
+  QVERIFY(CacheDiskStorage::writeTimestamps(QHash<QString, qint64>{{path, staleTs}}));
+
+  // The shutdown flush must fold the re-staged batch back in.
+  manager.saveToDiskForShutdown();
+
+  CacheDiskStorage storage;
+  QHash<QString, qint64> persisted;
+  storage.readTimestampsInto(persisted);
+  QVERIFY2(!persisted.contains(path),
+           "a removal whose async write failed must still reach the store by shutdown");
   QVERIFY(storage.drainWithBudget(1000));
 }
 

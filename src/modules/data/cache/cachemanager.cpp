@@ -1,6 +1,7 @@
 // Manages in-memory pixmap cache with LRU eviction and optional disk
 // persistence.
 #include "cachemanager.h"
+#include "collection/media_settings_persistence.h" // clampArtworkDiskCacheBudgetMB
 #include "uiconstants/cache.h"
 
 #include <algorithm>
@@ -63,6 +64,9 @@ CacheManager::CacheManager() : m_diskStorage(std::make_unique<CacheDiskStorage>(
   const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
   artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max()
                                             : static_cast<int>(maxBytes));
+  // Same deal for the on-disk budget: hold the compile-time default until the
+  // owner pushes the user-configured artworkDiskCacheBudgetMB setting.
+  m_artworkDiskCacheBudgetMB.storeRelaxed(UIConstants::Cache::ARTWORK_DISK_CACHE_BUDGET_MB);
 
   // Timer context lives with CacheManager lifetime. CacheManager is
   // created on the main thread (ApplicationManager::initialize).
@@ -119,13 +123,23 @@ CacheManager::~CacheManager() {
 }
 
 auto CacheManager::snapshotTimestampsForShutdown() const -> CacheTimestampsSnapshot {
+  // Peek (non-draining) at removal batches still awaiting a successful
+  // store write — a batch snapshotted out of the dirty sets whose async
+  // write failed or was dropped must still reach the shutdown write.
+  // Taken before m_mutex so the two locks never nest.
+  const QStringList pendingStoreRemovals = m_diskStorage->pendingRemovals();
+
   QMutexLocker locker(&m_mutex);
   // Capture the full map AND the pending removal set under the same lock so
   // an invalidation inside the final debounce window (its deleting flush
   // never fired) is carried through the shutdown write (Kartend-2zkm8).
   // Const/non-clearing by design: a later saveToDiskForShutdown() re-deleting
   // the same rows is a harmless no-op DELETE.
-  return {fileTimestamps, QStringList(dirtyRemovals.cbegin(), dirtyRemovals.cend())};
+  QSet<QString> removed = dirtyRemovals;
+  for (const QString &path : pendingStoreRemovals) {
+    removed.insert(path);
+  }
+  return {fileTimestamps, QStringList(removed.cbegin(), removed.cend())};
 }
 
 void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
@@ -165,6 +179,7 @@ void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);
   artworkCache.clear();
   dirtyArtwork.clear();
+  m_dirtyImages.clear();
 }
 
 void CacheManager::setArtworkCacheBudgetMB(int megabytes) {
@@ -181,6 +196,15 @@ void CacheManager::setArtworkCacheBudgetMB(int megabytes) {
   QMutexLocker locker(&m_mutex);
   artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max()
                                             : static_cast<int>(maxBytes));
+}
+
+void CacheManager::setArtworkDiskCacheBudgetMB(int megabytes) {
+  // Same clamp the settings load/save paths apply (0 = unlimited sentinel,
+  // everything else bounded), so direct API misuse can't configure a
+  // pathological evict-everything budget. Atomic store — the background
+  // getCacheSize() walk reads this without taking m_mutex.
+  m_artworkDiskCacheBudgetMB.storeRelaxed(
+      MediaSettingsPersistence::clampArtworkDiskCacheBudgetMB(megabytes));
 }
 
 namespace {
@@ -239,6 +263,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
         fileTimestamps.remove(artworkPath);
         dirtyTimestamps.remove(artworkPath);
         dirtyRemovals.insert(artworkPath);
+        m_dirtyImages.remove(artworkPath);
         m_lastRevalidatedMs.remove(artworkPath);
         m_metadataDirty = true;
         ++m_metrics.invalidations;
@@ -268,29 +293,102 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
 
   QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
   if (QFile::exists(cachePath)) {
-    QPixmap cachedPixmap(cachePath);
-    if (!cachedPixmap.isNull()) {
-      // Disk cache hit
-      // Set device pixel ratio for HiDPI displays
-      qreal dpr = 1.0;
-      if (QGuiApplication::primaryScreen()) {
-        dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
-      }
-      cachedPixmap.setDevicePixelRatio(dpr);
-
+    // Validate the cached PNG against the source BEFORE serving it. The old
+    // disk path served unconditionally and then stamped fileTimestamps with
+    // the CURRENT source mtime — so a stale PNG was not only served, the
+    // fresh stamp erased the very mismatch that would have invalidated it on
+    // the next read, masking the staleness permanently. Two cases:
+    //   * recorded timestamp present and mismatched → the source changed;
+    //     invalidate instead of serving stale bytes (mirrors the memory-hit
+    //     revalidation above).
+    //   * recorded timestamp MISSING (lost dirty batch, store wipe on a
+    //     schema mismatch) → the PNG is unvalidatable by row. Fall back to
+    //     the PNG's own mtime: it is written — and touched below — strictly
+    //     after the source it was encoded from, so a source newer than the
+    //     PNG proves staleness. (Known windows: a source replaced during the
+    //     encode's debounce/flush, or replaced with a preserved-older mtime,
+    //     can pass this heuristic once; the recovered row below restores
+    //     exact row validation from then on.)
+    // Disk-load path (memory miss, not the hot path): stat here with a local
+    // QFileInfo so the memory-hit fast path above stays allocation-free
+    // (Kartend-5agy1).
+    const QFileInfo sourceInfo(artworkPath);
+    const bool sourceExists = sourceInfo.exists();
+    const qint64 sourceTs = sourceExists ? sourceInfo.lastModified().toMSecsSinceEpoch() : 0;
+    bool timestampKnown = false;
+    bool stale = false;
+    {
       QMutexLocker relocker(&m_mutex);
-      ++m_metrics.diskHits;
+      const auto it = fileTimestamps.constFind(artworkPath);
+      timestampKnown = it != fileTimestamps.constEnd();
+      stale = timestampKnown && sourceExists && it.value() != sourceTs;
+    }
+    if (!timestampKnown && sourceExists) {
+      stale = QFileInfo(cachePath).lastModified().toMSecsSinceEpoch() < sourceTs;
+    }
+    if (stale) {
+      // Delete + miss so the re-encode path repopulates both the PNG and the
+      // timestamp row. Falls through to the miss accounting below.
+      QFile::remove(cachePath);
+      QMutexLocker relocker(&m_mutex);
+      artworkCache.remove(artworkPath);
+      fileTimestamps.remove(artworkPath);
+      dirtyTimestamps.remove(artworkPath);
+      dirtyRemovals.insert(artworkPath);
+      dirtyArtwork.remove(artworkPath);
+      m_dirtyImages.remove(artworkPath);
+      m_lastRevalidatedMs.remove(artworkPath);
+      m_metadataDirty = true;
+      ++m_metrics.invalidations;
+      relocker.unlock();
+      scheduleSaveToDisk();
+    } else {
+      QPixmap cachedPixmap(cachePath);
+      if (!cachedPixmap.isNull()) {
+        // Disk cache hit
+        // Touch the cache file so the disk-budget eviction pass (ordered by
+        // mtime) sees recently-used artwork as fresh — otherwise eviction is
+        // FIFO-by-write-time and drops hot entries as readily as cold ones.
+        // One utimens per disk hit; noise next to the PNG decode above. Runs
+        // only AFTER validation so the touch can't bump the PNG past a newer
+        // source and defeat the missing-row mtime heuristic.
+        {
+          QFile touch(cachePath);
+          if (touch.open(QIODevice::ReadWrite)) {
+            touch.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+          }
+        }
+        // Set device pixel ratio for HiDPI displays
+        qreal dpr = 1.0;
+        if (QGuiApplication::primaryScreen()) {
+          dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+        }
+        cachedPixmap.setDevicePixelRatio(dpr);
 
-      artworkCache.insert(artworkPath, new QPixmap(cachedPixmap),
-                          clampToCacheCostBytes(cachedPixmap));
-      // Disk-load path (memory miss, not the hot path): stat here with a local
-      // QFileInfo so the memory-hit fast path above stays allocation-free
-      // (Kartend-5agy1).
-      const QFileInfo diskFileInfo(artworkPath);
-      if (diskFileInfo.exists()) {
-        fileTimestamps[artworkPath] = diskFileInfo.lastModified().toMSecsSinceEpoch();
+        bool recoveredRow = false;
+        {
+          QMutexLocker relocker(&m_mutex);
+          ++m_metrics.diskHits;
+
+          artworkCache.insert(artworkPath, new QPixmap(cachedPixmap),
+                              clampToCacheCostBytes(cachedPixmap));
+          if (sourceExists) {
+            fileTimestamps[artworkPath] = sourceTs;
+            if (!timestampKnown) {
+              // Recovered row (store wipe / lost dirty batch): mark it dirty
+              // so the store row is repopulated and the next session gets
+              // exact row validation back instead of the mtime heuristic.
+              dirtyTimestamps.insert(artworkPath);
+              m_metadataDirty = true;
+              recoveredRow = true;
+            }
+          }
+        }
+        if (recoveredRow) {
+          scheduleSaveToDisk();
+        }
+        return cachedPixmap;
       }
-      return cachedPixmap;
     }
   }
 
@@ -338,6 +436,7 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
         dirtyTimestamps.remove(artworkPath);
         dirtyRemovals.insert(artworkPath);
         dirtyArtwork.remove(artworkPath);
+        m_dirtyImages.remove(artworkPath);
         m_lastRevalidatedMs.remove(artworkPath);
         m_metadataDirty = true;
         ++m_metrics.invalidations;
@@ -377,14 +476,17 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
 
   // If we have a known timestamp and it no longer matches, invalidate the disk
   // entry.
+  bool timestampKnown = false;
   {
     QMutexLocker locker(&m_mutex);
     auto it = fileTimestamps.constFind(artworkPath);
-    if (it != fileTimestamps.constEnd() && it.value() != currentTimestamp) {
+    timestampKnown = it != fileTimestamps.constEnd();
+    if (timestampKnown && it.value() != currentTimestamp) {
       fileTimestamps.remove(artworkPath);
       dirtyTimestamps.remove(artworkPath);
       dirtyRemovals.insert(artworkPath);
       dirtyArtwork.remove(artworkPath);
+      m_dirtyImages.remove(artworkPath);
       m_metadataDirty = true;
       ++m_metrics.invalidations;
 
@@ -406,6 +508,34 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
     return {};
   }
 
+  if (!timestampKnown) {
+    // No recorded row for this key (lost dirty batch, or a store wipe on a
+    // schema mismatch). The old path served the PNG anyway and stamped the
+    // CURRENT source mtime below — permanently erasing the mismatch that
+    // would have invalidated a stale PNG on every later read. Treat the PNG
+    // as unvalidated instead: it is written strictly after the source it was
+    // encoded from (and only ever touched after successful validation, both
+    // here and in getArtwork), so a source newer than the PNG proves staleness → delete
+    // + miss and let the re-encode path repopulate both PNG and store row.
+    if (QFileInfo(cachePath).lastModified().toMSecsSinceEpoch() < currentTimestamp) {
+      QFile::remove(cachePath);
+      {
+        QMutexLocker locker(&m_mutex);
+        dirtyTimestamps.remove(artworkPath);
+        // The in-memory row is absent but a store row may still exist (the
+        // lost-batch flavor) — queue the deletion regardless; a DELETE of a
+        // nonexistent row is a no-op.
+        dirtyRemovals.insert(artworkPath);
+        dirtyArtwork.remove(artworkPath);
+        m_dirtyImages.remove(artworkPath);
+        m_metadataDirty = true;
+        ++m_metrics.invalidations;
+      }
+      scheduleSaveToDisk();
+      return {};
+    }
+  }
+
   QImage cachedImage(cachePath);
   if (cachedImage.isNull()) {
     QMutexLocker locker(&m_mutex);
@@ -413,10 +543,34 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
     return {};
   }
 
+  // Touch the cache file so the disk-budget eviction pass (ordered by mtime)
+  // sees worker-served artwork as fresh — this path serves most viewport
+  // loads, so without it eviction would rank hot entries as cold and drop
+  // them first. Same post-validation ordering as getArtwork's touch: it runs
+  // only after the row/mtime checks above so it can't bump the PNG past a
+  // newer source and defeat the missing-row heuristic.
+  {
+    QFile touch(cachePath);
+    if (touch.open(QIODevice::ReadWrite)) {
+      touch.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+    }
+  }
+
+  bool recoveredRow = false;
   {
     QMutexLocker locker(&m_mutex);
     ++m_metrics.diskHits;
     fileTimestamps[artworkPath] = currentTimestamp;
+    if (!timestampKnown) {
+      // Recovered row: persist it again so the next session validates by
+      // exact row match instead of the PNG-mtime heuristic above.
+      dirtyTimestamps.insert(artworkPath);
+      m_metadataDirty = true;
+      recoveredRow = true;
+    }
+  }
+  if (recoveredRow) {
+    scheduleSaveToDisk();
   }
 
   return cachedImage;
@@ -425,6 +579,17 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
 // Caches artwork pixmap if large enough and maintains O(1) running total for
 // memory accounting; evicts until under limit
 void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) {
+  cacheArtwork(artworkPath, pixmap, QImage());
+}
+
+// Image-carrying overload: the artwork delivery paths still hold the
+// worker-decoded QImage the pixmap was built from, so retaining it here
+// (implicitly shared) lets the debounced flush snapshot an encode-ready
+// QImage with zero conversion instead of deep-copying the pixmap back on the
+// GUI thread. A null @p sourceImage is the pixmap-only path — the flush
+// falls back to QPixmap::toImage() for those entries.
+void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixmap,
+                                const QImage &sourceImage) {
   if (artworkPath.isEmpty() || pixmap.isNull()) {
     return;
   }
@@ -438,6 +603,16 @@ void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixma
 
   const int cost = clampToCacheCostBytes(pixmap);
 
+  // Stat the source BEFORE taking the cache mutex: callers run on the GUI
+  // thread (up to ~8 deliveries per apply tick during loading), and a cold or
+  // network-mounted path stat held under m_mutex serialized the apply loop
+  // against every worker cache probe contending for the same lock. The
+  // captured stamp keeps the revalidation semantics identical — it reflects
+  // the file the pixmap was just decoded from.
+  const QFileInfo fileInfo(artworkPath);
+  const bool sourceExists = fileInfo.exists();
+  const qint64 sourceTs = sourceExists ? fileInfo.lastModified().toMSecsSinceEpoch() : 0;
+
   QMutexLocker locker(&m_mutex);
   if (QApplication::closingDown()) {
     return;
@@ -445,9 +620,8 @@ void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixma
 
   // Insert/update the pixmap and adjust running total
   artworkCache.insert(artworkPath, new QPixmap(pixmap), cost);
-  QFileInfo fileInfo(artworkPath);
-  if (fileInfo.exists()) {
-    fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
+  if (sourceExists) {
+    fileTimestamps[artworkPath] = sourceTs;
     dirtyTimestamps.insert(artworkPath); // Track which timestamps are new/changed
     // A re-cache supersedes any invalidation queued for this key. Belt and
     // braces — writeTimestamps also runs deletions before upserts, so a key
@@ -456,6 +630,13 @@ void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixma
     dirtyRemovals.remove(artworkPath);
   }
   dirtyArtwork.insert(artworkPath);
+  if (!sourceImage.isNull()) {
+    m_dirtyImages.insert(artworkPath, sourceImage);
+  } else {
+    // A pixmap-only re-cache may carry different content than a previously
+    // retained image — drop it so the flush converts the current pixmap.
+    m_dirtyImages.remove(artworkPath);
+  }
   m_metadataDirty = true;
   ++m_metrics.inserts;
 
@@ -477,15 +658,23 @@ void CacheManager::cacheArtworkInMemoryOnly(const QString &artworkPath, const QP
 
   const int cost = clampToCacheCostBytes(pixmap);
 
+  // Stat outside the lock — same rationale as cacheArtwork above.
+  const QFileInfo fileInfo(artworkPath);
+  const bool sourceExists = fileInfo.exists();
+  const qint64 sourceTs = sourceExists ? fileInfo.lastModified().toMSecsSinceEpoch() : 0;
+
   QMutexLocker locker(&m_mutex);
   if (QApplication::closingDown()) {
     return;
   }
 
   artworkCache.insert(artworkPath, new QPixmap(pixmap), cost);
-  QFileInfo fileInfo(artworkPath);
-  if (fileInfo.exists()) {
-    fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
+  // If the key is still dirty from an earlier cacheArtwork, the retained
+  // image no longer matches the pixmap just inserted — drop it so the flush
+  // converts the live pixmap instead of writing stale content.
+  m_dirtyImages.remove(artworkPath);
+  if (sourceExists) {
+    fileTimestamps[artworkPath] = sourceTs;
   }
   ++m_metrics.inserts;
 }
@@ -525,6 +714,15 @@ void CacheManager::clearCollectionCache(const QString &artworkDirectoryPrefix) {
       ++it;
     }
   }
+  // And the retained decode images for the same prefix, so a cleared
+  // collection's dirty entries can't pin their QImages until the next flush.
+  for (auto it = m_dirtyImages.begin(); it != m_dirtyImages.end();) {
+    if (it.key().startsWith(prefix)) {
+      it = m_dirtyImages.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 // Returns the cached on-disk size and (when stale) dispatches a background
@@ -552,12 +750,32 @@ qint64 CacheManager::getCacheSize() const {
     // the lambda can't outlive the owning object.
     m_cacheSizeWalkFuture = QtConcurrent::run([this]() {
       const QString cacheDirPath = CacheDiskStorage::cacheDirectory();
+      const QString artworkPrefix = cacheDirPath + QStringLiteral("/artwork/");
       qint64 totalSize = 0;
+      QList<DiskCacheFile> artworkFiles;
       QDirIterator dirIt(cacheDirPath, QDir::Files, QDirIterator::Subdirectories);
       while (dirIt.hasNext()) {
         dirIt.next();
-        totalSize += dirIt.fileInfo().size();
+        const QFileInfo info = dirIt.fileInfo();
+        totalSize += info.size();
+        // Eviction candidates are the decoded-artwork PNGs only — the
+        // metadata store under metadata/ must never be evicted.
+        if (info.filePath().startsWith(artworkPrefix)) {
+          artworkFiles.append(
+              {info.filePath(), info.size(), info.lastModified().toMSecsSinceEpoch()});
+        }
       }
+      // Disk budget, piggybacked on this walk since it already enumerated
+      // every file with sizes: without a cap the artwork cache grows by one
+      // PNG per artwork ever decoded — silent and unbounded on end-user
+      // machines. The budget is the user-configured artworkDiskCacheBudgetMB
+      // setting (0 = unlimited; evictArtworkOverDiskBudget no-ops on a
+      // non-positive budget), defaulting to ARTWORK_DISK_CACHE_BUDGET_MB.
+      // Same const_cast rationale as pruneStaleEntries() below.
+      const qint64 diskBudgetBytes =
+          static_cast<qint64>(m_artworkDiskCacheBudgetMB.loadRelaxed()) * 1024 * 1024;
+      totalSize -= const_cast<CacheManager *>(this)->evictArtworkOverDiskBudget(
+          std::move(artworkFiles), totalSize, diskBudgetBytes);
       {
         // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't
         // see that ~CacheManager waits on m_cacheSizeWalkFuture, so the
@@ -680,6 +898,43 @@ void CacheManager::pruneStaleEntries() {
   }
 }
 
+qint64 CacheManager::evictArtworkOverDiskBudget(QList<DiskCacheFile> files, qint64 totalDiskBytes,
+                                                qint64 budgetBytes) {
+  if (budgetBytes <= 0 || totalDiskBytes <= budgetBytes) {
+    return 0;
+  }
+  // Oldest-touched first. Cache PNGs are written once and touched on every
+  // disk-cache hit (getArtwork), so mtime approximates last use; entries the
+  // user still scrolls past regularly survive, cold ones go first.
+  std::sort(files.begin(), files.end(),
+            [](const DiskCacheFile &a, const DiskCacheFile &b) { return a.mtimeMs < b.mtimeMs; });
+  const qint64 target = budgetBytes - budgetBytes / 10;
+  qint64 freed = 0;
+  int evicted = 0;
+  for (const DiskCacheFile &file : std::as_const(files)) {
+    if (totalDiskBytes - freed <= target) {
+      break;
+    }
+    if (m_diskStorage->isCancelled()) {
+      break; // shutting down — leave the rest for the next session's walk
+    }
+    // A failed remove (e.g. a writer holds the file on Windows) is skipped;
+    // the file stays a candidate for the next pass. The orphaned timestamps
+    // row (keyed by source path, not recoverable from the PNG name) is
+    // harmless: the next load finds no cached file and simply re-encodes.
+    if (QFile::remove(file.path)) {
+      freed += file.size;
+      ++evicted;
+    }
+  }
+  if (evicted > 0) {
+    qCInfo(lcCacheManager) << "Artwork disk cache exceeded its" << (budgetBytes / (1024 * 1024))
+                           << "MB budget — evicted" << evicted << "oldest files ("
+                           << (freed / (1024 * 1024)) << "MB )";
+  }
+  return freed;
+}
+
 int CacheManager::fileTimestampCountForTesting() const {
   QMutexLocker locker(&m_mutex);
   return fileTimestamps.size();
@@ -688,6 +943,11 @@ int CacheManager::fileTimestampCountForTesting() const {
 int CacheManager::lastRevalidatedCountForTesting() const {
   QMutexLocker locker(&m_mutex);
   return m_lastRevalidatedMs.size();
+}
+
+int CacheManager::dirtyImageCountForTesting() const {
+  QMutexLocker locker(&m_mutex);
+  return m_dirtyImages.size();
 }
 
 auto CacheManager::metrics() const -> CacheMetrics {

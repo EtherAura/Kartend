@@ -64,6 +64,11 @@ public:
   [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath) override;
 
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) override;
+  // Delivery-path overload: retains @p sourceImage (implicitly shared) in
+  // m_dirtyImages so the debounced flush snapshots it with zero conversion
+  // instead of deep-copying the pixmap back to a QImage on the GUI thread.
+  void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap,
+                    const QImage &sourceImage) override;
 
   // Inserts into in-memory cache only; does not mark dirty for disk
   // persistence.
@@ -81,6 +86,7 @@ public:
   void releaseGuiResources() override;
 
   void setArtworkCacheBudgetMB(int megabytes) override;
+  void setArtworkDiskCacheBudgetMB(int megabytes) override;
 
   /// Test-only introspection: the QCache::maxCost ceiling (in bytes) the
   /// artwork cache is currently configured for. Exposed solely so tests
@@ -89,6 +95,13 @@ public:
   /// (Kartend-c7mb). Not part of ICacheManager — production code reads
   /// metrics() instead.
   [[nodiscard]] int artworkCacheMaxCostForTesting() const { return artworkCache.maxCost(); }
+
+  /// Test-only introspection: the disk-cache eviction budget (MB) the
+  /// background walk currently enforces (0 = unlimited). Same precedent as
+  /// artworkCacheMaxCostForTesting.
+  [[nodiscard]] int artworkDiskCacheBudgetMBForTesting() const {
+    return m_artworkDiskCacheBudgetMB.loadRelaxed();
+  }
 
   /// Test-only introspection + trigger for the opportunistic bookkeeping
   /// sweep (Kartend-0ldg2). Production runs pruneStaleEntries() from the
@@ -99,6 +112,13 @@ public:
   [[nodiscard]] int lastRevalidatedCountForTesting() const;
   void pruneStaleEntriesForTesting() { pruneStaleEntries(); }
 
+  /// Test-only introspection: number of worker-decoded QImages currently
+  /// retained for dirty entries (m_dirtyImages). Lets tests assert the store
+  /// is populated by the image-carrying cacheArtwork overload and emptied by
+  /// the flush snapshot / cache clears, so retained images can't pin decoded
+  /// artwork forever. Same precedent as fileTimestampCountForTesting.
+  [[nodiscard]] int dirtyImageCountForTesting() const;
+
   /// Test-only: synchronously drain the disk-I/O worker pool so a slot can
   /// assert on the store contents a scheduled async save produced
   /// (Kartend-9lm54). Single-shot like CacheDiskStorage::drainWithBudget —
@@ -106,6 +126,23 @@ public:
   [[nodiscard]] bool drainPendingIoForTesting(int budgetMs) {
     return m_diskStorage->drainWithBudget(budgetMs);
   }
+
+  /// One on-disk artwork-cache PNG, as enumerated by the background
+  /// getCacheSize() walk. mtimeMs approximates last use: cache files are
+  /// written once and touched on every disk-cache hit in getArtwork().
+  struct DiskCacheFile {
+    QString path;
+    qint64 size = 0;
+    qint64 mtimeMs = 0;
+  };
+  /// Evict oldest-touched artwork PNGs until the cache directory total drops
+  /// below ~90% of @p budgetBytes (hysteresis so the pass doesn't re-trigger
+  /// on every walk once the cache hovers at the cap). Returns the bytes
+  /// freed. No-op when @p budgetBytes is non-positive or the total is within
+  /// budget. Runs on the background getCacheSize() walk thread in production;
+  /// public so tests can drive it directly with a fabricated file set.
+  qint64 evictArtworkOverDiskBudget(QList<DiskCacheFile> files, qint64 totalDiskBytes,
+                                    qint64 budgetBytes);
 
   // Cache metrics access
   [[nodiscard]] CacheMetrics metrics() const override;
@@ -137,6 +174,17 @@ private:
   // bounded prune pass happened to reach it (Kartend-9lm54).
   QSet<QString> dirtyRemovals;
   QSet<QString> dirtyArtwork;
+  // Worker-decoded QImages for keys in dirtyArtwork, handed through the
+  // image-carrying cacheArtwork overload. Implicitly shared with the
+  // delivery path's decode result, so retaining them is refcount-only; the
+  // debounced flush snapshots these instead of deep-copying each dirty
+  // pixmap back to a QImage on the GUI thread (QPixmap::toImage is a full
+  // copy, 0.6–2.5 MB per entry). Maintained strictly alongside dirtyArtwork
+  // — cleared for a key on invalidation / clearCollectionCache /
+  // releaseGuiResources and wholesale when a flush snapshots the dirty set —
+  // so it never pins decoded images beyond their dirty window. Guarded by
+  // m_mutex like the sibling maps.
+  QHash<QString, QImage> m_dirtyImages;
   CacheMetrics m_metrics;
 
   /// Disk persistence helper — owns the cache directory layout, the
@@ -178,6 +226,14 @@ private:
   // m_diskCacheSizeMutex; only the single-flight walk thread advances them).
   QString m_pruneDbCursor;
   QString m_sweepCursor;
+
+  // On-disk artwork-cache eviction budget (MB); 0 disables eviction. Written
+  // by setArtworkDiskCacheBudgetMB on the GUI thread, read by the background
+  // getCacheSize() walk — atomic so the cross-thread read needs no lock.
+  // Seeded to the compile-time default in the constructor (the header can't
+  // name UIConstants); the owner wires the user setting during startup,
+  // mirroring the in-memory budget's construction-time default above.
+  QAtomicInteger<int> m_artworkDiskCacheBudgetMB{0};
 };
 
 #endif // CACHEMANAGER_H

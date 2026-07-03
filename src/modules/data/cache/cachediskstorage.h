@@ -6,7 +6,9 @@
 #include <QHash>
 #include <QImage>
 #include <QList>
+#include <QMutex>
 #include <QPair>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -70,8 +72,32 @@ public:
   /// full map) and from the async-save lambda. Static because the caller
   /// already snapshotted state — the helper has no per-instance
   /// dependencies.
-  static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+  ///
+  /// Returns true when the batch committed (or was vacuous: nothing to
+  /// write, or a removals-only batch against a store that doesn't exist).
+  /// Returns false when the store could not be opened or the transaction
+  /// failed — the async-save path re-stages its removals batch on false so
+  /// failed deletions still reach the store later; dropped upserts self-heal
+  /// via the shutdown full-map write. Deliberately not [[nodiscard]]: the
+  /// synchronous shutdown writes have no retry avenue and every failure is
+  /// already logged inside.
+  static bool writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
                               const QStringList &removedPaths = {});
+
+  /// Drain the removal batches still awaiting a successful store write.
+  /// scheduleAsyncSave() stages its removals here BEFORE dispatching (so a
+  /// batch dropped by cancel()/clearQueue() or a drained pool is not lost),
+  /// the async task takes the staged set and re-stages it when the write
+  /// fails, and the shutdown flush drains whatever is left into its own
+  /// synchronous write. Previously the dirty sets were cleared at snapshot
+  /// time and a failed batch silently kept its stale store rows until the
+  /// bounded prune happened to reach them.
+  [[nodiscard]] QStringList takePendingRemovals();
+
+  /// Non-draining peek at the staged removals, for the const shutdown
+  /// snapshot path (which is non-clearing by design — re-deleting the same
+  /// rows is a harmless no-op).
+  [[nodiscard]] QStringList pendingRemovals() const;
 
   /// Opportunistic GC: examine up to @p maxRowsToExamine rows (ordered by
   /// path, resuming after @p *cursorPath) and DELETE the ones whose source
@@ -85,7 +111,10 @@ public:
   /// Schedule an async save on the worker pool. Encodes @p dirtyImages
   /// to PNG inside the dedicated cache directory; writes (or skips
   /// writing) @p dirtyTimestamps and the @p removedTimestampPaths
-  /// deletions based on @p shouldWriteMetadata. The lambda captures the
+  /// deletions based on @p shouldWriteMetadata. Each distinct parent
+  /// directory of the written files is fsynced once per batch — not once
+  /// per file — to make the QSaveFile renames durable without a
+  /// directory-fsync storm during silent precache. The lambda captures the
   /// cancellation token by shared_ptr value so it keeps observing
   /// cancellation even if the storage instance is being torn down.
   void scheduleAsyncSave(bool shouldWriteMetadata, const QHash<QString, qint64> &dirtyTimestamps,
@@ -111,7 +140,17 @@ public:
   [[nodiscard]] bool drainWithBudget(int budgetMs);
 
 private:
+  /// Removal paths staged for the store, shared with the async-save lambdas
+  /// by shared_ptr value (like the cancellation token) so a task draining
+  /// past the shutdown budget can still re-stage safely after this instance
+  /// is gone.
+  struct PendingRemovals {
+    QMutex mutex;
+    QSet<QString> paths;
+  };
+
   std::shared_ptr<std::atomic_bool> m_cancelToken;
+  std::shared_ptr<PendingRemovals> m_pendingRemovals;
   // Raw pointer; intentionally leaked at shutdown when the drain budget
   // expires (~QThreadPool blocks; the OS reaps).
   QThreadPool *m_pool;

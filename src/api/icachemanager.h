@@ -76,6 +76,18 @@ public:
   [[nodiscard]] virtual QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath) = 0;
 
   virtual void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) = 0;
+  /// Overload for the artwork delivery paths, which still hold the
+  /// worker-decoded QImage the pixmap was built from: the implementation may
+  /// retain @p sourceImage (implicitly shared — no deep copy) so the
+  /// debounced disk flush can hand the encode worker a ready QImage instead
+  /// of paying a GUI-thread QPixmap::toImage() deep copy per dirty entry.
+  /// Defaults to forwarding to the pixmap-only variant so doubles that only
+  /// override that one keep working.
+  virtual void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap,
+                            const QImage &sourceImage) {
+    Q_UNUSED(sourceImage);
+    cacheArtwork(artworkPath, pixmap);
+  }
   virtual void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) = 0;
 
   /// Evict cached artwork (in-memory + dirty-tracking) whose source path
@@ -92,6 +104,15 @@ public:
   /// implementation to avoid degenerating into an immediate-eviction
   /// cache. Called at startup wiring and on settings change.
   virtual void setArtworkCacheBudgetMB(int megabytes) = 0;
+
+  /// Configure the ON-DISK artwork-cache eviction budget (MB), enforced by
+  /// the background cache-size walk. Driven by the user
+  /// `artworkDiskCacheBudgetMB` setting; 0 disables eviction (unlimited),
+  /// other values are clamped by the implementation. Called at startup
+  /// wiring and on settings change. Defaults to a no-op so memory-only
+  /// doubles keep working (same convention as the image-carrying
+  /// cacheArtwork overload above).
+  virtual void setArtworkDiskCacheBudgetMB(int megabytes) { Q_UNUSED(megabytes); }
 
   [[nodiscard]] virtual CacheMetrics metrics() const = 0;
   virtual void resetMetrics() = 0;
