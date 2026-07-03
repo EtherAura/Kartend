@@ -1,4 +1,5 @@
 target_sources(kartend_utils PRIVATE
+  artworkwizardservice.cpp
   bulkedit.cpp
   bulkeditservice.cpp
   collectionhealth.cpp
@@ -16,6 +17,7 @@ target_sources(kartend_utils PRIVATE
   statisticsservice.cpp
   usagestatsstore.cpp
   variantgrouping.cpp
+  artworkwizardservice.h
   batchsizes.h
   bulkedit.h
   bulkeditservice.h
