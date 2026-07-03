@@ -13,16 +13,20 @@
 #   -modernize-use-designated-initializers    — Qt structs predate C99-style designated init
 #   -modernize-use-nodiscard                  — [[nodiscard]] only on getters/factories by convention
 #   -modernize-return-braced-init-list        — readability tradeoff with explicit type
-#   -modernize-use-ranges                     — reassessed 2026-06 (Kartend-17l6n): std::ranges
-#                                               algorithms are ALREADY used in-tree (e.g.
-#                                               querymanagerstatichelpers, navigationmanagerfilter,
-#                                               sessionmanager, artworkwidgetregistry) and build on
-#                                               the Qt 6.4 CI pin, so the check itself is not blocked.
-#                                               Kept off because its auto-rewrites can target Qt
-#                                               containers whose std::ranges-concept conformance is
-#                                               only partial on 6.4 — re-enable and apply the fixes
-#                                               once they're verified under the LLVM-19 / Qt-6.4 CI
-#                                               container, or after the CI Qt bump lands.
+#   -modernize-use-ranges                     — BLOCKED on a toolchain bump, not
+#                                               just Qt. 2026-07 review: the CI
+#                                               container's clang-tidy is LLVM
+#                                               18.1.3, and modernize-use-ranges
+#                                               was only introduced in clang-tidy
+#                                               20, so it does not exist on the
+#                                               current CI at all (an all-src pass
+#                                               "found 0" only because the check
+#                                               name is unknown there). Re-enable
+#                                               once CI's clang-tidy reaches >= 20,
+#                                               then verify its auto-rewrites are
+#                                               sound on the pinned Qt (std::ranges
+#                                               conformance was only partial on
+#                                               6.4) before applying fixes.
 #
 # readability-*:
 #   -readability-implicit-bool-conversion     — project rule: implicit-null is preferred

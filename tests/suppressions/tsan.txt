@@ -292,25 +292,11 @@ race:QThreadPoolPrivate::enqueueTask
 # global-pool fan-out.
 race:QWaitCondition::QWaitCondition
 
-# Qt-internal pool bookkeeping with EVERY frame stripped (e.g. two pooled
-# workers' memmoves on a recycled QArrayData block inside libQt6Core's
-# QThreadPool code, or libQt6Gui's threaded image-conversion buffer free):
-# no race: symbol pattern can target these because GCC's libtsan matches
-# suppressions only against the racing-access stacks, and those contain
-# nothing but <null> libQt6* frames (the CI image's Qt is stripped).
-# called_from_lib matches by MODULE, so it works on stripped libraries and
-# suppresses only interceptor events whose caller is inside the named .so —
-# Kartend's instrumented code stays fully visible, including Qt template
-# code inlined into Kartend TUs from headers. Same rationale and tradeoff
-# as the module-scoped Group D on the in-flight Kartend-t9u0o branch (these
-# two lines converge with it textually; dedup is a no-op at merge). The
-# narrower race: entries above are kept deliberately: they anchor on
-# Kartend-visible symbols, cost nothing, and document the known shapes.
-# Surfaces under Integration.TestNavigationManager / TestLaunchFlow
-# (MainWindow fixture spins the global pool via cache init + placeholder
-# tile conversion).
-called_from_lib:libQt6Core.so.6
-called_from_lib:libQt6Gui.so.6
+# (2026-07 quarterly review: an earlier libQt6Core/libQt6Gui called_from_lib
+# pair lived here as a separate sub-group. Post-merge it is textually covered
+# by the module-scoped Group D below — the exact dedup its own note called "a
+# no-op at merge" — so it was removed. Its surfacing note is folded into
+# Group D's libQt6Core entry.)
 
 # ─── Group C: Third-party library sync primitives (Kartend-d4x4) ────────
 # These libraries use sync primitives TSan can't observe; the races
@@ -351,6 +337,10 @@ called_from_lib:libgstreamer-1.0.so
 # start-up, QScrollArea's reserved render threads — with every frame
 # stripped, so no race: symbol pattern can target them (the CI image has
 # no llvm-symbolizer; Qt frames render <null>).
+#
+# Also surfaces under Integration.TestNavigationManager / TestLaunchFlow (the
+# MainWindow fixture spins the global pool via cache init + placeholder tile
+# conversion) — the concrete shapes the deduped sub-group above documented.
 #
 # called_from_lib matches by MODULE, not symbol, so it works on stripped
 # libraries. It suppresses only interceptor events whose caller is inside
