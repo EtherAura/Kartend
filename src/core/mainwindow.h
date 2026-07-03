@@ -64,6 +64,7 @@ struct SettingsDialogContext;
 struct DialogRunners;
 class ScraperController;
 class DatAuditController;
+class LibraryToolsController;
 class ScrollEventsController;
 class TextZoomHud;
 class OverlayZOrderRegistry;
@@ -330,6 +331,14 @@ private:
   // Guards connectDatabaseManager() — one-shot wiring whose non-UniqueConnection
   // and lambda edges would double-fire if it ever ran twice (Kartend-x8spn).
   bool m_databaseManagerConnected = false;
+  // Same one-shot guard for the other two connect tables: several of their
+  // edges (subcollectionEntered, virtualFolderEntered,
+  // artworkPreviewLaunchRequested, selectionChanged, both DetailsPaneManager
+  // sidebar signals) deliberately omit Qt::UniqueConnection, so a second run
+  // would double-fire navigation entry, launch-from-preview, and the sidebar
+  // refresh handlers.
+  bool m_scrollManagerConnected = false;
+  bool m_sidebarManagerConnected = false;
   // Kart drag-drop import queue + re-entrancy guard (Kartend-tubnr). dropEvent
   // collects .kart paths here and accepts immediately; processPendingKartImports
   // drains them on the next event-loop turn so the per-file destination prompt
@@ -382,6 +391,11 @@ private:
   std::unique_ptr<DbEventsController> m_dbEventsController;
   std::unique_ptr<ScraperController> m_scraperController;
   std::unique_ptr<DatAuditController> m_datAuditController;
+  /// Owns the per-collection library tool flows (collection health, variant
+  /// grouping, bulk edit, metadata review, artwork wizard) extracted from
+  /// mainwindow_dialogs.cpp; the *Interactive methods below are one-line
+  /// delegations into it. Context wired in connectDatabaseManager().
+  std::unique_ptr<LibraryToolsController> m_libraryToolsController;
   /// Owns dialog construction so MainWindow doesn't need to #include every
   /// dialog header. See dialogcontroller.{h,cpp}.
   std::unique_ptr<DialogController> m_dialogController;
@@ -577,23 +591,12 @@ private:
   /// Opens the layout-profile registry dialog. Loads the on-disk profile
   /// list, mutates it via the dialog buttons, and persists on close.
   void manageLayoutProfilesInteractive();
-  /// Runs @p fn for the active collection: validates the current collection
-  /// index, resolves its uuid, null-guards the database manager, and hands the
-  /// config + uuid + db to @p fn (which loads the item rows and drives its own
-  /// dialog). Shows @p openMessage when no collection is active, and a standard
-  /// identity-resolution warning under @p title on uuid failure. Collapses the
-  /// shared skeleton of the per-collection *Interactive launchers.
-  void withActiveCollectionItems(
-      const QString &title, const QString &openMessage,
-      const std::function<void(const CollectionConfig &cfg, const QString &uuid,
-                               IDatabaseManager *db)> &fn);
   /// Opens the collection-health dashboard for the active collection.
-  /// Runs the CollectionHealth analyzer over the current item list +
-  /// launcher config and pops a read-only summary dialog.
+  /// Delegates to LibraryToolsController.
   void showCollectionHealthInteractive();
-  /// Run the same-basename variant detector across the active collection's
-  /// items table and pop the inspector dialog. No-op when no collection is
-  /// open; falls back to an informational toast when no groups are detected.
+  /// Runs the same-basename variant detector across the active collection's
+  /// items table and pops the inspector dialog. Delegates to
+  /// LibraryToolsController.
   void showVariantGroupingInteractive();
   /// Switches to the collection that owns `filePath` and selects the
   /// item. No-op when the path can't be resolved to a live collection
@@ -601,25 +604,20 @@ private:
   /// analytics dialog's double-click handler.
   void navigateToItem(const QString &filePath);
   /// Opens the bulk-edit dialog scoped to all items in the active
-  /// collection. On confirm, fetches per-item metadata via the batch
-  /// loader, applies the chosen action through BulkEdit::applyAction,
-  /// persists every row that actually changed, and refreshes the view.
+  /// collection (BulkEditService thread-pool pipeline behind a cancellable
+  /// progress dialog). Delegates to LibraryToolsController.
   void bulkEditInteractive();
-  /// Opens the global command palette. Builds a fresh command list each
-  /// open so live collections / view-mode / settings entries reflect
-  /// the current state.
+  /// Opens the global command palette. The registry comes from
+  /// MenuController::buildPaletteCommands, rebuilt each open so live
+  /// collections / view-mode / settings entries reflect the current state.
   void openCommandPalette();
 
   /// Opens the missing-metadata review queue for the active collection.
-  /// Items lacking title / description / genre / artwork are presented
-  /// one at a time with Edit / Skip / Close controls.
+  /// Delegates to LibraryToolsController.
   void reviewMissingMetadataInteractive();
 
-  /// Opens the artwork-assignment wizard for items in the active
-  /// collection that have no artwork match on disk. Each item shows a
-  /// ranked list of candidate images from the collection's artwork
-  /// directory; the user picks one, browses for a file manually, or
-  /// skips, and the choice is persisted as a per-item override.
+  /// Opens the artwork-assignment wizard for items in the active collection
+  /// that have no artwork match on disk. Delegates to LibraryToolsController.
   void artworkWizardInteractive();
 
   /// Opens the read-only binding visualizer (Help → Binding

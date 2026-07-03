@@ -142,8 +142,18 @@ void MainWindow::setupUI() {
   QTimer::singleShot(0, this, [this]() {
     resyncPlaylistCollections();
     if (PlaylistManager *pm = m_appManager->getPlaylistManager()) {
-      QObject::connect(pm, &PlaylistManager::playlistsChanged, this,
-                       [this]() { resyncPlaylistCollections(); });
+      QObject::connect(pm, &PlaylistManager::playlistsChanged, this, [this]() {
+        // Playlist membership feeds the favorite:/tag token clauses baked
+        // into the sorted-items query cache — drop the usage-sensitive
+        // caches so a favorite toggle refreshes an actively-filtered grid
+        // now, not on the next rescan. PlaylistManager writes through its
+        // own DB connection, so DatabaseManager can't observe the mutation
+        // itself.
+        if (auto *db = m_appManager->getDatabaseManager()) {
+          db->invalidateUsageSensitiveCaches();
+        }
+        resyncPlaylistCollections();
+      });
     }
   });
 
@@ -409,6 +419,12 @@ void MainWindow::applyPixmapCacheBudget(int megabytes) {
   // pick up the user value on the next call.
   if (auto *cm = m_appManager->getCacheManager()) {
     cm->setArtworkCacheBudgetMB(megabytes);
+    // The on-disk eviction budget rides along so both artwork-cache budgets
+    // stay in lockstep through the one entry point (same drift-avoidance
+    // rationale as Kartend-10pb). Read from the live settings rather than a
+    // second parameter: every caller passes media.pixmapCacheSizeMB from the
+    // same struct that carries the disk budget.
+    cm->setArtworkDiskCacheBudgetMB(m_generalSettings.media.artworkDiskCacheBudgetMB);
   }
 }
 

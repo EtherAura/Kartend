@@ -74,9 +74,11 @@ public:
 
   /// Recompute the badge state for the currently-active collection. Hides
   /// the badge when the collection's launcher profile is clean; otherwise
-  /// shows it with a one-issue-per-line tooltip (delegating to
-  /// LauncherUtils::launcherPathIssues so the items-toolbar tooltip text
-  /// matches the sidebar's `⚠ Launcher path` rows verbatim).
+  /// shows it with a one-issue-per-line tooltip (delegating to the
+  /// launch-time LauncherUtils::launcherPathIssues overload — preset-resolved
+  /// + %collection%-expanded, the same verdict the pre-launch gate reaches —
+  /// so the tooltip text matches the sidebar's `⚠ Launcher path` rows
+  /// verbatim).
   void refreshCollectionWarningBadge();
 
   /// Apply the per-button visibility flags from @p gs to the toolbar's

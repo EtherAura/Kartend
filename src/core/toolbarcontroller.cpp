@@ -227,7 +227,15 @@ void ToolbarController::refreshCollectionWarningBadge() {
   QStringList issues;
   const int idx = m_mainWindow->currentCollectionIndex;
   if (idx >= 0 && idx < m_mainWindow->m_collections.size()) {
-    issues = LauncherUtils::launcherPathIssues(m_mainWindow->m_collections[idx].launcher);
+    // Launch-time overload: judge the EFFECTIVE config (preset-resolved +
+    // %collection%-expanded) so the badge reaches the same verdict as the
+    // pre-launch gate — the raw fields showed a false badge for a
+    // placeholder-routed path that launches fine, and no badge for a broken
+    // preset-backed entry.
+    const CollectionConfig &collection = m_mainWindow->m_collections[idx];
+    issues = LauncherUtils::launcherPathIssues(
+        collection.launcher, m_mainWindow->m_generalSettings.launchers.launcherPresets,
+        collection.name);
   }
   const bool hasIssues = !issues.isEmpty();
   m_collectionWarningBadge->setVisible(hasIssues);

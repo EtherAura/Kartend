@@ -18,6 +18,7 @@
 #include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
 #include "test_attractmanager.h"
+#include "test_datauditcontroller.h"
 #include "test_dbeventscontroller.h"
 #include "test_detailpagemanager.h"
 #include "test_detailspane_coverflow.h"
@@ -27,11 +28,15 @@
 #include "test_interactionmanager.h"
 #include "test_kartmanager.h"
 #include "test_launchflow.h"
+#include "test_librarytoolscontroller.h"
 #include "test_mainwindow_smoke.h"
+#include "test_marqueecontroller.h"
 #include "test_menucontroller.h"
 #include "test_navigationmanager.h"
 #include "test_scanservice.h"
 #include "test_scrapedialog_perf.h"
+#include "test_scrapercontroller.h"
+#include "test_scrolleventscontroller.h"
 #include "test_scrollmanager.h"
 #include "test_searchmanager.h"
 #include "test_selectiondisplaymanager.h"
@@ -40,6 +45,7 @@
 #include "test_settingsdialog_navigation.h"
 #include "test_settingsdialog_perf.h"
 #include "test_settingsdialog_scope.h"
+#include "test_toolbarcontroller.h"
 #include "test_virtualcontainermanager.h"
 
 #include "../support/machomesandbox.h"
@@ -88,6 +94,36 @@ const Suite kSuites[] = {
     {"TestMenuController",
      [](int c, char **v) {
        TestMenuController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestScraperController",
+     [](int c, char **v) {
+       TestScraperController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestToolbarController",
+     [](int c, char **v) {
+       TestToolbarController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestMarqueeController",
+     [](int c, char **v) {
+       TestMarqueeController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestScrollEventsController",
+     [](int c, char **v) {
+       TestScrollEventsController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDatAuditController",
+     [](int c, char **v) {
+       TestDatAuditController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestLibraryToolsController",
+     [](int c, char **v) {
+       TestLibraryToolsController t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestSettingsDialogScope",

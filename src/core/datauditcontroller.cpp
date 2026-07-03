@@ -264,6 +264,6 @@ void DatAuditController::openLibraryReview() {
 
   QWidget *parent = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
   DatLibraryReviewDialog dlg(root, collectionInfos(), initial, hooks,
-                             m_dialog != nullptr ? static_cast<QWidget *>(m_dialog) : parent);
+                             m_dialog ? static_cast<QWidget *>(m_dialog.data()) : parent);
   dlg.exec();
 }

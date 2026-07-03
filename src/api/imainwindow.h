@@ -110,7 +110,10 @@ public:
   /// process-global QPixmapCache and the CacheManager artworkCache.
   /// Settings dialogs and startup wiring should call this single entry
   /// point rather than touching the two caches independently — historic
-  /// drift between them was Kartend-10pb. Idempotent.
+  /// drift between them was Kartend-10pb. The implementation also pushes
+  /// the sibling on-disk artwork-cache budget (read from the window's live
+  /// GeneralSettings) so the two cache budgets never diverge across call
+  /// sites. Idempotent.
   virtual void applyPixmapCacheBudget(int megabytes) = 0;
 };
 

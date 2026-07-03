@@ -296,3 +296,80 @@ void MenuController::syncOrientationActions(DetailsPanePosition position) {
     m_orientationActionBottom->setChecked(position == DetailsPanePosition::Bottom);
   }
 }
+
+QList<CommandPaletteDialog::Command> MenuController::buildPaletteCommands() {
+  QList<CommandPaletteDialog::Command> commands;
+
+  // Collection switch entries. Skip playlists / smart playlists from
+  // the suggestions — they have their own access paths and the palette
+  // would otherwise be dominated by reserved/auto-generated rows.
+  QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+  if (collections) {
+    for (int i = 0; i < collections->size(); ++i) {
+      const CollectionConfig &cfg = collections->at(i);
+      if (cfg.isPlaylist) continue;
+      const int idx = i;
+      commands.append({tr("Collection"), cfg.name, [this, idx]() {
+                         auto *nav =
+                             m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr;
+                         if (nav) {
+                           nav->showCollectionItems(idx);
+                         }
+                       }});
+    }
+  }
+
+  // View-mode toggles. Map the live ViewType enum to two simple verbs; the
+  // toolbar already syncs visually once the new mode is set. One helper for
+  // both entries — the flows differ only in the target ViewType + label.
+  const auto makeViewModeCommand = [this](ViewType viewType, const QString &label) {
+    return CommandPaletteDialog::Command{
+        tr("View"), label, [this, viewType]() {
+          syncLayoutActions(viewType);
+          QList<CollectionConfig> *cols = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+          const int index =
+              m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+          if (!cols || index < 0 || index >= cols->size()) {
+            return;
+          }
+          (*cols)[index].viewType = viewType;
+          if (auto *settings = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
+            ErrorPresentation::reportSaveResult(settings->saveCollections(*cols), "collections",
+                                                true);
+          }
+          if (auto *nav = m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr) {
+            nav->safeReloadCollection(index);
+          }
+        }};
+  };
+  commands.append(makeViewModeCommand(ViewType::Grid, tr("Switch to grid view")));
+  commands.append(makeViewModeCommand(ViewType::List, tr("Switch to list view")));
+
+  // Common tool entries already reachable via menus — surfaced here so
+  // the palette is the single keyboard-driven entry point users learn.
+  // Each routes through the same MenuControllerContext callback its menu
+  // action uses, so the two surfaces can't drift.
+  if (m_ctx.onOpenSettings) {
+    commands.append({tr("Tools"), tr("Open settings"), m_ctx.onOpenSettings});
+  }
+  commands.append({tr("Tools"), tr("Rescan current collection"), [this]() {
+                     const int index =
+                         m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+                     auto *nav =
+                         m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr;
+                     if (index >= 0 && nav) {
+                       nav->safeReloadCollection(index);
+                     }
+                   }});
+  if (m_ctx.onShowCollectionHealth) {
+    commands.append({tr("Tools"), tr("Show collection health…"), m_ctx.onShowCollectionHealth});
+  }
+  if (m_ctx.onBulkEdit) {
+    commands.append({tr("Tools"), tr("Bulk edit items…"), m_ctx.onBulkEdit});
+  }
+  if (m_ctx.onManageLayoutProfiles) {
+    commands.append({tr("Tools"), tr("Layout profiles…"), m_ctx.onManageLayoutProfiles});
+  }
+
+  return commands;
+}

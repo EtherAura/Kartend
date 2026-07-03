@@ -11,7 +11,10 @@
 // so that if a `connect*Manager()` ever runs a second time (dynamic
 // reconfiguration, test re-init), the duplicate connection is silently
 // skipped instead of firing the slot twice per emit. New connects to these
-// senders should follow the same pattern.
+// senders should follow the same pattern. UniqueConnection can't dedup
+// lambda or non-UniqueConnection edges, so each connect*Manager() table is
+// additionally guarded by a one-bool early return — a second invocation is
+// a no-op rather than a double-wire.
 //
 // The slot handlers that those connections target live in companion TUs
 // extracted by responsibility:
@@ -29,12 +32,15 @@
 //                                    onCoverFlow*, onArtworkPreviewVisibilityChanged,
 //                                    onList*ColumnWidthChanged).
 //                                    Extracted from MainWindow per Kartend-hzef.
-//   * mainwindow_scraper.cpp      — IMainWindow scraper-flow forwarders
+//   * mainwindow_scraper.cpp      — IMainWindow scraper / DAT-audit forwarders
 //                                    (openScraperDialog,
-//                                    promptResumePendingScrapeIfAny) and
-//                                    marquee shims (applyMarqueeSettings,
-//                                    updateMarqueeArtwork). Implementation lives
-//                                    in scrapercontroller.{h,cpp}.
+//                                    promptResumePendingScrapeIfAny,
+//                                    openDatAuditDialog…). Implementation lives
+//                                    in scrapercontroller.{h,cpp} /
+//                                    datauditcontroller.{h,cpp}. The marquee
+//                                    shims (applyMarqueeSettings,
+//                                    updateMarqueeArtwork) live in
+//                                    mainwindow.cpp's grab-bag.
 //
 // This TU keeps:
 //   - the connect*() tables (the flat manager graph)
@@ -160,6 +166,7 @@
 #include "errorutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "librarytoolscontroller.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
 #include "navigationmanager.h"
@@ -468,9 +475,38 @@ void MainWindow::connectDatabaseManager() {
     };
     m_datAuditController->setContext(dc);
   }
+
+  // LibraryToolsController — the per-collection tool flows extracted from
+  // mainwindow_dialogs.cpp. Same closure-context shape as the two above.
+  if (m_libraryToolsController) {
+    LibraryToolsControllerContext lt;
+    lt.getParentWindow = [this]() -> QWidget * { return this; };
+    lt.getCollections = [this]() { return &m_collections; };
+    lt.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+    lt.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
+    lt.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
+    lt.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
+    // The variant dialog's select handler — navigateToItem needs MainWindow's
+    // collection-switch + async visual-index plumbing, so it stays a closure.
+    lt.navigateToItem = [this](const QString &filePath) { navigateToItem(filePath); };
+    // Stock-modal runners for the controller's active-collection guard
+    // prompts; headless tests stub these instead of fighting a modal.
+    lt.dialogs = makeDialogRunners();
+    m_libraryToolsController->setContext(lt);
+  }
 }
 
 void MainWindow::connectScrollManager() {
+  // One-shot wiring, same idempotence guard as connectDatabaseManager():
+  // the subcollectionEntered / virtualFolderEntered /
+  // artworkPreviewLaunchRequested / selectionChanged edges below don't use
+  // Qt::UniqueConnection, so a second run (dynamic reconfiguration, test
+  // re-init) would double-fire navigation entry and launch-from-preview.
+  if (m_scrollManagerConnected) {
+    return;
+  }
+  m_scrollManagerConnected = true;
+
   auto *scroll = m_appManager->getScrollManager();
   auto *nav = m_appManager->getNavigationManager();
   auto *interaction = m_appManager->getInteractionManager();
@@ -541,6 +577,14 @@ void MainWindow::connectScrollManager() {
 }
 
 void MainWindow::connectSidebarManager() {
+  // One-shot wiring, same idempotence guard as connectDatabaseManager():
+  // neither edge uses Qt::UniqueConnection, so a second run would
+  // double-fire the sidebar visibility/layout refresh handlers.
+  if (m_sidebarManagerConnected) {
+    return;
+  }
+  m_sidebarManagerConnected = true;
+
   auto *details = m_appManager->getDetailsPaneManager();
   // DetailsPaneManager → MainWindow
   QObject::connect(details, &DetailsPaneManager::sidebarVisibilityChanged, this,
@@ -592,10 +636,13 @@ void MainWindow::connectSearchComponents() {
   // Search-mode toggle lives inside the QLineEdit as a QAction owned by the
   // ToolbarController. Wire it to InteractionManager's existing toggle slot
   // so the cycling behavior remains identical to the legacy QPushButton.
+  // Member-function-pointer edge, so Qt::UniqueConnection alone makes a
+  // re-run of this block a no-op (see the connect*Manager() guards above).
   if (m_toolbarController && m_toolbarController->searchModeAction() &&
       m_appManager->getInteractionManager()) {
     QObject::connect(m_toolbarController->searchModeAction(), &QAction::triggered,
-                     m_appManager->getInteractionManager(), &InteractionManager::toggleSearchMode);
+                     m_appManager->getInteractionManager(), &InteractionManager::toggleSearchMode,
+                     Qt::UniqueConnection);
   }
 }
 
@@ -641,12 +688,14 @@ void MainWindow::connectScrollBars() {
   if (!ui->itemScrollArea || !m_appManager->getNavigationManager()) {
     return;
   }
+  // Member-function-pointer edges, so Qt::UniqueConnection alone makes a
+  // re-run of this block a no-op (see the connect*Manager() guards above).
   if (const QScrollBar *vScrollBar = ui->itemScrollArea->verticalScrollBar()) {
     QObject::connect(vScrollBar, &QScrollBar::valueChanged, m_appManager->getNavigationManager(),
-                     &NavigationManager::onViewportChanged);
+                     &NavigationManager::onViewportChanged, Qt::UniqueConnection);
   }
   if (const QScrollBar *hScrollBar = ui->itemScrollArea->horizontalScrollBar()) {
     QObject::connect(hScrollBar, &QScrollBar::valueChanged, m_appManager->getNavigationManager(),
-                     &NavigationManager::onViewportChanged);
+                     &NavigationManager::onViewportChanged, Qt::UniqueConnection);
   }
 }

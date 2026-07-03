@@ -9,6 +9,10 @@
 #include "collection/collectionconfig.h"
 #include "collection/collectionhierarchycache.h"
 #include "collection/generalsettings.h"
+// For CommandPaletteDialog::Command — a nested struct, so buildPaletteCommands'
+// return type can't be forward-declared. The header is light (QDialog + two
+// value members).
+#include "commandpalettedialog.h"
 #include "usagestatsstore.h"
 
 QT_BEGIN_NAMESPACE
@@ -117,6 +121,17 @@ public:
   /// been wired so checked states and widget visibility stay in lockstep on
   /// startup.
   void applyPersistedViewState();
+
+  /// Build the command-palette registry: collection-switch entries (playlists
+  /// skipped — they have their own access paths), the grid/list view-mode
+  /// toggles, and the common tool entries already reachable via menus.
+  /// MenuController hosts this because it owns the command metadata the
+  /// entries mirror (the Tools callbacks, layout-action sync, manager
+  /// getters); MainWindow::openCommandPalette stays the thin wrapper that
+  /// constructs the dialog and calls this per open, so live collections /
+  /// view modes reflect the current state. Implemented in
+  /// menucontroller_dynamicmenus.cpp.
+  [[nodiscard]] QList<CommandPaletteDialog::Command> buildPaletteCommands();
 
 private:
   MenuControllerContext m_ctx;

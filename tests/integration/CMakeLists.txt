@@ -18,6 +18,12 @@ set(INTEGRATION_TEST_SOURCES
   mocks/mockedmainwindowfixture.cpp
   test_mainwindow_smoke.cpp
   test_menucontroller.cpp
+  test_scrapercontroller.cpp
+  test_toolbarcontroller.cpp
+  test_marqueecontroller.cpp
+  test_scrolleventscontroller.cpp
+  test_datauditcontroller.cpp
+  test_librarytoolscontroller.cpp
   test_settingsdialog_scope.cpp
   test_applysettingsdialog.cpp
   test_applicationmanager_lifecycle.cpp
@@ -48,6 +54,12 @@ set(INTEGRATION_TEST_HEADERS
   mainwindowfixture.h
   test_mainwindow_smoke.h
   test_menucontroller.h
+  test_scrapercontroller.h
+  test_toolbarcontroller.h
+  test_marqueecontroller.h
+  test_scrolleventscontroller.h
+  test_datauditcontroller.h
+  test_librarytoolscontroller.h
   test_settingsdialog_scope.h
   test_applysettingsdialog.h
   test_applicationmanager_lifecycle.h
@@ -123,6 +135,12 @@ target_include_directories(test_integration PRIVATE
 set(INTEGRATION_TEST_CLASSES
   TestMainWindowSmoke
   TestMenuController
+  TestScraperController
+  TestToolbarController
+  TestMarqueeController
+  TestScrollEventsController
+  TestDatAuditController
+  TestLibraryToolsController
   TestSettingsDialogScope
   TestApplySettingsDialog
   TestApplicationManagerLifecycle

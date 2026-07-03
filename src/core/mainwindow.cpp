@@ -49,6 +49,7 @@
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
+#include "librarytoolscontroller.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
@@ -103,6 +104,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_dbEventsController = std::make_unique<DbEventsController>(nullptr);
   m_scraperController = std::make_unique<ScraperController>(nullptr);
   m_datAuditController = std::make_unique<DatAuditController>(nullptr);
+  m_libraryToolsController = std::make_unique<LibraryToolsController>(nullptr);
   m_dialogController = std::make_unique<DialogController>(this);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
@@ -120,6 +122,23 @@ MainWindow::~MainWindow() {
   // so it tears down later in reverse-declaration order), keeping the Ui struct
   // and ctx.ui valid while those teardown paths run. Defined out-of-line here so
   // the unique_ptr<Ui_MainWindow> destructor sees the complete type.
+}
+
+// Marquee shims — grab-bag one-line forwarders into the MarqueeController
+// this window owns (applyMarqueeSettings implements the IMainWindow virtual
+// the settings dialog calls). Hosted here rather than in a scraper/marquee
+// partial: too small for their own TU, and this file already constructs the
+// controller.
+void MainWindow::applyMarqueeSettings() {
+  if (m_marqueeController) {
+    m_marqueeController->applyMarqueeSettings();
+  }
+}
+
+void MainWindow::updateMarqueeArtwork() {
+  if (m_marqueeController) {
+    m_marqueeController->updateMarqueeArtwork();
+  }
 }
 
 bool MainWindow::event(QEvent *event) {

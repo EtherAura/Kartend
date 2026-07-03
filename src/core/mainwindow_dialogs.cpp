@@ -8,79 +8,55 @@
 // setupLastSelectedIndices / setupEventFilters / refreshCollectionFilesystemWatcher /
 // applyPixmapCacheBudget / adjustGridWidth / setViewType / showEvent).
 //
+// Charter (docs/dev/mainwindow-partials.md): every function here is a thin
+// wrapper — construct the dialog/wizard, populate its inputs from MainWindow
+// state, exec(), write results back. Substantive tool flows live in
+// controllers: the per-collection library tools in LibraryToolsController,
+// the command-palette registry in MenuController::buildPaletteCommands.
+//
 // Includes are the dialog/wizard headers each launcher names plus the
 // managers and value-container headers their bodies dereference. Keep the
 // list narrow — anything used only by setup* code belongs in
 // mainwindow_setup.cpp's include block, not here.
 
-#include <QActionGroup>
-#include <QApplication>
-#include <QDir>
+#include <memory>
+
 #include <QFileDialog>
-#include <QInputDialog>
+#include <QFileInfo>
+#include <QHash>
 #include <QMessageBox>
-#include <QPushButton>
+#include <QPair>
 
 #include "applicationmanager.h"
-#include "artworkcandidates.h"
-#include "artworkmanager.h"
-#include "artworkwizarddialog.h"
 #include "bindingvisualizerdialog.h"
-#include "bulkedit.h"
-#include "bulkeditdialog.h"
-#include "cachemanager.h"
 #include "collection/collectioncontext.h"
 #include "collection/presentationprofile.h"
 #include "collection/themepreset.h"
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
-#include "collectionhealth.h"
-#include "collectionhealthdialog.h"
 #include "commandpalettedialog.h"
 #include "createcollectiondialog.h"
-#include "detailpagemanager.h"
 #include "dialogcontroller.h"
 #include "dialogrunners.h"
 #include "errorpresentation.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
-#include "itemartwork.h"
-#include "itemmetadataactioncontroller.h"
-#include "kartmanager.h"
-#include "launchmanager.h"
+#include "isettingsmanager.h"
 #include "layoutprofilesdialog.h"
 #include "libraryonboardingwizard.h"
+#include "librarytoolscontroller.h"
 #include "mainwindow.h"
-#include "marqueecontroller.h"
 #include "menucontroller.h"
-#include "metadataqueue.h"
-#include "metadatareviewdialog.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
-#include "playlistmanager.h"
 #include "presentationprofilesdialog.h"
 #include "scraperprovidersdialog.h"
 #include "scrollmanager.h"
-#include "selectionmanager.h"
 #include "settingsdialogcontroller.h"
-#include "toolbarcontroller.h"
+#include "settingsutils.h"
+#include "uiconstants/dialog.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
-#include "variantgrouping.h"
-#include "variantgroupingdialog.h"
-#include <QFileInfo>
-#include <QHash>
-#include <QPair>
-
-#include "isettingsmanager.h"
-#include "sessionmanager.h"
-#include "settingsutils.h"
-#include "stringutils.h"
-#include "ui_mainwindow.h"
-#include "uiconstants/dialog.h"
-
-#include <QLoggingCategory>
-Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
 SettingsDialogController *MainWindow::settingsDialogController() {
   if (!m_settingsDialogController) {
@@ -318,96 +294,18 @@ void MainWindow::manageLayoutProfilesInteractive() {
   }
 }
 
-void MainWindow::withActiveCollectionItems(
-    const QString &title, const QString &openMessage,
-    const std::function<void(const CollectionConfig &, const QString &, IDatabaseManager *)> &fn) {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
-    QMessageBox::information(this, title, openMessage);
-    return;
-  }
-  const CollectionConfig &cfg = m_collections[currentCollectionIndex];
-  // Resolve the uuid the same way every other per-item code path does so
-  // the item enumeration finds the rows the rest of the app sees.
-  const QString uuid = CollectionUtils::computeCollectionUuid(cfg);
-  if (uuid.isEmpty()) {
-    QMessageBox::warning(this, title,
-                         tr("Could not resolve this collection's identity. "
-                            "Check the media directory in settings."));
-    return;
-  }
-  IDatabaseManager *db = m_appManager->getDatabaseManager();
-  if (!db) {
-    return;
-  }
-  fn(cfg, uuid, db);
-}
+// The five per-collection tool flows (Collection Health, Duplicates &
+// Variants, Bulk Edit, Review Missing Metadata, Artwork Wizard) and their
+// shared withActiveCollectionItems() skeleton live in
+// librarytoolscontroller.{h,cpp}. The one-line delegations below keep the
+// MainWindow surface the menu / palette callbacks bind to.
 
 void MainWindow::showCollectionHealthInteractive() {
-  withActiveCollectionItems(
-      tr("Collection health"), tr("Open a collection before running the health audit."),
-      [this](const CollectionConfig &cfg, const QString &uuid, IDatabaseManager *db) {
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-
-        // Convert to CollectionHealth::ItemPath wire shape. Decoupling the
-        // analyzer's input from IDatabaseManager keeps the analyzer
-        // unit-testable without a real DB.
-        QList<CollectionHealth::ItemPath> healthItems;
-        healthItems.reserve(rows.size());
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          healthItems.append({row.path, row.artworkPath});
-        }
-
-        // Launcher validator: defer to LaunchManager's existing path resolver
-        // so what counts as "found" matches what the launch pipeline would
-        // accept at run time.
-        auto validator = [](const QString &path) {
-          return LaunchManager::validateLauncherPath(path).isOk();
-        };
-        const CollectionHealth::Report report =
-            CollectionHealth::analyze(cfg, healthItems, validator);
-
-        CollectionHealthDialog dialog(this);
-        dialog.setReport(cfg.name, report);
-        dialog.exec();
-      });
+  if (m_libraryToolsController) m_libraryToolsController->showCollectionHealthInteractive();
 }
 
 void MainWindow::showVariantGroupingInteractive() {
-  withActiveCollectionItems(
-      tr("Duplicates and variants"), tr("Open a collection before scanning for variants."),
-      [this](const CollectionConfig &cfg, const QString &uuid, IDatabaseManager *db) {
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-        QStringList paths;
-        paths.reserve(rows.size());
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          paths.append(row.path);
-        }
-        const auto groups = VariantGrouping::groupByBaseName(paths);
-        if (groups.isEmpty()) {
-          QMessageBox::information(this, tr("Duplicates and variants"),
-                                   tr("No same-name variants were detected in '%1' — every item "
-                                      "has a unique basename.")
-                                       .arg(cfg.name));
-          return;
-        }
-
-        VariantGroupingDialog dialog(groups, this);
-        dialog.setLaunchHandler([this](const QString &path) {
-          if (path.isEmpty() || !m_appManager) return;
-          // Defer to InteractionManager so launcher selection, kart-archive
-          // unpacking, and play-count bumps stay in one place. Resolve the
-          // owning collection via the DB instead of trusting the currently-viewed
-          // one — a user can navigate elsewhere while the dialog is up.
-          IDatabaseManager *handlerDb = m_appManager->getDatabaseManager();
-          InteractionManager *im = m_appManager->getInteractionManager();
-          if (!handlerDb || !im) return;
-          const int owningIndex = handlerDb->getCollectionIndexForFile(path);
-          if (!CollectionUtils::isValidIndex(owningIndex, &m_collections)) return;
-          im->launchItemWithCollection(path, owningIndex);
-        });
-        dialog.setSelectHandler([this](const QString &path) { navigateToItem(path); });
-        dialog.exec();
-      });
+  if (m_libraryToolsController) m_libraryToolsController->showVariantGroupingInteractive();
 }
 
 void MainWindow::navigateToItem(const QString &filePath) {
@@ -444,7 +342,7 @@ void MainWindow::navigateToItem(const QString &filePath) {
   context.config.artworkDirectory =
       PathUtils::validateAndExpandPath(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
-  if (auto *im = m_appManager->getInteractionManager()) {
+  if (m_appManager->getInteractionManager()) {
     // Kartend-swyk: own the Connection handle via shared_ptr instead of a
     // manual new/delete. The delete previously ran only on the matching-path
     // branch, so if the worker never emitted a result for filePath (collection
@@ -454,14 +352,22 @@ void MainWindow::navigateToItem(const QString &filePath) {
     // the lambda, dropping the last shared_ptr ref to the handle. The signal is
     // shared across paths (hence the resultPath filter), so Qt::SingleShot-
     // Connection is unusable — it would fire on the first non-matching result.
+    // The InteractionManager is re-resolved at dispatch time (matching the
+    // controller-ctx closures) rather than captured raw: the connection's
+    // lifetime tracks MainWindow/DatabaseManager, not the sibling manager, so
+    // a raw capture could dangle if a nested event loop dispatched the result
+    // mid-teardown.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(db, &IDatabaseManager::visualIndexForPathLoaded, this,
-                    [conn, filePath, im](int visualIndex, const QString &resultPath) {
+                    [this, conn, filePath](int visualIndex, const QString &resultPath) {
                       if (resultPath != filePath) {
                         return; // some other path's result — ignore
                       }
                       QObject::disconnect(*conn);
-                      if (visualIndex >= 0) {
+                      if (visualIndex < 0) {
+                        return;
+                      }
+                      if (auto *im = m_appManager->getInteractionManager()) {
                         im->selectItemByIndex(visualIndex, /*allowHorizontalScroll=*/true);
                       }
                     });
@@ -470,294 +376,28 @@ void MainWindow::navigateToItem(const QString &filePath) {
 }
 
 void MainWindow::bulkEditInteractive() {
-  withActiveCollectionItems(
-      tr("Bulk edit"), tr("Open a collection before bulk-editing items."),
-      [this](const CollectionConfig &cfg, const QString &uuid, IDatabaseManager *db) {
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-        if (rows.isEmpty()) {
-          QMessageBox::information(this, tr("Bulk edit"),
-                                   tr("This collection has no items to edit."));
-          return;
-        }
-
-        BulkEditDialog dialog(this);
-        dialog.setScope(cfg.name, rows.size());
-        if (dialog.exec() != QDialog::Accepted) {
-          return;
-        }
-        const auto choice = dialog.result();
-
-        // Confirmation gate — describes the change in user-readable terms
-        // before persistence. The dialog disables Apply when the input is
-        // invalid (e.g. empty tag), but a final yes/no still surfaces here so
-        // an accidental Enter on the picker isn't destructive.
-        const QString actionDescription =
-            BulkEdit::actionRequiresParameter(choice.action)
-                ? tr("%1 \"%2\"").arg(BulkEdit::actionLabel(choice.action), choice.parameter)
-                : BulkEdit::actionLabel(choice.action);
-        const auto confirmation =
-            QMessageBox::question(this, tr("Bulk edit"),
-                                  tr("%1 across %2 item(s) in \"%3\"?")
-                                      .arg(actionDescription)
-                                      .arg(rows.size())
-                                      .arg(cfg.name),
-                                  QMessageBox::Apply | QMessageBox::Cancel, QMessageBox::Cancel);
-        if (confirmation != QMessageBox::Apply) {
-          return;
-        }
-
-        QStringList paths;
-        paths.reserve(rows.size());
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          paths.append(row.path);
-        }
-        const auto loaded = db->loadItemMetadataBatch(uuid, paths);
-
-        QList<ItemMetadataStore::ItemMetadata> batch;
-        batch.reserve(paths.size());
-        for (const QString &path : paths) {
-          auto it = loaded.find(path);
-          ItemMetadataStore::ItemMetadata md =
-              it != loaded.end() ? it.value() : ItemMetadataStore::ItemMetadata{};
-          md.collectionUuid = uuid;
-          md.path = path;
-          batch.append(md);
-        }
-
-        const auto changes = BulkEdit::applyAction(choice.action, choice.parameter, batch);
-        int writes = 0;
-        for (const auto &change : changes) {
-          if (!change.changed) {
-            continue;
-          }
-          if (db->saveItemMetadata(change.metadata)) {
-            ++writes;
-          }
-        }
-
-        // Soft reload so the new state (tags, flags, ratings) surfaces in the
-        // sidebar without a collection switch. The grid rendering isn't
-        // affected by these flags until Kartend-elte ships, but the details
-        // pane already reads them.
-        if (m_appManager->getNavigationManager()) {
-          m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-        }
-        QMessageBox::information(this, tr("Bulk edit"),
-                                 tr("Applied to %1 of %2 item(s).").arg(writes).arg(rows.size()));
-      });
+  if (m_libraryToolsController) m_libraryToolsController->bulkEditInteractive();
 }
 
 void MainWindow::openCommandPalette() {
-  QList<CommandPaletteDialog::Command> commands;
-
-  // Collection switch entries. Skip playlists / smart playlists from
-  // the suggestions — they have their own access paths and the palette
-  // would otherwise be dominated by reserved/auto-generated rows.
-  for (int i = 0; i < m_collections.size(); ++i) {
-    const CollectionConfig &cfg = m_collections.at(i);
-    if (cfg.isPlaylist) continue;
-    const int idx = i;
-    commands.append({tr("Collection"), cfg.name, [this, idx]() {
-                       if (m_appManager->getNavigationManager()) {
-                         m_appManager->getNavigationManager()->showCollectionItems(idx);
-                       }
-                     }});
+  // Registry building lives in MenuController::buildPaletteCommands — it owns
+  // the command metadata (Tools callbacks, layout-action sync, manager
+  // getters) the entries mirror. Built fresh per open so live collections /
+  // view-mode / settings entries reflect the current state.
+  if (!m_menuController) {
+    return;
   }
-
-  // View-mode toggles. Map the live ViewType enum to two simple verbs;
-  // the toolbar already syncs visually once the new mode is set.
-  commands.append(
-      {tr("View"), tr("Switch to grid view"), [this]() {
-         if (auto *menu = m_menuController.get()) {
-           menu->syncLayoutActions(ViewType::Grid);
-         }
-         if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-           m_collections[currentCollectionIndex].viewType = ViewType::Grid;
-           if (m_appManager->getSettingsManager()) {
-             ErrorPresentation::reportSaveResult(
-                 m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
-                 true);
-           }
-           if (m_appManager->getNavigationManager()) {
-             m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-           }
-         }
-       }});
-  commands.append(
-      {tr("View"), tr("Switch to list view"), [this]() {
-         if (auto *menu = m_menuController.get()) {
-           menu->syncLayoutActions(ViewType::List);
-         }
-         if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-           m_collections[currentCollectionIndex].viewType = ViewType::List;
-           if (m_appManager->getSettingsManager()) {
-             ErrorPresentation::reportSaveResult(
-                 m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
-                 true);
-           }
-           if (m_appManager->getNavigationManager()) {
-             m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-           }
-         }
-       }});
-
-  // Common tool entries already reachable via menus — surfaced here so
-  // the palette is the single keyboard-driven entry point users learn.
-  commands.append({tr("Tools"), tr("Open settings"), [this]() {
-                     // Mirror ctx.onOpenSettings (mainwindow_setup createMenuBar) so the
-                     // palette opens the same dialog the Settings menu entry uses.
-                     if (m_appManager->getSettingsManager() != nullptr) {
-                       SettingsDialogContext context = makeSettingsDialogContext();
-                       settingsDialogController()->openSettingsDialog(context);
-                     }
-                   }});
-  commands.append({tr("Tools"), tr("Rescan current collection"), [this]() {
-                     if (currentCollectionIndex >= 0 && m_appManager->getNavigationManager()) {
-                       m_appManager->getNavigationManager()->safeReloadCollection(
-                           currentCollectionIndex);
-                     }
-                   }});
-  commands.append({tr("Tools"), tr("Show collection health…"),
-                   [this]() { showCollectionHealthInteractive(); }});
-  commands.append({tr("Tools"), tr("Bulk edit items…"), [this]() { bulkEditInteractive(); }});
-  commands.append(
-      {tr("Tools"), tr("Layout profiles…"), [this]() { manageLayoutProfilesInteractive(); }});
-
   CommandPaletteDialog dialog(this);
-  dialog.setCommands(std::move(commands));
+  dialog.setCommands(m_menuController->buildPaletteCommands());
   dialog.exec();
 }
 
 void MainWindow::reviewMissingMetadataInteractive() {
-  withActiveCollectionItems(
-      tr("Review missing metadata"), tr("Open a collection before running the review."),
-      [this](const CollectionConfig &cfg, const QString &uuid, IDatabaseManager *db) {
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-        if (rows.isEmpty()) {
-          QMessageBox::information(this, tr("Review missing metadata"),
-                                   tr("This collection has no items to review."));
-          return;
-        }
-        QList<MetadataQueue::InputRow> inputs;
-        inputs.reserve(rows.size());
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          MetadataQueue::InputRow input;
-          input.filePath = row.path;
-          input.hasArtworkOnDisk = !row.artworkPath.trimmed().isEmpty();
-          input.itemName = QFileInfo(row.path).completeBaseName();
-          inputs.append(input);
-        }
-        const auto entries =
-            MetadataQueue::build(uuid, inputs, [db](const QString &u, const QString &p) {
-              return db->loadItemMetadata(u, p);
-            });
-        if (entries.isEmpty()) {
-          QMessageBox::information(
-              this, tr("Review missing metadata"),
-              tr("Every item in \"%1\" already has the core metadata fields.").arg(cfg.name));
-          return;
-        }
-
-        // Edit closure: open the existing per-item editor through the
-        // interaction manager (it owns the closure that pops EditMetadataDialog
-        // and persists the result). Returns true when something changed.
-        auto onEdit = [this](const QString &filePath, const QString &itemName) {
-          auto *im = m_appManager->getInteractionManager();
-          if (im && im->itemMetadataActions()) {
-            // editItemMetadata is fire-and-forget; we can't tell from its
-            // signature whether the user actually saved. Conservative: assume
-            // an edit attempt counts and let reevaluate filter the queue.
-            im->itemMetadataActions()->editItemMetadata(filePath, itemName);
-            return true;
-          }
-          return false;
-        };
-        auto onReload = [db](const QString &u, const QString &p) {
-          return db->loadItemMetadata(u, p);
-        };
-
-        MetadataReviewDialog dialog(this);
-        dialog.setQueue(entries, std::move(onEdit), std::move(onReload));
-        dialog.exec();
-
-        // Refresh the sidebar so any edits made during the review are visible
-        // without a separate collection switch.
-        if (m_appManager->getNavigationManager()) {
-          m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-        }
-      });
+  if (m_libraryToolsController) m_libraryToolsController->reviewMissingMetadataInteractive();
 }
 
 void MainWindow::artworkWizardInteractive() {
-  withActiveCollectionItems(
-      tr("Assign missing artwork"), tr("Open a collection before running the wizard."),
-      [this](const CollectionConfig &cfg, const QString &uuid, IDatabaseManager *db) {
-        const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
-        if (artworkDir.trimmed().isEmpty()) {
-          QMessageBox::information(this, tr("Assign missing artwork"),
-                                   tr("This collection has no artwork directory configured."));
-          return;
-        }
-
-        // Queue = items where items.artwork_path is empty / NULL. Pull the
-        // path list, filter, and build the wizard's per-entry record.
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-        QList<ArtworkWizardDialog::Entry> queue;
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          if (!row.artworkPath.trimmed().isEmpty()) {
-            continue;
-          }
-          ArtworkWizardDialog::Entry entry;
-          entry.filePath = row.path;
-          entry.collectionUuid = uuid;
-          entry.itemName = QFileInfo(row.path).completeBaseName();
-          queue.append(entry);
-        }
-        if (queue.isEmpty()) {
-          QMessageBox::information(this, tr("Assign missing artwork"),
-                                   tr("Every item in \"%1\" already has artwork.").arg(cfg.name));
-          return;
-        }
-
-        // Snapshot the artwork directory listing once. The wizard ranks
-        // candidates per item but re-walking the directory for every entry
-        // would be wasteful — these directories typically contain hundreds of
-        // files and the listing is stable for the wizard's lifetime.
-        QStringList directoryFiles;
-        {
-          QDir dir(artworkDir);
-          const QStringList entries = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
-          directoryFiles.reserve(entries.size());
-          for (const QString &name : entries) {
-            directoryFiles.append(dir.absoluteFilePath(name));
-          }
-        }
-
-        auto candidatesFor = [directoryFiles](const ArtworkWizardDialog::Entry &entry) {
-          return ArtworkCandidates::rank(entry.itemName, directoryFiles);
-        };
-        auto onPick = [db](const ArtworkWizardDialog::Entry &entry, const QString &chosenFilePath) {
-          ItemArtworkStore::ItemArtwork row;
-          row.collectionUuid = entry.collectionUuid;
-          row.path = entry.filePath;
-          // "Front" is the cross-provider primary-cover slot used by the
-          // sidebar gallery and tile renderer; saving here makes the picked
-          // image surface as the item's main artwork immediately.
-          row.artworkType = ItemArtworkStore::StandardTypes::Front;
-          row.manualPath = chosenFilePath;
-          return db->saveItemArtwork(row);
-        };
-
-        ArtworkWizardDialog dialog(this);
-        dialog.setQueue(queue, std::move(candidatesFor), std::move(onPick));
-        dialog.exec();
-
-        // safeReloadCollection so newly-assigned artwork surfaces in the grid
-        // and sidebar without requiring a collection switch.
-        if (m_appManager->getNavigationManager()) {
-          m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-        }
-      });
+  if (m_libraryToolsController) m_libraryToolsController->artworkWizardInteractive();
 }
 
 void MainWindow::showBindingVisualizer() {

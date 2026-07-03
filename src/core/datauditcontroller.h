@@ -5,6 +5,7 @@
 
 #include <QFutureWatcher>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -120,7 +121,11 @@ private:
   void updateLibraryWatch();
 
   DatAuditControllerContext m_ctx;
-  DatAuditDialog *m_dialog = nullptr;
+  /// Cached across opens (hidden, not destroyed, on close). QPointer so a
+  /// destruction elsewhere (parent teardown, a future WA_DeleteOnClose)
+  /// nulls the cache and ensureDialog() self-heals by recreating instead of
+  /// reusing a dangling pointer.
+  QPointer<DatAuditDialog> m_dialog;
   QFutureWatcher<DatLibraryScan::ScanResult> m_libraryWatcher;
   DatLibraryScan::ScanResult m_startupProposals;
 
