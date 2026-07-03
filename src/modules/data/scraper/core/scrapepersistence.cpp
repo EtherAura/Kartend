@@ -302,9 +302,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       }
       // Shared filename: `<scope>_<scopeKey>.<ext>`. Per-game keeps
       // `{baseName}.{ext}`.
-      const QString sharedScopePrefix = write.asset.scope == Scraper::MediaScope::Group
-                                            ? QStringLiteral("group_")
-                                            : QStringLiteral("company_");
+      const QString sharedScopePrefix = Scraper::sharedScopePrefix(write.asset.scope);
       const QString destFile =
           sharedScope ? QDir(destDir).filePath(sharedScopePrefix + write.asset.scopeKey +
                                                QLatin1Char('.') + ext)

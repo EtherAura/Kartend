@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include "scrapertypes.h"
+
 /// Abstract base for metadata / artwork lookup providers.
 ///
 /// Stage 1 (what this file currently supports): web-search providers
@@ -52,6 +54,16 @@ public:
   /// `WebSearch`; Stage 2+ providers will add `MetadataLookup` /
   /// `MediaFetch`.
   [[nodiscard]] virtual Capabilities capabilities() const = 0;
+
+  /// Which catalog-entity types this provider can scrape. Defaults to
+  /// `{Game}` — the per-file unit every provider supports today. The
+  /// entity-scraping sub-tasks (Kartend-ckepd) override this on providers
+  /// that can also scrape Platform / Collection / Category art so the
+  /// registry can resolve an entity-type-aware provider. Returning a list
+  /// (not flags) keeps the door open for entity-type-specific ordering.
+  [[nodiscard]] virtual QList<Scraper::ScrapeEntityType> supportedEntities() const {
+    return {Scraper::ScrapeEntityType::Game};
+  }
 
   /// Returns a search URL for the given query when `WebSearch` is in
   /// `capabilities()`. Implementations should percent-encode the

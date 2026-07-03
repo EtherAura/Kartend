@@ -50,14 +50,15 @@ constexpr int kTransferTimeoutMs = 30000;
 /// verbatim leaks working credentials into scrape.log. START / FINISH log
 /// only url.path() and are unaffected — this is for the ENQ line, which
 /// needs the query string to show media presets.
-QString redactedUrlForLog(const QUrl &url) {
-  static const char *const kSensitiveKeys[] = {"devpassword", "sspassword", "password",
+constexpr const char *kSensitiveQueryKeys[] = {"devpassword", "sspassword", "password",
                                                "passwd",      "apikey",     "api_key",
                                                "token",       "ssid",       "devid"};
+
+QString redactedUrlForLog(const QUrl &url) {
   QUrl sanitized = url;
   QUrlQuery query(sanitized);
   bool changed = false;
-  for (const char *key : kSensitiveKeys) {
+  for (const char *key : kSensitiveQueryKeys) {
     const QString k = QLatin1String(key);
     if (query.hasQueryItem(k)) {
       query.removeAllQueryItems(k);
@@ -71,6 +72,30 @@ QString redactedUrlForLog(const QUrl &url) {
   return sanitized
       .toString(QUrl::RemoveScheme | QUrl::RemoveUserInfo | QUrl::RemovePort | QUrl::RemoveFragment)
       .left(200);
+}
+
+/// Masks the VALUES of @p url's credential-bearing query parameters wherever
+/// they appear in @p text. Qt's QNetworkReply::errorString() embeds the full
+/// request URL ("Error transferring <url> - server replied: ..."), so an
+/// error fold that starts from errorString() carries devpassword /
+/// sspassword verbatim — and that string flows into ErrorContext::details,
+/// userFacingSummary()'s first-line pick, the always-on kartend.errors log,
+/// the scrape-failure UI list, and the persisted resume file. Replacing the
+/// values (raw and percent-encoded forms) rather than re-parsing the URL out
+/// of prose also covers a server body that echoes a credential back.
+QString redactCredentialValues(QString text, const QUrl &url) {
+  const QUrlQuery query(url);
+  for (const char *key : kSensitiveQueryKeys) {
+    const QString k = QLatin1String(key);
+    if (!query.hasQueryItem(k)) continue;
+    for (const QString &value : {query.queryItemValue(k, QUrl::FullyDecoded),
+                                 query.queryItemValue(k, QUrl::FullyEncoded)}) {
+      // Single-character values would shotgun the whole string; real
+      // credentials are longer.
+      if (value.size() >= 2) text.replace(value, QStringLiteral("<redacted>"));
+    }
+  }
+  return text;
 }
 
 /// True if @p host equals one of @p allowedSuffixes or is a subdomain of
@@ -121,6 +146,15 @@ void HttpClient::setRateLimit(const QString &host, int intervalMs, int maxConcur
   // unguarded rate-limit map.
   Q_ASSERT_X(thread() == QThread::currentThread(), "HttpClient::setRateLimit",
              "HttpClient must be driven from its own (main) thread");
+  // Release-mode guard (the assert above compiles out under NDEBUG): a
+  // wrong-thread write would race the main thread's reads of m_rateLimits.
+  // Refuse loudly instead — dropping a policy update is recoverable, a
+  // corrupted QHash is not.
+  if (thread() != QThread::currentThread()) {
+    qCCritical(lcScraperHttp)
+        << "HttpClient::setRateLimit called off its owning thread — ignoring update for" << host;
+    return;
+  }
   if (intervalMs <= 0 && maxConcurrent <= 0) {
     m_rateLimits.remove(host);
     return;
@@ -132,6 +166,18 @@ void HttpClient::setRateLimit(const QString &host, int intervalMs, int maxConcur
 }
 
 void HttpClient::clearPending() {
+  // Kartend-s3hvv: see HttpClient::get — main-thread-only invariant for the
+  // unguarded queue map.
+  Q_ASSERT_X(thread() == QThread::currentThread(), "HttpClient::clearPending",
+             "HttpClient must be driven from its own (main) thread");
+  // Release-mode guard (the assert above compiles out under NDEBUG): a
+  // wrong-thread exchange would race the main thread's queue mutations and the
+  // callbacks would fire on the wrong thread. Refuse loudly — a skipped clear
+  // leaves requests to complete normally, a corrupted QHash is not recoverable.
+  if (thread() != QThread::currentThread()) {
+    qCCritical(lcScraperHttp) << "HttpClient::clearPending called off its owning thread — ignoring";
+    return;
+  }
   // Fire each queued (not-yet-dispatched) request's callback with a cancelled
   // error before dropping it, so a caller waiting on the callback — e.g. a
   // BatchScrapeRunner media-aggregator's --pending count or any in-flight tally
@@ -191,6 +237,22 @@ void HttpClient::get(const QUrl &url, const RawHeaders &headers, ResponseCallbac
   // worker-thread caller fails loudly instead of silently corrupting the maps.
   Q_ASSERT_X(thread() == QThread::currentThread(), "HttpClient::get",
              "HttpClient must be driven from its own (main) thread");
+  // Release-mode guard (the assert above compiles out under NDEBUG): a
+  // wrong-thread get() would race the main thread on every per-host map and
+  // silently corrupt them. Refuse the request loudly instead, resolving the
+  // callback (on the CALLING thread, as an exception to the main-thread
+  // delivery contract — the caller is already off-contract) so a waiting
+  // caller gets an error rather than a hang.
+  if (thread() != QThread::currentThread()) {
+    qCCritical(lcScraperHttp)
+        << "HttpClient::get called off its owning thread — refusing request to host:" << url.host();
+    if (callback) {
+      callback(ErrorContext::error(ErrorCode::InvalidArgument,
+                                   "HttpClient::get called off its owning thread",
+                                   "Scraper::HttpClient::get"));
+    }
+    return;
+  }
   logSslConfigOnce();
   if (!url.isValid()) {
     if (callback) {
@@ -454,8 +516,23 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                 const QByteArray body = reply->read(kMaxErrorBodyBytes);
                 QString details = reply->errorString();
                 if (!body.isEmpty()) {
-                  details += QStringLiteral("\nResponse: ") + QString::fromUtf8(body).trimmed();
+                  // The body is provider-controlled text headed for
+                  // ErrorContext::details and, from there, the always-on
+                  // kartend.errors log — flatten it to one bounded line so
+                  // embedded CR/LF can't forge log entries. The structural
+                  // '\n' before "Response:" is ours, and keeps
+                  // userFacingSummary()'s first-line pick on errorString().
+                  details += QStringLiteral("\nResponse: ") +
+                             ErrorUtils::sanitizedSingleLine(QString::fromUtf8(body));
                 }
+                // errorString() embeds the full request URL, and a server
+                // body can echo credentials back — mask credential query
+                // values before this string fans out to details / summaries /
+                // logs / the resume file (see redactCredentialValues). Both
+                // the original and the (possibly redirected) final URL can
+                // carry the credentials.
+                details = redactCredentialValues(std::move(details), reply->request().url());
+                details = redactCredentialValues(std::move(details), reply->url());
                 // Capture the HTTP status code (when the transport got
                 // far enough to receive one) and any Retry-After header.
                 // ScreenScraperProvider re-maps these into actionable

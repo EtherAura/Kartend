@@ -16,6 +16,7 @@
  */
 
 #include "batchscraperunner.h"
+#include "scrapeskipdecision.h"
 
 #include "applicationcontext.h"
 #include "errorutils.h"
@@ -57,6 +58,10 @@ public:
     /// 0 = leave it unset. 430/431 mark a ScreenScraper quota
     /// exhaustion the runner is expected to stop the batch on.
     int lookupErrorHttpStatus = 0;
+    /// Optional server-detail string stamped onto the lookup error's
+    /// ErrorContext (Qt errorString / response body) — lets a test assert the
+    /// failure summary surfaces it rather than a bare message (Kartend-e6oyu).
+    QString lookupErrorDetails;
     /// Force fetchDetail() to return this error.
     QString detailError;
   };
@@ -101,6 +106,9 @@ public:
                                                    c.lookupError, "stub");
         if (c.lookupErrorHttpStatus != 0) {
           err.withHttpStatus(c.lookupErrorHttpStatus);
+        }
+        if (!c.lookupErrorDetails.isEmpty()) {
+          err.withDetails(c.lookupErrorDetails);
         }
         cb(err);
         return;
@@ -285,7 +293,14 @@ private slots:
   void fillMissingHonoursRefreshWindowSameAsSkip();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
+  void quota429StopsBatch();
+  void notFoundReportedSeparatelyFromErrors();
+  void failureMessageIncludesStatusAndDetail();
+  void failedPathsCapturedForErrorsOnly();
   void skipCurrentItemSkipsOnlyTheDisplayedItem();
+  void remainingPathsEmptyAfterMixedOutcomes();
+  void remainingPathsKeepsQuotaStoppedWork();
+  void consecutiveFatalErrorsTripBreaker();
 };
 
 void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
@@ -306,8 +321,9 @@ void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
 
 void TestBatchScrapeRunner::skipsItemsWithNoCandidates() {
   // Beta isn't in the provider's table → the stub returns empty
-  // candidates for it; the runner counts that as "skipped" rather
-  // than an error.
+  // candidates for it. Post Kartend-e8aag the runner counts that as
+  // "not found" (the provider ran and had no match) rather than "skipped"
+  // or an error.
   auto stub = std::make_shared<StubProvider>();
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
   stub->byQuery[QStringLiteral("Gamma")] = makeMatch("3", "Gamma");
@@ -318,8 +334,122 @@ void TestBatchScrapeRunner::skipsItemsWithNoCandidates() {
   runner.start();
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 2);
-  QCOMPARE(summary.skipped, 1);
+  QCOMPARE(summary.notFound, 1);
+  QCOMPARE(summary.skipped, 0);
   QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::notFoundReportedSeparatelyFromErrors() {
+  // Kartend-e8aag: a provider "not found" — an HTTP 404, or an empty
+  // candidate list (TMDB/MusicBrainz/OpenLibrary signal a miss that way) — is
+  // a routine outcome counted in `notFound`, NOT `errors`. A genuine failure
+  // (here a 403) still lands in `errors` and the failure list.
+  auto stub = std::make_shared<StubProvider>();
+  // Alpha: an HTTP 404 not-found.
+  StubProvider::Canned notFound404;
+  notFound404.lookupError = QStringLiteral("ScreenScraper has no entry for this game (HTTP 404).");
+  notFound404.lookupErrorHttpStatus = 404;
+  stub->byQuery[QStringLiteral("Alpha")] = notFound404;
+  // Beta: an empty candidate list (no match) — also not-found.
+  stub->byQuery[QStringLiteral("Beta")] = StubProvider::Canned{};
+  // Gamma: a real error (HTTP 403 auth) — stays in errors.
+  StubProvider::Canned authFail;
+  authFail.lookupError = QStringLiteral("forbidden");
+  authFail.lookupErrorHttpStatus = 403;
+  stub->byQuery[QStringLiteral("Gamma")] = authFail;
+  // Delta: a clean scrape.
+  stub->byQuery[QStringLiteral("Delta")] = makeMatch("4", "Delta");
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin"),
+                          QStringLiteral("/games/Gamma.bin"), QStringLiteral("/games/Delta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.notFound, 2); // the 404 and the empty-candidate miss
+  QCOMPARE(summary.errors, 1);   // only the 403
+  QCOMPARE(summary.scraped, 1);  // Delta
+  QCOMPARE(summary.skipped, 0);
+  // Not-found items are kept OUT of the failure list — only the real error.
+  QCOMPARE(summary.firstFailures.size(), 1);
+  QVERIFY(summary.firstFailures.first().contains(QStringLiteral("Gamma")));
+}
+
+void TestBatchScrapeRunner::quota429StopsBatch() {
+  // Kartend-oa1ry: a plain HTTP 429 (Too Many Requests) from any provider —
+  // not just ScreenScraper's non-standard 430/431 — stops the batch and leaves
+  // a resume point, mirroring quotaExhaustedStopsBatchAndSkipsRemainingItems.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned quotaHit;
+  quotaHit.lookupError = QStringLiteral("rate limited");
+  quotaHit.lookupErrorHttpStatus = 429;
+  stub->byQuery[QStringLiteral("Item0")] = quotaHit;
+  for (int i = 1; i < 10; ++i) {
+    const QString name = QStringLiteral("Item%1").arg(i);
+    stub->byQuery[name] = makeMatch(QString::number(i), name);
+  }
+  QStringList paths;
+  for (int i = 0; i < 10; ++i) {
+    paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
+  }
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QVERIFY(summary.quotaExhausted);
+  const int processed = summary.processedItems();
+  QVERIFY(processed < 10);      // stopped dispatching before the other nine
+  QCOMPARE(summary.scraped, 0); // nothing after the wall scraped
+}
+
+void TestBatchScrapeRunner::failureMessageIncludesStatusAndDetail() {
+  // Kartend-e6oyu: a generic HTTP failure surfaces the status code and a
+  // server-detail snippet in the recorded failure line, not a bare message.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned httpFail;
+  httpFail.lookupError = QStringLiteral("HTTP request failed");
+  httpFail.lookupErrorHttpStatus = 500;
+  httpFail.lookupErrorDetails = QStringLiteral("Internal Server Error\nResponse: {\"error\":1}");
+  stub->byQuery[QStringLiteral("Alpha")] = httpFail;
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.errors, 1);
+  QCOMPARE(summary.firstFailures.size(), 1);
+  const QString line = summary.firstFailures.first();
+  QVERIFY2(line.contains(QStringLiteral("HTTP 500")), qPrintable(line));
+  QVERIFY2(line.contains(QStringLiteral("Internal Server Error")), qPrintable(line));
+  // The multi-line response body is collapsed to its first line so the raw
+  // blob doesn't bloat the summary list.
+  QVERIFY2(!line.contains(QStringLiteral("Response:")), qPrintable(line));
+}
+
+void TestBatchScrapeRunner::failedPathsCapturedForErrorsOnly() {
+  // Kartend-jjjo5: only items in the `errors` bucket land in failedPaths, by
+  // FULL path. Not-found (404 or empty candidates) and clean scrapes are
+  // excluded — re-scraping a genuine not-found item would just fail again.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned err500; // real error → captured
+  err500.lookupError = QStringLiteral("HTTP request failed");
+  err500.lookupErrorHttpStatus = 500;
+  stub->byQuery[QStringLiteral("Alpha")] = err500;
+  StubProvider::Canned notFound404; // 404 → excluded
+  notFound404.lookupError = QStringLiteral("missing");
+  notFound404.lookupErrorHttpStatus = 404;
+  stub->byQuery[QStringLiteral("Beta")] = notFound404;
+  stub->byQuery[QStringLiteral("Gamma")] = StubProvider::Canned{};  // empty miss → excluded
+  stub->byQuery[QStringLiteral("Delta")] = makeMatch("4", "Delta"); // scraped → excluded
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin"),
+                          QStringLiteral("/games/Gamma.bin"), QStringLiteral("/games/Delta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.errors, 1);
+  QCOMPARE(summary.notFound, 2);
+  QCOMPARE(summary.scraped, 1);
+  QCOMPARE(summary.failedPaths.size(), 1);
+  QCOMPARE(summary.failedPaths.first(), QStringLiteral("/games/Alpha.bin"));
 }
 
 void TestBatchScrapeRunner::skipCurrentItemSkipsOnlyTheDisplayedItem() {
@@ -620,9 +750,9 @@ void TestBatchScrapeRunner::decideScrapeSkipBranches() {
   // The skip decision, factored out of shouldSkipScrapedItem so its branches
   // are testable without DB/filesystem context (Kartend audit 2w4wz). Field
   // order: {mode, writeMetadata, metaPresent, metaWithinWindow, allMediaCovered}.
-  using Inputs = Scraper::BatchScrapeRunner::SkipDecisionInputs;
+  using Inputs = Scraper::SkipDecisionInputs;
   using Mode = Scraper::RescrapeMode;
-  const auto skip = [](Inputs in) { return Scraper::BatchScrapeRunner::decideScrapeSkip(in); };
+  const auto skip = [](Inputs in) { return Scraper::decideScrapeSkip(in); };
 
   // Skip mode: any present marker within the window is enough; stale or absent
   // markers release the item back for a re-scrape.
@@ -976,6 +1106,84 @@ void TestBatchScrapeRunner::quotaExhaustedAbortsInFlightItemsAtConcurrency() {
   // The crux: not one in-flight sibling scraped despite all eight being
   // dispatched before the 430 landed (pre-fix this was ~7).
   QCOMPARE(summary.scraped, 0);
+}
+
+void TestBatchScrapeRunner::remainingPathsEmptyAfterMixedOutcomes() {
+  // Resume bookkeeping: every real terminal verdict (success, error,
+  // not-found) leaves the remaining list, trimmed by identity — a finished
+  // batch has nothing left to resume even when failures interleave with
+  // successes. (The old service-side positional removeFirst dropped the head
+  // whenever ANY item succeeded, so an errored head item leaked a completed
+  // one into the resume snapshot.)
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned bad;
+  bad.lookupError = QStringLiteral("HTTP 500");
+  stub->byQuery[QStringLiteral("Beta")] = bad;
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha (USA)");
+  stub->byQuery[QStringLiteral("Gamma")] = makeMatch("3", "Gamma (USA)");
+
+  // The errored item sits at the head — exactly the interleaving that used to
+  // trim the wrong entry.
+  const QStringList paths{QStringLiteral("/games/Beta.bin"), QStringLiteral("/games/Alpha.bin"),
+                          QStringLiteral("/games/Gamma.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 2);
+  QCOMPARE(summary.errors, 1);
+  QVERIFY2(runner.remainingPaths().isEmpty(),
+           qPrintable(runner.remainingPaths().join(QLatin1Char(','))));
+}
+
+void TestBatchScrapeRunner::remainingPathsKeepsQuotaStoppedWork() {
+  // Quota stop: the quota-erroring item never really got scraped and the rest
+  // were never dispatched — all of them must stay in the remaining list so
+  // the service's persisted resume point retries exactly the killed work.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned quota;
+  quota.lookupError = QStringLiteral("quota exhausted");
+  quota.lookupErrorHttpStatus = 430;
+  stub->byQuery[QStringLiteral("Alpha")] = quota;
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta (USA)");
+  stub->byQuery[QStringLiteral("Gamma")] = makeMatch("3", "Gamma (USA)");
+
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin"),
+                          QStringLiteral("/games/Gamma.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QVERIFY(summary.quotaExhausted);
+  QCOMPARE(runner.remainingPaths(), paths);
+}
+
+void TestBatchScrapeRunner::consecutiveFatalErrorsTripBreaker() {
+  // Circuit breaker: persistent identical fatal responses (403 bad
+  // credentials here) must stop dispatch after the threshold instead of
+  // firing one doomed request per item — and the un-dispatched work must
+  // stay in the resume list, like a quota stop.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned denied;
+  denied.lookupError = QStringLiteral("forbidden");
+  denied.lookupErrorHttpStatus = 403;
+  QStringList paths;
+  for (int i = 0; i < 8; ++i) {
+    const QString name = QStringLiteral("Item%1").arg(i);
+    stub->byQuery[name] = denied;
+    paths.append(QStringLiteral("/games/%1.bin").arg(name));
+  }
+
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+
+  // The 5th consecutive 403 trips the breaker (its own item is counted as an
+  // error, then dispatch stops), so exactly the threshold count errored and
+  // everything from the tripping item onward stays queued for resume.
+  QVERIFY(summary.quotaExhausted);
+  QCOMPARE(summary.errors, 5);
+  QCOMPARE(summary.scraped, 0);
+  QCOMPARE(runner.remainingPaths().size(), paths.size() - 4);
+  QVERIFY(runner.remainingPaths().contains(QStringLiteral("/games/Item7.bin")));
 }
 
 QTEST_MAIN(TestBatchScrapeRunner)

@@ -3,8 +3,8 @@
 #include "collection/generalsettings.h"
 #include "formbuilders.h"
 #include "scrapelogger.h"
+#include "screenscraperaccount.h"
 #include "screenscraperparser.h"
-#include "screenscraperprovider.h"
 #include "settingsmodel.h"
 
 #include <QCheckBox>

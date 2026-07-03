@@ -73,6 +73,18 @@ public:
   /// runs once. Some providers' search endpoints already return
   /// everything needed — those can pass through and return the candidate
   /// data verbatim.
+  ///
+  /// Caching contract with the batch runner: a provider MAY answer this from
+  /// an internal cache populated during lookup() — but the cache must be
+  /// keyed on `candidate.providerSpecificId` and hold enough entries that an
+  /// interleaved lookup for ANOTHER item (the runner pipelines items when
+  /// itemConcurrency > 1) cannot displace this candidate's detail between
+  /// its lookup completing and fetchDetail arriving. A single-slot
+  /// "last lookup" cache violates the contract. Threading: lookup(),
+  /// fetchDetail(), and the HTTP completions all run on the main-thread
+  /// event loop, so no locking is needed — only id-keyed, sufficient
+  /// capacity. (ScreenScraperProvider's 64-entry FIFO detail cache is the
+  /// reference implementation.)
   virtual void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) = 0;
 
   /// Download the bytes of a single media asset. Provider-supplied so
@@ -80,6 +92,23 @@ public:
   /// client / auth headers. The result dialog calls this once per
   /// checked MediaAsset on Apply.
   virtual void fetchMediaBytes(const QUrl &url, MediaCallback callback) = 0;
+
+  /// Entity-scope counterpart to lookup()+fetchDetail(): fetch metadata + art
+  /// for a non-game entity (platform / collection / category) the provider
+  /// supports. Reuses the ScrapedItem result shape — its `media` list carries
+  /// the entity art, which the persistence layer routes to the right target.
+  /// The default reports "not supported" so existing Game-only providers need
+  /// no change; providers that advertise the entity type in supportedEntities()
+  /// override this. Fleshed out by the entity-scraping sub-tasks
+  /// (Kartend-ckepd.4 / .5). Reuses DetailCallback (same Result<ScrapedItem>).
+  virtual void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) {
+    Q_UNUSED(target);
+    if (callback) {
+      callback(ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::InvalidArgument,
+          QStringLiteral("entity scraping not supported by this provider")));
+    }
+  }
 
   /// Provider-supplied snapshot of the upstream's realtime health,
   /// surfaced by the scrape-result dialog before the user clicks
@@ -115,6 +144,21 @@ public:
   /// return the quota parsed from the `ssuser` block every lookup /
   /// detail response carries.
   [[nodiscard]] virtual Scraper::QuotaStatus quotaStatus() const { return {}; }
+
+  /// True when @p err signals THIS provider's request quota is spent — the
+  /// scrape drivers then stop dispatching, keep the un-finished work queued,
+  /// and persist it as the resume point instead of machine-gunning doomed
+  /// requests (which, on ScreenScraper, deepens the failed-lookup ban).
+  /// The default covers RFC 6585's 429 plus ScreenScraper's non-standard 430
+  /// (daily request quota) / 431 (daily failed-lookup quota) — the latter two
+  /// are unassigned codes no other integrated provider emits, so inheriting
+  /// the default is harmless for them. A provider whose upstream signals
+  /// quota differently (custom status, an error-body marker mapped into the
+  /// ErrorContext) overrides this; the drivers carry no per-provider
+  /// status-code knowledge of their own.
+  [[nodiscard]] virtual bool isQuotaExhausted(const ErrorUtils::ErrorContext &err) const {
+    return err.httpStatus == 429 || err.httpStatus == 430 || err.httpStatus == 431;
+  }
 
   /// Optional progress reporter for long-running lookup stages
   /// (hashing a multi-GB ROM, extracting an archive, awaiting a slow

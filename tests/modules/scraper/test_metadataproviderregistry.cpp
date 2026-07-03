@@ -2,15 +2,21 @@
 // per-category filter, and the synonym normalisation. Pure logic, no
 // network, no filesystem; the WebSearchProvider URL builder gets exercised
 // indirectly through the curated list's searchUrl() outputs.
+#include <memory>
+
 #include <QObject>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTest>
 #include <QUrl>
+#include <QVariant>
 
+#include "collection/collectionconfig.h"
+#include "metadatalookupprovider.h"
 #include "metadataprovider.h"
 #include "metadataproviderregistry.h"
+#include "scrapertypes.h"
 #include "websearchprovider.h"
 
 class TestMetadataProviderRegistry : public QObject {
@@ -31,7 +37,30 @@ private slots:
   void defaultScraperForType_mapsStandardTypesToProviders();
   void defaultScraperForType_emptyForUntaggedAndUnmatched();
   void webSearchProvider_emptyQueryReturnsInvalidUrl();
+  void builtIn_everyProviderSupportsGameEntityByDefault();
+  void entityScrapeTarget_defaultsAndMetatypeRoundTrip();
+  void forEntity_resolvesGameProvidersAndEmptyForUnsupported();
+  void claimLookupProvider_overrideWinsOverCategory();
+  void claimLookupProvider_unusableOverrideFallsBackToCategory();
+  void claimLookupProvider_picksFirstLookupCapableForCategory();
+  void claimLookupProvider_untaggedFallsBackToFirstLookupCapable();
+  void claimLookupProvider_unmatchedCustomTagReturnsNull();
+  void claimLookupProvider_specMetadataMatchesBuiltIn();
 };
+
+namespace {
+
+/// Minimal CollectionConfig for claimLookupProvider — the helper selects on
+/// exactly two fields: the free-form `type` and the per-collection scraper
+/// override id.
+CollectionConfig cfgFor(const QString &type, const QString &overrideId = {}) {
+  CollectionConfig cfg;
+  cfg.type = type;
+  cfg.scraperOverrides.scraperProviderId = overrideId;
+  return cfg;
+}
+
+} // namespace
 
 void TestMetadataProviderRegistry::builtIn_isNonEmptyAndAllIdsUnique() {
   const auto providers = MetadataProviderRegistry::builtIn();
@@ -242,6 +271,147 @@ void TestMetadataProviderRegistry::webSearchProvider_emptyQueryReturnsInvalidUrl
   QVERIFY(!p.searchUrl("").isValid());
   QVERIFY(!p.searchUrl("   ").isValid());
   QVERIFY(p.searchUrl("hello").isValid());
+}
+
+void TestMetadataProviderRegistry::builtIn_everyProviderSupportsGameEntityByDefault() {
+  // Kartend-ckepd.1: supportedEntities() defaults to {Game}; no shipped
+  // provider has opted into Platform/Collection/Category yet, so every curated
+  // provider must still report Game (and nothing else has regressed it away).
+  for (const auto &p : MetadataProviderRegistry::builtIn()) {
+    QVERIFY2(p->supportedEntities().contains(Scraper::ScrapeEntityType::Game),
+             qPrintable(QString("Provider %1 does not support the Game entity").arg(p->id())));
+  }
+}
+
+void TestMetadataProviderRegistry::entityScrapeTarget_defaultsAndMetatypeRoundTrip() {
+  // Default target is a Game with no identity and an unset collection index.
+  const Scraper::EntityScrapeTarget def;
+  QCOMPARE(def.type, Scraper::ScrapeEntityType::Game);
+  QVERIFY(def.identity.isEmpty());
+  QCOMPARE(def.collectionIndex, -1);
+  // Metatype is registered (Q_DECLARE_METATYPE) so the descriptor can ride in a
+  // CollectionJob / queued signal once entity jobs are dispatched.
+  const Scraper::EntityScrapeTarget t{Scraper::ScrapeEntityType::Platform, QStringLiteral("42"), 3};
+  const QVariant v = QVariant::fromValue(t);
+  QVERIFY(v.isValid());
+  const auto rt = v.value<Scraper::EntityScrapeTarget>();
+  QCOMPARE(rt.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(rt.identity, QStringLiteral("42"));
+  QCOMPARE(rt.collectionIndex, 3);
+}
+
+void TestMetadataProviderRegistry::forEntity_resolvesGameProvidersAndEmptyForUnsupported() {
+  // Kartend-ckepd.2: forEntity filters by supportedEntities(). Every provider
+  // supports Game. ScreenScraper opted into Platform (Kartend-ckepd.4) — it's
+  // the only one so far. Collection/Category have no provider yet (ckepd.5).
+  const auto all = MetadataProviderRegistry::builtIn();
+  const auto gameProviders =
+      MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Game);
+  QCOMPARE(gameProviders.size(), static_cast<int>(all.size()));
+  const auto platformProviders =
+      MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(platformProviders.size(), 1);
+  QCOMPARE(platformProviders.first()->id(), QStringLiteral("screenscraper"));
+  QVERIFY(
+      MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Collection).isEmpty());
+  QVERIFY(MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Category).isEmpty());
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_overrideWinsOverCategory() {
+  // An explicit per-collection override naming a lookup-capable provider wins
+  // even when the collection type would resolve to a different provider.
+  const auto claimed = MetadataProviderRegistry::claimLookupProvider(
+      cfgFor(QStringLiteral("games"), QStringLiteral("tmdb")));
+  QVERIFY(claimed);
+  QCOMPARE(claimed->id(), QStringLiteral("tmdb"));
+  QVERIFY(claimed->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup));
+  // The persisted override may carry stray whitespace — trimmed before match
+  // (parity with the old ScraperController picker, which trimmed at the call
+  // site).
+  const auto padded = MetadataProviderRegistry::claimLookupProvider(
+      cfgFor(QStringLiteral("games"), QStringLiteral("  tmdb  ")));
+  QVERIFY(padded);
+  QCOMPARE(padded->id(), QStringLiteral("tmdb"));
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_unusableOverrideFallsBackToCategory() {
+  // An override naming a URL-only provider (imdb has no MetadataLookup) is
+  // unusable for a scrape — fall through to the category path.
+  const auto urlOnly = MetadataProviderRegistry::claimLookupProvider(
+      cfgFor(QStringLiteral("video"), QStringLiteral("imdb")));
+  QVERIFY(urlOnly);
+  QCOMPARE(urlOnly->id(), QStringLiteral("tmdb"));
+  // An override naming no registered provider at all falls back the same way.
+  const auto unknown = MetadataProviderRegistry::claimLookupProvider(
+      cfgFor(QStringLiteral("video"), QStringLiteral("no-such-provider")));
+  QVERIFY(unknown);
+  QCOMPARE(unknown->id(), QStringLiteral("tmdb"));
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_picksFirstLookupCapableForCategory() {
+  // No override: the first lookup-capable provider whose category matches the
+  // (normalised) collection type wins — same mapping the creation dialog's
+  // defaultScraperForType exposes.
+  QCOMPARE(MetadataProviderRegistry::claimLookupProvider(cfgFor(QStringLiteral("games")))->id(),
+           QStringLiteral("screenscraper"));
+  // Synonym ("movies" → video) and case-insensitivity resolve identically.
+  QCOMPARE(MetadataProviderRegistry::claimLookupProvider(cfgFor(QStringLiteral("Movies")))->id(),
+           QStringLiteral("tmdb"));
+  QCOMPARE(MetadataProviderRegistry::claimLookupProvider(cfgFor(QStringLiteral("Audio")))->id(),
+           QStringLiteral("musicbrainz"));
+  QCOMPARE(MetadataProviderRegistry::claimLookupProvider(cfgFor(QStringLiteral("books")))->id(),
+           QStringLiteral("openlibrary"));
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_untaggedFallsBackToFirstLookupCapable() {
+  // Untagged collection: forCategory("") surfaces the full menu, so the claim
+  // resolves to the first lookup-capable provider in display order.
+  const auto claimed = MetadataProviderRegistry::claimLookupProvider(cfgFor(QString()));
+  QVERIFY(claimed);
+  QCOMPARE(claimed->id(), QStringLiteral("screenscraper"));
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_unmatchedCustomTagReturnsNull() {
+  // A custom tag matching no provider category resolves to nothing — the
+  // caller reports "no provider applies" instead of scraping with a random
+  // provider.
+  QVERIFY(!MetadataProviderRegistry::claimLookupProvider(cfgFor(QStringLiteral("homebrew"))));
+}
+
+void TestMetadataProviderRegistry::claimLookupProvider_specMetadataMatchesBuiltIn() {
+  // Drift guard: claimLookupProvider selects on the registry's static spec
+  // table WITHOUT constructing the non-matching providers, so the table's
+  // id / lookup-capability / category mirrors of the provider classes must
+  // stay in sync with what the constructed instances actually report.
+  //
+  // Per-id + capability check: claiming with an unmatched type and an
+  // explicit override must succeed exactly for the lookup-capable providers
+  // (the unmatched type makes the category fallback yield null, isolating
+  // the override path).
+  const QString unmatched = QStringLiteral("zz-no-such-category");
+  for (const auto &p : MetadataProviderRegistry::builtIn()) {
+    const auto claimed = MetadataProviderRegistry::claimLookupProvider(cfgFor(unmatched, p->id()));
+    const bool lookupCapable =
+        p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup);
+    if (lookupCapable) {
+      QVERIFY2(claimed, qPrintable(QString("claim failed for lookup-capable %1").arg(p->id())));
+      QCOMPARE(claimed->id(), p->id());
+      QVERIFY(claimed->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup));
+    } else {
+      QVERIFY2(!claimed,
+               qPrintable(QString("claim built a non-lookup provider for %1").arg(p->id())));
+    }
+  }
+  // Category check: for every canonical tag the claim must land on the same
+  // provider defaultScraperForType computes from the constructed instances'
+  // categories() lists.
+  const QStringList canonical = {QStringLiteral("games"), QStringLiteral("video"),
+                                 QStringLiteral("audio"), QStringLiteral("reference")};
+  for (const QString &cat : canonical) {
+    const auto claimed = MetadataProviderRegistry::claimLookupProvider(cfgFor(cat));
+    QVERIFY2(claimed, qPrintable(QString("no claim for canonical category %1").arg(cat)));
+    QCOMPARE(claimed->id(), MetadataProviderRegistry::defaultScraperForType(cat));
+  }
 }
 
 QTEST_MAIN(TestMetadataProviderRegistry)

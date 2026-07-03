@@ -1,11 +1,10 @@
 // Tests for ScreenScraperProvider's request-URL construction (Kartend-hsboz).
 //
 // buildJeuInfosUrl turns (credentials, romnom, systemeid, hashes, hasUser)
-// into the jeuInfos.php query. It is a private member but was extracted
-// precisely so the SS query shape can be regression-tested without the
-// network; TestScreenScraperProvider is a friend (see the class declaration)
-// so it can call the builder directly. The builder touches no member state,
-// so one shared provider with empty accessors is sufficient.
+// into the jeuInfos.php query. It lives in the ScreenScraperUrls namespace
+// (screenscraperurls.{h,cpp}) precisely so the SS query shape can be
+// regression-tested without the network or a provider instance; the
+// provider instance here only backs the entity/hash-cache cases.
 //
 // What matters and is covered here: dev credentials always ride, user
 // credentials only when hasUser; system/rom and the static softname/output
@@ -14,23 +13,28 @@
 // credentials in the query (never the path); and a credential containing
 // query delimiters cannot inject or override other params.
 #include <memory>
+#include <optional>
 
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "collection/generalsettings.h"
 #include "dbmigrations.h"
 #include "filehashcache.h"
 #include "romhasher.h"
 #include "screenscrapercatalogmanager.h"
 #include "screenscraperprovider.h"
+#include "screenscrapersystemcache.h"
+#include "screenscraperurls.h"
 
 class TestScreenScraperProvider : public QObject {
   Q_OBJECT
@@ -39,7 +43,8 @@ class TestScreenScraperProvider : public QObject {
 
   QUrlQuery build(const Credentials &creds, const QString &romnom, int systemeid,
                   const RomHasher::Result &hashes, bool hasUser) {
-    return QUrlQuery(m_provider->buildJeuInfosUrl(creds, romnom, systemeid, hashes, hasUser));
+    return QUrlQuery(
+        ScreenScraperUrls::buildJeuInfosUrl(creds, romnom, systemeid, hashes, hasUser));
   }
 
 private slots:
@@ -54,13 +59,19 @@ private slots:
   void hashRegularFileCached_cacheHit_returnsCachedNotRehashed();
   void hashRegularFileCached_cacheMiss_hashesAndStores();
 
+  // Kartend-ckepd.4: platform-entity scraping.
+  void supportedEntities_includesPlatform();
+  void buildSystemeMediaUrl_mapsParamsAndGatesUser();
+  void fetchEntity_userCredsRequireBothIdAndPassword();
+
 private:
   std::unique_ptr<ScreenScraperProvider> m_provider;
 };
 
 void TestScreenScraperProvider::initTestCase() {
-  // Empty accessors: buildJeuInfosUrl never reads them, and the constructor
-  // only forwards a null settings pointer to registerHostThrottles.
+  // Empty accessors: the URL builders live in ScreenScraperUrls and take
+  // credentials explicitly; the constructor only forwards a null settings
+  // pointer to registerHostThrottles.
   m_provider =
       std::make_unique<ScreenScraperProvider>(ScreenScraperProvider::GeneralSettingsAccessor{},
                                               ScreenScraperProvider::CollectionAccessor{});
@@ -151,7 +162,8 @@ void TestScreenScraperProvider::endpointIsHttpsApiHost_andCredentialsStayInQuery
   creds.devPassword = QStringLiteral("secretpw");
   const RomHasher::Result hashes;
 
-  const QUrl url = m_provider->buildJeuInfosUrl(creds, QStringLiteral("rom"), 1, hashes, false);
+  const QUrl url =
+      ScreenScraperUrls::buildJeuInfosUrl(creds, QStringLiteral("rom"), 1, hashes, false);
   QCOMPARE(url.scheme(), QStringLiteral("https"));
   QCOMPARE(url.host(), QStringLiteral("api.screenscraper.fr"));
   QCOMPARE(url.path(), QStringLiteral("/api2/jeuInfos.php"));
@@ -270,6 +282,109 @@ void TestScreenScraperProvider::hashRegularFileCached_cacheMiss_hashesAndStores(
     db.close();
   }
   QSqlDatabase::removeDatabase(verifyConn);
+}
+
+void TestScreenScraperProvider::supportedEntities_includesPlatform() {
+  // Kartend-ckepd.4: ScreenScraper opts into Platform entity scraping (plus Game).
+  const auto entities = m_provider->supportedEntities();
+  QVERIFY(entities.contains(Scraper::ScrapeEntityType::Game));
+  QVERIFY(entities.contains(Scraper::ScrapeEntityType::Platform));
+}
+
+void TestScreenScraperProvider::buildSystemeMediaUrl_mapsParamsAndGatesUser() {
+  // The mediaSysteme.php URL carries systemeid + media type + dev creds,
+  // gates user creds on hasUser, and omits output=json (it returns media
+  // bytes, not JSON). Live-API verified: the media parameter must be the
+  // region-qualified token — a bare "wheel" answers 200 "NOMEDIA" even for
+  // systems that have the art, so the builder appends "(wor)".
+  Credentials creds;
+  creds.devId = QStringLiteral("dev123");
+  creds.devPassword = QStringLiteral("devpw");
+  creds.userId = QStringLiteral("user42");
+  creds.userPassword = QStringLiteral("userpw");
+
+  const QUrl url = ScreenScraperUrls::buildSystemeMediaUrl(creds, 7, QStringLiteral("wheel"),
+                                                           /*hasUser=*/false);
+  QCOMPARE(url.host(), QStringLiteral("api.screenscraper.fr"));
+  QVERIFY(url.path().endsWith(QStringLiteral("/mediaSysteme.php")));
+  const QUrlQuery q(url);
+  QCOMPARE(q.queryItemValue(QStringLiteral("systemeid")), QStringLiteral("7"));
+  QCOMPARE(q.queryItemValue(QStringLiteral("media")), QStringLiteral("wheel(wor)"));
+  QCOMPARE(q.queryItemValue(QStringLiteral("devid")), QStringLiteral("dev123"));
+  QCOMPARE(q.queryItemValue(QStringLiteral("devpassword")), QStringLiteral("devpw"));
+  QVERIFY(!q.hasQueryItem(QStringLiteral("output"))); // media endpoint, not JSON
+  QVERIFY(!q.hasQueryItem(QStringLiteral("ssid")));   // user creds gated off
+
+  // hasUser=true adds ssid/sspassword.
+  const QUrlQuery q2(ScreenScraperUrls::buildSystemeMediaUrl(creds, 7,
+                                                             QStringLiteral("illustration"),
+                                                             /*hasUser=*/true));
+  QCOMPARE(q2.queryItemValue(QStringLiteral("ssid")), QStringLiteral("user42"));
+  QCOMPARE(q2.queryItemValue(QStringLiteral("sspassword")), QStringLiteral("userpw"));
+  QCOMPARE(q2.queryItemValue(QStringLiteral("media")), QStringLiteral("illustration(wor)"));
+}
+
+void TestScreenScraperProvider::fetchEntity_userCredsRequireBothIdAndPassword() {
+  // fetchEntity must gate ssid/sspassword on BOTH fields being set — matching
+  // runLookupAfterHash and the account probes. Gating on the id alone appended
+  // `ssid=<id>&sspassword=` for a user with a cleared password and made SS
+  // reject every platform media URL with a login error.
+  //
+  // Headless: seed a fresh systems catalog into the sandboxed disk cache so
+  // ensureSystemsCatalog resolves synchronously with no network round-trip.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  QVERIFY(!cachePath.isEmpty());
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  blob.insert(QStringLiteral("user_id"), QStringLiteral("user42")); // password NOT set
+
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY2(result.has_value(),
+           "fetchEntity callback did not fire synchronously from the seeded cache");
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  QVERIFY(!result->value().media.isEmpty());
+  for (const auto &asset : result->value().media) {
+    const QUrlQuery q(asset.url);
+    QCOMPARE(q.queryItemValue(QStringLiteral("devid")), QStringLiteral("dev123"));
+    QVERIFY2(!q.hasQueryItem(QStringLiteral("ssid")),
+             "ssid emitted for a user with a cleared password");
+    QVERIFY2(!q.hasQueryItem(QStringLiteral("sspassword")),
+             "empty sspassword emitted for a user with a cleared password");
+  }
+
+  // With both fields present the same provider (the accessor re-reads the
+  // settings on every call) emits user credentials on every media URL.
+  blob.insert(QStringLiteral("user_password"), QStringLiteral("userpw"));
+  result.reset();
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY(result->isOk());
+  QVERIFY(!result->value().media.isEmpty());
+  for (const auto &asset : result->value().media) {
+    const QUrlQuery q(asset.url);
+    QCOMPARE(q.queryItemValue(QStringLiteral("ssid")), QStringLiteral("user42"));
+    QCOMPARE(q.queryItemValue(QStringLiteral("sspassword")), QStringLiteral("userpw"));
+  }
+
+  // Tidy the sandboxed cache so later runs re-seed deterministically.
+  QVERIFY(QFile::remove(cachePath));
 }
 
 QTEST_MAIN(TestScreenScraperProvider)

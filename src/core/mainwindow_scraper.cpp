@@ -1,15 +1,15 @@
-// MainWindow's marquee-shim entry points + IMainWindow forwarders to the
-// extracted ScraperController (Kartend-hzef step 3).
+// MainWindow's IMainWindow forwarders into the extracted scraper / DAT-audit
+// controllers (Kartend-hzef step 3).
 //
 // The scraper-flow methods (openScraperDialog + promptResumePendingScrapeIfAny)
-// and the pickLookupProvider helper moved to scrapercontroller.{h,cpp}. The
-// IMainWindow virtual stays here so callers reaching MainWindow through the
-// interface (interaction context menu, menu lambda) don't need to know about
-// the controller; it just forwards.
-//
-// The marquee forwarders are too small to need their own TU — they stay
-// because MarqueeController is owned by MainWindow and these are the only
-// other entry points in this file's surface area.
+// and the pickLookupProvider helper moved to scrapercontroller.{h,cpp}; the
+// DAT-audit flows live in datauditcontroller.{h,cpp}. The IMainWindow
+// virtuals stay here so callers reaching MainWindow through the interface
+// (interaction context menu, menu lambda, settings panel) don't need to know
+// about the controllers; they just forward. datAuditStatusForCollection is
+// the one real body — a short-lived app-DB read for the settings panel's
+// audit hint. The marquee shims that used to ride along here moved to
+// mainwindow.cpp's grab-bag.
 
 #include <QSqlDatabase>
 #include <QStandardPaths>
@@ -21,21 +21,8 @@
 #include "datauditprofile.h"
 #include "dataudittypes.h"
 #include "mainwindow.h"
-#include "marqueecontroller.h"
 #include "pathutils.h"
 #include "scrapercontroller.h"
-
-void MainWindow::applyMarqueeSettings() {
-  if (m_marqueeController) {
-    m_marqueeController->applyMarqueeSettings();
-  }
-}
-
-void MainWindow::updateMarqueeArtwork() {
-  if (m_marqueeController) {
-    m_marqueeController->updateMarqueeArtwork();
-  }
-}
 
 void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
   if (m_scraperController) {

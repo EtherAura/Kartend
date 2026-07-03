@@ -1,5 +1,9 @@
 target_sources(kartend_data PRIVATE
   batchscraperunner.cpp
+  entityscrapecoordinator.cpp
+  scrapelock.cpp
+  scrapependingstate.cpp
+  scrapeskipdecision.cpp
   scraperservice.cpp
   scrapewriteworker.cpp
   scrapepersistence.cpp
@@ -10,6 +14,10 @@ target_sources(kartend_data PRIVATE
   scraperretrypolicy.cpp
   scrapedownloaddispatcher.cpp
   batchscraperunner.h
+  entityscrapecoordinator.h
+  scrapelock.h
+  scrapependingstate.h
+  scrapeskipdecision.h
   scraperretrypolicy.h
   scrapedownloaddispatcher.h
   scrapeassetdedup.h

@@ -21,6 +21,7 @@
 #include <functional>
 #include <memory>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 
 QT_BEGIN_NAMESPACE
@@ -31,6 +32,7 @@ class ArtworkManager;
 class DetailsPaneManager;
 class IDatabaseManager;
 class InteractionManager;
+class MetadataLookupProvider;
 class NavigationManager;
 class ScrapeResultDialog;
 class ScrollManager;
@@ -43,6 +45,19 @@ template <typename T> class QList;
 namespace Scraper {
 class ScraperService;
 }
+
+namespace ScraperControllerInternal {
+/// The shared per-collection provider-builder closure openScraperDialog /
+/// promptResumePendingScrapeIfAny wire into the dialog + service contexts.
+/// Each call resolves the collection's scraper through
+/// MetadataProviderRegistry::claimLookupProvider (override id first, else
+/// first category match). Declared here — rather than staying file-local in
+/// scrapercontroller.cpp — as a test seam: the integration suite exercises
+/// the per-index claim path directly, which is otherwise only observable
+/// through a live scrape. Production callers stay inside the controller.
+[[nodiscard]] std::function<std::shared_ptr<MetadataLookupProvider>(int)>
+makeProviderBuilder(QList<CollectionConfig> *collections, GeneralSettings *generalSettings);
+} // namespace ScraperControllerInternal
 
 struct ScraperControllerContext {
   /// Parent widget for the dialog + message boxes — the live MainWindow.
@@ -103,13 +118,13 @@ private:
 
   /// Cached dialog — constructed on first openScraperDialog, hidden (not
   /// destroyed) on close so the widget tree survives across re-opens.
-  /// Reset to nullptr if the dialog is force-destroyed elsewhere.
-  ScrapeResultDialog *m_scraperDialog = nullptr;
-  /// Per-instance guard so each controller wires its reused dialog's
-  /// unifiedScrapeFinished handler exactly once. Kartend-r2722: was a
-  /// process-wide static, so a 2nd ScraperController never connected and its
-  /// scrapes produced no summary / no grid refresh.
-  bool m_unifiedFinishedConnected = false;
+  /// QPointer so a destruction elsewhere (parent teardown, a future
+  /// WA_DeleteOnClose) nulls the cache and the `if (!m_scraperDialog)`
+  /// check self-heals by recreating instead of reusing a dangling pointer.
+  /// The unifiedScrapeFinished housekeeping handler is connected inside the
+  /// construction block in openScraperDialog, so it is wired exactly once
+  /// per dialog instance without an ad-hoc connected-yet flag.
+  QPointer<ScrapeResultDialog> m_scraperDialog;
 };
 
 #endif // SCRAPERCONTROLLER_H

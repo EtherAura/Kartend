@@ -30,10 +30,11 @@ kartend_add_test(NAME NavigationStackManager
   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
-# DbMigrations tests (sqlite in-memory, no UI)
+# DbMigrations tests (real sqlite, no UI; kartend_data for the shared
+# MigratedDb fixture's production bootstrap in the reopen test)
 kartend_add_test(NAME DbMigrations
   SOURCES utils/db/test_dbmigrations.cpp
-  LINK kartend_utils
+  LINK kartend_data kartend_api kartend_utils
 )
 
 # FileHashCache tests (schema v16, in-memory sqlite)

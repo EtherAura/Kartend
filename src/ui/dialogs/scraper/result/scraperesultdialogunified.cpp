@@ -75,6 +75,16 @@ ScrapeResultDialogUnified::ScrapeResultDialogUnified(ScrapeResultDialog *dlg)
 
 ScrapeResultDialogUnified::~ScrapeResultDialogUnified() = default;
 
+void ScrapeResultDialogUnified::resetRunState() {
+  // Run-scoped controller state. The session-scoped members
+  // (m_allSeenCustomKeys / m_customFieldEdits / m_typedChipCount and
+  // m_lastQuotaResetText) deliberately survive across runs — see the
+  // header docs.
+  m_rateSamples.clear();
+  m_interactiveItems.clear();
+  m_shownCollectionName.clear();
+}
+
 namespace {
 /// Shorten provider-specific keys for the label cell so every label
 /// fits in the fixed label-column width. Common SS prefixes
@@ -448,9 +458,9 @@ QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
     extrasLayout->addWidget(makeChipPair(field.label, edit));
   }
   // populateCustomFields appends custom-key chips AFTER these typed
-  // chips. m_dlg->m_typedChipCount marks the boundary so re-renders only
+  // chips. m_typedChipCount marks the boundary so re-renders only
   // tear down the custom chips, leaving typed chips in place.
-  m_dlg->m_typedChipCount = extrasLayout->count();
+  m_typedChipCount = extrasLayout->count();
   postOuter->addWidget(m_dlg->m_liveExtrasContainer);
 
   // Add the backdrop frame to the outer vertical column.
@@ -491,7 +501,7 @@ QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
       QStringLiteral("screenscraper_id"),
       QStringLiteral("topstaff"),
   };
-  for (const QString &k : kKnownSSCustomKeys) m_dlg->m_allSeenCustomKeys.insert(k);
+  for (const QString &k : kKnownSSCustomKeys) m_allSeenCustomKeys.insert(k);
   // Initial render with empty values — populateCustomFields handles
   // the persistent-cell creation against the seeded union.
   populateCustomFields({});
@@ -620,24 +630,24 @@ void ScrapeResultDialogUnified::populateCustomFields(const QHash<QString, QStrin
   // emitted mid-scrape get a placeholder chip added to the flow.
   bool newKeyAdded = false;
   for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
-    if (!m_dlg->m_allSeenCustomKeys.contains(it.key())) {
-      m_dlg->m_allSeenCustomKeys.insert(it.key());
+    if (!m_allSeenCustomKeys.contains(it.key())) {
+      m_allSeenCustomKeys.insert(it.key());
       newKeyAdded = true;
     }
   }
   // First-pass build or new-key arrival → rebuild every chip-pair so
   // sorted-key order stays stable across the full union. Only the
-  // chips from m_dlg->m_typedChipCount onward are torn down — the leading
+  // chips from m_typedChipCount onward are torn down — the leading
   // typed-field chips (Publisher … Tags) stay in place.
-  if (m_dlg->m_customFieldEdits.isEmpty() || newKeyAdded) {
-    while (layout->count() > m_dlg->m_typedChipCount) {
-      QLayoutItem *child = layout->takeAt(m_dlg->m_typedChipCount);
+  if (m_customFieldEdits.isEmpty() || newKeyAdded) {
+    while (layout->count() > m_typedChipCount) {
+      QLayoutItem *child = layout->takeAt(m_typedChipCount);
       if (!child) break;
       if (auto *w = child->widget()) w->deleteLater();
       delete child;
     }
-    m_dlg->m_customFieldEdits.clear();
-    QStringList keys = m_dlg->m_allSeenCustomKeys.values();
+    m_customFieldEdits.clear();
+    QStringList keys = m_allSeenCustomKeys.values();
     std::sort(keys.begin(), keys.end());
     // Custom-field cells share the EXACT same label + chip widths as
     // the typed-fields chips above so columns align visually across
@@ -661,14 +671,13 @@ void ScrapeResultDialogUnified::populateCustomFields(const QHash<QString, QStrin
       h->addWidget(edit);
       chip->setFixedSize(kCustomLabelW + 4 + kCustomValueW, edit->sizeHint().height() + 2);
       layout->addWidget(chip);
-      m_dlg->m_customFieldEdits.insert(key, edit);
+      m_customFieldEdits.insert(key, edit);
     }
   }
   // Update value text in every persistent cell — empty string for
   // keys absent from the current item so the slot stays visible but
   // blank rather than disappearing.
-  for (auto it = m_dlg->m_customFieldEdits.constBegin(); it != m_dlg->m_customFieldEdits.constEnd();
-       ++it) {
+  for (auto it = m_customFieldEdits.constBegin(); it != m_customFieldEdits.constEnd(); ++it) {
     const QString value = fields.value(it.key()).trimmed();
     it.value()->setText(value);
     it.value()->setCursorPosition(0);
@@ -682,54 +691,25 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
   m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::Setup;
   m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
   m_dlg->m_applyButton->hide();
-  // Repurpose the dialog button area: hide the legacy Apply, show a
-  // dedicated Scrape button + a Close button. Close hides the dialog
-  // (the ScraperService keeps running); Cancel stops the active
-  // scrape entirely.
-  if (!m_dlg->m_scrapeButton) {
-    // Kartend-l06g6: use the stored handle instead of re-deriving the box
-    // from m_applyButton's parentage (broke silently if the button were
-    // ever wrapped in a container).
-    QDialogButtonBox *box = m_dlg->m_buttonBox;
-    if (box) {
-      m_dlg->m_scrapeButton = box->addButton(tr("Scrape"), QDialogButtonBox::ActionRole);
-      connect(m_dlg->m_scrapeButton, &QPushButton::clicked, this,
-              &ScrapeResultDialogUnified::onScrapeClicked);
-      m_dlg->m_closeButton = box->addButton(tr("Close"), QDialogButtonBox::ActionRole);
-      m_dlg->m_closeButton->setToolTip(
-          tr("Hide this window. The scrape keeps running in the background; "
-             "reopen Scraper from the File menu to see progress."));
-      connect(m_dlg->m_closeButton, &QPushButton::clicked, this, [this]() {
-        // Mid-interactive close → tell the service to pause so it
-        // doesn't fire the next item's picker into a vanished UI.
-        // Auto mode + idle: just hide.
-        if (m_dlg->m_service &&
-            m_dlg->m_service->state() == Scraper::ScraperService::State::RunningInteractive) {
-          m_dlg->m_service->pauseInteractive();
-        }
-        m_dlg->hide();
-      });
-      m_dlg->m_closeButton->hide();
-    }
-  }
-  if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->show();
+  // Repurpose the dialog button area: hide the legacy Apply, show the
+  // dedicated Scrape button. Scrape + Close are built (hidden) once in the
+  // host's buildUi — no connects happen anywhere in this open path. Close
+  // hides the dialog (the ScraperService keeps running); Cancel stops the
+  // active scrape entirely.
+  m_dlg->m_scrapeButton->show();
   // Re-attach to a running service if there is one — we should
   // come up directly in the Live view, not the Setup view. Don't
   // touch the tree / items state in that case: the user might have
   // configured a selection earlier and we shouldn't overwrite it
-  // mid-run. Setup view rebuilds the tree as it always has.
+  // mid-run — the same reason this branch must NOT resetRunState().
+  // Setup view rebuilds the tree as it always has.
   if (m_dlg->m_service && m_dlg->m_service->isActive()) {
     setUnifiedSetupEnabled(false);
-    if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
-    // Start the 1-second live tick (the scrapeStarted handler missed
-    // this run because we connected after it already fired).
+    m_dlg->m_closeButton->show();
+    // Restart the 1-second live tick (the scrapeStarted handler missed
+    // this run because we connected after it already fired) with a
+    // fresh rate window.
     m_rateSamples.clear();
-    if (!m_dlg->m_liveTickTimerInited) {
-      m_dlg->m_liveTickTimer.setInterval(1000);
-      connect(&m_dlg->m_liveTickTimer, &QTimer::timeout, this,
-              &ScrapeResultDialogUnified::updateUnifiedProgressLabel);
-      m_dlg->m_liveTickTimerInited = true;
-    }
     m_dlg->m_liveTickTimer.start();
     m_dlg->m_marqueeTicker->start();
     // Sync the Live view from the service's current snapshot so the
@@ -741,7 +721,7 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
         tr("Collection: %1 — scraping: %2")
             .arg(m_dlg->m_service->currentCollectionName(),
                  QFileInfo(m_dlg->m_service->currentItemPath()).fileName()));
-    m_dlg->m_shownCollectionName = m_dlg->m_service->currentCollectionName();
+    m_shownCollectionName = m_dlg->m_service->currentCollectionName();
     // Restore the recent-media thumbnail strip from the service so
     // the user doesn't see an empty band when re-entering. Icon-only
     // rows + auto-scroll to the latest match the same shape as the
@@ -764,6 +744,9 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
     }
     return; // skip populateCollectionTree — keep existing selection
   }
+  // Fresh setup (no live run to re-attach to): wipe everything run-scoped
+  // in one place so nothing from the previous run survives the reopen.
+  m_dlg->resetRunState();
   setUnifiedSetupEnabled(true);
   m_dlg->m_selectionModel->populateCollectionTree();
 

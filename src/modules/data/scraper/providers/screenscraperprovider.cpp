@@ -21,9 +21,7 @@
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
-#include <QUrlQuery>
 
-#include "bundledcredentials.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "databaseschema.h"
@@ -33,9 +31,11 @@
 #include "httpclient.h"
 #include "romhasher.h"
 #include "scraperretrypolicy.h"
+#include "screenscraperaccount.h"
 #include "screenscraperparser.h"
 #include "screenscraperregion.h"
 #include "screenscrapersystems.h"
+#include "screenscraperurls.h"
 
 namespace {
 
@@ -45,25 +45,6 @@ namespace {
 // past unnoticed again (Kartend-ou0a).
 Q_LOGGING_CATEGORY(lcScreenScraperProvider, "kartend.scraper.screenscraper")
 
-// API endpoints live under api.screenscraper.fr — the public site at
-// www.screenscraper.fr is the human-facing browse UI and does not
-// answer the api2/* paths we hit here.
-constexpr const char *SS_HOST = "api.screenscraper.fr";
-
-// SS serves media files from a separate CDN host (`neoclone.screenscraper.fr`).
-// Without an explicit policy this host defaults to maxConcurrent=1 in
-// HttpClient, so every cover/screenshot/fanart download serialized
-// behind the previous one — the symptom in /tmp/scrape.log was 27
-// queued media requests all sitting at inflight=1 even after the
-// dialog dispatched them in parallel.
-constexpr const char *SS_MEDIA_HOST = "neoclone.screenscraper.fr";
-// SSRF defense-in-depth (Kartend-pugp.2): medias[].url and any redirect it
-// follows are response-derived (untrusted), so fetchMediaBytes pins them to
-// ScreenScraper's own domain. Domain-level rather than the exact SS_MEDIA_HOST
-// so SS adding/rotating CDN subdomains keeps working — only a host (or
-// redirect) off screenscraper.fr entirely is refused, which is the SSRF case.
-constexpr const char *SS_MEDIA_HOST_SUFFIX = "screenscraper.fr";
-constexpr const char *SS_JEUINFOS = "https://api.screenscraper.fr/api2/jeuInfos.php";
 // API-host pacing for jeuInfos.php. Fixed (one call per scrape, not
 // the bottleneck). Media-host pacing is *dynamic* and pulled from
 // GeneralSettings.scraper.options on every fetch so the user can dial
@@ -71,52 +52,33 @@ constexpr const char *SS_JEUINFOS = "https://api.screenscraper.fr/api2/jeuInfos.
 constexpr int SS_API_RATE_LIMIT_MS = 250;
 constexpr int SS_API_MAX_CONCURRENT = 2;
 
-constexpr const char *SS_PROVIDER_ID = "screenscraper";
-constexpr const char *SS_FIELD_DEV_ID = "dev_id";
-constexpr const char *SS_FIELD_DEV_PASSWORD = "dev_password";
-constexpr const char *SS_FIELD_USER_ID = "user_id";
-constexpr const char *SS_FIELD_USER_PASSWORD = "user_password";
-
-// Resolve ScreenScraper credentials from settings, falling back to the bundled
-// dev key when the user hasn't set their own (dev fields only; user fields are
-// strictly opt-in). Single source of truth keyed off the SS_* constants so
-// currentCredentials() and the user/infra/health helpers can't drift on field
-// names or the literal "screenscraper" key (Kartend audit D-03).
-struct SsCredentials {
-  QString devId;
-  QString devPassword;
-  QString userId;
-  QString userPassword;
+// Common platform-media types served by mediaSysteme.php. Every token below
+// is an exact nomcourt in the live mediasSystemeListe.php catalog (verified);
+// buildSystemeMediaUrl appends the "(wor)" region qualifier. A type a system
+// has no entry for answers 200 "NOMEDIA" (text/html), which the image/
+// content-type gate turns into a non-fatal skip, so an over-broad list is
+// safe. {api token, canonical MediaAsset type, user-visible label}.
+struct PlatformMediaType {
+  const char *apiToken;
+  const char *canonicalType;
+  const char *label;
+  /// Config slot + in-role preference the coordinator wires from — declared
+  /// HERE (the provider owns its type vocabulary) so the generic entity
+  /// coordinator never has to know these strings (EntityArtRole contract).
+  Scraper::EntityArtRole role;
+  int rolePriority;
 };
-
-SsCredentials resolveSsCredentials(const GeneralSettings *settings) {
-  SsCredentials c;
-  if (settings) {
-    const auto blob = settings->scraper.credentials.value(QString::fromLatin1(SS_PROVIDER_ID));
-    c.devId = blob.value(QString::fromLatin1(SS_FIELD_DEV_ID));
-    c.devPassword = blob.value(QString::fromLatin1(SS_FIELD_DEV_PASSWORD));
-    c.userId = blob.value(QString::fromLatin1(SS_FIELD_USER_ID));
-    c.userPassword = blob.value(QString::fromLatin1(SS_FIELD_USER_PASSWORD));
-  }
-  // Bundled dev fallback (empty until the SS forum application is approved,
-  // which the caller treats as "credentials not configured").
-  if (c.devId.isEmpty() || c.devPassword.isEmpty()) {
-    const auto bundled = BundledCredentials::screenscraper();
-    if (c.devId.isEmpty()) c.devId = bundled.devId;
-    if (c.devPassword.isEmpty()) c.devPassword = bundled.devPassword;
-  }
-  return c;
-}
-
-// The four base api2 query params every SS endpoint needs. Type-agnostic on the
-// dev creds so both the member Credentials path (buildJeuInfosUrl) and the free
-// helpers (fetchUserInfo/fetchInfraInfo) share one definition (Kartend audit D-03).
-void addCommonQueryParams(QUrlQuery &q, const QString &devId, const QString &devPassword) {
-  q.addQueryItem(QStringLiteral("devid"), devId);
-  q.addQueryItem(QStringLiteral("devpassword"), devPassword);
-  q.addQueryItem(QStringLiteral("softname"), QStringLiteral("kartend"));
-  q.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
-}
+constexpr PlatformMediaType kPlatformMediaTypes[] = {
+    // Only types that map to a CollectionConfig art field are requested — no
+    // point spending a media-host request + the user's SS quota on art with no
+    // home (e.g. controller art has no config slot) (Kartend-ckepd.3 review).
+    // Logo: prefer the wheel, fall back to the monochrome logo. Background:
+    // prefer the illustration, fall back to the console photo.
+    {"wheel", "wheel", "Logo (wheel)", Scraper::EntityArtRole::Logo, 0},
+    {"logo-monochrome", "logo", "Logo (monochrome)", Scraper::EntityArtRole::Logo, 1},
+    {"illustration", "illustration", "Console illustration", Scraper::EntityArtRole::Background, 0},
+    {"photo", "photo", "Console photo", Scraper::EntityArtRole::Background, 1},
+};
 
 // Re-applied on every fetchMediaBytes so the user can change the
 // concurrency/throttle settings live. API host stays at compile-time
@@ -124,14 +86,16 @@ void addCommonQueryParams(QUrlQuery &q, const QString &devId, const QString &dev
 // from the settings struct, clamped to safe ranges.
 void registerHostThrottles(const GeneralSettings *settings) {
   auto *client = Scraper::HttpClient::instance();
-  client->setRateLimit(QString::fromLatin1(SS_HOST), SS_API_RATE_LIMIT_MS, SS_API_MAX_CONCURRENT);
+  client->setRateLimit(QString::fromLatin1(ScreenScraperUrls::SS_HOST), SS_API_RATE_LIMIT_MS,
+                       SS_API_MAX_CONCURRENT);
   int mediaConc = 6;
   int mediaThrottle = 100;
   if (settings) {
     mediaConc = std::clamp(settings->scraper.options.mediaConcurrency, 1, 16);
     mediaThrottle = std::clamp(settings->scraper.options.mediaThrottleMs, 0, 5000);
   }
-  client->setRateLimit(QString::fromLatin1(SS_MEDIA_HOST), mediaThrottle, mediaConc);
+  client->setRateLimit(QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST), mediaThrottle,
+                       mediaConc);
 }
 
 ErrorUtils::ErrorContext notConfiguredError() {
@@ -145,85 +109,6 @@ ErrorUtils::ErrorContext notConfiguredError() {
       "ScreenScraperProvider");
 }
 
-// SS API v2 returns specific HTTP status codes for distinct failure
-// modes (see api.screenscraper.fr docs). Re-map the upstream's
-// generic "HTTP request failed" + French response body into a single
-// English sentence the dialog can show without dumping the raw blob
-// at the user. Returns the original error untouched when the status
-// code isn't one SS overloads (regular 5xx, network-level timeouts,
-// etc.) so unexpected failures still surface their underlying detail.
-ErrorUtils::ErrorContext mapScreenScraperHttpError(const ErrorUtils::ErrorContext &original) {
-  if (original.httpStatus <= 0) return original;
-  QString message;
-  switch (original.httpStatus) {
-  case 400:
-    message = QStringLiteral("ScreenScraper rejected the request as malformed (HTTP 400). "
-                             "Likely causes: an invalid system id, a missing required field, "
-                             "or a path component the server refused.");
-    break;
-  case 401:
-    message = QStringLiteral(
-        "ScreenScraper closed its API to non-members because the server is "
-        "overloaded (HTTP 401). Try again later, or sign in with member "
-        "credentials under Settings → Scrapers → ScreenScraper for priority access.");
-    break;
-  case 403:
-    message = QStringLiteral(
-        "ScreenScraper rejected the developer credentials (HTTP 403). "
-        "Verify the dev_id and dev_password under Settings → Scrapers → ScreenScraper.");
-    break;
-  case 404:
-    message = QStringLiteral("ScreenScraper has no entry for this game (HTTP 404).");
-    break;
-  case 423:
-    message = QStringLiteral("ScreenScraper infrastructure is currently down (HTTP 423). "
-                             "Their service is unavailable — try again later.");
-    break;
-  case 426:
-    message = QStringLiteral("This Kartend build was blocked by ScreenScraper (HTTP 426). "
-                             "Update Kartend to the latest version — older releases are "
-                             "occasionally blacklisted when their API requests fall behind a "
-                             "breaking change.");
-    break;
-  case 429: {
-    QString tail = QStringLiteral(" Reduce concurrent scrapes or wait before retrying.");
-    if (original.retryAfterSeconds > 0) {
-      tail = QStringLiteral(" Server asked us to wait %1 second(s) before retrying.")
-                 .arg(original.retryAfterSeconds);
-    }
-    message = QStringLiteral("ScreenScraper rate-limited the request (HTTP 429).") + tail;
-    break;
-  }
-  case 430:
-    message = QStringLiteral("ScreenScraper's daily request quota for this account is "
-                             "exhausted (HTTP 430). The quota resets at midnight UTC.");
-    break;
-  case 431:
-    message = QStringLiteral("ScreenScraper hit the daily failed-lookup quota for this "
-                             "account (HTTP 431). Too many ROMs in this collection don't "
-                             "match anything in the SS database — fix the collection's "
-                             "system id or the file naming, then try again tomorrow.");
-    break;
-  default:
-    return original;
-  }
-  auto remapped = ErrorUtils::ErrorContext::error(original.code != ErrorUtils::ErrorCode::Success
-                                                      ? original.code
-                                                      : ErrorUtils::ErrorCode::DatabaseQueryFailed,
-                                                  message,
-                                                  original.source.isEmpty()
-                                                      ? QStringLiteral("ScreenScraperProvider")
-                                                      : original.source)
-                      .withHttpStatus(original.httpStatus);
-  if (original.retryAfterSeconds > 0) {
-    remapped.withRetryAfter(original.retryAfterSeconds);
-  }
-  if (!original.details.isEmpty()) {
-    remapped.withDetails(original.details);
-  }
-  return remapped;
-}
-
 } // namespace
 
 ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAccessor,
@@ -232,7 +117,7 @@ ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAcc
       m_collectionAccessor(std::move(collectionAccessor)),
       m_catalog(
           Scraper::HttpClient::instance(), userAgent(), [this]() { return currentCredentials(); },
-          &mapScreenScraperHttpError) {
+          &ScreenScraperUrls::mapScreenScraperHttpError) {
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
 }
 
@@ -278,13 +163,118 @@ ScreenScraperProvider::~ScreenScraperProvider() {
 }
 
 ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() const {
-  const SsCredentials r = resolveSsCredentials(m_settingsAccessor ? m_settingsAccessor() : nullptr);
+  const ScreenScraperProviderHelpers::SsCredentials r =
+      ScreenScraperProviderHelpers::resolveSsCredentials(m_settingsAccessor ? m_settingsAccessor()
+                                                                            : nullptr);
   Credentials c;
   c.devId = r.devId;
   c.devPassword = r.devPassword;
   c.userId = r.userId;
   c.userPassword = r.userPassword;
   return c;
+}
+
+void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &target,
+                                        DetailCallback callback) {
+  if (target.type != Scraper::ScrapeEntityType::Platform) {
+    if (callback) {
+      callback(ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::InvalidArgument,
+          QStringLiteral("ScreenScraper only scrapes Platform entities (got entity type %1)")
+              .arg(static_cast<int>(target.type)),
+          QStringLiteral("ScreenScraperProvider::fetchEntity")));
+    }
+    return;
+  }
+  bool ok = false;
+  const int systemeid = target.identity.toInt(&ok);
+  if (!ok || systemeid <= 0) {
+    if (callback) {
+      callback(ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::InvalidArgument,
+          QStringLiteral("ScreenScraper platform scrape needs a numeric systemeid (got \"%1\")")
+              .arg(target.identity),
+          QStringLiteral("ScreenScraperProvider::fetchEntity")));
+    }
+    return;
+  }
+  const Credentials creds = currentCredentials();
+  // Resolve the system in the catalog (cold-start fetch handled by the catalog
+  // manager) for its display name, then emit one media URL per known platform
+  // media type. The liveness token guards against the provider being destroyed
+  // mid-fetch — same pattern as runLookup (Kartend audit cr950).
+  m_catalog.ensureSystemsCatalog(
+      [this, systemeid, creds, alive = std::weak_ptr<int>(m_lifetimeToken),
+       callback = std::move(callback)](const QList<ScreenScraperSystems::System> &systems) mutable {
+        if (alive.expired()) {
+          if (callback) {
+            callback(ErrorUtils::ErrorContext::error(
+                ErrorUtils::ErrorCode::OperationCancelled,
+                QStringLiteral("ScreenScraper provider destroyed during platform catalog lookup"),
+                QStringLiteral("ScreenScraperProvider::fetchEntity")));
+          }
+          return;
+        }
+        // ensureSystemsCatalog ALWAYS calls back with a list — empty on ANY
+        // failure (no creds, null HTTP client, network error, parse/empty). An
+        // empty list therefore means "catalog unavailable", NOT "this id is
+        // absent". Mapping the former to RemoteResourceNotFound would let the
+        // coordinator's notFound bucket silently consume every entity job when
+        // offline / no-creds / cold-cache (cursor advances, nothing recorded,
+        // not re-queueable). Return a transient, non-notFound error so it lands
+        // in errors + failedItems and (with the entity discriminator) stays
+        // re-queueable. Only a NON-empty catalog that genuinely lacks the id is
+        // a real RemoteResourceNotFound.
+        if (systems.isEmpty()) {
+          if (callback) {
+            callback(ErrorUtils::ErrorContext::error(
+                         ErrorUtils::ErrorCode::UnknownError,
+                         QStringLiteral("ScreenScraper systems catalog unavailable; cannot resolve "
+                                        "system %1")
+                             .arg(systemeid),
+                         QStringLiteral("ScreenScraperProvider::fetchEntity"))
+                         .withHttpStatus(503));
+          }
+          return;
+        }
+        const ScreenScraperSystems::System *sys = ScreenScraperSystems::find(systems, systemeid);
+        if (!sys) {
+          // Catalog loaded but has no entry for this systemeid — a genuine,
+          // routine "not found", not an error (Kartend-e8aag bucketing applies
+          // to entity scrapes too).
+          if (callback) {
+            callback(ErrorUtils::ErrorContext::error(
+                ErrorUtils::ErrorCode::RemoteResourceNotFound,
+                QStringLiteral("ScreenScraper has no system with id %1").arg(systemeid),
+                QStringLiteral("ScreenScraperProvider::fetchEntity")));
+          }
+          return;
+        }
+        Scraper::ScrapedItem item;
+        item.sourceProviderId = id();
+        item.title = sys->displayName;
+        // User creds count only when BOTH ssid and sspassword are set —
+        // matching runLookupAfterHash and the account probes. Gating on the
+        // id alone would append `ssid=<id>&sspassword=` for a user with a
+        // cleared password and fail SS login on every media URL.
+        const bool hasUser = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
+        for (const auto &mt : kPlatformMediaTypes) {
+          Scraper::MediaAsset asset;
+          asset.type = QString::fromLatin1(mt.canonicalType);
+          asset.label = QString::fromLatin1(mt.label);
+          asset.entityRole = mt.role;
+          asset.entityRolePriority = mt.rolePriority;
+          asset.url = ScreenScraperUrls::buildSystemeMediaUrl(
+              creds, systemeid, QString::fromLatin1(mt.apiToken), hasUser);
+          // Platform-scoped → persisted to the collection's _shared art dir as
+          // `_shared/<type>/platform_<systemeid>.<ext>` (Kartend-ckepd.3). The
+          // systemeid is numeric, so it is a safe path component.
+          asset.scope = Scraper::MediaScope::Platform;
+          asset.scopeKey = QString::number(systemeid);
+          item.media.append(asset);
+        }
+        if (callback) callback(item);
+      });
 }
 
 int ScreenScraperProvider::resolveSystemId(
@@ -583,7 +573,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
                                           "so SS can match by hash.")));
       return;
     }
-    const QUrl url = buildJeuInfosUrl(creds, romnom, systemeid, hashes, hasUser);
+    const QUrl url = ScreenScraperUrls::buildJeuInfosUrl(creds, romnom, systemeid, hashes, hasUser);
 
     // Kartend-ou0a: filename region detection. The user picks the policy:
     //   TrustScraperFirst: use filename region ONLY when no hash narrowed
@@ -676,14 +666,14 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
       // the credential-bearing URL to an attacker host. Reuses the same
       // allowlist mechanism (hostMatchesAllowlist + UserVerifiedRedirectPolicy)
       // that fetchMediaBytes already applies to response-derived media URLs.
-      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
+      {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)});
 }
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
                                                    const LookupCallback &callback,
                                                    const QString &filenameRegionOverride) {
   if (response.isError()) {
-    callback(mapScreenScraperHttpError(response.error()));
+    callback(ScreenScraperUrls::mapScreenScraperHttpError(response.error()));
     return;
   }
   // SS returns HTTP 200 with a plain-text French error body
@@ -737,10 +727,13 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
   }
   const QString trimmedHead = QString::fromUtf8(bytes.left(64)).trimmed();
   if (!trimmedHead.startsWith('{') && trimmedHead.startsWith(QLatin1String("Erreur"))) {
+    // Server-controlled text headed for details / the always-on error log —
+    // flatten to one bounded line (log-injection hardening). Real SS
+    // "Erreur ..." bodies are short single-line French sentences.
     callback(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
                                              QStringLiteral("ScreenScraper rejected the request"),
                                              "ScreenScraperProvider")
-                 .withDetails(QString::fromUtf8(bytes).trimmed()));
+                 .withDetails(ErrorUtils::sanitizedSingleLine(QString::fromUtf8(bytes), 512)));
     return;
   }
   // Refresh the cached quota from this response's `ssuser` block before
@@ -809,44 +802,10 @@ QString ScreenScraperProvider::findDatCanonicalName(const RomHasher::Result &has
   return QString();
 }
 
-QUrl ScreenScraperProvider::buildJeuInfosUrl(const Credentials &creds, const QString &romnom,
-                                             int systemeid, const RomHasher::Result &hashes,
-                                             bool hasUser) const {
-  QUrl url(QString::fromLatin1(SS_JEUINFOS));
-  QUrlQuery q;
-  // SECURITY (Kartend-0gp7): devpassword / sspassword unavoidably travel
-  // in the query string. ScreenScraper's api2 endpoints authenticate only
-  // via query parameters — there is no header-based auth — so unlike TMDB
-  // (moved to an Authorization: Bearer header) these credentials cannot be
-  // relocated off the URL. The residual exposure is bounded: every request
-  // is HTTPS, so the query is encrypted on the wire and never appears in a
-  // cleartext Referer to a third party; and local scrape.log lines pass
-  // through redactedUrlForLog() (httpclient.cpp), which masks
-  // devpassword/sspassword/ssid/devid before anything is written. Upstream
-  // proxy access logs remain the only unmitigated sink and are outside our
-  // control. Same constraint applies to every other api2 builder below.
-  addCommonQueryParams(q, creds.devId, creds.devPassword);
-  q.addQueryItem(QStringLiteral("romnom"), romnom);
-  q.addQueryItem(QStringLiteral("systemeid"), QString::number(systemeid));
-  if (!hashes.md5.isEmpty()) {
-    q.addQueryItem(QStringLiteral("md5"), hashes.md5);
-  }
-  if (!hashes.sha1.isEmpty()) {
-    q.addQueryItem(QStringLiteral("sha1"), hashes.sha1);
-  }
-  if (!hashes.crc.isEmpty()) {
-    q.addQueryItem(QStringLiteral("crc"), hashes.crc);
-  }
-  if (hashes.size > 0) {
-    q.addQueryItem(QStringLiteral("romtaille"), QString::number(hashes.size));
-  }
-  if (hasUser) {
-    q.addQueryItem(QStringLiteral("ssid"), creds.userId);
-    q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
-  }
-  url.setQuery(q);
-  return url;
-}
+// buildJeuInfosUrl + buildSystemeMediaUrl moved to the ScreenScraperUrls
+// namespace — see screenscraperurls.{h,cpp}. Pure query construction with
+// no provider state, so they live with the other SS wire-shape helpers and
+// are unit-tested without a provider instance.
 
 ScreenScraperParser::ParseOptions ScreenScraperProvider::buildParseOptions() const {
   ScreenScraperParser::ParseOptions parseOpts;
@@ -911,12 +870,16 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
       url, userAgentHeader(),
       [callback = std::move(callback)](const ErrorUtils::Result<QByteArray> &response) {
         if (response.isError()) {
-          callback(mapScreenScraperHttpError(response.error()));
+          callback(ScreenScraperUrls::mapScreenScraperHttpError(response.error()));
           return;
         }
         callback(response);
       },
-      Scraper::HttpClient::kDefaultMaxResponseBytes,
+      // Image-sized cap (not the wide default): this path is pinned to
+      // image/* below, media fetches fan out per the user's mediaConcurrency
+      // setting, and every reply is buffered whole — the tighter per-request
+      // bound limits worst-case in-flight RAM from a hostile CDN.
+      Scraper::HttpClient::kImageMaxResponseBytes,
       // Kartend-9ryx: media fetches must come back as image/*.
       // ScreenScraper has been observed to serve 200-OK HTML
       // "Access denied" pages under expired media URLs; the prefix
@@ -926,160 +889,10 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
       // Kartend-pugp.2: url is response-derived; pin it (and its
       // redirects) to ScreenScraper's domain so it can't be steered at
       // an internal https host.
-      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
+      {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)});
 }
 
-namespace ScreenScraperProviderHelpers {
-
-void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback) {
-  if (!callback) return;
-  // Build credentials from the same path as the main provider so the detected
-  // user-info exactly matches what scrapes will actually send (Kartend audit
-  // D-03). user_id / user_password are strictly opt-in (no fallback).
-  const SsCredentials creds = resolveSsCredentials(settings);
-  const QString &devId = creds.devId;
-  const QString &devPassword = creds.devPassword;
-  const QString &userId = creds.userId;
-  const QString &userPassword = creds.userPassword;
-  if (devId.isEmpty() || devPassword.isEmpty()) {
-    callback(
-        ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                        QStringLiteral("Developer credentials are not available"),
-                                        "ScreenScraperProviderHelpers::fetchUserInfo"));
-    return;
-  }
-  if (userId.isEmpty() || userPassword.isEmpty()) {
-    callback(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                             QStringLiteral("Member credentials not set"),
-                                             "ScreenScraperProviderHelpers::fetchUserInfo"));
-    return;
-  }
-  QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/ssuserInfos.php"));
-  QUrlQuery q;
-  addCommonQueryParams(q, devId, devPassword);
-  q.addQueryItem(QStringLiteral("ssid"), userId);
-  q.addQueryItem(QStringLiteral("sspassword"), userPassword);
-  url.setQuery(q);
-  Scraper::HttpClient::instance()->get(
-      url, ProviderBase::userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(mapScreenScraperHttpError(response.error()));
-          return;
-        }
-        callback(ScreenScraperParser::parseUserInfoResponse(response.value()));
-      },
-      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
-      // Kartend-8xs72: ssuserInfos.php carries devpassword/sspassword in the
-      // query string — pin it (and its redirects) to ScreenScraper's domain so
-      // a cross-host redirect can't forward the credential-bearing URL. Same
-      // allowlist mechanism fetchMediaBytes uses for media URLs.
-      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
-}
-
-void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback) {
-  if (!callback) return;
-  // Mirror fetchUserInfo's credential resolution so the probe runs with exactly
-  // what subsequent scrapes will use (Kartend audit D-03). Dev creds are
-  // required (SS rejects unauthenticated infra polls); user creds are optional
-  // and only add the tier boost.
-  const SsCredentials creds = resolveSsCredentials(settings);
-  const QString &devId = creds.devId;
-  const QString &devPassword = creds.devPassword;
-  const QString &userId = creds.userId;
-  const QString &userPassword = creds.userPassword;
-  if (devId.isEmpty() || devPassword.isEmpty()) {
-    callback(
-        ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                        QStringLiteral("Developer credentials are not available"),
-                                        "ScreenScraperProviderHelpers::fetchInfraInfo"));
-    return;
-  }
-  QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/ssinfraInfos.php"));
-  QUrlQuery q;
-  addCommonQueryParams(q, devId, devPassword);
-  if (!userId.isEmpty() && !userPassword.isEmpty()) {
-    q.addQueryItem(QStringLiteral("ssid"), userId);
-    q.addQueryItem(QStringLiteral("sspassword"), userPassword);
-  }
-  url.setQuery(q);
-  Scraper::HttpClient::instance()->get(
-      url, ProviderBase::userAgentHeader(),
-      [callback = std::move(callback)](ErrorUtils::Result<QByteArray> response) {
-        if (response.isError()) {
-          callback(mapScreenScraperHttpError(response.error()));
-          return;
-        }
-        callback(ScreenScraperParser::parseInfraInfoResponse(response.value()));
-      },
-      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
-      // Kartend-8xs72: ssinfraInfos.php carries devpassword/sspassword in the
-      // query string — pin it (and its redirects) to ScreenScraper's domain so
-      // a cross-host redirect can't forward the credential-bearing URL. Same
-      // allowlist mechanism fetchMediaBytes uses for media URLs.
-      {QString::fromLatin1(SS_MEDIA_HOST_SUFFIX)});
-}
-
-void fetchHealthStatus(const GeneralSettings *settings,
-                       MetadataLookupProvider::HealthCallback callback) {
-  if (!callback) return;
-  // Whether the caller has user creds wired up — drives whether the
-  // `closeforleecher` flag should refuse the scrape (anonymous tier is
-  // the leecher tier in SS parlance) vs just warn.
-  const SsCredentials creds = resolveSsCredentials(settings);
-  const bool hasUserCreds = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
-  fetchInfraInfo(settings, [callback = std::move(callback), hasUserCreds](
-                               ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo> r) {
-    using HealthStatus = MetadataLookupProvider::HealthStatus;
-    if (r.isError()) {
-      // Probe failure is non-fatal — the actual scrape will hit the
-      // same error path and report it via mapScreenScraperHttpError.
-      // Stay silent in the dialog rather than fearmongering on a
-      // transient blip.
-      callback(HealthStatus{});
-      return;
-    }
-    const auto &info = r.value();
-    HealthStatus out;
-    // Refuse anonymous scrapes when SS has shut its API to the
-    // leecher tier. Member scrapes still go through (SS allows them
-    // on a separate path).
-    if (info.closedForLeechers && !hasUserCreds) {
-      out.refuseScrape = true;
-      out.humanStatus =
-          QObject::tr("ScreenScraper has closed its API to anonymous traffic right now. "
-                      "Sign in with member credentials under Settings → Scrapers → ScreenScraper, "
-                      "or try again later.");
-      callback(out);
-      return;
-    }
-    if (info.closedForNonMembers && !hasUserCreds) {
-      out.refuseScrape = true;
-      out.humanStatus = QObject::tr("ScreenScraper has closed its API to non-members right now "
-                                    "(server overloaded). Sign in with member credentials, or try "
-                                    "again later.");
-      callback(out);
-      return;
-    }
-    // Surface load info when any of the CPU figures are alarming or
-    // scraper count is high. Threshold is intentionally loose — we
-    // want to nudge the user about slow scrapes, not pepper them
-    // with infra trivia on a quiet day.
-    const int peakCpu = std::max({info.cpu1Percent, info.cpu2Percent, info.cpu3Percent});
-    if (peakCpu >= 70 || info.activeScrapers >= 200) {
-      QStringList parts;
-      if (peakCpu > 0) {
-        parts << QObject::tr("CPU %1%").arg(peakCpu);
-      }
-      if (info.activeScrapers > 0) {
-        parts << QObject::tr("%1 active scrapers").arg(info.activeScrapers);
-      }
-      out.humanStatus = QObject::tr("ScreenScraper is busy right now (%1) — "
-                                    "expect slower downloads.")
-                            .arg(parts.join(QStringLiteral(", ")));
-    }
-    callback(out);
-  });
-}
-
-} // namespace ScreenScraperProviderHelpers
+// The ScreenScraperProviderHelpers account probes (fetchUserInfo /
+// fetchInfraInfo / fetchHealthStatus) and the shared resolveSsCredentials
+// moved to screenscraperaccount.{h,cpp} — the settings panel consumes them
+// without pulling in this provider TU.

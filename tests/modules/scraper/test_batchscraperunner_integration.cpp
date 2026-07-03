@@ -256,7 +256,8 @@ void TestBatchScrapeRunnerIntegration::cancelMidBatchAtHighConcurrencyDrainsClea
   // 5s wait above well before reaching here.
 
   QCOMPARE(finishedCount, 1);
-  const int totalAccounted = captured.scraped + captured.skipped + captured.errors;
+  const int totalAccounted =
+      captured.scraped + captured.skipped + captured.errors + captured.notFound;
   QVERIFY2(totalAccounted <= kQueueSize,
            qPrintable(QStringLiteral("totalAccounted=%1 > queueSize=%2 — "
                                      "indicates double-counting under cancel race")

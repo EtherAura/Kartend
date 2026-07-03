@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <memory>
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPair>
@@ -16,6 +17,7 @@
 
 QT_BEGIN_NAMESPACE
 class QGroupBox;
+class QLineEdit;
 class QListWidgetItem;
 class QTreeWidgetItem;
 class QWidget;
@@ -63,6 +65,9 @@ public:
   // receiver) and forwards to these.
   void onScrapeClicked();
   void showScrapeErrorDetails();
+  /// Re-queue exactly the items that errored this run (grouped by owning
+  /// collection), reusing the run's mode + media options (Kartend-jjjo5).
+  void rescrapeFailedItems();
   void onServiceScrapeStarted(int total);
   void onServiceItemBegan(int done, int total, const QString &collectionName, const QString &name);
   void onServiceItemCompleted(int done, int total, const Scraper::ScrapedItem &scraped,
@@ -77,6 +82,12 @@ public:
 
   // ── Non-slot helpers ───────────────────────────────────────────────────
   void buildUnifiedPanel();
+  /// Clears the run-scoped state this controller owns (rate window,
+  /// interactive item cursor, shown-collection tracker). Only called by the
+  /// host's resetRunState() so the whole dialog family resets through one
+  /// entry point. Session-scoped state (custom-field key union, last known
+  /// quota reset time) is deliberately left intact — see the member docs.
+  void resetRunState();
   void setUnifiedSetupEnabled(bool enabled);
   void updateUnifiedProgressLabel();
   void finishCurrentApply();
@@ -143,6 +154,42 @@ private:
   /// applies. A single-element list — the service emits one pickerNeeded
   /// per item, so this is just "the item on screen right now".
   QStringList m_interactiveItems;
+
+  /// Collection name currently shown in the host's m_unifiedCurrentLabel.
+  /// Tracked so the itemBegan handler can refresh the label whenever the
+  /// scrape moves to a new collection — without re-setting it per-item when
+  /// batchItemConcurrency > 1 starts several items at once. Cleared by
+  /// resetRunState so a new run's first itemBegan always refreshes the label
+  /// even when it opens on the same collection the last run ended on.
+  QString m_shownCollectionName;
+
+  /// Local-time "HH:mm" the SS quota next resets at, captured from the most
+  /// recent quotaUpdated signal. Reused by the quota-exhausted
+  /// scrapeFinished message so it can name the reset time without
+  /// re-deriving it. Empty until the first quota update; deliberately
+  /// session-sticky (NOT part of resetRunState) — a rerun that dies on the
+  /// still-exhausted quota before any quota update should keep naming the
+  /// last known reset time.
+  QString m_lastQuotaResetText;
+
+  // ── Live-metadata custom-field cells (session-scoped) ───────────────────
+  /// Union of every custom-field key seen across this scrape session.
+  /// `populateCustomFields` adds new keys then renders the union — so the
+  /// section always shows every possible field, with empty values for keys
+  /// not present in the current scraped item.
+  QSet<QString> m_allSeenCustomKeys;
+  /// Persistent per-key QLineEdit cells inside the host's
+  /// m_liveExtrasContainer. Created once (either at panel build time for the
+  /// pre-seeded "known" keys, or lazily when a new key first appears) and
+  /// reused across items — populateCustomFields just rewrites the .text on
+  /// each cell, so the section's widget count + layout stay rock-stable
+  /// instead of being torn down and rebuilt every item.
+  QHash<QString, QLineEdit *> m_customFieldEdits;
+  /// Number of fixed typed-field chips occupying the first N slots of
+  /// m_liveExtrasContainer's FlowLayout. Custom-field chips are appended
+  /// after these and torn down / rebuilt from index m_typedChipCount
+  /// onward, leaving the typed chips untouched.
+  int m_typedChipCount = 0;
 
   ScrapeResultDialog *m_dlg = nullptr;
 };

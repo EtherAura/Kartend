@@ -75,6 +75,18 @@ public:
   /// response while still stopping a runaway long before OOM.
   static constexpr qint64 kDefaultMaxResponseBytes = 256LL * 1024 * 1024;
 
+  /// Response-size cap for image fetches — callers that pin
+  /// expectedContentTypePrefix to "image/" should pass this instead of
+  /// kDefaultMaxResponseBytes. Every reply is buffered whole in RAM
+  /// before it reaches the caller, and media fetches fan out (several
+  /// concurrent per host under the user's mediaConcurrency setting,
+  /// across multiple in-flight items), so the per-request cap bounds the
+  /// worst-case in-flight memory a hostile or misconfigured CDN can pin.
+  /// 64 MiB is still far above any real cover / screenshot / fanart
+  /// (low single-digit MB); video/manual kinds, if a caller ever fetches
+  /// them without the image pin, keep the wide default.
+  static constexpr qint64 kImageMaxResponseBytes = 64LL * 1024 * 1024;
+
   /// Issue an HTTP GET. @p headers are applied verbatim as raw request
   /// headers (see RawHeaders): callers pass a User-Agent here (required
   /// by some providers — MusicBrainz rejects bare requests) and any
@@ -124,8 +136,13 @@ public:
   /// the network time of one request overlaps with the next's throttle
   /// window). `maxConcurrent` caps in-flight requests for this host
   /// — set above 1 only when the upstream provider documents support
-  /// for concurrent threads from a single key. The default (no rule
-  /// set) is unlimited. Idempotent.
+  /// for concurrent threads from a single key. A host with no rule set
+  /// gets HostPolicy's defaults: no inter-start pacing, but in-flight
+  /// requests capped at 1 — conservative by design, so an unregistered
+  /// host can never be hammered concurrently by accident. Providers
+  /// that want parallel downloads must register an explicit policy
+  /// (ScreenScraper's media host wires the user's mediaConcurrency
+  /// setting through here). Idempotent.
   void setRateLimit(const QString &host, int intervalMs, int maxConcurrent = 1);
 
   /// Cancels any queued (not-yet-dispatched) requests, invoking each one's
@@ -165,8 +182,9 @@ private:
     int intervalMs = 0;    // min ms between successive request *starts*
     int maxConcurrent = 1; // cap of in-flight requests for this host
   };
-  /// Per-host pacing rules. Missing entry = no throttle, unlimited
-  /// concurrency.
+  /// Per-host pacing rules. A missing entry falls back to HostPolicy's
+  /// defaults (drainHost uses value(host, HostPolicy{})): no inter-start
+  /// pacing, in-flight capped at 1 — see setRateLimit.
   QHash<QString, HostPolicy> m_rateLimits;
   /// Per-host queue of pending requests.
   QHash<QString, QQueue<PendingRequest>> m_queues;

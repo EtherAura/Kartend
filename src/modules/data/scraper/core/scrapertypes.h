@@ -30,9 +30,69 @@ inline constexpr int kMaxReportedFailures = 1000;
 /// pre-fetch dedup that lets a second game with the same `groupid`
 /// skip the network entirely.
 enum class MediaScope {
-  Game,    ///< Per-game asset — ScreenScraper mediaJeu.php and friends.
-  Group,   ///< Per-genre/theme/family/style — ScreenScraper mediaGroup.php.
-  Company, ///< Per-publisher/developer — ScreenScraper mediaCompagnie.php.
+  Game,     ///< Per-game asset — ScreenScraper mediaJeu.php and friends.
+  Group,    ///< Per-genre/theme/family/style — ScreenScraper mediaGroup.php.
+  Company,  ///< Per-publisher/developer — ScreenScraper mediaCompagnie.php.
+  Platform, ///< Per-platform/system art — ScreenScraper mediaSysteme.php (console
+            ///< logo / illustration). Routed to `_shared/` like Group/Company;
+            ///< scopeKey is the systemeid (Kartend-ckepd.3).
+};
+
+/// Filename prefix for a `_shared`-scoped media asset, used as
+/// `_shared/<type>/<prefix><scopeKey>.<ext>`. Empty for Game (per-game layout,
+/// never `_shared`). Centralised so the file-write router and the pre-download
+/// dedup probe can't drift apart as scopes are added (Kartend-ckepd.3). The
+/// switch has no default, so -Wswitch flags a newly-added scope.
+[[nodiscard]] inline QString sharedScopePrefix(MediaScope scope) {
+  switch (scope) {
+  case MediaScope::Group:
+    return QStringLiteral("group_");
+  case MediaScope::Company:
+    return QStringLiteral("company_");
+  case MediaScope::Platform:
+    return QStringLiteral("platform_");
+  case MediaScope::Game:
+    return {};
+  }
+  return {};
+}
+
+/// What kind of catalog entity a scrape targets. The default unit is a single
+/// game/media item keyed by its file path; the entity-scraping work
+/// (Kartend-ckepd) extends scraping to platform/collection/category-level art
+/// and metadata that aren't tied to one file. Scaffolding only today — the
+/// non-Game members are wired up by the follow-up sub-tasks.
+enum class ScrapeEntityType {
+  Game,       ///< A single media item, identified by its file path (the default unit).
+  Platform,   ///< A console/system entity — e.g. a ScreenScraper systemeid → console art/logo.
+  Collection, ///< A whole collection — collection logo / background / description.
+  Category,   ///< A category/genre grouping.
+};
+
+/// Identifies the subject of a scrape. `Game` scrapes still flow through the
+/// file-path-based runner; the other entity types carry an opaque identity key
+/// the resolving provider understands (a ScreenScraper systemeid for Platform,
+/// the collection uuid for Collection/Category) plus the owning collection
+/// index so results route onto the right config / artwork directory.
+struct EntityScrapeTarget {
+  ScrapeEntityType type = ScrapeEntityType::Game;
+  /// Provider-understood identity: a file path for Game, a systemeid for
+  /// Platform, a collection uuid for Collection/Category.
+  QString identity;
+  /// Index of the collection this entity belongs to (-1 = unset). Lets the
+  /// persistence layer route results onto the right CollectionConfig.
+  int collectionIndex = -1;
+};
+
+/// Which CollectionConfig art slot an entity-scrape asset feeds once written.
+/// Declared per MediaAsset by the provider that built it, so the generic
+/// entity coordinator never has to know a provider's type-string vocabulary —
+/// a second entity-capable provider tags its own assets instead of mimicking
+/// ScreenScraper's canonical names.
+enum class EntityArtRole {
+  None,       ///< Not config-wired (the default; correct for all game-scope assets).
+  Logo,       ///< Feeds headerLogoImage + collectionIcon.
+  Background, ///< Feeds backgroundImage.
 };
 
 /// One downloadable media asset attached to a scraped item — typically
@@ -57,6 +117,14 @@ struct MediaAsset {
   /// for `Group` / `Company`. Used to name the shared file:
   ///   `_shared/<type>/group_<scopeKey>.<ext>` etc.
   QString scopeKey;
+  /// Config-wiring role for entity scrapes — see EntityArtRole. Assets left
+  /// at `None` are still downloaded and written, just never wired into the
+  /// collection's config fields.
+  EntityArtRole entityRole = EntityArtRole::None;
+  /// Preference order WITHIN a role when several assets share it — lower
+  /// wins (e.g. a wheel logo at 0 beats its monochrome fallback at 1). Only
+  /// consulted for assets whose role is not `None`.
+  int entityRolePriority = 0;
 };
 
 /// One match candidate returned by a provider's `lookup()`. Carries
@@ -135,5 +203,9 @@ struct QuotaStatus {
 // the type definition so every TU that can see ScrapedItem also sees the
 // metatype declaration, avoiding "specialization after instantiation" errors.
 Q_DECLARE_METATYPE(Scraper::ScrapedItem)
+// EntityScrapeTarget rides in a CollectionJob and (later) queued signals when an
+// entity scrape is dispatched, so it needs the metatype like ScrapedItem above
+// (Kartend-ckepd.1).
+Q_DECLARE_METATYPE(Scraper::EntityScrapeTarget)
 
 #endif // SCRAPERTYPES_H

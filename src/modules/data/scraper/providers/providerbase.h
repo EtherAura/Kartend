@@ -103,8 +103,12 @@ protected:
       s_testFetch(url, headers, std::move(callback), allowedHostSuffixes);
       return;
     }
+    // Image-sized response cap: media fetches fan out concurrently and each
+    // reply is buffered whole, so the tighter per-request bound (not the wide
+    // default meant for video/manual payloads) limits how much RAM a hostile
+    // or misconfigured image CDN can pin before the abort trips.
     Scraper::HttpClient::instance()->get(url, headers, std::move(callback),
-                                         Scraper::HttpClient::kDefaultMaxResponseBytes,
+                                         Scraper::HttpClient::kImageMaxResponseBytes,
                                          QStringLiteral("image/"), allowedHostSuffixes);
   }
 

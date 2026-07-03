@@ -1,9 +1,11 @@
 #ifndef SCRAPERSERVICE_H
 #define SCRAPERSERVICE_H
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
+#include <QFuture>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -14,12 +16,14 @@
 #include "batchscraperunner.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "entityscrapecoordinator.h"
 #include "metadatalookupprovider.h"
+#include "scrapelock.h"
+#include "scrapepersistence.h"
 #include "scrapertypes.h"
 
 class IDatabaseManager;
 #include "applicationcontext_fwd.h"
-class QLockFile;
 class QTimer;
 struct GeneralSettings;
 
@@ -50,6 +54,11 @@ namespace Scraper {
 class ScraperService : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ScraperService)
+  /// Entity-scrape execution engine (friend + back-pointer pattern): the
+  /// canonical run state stays on this class; the coordinator owns only the
+  /// entity flow's code. See entityscrapecoordinator.h.
+  friend class EntityScrapeCoordinator;
+
 public:
   enum class State { Idle, RunningAuto, RunningInteractive, PausedInteractive, Finishing };
   Q_ENUM(State)
@@ -64,6 +73,15 @@ public:
     QString collectionName;
     QString artworkDir;
     QStringList items; // remaining items only (completed ones are removed as they finish)
+    /// When `entity.type` is a non-Game type, this job is a single
+    /// platform/collection/category entity scrape (not a per-file batch); the
+    /// service dispatches it via one provider->fetchEntity() call rather than a
+    /// BatchScrapeRunner, sharing the same queue / resume / quota / result
+    /// machinery (Kartend-ckepd.2). `items` is unused for an entity job.
+    Scraper::EntityScrapeTarget entity;
+    [[nodiscard]] bool isEntityJob() const {
+      return entity.type != Scraper::ScrapeEntityType::Game;
+    }
   };
 
   /// Aggregate running summary; mirrors BatchScrapeRunner::Summary but
@@ -72,11 +90,43 @@ public:
     int scraped = 0;
     int skipped = 0;
     int errors = 0;
+    /// Items the provider has no entry for (HTTP 404 / empty "no match"),
+    /// accumulated across the queue. Mirrors BatchScrapeRunner::Summary::
+    /// notFound — counted apart from `errors` (Kartend-e8aag).
+    int notFound = 0;
     /// Aggregate media-files written across every collection so the
     /// dialog's Live view can render "items: X · media: Y" instead
     /// of just an item count.
     int mediaWritten = 0;
     QStringList firstFailures;
+    /// Full source path of an errored item, tagged with the index of the
+    /// collection that owns it — enough for the dialog to rebuild a
+    /// CollectionJob per owner and re-queue just the failures (Kartend-jjjo5).
+    struct FailedItem {
+      int collectionIndex = -1;
+      QString path;
+      /// Owning collection's stable UUID. Persisted alongside the index so a
+      /// resume in a later session (where indices may have shifted) can
+      /// re-resolve the live index instead of re-queueing against the wrong
+      /// collection. Empty on legacy snapshots — those fall back to the index.
+      QString collectionUuid;
+      /// Discriminator: a game item (false, the default) vs. an entity item
+      /// (true). Entity failures land in the SAME failedItems list a game
+      /// re-scrape consumes, but they must be re-queued AS entity jobs — the
+      /// `path`/`identity` alone can't rebuild the job, which needs the entity
+      /// type + collectionIndex too. Without this flag rescrapeFailedItems()
+      /// re-dispatched an entity failure as a bogus game lookup of its
+      /// systemeid, losing the original entity target.
+      bool isEntity = false;
+      /// The entity target to reconstruct the entity job on re-queue. Only
+      /// meaningful when `isEntity` is true; default-constructed (type == Game)
+      /// for a game item. Round-tripped through pending-scrape.json so a resumed
+      /// run keeps entity failures re-queueable AS entities.
+      Scraper::EntityScrapeTarget entity;
+    };
+    /// Errored items across the whole queue (NOT notFound / skipped). Bounded
+    /// like firstFailures. Drives the "re-scrape failed" affordance.
+    QList<FailedItem> failedItems;
     /// Set when a collection's runner stopped because ScreenScraper's
     /// daily quota was exhausted (HTTP 430/431). The service then
     /// stops walking the queue and leaves the persisted resume point
@@ -85,6 +135,8 @@ public:
     /// Sidecar (.json) writes that failed across the whole queue —
     /// mirrors BatchScrapeRunner::Summary::sidecarFailures (audit hhr5x).
     int sidecarFailures = 0;
+    /// Every per-item terminal outcome — used for progress / resume math.
+    [[nodiscard]] int processedItems() const { return scraped + skipped + errors + notFound; }
   };
 
   /// Persistence snapshot returned by loadPendingState(). Empty
@@ -251,6 +303,11 @@ private:
   void startNextCollection();
   void startAutoCollection();
   void startInteractiveItem();
+  /// Stop the whole queue because the provider's quota is exhausted, leaving
+  /// the current cursor position (and therefore the un-finished jobs) in the
+  /// persisted state as the resume point — mirrors onAutoFinished's quota
+  /// branch. Shared by the interactive and entity paths.
+  void stopForQuotaExhaustion();
   void onAutoItemBegan(int doneInCol, int totalInCol, const QString &name);
   void onAutoItemCompleted(int doneInCol, int totalInCol, const Scraper::ScrapedItem &scraped,
                            const QStringList &mediaPaths);
@@ -272,24 +329,6 @@ private:
   /// Force any pending debounced persist to disk immediately.
   void flushPendingPersist();
   void clearStateFile();
-  [[nodiscard]] static QString pendingStateFilePath();
-  /// Sibling lock file (`pending-scrape.json.lock`) used to mark the
-  /// pending-scrape state as owned by a live process.
-  [[nodiscard]] static QString pendingStateLockFilePath();
-  /// Take the pending-scrape ownership lock for this run. Returns true
-  /// when acquired (or already held). Returns false when another live
-  /// Kartend instance already owns the scrape — the caller then runs
-  /// without persisting resumable state. A lock left by a crashed
-  /// owner is stale (its PID is dead) and gets reclaimed here.
-  [[nodiscard]] bool acquireScrapeLock();
-  /// Drop the ownership lock and remove its on-disk file. Safe to call
-  /// when no lock is held.
-  void releaseScrapeLock();
-  /// True when `pending-scrape.json` belongs to a still-running
-  /// Kartend instance — i.e. a second instance must NOT offer to
-  /// resume that scrape. False when nobody holds it or the previous
-  /// owner crashed (stale lock).
-  [[nodiscard]] static bool pendingScrapeOwnedByLiveInstance();
   void appendRecentMedia(const QStringList &paths);
   [[nodiscard]] int countQueueRemaining() const;
 
@@ -300,6 +339,13 @@ private:
   bool m_writeMetadata = true;
   QList<CollectionJob> m_queue;
   int m_queueCursor = 0; ///< Index into m_queue of the active collection.
+  /// Bumped on every run start (startScrape / resumeFromState) and on cancel().
+  /// The entity-fetch callback captures the generation it was issued under and
+  /// no-ops if it no longer matches — so a stale fetch that resolves after a
+  /// cancel-then-restart can't mutate the new run's summary/cursor (the entity
+  /// path has no m_autoRunner to detach the way the batch path does). Kartend-
+  /// ckepd.2 review.
+  quint64 m_runGeneration = 0;
   Summary m_summary;
   int m_totalItemsAtStart = 0;
   int m_itemsCompleted = 0;
@@ -349,12 +395,29 @@ private:
   QPointer<QTimer> m_persistTimer;
   bool m_persistDirty = false;
 
+  // Entity media-write drain (mirrors BatchScrapeRunner's m_mediaWriteCancel /
+  // m_inFlightMediaWrites). The write lambdas capture values + this shared
+  // token only — never `this` — so an abandoned write past the destructor's
+  // bounded drain can't UAF. A fresh token is allocated per run start so a
+  // cancel can't poison the next run's writes.
+  std::shared_ptr<std::atomic<bool>> m_entityWriteCancel =
+      std::make_shared<std::atomic<bool>>(false);
+  /// In-flight entity media writes on the global QThreadPool. Pruned of
+  /// finished entries on each dispatch; the destructor flips the cancel token
+  /// and drains this list with a bounded wait.
+  QList<QFuture<Scraper::MediaWriteResult>> m_inFlightEntityWrites;
+  /// Entity-flow engine (see the friend declaration above). Value member, so
+  /// its lifetime is exactly this service's — async callbacks guard on a
+  /// QPointer to the service and re-enter through this member.
+  EntityScrapeCoordinator m_entityCoordinator{this};
+
   // Multi-instance guard. Held for the lifetime of an active run so a
   // second Kartend instance can tell the scrape is live and skips its
   // resume prompt. `m_ownsStateFile` gates every write to / removal of
   // `pending-scrape.json`: false means another live instance owns the
-  // file, so this run must leave it untouched.
-  std::unique_ptr<QLockFile> m_scrapeLock;
+  // file, so this run must leave it untouched. Lock mechanics live in
+  // ScrapeLock; the state-file JSON lives in ScrapePendingState.
+  ScrapeLock m_scrapeLock;
   bool m_ownsStateFile = false;
 };
 

@@ -3,6 +3,7 @@ target_sources(kartend_data PRIVATE
   musicbrainzprovider.cpp
   openlibraryprovider.cpp
   providerbase.cpp
+  screenscraperaccount.cpp
   screenscrapercatalogmanager.cpp
   screenscraperprovider.cpp
   screenscraperregion.cpp
@@ -10,6 +11,7 @@ target_sources(kartend_data PRIVATE
   screenscraperquotamanager.cpp
   screenscrapersystemcache.cpp
   screenscrapersystems.cpp
+  screenscraperurls.cpp
   tmdbprovider.cpp
   websearchprovider.cpp
   metadatalookupprovider.h
@@ -18,6 +20,7 @@ target_sources(kartend_data PRIVATE
   musicbrainzprovider.h
   openlibraryprovider.h
   providerbase.h
+  screenscraperaccount.h
   screenscrapercatalogmanager.h
   screenscraperprovider.h
   screenscraperregion.h
@@ -25,6 +28,7 @@ target_sources(kartend_data PRIVATE
   screenscraperquotamanager.h
   screenscrapersystemcache.h
   screenscrapersystems.h
+  screenscraperurls.h
   tmdbprovider.h
   websearchprovider.h
 )

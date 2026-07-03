@@ -8,6 +8,9 @@
 #include <QList>
 #include <QString>
 
+#include "scrapertypes.h"
+
+class MetadataLookupProvider;
 class MetadataProvider;
 struct CollectionConfig;
 struct GeneralSettings;
@@ -60,6 +63,38 @@ builtIn(const GeneralSettingsAccessor &settingsAccessor = {},
 /// container — they stay valid until the unique_ptrs in `all` are destroyed.
 [[nodiscard]] QList<MetadataProvider *>
 forCategory(const std::vector<std::unique_ptr<MetadataProvider>> &all, const QString &category);
+
+/// Filter providers to those that advertise support for `entityType` in
+/// supportedEntities() (Kartend-ckepd.2). The resolution step for a non-game
+/// entity scrape: a Platform scrape resolves only providers that can scrape a
+/// Platform. Today every provider supports only `Game`, so a non-Game query
+/// returns an empty list until a provider opts in (Kartend-ckepd.4/.5).
+/// Non-owning views, same lifetime contract as forCategory().
+[[nodiscard]] QList<MetadataProvider *>
+forEntity(const std::vector<std::unique_ptr<MetadataProvider>> &all,
+          Scraper::ScrapeEntityType entityType);
+
+/// Resolve and construct ONLY the metadata-lookup provider a collection
+/// scrape should use — the selection counterpart to forCategory() for the
+/// batch/interactive scrape paths. An explicit
+/// `CollectionConfig::scraperOverrides.scraperProviderId` wins when it names
+/// a lookup-capable provider; otherwise the first lookup-capable provider
+/// whose category matches the collection `type` is used (an empty type
+/// matches everything, mirroring forCategory()'s full-menu behaviour).
+/// Returns null when nothing usable matches.
+///
+/// Selection runs on the registry's static per-provider metadata, so the
+/// non-matching siblings are never constructed — a multi-collection batch
+/// that rebuilds its provider per collection switch no longer builds and
+/// discards the whole registry (including a full ScreenScraperProvider) per
+/// call. The accessors are wired into the one constructed provider exactly
+/// as builtIn() would wire them; because the collection accessor typically
+/// closes over one collection, the returned provider is fresh per call and
+/// must not be reused for a different collection.
+[[nodiscard]] std::shared_ptr<MetadataLookupProvider>
+claimLookupProvider(const CollectionConfig &cfg,
+                    const GeneralSettingsAccessor &settingsAccessor = {},
+                    const CollectionAccessor &collectionAccessor = {});
 
 /// Normalise a `CollectionConfig::type` value into the canonical
 /// lowercase tag used by `forCategory()`. Exposed because the context

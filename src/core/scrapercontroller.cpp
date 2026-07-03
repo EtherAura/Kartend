@@ -1,12 +1,15 @@
 // Implementation extracted from mainwindow_scraper.cpp (Kartend-hzef step 3).
 // openScraperDialog + promptResumePendingScrapeIfAny moved verbatim with
 // references rerouted from MainWindow members to m_ctx.<getter>() calls.
-// pickLookupProvider (file-local helper) moved into the anonymous namespace
-// below.
+// The old file-local pickLookupProvider helper (build the FULL registry,
+// then release one provider out of it) has been replaced by
+// MetadataProviderRegistry::claimLookupProvider, which selects first and
+// constructs only the chosen provider; makeProviderBuilder below is the
+// shared closure factory for the dialog + service contexts.
 #include "scrapercontroller.h"
 
+#include <functional>
 #include <memory>
-#include <vector>
 
 #include <QAbstractButton>
 #include <QDateTime>
@@ -36,52 +39,34 @@
 #include "scraperservice.h"
 #include "scrollmanager.h"
 
-namespace {
+namespace ScraperControllerInternal {
 
-/// Resolve the metadata-lookup provider for a collection scrape. An
-/// explicit `CollectionConfig::scraperProviderId` override wins; with no
-/// override (or one that doesn't resolve to a lookup-capable provider)
-/// the first provider whose category matches the collection `type` is
-/// used. Ownership of the chosen provider is released out of @p registry
-/// into the returned shared_ptr; returns null when nothing usable matches.
-std::shared_ptr<MetadataLookupProvider>
-pickLookupProvider(std::vector<std::unique_ptr<MetadataProvider>> &registry,
-                   const CollectionConfig &cfg) {
-  auto claim = [&registry](MetadataProvider *p) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!p || !p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
-      return nullptr;
-    }
-    auto *typed = dynamic_cast<MetadataLookupProvider *>(p);
-    if (!typed) return nullptr;
-    for (auto &up : registry) {
-      if (up.get() == p) {
-        up.release();
-        break;
-      }
-    }
-    return std::shared_ptr<MetadataLookupProvider>(typed);
+/// Shared per-collection provider builder for the dialog and service
+/// contexts (openScraperDialog wires the same closure into both;
+/// promptResumePendingScrapeIfAny needs an identical one before a resume).
+/// Each call resolves the collection's scraper via
+/// MetadataProviderRegistry::claimLookupProvider — override id first, else
+/// first category match — which constructs ONLY the selected provider
+/// instead of building the full registry and discarding the unused siblings
+/// on every collection switch. The provider is still fresh per call: its
+/// collection accessor closes over @p idx (per-collection systemeid / DAT
+/// overrides are read through it), so it must not be reused for another
+/// collection. Declared in scrapercontroller.h as a test seam.
+std::function<std::shared_ptr<MetadataLookupProvider>(int)>
+makeProviderBuilder(QList<CollectionConfig> *collections, GeneralSettings *generalSettings) {
+  return [collections, generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+    if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
+    return MetadataProviderRegistry::claimLookupProvider(
+        (*collections)[idx],
+        [generalSettings]() -> const GeneralSettings * { return generalSettings; },
+        [collections, idx]() -> const CollectionConfig * {
+          if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
+          return &(*collections)[idx];
+        });
   };
-
-  const QString overrideId = cfg.scraperOverrides.scraperProviderId.trimmed();
-  if (!overrideId.isEmpty()) {
-    for (auto &up : registry) {
-      if (up && up->id() == overrideId) {
-        if (auto provider = claim(up.get())) return provider;
-        break;
-      }
-    }
-  }
-
-  const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
-  for (auto &up : registry) {
-    if (up && applicable.contains(up.get())) {
-      if (auto provider = claim(up.get())) return provider;
-    }
-  }
-  return nullptr;
 }
 
-} // namespace
+} // namespace ScraperControllerInternal
 
 ScraperController::ScraperController(QObject *parent)
     : QObject(parent), m_scraperService(std::make_unique<Scraper::ScraperService>(nullptr)) {}
@@ -108,8 +93,53 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
     m_scraperDialog = new ScrapeResultDialog(/*provider=*/nullptr, /*candidates=*/{}, parent);
     m_scraperDialog->setWindowFlag(Qt::Window, true);
     m_scraperDialog->setModal(false);
+    // Post-completion housekeeping: refresh the active grid + sidebar +
+    // artwork cache once a scrape ends, then surface a summary box. The
+    // connect lives inside this construction block so it is made exactly
+    // once per dialog instance — structurally impossible to stack a second
+    // handler on a re-open (this replaces the old ad-hoc connected-yet bool
+    // guard). Each controller wires the dialog it constructed, so a 2nd
+    // controller still gets its own summary / grid refresh.
+    QObject::connect(
+        m_scraperDialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
+        [this](int scraped, int skipped, int errors, int notFound,
+               const QStringList &firstFailures) {
+          DetailsPaneManager *dpm =
+              m_ctx.getDetailsPaneManager ? m_ctx.getDetailsPaneManager() : nullptr;
+          ScrollManager *scroll = m_ctx.getScrollManager ? m_ctx.getScrollManager() : nullptr;
+          InteractionManager *interaction =
+              m_ctx.getInteractionManager ? m_ctx.getInteractionManager() : nullptr;
+          if (dpm && scroll && interaction) {
+            const int sel = interaction->currentSelectedIndex();
+            if (sel >= 0) {
+              ItemWidget *widgetPtr = scroll->getActiveWidgets().value(sel, nullptr);
+              dpm->updateSidebarMetadata(widgetPtr);
+            }
+          }
+          ArtworkUtils::clearDirectoryCache();
+          NavigationManager *nav =
+              m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr;
+          QList<CollectionConfig> *cols = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+          const int curIdx =
+              m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+          if (nav && CollectionUtils::isValidIndex(curIdx, cols)) {
+            nav->safeReloadCollection(curIdx);
+          }
+          QString text =
+              tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nNot found: %3\nErrors: %4")
+                  .arg(scraped)
+                  .arg(skipped)
+                  .arg(notFound)
+                  .arg(errors);
+          if (!firstFailures.isEmpty()) {
+            text += QStringLiteral("\n\n") +
+                    tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
+          }
+          QWidget *parentWindow = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
+          QMessageBox::information(parentWindow, tr("Scraper"), text);
+        });
   }
-  auto *dialog = m_scraperDialog;
+  ScrapeResultDialog *dialog = m_scraperDialog;
 
   QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
   GeneralSettings *generalSettings =
@@ -121,17 +151,8 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
   sctx.collections = collections;
   sctx.ctx = appCtx;
   sctx.generalSettings = generalSettings;
-  sctx.providerBuilder = [collections,
-                          generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
-    auto registry = MetadataProviderRegistry::builtIn(
-        [generalSettings]() -> const GeneralSettings * { return generalSettings; },
-        [collections, idx]() -> const CollectionConfig * {
-          if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
-          return &(*collections)[idx];
-        });
-    return pickLookupProvider(registry, (*collections)[idx]);
-  };
+  sctx.providerBuilder =
+      ScraperControllerInternal::makeProviderBuilder(collections, generalSettings);
   sctx.applyResult = [this, collections,
                       generalSettings](int collectionIndex, const QString &filePath,
                                        const ScrapeResultDialog::Result &result) {
@@ -156,64 +177,18 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
     (void)Scraper::applyScrapedItem(innerDb, uuid, filePath, artworkDir, baseName, result.item,
                                     writes, rescrapeMode);
   };
-  dialog->setScraperContext(sctx);
-
-  // Bind the long-lived service to the dialog. The service is owned by
-  // this controller (constructed in the ctor); we configure it here with
-  // the same builder so a resume on next launch can still build
-  // providers, then bind to the dialog.
+  // Configure the long-lived service (owned by this controller, constructed
+  // in the ctor) with the same builder so a resume on next launch can still
+  // build providers, then rebind dialog context + service through the
+  // dialog's single open-time entry point. bindForOpen is idempotent — no
+  // connection it (transitively) makes can stack across re-opens.
   Scraper::ScraperService::Context srvCtx;
   srvCtx.ctx = appCtx;
   srvCtx.generalSettings = generalSettings;
   srvCtx.collections = collections;
   srvCtx.providerBuilder = sctx.providerBuilder;
   m_scraperService->setContext(srvCtx);
-  dialog->setScraperService(m_scraperService.get());
-
-  // Post-completion housekeeping: refresh the active grid + sidebar +
-  // artwork cache once the scrape ends, then surface a summary box. The dialog
-  // is reused across opens, so guard the connect to attach the lambda exactly
-  // once per controller — otherwise one scrape-finish would pop N message
-  // boxes. The guard is per-instance (not a process-wide static) so a 2nd
-  // controller still connects its own dialog (Kartend-r2722).
-  if (!m_unifiedFinishedConnected) {
-    m_unifiedFinishedConnected = true;
-    QObject::connect(
-        dialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
-        [this](int scraped, int skipped, int errors, const QStringList &firstFailures) {
-          DetailsPaneManager *dpm =
-              m_ctx.getDetailsPaneManager ? m_ctx.getDetailsPaneManager() : nullptr;
-          ScrollManager *scroll = m_ctx.getScrollManager ? m_ctx.getScrollManager() : nullptr;
-          InteractionManager *interaction =
-              m_ctx.getInteractionManager ? m_ctx.getInteractionManager() : nullptr;
-          if (dpm && scroll && interaction) {
-            const int sel = interaction->currentSelectedIndex();
-            if (sel >= 0) {
-              ItemWidget *widgetPtr = scroll->getActiveWidgets().value(sel, nullptr);
-              dpm->updateSidebarMetadata(widgetPtr);
-            }
-          }
-          ArtworkUtils::clearDirectoryCache();
-          NavigationManager *nav =
-              m_ctx.getNavigationManager ? m_ctx.getNavigationManager() : nullptr;
-          QList<CollectionConfig> *cols = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
-          const int curIdx =
-              m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
-          if (nav && CollectionUtils::isValidIndex(curIdx, cols)) {
-            nav->safeReloadCollection(curIdx);
-          }
-          QString text = tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nErrors: %3")
-                             .arg(scraped)
-                             .arg(skipped)
-                             .arg(errors);
-          if (!firstFailures.isEmpty()) {
-            text += QStringLiteral("\n\n") +
-                    tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
-          }
-          QWidget *parentWindow = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
-          QMessageBox::information(parentWindow, tr("Scraper"), text);
-        });
-  }
+  dialog->bindForOpen(sctx, m_scraperService.get());
 
   dialog->startUnifiedScrape(preCollectionIndex, preItemPath);
   dialog->show();
@@ -240,17 +215,8 @@ void ScraperController::promptResumePendingScrapeIfAny() {
   srvCtx.ctx = appCtx;
   srvCtx.generalSettings = generalSettings;
   srvCtx.collections = collections;
-  srvCtx.providerBuilder = [collections,
-                            generalSettings](int idx) -> std::shared_ptr<MetadataLookupProvider> {
-    if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
-    auto registry = MetadataProviderRegistry::builtIn(
-        [generalSettings]() -> const GeneralSettings * { return generalSettings; },
-        [collections, idx]() -> const CollectionConfig * {
-          if (!CollectionUtils::isValidIndex(idx, collections)) return nullptr;
-          return &(*collections)[idx];
-        });
-    return pickLookupProvider(registry, (*collections)[idx]);
-  };
+  srvCtx.providerBuilder =
+      ScraperControllerInternal::makeProviderBuilder(collections, generalSettings);
   m_scraperService->setContext(srvCtx);
 
   // Auto-resume is gated by ScraperOptions::scrapeAutoResume.
@@ -279,10 +245,11 @@ void ScraperController::promptResumePendingScrapeIfAny() {
   box->setWindowTitle(tr("Resume scrape?"));
   box->setIcon(QMessageBox::Question);
   box->setText(tr("An interrupted scrape from %1 was found.").arg(started));
-  box->setInformativeText(tr("Scraped so far: %1\nSkipped: %2\nErrors: %3\n"
-                             "Remaining items: %4")
+  box->setInformativeText(tr("Scraped so far: %1\nSkipped: %2\nNot found: %3\nErrors: %4\n"
+                             "Remaining items: %5")
                               .arg(pending.summarySoFar.scraped)
                               .arg(pending.summarySoFar.skipped)
+                              .arg(pending.summarySoFar.notFound)
                               .arg(pending.summarySoFar.errors)
                               .arg(remaining));
   auto *resumeBtn = box->addButton(tr("Resume"), QMessageBox::AcceptRole);

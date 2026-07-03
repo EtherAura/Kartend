@@ -18,9 +18,7 @@ QStringList sharedAssetProbePaths(const Scraper::MediaAsset &asset, const QStrin
       artworkDir.isEmpty()) {
     return {};
   }
-  const QString scopePrefix = asset.scope == Scraper::MediaScope::Group
-                                  ? QStringLiteral("group_")
-                                  : QStringLiteral("company_");
+  const QString scopePrefix = Scraper::sharedScopePrefix(asset.scope);
   const QString dir = QDir(artworkDir).filePath(QStringLiteral("_shared/") + asset.type);
   // Probe png first (default), then common fallbacks. extensionForAsset in
   // scrapepersistence defaults to png for images; if a previous scrape used

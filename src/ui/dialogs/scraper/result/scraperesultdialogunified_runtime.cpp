@@ -31,6 +31,7 @@
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
 #include "singleitemview.h"
+#include "transferrateformat.h"
 #include "valuemarqueeticker.h"
 
 #include <algorithm>
@@ -99,22 +100,19 @@ void stripTextualFields(Scraper::ScrapedItem &item) {
 
 void ScrapeResultDialogUnified::onServiceScrapeStarted(int total) {
   qCInfo(lcScrapeTimings) << "DIALOG service.scrapeStarted total=" << total;
+  // Run boundary: wipe all run-scoped dialog state in one place —
+  // mirrors ScraperService::startScrape, which just reset its own
+  // counterparts. The seen-keys union is session-scoped and left intact
+  // so the pre-seeded known SS keys (plus any keys accumulated during
+  // prior runs in this session) stay visible — values clear naturally
+  // as each item rewrites them.
+  m_dlg->resetRunState();
   setUnifiedSetupEnabled(false);
   m_dlg->m_unifiedProgressBar->setRange(0, std::max(1, total));
   m_dlg->m_unifiedProgressBar->setValue(m_dlg->m_service->itemsCompleted());
-  // Reset rate-window samples. The seen-keys union is left intact so
-  // the pre-seeded known SS keys (plus any keys accumulated during
-  // prior runs in this session) stay visible — values clear naturally
-  // as each item rewrites them.
-  m_rateSamples.clear();
-  if (!m_dlg->m_liveTickTimerInited) {
-    m_dlg->m_liveTickTimer.setInterval(1000);
-    connect(&m_dlg->m_liveTickTimer, &QTimer::timeout, this,
-            &ScrapeResultDialogUnified::updateUnifiedProgressLabel);
-    m_dlg->m_liveTickTimerInited = true;
-  }
+  // Live tick (wired once in the host's buildUi) + value-marquee timer:
+  // the latter scrolls overflowing chip text L→R then wraps.
   m_dlg->m_liveTickTimer.start();
-  // Value-marquee timer: scrolls overflowing chip text L→R then wraps.
   m_dlg->m_marqueeTicker->start();
   updateUnifiedProgressLabel();
 }
@@ -137,8 +135,8 @@ void ScrapeResultDialogUnified::onServiceItemBegan(int done, int total,
   // whatever the outcome. Gated on an actual collection change so
   // batchItemConcurrency > 1 doesn't re-set the label as each parallel
   // item in the same collection starts.
-  if (collectionName != m_dlg->m_shownCollectionName) {
-    m_dlg->m_shownCollectionName = collectionName;
+  if (collectionName != m_shownCollectionName) {
+    m_shownCollectionName = collectionName;
     m_dlg->m_unifiedCurrentLabel->setText(tr("Collection: %1").arg(collectionName));
   }
   // The metadata panel and the richer "last scraped" label form are
@@ -235,7 +233,8 @@ void ScrapeResultDialogUnified::onServicePickerNeeded(
 
 void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperService::Summary &s) {
   qCInfo(lcScrapeTimings) << "DIALOG service.scrapeFinished scraped=" << s.scraped
-                          << "skipped=" << s.skipped << "errors=" << s.errors;
+                          << "skipped=" << s.skipped << "errors=" << s.errors
+                          << "notFound=" << s.notFound;
   m_dlg->m_liveTickTimer.stop();
   m_dlg->m_marqueeTicker->stop();
   if (m_dlg->m_interactiveCandidateRow) m_dlg->m_interactiveCandidateRow->hide();
@@ -247,6 +246,13 @@ void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperSe
   setUnifiedSetupEnabled(true);
   if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->show();
   if (m_dlg->m_applyButton) m_dlg->m_applyButton->hide();
+  // setUnifiedSetupEnabled(true) hid the counts label, but when the run
+  // recorded errors that label's "Errors N" link is the ONLY entry point to
+  // the failure list and the re-queue affordance (Kartend-jjjo5) — and the
+  // post-run idle state is precisely when a re-queue can actually start.
+  // Keep it visible (it still holds the final counts), same pattern as the
+  // quota re-show below.
+  if (s.errors > 0) m_dlg->m_unifiedCountsLabel->show();
   // Quota-exhausted stop: setUnifiedSetupEnabled(true) hid the progress
   // label, but the user needs to see WHY the scrape ended early — and
   // when they can resume. Re-show the current-status label with the
@@ -254,19 +260,21 @@ void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperSe
   // when we have one (the label still holds it); otherwise fall back
   // to the generic "midnight UTC" wording.
   if (s.quotaExhausted) {
-    // m_dlg->m_lastQuotaResetText is the local-time HH:mm captured from the
-    // last live quota update; fall back to the generic wording when no
-    // quota update arrived (e.g. the very first item hit 430 before
-    // any ssuser block was parsed).
-    const QString resetText =
-        m_dlg->m_lastQuotaResetText.isEmpty() ? tr("midnight UTC") : m_dlg->m_lastQuotaResetText;
-    m_dlg->m_unifiedCurrentLabel->setText(
-        tr("Scrape stopped — ScreenScraper's daily quota is exhausted. "
-           "Resume after it resets (%1).")
-            .arg(resetText));
+    // Provider-neutral wording (Kartend-oa1ry): any provider's request/daily
+    // quota — ScreenScraper's 430/431 or a 429 from TMDB et al. — can stop the
+    // run. m_lastQuotaResetText is the local-time HH:mm captured from
+    // ScreenScraper's last live quota update; only show a concrete reset time
+    // when we actually have one (other providers don't report it).
+    QString msg = tr("Scrape stopped — the provider's request quota is exhausted.");
+    if (!m_lastQuotaResetText.isEmpty()) {
+      msg += QLatin1Char(' ') + tr("Resume after it resets (%1).").arg(m_lastQuotaResetText);
+    } else {
+      msg += QLatin1Char(' ') + tr("Resume after the quota resets.");
+    }
+    m_dlg->m_unifiedCurrentLabel->setText(msg);
     m_dlg->m_unifiedCurrentLabel->show();
   }
-  emit m_dlg->unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.firstFailures);
+  emit m_dlg->unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.notFound, s.firstFailures);
 }
 
 void ScrapeResultDialogUnified::onServiceScrapePaused() {
@@ -282,11 +290,11 @@ void ScrapeResultDialogUnified::onServiceQuotaUpdated(const Scraper::QuotaStatus
     m_dlg->m_unifiedQuotaLabel->hide();
     return;
   }
-  m_dlg->m_lastQuotaResetText = quota.resetAtUtc.toLocalTime().toString(QStringLiteral("HH:mm"));
+  m_lastQuotaResetText = quota.resetAtUtc.toLocalTime().toString(QStringLiteral("HH:mm"));
   m_dlg->m_unifiedQuotaLabel->setText(tr("ScreenScraper: %1 / %2 requests today · resets %3")
                                           .arg(quota.dailyUsed)
                                           .arg(quota.dailyMax)
-                                          .arg(m_dlg->m_lastQuotaResetText));
+                                          .arg(m_lastQuotaResetText));
   m_dlg->m_unifiedQuotaLabel->show();
 }
 
@@ -336,14 +344,9 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
     if (m_rateSamples.size() >= 2) {
       const auto &oldest = m_rateSamples.first();
       const auto &newest = m_rateSamples.last();
-      const qint64 deltaMs = std::max<qint64>(1, newest.first - oldest.first);
+      const qint64 deltaMs = newest.first - oldest.first;
       const qint64 deltaBytes = std::max<qint64>(0, newest.second - oldest.second);
-      const double mibPerSec = (deltaBytes / (1024.0 * 1024.0)) / (deltaMs / 1000.0);
-      if (mibPerSec >= 1.0) {
-        rateStr = tr("%1 MiB/s").arg(mibPerSec, 0, 'f', 1);
-      } else {
-        rateStr = tr("%1 KiB/s").arg(mibPerSec * 1024.0, 0, 'f', 0);
-      }
+      rateStr = TransferRateFormat::formatTransferRate(deltaBytes, deltaMs);
     }
   }
   m_dlg->m_unifiedTimingLabel->setText(
@@ -352,17 +355,20 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
           .arg(total)
           .arg(ScrapeResultDialog::formatDuration(elapsedMs), etaStr, rateStr));
   const int mediaWritten = m_dlg->m_service ? m_dlg->m_service->summary().mediaWritten : 0;
+  // Items the provider had no entry for (HTTP 404 / no match) — shown apart
+  // from Errors so an unmatched-but-fine library reads 0 errors (Kartend-e8aag).
+  const int notFound = m_dlg->m_service ? m_dlg->m_service->summary().notFound : 0;
   // Render the error count as a clickable link when there are errors,
   // so the user can open the recorded failure messages. Substituted
-  // into the %4 slot rather than baked into the tr() string so the
+  // into the %5 slot rather than baked into the tr() string so the
   // translatable text stays markup-free.
   const QString errorsField =
       errors > 0 ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(errors)
                  : QString::number(errors);
-  m_dlg->m_unifiedCountsLabel->setText(tr("Scraped %1 items, %2 media  ·  Skipped %3  ·  Errors %4")
-                                           .arg(QString::number(scraped),
-                                                QString::number(mediaWritten),
-                                                QString::number(skipped), errorsField));
+  m_dlg->m_unifiedCountsLabel->setText(
+      tr("Scraped %1 items, %2 media  ·  Skipped %3  ·  Not found %4  ·  Errors %5")
+          .arg(QString::number(scraped), QString::number(mediaWritten), QString::number(skipped),
+               QString::number(notFound), errorsField));
 }
 
 void ScrapeResultDialogUnified::showScrapeErrorDetails() {
@@ -403,9 +409,103 @@ void ScrapeResultDialogUnified::showScrapeErrorDetails() {
   }
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
   connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  // Kartend-jjjo5: offer to re-queue just the errored items. Excludes
+  // not-found / skipped by construction (they never enter failedItems), since
+  // a true not-found won't change on retry against the same provider. Only
+  // when the run recorded re-queueable failures AND the service is idle so a
+  // fresh scrape can actually start — during a live run (where the phase is
+  // still Setup for auto scrapes) startScrape would refuse with only a
+  // warning, so offering the button mid-run is a silent no-op.
+  bool doRescrape = false;
+  const bool canRescrape = m_dlg->m_service && !m_dlg->m_service->isActive() &&
+                           !m_dlg->m_service->summary().failedItems.isEmpty() &&
+                           m_dlg->m_unifiedPhase == ScrapeResultDialog::UnifiedPhase::Setup;
+  if (canRescrape) {
+    QPushButton *rescrapeBtn =
+        buttons->addButton(tr("Re-scrape failed items"), QDialogButtonBox::ActionRole);
+    connect(rescrapeBtn, &QPushButton::clicked, &dlg, [&doRescrape, &dlg]() {
+      doRescrape = true;
+      dlg.accept();
+    });
+  }
   layout->addWidget(buttons);
   dlg.resize(640, 420);
   dlg.exec();
+  if (doRescrape) rescrapeFailedItems();
+}
+
+void ScrapeResultDialogUnified::rescrapeFailedItems() {
+  // Guarded the same way as onScrapeClicked: only from Setup, with collections,
+  // and only while the service is idle (startScrape refuses otherwise).
+  if (m_dlg->m_unifiedPhase != ScrapeResultDialog::UnifiedPhase::Setup) return;
+  if (!m_dlg->m_service || m_dlg->m_service->isActive() || !m_dlg->m_scraperCtx.collections) return;
+  const auto failedItems = m_dlg->m_service->summary().failedItems;
+  if (failedItems.isEmpty()) return;
+
+  // Group the errored items by their owning collection, preserving first-seen
+  // order so the progress label sequence stays predictable. Entity failures
+  // carry a discriminator (isEntity) and their own EntityScrapeTarget — they
+  // must be rebuilt AS entity jobs, not stuffed into a game item list where
+  // rescrape would dispatch the systemeid as a bogus game lookup.
+  QList<int> ownerOrder;
+  QHash<int, QStringList> pathsByOwner;
+  QHash<int, QList<Scraper::EntityScrapeTarget>> entitiesByOwner;
+  const int collectionCount = static_cast<int>(m_dlg->m_scraperCtx.collections->size());
+  for (const auto &fi : failedItems) {
+    if (fi.collectionIndex < 0 || fi.collectionIndex >= collectionCount) continue;
+    if (!pathsByOwner.contains(fi.collectionIndex) && !entitiesByOwner.contains(fi.collectionIndex))
+      ownerOrder.append(fi.collectionIndex);
+    if (fi.isEntity) {
+      entitiesByOwner[fi.collectionIndex].append(fi.entity);
+    } else {
+      pathsByOwner[fi.collectionIndex].append(fi.path);
+    }
+  }
+
+  // Rebuild CollectionJobs per owner — same resolution as onScrapeClicked
+  // (uuid + artwork dir keyed off the live CollectionConfig). An owner can
+  // yield both a game job (its errored item paths) and one entity job per
+  // errored entity; pump() already handles a mixed entity+game queue.
+  QList<Scraper::ScraperService::CollectionJob> serviceQueue;
+  for (int owner : ownerOrder) {
+    const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[owner];
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+    const QStringList paths = pathsByOwner.value(owner);
+    if (!paths.isEmpty()) {
+      Scraper::ScraperService::CollectionJob sJob;
+      sJob.collectionIndex = owner;
+      sJob.collectionUuid = uuid;
+      sJob.collectionName = cfg.name;
+      sJob.artworkDir = artworkDir;
+      sJob.items = paths;
+      serviceQueue.append(sJob);
+    }
+    for (const Scraper::EntityScrapeTarget &entity : entitiesByOwner.value(owner)) {
+      Scraper::ScraperService::CollectionJob eJob;
+      eJob.collectionIndex = owner;
+      eJob.collectionUuid = uuid;
+      eJob.collectionName = cfg.name;
+      eJob.artworkDir = artworkDir;
+      eJob.entity = entity; // isEntityJob() true → dispatched via fetchEntity()
+      serviceQueue.append(eJob);
+    }
+  }
+  if (serviceQueue.isEmpty()) return;
+
+  // Reuse the run's media/metadata + mode selections (the setup controls still
+  // hold them — onServiceScrapeFinished restored the Setup view).
+  bool writeMetadata = true;
+  const QSet<QString> mediaFilter = buildMediaFilter(writeMetadata);
+  const auto mode = m_dlg->m_modeAutoRadio->isChecked()
+                        ? Scraper::ScraperService::Mode::Auto
+                        : Scraper::ScraperService::Mode::Interactive;
+  qCInfo(lcScrapeTimings) << "DIALOG rescrapeFailedItems: re-queue collections="
+                          << serviceQueue.size();
+  setUnifiedSetupEnabled(false);
+  if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
+  m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
 }
 
 QSet<QString> ScrapeResultDialogUnified::buildMediaFilter(bool &writeMetadata) const {

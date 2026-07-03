@@ -1,14 +1,21 @@
 #include "scraperservice.h"
 
 #include "applicationcontext.h"
+#include "collection/typehelpers.h"
+#include "httpclient.h"
 #include "idatabasemanager.h"
+#include "isettingsmanager.h"
 #include "pathutils.h"
+#include "scrapelock.h"
+#include "scrapependingstate.h"
 #include "scrapepersistence.h"
 
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,6 +24,8 @@
 #include <QPointer>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QtConcurrent/QtConcurrentRun>
+#include <QThread>
 #include <QTimer>
 #include <utility>
 
@@ -24,12 +33,14 @@ namespace Scraper {
 
 namespace {
 Q_LOGGING_CATEGORY(lcScraperService, "kartend.scraperservice", QtWarningMsg)
-constexpr int kCurrentStateVersion = 1;
 } // namespace
 
 int ScraperService::PendingState::totalRemaining() const {
   int total = 0;
-  for (const auto &j : queue) total += j.items.size();
+  // Entity jobs carry no item list but are one unit of work each — mirror
+  // countQueueRemaining() so the resume prompt's "remaining" count is right
+  // (Kartend-ckepd.2).
+  for (const auto &j : queue) total += j.isEntityJob() ? 1 : j.items.size();
   return total;
 }
 
@@ -44,6 +55,27 @@ ScraperService::ScraperService(QObject *parent) : QObject(parent) {
 }
 
 ScraperService::~ScraperService() {
+  // Stop any in-flight entity media writes, then give them a bounded drain —
+  // same contract as ~BatchScrapeRunner: the token makes the write lambdas
+  // exit within one in-progress asset, so the full budget is only consumed on
+  // genuinely wedged storage, and abandoning past it is safe (the lambdas
+  // capture values + the shared token only, never `this`).
+  m_entityWriteCancel->store(true, std::memory_order_release);
+  constexpr int kEntityWriteDrainBudgetMs = 1000;
+  QDeadlineTimer deadline(kEntityWriteDrainBudgetMs);
+  bool abandoned = false;
+  for (auto &future : m_inFlightEntityWrites) {
+    while (!future.isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!future.isFinished()) abandoned = true;
+  }
+  if (abandoned) {
+    qCWarning(lcScraperService)
+        << "entity media writes did not drain in" << kEntityWriteDrainBudgetMs
+        << "ms during destruction; abandoned them (value-captures only — the in-progress "
+           "asset may still finish writing to disk)";
+  }
   // Final flush so app shutdown mid-scrape preserves the latest
   // queue state for the next launch's resume prompt.
   flushPendingPersist();
@@ -53,59 +85,11 @@ void ScraperService::setContext(const Context &ctx) {
   m_ctx = ctx;
 }
 
-QString ScraperService::pendingStateFilePath() {
-  const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-  return QDir(dir).filePath(QStringLiteral("pending-scrape.json"));
-}
-
-QString ScraperService::pendingStateLockFilePath() {
-  return pendingStateFilePath() + QStringLiteral(".lock");
-}
-
-bool ScraperService::acquireScrapeLock() {
-  if (m_scrapeLock && m_scrapeLock->isLocked()) return true;
-  const QString path = pendingStateLockFilePath();
-  QDir().mkpath(QFileInfo(path).absolutePath());
-  m_scrapeLock = std::make_unique<QLockFile>(path);
-  // Disable time-based staleness: a scrape legitimately runs for
-  // minutes or hours, so the lock file's age says nothing. QLockFile
-  // still treats a lock whose owning PID is no longer running as
-  // stale (PID + process-name check) and reclaims it — exactly the
-  // crashed-owner case we *want* to resume from.
-  m_scrapeLock->setStaleLockTime(0);
-  if (m_scrapeLock->tryLock(0)) return true;
-  qCWarning(lcScraperService) << "pending-scrape state is owned by another live Kartend instance;"
-                              << "this run will not be persisted for resume.";
-  m_scrapeLock.reset();
-  return false;
-}
-
-void ScraperService::releaseScrapeLock() {
-  if (m_scrapeLock) {
-    m_scrapeLock->unlock(); // also removes the .lock file
-    m_scrapeLock.reset();
-  }
-}
-
-bool ScraperService::pendingScrapeOwnedByLiveInstance() {
-  QLockFile probe(pendingStateLockFilePath());
-  probe.setStaleLockTime(0);
-  if (probe.tryLock(0)) {
-    // Acquired it ourselves → no live owner (nobody scraping, or the
-    // previous owner crashed and its stale lock was reclaimed). Drop
-    // it again; the actual run takes its own lock via acquireScrapeLock.
-    probe.unlock();
-    return false;
-  }
-  // tryLock failed: a live process holds it iff the error is
-  // LockFailedError. Any other error (permissions, etc.) is treated
-  // as "not owned" so a transient glitch can't strand a real resume.
-  return probe.error() == QLockFile::LockFailedError;
-}
-
 int ScraperService::countQueueRemaining() const {
   int total = 0;
-  for (const auto &j : m_queue) total += j.items.size();
+  // An entity job is one unit of work (no item list); a normal job counts its
+  // remaining paths (Kartend-ckepd.2).
+  for (const auto &j : m_queue) total += j.isEntityJob() ? 1 : j.items.size();
   return total;
 }
 
@@ -120,7 +104,11 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   // live and won't offer to resume it. If another instance already
   // owns the state file, this run still proceeds (the user asked for
   // it) but persistState() will skip writing — see m_ownsStateFile.
-  m_ownsStateFile = acquireScrapeLock();
+  m_ownsStateFile = m_scrapeLock.acquire(ScrapePendingState::lockFilePath());
+  ++m_runGeneration; // invalidate any stale in-flight entity-fetch callback
+  // Fresh cancel token per run: cancel() flips the old one, and any write
+  // still draining under it must not suppress this run's writes.
+  m_entityWriteCancel = std::make_shared<std::atomic<bool>>(false);
   m_queue = jobs;
   m_queueCursor = 0;
   m_mode = mode;
@@ -155,21 +143,60 @@ void ScraperService::resumeFromState(const PendingState &state) {
   // Claim ownership before touching the queue. A failure here means
   // another live instance grabbed this scrape between loadPendingState
   // and now — resuming anyway would run it twice, so bail.
-  if (!acquireScrapeLock()) {
+  if (!m_scrapeLock.acquire(ScrapePendingState::lockFilePath())) {
     qCWarning(lcScraperService)
         << "Refusing to resume: another live Kartend instance owns this scrape.";
     return;
   }
   m_ownsStateFile = true;
+  ++m_runGeneration; // invalidate any stale in-flight entity-fetch callback
+  m_entityWriteCancel = std::make_shared<std::atomic<bool>>(false); // see startScrape
   m_queue = state.queue;
   m_queueCursor = 0;
   m_mode = state.mode;
   m_mediaFilter = state.mediaFilter;
   m_writeMetadata = state.writeMetadata;
   m_summary = state.summarySoFar;
-  m_totalItemsAtStart =
-      countQueueRemaining() + m_summary.scraped + m_summary.skipped + m_summary.errors;
-  m_itemsCompleted = m_summary.scraped + m_summary.skipped + m_summary.errors;
+  // The persisted flag documents WHY the previous leg stopped; the user chose
+  // to resume (quota presumably reset), so the new leg starts unexhausted —
+  // otherwise a clean resumed run would still report quota death at the end.
+  m_summary.quotaExhausted = false;
+  // Collection indices are NOT stable across sessions (add/remove/reorder,
+  // playlist resync) but the persisted index is used to build the provider
+  // (per-collection overrides / systemeid) and — for entity jobs — to mutate
+  // that collection's config fields. Re-resolve every job's live index from
+  // its stable UUID and drop jobs whose UUID no longer resolves; trusting a
+  // stale index would silently scrape against (and write art into) another
+  // collection's config. Legacy v1 snapshots without a UUID keep their index.
+  if (m_ctx.collections) {
+    QList<CollectionJob> liveQueue;
+    liveQueue.reserve(m_queue.size());
+    for (CollectionJob job : std::as_const(m_queue)) {
+      if (!job.collectionUuid.isEmpty()) {
+        const int liveIndex = CollectionUtils::indexForUuid(*m_ctx.collections, job.collectionUuid);
+        if (liveIndex < 0) {
+          qCWarning(lcScraperService)
+              << "Dropping resumed job for" << job.collectionName
+              << "— its collection UUID no longer resolves (collection removed or renamed)";
+          continue;
+        }
+        job.collectionIndex = liveIndex;
+        if (job.isEntityJob()) job.entity.collectionIndex = liveIndex;
+      }
+      liveQueue.append(job);
+    }
+    m_queue = std::move(liveQueue);
+    // Failed items re-queue against the live list too ("re-scrape failed"
+    // after a resume). Unresolvable entries go to -1; the dialog's grouping
+    // skips out-of-range owners.
+    for (auto &failed : m_summary.failedItems) {
+      if (failed.collectionUuid.isEmpty()) continue;
+      failed.collectionIndex =
+          CollectionUtils::indexForUuid(*m_ctx.collections, failed.collectionUuid);
+    }
+  }
+  m_totalItemsAtStart = countQueueRemaining() + m_summary.processedItems();
+  m_itemsCompleted = m_summary.processedItems();
   m_startedAtMs =
       state.startedAtUnixMs > 0 ? state.startedAtUnixMs : QDateTime::currentMSecsSinceEpoch();
   m_currentCollectionName.clear();
@@ -188,6 +215,23 @@ void ScraperService::resumeFromState(const PendingState &state) {
 
 void ScraperService::cancel() {
   if (m_state == State::Idle) return;
+  // Establish the terminal state BEFORE triggering any drain. Both branches
+  // below call HttpClient::clearPending() (directly, or inside
+  // BatchScrapeRunner::cancel()), which resolves queued callbacks
+  // SYNCHRONOUSLY on this stack. If we drained while still RunningAuto/
+  // RunningInteractive with our slots connected, a synchronously-resolved
+  // callback could re-enter onAutoFinished / interactiveLookupComplete,
+  // advance the queue, and start the next collection detached — plus a
+  // double scrapeFinished. Setting Finishing first makes those callbacks'
+  // `m_state != Running…` guards short-circuit to a clean return.
+  m_state = State::Finishing;
+  // Bump so a still-in-flight entity-fetch callback from this run no-ops when
+  // it resolves (Kartend-ckepd.2 review).
+  ++m_runGeneration;
+  // Stop any queued/in-progress entity media write promptly — the token is
+  // polled between assets inside writeMediaFiles, so cancel interrupts a
+  // multi-asset platform-art write instead of letting it run to completion.
+  m_entityWriteCancel->store(true, std::memory_order_release);
   if (m_autoRunner) {
     // An in-flight HTTP request can't be interrupted — waiting for the
     // runner's own `finished` (the old behaviour) leaves the UI frozen
@@ -197,13 +241,28 @@ void ScraperService::cancel() {
     // service), and let it delete itself once its `finished` lands.
     // The synthesized finish below returns the UI to the setup view
     // immediately.
-    m_autoRunner->cancel();
-    disconnect(m_autoRunner, nullptr, this, nullptr);
-    connect(m_autoRunner, &BatchScrapeRunner::finished, m_autoRunner, &QObject::deleteLater);
+    //
+    // Detach BEFORE cancel(): the runner's cancel() drains queued HTTP
+    // callbacks synchronously, and the last one can emit finished() on this
+    // stack. Dropping our slots first means that finished can't re-enter
+    // onAutoFinished (which would ++m_queueCursor + pump() the next
+    // collection). Null the service pointer first too, so the finished→
+    // deleteLater connect below binds the runner that's actually going away.
+    BatchScrapeRunner *runner = m_autoRunner;
     m_autoRunner = nullptr;
+    disconnect(runner, nullptr, this, nullptr);
+    connect(runner, &BatchScrapeRunner::finished, runner, &QObject::deleteLater);
+    runner->cancel();
+  } else {
+    // No runner (interactive lookup or entity fan-out in flight): those
+    // requests queue in the same per-host HttpClient queues — drop the
+    // not-yet-dispatched ones so a cancelled run stops burning quota and a
+    // fresh run doesn't contend behind dead requests. The Finishing state set
+    // above makes any synchronously-resolved interactive callback no-op. (The
+    // runner path does this inside BatchScrapeRunner::cancel().)
+    HttpClient::instance()->clearPending();
   }
   // Interactive / paused: synthesize a finish.
-  m_state = State::Finishing;
   clearStateFile();
   emit scrapeFinished(m_summary);
   m_state = State::Idle;
@@ -217,6 +276,11 @@ void ScraperService::skipCurrentItem() {
 
 void ScraperService::pauseInteractive() {
   if (m_state != State::RunningInteractive) return;
+  // Invalidate any in-flight entity fetch / media-download callbacks so one
+  // that resolves AFTER a resume (which re-dispatches the item from scratch)
+  // can't double-advance the queue or double-count (Kartend-ckepd.3 review).
+  // Mirrors cancel()/startScrape's generation bump.
+  ++m_runGeneration;
   m_state = State::PausedInteractive;
   emit scrapePaused();
   persistState();
@@ -277,8 +341,10 @@ void ScraperService::pump() {
     return;
   }
   // Skip empty queue entries (defensive — applyPick/skipPick prune
-  // them inline but a malformed resume could land here).
-  while (m_queueCursor < m_queue.size() && m_queue[m_queueCursor].items.isEmpty()) {
+  // them inline but a malformed resume could land here). Entity jobs have no
+  // item list but ARE work, so they must not be skipped (Kartend-ckepd.2).
+  while (m_queueCursor < m_queue.size() && m_queue[m_queueCursor].items.isEmpty() &&
+         !m_queue[m_queueCursor].isEntityJob()) {
     ++m_queueCursor;
   }
   if (m_queueCursor >= m_queue.size()) {
@@ -289,6 +355,13 @@ void ScraperService::pump() {
     return;
   }
   m_currentCollectionName = m_queue[m_queueCursor].collectionName;
+  // An entity scrape is a single provider fetch with no per-item picker, so it
+  // dispatches the same way regardless of Auto / Interactive mode.
+  if (m_queue[m_queueCursor].isEntityJob()) {
+    m_state = m_mode == Mode::Auto ? State::RunningAuto : State::RunningInteractive;
+    m_entityCoordinator.startEntityCollection();
+    return;
+  }
   if (m_mode == Mode::Auto) {
     m_state = State::RunningAuto;
     startAutoCollection();
@@ -384,6 +457,7 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
   m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
   m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
   m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
+  m_summary.notFound = m_summaryAtCollectionStart.notFound + runnerSummary.notFound;
   m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
   m_summary.sidecarFailures =
       m_summaryAtCollectionStart.sidecarFailures + runnerSummary.sidecarFailures;
@@ -392,6 +466,30 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
     if (m_summary.firstFailures.size() >= kMaxReportedFailures) break;
     m_summary.firstFailures.append(f);
   }
+  // Kartend-jjjo5: tag each errored path with the collection currently being
+  // scraped so the dialog can rebuild one CollectionJob per owner. SET
+  // semantics, same as firstFailures — m_queueCursor still points at the active
+  // collection when this runs (it advances only after onAutoFinished).
+  m_summary.failedItems = m_summaryAtCollectionStart.failedItems;
+  const bool haveJob = m_queueCursor < m_queue.size();
+  const int curIdx = haveJob ? m_queue[m_queueCursor].collectionIndex : -1;
+  const QString curUuid = haveJob ? m_queue[m_queueCursor].collectionUuid : QString();
+  for (const QString &p : runnerSummary.failedPaths) {
+    if (m_summary.failedItems.size() >= kMaxReportedFailures) break;
+    m_summary.failedItems.append({curIdx, p, curUuid, /*isEntity=*/false, {}});
+  }
+}
+
+void ScraperService::stopForQuotaExhaustion() {
+  // Mirrors onAutoFinished's quota branch: do NOT advance the cursor or clear
+  // the state file — the persisted queue (current job included) IS the resume
+  // point the user continues from after the quota resets.
+  m_summary.quotaExhausted = true;
+  schedulePersist();
+  flushPendingPersist(); // ensure the resume point hits disk now
+  m_state = State::Finishing;
+  emit scrapeFinished(m_summary);
+  m_state = State::Idle;
 }
 
 void ScraperService::onAutoItemBegan(int doneInCol, int /*totalInCol*/, const QString &name) {
@@ -406,6 +504,14 @@ void ScraperService::onAutoItemBegan(int doneInCol, int /*totalInCol*/, const QS
   if (m_autoRunner) {
     rollRunnerSummaryIntoSummary(m_autoRunner->currentSummary());
     m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
+    // Sync the persisted remaining list here too: errored / not-found items
+    // never fire itemCompleted, but they DO tick progress — without this a
+    // crash after a run of pure failures would persist a stale remaining
+    // list. Cheap: an implicitly-shared list copy per tick.
+    if (m_queueCursor < m_queue.size()) {
+      m_queue[m_queueCursor].items = m_autoRunner->remainingPaths();
+      schedulePersist();
+    }
   }
   qCDebug(lcScraperService) << "itemBegan name=" << name << "doneInCol=" << doneInCol
                             << "totalCompleted=" << m_itemsCompleted << "of" << m_totalItemsAtStart;
@@ -431,13 +537,14 @@ void ScraperService::onAutoItemCompleted(int doneInCol, int /*totalInCol*/,
   qCDebug(lcScraperService) << "itemCompleted scraped.title=" << scraped.title
                             << "mediaPaths=" << paths.size()
                             << "totalCompleted=" << m_itemsCompleted;
-  // Remove the just-completed item from the persisted queue so a
-  // resume picks up at the *next* unfinished item. The runner is
-  // walking m_queue[m_queueCursor].items by value (it was copy-
-  // constructed from `job.items` at startAutoCollection), so we own
-  // the queue-side trim independently.
-  if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
-    m_queue[m_queueCursor].items.removeFirst();
+  // Sync the persisted remaining list from the runner, which trims items by
+  // identity as they reach a terminal outcome. The old positional
+  // removeFirst() dropped the HEAD of the list whenever ANY item succeeded —
+  // with interleaved errors (or itemConcurrency > 1, where completion order
+  // != queue order) a resume would re-scrape completed items and never
+  // revisit dropped ones.
+  if (m_queueCursor < m_queue.size() && m_autoRunner) {
+    m_queue[m_queueCursor].items = m_autoRunner->remainingPaths();
   }
   schedulePersist();
   emit itemCompleted(m_itemsCompleted, m_totalItemsAtStart, scraped, paths);
@@ -455,20 +562,28 @@ void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
   }
   qCInfo(lcScraperService) << "onAutoFinished collection done — scraped=" << summary.scraped
                            << "skipped=" << summary.skipped << "errors=" << summary.errors
+                           << "notFound=" << summary.notFound
                            << "quotaExhausted=" << summary.quotaExhausted;
 
   // Quota exhausted (HTTP 430/431): SS's daily allowance is spent, so
   // every remaining item in every remaining collection would just
   // fail. Stop the whole queue here. Crucially we do NOT clear the
-  // current collection's items or advance m_queueCursor — the items
-  // still un-scraped (the runner removes only successfully-scraped
-  // ones) stay in the queue, and the schedulePersist below writes
-  // them out so the user can resume after the quota resets. We also
-  // do NOT clearStateFile() (unlike the normal queue-drained path in
-  // pump()) — the persisted state IS the resume point.
+  // current collection's items or advance m_queueCursor — the runner's
+  // remaining list (everything without a real terminal verdict,
+  // quota-stopped work included) stays in the queue, and the
+  // schedulePersist below writes it out so the user can resume after
+  // the quota resets. We also do NOT clearStateFile() (unlike the
+  // normal queue-drained path in pump()) — the persisted state IS the
+  // resume point.
   if (summary.quotaExhausted) {
     m_summary.quotaExhausted = true;
     if (m_autoRunner) {
+      // Final remaining-list sync before the runner goes away: keeps the
+      // quota-erroring item and everything undispatched, drops whatever
+      // settled with a real verdict before the stop.
+      if (m_queueCursor < m_queue.size()) {
+        m_queue[m_queueCursor].items = m_autoRunner->remainingPaths();
+      }
       m_autoRunner->deleteLater();
       m_autoRunner = nullptr;
     }
@@ -506,6 +621,14 @@ void ScraperService::startInteractiveItem() {
     return;
   }
   auto &job = m_queue[m_queueCursor];
+  // Entity jobs have no per-item picker; dispatch them the same way pump()
+  // does, so the interactive pause/resume path (resumePaused → here) doesn't
+  // silently skip an entity job as if its empty item list meant "done"
+  // (Kartend-ckepd.2 review).
+  if (job.isEntityJob()) {
+    m_entityCoordinator.startEntityCollection();
+    return;
+  }
   if (job.items.isEmpty()) {
     ++m_queueCursor;
     pump();
@@ -568,10 +691,37 @@ void ScraperService::interactiveLookupComplete(
     return;
   }
   if (result.isError()) {
-    ++m_summary.errors;
-    if (m_summary.firstFailures.size() < kMaxReportedFailures) {
-      m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(
-          QFileInfo(m_currentItemPath).fileName(), result.error().message));
+    const auto &err = result.error();
+    // Quota exhaustion (as classified by the provider) stops the whole
+    // queue with a resume point — the per-item auto-advance below would
+    // otherwise machine-gun every remaining lookup into the exhausted quota
+    // at one doomed request per item, deepening a failed-lookup ban. The
+    // current item stays queued (its lookup consumed nothing scrappable).
+    if (m_interactiveProvider && m_interactiveProvider->isQuotaExhausted(err)) {
+      qCWarning(lcScraperService) << "interactive lookup hit provider quota (HTTP" << err.httpStatus
+                                  << ") — stopping the queue with a resume point";
+      stopForQuotaExhaustion();
+      return;
+    }
+    // Kartend-e8aag: a 404 / RemoteResourceNotFound is a routine "not found",
+    // counted apart from errors and kept out of the failure list.
+    if (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404) {
+      ++m_summary.notFound;
+    } else {
+      ++m_summary.errors;
+      if (m_summary.firstFailures.size() < kMaxReportedFailures) {
+        // Kartend-e6oyu: enriched summary (status + detail) over bare message.
+        m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(
+            QFileInfo(m_currentItemPath).fileName(), err.userFacingSummary()));
+      }
+      // Kartend-jjjo5: retain the errored path (tagged with its collection)
+      // for "re-scrape failed".
+      if (m_summary.failedItems.size() < kMaxReportedFailures) {
+        const bool haveJob = m_queueCursor < m_queue.size();
+        const int idx = haveJob ? m_queue[m_queueCursor].collectionIndex : -1;
+        const QString uuid = haveJob ? m_queue[m_queueCursor].collectionUuid : QString();
+        m_summary.failedItems.append({idx, m_currentItemPath, uuid, /*isEntity=*/false, {}});
+      }
     }
     ++m_itemsCompleted;
     if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
@@ -585,7 +735,8 @@ void ScraperService::interactiveLookupComplete(
     return;
   }
   if (result.value().isEmpty()) {
-    ++m_summary.skipped;
+    // Kartend-e8aag: provider returned no match — "not found", not skipped.
+    ++m_summary.notFound;
     ++m_itemsCompleted;
     if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
       m_queue[m_queueCursor].items.removeFirst();
@@ -629,57 +780,18 @@ void ScraperService::persistState() {
     clearStateFile();
     return;
   }
-  QJsonObject root;
-  root[QStringLiteral("version")] = kCurrentStateVersion;
-  root[QStringLiteral("started_at_unix_ms")] = m_startedAtMs;
-  root[QStringLiteral("mode")] =
-      m_mode == Mode::Auto ? QStringLiteral("auto") : QStringLiteral("interactive");
-  root[QStringLiteral("write_metadata")] = m_writeMetadata;
-  QJsonArray filterArr;
-  for (const auto &t : m_mediaFilter) filterArr.append(t);
-  root[QStringLiteral("media_filter")] = filterArr;
-  QJsonObject sumObj;
-  sumObj[QStringLiteral("scraped")] = m_summary.scraped;
-  sumObj[QStringLiteral("skipped")] = m_summary.skipped;
-  sumObj[QStringLiteral("errors")] = m_summary.errors;
-  sumObj[QStringLiteral("media_written")] = m_summary.mediaWritten;
-  QJsonArray failArr;
-  for (const auto &f : m_summary.firstFailures) failArr.append(f);
-  sumObj[QStringLiteral("first_failures")] = failArr;
-  root[QStringLiteral("summary_so_far")] = sumObj;
-  QJsonArray queueArr;
-  for (int i = m_queueCursor; i < m_queue.size(); ++i) {
-    const auto &j = m_queue[i];
-    if (j.items.isEmpty()) continue;
-    QJsonObject jObj;
-    jObj[QStringLiteral("collection_index")] = j.collectionIndex;
-    jObj[QStringLiteral("collection_uuid")] = j.collectionUuid;
-    jObj[QStringLiteral("collection_name")] = j.collectionName;
-    jObj[QStringLiteral("artwork_dir")] = j.artworkDir;
-    QJsonArray itemsArr;
-    for (const auto &p : j.items) itemsArr.append(p);
-    jObj[QStringLiteral("remaining")] = itemsArr;
-    queueArr.append(jObj);
-  }
-  root[QStringLiteral("queue")] = queueArr;
-
-  const QString path = pendingStateFilePath();
-  QDir().mkpath(QFileInfo(path).absolutePath());
-  // QSaveFile streams into a temp sibling and atomically renames on
-  // commit() — so a crash mid-write can't leave a truncated
-  // pending-scrape.json. A partial file fails loadPendingState()'s JSON
-  // parse, which silently suppresses the resume prompt on next launch.
-  QSaveFile f(path);
-  if (!f.open(QIODevice::WriteOnly)) {
-    qCWarning(lcScraperService) << "Failed to write pending state to" << path;
-    return;
-  }
-  // Compact rather than Indented: smaller file, faster to format, and
-  // the file is machine-read only — no human ever edits this.
-  f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-  if (!f.commit()) {
-    qCWarning(lcScraperService) << "Failed to commit pending state to" << path;
-  }
+  // Snapshot the live run into the public PendingState shape and let the
+  // serialization module do the byte-level work (JSON build + atomic write).
+  PendingState snap;
+  snap.hasState = true;
+  snap.startedAtUnixMs = m_startedAtMs;
+  snap.mode = m_mode;
+  snap.writeMetadata = m_writeMetadata;
+  snap.mediaFilter = m_mediaFilter;
+  snap.summarySoFar = m_summary;
+  snap.queue = m_queue.mid(m_queueCursor);
+  ScrapePendingState::atomicWrite(ScrapePendingState::filePath(),
+                                  ScrapePendingState::serialize(snap));
 }
 
 void ScraperService::schedulePersist() {
@@ -703,16 +815,16 @@ void ScraperService::clearStateFile() {
   // scrape that never got the lock must leave the real owner's state
   // intact when it finishes.
   if (m_ownsStateFile) {
-    const QString path = pendingStateFilePath();
+    const QString path = ScrapePendingState::filePath();
     if (QFile::exists(path)) QFile::remove(path);
   }
-  releaseScrapeLock();
+  m_scrapeLock.release();
   m_ownsStateFile = false;
 }
 
 ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad) {
   PendingState out;
-  const QString path = pendingStateFilePath();
+  const QString path = ScrapePendingState::filePath();
   QFile f(path);
   if (!f.exists() || !f.open(QIODevice::ReadOnly)) return out;
   // A pending file that belongs to a still-running Kartend instance is
@@ -720,55 +832,17 @@ ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad
   // state so the caller skips the resume prompt; the owning instance
   // clears the file itself when its scrape finishes. Never consume it
   // here, even with consumeOnLoad set.
-  if (pendingScrapeOwnedByLiveInstance()) {
+  if (ScrapeLock::ownedByLiveInstance(ScrapePendingState::lockFilePath())) {
     qCInfo(lcScraperService) << "pending-scrape.json belongs to a running Kartend instance — "
                                 "skipping resume.";
     return out;
   }
   const QByteArray bytes = f.readAll();
   f.close();
-  QJsonParseError err{};
-  const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
-  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-    qCWarning(lcScraperService) << "Bad pending-scrape.json:" << err.errorString();
-    if (consumeOnLoad) QFile::remove(path);
-    return out;
-  }
-  const QJsonObject root = doc.object();
-  const int version = root.value(QStringLiteral("version")).toInt(0);
-  if (version != kCurrentStateVersion) {
-    qCWarning(lcScraperService) << "Unsupported pending-scrape.json version" << version;
-    if (consumeOnLoad) QFile::remove(path);
-    return out;
-  }
-  out.startedAtUnixMs =
-      static_cast<qint64>(root.value(QStringLiteral("started_at_unix_ms")).toDouble(0));
-  out.mode = root.value(QStringLiteral("mode")).toString() == QLatin1String("interactive")
-                 ? Mode::Interactive
-                 : Mode::Auto;
-  out.writeMetadata = root.value(QStringLiteral("write_metadata")).toBool(true);
-  const auto filterArr = root.value(QStringLiteral("media_filter")).toArray();
-  for (const auto &v : filterArr) out.mediaFilter.insert(v.toString());
-  const auto sumObj = root.value(QStringLiteral("summary_so_far")).toObject();
-  out.summarySoFar.scraped = sumObj.value(QStringLiteral("scraped")).toInt(0);
-  out.summarySoFar.skipped = sumObj.value(QStringLiteral("skipped")).toInt(0);
-  out.summarySoFar.errors = sumObj.value(QStringLiteral("errors")).toInt(0);
-  out.summarySoFar.mediaWritten = sumObj.value(QStringLiteral("media_written")).toInt(0);
-  const auto failArr = sumObj.value(QStringLiteral("first_failures")).toArray();
-  for (const auto &v : failArr) out.summarySoFar.firstFailures.append(v.toString());
-  const auto queueArr = root.value(QStringLiteral("queue")).toArray();
-  for (const auto &v : queueArr) {
-    const auto jo = v.toObject();
-    CollectionJob job;
-    job.collectionIndex = jo.value(QStringLiteral("collection_index")).toInt(-1);
-    job.collectionUuid = jo.value(QStringLiteral("collection_uuid")).toString();
-    job.collectionName = jo.value(QStringLiteral("collection_name")).toString();
-    job.artworkDir = jo.value(QStringLiteral("artwork_dir")).toString();
-    const auto items = jo.value(QStringLiteral("remaining")).toArray();
-    for (const auto &p : items) job.items.append(p.toString());
-    if (!job.items.isEmpty()) out.queue.append(job);
-  }
-  out.hasState = !out.queue.isEmpty();
+  // Parse failures and unsupported versions come back as an invalid state
+  // (deserialize logs the reason); consuming in that case discards the
+  // unusable file exactly as the valid-load consume does.
+  out = ScrapePendingState::deserialize(bytes);
   if (consumeOnLoad) QFile::remove(path);
   return out;
 }
@@ -780,11 +854,11 @@ void ScraperService::discardPendingState() {
   // so an unconditional remove here can't clobber a running scrape.
   m_persistDirty = false;
   if (m_persistTimer) m_persistTimer->stop();
-  const QString path = pendingStateFilePath();
+  const QString path = ScrapePendingState::filePath();
   if (QFile::exists(path)) QFile::remove(path);
   // Drop the now-orphaned lock file too so the config dir stays tidy;
   // QLockFile would reclaim it as stale anyway.
-  QFile::remove(pendingStateLockFilePath());
+  QFile::remove(ScrapePendingState::lockFilePath());
 }
 
 } // namespace Scraper

@@ -211,8 +211,11 @@ void SingleItemScrapeView::onCandidateSelected(int row) {
       return;
     }
     if (result.isError()) {
+      // Kartend-e6oyu: show the enriched summary (status + server-detail
+      // snippet) so a one-off lookup failure is diagnosable, not a bare
+      // "HTTP request failed".
       guard->m_detailText->setHtml(QStringLiteral("<p style='color:red'>%1</p>")
-                                       .arg(result.error().message.toHtmlEscaped()));
+                                       .arg(result.error().userFacingSummary().toHtmlEscaped()));
       guard->m_mediaList->clear();
       guard->clearMediaRows();
       guard->setDetailPage(DetailStackPage::Detail);
@@ -244,6 +247,8 @@ void SingleItemScrapeView::populateMediaCheckboxes(const Scraper::ScrapedItem &i
       label += QStringLiteral(" — ") + tr("theme/family (shared)");
     } else if (asset.scope == Scraper::MediaScope::Company) {
       label += QStringLiteral(" — ") + tr("publisher (shared)");
+    } else if (asset.scope == Scraper::MediaScope::Platform) {
+      label += QStringLiteral(" — ") + tr("platform (shared)");
     }
     auto *checkbox = new QCheckBox(label, m_mediaList);
     checkbox->setChecked(true); // Pre-check everything; user unchecks what they don't want.

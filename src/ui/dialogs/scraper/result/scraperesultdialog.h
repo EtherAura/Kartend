@@ -7,7 +7,6 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QList>
-#include <QSet>
 #include <QString>
 #include <QTimer>
 
@@ -144,8 +143,17 @@ public:
   /// dialog close / app restart. The dialog observes the service's
   /// signals to keep its Live view in sync; closing the dialog only
   /// hides it (the service keeps running). On re-entry the dialog
-  /// reattaches to whatever state the service is in.
+  /// reattaches to whatever state the service is in. Rebinding is
+  /// structurally duplicate-proof: a same-service call is a no-op and
+  /// a service change first disconnects every old-service connection.
   void setScraperService(Scraper::ScraperService *service);
+
+  /// Single open-time rebinding entry for the reused dialog: binds the
+  /// data callbacks and the long-lived service in one call. Safe to call
+  /// on every open — each connection the open path relies on is either
+  /// made once at construction (buildUi) or guarded structurally inside
+  /// setScraperService, so re-opening can never stack duplicates.
+  void bindForOpen(const ScraperContext &ctx, Scraper::ScraperService *service);
 
   /// Open the dialog in unified-setup mode. When `preCollectionIndex`
   /// is non-negative, that collection is pre-checked in the tree; when
@@ -200,7 +208,7 @@ signals:
   /// interactive) so the caller can refresh the grid / details pane /
   /// artwork cache. Sent before the dialog closes itself; the caller
   /// can show a summary box.
-  void unifiedScrapeFinished(int totalScraped, int totalSkipped, int totalErrors,
+  void unifiedScrapeFinished(int totalScraped, int totalSkipped, int totalErrors, int totalNotFound,
                              const QStringList &firstFailures);
 
 protected:
@@ -244,6 +252,13 @@ private:
   enum class UnifiedPhase { Setup, AutoRunning, InteractiveLookingUp, InteractivePicking, Done };
 
   void buildUi();
+  /// Reset every run-scoped member in one place. Called by the open path
+  /// (startUnifiedScrape's fresh-setup branch, i.e. whenever the dialog is
+  /// not re-attaching to a live run) and again on each scrapeStarted, so no
+  /// state from a previous run leaks across a hide-and-reopen or into the
+  /// next run. Session-scoped state (the custom-field key union, the last
+  /// known quota reset time) is deliberately left intact.
+  void resetRunState();
   /// Skip the item currently being scraped in the Unified flow —
   /// dispatches to the active ScraperService (its auto-runner) or, in
   /// the legacy in-dialog path, the directly-bound BatchScrapeRunner.
@@ -279,11 +294,10 @@ private:
   // in onApply and toggles m_applyButton on detailLoaded / detailFailed.
 
   QPushButton *m_applyButton = nullptr;
+  // Apply / Scrape / Close are all added to the one QDialogButtonBox in
+  // buildUi (construct-once, unified pair starts hidden); no stored box
+  // handle is needed now that nothing adds buttons after construction.
   QPushButton *m_scrapeButton = nullptr;
-  /// Kartend-l06g6: direct handle to the dialog button box. The unified
-  /// controller used to re-derive it via m_applyButton->parent(), which
-  /// breaks silently if the button is ever wrapped in a container.
-  QDialogButtonBox *m_buttonBox = nullptr;
   /// Outer mode-swap: page 0 hosts the existing single-item splitter
   /// (candidate / detail / media); page 1 hosts the batch-progress
   /// panel; page 2 hosts the unified-setup panel.
@@ -309,17 +323,9 @@ private:
   /// its first response); shown only once a valid quota arrives via
   /// the service's quotaUpdated signal during a live scrape.
   QLabel *m_unifiedQuotaLabel = nullptr;
-  /// Local-time "HH:mm" the SS quota next resets at, captured from
-  /// the most recent quotaUpdated signal. Reused by the quota-
-  /// exhausted scrapeFinished message so it can name the reset time
-  /// without re-deriving it. Empty until the first quota update.
-  QString m_lastQuotaResetText;
+  // m_lastQuotaResetText and m_shownCollectionName moved onto
+  // ScrapeResultDialogUnified — only its handlers ever read or wrote them.
   QLabel *m_unifiedCurrentLabel = nullptr;
-  /// Collection name currently shown in m_unifiedCurrentLabel. Tracked so
-  /// the itemBegan handler can refresh the label whenever the scrape moves
-  /// to a new collection — without re-setting it per-item when
-  /// batchItemConcurrency > 1 starts several items at once.
-  QString m_shownCollectionName;
   // Live-view widgets (shown when ScraperService is active). Layered
   // into the unified page; visibility toggled by setUnifiedSetupEnabled.
   QGroupBox *m_liveMetadataGroup = nullptr;
@@ -344,25 +350,10 @@ private:
   /// grid above). Re-populated by `populateCustomFields` on every
   /// `itemCompleted` against the union of every key ever seen so the
   /// section size stays stable instead of growing as new providers /
-  /// items contribute new keys.
+  /// items contribute new keys. The key union, the persistent per-key
+  /// cells, and the typed-chip boundary index moved onto
+  /// ScrapeResultDialogUnified, which owns every read and write.
   QWidget *m_liveExtrasContainer = nullptr;
-  /// Union of every custom-field key seen across this scrape session.
-  /// `populateCustomFields` adds new keys then renders the union — so
-  /// the section always shows every possible field, with empty values
-  /// for keys not present in the current scraped item.
-  QSet<QString> m_allSeenCustomKeys;
-  /// Persistent per-key QLineEdit cells inside m_liveExtrasContainer.
-  /// Created once (either at panel build time for the pre-seeded
-  /// "known" keys, or lazily when a new key first appears) and reused
-  /// across items — populateCustomFields just rewrites the .text on
-  /// each cell, so the section's widget count + layout stay rock-
-  /// stable instead of being torn down and rebuilt every item.
-  QHash<QString, QLineEdit *> m_customFieldEdits;
-  /// Number of fixed typed-field chips occupying the first N slots
-  /// of m_liveExtrasContainer's FlowLayout. Custom-field chips are
-  /// appended after these and torn down / rebuilt from index
-  /// m_typedChipCount onward, leaving the typed chips untouched.
-  int m_typedChipCount = 0;
   QGroupBox *m_liveThumbsGroup = nullptr;
   QListWidget *m_liveThumbsStrip = nullptr;
   QPushButton *m_closeButton = nullptr;
@@ -446,9 +437,10 @@ private:
   /// 1-second tick that keeps the Live view's timing/rate readout
   /// fresh between item-event signals (a slow download can leave the
   /// label stale otherwise). Started when the service goes active,
-  /// stopped on scrapeFinished.
-  QTimer m_liveTickTimer; // Kartend-a911.6: value member
-  bool m_liveTickTimerInited = false;
+  /// stopped on scrapeFinished. Interval + timeout connection are wired
+  /// exactly once, in buildUi — every run/show/hide path only ever
+  /// calls start()/stop() on it.
+  QTimer m_liveTickTimer;
 
   /// Owns the unified-flow queue walker, live-metadata panel renderer, and
   /// ScraperService signal handlers. Constructed once in the ctor with a

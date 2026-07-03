@@ -28,39 +28,6 @@
 struct CollectionConfig;
 struct GeneralSettings;
 
-namespace ScreenScraperProviderHelpers {
-
-/// Hit SS's `ssuserInfos.php` with whatever credentials are currently
-/// in `settings.scraper.credentials["screenscraper"]` (falling back to
-/// the bundled dev_id for the dev fields when absent). The callback
-/// fires on the main thread with the parsed user-info struct or an
-/// error context. Used by the Scraper settings panel to surface "this
-/// account gets N threads" without forcing the user to scrape first.
-using UserInfoCallback =
-    std::function<void(ErrorUtils::Result<ScreenScraperParser::ScreenScraperUserInfo>)>;
-void fetchUserInfo(const GeneralSettings *settings, UserInfoCallback callback);
-
-/// Hit SS's `ssinfraInfos.php` to get realtime cluster status (CPU
-/// load, active scrapers today, anonymous-tier shutdown flags). One
-/// cheap probe used by the scrape-result dialog before firing the
-/// real lookup so users see "SS is busy right now" instead of a
-/// timeout. Needs only dev creds — user creds optional.
-using InfraInfoCallback =
-    std::function<void(ErrorUtils::Result<ScreenScraperParser::ScreenScraperInfraInfo>)>;
-void fetchInfraInfo(const GeneralSettings *settings, InfraInfoCallback callback);
-
-/// Probe ssinfraInfos.php and project the response into a HealthStatus
-/// (refuseScrape + humanStatus). Honors `closeforleecher` /
-/// `closeforexternalscrapers` for anonymous-only callers. Extracted
-/// from ScreenScraperProvider::fetchHealthStatus so the pure
-/// transformation (InfraInfo → HealthStatus) can be tested without a
-/// network mock. Returns an empty HealthStatus on probe failure —
-/// transient blips shouldn't surface in the dialog.
-void fetchHealthStatus(const GeneralSettings *settings,
-                       MetadataLookupProvider::HealthCallback callback);
-
-} // namespace ScreenScraperProviderHelpers
-
 /// ScreenScraper.fr API-backed provider for game collections.
 ///
 /// Auth: dual credentials. The dev credentials (devid + devpassword)
@@ -80,13 +47,6 @@ void fetchHealthStatus(const GeneralSettings *settings,
 /// with systemeid=0 (SS treats this as "search all systems" — lower
 /// match quality but doesn't hard-fail).
 class ScreenScraperProvider : public ProviderBase {
-  // Test seam (Kartend-hsboz): buildJeuInfosUrl and the sibling request
-  // builders are private but were extracted specifically so the SS query
-  // shape can be regression-tested without the network (see the member
-  // docs). Granting the test friendship keeps them off the public API while
-  // letting test_screenscraperprovider.cpp exercise them directly.
-  friend class TestScreenScraperProvider;
-
 public:
   using GeneralSettingsAccessor = std::function<const GeneralSettings *()>;
   /// Resolves the collection context for the next scrape. Returning
@@ -106,6 +66,12 @@ public:
   [[nodiscard]] Capabilities capabilities() const override {
     return Capability::WebSearch | Capability::MetadataLookup | Capability::MediaFetch;
   }
+  /// ScreenScraper can scrape Game items and Platform (console/system) art via
+  /// its systemesListe.php catalog + mediaSysteme.php media endpoint
+  /// (Kartend-ckepd.4).
+  [[nodiscard]] QList<Scraper::ScrapeEntityType> supportedEntities() const override {
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+  }
   [[nodiscard]] QUrl searchUrl(const QString &query) const override;
 
   void lookup(const QString &query, LookupCallback callback) override;
@@ -117,6 +83,12 @@ public:
   void lookup(const LookupContext &ctx, LookupCallback callback) override;
   void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) override;
   void fetchMediaBytes(const QUrl &url, MediaCallback callback) override;
+  /// Scrape PLATFORM-level art (console logo / system illustration) for the
+  /// ScreenScraper systemeid carried in `target.identity`. Resolves the system
+  /// in the cached systemesListe.php catalog for its display name, then emits
+  /// mediaSysteme.php media URLs (downloaded later via fetchMediaBytes; SS's
+  /// 404 for an absent media type is non-fatal). Kartend-ckepd.4.
+  void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) override;
 
   /// Hash a regular (non-archive) file through FileHashCache so an unchanged
   /// file (same size+mtime) is not re-hashed on every scrape. Opens its own
@@ -202,16 +174,10 @@ private:
   /// user creds are optional. The struct itself is owned by
   /// ScreenScraperCatalogManager (the catalog dance needs the same
   /// shape); the alias keeps the rest of the provider's call sites —
-  /// buildJeuInfosUrl, the URL builders — unchanged.
+  /// the ScreenScraperUrls builders — unchanged.
   using Credentials = ScreenScraperCatalogManager::Credentials;
   [[nodiscard]] Credentials currentCredentials() const;
 
-  /// Build the jeuInfos.php URL from credentials + resolved system id
-  /// + hash result. Extracted from runLookupAfterHash so the SS query
-  /// shape can be regression-tested without hitting the network.
-  [[nodiscard]] QUrl buildJeuInfosUrl(const Credentials &creds, const QString &romnom,
-                                      int systemeid, const RomHasher::Result &hashes,
-                                      bool hasUser) const;
   /// Resolves systemeid for the current scrape. Picks the explicit
   /// override on the collection when set; otherwise runs autodetect
   /// against the supplied catalog; otherwise returns 0 (SS's "any

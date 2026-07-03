@@ -17,6 +17,7 @@
 // client disables peer verification in initTestCase so the self-signed cert is
 // accepted without a real CA.
 #include <optional>
+#include <thread>
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -339,6 +340,45 @@ private:
   bool m_servedRedirect = false;
 };
 
+// Minimal HTTPS/1.1 server that answers every request with one canned raw
+// response. Used by the error-body sanitization test to serve an HTTP error
+// whose body carries CR/LF and terminal-escape bytes.
+class StaticResponseServer : public QObject {
+  Q_OBJECT
+public:
+  explicit StaticResponseServer(QByteArray response, QObject *parent = nullptr)
+      : QObject(parent), m_response(std::move(response)) {
+    m_server = new QSslServer(this);
+    m_server->setSslConfiguration(serverTlsConfig());
+    // See FloodingServer: QSslServer signals readiness via
+    // pendingConnectionAvailable, not newConnection.
+    connect(m_server, &QTcpServer::pendingConnectionAvailable, this,
+            &StaticResponseServer::handleConnection);
+  }
+
+  bool start() { return m_server->listen(QHostAddress::LocalHost, 0); }
+  quint16 port() const { return m_server->serverPort(); }
+
+private slots:
+  void handleConnection() {
+    QTcpSocket *sock = m_server->nextPendingConnection();
+    if (!sock) return;
+    auto buffer = std::make_shared<QByteArray>();
+    connect(sock, &QTcpSocket::readyRead, this, [this, sock, buffer]() {
+      *buffer += sock->readAll();
+      if (!buffer->contains("\r\n\r\n")) return;
+      sock->write(m_response);
+      sock->flush();
+      sock->disconnectFromHost();
+    });
+    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+  }
+
+private:
+  QSslServer *m_server = nullptr;
+  QByteArray m_response;
+};
+
 } // namespace
 
 class TestHttpClient : public QObject {
@@ -354,6 +394,10 @@ private slots:
   void responseUnderCap_returnsBodySuccessfully();
   void requestHeaders_rideInHeaderBlockNotUrl();
   void clearPending_cancelsQueuedRequestsViaCallback();
+  void errorBody_controlCharacters_areFlattenedInDetails();
+  void errorDetails_redactCredentialQueryValues();
+  void unconfiguredHost_defaultsToOneInFlightRequest();
+  void get_fromWrongThread_isRefusedInReleaseBuilds();
 };
 
 void TestHttpClient::initTestCase() {
@@ -711,6 +755,175 @@ void TestHttpClient::clearPending_cancelsQueuedRequestsViaCallback() {
   QTRY_VERIFY_WITH_TIMEOUT(inflightFired, 10000);
   client->clearPending();
   client->setRateLimit(host, 0, 0);
+}
+
+// Log-injection hardening: a 4xx/5xx body is provider-controlled text that
+// HttpClient folds into ErrorContext::details, which flows verbatim into the
+// always-on kartend.errors log. Embedded CR/LF (line forging) and other
+// control bytes (terminal escapes) must be flattened at the fold; only the
+// single structural '\n' HttpClient itself inserts before "Response:" may
+// survive, so userFacingSummary()'s first-line pick still lands on Qt's
+// errorString.
+void TestHttpClient::errorBody_controlCharacters_areFlattenedInDetails() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
+  const QByteArray body = "Bad request\r\nINJECTED log line\x1b[31mred";
+  const QByteArray response = "HTTP/1.1 400 Bad Request\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: " +
+                              QByteArray::number(body.size()) +
+                              "\r\n"
+                              "Connection: close\r\n\r\n" +
+                              body;
+  StaticResponseServer server(response);
+  QVERIFY(server.start());
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/err");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> r) {
+                                         received = std::move(r);
+                                         loop.quit();
+                                       });
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(received->isError(), "Expected an error result for the HTTP 400");
+  const QString details = received->error().details;
+  QVERIFY2(details.contains(QStringLiteral("Response:")),
+           qPrintable(QStringLiteral("error body missing from details: %1").arg(details)));
+  QVERIFY2(!details.contains(QLatin1Char('\r')),
+           qPrintable(QStringLiteral("CR survived into details: %1").arg(details)));
+  QCOMPARE(details.count(QLatin1Char('\n')), 1); // only the structural separator
+  QVERIFY2(!details.contains(QChar(0x1b)),
+           qPrintable(QStringLiteral("escape byte survived into details: %1").arg(details)));
+  // The body content itself is preserved, just flattened onto one line.
+  QVERIFY2(details.contains(QStringLiteral("Bad request INJECTED log line")),
+           qPrintable(QStringLiteral("flattened body content missing: %1").arg(details)));
+}
+
+void TestHttpClient::errorDetails_redactCredentialQueryValues() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
+  // Qt's errorString() embeds the FULL request URL ("Error transferring
+  // <url> - server replied: ..."), and the server body here echoes the
+  // password back the way ScreenScraper's "Erreur de login" responses can.
+  // Neither copy may survive into details / userFacingSummary — they fan
+  // out to the always-on error log, the failure UI, and the resume file.
+  const QByteArray body = "Erreur de login: sspassword topsecret99 rejected";
+  const QByteArray response = "HTTP/1.1 403 Forbidden\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: " +
+                              QByteArray::number(body.size()) +
+                              "\r\n"
+                              "Connection: close\r\n\r\n" +
+                              body;
+  StaticResponseServer server(response);
+  QVERIFY(server.start());
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/jeuInfos.php");
+  url.setQuery("devid=cedar&devpassword=topsecret99&ssid=user1&sspassword=topsecret99&output=json");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> r) {
+                                         received = std::move(r);
+                                         loop.quit();
+                                       });
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(received->isError(), "Expected an error result for the HTTP 403");
+  const QString details = received->error().details;
+  const QString summary = received->error().userFacingSummary();
+  QVERIFY2(!details.contains(QStringLiteral("topsecret99")),
+           qPrintable(QStringLiteral("credential value leaked into details: %1").arg(details)));
+  QVERIFY2(!summary.contains(QStringLiteral("topsecret99")),
+           qPrintable(QStringLiteral("credential value leaked into summary: %1").arg(summary)));
+  QVERIFY2(
+      details.contains(QStringLiteral("<redacted>")),
+      qPrintable(
+          QStringLiteral("redaction marker missing — did the URL fold move? %1").arg(details)));
+}
+
+// Locks in the documented default host policy: a host with NO setRateLimit
+// rule is still capped at one in-flight request (HostPolicy{}'s defaults) —
+// the conservative default the header documents. Deterministic shape borrowed
+// from the clearPending test: with the single default slot occupied and no
+// event-loop turn in between, the second request must still be queued, which
+// clearPending proves by firing its callback. Were the default unlimited, both
+// requests would dispatch immediately and there would be nothing to cancel.
+void TestHttpClient::unconfiguredHost_defaultsToOneInFlightRequest() {
+  auto *client = Scraper::HttpClient::instance();
+  client->clearPending();
+
+  const QString host = QStringLiteral("127.0.0.1");
+  // Drop any per-host rule an earlier test registered so this host runs on
+  // the implicit default policy.
+  client->setRateLimit(host, 0, 0);
+  // A closed loopback port: the first request occupies the default single
+  // in-flight slot, then fails fast with connection-refused.
+  const QUrl url(QStringLiteral("https://127.0.0.1:1/x"));
+
+  bool inflightFired = false;
+  bool queuedFired = false;
+  std::optional<ErrorUtils::Result<QByteArray>> queuedResult;
+  client->get(url, {{"User-Agent", "test-agent"}},
+              [&](ErrorUtils::Result<QByteArray>) { inflightFired = true; });
+  client->get(url, {{"User-Agent", "test-agent"}}, [&](ErrorUtils::Result<QByteArray> r) {
+    queuedFired = true;
+    queuedResult = std::move(r);
+  });
+
+  client->clearPending();
+  QVERIFY2(queuedFired, "second request to an unconfigured host was not queued behind the first");
+  QVERIFY(queuedResult.has_value());
+  QVERIFY(queuedResult->isError());
+  QCOMPARE(queuedResult->error().code, ErrorCode::OperationCancelled);
+
+  // Drain the in-flight request (fast connection-refused) so no reply lingers
+  // past the test.
+  QTRY_VERIFY_WITH_TIMEOUT(inflightFired, 10000);
+  client->clearPending();
+}
+
+// Kartend release-mode thread guard: HttpClient's per-host maps are
+// main-thread-only. In debug builds a wrong-thread get() trips Q_ASSERT_X
+// (process abort — cannot run under QTest), so this exercises the RELEASE-mode
+// guard: the request must be refused via the callback (resolved on the calling
+// thread) instead of silently corrupting the maps.
+void TestHttpClient::get_fromWrongThread_isRefusedInReleaseBuilds() {
+#ifndef QT_NO_DEBUG
+  QSKIP("debug builds enforce the wrong-thread invariant with Q_ASSERT_X (which aborts); "
+        "the release-mode guard runs in the Release CI legs");
+#else
+  auto *client = Scraper::HttpClient::instance();
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  bool fired = false;
+  std::thread worker([&]() {
+    client->get(QUrl(QStringLiteral("https://example.test/x")), {{"User-Agent", "test-agent"}},
+                [&](ErrorUtils::Result<QByteArray> r) {
+                  received = std::move(r);
+                  fired = true;
+                });
+  });
+  worker.join();
+  QVERIFY2(fired, "wrong-thread get() must resolve its callback synchronously");
+  QVERIFY(received.has_value());
+  QVERIFY(received->isError());
+  QCOMPARE(received->error().code, ErrorCode::InvalidArgument);
+#endif
 }
 
 QTEST_MAIN(TestHttpClient)

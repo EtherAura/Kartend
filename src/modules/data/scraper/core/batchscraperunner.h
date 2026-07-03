@@ -89,8 +89,19 @@ public:
   /// the run without tracking per-event state themselves.
   struct Summary {
     int scraped = 0; ///< Items where applyScrapedItem succeeded.
-    int skipped = 0; ///< Items with no provider candidates.
-    int errors = 0;  ///< Items where lookup / fetchDetail / apply failed.
+    /// Items skipped without a verdict — user-skipped, pre-skipped by the
+    /// rescrape-mode filter, or an in-flight item whose detail fetch was
+    /// cut short by a quota stop. Items left undispatched after a quota
+    /// stop are NOT counted here (or in any other bucket): they stay in
+    /// the service's queue as the resume point, so on a quota stop
+    /// processedItems() legitimately ends below the run's total.
+    int skipped = 0;
+    int errors = 0; ///< Items where lookup / fetchDetail / apply failed.
+    /// Items the provider has no entry for — an HTTP 404 or an empty
+    /// "no match" lookup result. A routine, expected outcome counted apart
+    /// from `errors` so an unmatched-but-otherwise-fine library reads as
+    /// 0 errors (Kartend-e8aag).
+    int notFound = 0;
     /// Aggregate count of media files written by applyScrapedItem
     /// across all items — covers / screenshots / videos / etc.
     /// Ticks per-write, not per-item, so the Live view can show
@@ -100,6 +111,10 @@ public:
     /// Bounded so a 10k-item rescrape with a broken provider doesn't
     /// produce an unreadable wall of text.
     QStringList firstFailures;
+    /// Full source paths of items that landed in `errors` (NOT notFound or
+    /// skipped) — the set the "re-scrape failed" affordance re-queues
+    /// (Kartend-jjjo5). Bounded by kMaxReportedFailures like firstFailures.
+    QStringList failedPaths;
     /// Set when an item failed with an HTTP 430/431 — ScreenScraper's
     /// daily request / failed-lookup quota is exhausted. The runner
     /// stops dispatching new items (in-flight ones still finish); the
@@ -112,6 +127,10 @@ public:
     /// derived copy — authoritative metadata still landed — so these are
     /// counted separately from `errors` (Kartend audit hhr5x).
     int sidecarFailures = 0;
+    /// Items that reached a terminal verdict this run (every per-item
+    /// outcome bucket). Used for progress math so a notFound item still
+    /// advances the "X of N" counter.
+    [[nodiscard]] int processedItems() const { return scraped + skipped + errors + notFound; }
   };
 
   /// `db` may be nullptr — the runner still drives the scrape but
@@ -172,19 +191,16 @@ public:
   /// `finished` signal at end-of-collection.
   [[nodiscard]] Summary currentSummary() const { return m_summary; }
 
-  /// Resolved inputs to the pure already-scraped skip decision.
-  struct SkipDecisionInputs {
-    Scraper::RescrapeMode mode = Scraper::RescrapeMode::Overwrite;
-    bool writeMetadata = true;
-    bool metaPresent = false;          ///< Metadata exists (DB row or sidecar).
-    bool metaWithinWindow = true;      ///< ...and within the refresh window (or no window).
-    bool allWantedMediaCovered = true; ///< Every wanted media type already on disk.
-  };
-  /// The Skip / FillMissing / time-window decision, factored out of
-  /// shouldSkipScrapedItem so its branches are unit-testable without DB or
-  /// filesystem context (Kartend audit 2w4wz). Returns true when the item is
-  /// already covered and should be dropped from the queue.
-  [[nodiscard]] static bool decideScrapeSkip(const SkipDecisionInputs &in);
+  /// Paths that have not yet reached a per-item terminal outcome this run:
+  /// undispatched items plus those still mid-chain. Successes, user-skips,
+  /// errors and not-founds are trimmed as they settle — by identity, not by
+  /// queue position, so interleaved errors (or itemConcurrency > 1, where
+  /// completion order != queue order) can't trim the wrong item. Work stopped
+  /// by quota exhaustion (the erroring item and everything settling after the
+  /// stop flag flipped) intentionally stays listed, so a persisted resume
+  /// point retries exactly the items the quota killed. ScraperService
+  /// snapshots this as the collection's persisted remaining list.
+  [[nodiscard]] QStringList remainingPaths() const { return m_remainingPaths; }
 
   /// Total media bytes fetched so far in this collection. Used by
   /// the Live view to compute and display a rolling download rate
@@ -243,6 +259,16 @@ signals:
   /// "N / M requests today" readout.
   void quotaUpdated(const Scraper::QuotaStatus &quota);
 
+public:
+  /// Watchdog budget in ms. Default 10min — long enough that a legitimate hash
+  /// of a multi-GB image over a slow network mount won't false-trip, short
+  /// enough that a genuine wedge bounds the stall to minutes instead of
+  /// freezing the batch. Overridable via KARTEND_SCRAPE_STEP_TIMEOUT_MS (tests
+  /// set it tiny; pathological large-file setups can raise it). Public so
+  /// ScraperService's entity media-write watchdog shares the same budget and
+  /// env knob instead of growing a second, subtly-different timeout.
+  [[nodiscard]] static int stepWatchdogMs();
+
 private:
   /// Per-item state captured by the async callback chain. Each item's
   /// lookup → detail → media → apply path operates on its own
@@ -276,44 +302,6 @@ private:
   /// visit every item and let the per-asset persistence gate
   /// decide.
   void filterAlreadyScraped();
-
-  /// Precomputed, read-only context for the per-item skip predicate.
-  /// `filterAlreadyScraped` builds this once (the basename indexes,
-  /// the batch-loaded DB metadata, and the refresh window) so the
-  /// per-item check stays O(1) instead of re-scanning the directory /
-  /// re-querying the DB per path.
-  struct ScrapeSkipContext {
-    bool dbCheckPossible = false;
-    bool sidecarCheckPossible = false;
-    /// Effective "wanted" media types under FillMissing (lowercase).
-    QSet<QString> wantedTypes;
-    /// Batch-loaded item metadata keyed by item path.
-    QHash<QString, ItemMetadataStore::ItemMetadata> metadataByPath;
-    /// Per-wanted-type basename index of media files on disk (lowercase).
-    QHash<QString, QSet<QString>> presentByType;
-    /// `front` basenames in the flat artwork dir mirror (lowercase).
-    QSet<QString> frontFlatBases;
-    bool hasWindow = false;
-    QDateTime cutoff;
-  };
-
-  /// Per-item predicate extracted from `filterAlreadyScraped`'s loop.
-  /// Returns true when `path` should be dropped from the queue under
-  /// the active rescrape mode (Skip / FillMissing) given the
-  /// precomputed `ctx`. Pure read-only over `ctx` and the runner's
-  /// rescrape-mode / write-metadata / artwork-dir members.
-  [[nodiscard]] bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) const;
-
-  /// Basename indexes of media-on-disk for the coverage check, pre-built once
-  /// per run so the per-item probe is an O(1) hash lookup (Kartend audit 2w4wz).
-  struct MediaCoverageIndex {
-    /// Per-wanted-type basename index of media files on disk (lowercase).
-    QHash<QString, QSet<QString>> presentByType;
-    /// `front` basenames in the flat artwork-dir mirror (lowercase).
-    QSet<QString> frontFlatBases;
-  };
-  [[nodiscard]] MediaCoverageIndex buildMediaCoverageIndex(const QSet<QString> &wantedTypes,
-                                                           bool sidecarCheckPossible) const;
 
   /// Top of the worker loop. Fills empty in-flight slots from the
   /// queue until either the queue is empty or the in-flight count
@@ -381,8 +369,10 @@ private:
   /// cover subdirs for an existing file (Kartend audit 2w4wz).
   [[nodiscard]] QStringList resolveThumbnailPaths(const QString &baseName,
                                                   const QStringList &writtenPaths) const;
-  /// Record a per-item failure, mark the slot free, and pump.
-  void recordError(const QString &reason);
+  /// Record a per-item failure, mark the slot free, and pump. When
+  /// `failedPath` is non-empty it is appended to `Summary::failedPaths` so the
+  /// "re-scrape failed" affordance can re-queue exactly that item (Kartend-jjjo5).
+  void recordError(const QString &reason, const QString &failedPath = QString());
   /// Per-item failure overload that also inspects the error's HTTP
   /// status: an HTTP 430 (SS daily request quota) or 431 (SS daily
   /// failed-lookup quota) flips `m_summary.quotaExhausted` and
@@ -415,12 +405,6 @@ private:
   /// Watchdog-fire continuation: count the stalled item as an error (or just
   /// drain it if the run was cancelled) and pump the queue.
   void onStepTimedOut(const std::shared_ptr<ItemState> &state, const QString &stageLabel);
-  /// Watchdog budget in ms. Default 10min — long enough that a legitimate hash
-  /// of a multi-GB image over a slow network mount won't false-trip, short
-  /// enough that a genuine wedge bounds the stall to minutes instead of
-  /// freezing the batch. Overridable via KARTEND_SCRAPE_STEP_TIMEOUT_MS (tests
-  /// set it tiny; pathological large-file setups can raise it).
-  [[nodiscard]] static int stepWatchdogMs();
 
   /// Mark one item complete (success / skip / error). When the queue
   /// is drained and the in-flight count returns to 0, emits
@@ -463,6 +447,10 @@ private:
   std::shared_ptr<MetadataLookupProvider> m_provider;
   QString m_collectionUuid;
   QStringList m_paths;
+  /// Resume bookkeeping behind remainingPaths(): seeded from m_paths when the
+  /// run starts (post pre-filter), trimmed by identity at each terminal
+  /// outcome except quota-stopped work and cancel drains.
+  QStringList m_remainingPaths;
   QString m_artworkDir;
   bool m_fetchPrimaryCover = true;
   Scraper::RescrapeMode m_rescrapeMode = Scraper::RescrapeMode::Overwrite;
@@ -508,6 +496,22 @@ private:
   bool m_quotaStopped = false;
   bool m_finishedEmitted = false; ///< Guard against double-emit on cancel races.
   Summary m_summary;
+
+  /// Circuit breaker for persistent NON-quota fatal responses (bad
+  /// credentials 401/403, provider infrastructure down 423, blacklisted
+  /// build 426): these fail every request identically, so after
+  /// kFatalErrorBreakerThreshold consecutive errors with the SAME status the
+  /// runner stops new dispatch exactly like a quota stop (shared machinery —
+  /// in-flight items drain, un-dispatched work stays queued as the persisted
+  /// resume point). Any success, not-found, or differently-coded error
+  /// resets the streak.
+  static constexpr int kFatalErrorBreakerThreshold = 5;
+  int m_consecutiveFatalCount = 0;
+  int m_lastFatalStatus = 0;
+  void resetFatalStreak() {
+    m_consecutiveFatalCount = 0;
+    m_lastFatalStatus = 0;
+  }
 
   /// Per-item state captured between dispatch to the write worker and
   /// the queued writeCompleted reply. With itemConcurrency > 1 several

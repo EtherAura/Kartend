@@ -8,19 +8,25 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
 #include <QObject>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <memory>
+#include <optional>
 
 #include "../../support/testsandbox.h"
+#include "collection/typehelpers.h"
 #include "metadatalookupprovider.h"
+#include "scrapependingstate.h"
 #include "scraperservice.h"
 
 using Scraper::ScraperService;
@@ -44,6 +50,77 @@ public:
   void fetchMediaBytes(const QUrl &, MediaCallback) override {}
 };
 
+/// Provider that answers fetchEntity() synchronously with a canned result —
+/// drives the entity-scrape queue path end to end (Kartend-ckepd.2).
+class EntityStubProvider : public MetadataLookupProvider {
+public:
+  ErrorUtils::Result<Scraper::ScrapedItem> entityResult{Scraper::ScrapedItem{}}; // default success
+  Scraper::EntityScrapeTarget lastTarget;
+  int fetchEntityCalls = 0;
+
+  QString id() const override { return QStringLiteral("entitystub"); }
+  QString displayName() const override { return QStringLiteral("EntityStub"); }
+  QStringList categories() const override { return {}; }
+  Capabilities capabilities() const override { return Capability::MetadataLookup; }
+  QList<Scraper::ScrapeEntityType> supportedEntities() const override {
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+  }
+  /// Canned media bytes per URL (Kartend-ckepd.3 download pipeline test).
+  QHash<QUrl, QByteArray> mediaBytes;
+  /// When set, every fetchMediaBytes call fails with this error instead of
+  /// answering from mediaBytes (Kartend-xzqel failure-path tests).
+  std::optional<ErrorUtils::ErrorContext> mediaError;
+  /// When set, fetchMediaBytes parks its callback instead of firing — lets a
+  /// test fire it by hand to drive the in-flight / pause window.
+  bool parkMedia = false;
+  mutable MediaCallback lastMediaCallback;
+  void lookup(const QString &, LookupCallback cb) override {
+    cb(QList<Scraper::ScrapeCandidate>{});
+  }
+  void fetchDetail(const Scraper::ScrapeCandidate &, DetailCallback cb) override {
+    cb(Scraper::ScrapedItem{});
+  }
+  void fetchMediaBytes(const QUrl &url, MediaCallback cb) override {
+    if (parkMedia) {
+      lastMediaCallback = std::move(cb);
+      return;
+    }
+    if (mediaError.has_value()) {
+      cb(*mediaError);
+      return;
+    }
+    cb(mediaBytes.value(url));
+  }
+  void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback cb) override {
+    ++fetchEntityCalls;
+    lastTarget = target;
+    cb(entityResult);
+  }
+};
+
+/// Parks its fetchEntity() callback (never fires it itself) so a test can drive
+/// the in-flight / pause / cancel windows of the entity path by hand — the
+/// realistic async-provider case (Kartend-ckepd.2 review regressions).
+class ParkedEntityProvider : public MetadataLookupProvider {
+public:
+  mutable DetailCallback lastEntityCallback;
+  int fetchEntityCalls = 0;
+  QString id() const override { return QStringLiteral("parkedentity"); }
+  QString displayName() const override { return QStringLiteral("ParkedEntity"); }
+  QStringList categories() const override { return {}; }
+  Capabilities capabilities() const override { return Capability::MetadataLookup; }
+  QList<Scraper::ScrapeEntityType> supportedEntities() const override {
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+  }
+  void lookup(const QString &, LookupCallback) override {}
+  void fetchDetail(const Scraper::ScrapeCandidate &, DetailCallback) override {}
+  void fetchMediaBytes(const QUrl &, MediaCallback) override {}
+  void fetchEntity(const Scraper::EntityScrapeTarget &, DetailCallback cb) override {
+    ++fetchEntityCalls;
+    lastEntityCallback = std::move(cb); // park it; a test fires it by hand
+  }
+};
+
 class TestScraperServiceResume : public QObject {
   Q_OBJECT
 private slots:
@@ -55,6 +132,25 @@ private slots:
   void loadSkipsResumeWhenOwnedByLiveInstance();
   void startScrapePersistsInitialSnapshot();
   void cancelledInteractiveScrapeIgnoresLateLookupResult();
+  void entityScrapeProcessesViaQueue();
+  void entityScrapeNotFoundCountedSeparately();
+  void entityScrapeDownloadsArtToSharedAndConfig();
+  void entityJobLoadsFromPendingState();
+  void interactiveEntityJobResumedNotSkipped();
+  void staleEntityCallbackAfterRestartIgnored();
+  void pausedEntityMediaCallbackAfterResumeIgnored();
+  void entityFetchQuotaStopsQueueWithResumePoint();
+  void interactiveQuotaErrorStopsQueueWithResumePoint();
+  void entityMediaQuotaKeepsJobQueuedForResume();
+  void entityAllMediaFetchesFailedCountsError();
+  void resumeReresolvesCollectionIndexByUuid();
+  void resumeDropsJobWhoseUuidNoLongerResolves();
+  void failedItemsRoundTripThroughPendingState();
+  void persistWritesFailedItemsMidRun();
+  void entityFailureRecordsEntityDiscriminator();
+  void entityFailedItemRoundTripsDiscriminator();
+  void entityCatalogUnavailableBucketedAsError();
+  void entityNotFoundBucketedNotError();
 
 private:
   static void writePendingFile(const QByteArray &json);
@@ -133,6 +229,7 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
       "scraped": 12,
       "skipped": 3,
       "errors": 1,
+      "not_found": 4,
       "media_written": 27,
       "first_failures": ["foo.bin: timeout"]
     },
@@ -160,6 +257,8 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
   QCOMPARE(state.summarySoFar.scraped, 12);
   QCOMPARE(state.summarySoFar.skipped, 3);
   QCOMPARE(state.summarySoFar.errors, 1);
+  // notFound must round-trip too (Kartend-e8aag).
+  QCOMPARE(state.summarySoFar.notFound, 4);
 }
 
 void TestScraperServiceResume::loadDefaultsMediaWrittenToZeroForLegacyFile() {
@@ -303,6 +402,793 @@ void TestScraperServiceResume::cancelledInteractiveScrapeIgnoresLateLookupResult
   // ignore it and stay idle — not pick up the next queued item.
   provider->lastLookupCallback(QList<Scraper::ScrapeCandidate>{});
   QCOMPARE(service.state(), ScraperService::State::Idle);
+}
+
+void TestScraperServiceResume::entityScrapeProcessesViaQueue() {
+  // Kartend-ckepd.2: an entity job (no item list) is dispatched via one
+  // fetchEntity() and counted in the shared summary — proving it isn't skipped
+  // by the empty-items guard and flows through the same queue/finish path.
+  auto provider = std::make_shared<EntityStubProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 2;
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4"); // a systemeid
+  job.entity.collectionIndex = 2;
+  QVERIFY(job.isEntityJob());
+
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The synchronous stub processes the entity during startScrape.
+  QCOMPARE(provider->fetchEntityCalls, 1);
+  QCOMPARE(provider->lastTarget.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(provider->lastTarget.identity, QStringLiteral("4"));
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QCOMPARE(service.summary().scraped, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(finishedSpy.count(), 1);
+}
+
+void TestScraperServiceResume::entityScrapeNotFoundCountedSeparately() {
+  // A not-found entity (niche platform absent from the catalog) lands in
+  // notFound, not errors (Kartend-e8aag carried into the entity path).
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::RemoteResourceNotFound, QStringLiteral("no such platform"));
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionName = QStringLiteral("Obscure");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("999");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.summary().notFound, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(service.summary().scraped, 0);
+}
+
+void TestScraperServiceResume::entityScrapeDownloadsArtToSharedAndConfig() {
+  // Kartend-ckepd.3: a platform scrape downloads its art, writes it to the
+  // collection's _shared/<type>/platform_<id>.<ext> path, and wires the path
+  // into the collection's config art fields.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  // Providers declare each asset's config slot via EntityArtRole — the
+  // coordinator wires art from the roles, not from hardcoded type strings.
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  wheel.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(wheel);
+  Scraper::MediaAsset illustration;
+  illustration.type = QStringLiteral("illustration");
+  illustration.scope = Scraper::MediaScope::Platform;
+  illustration.scopeKey = QStringLiteral("4");
+  illustration.url = QUrl(QStringLiteral("https://example.test/illustration.png"));
+  illustration.entityRole = Scraper::EntityArtRole::Background;
+  item.media.append(illustration);
+  provider->entityResult = item;
+  // Adjacent-literal split terminates the \x0a hex escape before the following
+  // text — otherwise "\x0afake" parses as the single escape \x0afa (out of
+  // range for char, a hard error under clang).
+  provider->mediaBytes.insert(wheel.url, QByteArray("\x89PNG\x0d\x0a"
+                                                    "fake-bytes"));
+  provider->mediaBytes.insert(illustration.url, QByteArray("\x89PNG\x0d\x0a"
+                                                           "other-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The stub answers fetch + media download synchronously, but the file write
+  // runs on the global QThreadPool (mirrors the batch runner) — spin the event
+  // loop until the write's watcher lands back on the main thread.
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QVERIFY(service.summary().mediaWritten >= 1);
+  // Art landed under _shared with the platform_ prefix.
+  const QString expected =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QVERIFY2(QFile::exists(expected), qPrintable(expected));
+  // Role-driven config wiring: the Logo-role asset feeds the header logo +
+  // icon, the Background-role asset feeds the background image.
+  QCOMPARE(collections[0].background.headerLogoImage, expected);
+  QCOMPARE(collections[0].collectionIcon, expected);
+  const QString expectedBg =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
+  QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
+  QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
+void TestScraperServiceResume::entityJobLoadsFromPendingState() {
+  // An entity job round-trips through pending-scrape.json — the descriptor is
+  // restored so an interrupted entity scrape resumes (Kartend-ckepd.2).
+  const QByteArray json = R"json({
+    "version": 2,
+    "mode": "auto",
+    "write_metadata": true,
+    "media_filter": [],
+    "summary_so_far": { "scraped": 0, "skipped": 0, "errors": 0 },
+    "queue": [
+      {
+        "collection_index": 2,
+        "collection_uuid": "uuid-snes",
+        "collection_name": "SNES",
+        "artwork_dir": "/art",
+        "remaining": [],
+        "entity": { "type": 1, "identity": "4", "collection_index": 2 }
+      }
+    ]
+  })json";
+  writePendingFile(json);
+
+  ScraperService service;
+  const ScraperService::PendingState state = service.loadPendingState(/*consumeOnLoad=*/false);
+  QVERIFY(state.isValid());
+  QCOMPARE(state.queue.size(), 1);
+  QVERIFY(state.queue.first().isEntityJob());
+  QCOMPARE(state.queue.first().entity.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(state.queue.first().entity.identity, QStringLiteral("4"));
+  QCOMPARE(state.queue.first().entity.collectionIndex, 2);
+  // An entity job counts as one unit of remaining work in the resume prompt.
+  QCOMPARE(state.totalRemaining(), 1);
+}
+
+void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
+  // Kartend-ckepd.2 review: an entity job paused mid-fetch in Interactive mode
+  // must be re-dispatched on resume, NOT silently skipped by startInteractiveItem
+  // (whose empty-items "done" branch would otherwise eat it).
+  auto provider = std::make_shared<ParkedEntityProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The entity was dispatched and its fetch parked (in flight).
+  QCOMPARE(provider->fetchEntityCalls, 1);
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+
+  // Pause (dialog closed) mid-fetch, then resume (dialog reopened).
+  service.pauseInteractive();
+  QCOMPARE(service.state(), ScraperService::State::PausedInteractive);
+  service.resumePaused();
+
+  // Resume must re-dispatch the entity, not skip past it: still running, fetched
+  // again — never finishing the run with the entity unscraped.
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(provider->fetchEntityCalls, 2);
+}
+
+void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
+  // Kartend-ckepd.2 review: an entity-fetch callback that resolves after its run
+  // was cancelled and a NEW run started must NOT mutate the new run (the run
+  // generation rejects it; the entity path has no runner to detach).
+  auto provider = std::make_shared<ParkedEntityProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob jobA;
+  jobA.collectionName = QStringLiteral("RunA");
+  jobA.entity.type = Scraper::ScrapeEntityType::Platform;
+  jobA.entity.identity = QStringLiteral("1");
+  service.startScrape({jobA}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+  QCOMPARE(provider->fetchEntityCalls, 1);
+  const auto staleCallback = provider->lastEntityCallback; // run A's parked callback
+  QVERIFY(static_cast<bool>(staleCallback));
+
+  // Cancel run A, then start a fresh run B (also a parked entity).
+  service.cancel();
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  ScraperService::CollectionJob jobB;
+  jobB.collectionName = QStringLiteral("RunB");
+  jobB.entity.type = Scraper::ScrapeEntityType::Platform;
+  jobB.entity.identity = QStringLiteral("2");
+  service.startScrape({jobB}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+  QCOMPARE(service.state(), ScraperService::State::RunningAuto); // B in flight, parked
+
+  // Fire run A's stale callback as a "success". The run-generation guard must
+  // make it a no-op — run B's summary and cursor untouched.
+  staleCallback(Scraper::ScrapedItem{});
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(service.state(), ScraperService::State::RunningAuto);
+}
+
+void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
+  // Kartend-ckepd.3 review: a media-download callback issued before a pause must
+  // be rejected once it resolves AFTER resume (which re-dispatches the item) —
+  // otherwise it double-advances the cursor and double-counts. pauseInteractive
+  // bumps the run generation so the stale callback's generation no longer
+  // matches.
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  item.media.append(wheel);
+  provider->entityResult = item;
+  provider->parkMedia = true; // park the media download so the test controls timing
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // Entity fetched (sync); media download dispatched and parked.
+  QVERIFY(static_cast<bool>(provider->lastMediaCallback));
+  const auto staleCallback = provider->lastMediaCallback; // the pre-pause callback
+  QCOMPARE(service.summary().scraped, 0);
+
+  // Pause (Close) then resume (reopen) — resume re-dispatches the entity.
+  service.pauseInteractive();
+  QCOMPARE(service.state(), ScraperService::State::PausedInteractive);
+  service.resumePaused();
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+
+  // Fire the STALE pre-pause media callback. The generation bump must make it a
+  // no-op: nothing counted, no advance, run still in flight.
+  staleCallback(QByteArray("\x89PNG-bytes"));
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+}
+
+void TestScraperServiceResume::entityFetchQuotaStopsQueueWithResumePoint() {
+  // Kartend-xzqel: a 429/430/431 on the entity fetch itself must stop the
+  // queue and leave the job persisted as the resume point — not land in the
+  // errors bucket while a mixed queue keeps dispatching against a dead quota.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("quota exhausted"))
+                               .withHttpStatus(430);
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionUuid = QStringLiteral("uuid-quota");
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(finishedSpy.count(), 1);
+  // The resume point survived: the pending file is still on disk with the
+  // entity job queued. (Read it raw — the service still holds the ownership
+  // lock, so loadPendingState would rightly report the scrape as live.)
+  QVERIFY(QFile::exists(pendingFilePath()));
+  QFile f(pendingFilePath());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+  const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  QVERIFY(queue.first().toObject().contains(QStringLiteral("entity")));
+  QVERIFY(root.value(QStringLiteral("summary_so_far"))
+              .toObject()
+              .value(QStringLiteral("quota_exhausted"))
+              .toBool());
+}
+
+void TestScraperServiceResume::interactiveQuotaErrorStopsQueueWithResumePoint() {
+  // A 429/430/431 on an interactive lookup must stop the queue with a resume
+  // point — the old per-item auto-advance fired the next lookup immediately,
+  // machine-gunning the remaining items into the exhausted quota.
+  auto provider = std::make_shared<ParkedProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionUuid = QStringLiteral("uuid-int-quota");
+  job.collectionName = QStringLiteral("Coll");
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+  QVERIFY(static_cast<bool>(provider->lastLookupCallback));
+
+  provider->lastLookupCallback(
+      ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                      QStringLiteral("quota exhausted"))
+          .withHttpStatus(430));
+
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(finishedSpy.count(), 1);
+  // Resume point kept, with BOTH items still queued (the erroring lookup
+  // consumed nothing scrapable).
+  QVERIFY(QFile::exists(pendingFilePath()));
+  QFile f(pendingFilePath());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+  const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.first().toObject().value(QStringLiteral("remaining")).toArray().size(), 2);
+}
+
+void TestScraperServiceResume::entityMediaQuotaKeepsJobQueuedForResume() {
+  // Kartend-xzqel: quota death on a platform-art media fetch must also stop
+  // the queue and keep the entity job queued — unlike a game item, the art IS
+  // the point, and a retry after quota reset costs one fetch.
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  item.media.append(wheel);
+  provider->entityResult = item;
+  provider->mediaError = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                         QStringLiteral("quota exhausted"))
+                             .withHttpStatus(430);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionUuid = QStringLiteral("uuid-quota-media");
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().scraped, 0);
+  QVERIFY(QFile::exists(pendingFilePath())); // resume point kept
+}
+
+void TestScraperServiceResume::entityAllMediaFetchesFailedCountsError() {
+  // Kartend-xzqel: an entity whose media fetches ALL fail (auth error, wrong
+  // endpoint params) used to be counted scraped with zero art and no failure
+  // record — it must land in errors and be re-queueable via failedItems.
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  item.media.append(wheel);
+  provider->entityResult = item;
+  provider->mediaError = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                         QStringLiteral("HTTP failed"))
+                             .withHttpStatus(500);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 3;
+  job.collectionUuid = QStringLiteral("uuid-allfail");
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.summary().errors, 1);
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(service.summary().notFound, 0);
+  QCOMPARE(service.summary().failedItems.size(), 1);
+  QCOMPARE(service.summary().failedItems.first().path, QStringLiteral("4"));
+  QCOMPARE(service.summary().failedItems.first().collectionUuid, QStringLiteral("uuid-allfail"));
+  QVERIFY(!service.summary().quotaExhausted);
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+}
+
+void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
+  // Kartend-8zd3q: collection indices are not stable across sessions. A
+  // resumed job must re-resolve its live index from the persisted UUID —
+  // otherwise the provider is built with (and entity art written into)
+  // another collection's config.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir().mkpath(tmp.path() + QStringLiteral("/alpha")));
+  QVERIFY(QDir().mkpath(tmp.path() + QStringLiteral("/beta")));
+  CollectionConfig alpha;
+  alpha.name = QStringLiteral("Alpha");
+  alpha.mediaDirectory = tmp.path() + QStringLiteral("/alpha");
+  CollectionConfig beta;
+  beta.name = QStringLiteral("Beta");
+  beta.mediaDirectory = tmp.path() + QStringLiteral("/beta");
+  QList<CollectionConfig> collections{alpha, beta};
+  const QString betaUuid = CollectionUtils::computeCollectionUuid(collections[1]);
+
+  auto provider = std::make_shared<ParkedEntityProvider>();
+  QList<int> requestedIndices;
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider,
+                         &requestedIndices](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+    requestedIndices.append(idx);
+    return provider;
+  };
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  // The persisted snapshot was written when Beta sat at index 0 — since then
+  // a collection was inserted ahead of it, so the stale index now names Alpha.
+  ScraperService::PendingState state;
+  state.hasState = true;
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0; // stale
+  job.collectionUuid = betaUuid;
+  job.collectionName = QStringLiteral("Beta");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("7");
+  job.entity.collectionIndex = 0; // stale
+  state.queue.append(job);
+
+  service.resumeFromState(state);
+
+  // The provider must have been built for Beta's LIVE index, not the stale 0.
+  QCOMPARE(requestedIndices.size(), 1);
+  QCOMPARE(requestedIndices.first(), 1);
+}
+
+void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
+  // Kartend-8zd3q: a resumed job whose collection no longer exists must be
+  // dropped (with a warning), never guessed by stale index.
+  CollectionConfig only;
+  only.name = QStringLiteral("Solo");
+  QList<CollectionConfig> collections{only};
+
+  auto provider = std::make_shared<ParkedEntityProvider>();
+  int builderCalls = 0;
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider, &builderCalls](int) -> std::shared_ptr<MetadataLookupProvider> {
+    ++builderCalls;
+    return provider;
+  };
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  ScraperService::PendingState state;
+  state.hasState = true;
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0; // in range — would hit "Solo" if trusted
+  job.collectionUuid = QStringLiteral("deadbeef-no-such-collection");
+  job.collectionName = QStringLiteral("Removed");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("7");
+  state.queue.append(job);
+
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.resumeFromState(state);
+
+  // Job dropped: no provider built, queue drained immediately.
+  QCOMPARE(builderCalls, 0);
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QCOMPARE(finishedSpy.count(), 1);
+}
+
+void TestScraperServiceResume::failedItemsRoundTripThroughPendingState() {
+  // Kartend-ufmok: failedItems / sidecarFailures / quotaExhausted must load
+  // from the snapshot — a resumed run used to come back with an empty failure
+  // list, so "Re-scrape failed items" had nothing to re-queue.
+  const QByteArray json = R"json({
+    "version": 2,
+    "mode": "auto",
+    "write_metadata": true,
+    "media_filter": [],
+    "summary_so_far": {
+      "scraped": 2,
+      "skipped": 0,
+      "errors": 2,
+      "sidecar_failures": 3,
+      "quota_exhausted": true,
+      "failed_items": [
+        { "collection_index": 1, "collection_uuid": "uuid-a", "path": "/m/broken.bin" },
+        { "collection_index": 2, "collection_uuid": "uuid-b", "path": "/m/worse.bin" }
+      ]
+    },
+    "queue": [
+      {
+        "collection_index": 1,
+        "collection_uuid": "uuid-a",
+        "collection_name": "Coll",
+        "artwork_dir": "/art",
+        "remaining": ["/m/a.bin"]
+      }
+    ]
+  })json";
+  writePendingFile(json);
+
+  ScraperService service;
+  const ScraperService::PendingState state = service.loadPendingState(/*consumeOnLoad=*/false);
+  QVERIFY(state.isValid());
+  QCOMPARE(state.summarySoFar.sidecarFailures, 3);
+  QVERIFY(state.summarySoFar.quotaExhausted);
+  QCOMPARE(state.summarySoFar.failedItems.size(), 2);
+  QCOMPARE(state.summarySoFar.failedItems.first().collectionIndex, 1);
+  QCOMPARE(state.summarySoFar.failedItems.first().collectionUuid, QStringLiteral("uuid-a"));
+  QCOMPARE(state.summarySoFar.failedItems.first().path, QStringLiteral("/m/broken.bin"));
+  QCOMPARE(state.summarySoFar.failedItems.last().path, QStringLiteral("/m/worse.bin"));
+}
+
+void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
+  // Kartend-ufmok, persist direction: after an item fails mid-run the next
+  // debounced snapshot must carry it in summary_so_far.failed_items.
+  auto errorProvider = std::make_shared<EntityStubProvider>();
+  errorProvider->entityResult = ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::InvalidArgument, QStringLiteral("boom"));
+  auto parkedProvider = std::make_shared<ParkedEntityProvider>();
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [errorProvider,
+                         parkedProvider](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+    if (idx == 0) return errorProvider;
+    return parkedProvider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob failing;
+  failing.collectionIndex = 0;
+  failing.collectionUuid = QStringLiteral("uuid-failing");
+  failing.collectionName = QStringLiteral("Failing");
+  failing.entity.type = Scraper::ScrapeEntityType::Platform;
+  failing.entity.identity = QStringLiteral("9");
+  ScraperService::CollectionJob parked;
+  parked.collectionIndex = 1;
+  parked.collectionUuid = QStringLiteral("uuid-parked");
+  parked.collectionName = QStringLiteral("Parked");
+  parked.entity.type = Scraper::ScrapeEntityType::Platform;
+  parked.entity.identity = QStringLiteral("8");
+
+  service.startScrape({failing, parked}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // Job 1 errored synchronously; job 2 is parked in flight, so the run is
+  // still live and the debounced persist (250ms) will rewrite the snapshot.
+  QCOMPARE(service.summary().errors, 1);
+  const auto readFailedItems = []() {
+    QFile f(pendingFilePath());
+    if (!f.open(QIODevice::ReadOnly)) return QJsonArray{};
+    return QJsonDocument::fromJson(f.readAll())
+        .object()
+        .value(QStringLiteral("summary_so_far"))
+        .toObject()
+        .value(QStringLiteral("failed_items"))
+        .toArray();
+  };
+  QTRY_VERIFY(!readFailedItems().isEmpty());
+  const QJsonObject failed = readFailedItems().first().toObject();
+  QCOMPARE(failed.value(QStringLiteral("path")).toString(), QStringLiteral("9"));
+  QCOMPARE(failed.value(QStringLiteral("collection_uuid")).toString(),
+           QStringLiteral("uuid-failing"));
+  QCOMPARE(failed.value(QStringLiteral("collection_index")).toInt(), 0);
+}
+
+void TestScraperServiceResume::entityFailureRecordsEntityDiscriminator() {
+  // Fix A: an entity job that fails must record its failedItem tagged as an
+  // entity (isEntity=true) carrying the full EntityScrapeTarget — so the
+  // re-scrape path rebuilds it AS an entity job, not a bogus game lookup of the
+  // systemeid. Regression: the failedItem used to look identical to a game item
+  // (just the systemeid stuffed into `path`).
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::UnknownError,
+                                                           QStringLiteral("catalog unavailable"))
+                               .withHttpStatus(503);
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 5;
+  job.collectionUuid = QStringLiteral("uuid-plat");
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  job.entity.collectionIndex = 5;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // Bucketed as an error (503 is neither 404 nor RemoteResourceNotFound), and
+  // recorded as a re-queueable entity failure.
+  QCOMPARE(service.summary().errors, 1);
+  QCOMPARE(service.summary().notFound, 0);
+  QCOMPARE(service.summary().failedItems.size(), 1);
+  // summary() returns BY VALUE, so bind a copy — a reference would dangle the
+  // instant the temporary Summary is destroyed at the end of this statement
+  // (a use-after-free TSan flags and non-TSan builds pass by luck).
+  const auto fi = service.summary().failedItems.first();
+  QVERIFY(fi.isEntity);
+  QCOMPARE(fi.entity.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(fi.entity.identity, QStringLiteral("4"));
+  QCOMPARE(fi.entity.collectionIndex, 5);
+  QCOMPARE(fi.collectionUuid, QStringLiteral("uuid-plat"));
+}
+
+void TestScraperServiceResume::entityFailedItemRoundTripsDiscriminator() {
+  // Fix A persistence: an entity failedItem's discriminator + target must
+  // survive a serialize→deserialize so a resumed run keeps it re-queueable AS
+  // an entity. A game failedItem (no is_entity) must deserialize as isEntity
+  // false (backward-compat).
+  ScraperService::PendingState snap;
+  snap.hasState = true;
+  snap.startedAtUnixMs = 123;
+  ScraperService::Summary::FailedItem entityFail;
+  entityFail.collectionIndex = 2;
+  entityFail.collectionUuid = QStringLiteral("uuid-ent");
+  entityFail.path = QStringLiteral("4"); // display carries the systemeid
+  entityFail.isEntity = true;
+  entityFail.entity.type = Scraper::ScrapeEntityType::Platform;
+  entityFail.entity.identity = QStringLiteral("4");
+  entityFail.entity.collectionIndex = 2;
+  ScraperService::Summary::FailedItem gameFail;
+  gameFail.collectionIndex = 1;
+  gameFail.collectionUuid = QStringLiteral("uuid-game");
+  gameFail.path = QStringLiteral("/m/broken.bin"); // an ordinary game item
+  snap.summarySoFar.failedItems = {entityFail, gameFail};
+  // A queue entry is required for isValid()/deserialize to keep the state.
+  ScraperService::CollectionJob queued;
+  queued.collectionIndex = 1;
+  queued.collectionName = QStringLiteral("Coll");
+  queued.items = {QStringLiteral("/m/a.bin")};
+  snap.queue = {queued};
+
+  const QByteArray bytes = Scraper::ScrapePendingState::serialize(snap);
+  const ScraperService::PendingState back = Scraper::ScrapePendingState::deserialize(bytes);
+  QCOMPARE(back.summarySoFar.failedItems.size(), 2);
+  const auto &e = back.summarySoFar.failedItems.at(0);
+  QVERIFY(e.isEntity);
+  QCOMPARE(e.entity.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(e.entity.identity, QStringLiteral("4"));
+  QCOMPARE(e.entity.collectionIndex, 2);
+  QCOMPARE(e.collectionUuid, QStringLiteral("uuid-ent"));
+  const auto &g = back.summarySoFar.failedItems.at(1);
+  QVERIFY(!g.isEntity);
+  QCOMPARE(g.entity.type, Scraper::ScrapeEntityType::Game);
+  QCOMPARE(g.path, QStringLiteral("/m/broken.bin"));
+}
+
+void TestScraperServiceResume::entityCatalogUnavailableBucketedAsError() {
+  // Fix B (coordinator-level): the catalog-manager seam isn't injectable
+  // headlessly, so we simulate its observable effect — fetchEntity returning a
+  // transient, non-notFound error (as the provider now does when the systems
+  // catalog is EMPTY, e.g. offline / no-creds / cold-cache). It must land in
+  // errors + failedItems (re-queueable), NOT be silently consumed as notFound.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult =
+      ErrorUtils::ErrorContext::error(
+          ErrorUtils::ErrorCode::UnknownError,
+          QStringLiteral("ScreenScraper systems catalog unavailable; cannot resolve system 4"))
+          .withHttpStatus(503);
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.summary().errors, 1);
+  QCOMPARE(service.summary().notFound, 0);
+  QCOMPARE(service.summary().failedItems.size(), 1);
+  QVERIFY(service.summary().failedItems.first().isEntity);
+}
+
+void TestScraperServiceResume::entityNotFoundBucketedNotError() {
+  // Fix B contrast: a GENUINE not-found (catalog loaded, id absent) still maps
+  // to RemoteResourceNotFound → the notFound bucket, and is NOT recorded as a
+  // re-queueable failure. Proves the two paths stay distinguished.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::RemoteResourceNotFound, QStringLiteral("no such system 999"));
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionName = QStringLiteral("Obscure");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("999");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.summary().notFound, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QVERIFY(service.summary().failedItems.isEmpty());
 }
 
 QTEST_MAIN(TestScraperServiceResume)

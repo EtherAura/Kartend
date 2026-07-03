@@ -22,6 +22,7 @@ target_sources(kartend_ui PRIVATE
   result/scraperesultselectionmodel.h
   result/scraperesultthumbnailloader.h
   result/singleitemview.h
+  result/transferrateformat.h
   result/valuemarqueeticker.h
   scrapejobgrouping.h
   scrapercredentialsdialog.h

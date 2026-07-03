@@ -14,6 +14,7 @@
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
 #include "singleitemview.h"
+#include "transferrateformat.h"
 #include "valuemarqueeticker.h"
 
 #include <limits>
@@ -170,11 +171,11 @@ void ScrapeResultDialog::showEvent(QShowEvent *event) {
   ++g_visibleInstanceCount;
   // Resume periodic UI updates when the dialog becomes visible again.
   // Only restart while the service is still actively scraping —
-  // ticks at idle are pure waste. Note startUnifiedScrape also creates
+  // ticks at idle are pure waste. Note startUnifiedScrape also restarts
   // these timers on the running-service path; this branch just covers
   // a plain show() after a hide().
   if (m_service && m_service->isActive()) {
-    if (m_liveTickTimerInited && !m_liveTickTimer.isActive()) m_liveTickTimer.start();
+    if (!m_liveTickTimer.isActive()) m_liveTickTimer.start();
     m_marqueeTicker->resume();
   }
 }
@@ -267,7 +268,6 @@ void ScrapeResultDialog::buildUi() {
   root->addLayout(skipRow);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-  m_buttonBox = buttons;
   m_applyButton = buttons->addButton(tr("Apply"), QDialogButtonBox::AcceptRole);
   m_applyButton->setEnabled(false);
   // Cancel semantics:
@@ -308,7 +308,35 @@ void ScrapeResultDialog::buildUi() {
     }
   });
   connect(m_applyButton, &QPushButton::clicked, this, &ScrapeResultDialog::onApply);
+
+  // Unified-flow buttons are built (hidden) once here rather than lazily in
+  // the open path, so their clicked() connections can never be made twice
+  // whatever the open/close/reopen sequence. startUnifiedScrape shows the
+  // Scrape button; setUnifiedSetupEnabled toggles Close with the live view.
+  // Explicitly-hidden children stay hidden when the dialog is shown, so the
+  // legacy single-item flow never sees either button.
+  m_scrapeButton = buttons->addButton(tr("Scrape"), QDialogButtonBox::ActionRole);
+  m_scrapeButton->hide();
+  connect(m_scrapeButton, &QPushButton::clicked, this, &ScrapeResultDialog::onScrapeClicked);
+  m_closeButton = buttons->addButton(tr("Close"), QDialogButtonBox::ActionRole);
+  m_closeButton->setToolTip(tr("Hide this window. The scrape keeps running in the background; "
+                               "reopen Scraper from the File menu to see progress."));
+  connect(m_closeButton, &QPushButton::clicked, this, [this]() {
+    // Mid-interactive close → tell the service to pause so it doesn't fire
+    // the next item's picker into a vanished UI. Auto mode + idle: just hide.
+    if (m_service && m_service->state() == Scraper::ScraperService::State::RunningInteractive) {
+      m_service->pauseInteractive();
+    }
+    hide();
+  });
+  m_closeButton->hide();
   root->addWidget(buttons);
+
+  // The 1-second live tick is likewise wired exactly once here; every
+  // run/show/hide path only ever calls start()/stop() on the timer.
+  m_liveTickTimer.setInterval(1000);
+  connect(&m_liveTickTimer, &QTimer::timeout, m_unified.get(),
+          &ScrapeResultDialogUnified::updateUnifiedProgressLabel);
 }
 
 void ScrapeResultDialog::setScraperContext(const ScraperContext &ctx) {
@@ -330,6 +358,14 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
     qCInfo(lcScrapeTimings) << "DIALOG setScraperService: same service, skipping connect";
     return;
   }
+  // Structural duplicate/stale-connection guard: drop every connection from
+  // the previous service to this dialog before wiring the new one, so a
+  // rebind can neither stack a second set of handlers nor leave the old
+  // service still driving this UI. The named-slot connects below add
+  // Qt::UniqueConnection as belt-and-braces; the lambda connects can't be
+  // deduped by Qt (each lambda is a distinct functor), so this disconnect
+  // is their real guard.
+  if (m_service) disconnect(m_service, nullptr, this, nullptr);
   m_service = service;
   if (!m_service) return;
   qCInfo(lcScrapeTimings) << "DIALOG setScraperService: establishing connections";
@@ -338,19 +374,19 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
   // pulled the bodies out into named private slots — setScraperService
   // is now a connect table, and each handler is reviewable on its own.
   connect(m_service, &Scraper::ScraperService::scrapeStarted, this,
-          &ScrapeResultDialog::onServiceScrapeStarted);
+          &ScrapeResultDialog::onServiceScrapeStarted, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::itemBegan, this,
-          &ScrapeResultDialog::onServiceItemBegan);
+          &ScrapeResultDialog::onServiceItemBegan, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::itemCompleted, this,
-          &ScrapeResultDialog::onServiceItemCompleted);
+          &ScrapeResultDialog::onServiceItemCompleted, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::pickerNeeded, this,
-          &ScrapeResultDialog::onServicePickerNeeded);
+          &ScrapeResultDialog::onServicePickerNeeded, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::scrapeFinished, this,
-          &ScrapeResultDialog::onServiceScrapeFinished);
+          &ScrapeResultDialog::onServiceScrapeFinished, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::scrapePaused, this,
-          &ScrapeResultDialog::onServiceScrapePaused);
+          &ScrapeResultDialog::onServiceScrapePaused, Qt::UniqueConnection);
   connect(m_service, &Scraper::ScraperService::quotaUpdated, this,
-          &ScrapeResultDialog::onServiceQuotaUpdated);
+          &ScrapeResultDialog::onServiceQuotaUpdated, Qt::UniqueConnection);
   // Kartend-ou0a: route the provider's "Hashing ROM…" / "Extracting
   // archive…" stage into the in-dialog label so the user can see
   // what's holding the scrape up, rather than staring at a blank
@@ -391,6 +427,38 @@ void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
     }
     if (m_skipItemButton) m_skipItemButton->hide();
   });
+}
+
+void ScrapeResultDialog::bindForOpen(const ScraperContext &ctx, Scraper::ScraperService *service) {
+  // The single open-time rebinding entry (see the header doc): both callees
+  // are individually idempotent, so the reused dialog can be rebound on
+  // every open without stacking connections or clobbering a live run.
+  setScraperContext(ctx);
+  setScraperService(service);
+}
+
+void ScrapeResultDialog::resetRunState() {
+  // One place for every run-scoped member. The open path calls this from
+  // startUnifiedScrape's fresh-setup branch (never when re-attaching to a
+  // live run) and the scrapeStarted handler calls it again at each run
+  // boundary — mirroring ScraperService::startScrape, which wipes its own
+  // counterparts (summary, recent media, last scraped item) the same way.
+  m_result = Result{};
+  m_downloadsTotal = 0;
+  m_downloadedBytes = 0;
+  m_downloadStartMs = 0;
+  // Live-view leftovers from the previous run: the "Collection: … — last
+  // scraped: …" (or quota-exhausted) status line and the recent-media
+  // strip. Both are rebuilt by this run's signals; the strip mirrors the
+  // service's recentMediaPaths, which startScrape just cleared.
+  m_unifiedCurrentLabel->clear();
+  m_liveThumbsStrip->clear();
+  if (m_stageLabel) {
+    m_stageLabel->clear();
+    m_stageLabel->hide();
+  }
+  if (m_skipItemButton) m_skipItemButton->hide();
+  m_unified->resetRunState();
 }
 
 void ScrapeResultDialog::skipCurrentScrapeItem() {
@@ -556,13 +624,7 @@ void ScrapeResultDialog::updateSingleItemProgress(int completed) {
   // next to a 50 KB cover.
   const qint64 elapsedMs =
       std::max<qint64>(1, QDateTime::currentMSecsSinceEpoch() - m_downloadStartMs);
-  const double mibPerSec = (m_downloadedBytes / (1024.0 * 1024.0)) / (elapsedMs / 1000.0);
-  QString rateStr;
-  if (mibPerSec >= 1.0) {
-    rateStr = tr("%1 MiB/s").arg(mibPerSec, 0, 'f', 1);
-  } else {
-    rateStr = tr("%1 KiB/s").arg(mibPerSec * 1024.0, 0, 'f', 0);
-  }
+  const QString rateStr = TransferRateFormat::formatTransferRate(m_downloadedBytes, elapsedMs);
   QString etaStr = QStringLiteral("—");
   if (completed > 0 && m_downloadsTotal > completed) {
     const qint64 etaMs = static_cast<qint64>((double(elapsedMs) / double(completed)) *
