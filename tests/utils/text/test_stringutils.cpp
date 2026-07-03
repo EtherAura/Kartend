@@ -29,6 +29,10 @@ private slots:
   void relativePastTime_weeksMonthsYears();
   void relativePastTime_singularVsPlural();
   void relativePastTime_futureClamps();
+  void normalizeDisplayName_underscores();
+  void normalizeDisplayName_dashes();
+  void normalizeDisplayName_mixedCase();
+  void normalizeDisplayName_extraSpaces();
 
 private:
   QLocale m_originalLocale;
@@ -152,6 +156,27 @@ void TestStringUtils::relativePastTime_futureClamps() {
   // A stamp ahead of "now" (clock skew) clamps to "just now" rather than going
   // negative.
   QCOMPARE(StringUtils::relativePastTime(kNow + 5 * kMin, kNow), QStringLiteral("just now"));
+}
+
+// normalizeDisplayName — moved here from the PathUtils tests alongside the
+// function's relocation into StringUtils (pure text transform, no path logic).
+
+void TestStringUtils::normalizeDisplayName_underscores() {
+  QCOMPARE(StringUtils::normalizeDisplayName("Media_Title_Name"),
+           QStringLiteral("media title name"));
+}
+
+void TestStringUtils::normalizeDisplayName_dashes() {
+  QCOMPARE(StringUtils::normalizeDisplayName("Media-Title-Name"),
+           QStringLiteral("media title name"));
+}
+
+void TestStringUtils::normalizeDisplayName_mixedCase() {
+  QCOMPARE(StringUtils::normalizeDisplayName("MediaTitleNAME"), QStringLiteral("mediatitlename"));
+}
+
+void TestStringUtils::normalizeDisplayName_extraSpaces() {
+  QCOMPARE(StringUtils::normalizeDisplayName("  Media   Title  "), QStringLiteral("media title"));
 }
 
 QTEST_APPLESS_MAIN(TestStringUtils)

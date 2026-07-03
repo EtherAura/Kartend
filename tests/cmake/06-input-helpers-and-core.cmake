@@ -61,7 +61,8 @@ target_include_directories(test_wheeleventhandler PRIVATE
 
 # EventManagerMouse — mouse-dispatch signal-emission + parent-chain logic
 # (Kartend audit 4yktu): double-click / right / middle click, the wheel modal +
-# foreign-window gates, itemWidgetForObject / visualIndexForWidget. The
+# foreign-window gates, the shared modalInputGateActive() predicate,
+# itemWidgetForObject / visualIndexForWidget. The
 # MockDatabaseManager is a Q_OBJECT, so list its header in SOURCES so AUTOMOC
 # picks it up (same as the ItemMetadataActionController / TitleCountsHelpers
 # blocks); needed only for the db-collection-index double-click case.

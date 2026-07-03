@@ -71,6 +71,14 @@ kartend_add_test(NAME ArtworkWizardDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Onboarding wizards (first-run + library onboarding): page sequencing, the
+# media-page Next gate (mandatory fields + directory-must-exist), and the
+# Finish handlers that fold fields into the Result the caller persists.
+kartend_add_test(NAME OnboardingWizards
+  SOURCES ui/dialogs/test_onboardingwizards.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-0eeuk (mission 2): src/ui/dialogs/collection/ + kart/ logic tests.
 # Same headless pattern as the item/ block above.
 
@@ -182,12 +190,94 @@ kartend_add_test(NAME ScraperSettingsPanel
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# SettingsModel::currentWorkingCollection(): the canonical working-row guard
+# every settings panel's load()/save() path uses — nullptr for each unwired
+# model part / out-of-range index, live row (write-through) when valid.
+kartend_add_test(NAME SettingsModel
+  SOURCES ui/dialogs/test_settingsmodel.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# SettingsTreeHelpers: pure tree-mutation/sync logic extracted from the
+# SettingsDialog tree partials — per-category appearance/layout copy
+# allowlist, mask-aware bulk apply over both lists, subcollection
+# inheritance, parent-combo row models (self/cycle vs playlist exclusion),
+# duplicate name validation + config scrubbing, alias-name propagation, and
+# the post-drop reparent walk (real offscreen QTreeWidget).
+kartend_add_test(NAME SettingsDialogTreeHelpers
+  SOURCES ui/dialogs/test_settingsdialogtreehelpers.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# TreeManager: the SettingsDialog tree controller against a real (never
+# shown) CollectionTreeWidget + fake SettingsTreeHost — rebuild hierarchy /
+# index maps, stale-parent orphan repair, linked-appearance mirrors, ancestor
+# expansion, rename commit (lists + mirrors + aliases + dirty flag, blank
+# revert, rename-back), selection-switch guard, drop resync + signal.
+kartend_add_test(NAME TreeManager
+  SOURCES ui/dialogs/test_treemanager.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# SettingsDialog dirty tracking: one representative field per
+# check*Changes bucket feeding hasUnsavedChanges() (spacing mapping, stubbed
+# extension/dimension/background buckets via their absorbing panels, tree
+# rename, parent combo, colors/effects, list mode, default-launcher index,
+# general-settings whole-struct compare), each with a revert-to-clean pin.
+kartend_add_test(NAME SettingsDialogChecks
+  SOURCES ui/dialogs/test_settingsdialogchecks.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# SettingsDialog browse partial: the recursive content-import pipeline on
+# real QTemporaryDir trees (guard rails, subcollection creation + template
+# inheritance + artwork matching, decline path, traversal-unsafe name skip);
+# modals answered by a zero-interval timer queue. Native file pickers
+# (browseLauncher/Core/MediaDir) are not driven — platform dialogs.
+kartend_add_test(NAME SettingsDialogBrowse
+  SOURCES ui/dialogs/test_settingsdialogbrowse.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # ScrapeResultSelectionModel: tree-building, check-cascade, and per-item
 # selection/dedup logic, exercised with standalone widgets now that the model
 # is decoupled from ScrapeResultDialog (Kartend-hhv2u).
 kartend_add_test(NAME ScrapeResultSelectionModel
   SOURCES ui/dialogs/test_scraperesultselectionmodel.cpp
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# ScrapeResultDialogUnified runtime, driven against a real ScraperService
+# with scripted stub providers: Scrape-click selection → CollectionJob
+# translation (uuid / artwork-dir re-resolution, media-filter +
+# write-metadata derivation), the interactive pickerNeeded candidate combo +
+# live-metadata rendering, the Apply hop (applyResult callback, _metadata
+# stripping, queue advance to unifiedScrapeFinished), the error-details
+# modal (zero-interval driver) with its re-scrape-failed re-queue grouped by
+# owning collection, and the quota-exhausted finish message. Rebuilt queues
+# are asserted via the service's synchronous pending-scrape.json snapshot.
+kartend_add_test(NAME ScrapeResultDialogUnified
+  SOURCES ui/dialogs/test_scraperesultdialogunified.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# SingleItemScrapeView: candidate-list rendering (subtitle/score label
+# format, single-result auto-hide), the detail fetch lifecycle
+# (loading/loaded/failed signals, per-row cache, stale-callback guard for
+# superseded rows), detail-HTML field rows + escaping, and the media
+# checkbox rows with shared-scope hints. Driven standalone with a stub
+# provider — no dialog, no network.
+kartend_add_test(NAME SingleItemScrapeView
+  SOURCES ui/dialogs/test_singleitemview.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# TransferRateFormat: the shared bytes/elapsed → "KiB/s"/"MiB/s" readout used
+# by both scrape result dialogs (header-only, resolved via the directory-level
+# include fallback).
+kartend_add_test(NAME TransferRateFormat
+  SOURCES ui/dialogs/test_transferrateformat.cpp
+  LINK Qt6::Core
 )
 
 # GamepadCaptureController: capture state machine against a real
@@ -214,4 +304,58 @@ kartend_add_test(NAME LauncherEditorDialog
   SOURCES ui/dialogs/test_launchereditordialog.cpp
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
+
+# ErrorDialog: severity → window-title mapping, per-error-code guidance
+# suffix, details/copy gating on context payload, Show/Hide Details toggle,
+# clipboard payload, and showCriticalError's Continue/Quit rewiring + exec
+# result mapping (zero-interval modal driver).
+kartend_add_test(NAME ErrorDialog
+  SOURCES ui/dialogs/test_errordialog.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# ShortcutsDialog: section rendering, keybinding/gamepad/modifier text
+# sourced from a fake IMainWindow host's GeneralSettings, the
+# useHomeView-gated row, and the showEvent repopulate (no duplication).
+kartend_add_test(NAME ShortcutsDialog
+  SOURCES ui/dialogs/test_shortcutsdialog.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# CommandPaletteDialog: caller-order empty-query listing, fuzzy filter +
+# rank ordering, category rendering, search-field arrow-key forwarding, and
+# the Enter contract (accept first, run the original-index command).
+kartend_add_test(NAME CommandPaletteDialog
+  SOURCES ui/dialogs/test_commandpalettedialog.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# StatisticsDialog shell against a real on-disk migrated SQLite file (the
+# service half is covered by utils/db/test_statisticsservice): async
+# snapshot→tree rendering, uuid→label mapping incl. the deleted fallback,
+# navigate payload stash, live history toggle persist, and the Reset flow
+# (confirm modal + real SQL + refresh). The IDatabaseManager double only
+# names the db path — gather() reads real SQLite.
+kartend_add_test(NAME StatisticsDialog
+  SOURCES ui/dialogs/test_statisticsdialog.cpp
+          integration/mocks/mockdatabasemanager.h
+          integration/mocks/mocksettingsmanager.h
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_statisticsdialog PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
+# SettingsDialog live-save debounce (base color / fonts / splash panels):
+# an edit burst applies in-memory immediately but coalesces into ONE
+# GeneralSettings disk write; Cancel re-persists the baseline and the
+# pending debounce never fires; Save/OK's full save supersedes the flush.
+# Driven with a QWidget+IMainWindow fake host and a counting
+# ISettingsManager injected via ApplicationContext.
+kartend_add_test(NAME SettingsDialogLiveSave
+  SOURCES ui/dialogs/test_settingsdialoglivesave.cpp
+          integration/mocks/mocksettingsmanager.h
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_settingsdialoglivesave PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 

@@ -58,6 +58,24 @@ kartend_add_test(NAME LaunchManager
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# CmdExeQuoting tests: the two-layer cmd.exe/CommandLineToArgvW escaping the
+# Windows batch-launcher spawn path uses. Pure string transform, exercised on
+# every platform.
+kartend_add_test(NAME CmdExeQuoting
+  SOURCES modules/launch/test_cmdexequoting.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# LaunchCommandBuilder tests: the pure command-construction half split out of
+# launchmanager.cpp (boundary-aware %1/%f and %core substitution, %collection%
+# expansion, preset resolution feeding the builder, append-media-path
+# fallback). No process is spawned; LaunchManager's delegating statics stay
+# covered by the LaunchManager test above.
+kartend_add_test(NAME LaunchCommandBuilder
+  SOURCES modules/launch/test_launchcommandbuilder.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # PathUtils tests
 kartend_add_test(NAME PathUtils
   SOURCES utils/fs/test_pathutils.cpp
@@ -68,6 +86,13 @@ kartend_add_test(NAME PathUtils
 kartend_add_test(NAME VideoUtils
   SOURCES utils/view/test_videoutils.cpp
   LINK kartend_utils
+)
+
+# DetailsFormat tests (header-only pure formatters for the Details section /
+# detail page; DetailsPane & DetailPageOverlay keep thin wrappers over these)
+kartend_add_test(NAME DetailsFormat
+  SOURCES utils/view/test_detailsformat.cpp
+  LINK Qt6::Core
 )
 
 # ExtensionUtils tests (image-decode allowlist guard — keeps scraped .pdf
@@ -172,11 +197,13 @@ kartend_add_test(NAME EmptyStateWidget
 )
 
 # CoverFlowWidget tests (selection clamping, gesture state transitions,
-# wheel/key/mouse → signal emission, gallery owner bookkeeping). Pulls in
-# VideoPreviewWidget + VideoThumbnailExtractor because the widget's ctor
-# constructs the preview child and connects to the extractor singleton —
-# those are linked but never asked to play, so the QtMultimedia backend is
-# not actually started during the test.
+# wheel/key/mouse → signal emission, gallery owner bookkeeping, and the
+# paint-free center-rect maintenance that positions the video preview).
+# Pulls in VideoPreviewWidget + VideoThumbnailExtractor because the widget's
+# ctor constructs the preview child and connects to the extractor singleton —
+# those are linked (and the preview child is shown by the geometry tests) but
+# never asked to play, so the QtMultimedia backend is not actually started
+# during the test.
 kartend_add_test(NAME CoverFlowWidget
   SOURCES ui/widgets/test_coverflowwidget.cpp
   LINK kartend_chrome kartend_api kartend_utils
@@ -210,6 +237,40 @@ kartend_add_test(NAME DatAuditProfileDialog
 # order regression: filter checkbox toggled→applyFilters fired mid-build).
 kartend_add_test(NAME DatAuditBrowserPage
   SOURCES ui/dialogs/test_datauditbrowserpage.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# DatAuditProfilePanel: the saved-profile combo + CRUD row lifted off
+# DatAuditAuditPage. Selection flows announce profileChanged / unsavedSelected
+# against a real sandboxed media.db; constructed headlessly, never shown.
+kartend_add_test(NAME DatAuditProfilePanel
+  SOURCES ui/dialogs/test_datauditprofilepanel.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# DatAuditAuditPage: the DAT Manager's Audit page against a real sandboxed
+# media.db — construction inventory (input lists, filter presets, idle run
+# controls) and both openForCollection flows (unlinked seed with silent
+# "(unsaved)" row; linked-profile adoption with the caller's working
+# media-dir/DAT list overriding the saved derivation).
+kartend_add_test(NAME DatAuditAuditPage
+  SOURCES ui/dialogs/test_datauditauditpage.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# DatAuditDownloadPage: network-free paths only — construction gating
+# (No-Intro form up, Redump hidden, download/cancel/progress idle) and the
+# Load guard rejecting unparseable system ids without dispatching a fetch.
+kartend_add_test(NAME DatAuditDownloadPage
+  SOURCES ui/dialogs/test_datauditdownloadpage.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
+# DatAuditLibraryPage: pure-view contract — placeholder/path label
+# round-trip, review/check-updates/import gating setters (busy relabel),
+# and every button→intent-signal wire.
+kartend_add_test(NAME DatAuditLibraryPage
+  SOURCES ui/dialogs/test_datauditlibrarypage.cpp
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 

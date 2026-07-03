@@ -16,6 +16,18 @@ namespace StringUtils {
   return QLocale().toString(value);
 }
 
+/// Normalizes a raw display name into a comparison/sort key: underscores and
+/// dashes become spaces, whitespace runs collapse, and the result is
+/// lowercased. Used by the query layer to sort media filenames the way a
+/// human reads their titles. Pure text transform — moved here from PathUtils,
+/// where it was off-mission among the path expansion/validation helpers.
+[[nodiscard]] inline auto normalizeDisplayName(const QString &input) -> QString {
+  QString out = input;
+  out.replace('_', ' ').replace('-', ' ');
+  out = out.simplified().toLower();
+  return out;
+}
+
 /// Formats a byte count as human-readable size using binary (1024) steps:
 /// "1.00 KB", "2.50 MB", "512 bytes". Units go through translate() so the label
 /// and number/unit spacing stay localizable; the value uses QString::number

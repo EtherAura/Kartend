@@ -31,10 +31,12 @@ include_directories(
 #
 # The app target keeps linking the OBJECT libs directly (Kartend-q3vfq kept
 # them OBJECT for layering enforcement; nothing here touches that). For the
-# ~160 test executables OBJECT libs are pessimal, though: linking an OBJECT
-# lib forces EVERY one of its .o files into the executable — no
-# dead-stripping — so each test binary embedded the full object set of every
-# linked area (a 13 GB debug tests/ dir, link-dominated edit-test cycles).
+# standalone test executables — a couple hundred and counting, so no exact
+# figure here (testing.md: counts drift fast) — OBJECT libs are pessimal,
+# though: linking an OBJECT lib forces EVERY one of its .o files into the
+# executable — no dead-stripping — so each test binary embedded the full
+# object set of every linked area (a 13 GB debug tests/ dir, link-dominated
+# edit-test cycles).
 #
 # Each twin archives the SAME object files ($<TARGET_OBJECTS:...> — objects
 # compile exactly once, shared with the app link). A STATIC archive restores

@@ -26,6 +26,30 @@ inline const QLoggingCategory &lcErrors() {
   return QString::fromStdString(e.what());
 }
 
+// Collapse remote / untrusted text into one bounded, log-safe line. CR/LF
+// and every other ASCII control character become spaces (then whitespace
+// runs collapse via simplified()) so a hostile server body folded into
+// ErrorContext::details can't forge extra lines in the always-on
+// kartend.errors log or smuggle terminal escape sequences; the result is
+// truncated to `maxChars` so a size-capped-but-still-huge error body can't
+// dominate a log entry or an error dialog. Callers apply this wherever
+// remote bytes are folded into details, and logError() applies it again at
+// the sink as the backstop.
+[[nodiscard]] inline QString sanitizedSingleLine(QString text, int maxChars = 2048) {
+  for (QChar &ch : text) {
+    const char16_t u = ch.unicode();
+    if (u < 0x20 || u == 0x7f) {
+      ch = QLatin1Char(' ');
+    }
+  }
+  text = text.simplified();
+  if (maxChars > 0 && text.size() > maxChars) {
+    text.truncate(maxChars);
+    text += QStringLiteral("…");
+  }
+  return text;
+}
+
 } // namespace ErrorUtils
 
 namespace ErrorUtils {
@@ -73,6 +97,13 @@ enum class ErrorCode {
   // UI/Widget errors (500-599)
   WidgetCreationFailed = 500,
   WidgetNotFound = 501,
+
+  // Network / remote-provider errors (600-699)
+  // The remote provider has no entry for the queried item — an HTTP 404, or
+  // an empty "no match" result a provider classified as not-found. A routine,
+  // expected scrape outcome, counted apart from genuine errors so a library
+  // with some unmatched items doesn't inflate the error count (Kartend-e8aag).
+  RemoteResourceNotFound = 600,
 
   // Kart packaging errors (700-799)
   KartFormatInvalid = 700,
@@ -156,6 +187,31 @@ struct ErrorContext {
     retryAfterSeconds = seconds;
     return *this;
   }
+
+  // One-line, human-facing summary that folds the HTTP status and a short
+  // server-detail snippet into the lead message — so a failure list shows
+  // "HTTP request failed (HTTP 404): Not Found" instead of a context-free
+  // "HTTP request failed" (Kartend-e6oyu). Provider-remapped messages that
+  // already embed an "(HTTP n)" code (e.g. ScreenScraper's) are left intact:
+  // the status isn't re-appended and the raw (often foreign-language) response
+  // body isn't tacked on.
+  [[nodiscard]] QString userFacingSummary() const {
+    QString summary = message;
+    const bool messageHasStatus =
+        httpStatus > 0 && message.contains(QStringLiteral("HTTP %1").arg(httpStatus));
+    if (httpStatus > 0 && !messageHasStatus) {
+      summary += QStringLiteral(" (HTTP %1)").arg(httpStatus);
+    }
+    // Only fold a detail snippet into generic messages — a provider message
+    // that already carries an "(HTTP n)" code is a self-contained sentence.
+    if (!details.isEmpty() && !message.contains(QStringLiteral("(HTTP "))) {
+      const QString firstLine = details.section(QLatin1Char('\n'), 0, 0).trimmed();
+      if (!firstLine.isEmpty() && !summary.contains(firstLine)) {
+        summary += QStringLiteral(": %1").arg(firstLine);
+      }
+    }
+    return summary;
+  }
 };
 
 // Result type combining a value with optional error context.
@@ -221,7 +277,10 @@ inline void logError(const ErrorContext &ctx) {
     msg = QString("[%1] %2").arg(ctx.source, ctx.message);
   }
   if (!ctx.details.isEmpty()) {
-    msg += QString(" (%1)").arg(ctx.details);
+    // details is the one field that routinely carries remote text (HTTP
+    // error bodies); flatten it at the sink so an embedded CR/LF can't
+    // forge additional kartend.errors lines (log-injection hardening).
+    msg += QString(" (%1)").arg(sanitizedSingleLine(ctx.details));
   }
 
   switch (ctx.severity) {
@@ -283,6 +342,8 @@ inline void logError(const ErrorContext &ctx) {
     return "WidgetCreationFailed";
   case ErrorCode::WidgetNotFound:
     return "WidgetNotFound";
+  case ErrorCode::RemoteResourceNotFound:
+    return "RemoteResourceNotFound";
   case ErrorCode::KartFormatInvalid:
     return "KartFormatInvalid";
   case ErrorCode::KartVersionUnsupported:
