@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 
+#include "../../support/parkedcallbacksink.h"
 #include "../../support/testsandbox.h"
 #include "collection/typehelpers.h"
 #include "metadatalookupprovider.h"
@@ -70,10 +71,13 @@ public:
   /// When set, every fetchMediaBytes call fails with this error instead of
   /// answering from mediaBytes (Kartend-xzqel failure-path tests).
   std::optional<ErrorUtils::ErrorContext> mediaError;
-  /// When set, fetchMediaBytes parks its callback instead of firing — lets a
-  /// test fire it by hand to drive the in-flight / pause window.
-  bool parkMedia = false;
-  mutable MediaCallback lastMediaCallback;
+  /// When set, fetchMediaBytes parks its callback into this fixture-owned sink
+  /// instead of firing — lets a test fire it by hand to drive the in-flight /
+  /// pause window without forming a provider<->callback cycle (see
+  /// ParkedCallbackSink). Enable via parkMediaInto(); the two are coupled so a
+  /// park-mode test cannot forget to provide the sink.
+  KartendTest::ParkedCallbackSink *mediaSink = nullptr;
+  void parkMediaInto(KartendTest::ParkedCallbackSink &sink) { mediaSink = &sink; }
   void lookup(const QString &, LookupCallback cb) override {
     cb(QList<Scraper::ScrapeCandidate>{});
   }
@@ -81,8 +85,8 @@ public:
     cb(Scraper::ScrapedItem{});
   }
   void fetchMediaBytes(const QUrl &url, MediaCallback cb) override {
-    if (parkMedia) {
-      lastMediaCallback = std::move(cb);
+    if (mediaSink) {
+      mediaSink->media = std::move(cb);
       return;
     }
     if (mediaError.has_value()) {
@@ -103,7 +107,11 @@ public:
 /// realistic async-provider case (Kartend-ckepd.2 review regressions).
 class ParkedEntityProvider : public MetadataLookupProvider {
 public:
-  mutable DetailCallback lastEntityCallback;
+  /// Always parks fetchEntity() into this fixture-owned sink; the sink is a
+  /// required ctor argument so the provider<->callback cycle cannot form (see
+  /// ParkedCallbackSink) and cannot be forgotten (it is a compile error to omit).
+  explicit ParkedEntityProvider(KartendTest::ParkedCallbackSink &sink) : entitySink(sink) {}
+  KartendTest::ParkedCallbackSink &entitySink;
   int fetchEntityCalls = 0;
   QString id() const override { return QStringLiteral("parkedentity"); }
   QString displayName() const override { return QStringLiteral("ParkedEntity"); }
@@ -117,7 +125,7 @@ public:
   void fetchMediaBytes(const QUrl &, MediaCallback) override {}
   void fetchEntity(const Scraper::EntityScrapeTarget &, DetailCallback cb) override {
     ++fetchEntityCalls;
-    lastEntityCallback = std::move(cb); // park it; a test fires it by hand
+    entitySink.entity = std::move(cb); // park it; a test fires it by hand
   }
 };
 
@@ -162,6 +170,11 @@ private:
   static QString pendingLockFilePath();
   // A small valid pending-scrape snapshot reused by several tests.
   static QByteArray validPendingJson();
+
+  // Fixture-owned home for any callback a stub parks this test (see
+  // ParkedCallbackSink). Drained in cleanup() so the parked closure's captured
+  // provider shared_ptr is released — no per-test clear, no LSan cycle.
+  KartendTest::ParkedCallbackSink m_parkedCallbacks;
 };
 
 QString TestScraperServiceResume::pendingFilePath() {
@@ -212,6 +225,7 @@ void TestScraperServiceResume::init() {
 }
 
 void TestScraperServiceResume::cleanup() {
+  m_parkedCallbacks.clear();
   QFile::remove(pendingFilePath());
   QFile::remove(pendingLockFilePath());
 }
@@ -574,7 +588,7 @@ void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
   // Kartend-ckepd.2 review: an entity job paused mid-fetch in Interactive mode
   // must be re-dispatched on resume, NOT silently skipped by startInteractiveItem
   // (whose empty-items "done" branch would otherwise eat it).
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   ScraperService service;
   ScraperService::Context ctx;
   ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
@@ -602,18 +616,13 @@ void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
   // again — never finishing the run with the entity unscraped.
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
   QCOMPARE(provider->fetchEntityCalls, 2);
-
-  // Break the provider<->parked-callback cycle: ParkedEntityProvider stores a
-  // production callback that captures the provider shared_ptr, so the provider
-  // transitively owns itself and never frees (LSan flags the closure captures).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   // Kartend-ckepd.2 review: an entity-fetch callback that resolves after its run
   // was cancelled and a NEW run started must NOT mutate the new run (the run
   // generation rejects it; the entity path has no runner to detach).
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   ScraperService service;
   ScraperService::Context ctx;
   ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
@@ -628,7 +637,7 @@ void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   service.startScrape({jobA}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
                       /*writeMetadata=*/true);
   QCOMPARE(provider->fetchEntityCalls, 1);
-  const auto staleCallback = provider->lastEntityCallback; // run A's parked callback
+  const auto staleCallback = m_parkedCallbacks.entity; // run A's parked callback
   QVERIFY(static_cast<bool>(staleCallback));
 
   // Cancel run A, then start a fresh run B (also a parked entity).
@@ -647,9 +656,6 @@ void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   staleCallback(Scraper::ScrapedItem{});
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningAuto);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
@@ -668,7 +674,7 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
   wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
   item.media.append(wheel);
   provider->entityResult = item;
-  provider->parkMedia = true; // park the media download so the test controls timing
+  provider->parkMediaInto(m_parkedCallbacks); // park the media download so the test controls timing
 
   ScraperService service;
   ScraperService::Context ctx;
@@ -685,8 +691,8 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
                       /*writeMetadata=*/true);
 
   // Entity fetched (sync); media download dispatched and parked.
-  QVERIFY(static_cast<bool>(provider->lastMediaCallback));
-  const auto staleCallback = provider->lastMediaCallback; // the pre-pause callback
+  QVERIFY(static_cast<bool>(m_parkedCallbacks.media));
+  const auto staleCallback = m_parkedCallbacks.media; // the pre-pause callback
   QCOMPARE(service.summary().scraped, 0);
 
   // Pause (Close) then resume (reopen) — resume re-dispatches the entity.
@@ -700,14 +706,6 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
   staleCallback(QByteArray("\x89PNG-bytes"));
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
-
-  // Break the provider<->parked-callback cycle before the local provider
-  // shared_ptr drops. The production media callback captures the provider
-  // shared_ptr by value (deliberate lifetime management), and the stub parked
-  // that callback INTO the provider — so the provider transitively owns a
-  // strong ref to itself and never reaches refcount 0 (LSan flags every object
-  // the closure holds). Clearing the parked member releases the cycle.
-  provider->lastMediaCallback = {};
 }
 
 void TestScraperServiceResume::entityFetchQuotaStopsQueueWithResumePoint() {
@@ -895,7 +893,7 @@ void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
   QList<CollectionConfig> collections{alpha, beta};
   const QString betaUuid = CollectionUtils::computeCollectionUuid(collections[1]);
 
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   QList<int> requestedIndices;
   ScraperService service;
   ScraperService::Context ctx;
@@ -925,9 +923,6 @@ void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
   // The provider must have been built for Beta's LIVE index, not the stale 0.
   QCOMPARE(requestedIndices.size(), 1);
   QCOMPARE(requestedIndices.first(), 1);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
@@ -937,7 +932,7 @@ void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
   only.name = QStringLiteral("Solo");
   QList<CollectionConfig> collections{only};
 
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   int builderCalls = 0;
   ScraperService service;
   ScraperService::Context ctx;
@@ -1017,7 +1012,7 @@ void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
   auto errorProvider = std::make_shared<EntityStubProvider>();
   errorProvider->entityResult = ErrorUtils::ErrorContext::error(
       ErrorUtils::ErrorCode::InvalidArgument, QStringLiteral("boom"));
-  auto parkedProvider = std::make_shared<ParkedEntityProvider>();
+  auto parkedProvider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
 
   ScraperService service;
   ScraperService::Context ctx;
@@ -1063,9 +1058,6 @@ void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
   QCOMPARE(failed.value(QStringLiteral("collection_uuid")).toString(),
            QStringLiteral("uuid-failing"));
   QCOMPARE(failed.value(QStringLiteral("collection_index")).toInt(), 0);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  parkedProvider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::entityFailureRecordsEntityDiscriminator() {

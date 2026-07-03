@@ -53,6 +53,7 @@
 #include <QTimer>
 #include <QTreeWidget>
 
+#include "../../support/parkedcallbacksink.h"
 #include "../../support/testsandbox.h"
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
@@ -114,14 +115,23 @@ public:
   enum class EntityMode { Park, Error, Success };
   EntityMode entityMode = EntityMode::Error;
   Scraper::EntityScrapeTarget lastEntityTarget;
-  mutable DetailCallback lastEntityCallback;
+  /// Park mode stashes the entity callback into this fixture-owned sink instead
+  /// of a member, so the parked closure's captured provider shared_ptr never
+  /// forms a self-cycle (see ParkedCallbackSink). parkEntityInto() sets the
+  /// mode and the sink together so a park test cannot forget either.
+  KartendTest::ParkedCallbackSink *entitySink = nullptr;
+  void parkEntityInto(KartendTest::ParkedCallbackSink &sink) {
+    entityMode = EntityMode::Park;
+    entitySink = &sink;
+  }
   QList<Scraper::ScrapeEntityType> supportedEntities() const override {
     return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
   }
   void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback cb) override {
     lastEntityTarget = target;
     if (entityMode == EntityMode::Park) {
-      lastEntityCallback = std::move(cb);
+      Q_ASSERT(entitySink); // set together via parkEntityInto()
+      entitySink->entity = std::move(cb);
       return;
     }
     if (entityMode == EntityMode::Error) {
@@ -289,6 +299,11 @@ private:
   static QString pendingFilePath();
   static QString pendingLockFilePath();
   static QJsonObject readPendingRoot();
+
+  // Fixture-owned home for a callback a stub parks this test (see
+  // ParkedCallbackSink). Drained in cleanup() so the parked closure's captured
+  // provider shared_ptr is released — no per-test clear, no LSan cycle.
+  KartendTest::ParkedCallbackSink m_parkedCallbacks;
 };
 
 QString TestScrapeResultDialogUnified::pendingFilePath() {
@@ -318,6 +333,7 @@ void TestScrapeResultDialogUnified::init() {
 }
 
 void TestScrapeResultDialogUnified::cleanup() {
+  m_parkedCallbacks.clear();
   QFile::remove(pendingFilePath());
   QFile::remove(pendingLockFilePath());
 }
@@ -733,7 +749,7 @@ void TestScrapeResultDialogUnified::errorDetailsRescrapeRebuildsEntityFailureAsE
   QVERIFY(service.summary().failedItems.first().isEntity);
 
   // Park the re-queued run so the rebuilt entity queue can be inspected.
-  provider->entityMode = ScriptedProvider::EntityMode::Park;
+  provider->parkEntityInto(m_parkedCallbacks);
   auto *interactive =
       widgetWithText<QRadioButton>(dlg, QStringLiteral("Interactive (pick candidate per item)"));
   QVERIFY(interactive);
@@ -774,12 +790,6 @@ void TestScrapeResultDialogUnified::errorDetailsRescrapeRebuildsEntityFailureAsE
   QVERIFY(entityJob.value(QStringLiteral("remaining")).toArray().isEmpty());
 
   service.cancel();
-  // Break the provider<->parked-callback cycle: the parked entity callback
-  // captures the provider shared_ptr by value, and the stub parked it into the
-  // provider, so the provider transitively owns itself and never frees (LSan
-  // flags the closure's captures). Clear the parked member before the local
-  // provider shared_ptr drops.
-  provider->lastEntityCallback = {};
 }
 
 void TestScrapeResultDialogUnified::errorDetailsWithoutFailuresOmitsRescrapeButton() {
