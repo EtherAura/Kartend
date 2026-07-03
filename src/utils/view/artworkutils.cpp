@@ -405,74 +405,39 @@ QString findArtworkForFile(const QString &fileName, const QString &artworkDirect
   return {};
 }
 
-ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
-                                                  const QString &artworkDirectory) {
-  using ErrorUtils::ErrorCode;
-  using ErrorUtils::ErrorContext;
-
-  if (fileName.isEmpty()) {
-    return ErrorContext::warning(ErrorCode::InvalidArgument, "Empty filename",
-                                 "ArtworkUtils::tryFindArtworkForFile");
-  }
-  if (artworkDirectory.isEmpty()) {
-    return ErrorContext::warning(ErrorCode::InvalidArgument, "Empty artwork directory",
-                                 "ArtworkUtils::tryFindArtworkForFile");
-  }
-
-  QDir artworkDir(artworkDirectory);
-  if (!artworkDir.exists()) {
-    return ErrorContext::warning(ErrorCode::ArtworkDirectoryNotFound,
-                                 "Artwork directory does not exist",
-                                 "ArtworkUtils::tryFindArtworkForFile")
-        .withDetails(artworkDirectory);
-  }
-
-  const QString baseName = QFileInfo(fileName).completeBaseName();
-  const QString fullName = QFileInfo(fileName).fileName();
-  const QStringList &bases = ExtensionUtils::imageBaseExtensions();
-
-  // Try baseName first, then fullName, at the flat root, then walk
-  // the typed cover subdirs (`front` → box → … ) where scrapes now
-  // write the cover.
-  QString result = searchWithName(artworkDir, baseName, bases);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  result = searchWithName(artworkDir, fullName, bases);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  for (const QString &subdir : coverSubdirPriority()) {
-    QDir coverDir(artworkDir.absoluteFilePath(subdir));
-    if (!coverDir.exists()) {
-      continue;
-    }
-    result = searchWithName(coverDir, baseName, bases);
-    if (!result.isEmpty()) {
-      return result;
-    }
-    result = searchWithName(coverDir, fullName, bases);
-    if (!result.isEmpty()) {
-      return result;
-    }
-  }
-
-  return ErrorContext::info(ErrorCode::FileNotFound, "No matching artwork found",
-                            "ArtworkUtils::tryFindArtworkForFile")
-      .withDetails(QString("Searched for: %1 in %2").arg(fileName, artworkDirectory));
-}
+namespace {
+/// Shared cascade for the cached lookups: probe @p baseName (and, when it
+/// differs, @p fullName) at the flat root, then per typed cover subdir in
+/// priority order. Callers own the strip policy — see
+/// findArtworkForBaseNameCached's header note on double-stripping.
+QString findCachedWithKeys(const QString &baseName, const QString &fullName,
+                           const QString &artworkDirectory);
+} // namespace
 
 QString findArtworkForFileCached(const QString &fileName, const QString &artworkDirectory) {
   if (fileName.isEmpty() || artworkDirectory.isEmpty()) {
     return {};
   }
+  return findCachedWithKeys(QFileInfo(fileName).completeBaseName(), QFileInfo(fileName).fileName(),
+                            artworkDirectory);
+}
 
+QString findArtworkForBaseNameCached(const QString &completeBaseName,
+                                     const QString &artworkDirectory) {
+  if (completeBaseName.isEmpty() || artworkDirectory.isEmpty()) {
+    return {};
+  }
+  return findCachedWithKeys(completeBaseName, completeBaseName, artworkDirectory);
+}
+
+namespace {
+QString findCachedWithKeys(const QString &baseName, const QString &fullName,
+                           const QString &artworkDirectory) {
   QElapsedTimer perfTimer;
   if (lcPerfTrace().isDebugEnabled()) {
     perfTimer.start();
   }
 
-  const QString baseName = QFileInfo(fileName).completeBaseName();
   QString result = DirectoryCache::instance().findInDirectory(baseName, artworkDirectory);
   if (!result.isEmpty()) {
     if (lcPerfTrace().isDebugEnabled() && perfTimer.elapsed() > 2) {
@@ -483,7 +448,6 @@ QString findArtworkForFileCached(const QString &fileName, const QString &artwork
   }
 
   // Try with full filename as fallback
-  const QString fullName = QFileInfo(fileName).fileName();
   if (fullName != baseName) {
     result = DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
     if (!result.isEmpty()) {
@@ -520,6 +484,7 @@ QString findArtworkForFileCached(const QString &fileName, const QString &artwork
   }
   return result;
 }
+} // namespace
 
 void clearDirectoryCache() {
   DirectoryCache::instance().clear();

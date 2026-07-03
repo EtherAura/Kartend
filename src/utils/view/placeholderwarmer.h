@@ -14,9 +14,9 @@ struct CollectionConfig;
 ///
 /// Walks `mediaDirectory` recursively, filters by `collection.extensions`,
 /// and for every item that does NOT already resolve to artwork (per
-/// ArtworkUtils::findArtworkForFile) generates the same hatched placeholder
-/// the live grid would render and writes it as `<basename>.png` into
-/// `artworkDirectory`.
+/// ArtworkUtils::findArtworkForFileCached, against a cache re-warmed at the
+/// start of the run) generates the same hatched placeholder the live grid
+/// would render and writes it as `<basename>.png` into `artworkDirectory`.
 ///
 /// Why callers want this: the per-item placeholder is normally regenerated
 /// lazily on every grid render. Exporting them once turns each into a real
@@ -24,7 +24,10 @@ struct CollectionConfig;
 /// artwork dir, then delete the .png) without having to disable the
 /// procedural fallback.
 ///
-/// Side effects: writes files into `artworkDirectory`. Skips items that
+/// Side effects: writes files into `artworkDirectory`. Clears the shared
+/// ArtworkUtils::DirectoryCache at the start of the run (so covers dropped
+/// mid-session are seen and never shadowed) and again at the end (so the live
+/// grid re-resolves against the freshly written files). Skips items that
 /// already have artwork. Does not touch the media tree.
 namespace PlaceholderWarmer {
 

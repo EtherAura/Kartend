@@ -129,7 +129,9 @@ void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
   m_scaledPixmapCache.clear();
   // Selected card may have moved into a different slot when filters or
   // sorting reshuffled the list; re-evaluate the video preview source so a
-  // stale path doesn't keep playing.
+  // stale path doesn't keep playing. Center rect first — the card set (and
+  // the possibly-clamped selection) shifts what sits at stage center.
+  refreshCenterRect();
   applyVideoPreviewState();
   update();
 }
@@ -171,6 +173,7 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   if (m_cards.isEmpty()) {
     m_selectedIndex = 0;
     m_selectionPositionF = 0.0;
+    refreshCenterRect();
     update();
     return;
   }
@@ -189,6 +192,9 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   if (!animate || !isVisible() || delta > kVisibleSideCards * 2) {
     m_selectedIndex = index;
     m_selectionPositionF = 0.0;
+    // Fresh center rect before applyVideoPreviewState reads it to place
+    // the preview over the newly-centered card.
+    refreshCenterRect();
     applyVideoPreviewState();
     update();
     return;
@@ -208,6 +214,7 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   // resolves to the new center index so the preview should track it. Hiding
   // the preview during glide avoids a stale-source frame floating off the
   // center card mid-animation.
+  refreshCenterRect();
   applyVideoPreviewState();
   update();
 }
@@ -222,9 +229,9 @@ void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGallery
   m_galleryActiveIndex = -1;
   m_galleryThumbCache.clear();
   // Layout slot reservations changed (gallery may have appeared/disappeared)
-  // so re-evaluate cards and the video preview's geometry.
+  // so re-derive the center rect, then re-evaluate the preview against it.
+  refreshCenterRect();
   applyVideoPreviewState();
-  updateVideoPreviewGeometry();
   update();
 }
 
@@ -246,6 +253,9 @@ void CoverFlowWidget::setSelectionPositionF(qreal v) {
     return;
   }
   m_selectionPositionF = v;
+  // Every glide frame moves the centered card; re-derive its rect here —
+  // outside the paint path — so the video preview tracks the animation.
+  refreshCenterRect();
   update();
 }
 
@@ -289,6 +299,9 @@ void CoverFlowWidget::setHideTitles(bool hide) {
     return;
   }
   m_hideTitles = hide;
+  // The title strip reserves a vertical slot, so toggling it shifts the
+  // carousel's center (and card size) — re-derive the center rect.
+  refreshCenterRect();
   update();
 }
 
@@ -297,6 +310,9 @@ void CoverFlowWidget::setFontSize(int size) {
     return;
   }
   m_fontSize = std::max(6, size);
+  // Font size scales the title-strip slot, which shifts the carousel's
+  // center (and card size) — re-derive the center rect.
+  refreshCenterRect();
   update();
 }
 
@@ -486,21 +502,10 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
   }
 
   const auto layout = computeVisibleLayout();
-  // Track the centered card's rect so updateVideoPreviewGeometry can
-  // position the QLabel-based preview over it on the next layout round.
-  QRect newCenterRect;
-  for (const auto &c : layout) {
-    if (c.index == m_selectedIndex && std::abs(c.offset) < 0.5) {
-      newCenterRect = c.rect;
-    }
-  }
-  if (newCenterRect != m_lastCenterRect) {
-    m_lastCenterRect = newCenterRect;
-    if (m_videoPreview && m_videoPreview->isVisible() && !newCenterRect.isEmpty()) {
-      m_videoPreview->setGeometry(newCenterRect);
-      m_videoPreview->raise();
-    }
-  }
+  // The centered card's rect (m_lastCenterRect — video-preview positioning)
+  // is maintained by refreshCenterRect() on the setters that move the center,
+  // never here: a child setGeometry inside a paint pass schedules another
+  // layout/paint round per glide frame (paint-driven layout).
   const bool videoCovering = m_videoPreview && m_videoPreview->isVisible();
   for (const auto &c : layout) {
     // Skip rendering the centered card when the video preview is sitting
@@ -704,7 +709,7 @@ void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
   m_pixmapCache.clear();
   cancelPendingScales();
   m_scaledPixmapCache.clear();
-  updateVideoPreviewGeometry();
+  refreshCenterRect();
   update();
 }
 
@@ -736,6 +741,26 @@ void CoverFlowWidget::changeEvent(QEvent *e) {
     m_galleryThumbCache.clear();
     update();
   }
+}
+
+void CoverFlowWidget::refreshCenterRect() {
+  // Same center detection paintEvent used to do inline: the selected card's
+  // rect while it is within half a step of the stage center. Empty while a
+  // glide is mid-flight past that band (or when there are no cards), which
+  // intentionally leaves the preview where it was — updateVideoPreviewGeometry
+  // skips empty rects, matching the old paint-path behaviour.
+  QRect newCenterRect;
+  const auto layout = computeVisibleLayout();
+  for (const auto &c : layout) {
+    if (c.index == m_selectedIndex && std::abs(c.offset) < 0.5) {
+      newCenterRect = c.rect;
+    }
+  }
+  if (newCenterRect == m_lastCenterRect) {
+    return;
+  }
+  m_lastCenterRect = newCenterRect;
+  updateVideoPreviewGeometry();
 }
 
 void CoverFlowWidget::updateVideoPreviewGeometry() {

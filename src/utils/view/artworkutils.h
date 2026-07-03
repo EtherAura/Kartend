@@ -1,8 +1,6 @@
 #ifndef ARTWORKUTILS_H
 #define ARTWORKUTILS_H
 
-#include "errorutils.h"
-
 #include <QAtomicInteger>
 #include <QColor>
 #include <QHash>
@@ -179,6 +177,22 @@ private:
                                                const QString &artworkDirectory);
 
 /**
+ * @brief findArtworkForFileCached for callers that already hold the
+ * extension-stripped stem (QFileInfo::completeBaseName()).
+ *
+ * findArtworkForFileCached strips its argument itself, so passing it an
+ * already-stripped stem double-strips dotted names ("Game v1.2" probes as
+ * "Game v1" first) and can resolve another item's artwork. This variant
+ * probes exactly the given stem.
+ *
+ * @param completeBaseName The media file's stem, already stripped.
+ * @param artworkDirectory The directory to search in.
+ * @return The full path to the artwork file if found, empty string otherwise.
+ */
+[[nodiscard]] QString findArtworkForBaseNameCached(const QString &completeBaseName,
+                                                   const QString &artworkDirectory);
+
+/**
  * @brief Compose the final item-card image: scale-to-fit + center on a
  * background + rounded-corner mask, at the physical target size.
  *
@@ -200,25 +214,6 @@ private:
 [[nodiscard]] QImage composeArtworkCard(const QImage &source, int targetWidthLogical,
                                         int targetHeightLogical, qreal dpr, int cornerRadiusLogical,
                                         const QColor &background);
-
-/**
- * @brief Find artwork file with structured error reporting.
- *
- * Same as findArtworkForFile() but returns a Result<QString> with
- * detailed error context on failure.
- *
- * Error codes:
- * - InvalidInput: Empty fileName or artworkDirectory
- * - DirectoryNotFound: Artwork directory doesn't exist
- * - FileNotFound: No matching artwork file found
- *
- * @param fileName The media filename to find artwork for.
- * @param artworkDirectory The directory to search in.
- * @return Result containing artwork path on success, or ErrorContext on
- * failure.
- */
-[[nodiscard]] ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
-                                                                const QString &artworkDirectory);
 
 /**
  * @brief Clear the artwork directory cache.

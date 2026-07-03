@@ -8,6 +8,8 @@ target_sources(kartend_ui PRIVATE
   detailspanemetadataview.cpp
   detailspanepaint.cpp
   detailspaneresizegrip.cpp
+  detailspanesummary.cpp
+  detailspanetabs.cpp
   detailspanevideo.cpp
   detailspane.h
   detailspaneartwork.h

@@ -115,9 +115,22 @@ void InteractionManager::connectKeyboardManagerSignals() {
   });
 }
 
+bool InteractionManager::modalInputGateActive() const {
+  return m_eventManager && m_eventManager->modalInputGateActive();
+}
+
 void InteractionManager::connectGamepadManagerSignals() {
+  // Keyboard/mouse grid input is gated by EventManager::filterEvent while a
+  // modal widget or the scrape-result dialog is up; gamepad input reaches
+  // these connections without ever crossing that filter, so every
+  // grid-affecting slot re-checks the shared gate (modalInputGateActive())
+  // before acting. requestScrollAnimationStop stays ungated — stopping a
+  // stale scroll animation when a dialog opens is harmless and desirable.
   connect(m_gamepadManager.get(), &GamepadManager::requestSelectionMove, this,
           [this](int direction, bool vertical) {
+            if (modalInputGateActive()) {
+              return;
+            }
             int effectiveDirection = direction;
             bool effectiveVertical = vertical;
             ViewType vt = ViewType::Grid;
@@ -153,14 +166,24 @@ void InteractionManager::connectGamepadManagerSignals() {
             handleArrowKeyNavigation(effectiveDirection, effectiveVertical);
           });
   connect(m_gamepadManager.get(), &GamepadManager::requestEnterAction, this, [this]() {
+    if (modalInputGateActive()) {
+      return;
+    }
     if (scrollMgr()) {
       const int totalItems = scrollMgr()->getTotalItems();
       processEnterOrReturnKey(totalItems);
     }
   });
-  connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this,
-          [this]() { (void)handleEscapeKey(); });
+  connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this, [this]() {
+    if (modalInputGateActive()) {
+      return;
+    }
+    (void)handleEscapeKey();
+  });
   connect(m_gamepadManager.get(), &GamepadManager::requestToggleSidebarAction, this, [this]() {
+    if (modalInputGateActive()) {
+      return;
+    }
     if (detailsPaneMgr()) {
       detailsPaneMgr()->toggleSidebar();
     }

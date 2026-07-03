@@ -6,6 +6,8 @@
 
 #include "extensionutils.h"
 
+#include <QBuffer>
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
@@ -145,6 +147,31 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
   const QSet<QString> wantedExts = normalizedExtensionSet(collection.extensions);
   const QString artworkDir = pre.resolvedArtworkDirectory;
 
+  // Existence checks below go through the shared DirectoryCache instead of the
+  // uncached per-item stat sweep (2 names x N extensions at the flat root plus
+  // up to 9 typed subdirs — the dominant cost of a warm over a large
+  // collection). Drop whatever this session already cached first: the grid
+  // caches negative results, so a cover hand-dropped since then must be seen
+  // by THIS run or the warmer would shadow it with a placeholder .png. Then
+  // warm the artwork root once — prewarmDirectories expands the typed cover
+  // subdirs itself (we're on a worker, so the blocking scan is fine here).
+  ArtworkUtils::clearDirectoryCache();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artworkDir});
+  // Basenames written by THIS run. A second media file sharing a basename
+  // (concert.mp4 + concert.mkv) must count as already-covered, exactly as the
+  // old fresh-stat probe reported after the first write — the cache holds a
+  // negative for it from before the write, so it can't answer that itself.
+  QSet<QString> writtenBaseKeys;
+
+  // Hoisted out of the loop: the tile factory's inputs (tileWidth /
+  // tileHeight / cornerRadius) are loop-invariant and the render is
+  // deterministic for fixed inputs, so every item gets an identical
+  // placeholder — render and PNG-encode exactly once and reuse the bytes for
+  // each output file. Encoded lazily on the first item that needs a
+  // placeholder so runs where everything already has artwork skip the render.
+  QByteArray tilePngBytes;
+  bool tileRenderAttempted = false;
+
   QDirIterator it(pre.resolvedMediaDirectory, QDir::Files | QDir::NoDotAndDotDot,
                   QDirIterator::Subdirectories);
   while (it.hasNext()) {
@@ -170,17 +197,27 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
     // Skip if any image with the matching base/full name already exists in
     // the artwork dir — the resolver would pick that up before our PNG, so
     // overwriting here would be either a no-op (same path) or destructive
-    // (clobbering a real cover).
-    const QString existing = ArtworkUtils::findArtworkForFile(fi.fileName(), artworkDir);
-    if (!existing.isEmpty()) {
+    // (clobbering a real cover). Resolved via the DirectoryCache warmed above.
+    const QString baseKey = ArtworkUtils::baseMatchKey(fi.completeBaseName());
+    if (writtenBaseKeys.contains(baseKey) ||
+        !ArtworkUtils::findArtworkForFileCached(fi.fileName(), artworkDir).isEmpty()) {
       ++result.itemsAlreadyHadArtwork;
       continue;
     }
 
     // Use the live render path so warmed PNGs are pixel-identical to the
     // grid's lazy fallback; no second source of truth for placeholder look.
-    const QImage tile = tileFactory ? tileFactory(tileWidth, tileHeight, cornerRadius) : QImage();
-    if (tile.isNull()) {
+    if (!tileRenderAttempted) {
+      tileRenderAttempted = true;
+      const QImage tile = tileFactory ? tileFactory(tileWidth, tileHeight, cornerRadius) : QImage();
+      if (!tile.isNull()) {
+        QBuffer buffer(&tilePngBytes);
+        if (!buffer.open(QIODevice::WriteOnly) || !tile.save(&buffer, "PNG")) {
+          tilePngBytes.clear();
+        }
+      }
+    }
+    if (tilePngBytes.isEmpty()) {
       ++result.itemsFailed;
       if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
         result.firstFailures.append(tr("%1: placeholder render returned null image").arg(fullPath));
@@ -191,7 +228,10 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
     // Always .png — matches the resolver's first lookup attempt so the
     // warmed file is hit on the next render without rescanning extensions.
     const QString outPath = artworkDir + QLatin1Char('/') + fi.completeBaseName() + ".png";
-    if (!tile.save(outPath, "PNG")) {
+    QFile out(outPath);
+    const bool written = out.open(QIODevice::WriteOnly) &&
+                         out.write(tilePngBytes) == tilePngBytes.size() && out.flush();
+    if (!written) {
       ++result.itemsFailed;
       if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
         result.firstFailures.append(tr("%1: failed to write %2").arg(fullPath, outPath));
@@ -199,7 +239,15 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
       continue;
     }
     ++result.itemsExported;
+    writtenBaseKeys.insert(baseKey);
   }
+
+  // The run changed the artwork dir's contents (new PNGs) and left cached
+  // negatives behind for every exported basename — drop the cache so the live
+  // grid re-resolves against post-write disk state, mirroring the scrape
+  // pipeline's post-bulk-write invalidation. Also done on cancellation: a
+  // partial run still wrote files.
+  ArtworkUtils::clearDirectoryCache();
 
   if (onProgress) {
     onProgress(result.itemsScanned, result.itemsExported);

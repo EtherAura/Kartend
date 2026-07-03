@@ -356,7 +356,10 @@ void ViewportArtworkScheduler::drainPendingApply() {
       if (result.loadedFromDiskCache) {
         cache->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
       } else {
-        cache->cacheArtwork(result.artworkPath, pixmap);
+        // Pass the worker-decoded QImage through so the debounced disk flush
+        // can encode it directly instead of deep-copying the pixmap back to
+        // a QImage on the GUI thread.
+        cache->cacheArtwork(result.artworkPath, pixmap, result.image);
       }
     }
     if (!QApplication::closingDown()) {

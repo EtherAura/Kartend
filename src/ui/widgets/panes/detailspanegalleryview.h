@@ -3,11 +3,14 @@
 
 #include "detailspane.h"
 
+#include <functional>
+
 #include <QList>
 #include <QObject>
 #include <QString>
 
 class ArtworkPreviewOverlay;
+class OverlayZOrderRegistry;
 class QHBoxLayout;
 class QPushButton;
 class QWidget;
@@ -23,10 +26,11 @@ class QWidget;
 /// entries() accessor and keeps using its own pixmap cache. Two distinct
 /// QWidget hierarchies, one shared entry list.
 ///
-/// Coupling: takes the host DetailsPane via setHost so the helper can pull
-/// the artwork-preview anchor (for ordered insertion into the content
-/// layout) and read the shared primary-artwork path that synthesizes the
-/// "Artwork" thumb. Click-overlay parents to the host's top-level window.
+/// Coupling: the host DetailsPane is used only through its public surface
+/// (palette, window, showMainPreviewForEntry). The content column, the
+/// preview-tile insertion anchors, and the scroll-idle gate are injected
+/// via setHostAnchors / setScrollIdlePredicate during DetailsPane's
+/// setupWidgets — no friend access into host state.
 class DetailsPaneGalleryView : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(DetailsPaneGalleryView)
@@ -37,6 +41,29 @@ public:
   /// Bind to the owning DetailsPane. Idempotent — call once during
   /// DetailsPane's setup.
   void setHost(DetailsPane *host);
+
+  /// Inject the host widgets the gallery section builds against:
+  /// @p contentWidget is the vertical content column the section is
+  /// inserted into; @p artworkAnchor / @p videoAnchor are the preview
+  /// tiles the section anchors below (video preferred when present).
+  /// Plain QWidget pointers — the helper only needs layout placement,
+  /// not the concrete types. Call once during DetailsPane's setup,
+  /// before the first ensureSection() runs (prewarmSection/setEntries).
+  void setHostAnchors(QWidget *contentWidget, QWidget *artworkAnchor, QWidget *videoAnchor);
+
+  /// Install the scroll-idle gate consulted before firing a video
+  /// thumbnail extraction (same forwarding pattern as
+  /// DetailsPane::setScrollIdlePredicate). Never wired / null = always
+  /// idle, i.e. extraction fires on the next tick.
+  void setScrollIdlePredicate(std::function<bool()> predicate);
+
+  /// Hand the central overlay z-order coordinator down so the lazily-created
+  /// preview overlay registers at Layer::ArtworkPreview instead of stacking
+  /// by raw raise() (which any registered overlay's later bringToFront() /
+  /// restack() would bury). Late-bound like SelectionOverlayManager's
+  /// equivalent: safe to call before or after the overlay exists; when never
+  /// wired the overlay keeps its raise() fallback.
+  void setLayerManager(OverlayZOrderRegistry *manager);
 
   /// Replace the gallery contents. Synthesizes a primary-artwork thumb when
   /// @p primaryArtworkPath is non-empty and not already represented. Pass
@@ -107,11 +134,18 @@ private:
   void applyVisibility(DetailsPaneTab activeTab);
 
   DetailsPane *m_host = nullptr;
+  /// Host widgets injected by setHostAnchors — see that setter's doc.
+  QWidget *m_contentWidget = nullptr;
+  QWidget *m_artworkAnchor = nullptr;
+  QWidget *m_videoAnchor = nullptr;
+  /// Scroll-idle gate injected by setScrollIdlePredicate.
+  std::function<bool()> m_scrollIdle;
   QWidget *m_container = nullptr;
   QHBoxLayout *m_thumbLayout = nullptr;
   QWidget *m_thumbsHost = nullptr;
   QPushButton *m_editButton = nullptr;
   ArtworkPreviewOverlay *m_overlay = nullptr;
+  OverlayZOrderRegistry *m_layerManager = nullptr;
 
   QList<DetailsPane::GalleryEntry> m_entries;
   bool m_editEnabled = false;

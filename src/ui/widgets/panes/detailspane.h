@@ -32,6 +32,7 @@ class DetailsPaneArtwork;
 class DetailsPaneGalleryView;
 class DetailsPaneMetadataView;
 class DetailsPaneResizeGrip;
+class OverlayZOrderRegistry;
 template <typename T> class QFutureWatcher;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
@@ -45,12 +46,10 @@ QT_END_NAMESPACE
 class DetailsPane : public QWidget, public IDetailsPane {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(DetailsPane)
-  // The vertical-dock gallery row's helper reaches into ui->contentWidget /
-  // ui->artworkDisplay and m_videoPlayback.videoPreview to build + anchor its section.
-  // Tightly coupled by design; the helper exists to group the gallery's
-  // setup/rebuild state cohesively.
-  friend class DetailsPaneGalleryView;
-  // Artwork + video-preview helper (Kartend-5nxz). Same coupling rationale:
+  // NB: DetailsPaneGalleryView is deliberately NOT a friend — it owns its
+  // own widgets and receives the content column / preview-tile anchors and
+  // the scroll-idle gate via narrow setters in setupWidgets.
+  // Artwork + video-preview helper (Kartend-5nxz). Coupling rationale:
   // reads/writes m_videoPlayback / m_artworkSource / m_primaryArtworkPath /
   // m_artworkLoadGen and the .ui-owned artwork display widget. State stays
   // on the host so the other helpers and ~100 existing access sites are
@@ -67,7 +66,8 @@ public:
   ~DetailsPane();
 
   // Pure utility formatters used by both the panel and downstream callers
-  // (and exercised directly in tests). State-free.
+  // (and exercised directly in tests). State-free — thin delegations to
+  // DetailsFormat (utils/view/detailsformat.h), where the bodies live.
   [[nodiscard]] static QString formatFileSize(qint64 bytes);
   [[nodiscard]] static QString formatRuntime(int seconds);
   [[nodiscard]] static QString formatTags(const QString &raw);
@@ -92,6 +92,13 @@ public:
   /// dragging the whole context tree into the widget. Default predicate
   /// returns false (preserves existing behaviour when not wired).
   void setScrollIdlePredicate(std::function<bool()> predicate);
+
+  /// Forward the central overlay z-order coordinator to the gallery view so
+  /// its lazily-created fullscreen preview overlay registers at
+  /// Layer::ArtworkPreview instead of stacking by raw raise(). DetailsPane
+  /// has no manager/ctx access (see setScrollIdlePredicate), so
+  /// DetailsPaneManager pushes the registry down during setupReferences().
+  void setOverlayLayerManager(OverlayZOrderRegistry *manager);
 
   void setMetadata(const QString &filePath, const QString &itemName,
                    const QString &artworkDirectory = QString(),
@@ -178,6 +185,12 @@ public:
   /// summary is rendered immediately if the sidebar is currently in the
   /// no-selection state; otherwise it is held until the user deselects.
   void setCollectionSummary(const CollectionSummary &summary);
+  /// Test-only readback of the cached summary, so suites can assert what
+  /// DetailsPaneManager pushed (e.g. the launcherPathIssues verdict) without
+  /// scraping rendered rows.
+  [[nodiscard]] const CollectionSummary &collectionSummaryForTesting() const {
+    return m_collectionSummary;
+  }
   void clearMetadata() override;
   [[nodiscard]] QWidget *asWidget() override { return this; }
   [[nodiscard]] const QWidget *asWidget() const override { return this; }
@@ -452,6 +465,19 @@ private:
   mutable int m_cachedPatternH = -1;
   mutable int m_cachedPatternIntensity = -1;
   mutable QRgb m_cachedPatternMidRgba = 0;
+  /// Cache for the cover-scaled sidebar background image — same idiom as the
+  /// pattern-tile cache above, for the Image branch of paintEvent, which has
+  /// the identical repaint frequency (sibling damage cascade during scroll)
+  /// but re-ran a full SmoothTransformation scale of the wallpaper pixmap on
+  /// every repaint. Keyed on the source pixmap's cacheKey() plus the target
+  /// width/height: a resize misses on the size, and a background change
+  /// misses on the cacheKey (applyAppearance replaces m_bgImage — including
+  /// the cleared-then-async-decoded swap — and every new QPixmap gets a
+  /// fresh cacheKey), so no extra invalidation hooks are needed.
+  mutable QPixmap m_cachedBgScaled;
+  mutable qint64 m_cachedBgScaledSrcKey = 0;
+  mutable int m_cachedBgScaledW = -1;
+  mutable int m_cachedBgScaledH = -1;
   /// Width-lock + dock position state. The lock flag toggles the resize
   /// grip on/off and the position drives both the grip's active edge and
   /// the paint code that draws the handle band. The grip controller below
@@ -467,6 +493,8 @@ private:
 
   /// tabs. The tab bar is created programmatically and inserted
   /// at the top of mainLayout so the .ui file stays unchanged.
+  /// Tab-bar construction + the per-tab visibility dispatch below are
+  /// defined in detailspanetabs.cpp.
   QTabBar *m_tabBar = nullptr;
   DetailsPaneTab m_activeTab = DetailsPaneTab::Item;
   void setupTabBar();
@@ -589,6 +617,8 @@ private:
   QString m_activeSidebarFontFamily;
   int m_activeSidebarFontPointSize = 0;
 
+  /// Rebuilds the Collection tab's summary card from m_collectionSummary.
+  /// Defined in detailspanesummary.cpp (with setCollectionSummary).
   void renderCollectionSummary();
 };
 

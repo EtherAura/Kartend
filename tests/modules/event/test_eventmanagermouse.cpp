@@ -1,9 +1,10 @@
 // Unit coverage for EventManager's mouse-dispatch core (Kartend audit 4yktu):
 // handleMouseDoubleClick, the right/middle-click branches of handleMousePress,
-// the handleWheelEvent modal + foreign-window gates, and the
-// itemWidgetForObject / visualIndexForWidget helpers. Most are signal-emission
-// or QObject-parent-chain logic reachable with real (un-laid-out) ItemWidgets +
-// stubs — no widget geometry.
+// the handleWheelEvent modal + foreign-window gates, the shared
+// modalInputGateActive() predicate (consumed by InteractionManager's
+// gamepad-driven slots), and the itemWidgetForObject / visualIndexForWidget
+// helpers. Most are signal-emission or QObject-parent-chain logic reachable
+// with real (un-laid-out) ItemWidgets + stubs — no widget geometry.
 //
 // The LEFT-click selection path (Kartend audit 8ipd4) is covered here too: a
 // real grid tree (gridContainer > virtual container > geometry-set ItemWidget
@@ -16,6 +17,8 @@
 // EventManager's handle* methods are private; this test is a declared friend
 // (see eventmanager.h) so it drives them directly, mirroring the friend-access
 // pattern test_mousemanager uses.
+#include <QApplication>
+#include <QDialog>
 #include <QMouseEvent>
 #include <QPointF>
 #include <QScrollArea>
@@ -80,6 +83,7 @@ private slots:
 
   void handleWheelEventBlockedWhileModalScrapeDialogVisible();
   void handleWheelEventRejectsTargetInForeignWindow();
+  void modalInputGateCombinesModalWidgetAndScrapePredicate();
   void itemWidgetForObjectWalksParentChain();
   void visualIndexForWidgetReturnsScrollDataLookup();
 
@@ -338,6 +342,34 @@ void TestEventManagerMouse::handleWheelEventRejectsTargetInForeignWindow() {
   const bool consumed = m_mgr.handleWheelEvent(&windowB, &wheel);
 
   QVERIFY(!consumed);
+}
+
+// ─── shared modal-input gate ─────────────────────────────────────────────────
+
+void TestEventManagerMouse::modalInputGateCombinesModalWidgetAndScrapePredicate() {
+  wire();
+
+  // m_mgr is shared across slots and an earlier slot injects a true-returning
+  // scrape predicate -- start from a known-inactive gate.
+  m_mgr.setModalScrapeDialogVisiblePredicate([] { return false; });
+  QVERIFY(!m_mgr.modalInputGateActive());
+
+  // The injected scrape-dialog predicate alone activates the gate.
+  m_mgr.setModalScrapeDialogVisiblePredicate([] { return true; });
+  QVERIFY(m_mgr.modalInputGateActive());
+  m_mgr.setModalScrapeDialogVisiblePredicate([] { return false; });
+  QVERIFY(!m_mgr.modalInputGateActive());
+
+  // An application-modal widget alone activates the gate. The modal stack is
+  // QApplication-internal bookkeeping, so this holds offscreen too.
+  QDialog dialog;
+  dialog.setModal(true);
+  dialog.show();
+  QVERIFY(QApplication::activeModalWidget());
+  QVERIFY(m_mgr.modalInputGateActive());
+  dialog.hide();
+  QVERIFY(!QApplication::activeModalWidget());
+  QVERIFY(!m_mgr.modalInputGateActive());
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────

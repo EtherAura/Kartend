@@ -8,6 +8,10 @@
 
 QT_BEGIN_NAMESPACE
 class QTimer;
+#ifdef KARTEND_HAS_QT_GAMEPAD
+class QGamepad;
+class QGamepadManager;
+#endif
 QT_END_NAMESPACE
 
 class IKeyboardManager;
@@ -122,9 +126,9 @@ private:
   Direction m_activeDirection = Direction::None;
 
 #ifdef KARTEND_HAS_QT_GAMEPAD
-  class QGamepad;
-  class QGamepadManager;
-
+  // QGamepad / QGamepadManager are forward-declared at namespace scope above:
+  // declaring them here would introduce nested GamepadManager::QGamepad types
+  // that shadow the real Qt classes in every member-function body.
   void attachToFirstConnectedGamepad();
   void attachToGamepad(int deviceId);
   void detachGamepad();

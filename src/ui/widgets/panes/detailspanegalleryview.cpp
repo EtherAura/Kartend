@@ -7,15 +7,16 @@
 
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
-#include "detailspaneartwork.h" // Kartend-4wxmp: isScrollIdle() now via m_artworkController
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
-#include "ui_detailspane.h"
+#include "overlaylayermanager.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
 #include "uiconstants/timing.h"
-#include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
+
+#include <functional>
+#include <memory>
 
 #include <QElapsedTimer>
 #include <QFrame>
@@ -48,6 +49,28 @@ void DetailsPaneGalleryView::setHost(DetailsPane *host) {
   m_host = host;
 }
 
+void DetailsPaneGalleryView::setHostAnchors(QWidget *contentWidget, QWidget *artworkAnchor,
+                                            QWidget *videoAnchor) {
+  m_contentWidget = contentWidget;
+  m_artworkAnchor = artworkAnchor;
+  m_videoAnchor = videoAnchor;
+}
+
+void DetailsPaneGalleryView::setScrollIdlePredicate(std::function<bool()> predicate) {
+  m_scrollIdle = std::move(predicate);
+}
+
+void DetailsPaneGalleryView::setLayerManager(OverlayZOrderRegistry *manager) {
+  m_layerManager = manager;
+  // If the overlay already exists, register it now so its next show goes
+  // through the coordinated z-order path. Otherwise openPreview()'s lazy
+  // construction handles registration.
+  if (m_layerManager && m_overlay) {
+    m_layerManager->registerOverlay(m_overlay, OverlayZOrderRegistry::Layer::ArtworkPreview);
+    m_overlay->setLayerManager(m_layerManager);
+  }
+}
+
 void DetailsPaneGalleryView::prewarmSection() {
   // Public entry point that just runs the private lazy builder. See header
   // comment for rationale (Kartend-jxp5).
@@ -55,11 +78,10 @@ void DetailsPaneGalleryView::prewarmSection() {
 }
 
 void DetailsPaneGalleryView::ensureSection() {
-  if (m_container || !m_host) {
+  if (m_container || !m_host || !m_contentWidget) {
     return;
   }
-  Ui::DetailsPane *ui = m_host->ui;
-  auto *contentLayout = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout());
+  auto *contentLayout = qobject_cast<QVBoxLayout *>(m_contentWidget->layout());
   if (!contentLayout) {
     return;
   }
@@ -76,7 +98,7 @@ void DetailsPaneGalleryView::ensureSection() {
     perfWall.start();
   }
 
-  m_container = new QWidget(ui->contentWidget);
+  m_container = new QWidget(m_contentWidget);
   // Object name lets applyBubbleStyles paint a backdrop behind the
   // whole gallery section (title row + thumb strip) so it visually
   // matches the metadata card below the description.
@@ -181,16 +203,16 @@ void DetailsPaneGalleryView::ensureSection() {
   // video preview, if any) so all visual artwork stays clustered. Falling
   // back to "append" keeps the section visible if the layout shape changes.
   int insertIndex = -1;
-  if (auto *artworkParentLayout =
-          qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
-    if (artworkParentLayout == contentLayout) {
-      const int videoIdx = m_host->m_videoPlayback.videoPreview
-                               ? contentLayout->indexOf(m_host->m_videoPlayback.videoPreview)
-                               : -1;
-      const int artIdx = contentLayout->indexOf(ui->artworkDisplay);
-      const int anchor = videoIdx >= 0 ? videoIdx : artIdx;
-      if (anchor >= 0) {
-        insertIndex = anchor + 1;
+  if (m_artworkAnchor && m_artworkAnchor->parentWidget()) {
+    if (auto *artworkParentLayout =
+            qobject_cast<QVBoxLayout *>(m_artworkAnchor->parentWidget()->layout())) {
+      if (artworkParentLayout == contentLayout) {
+        const int videoIdx = m_videoAnchor ? contentLayout->indexOf(m_videoAnchor) : -1;
+        const int artIdx = contentLayout->indexOf(m_artworkAnchor);
+        const int anchor = videoIdx >= 0 ? videoIdx : artIdx;
+        if (anchor >= 0) {
+          insertIndex = anchor + 1;
+        }
       }
     }
   }
@@ -370,14 +392,13 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
       // (next gallery rebuild), so a stale chain can't fire after the
       // entry it belonged to is gone.
       QPointer<DetailsPaneGalleryView> selfGuard(this);
-      DetailsPane *host = m_host;
       auto fire = std::make_shared<std::function<void()>>();
-      *fire = [selfGuard, videoPath, host, fire]() {
+      *fire = [selfGuard, videoPath, fire]() {
         if (!selfGuard) return;
-        // Kartend-4wxmp: the DetailsPane::isScrollIdle forwarder was removed;
-        // reach the artwork controller directly (friend access). Mirrors the
-        // forwarder's "idle when no controller" default.
-        if (host && host->m_artworkController && !host->m_artworkController->isScrollIdle()) {
+        // Scroll-idle gate: the host-injected predicate (setScrollIdlePredicate)
+        // replaced the old friend reach into the host's artwork controller.
+        // Never wired / null keeps the "always idle" default.
+        if (selfGuard->m_scrollIdle && !selfGuard->m_scrollIdle()) {
           // Re-arm the recursive retry chain in 50ms while a scroll is
           // mid-glide — see the block comment above for the full rationale.
           QTimer::singleShot(UIConstants::Timing::UI_SETTLE_RETRY_MS, selfGuard.data(), *fire);
@@ -555,6 +576,16 @@ void DetailsPaneGalleryView::openPreview(const DetailsPane::GalleryEntry &entry)
       overlayParent = m_host;
     }
     m_overlay = new ArtworkPreviewOverlay(overlayParent);
+    // Register with the central z-order coordinator so the fullscreen
+    // preview stacks at its documented ArtworkPreview layer. Without this
+    // the overlay's show path falls back to raw raise(), and any registered
+    // overlay's later bringToFront()/restack() buries it. Late-bound: a
+    // setLayerManager() call before this lazy construction is handled here,
+    // one after it re-registers in setLayerManager() itself.
+    if (m_layerManager) {
+      m_layerManager->registerOverlay(m_overlay, OverlayZOrderRegistry::Layer::ArtworkPreview);
+      m_overlay->setLayerManager(m_layerManager);
+    }
     connect(m_overlay, &ArtworkPreviewOverlay::visibilityChanged, this,
             &DetailsPaneGalleryView::overlayVisibilityChanged);
   }

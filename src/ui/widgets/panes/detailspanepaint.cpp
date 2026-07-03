@@ -227,12 +227,24 @@ void DetailsPane::paintEvent(QPaintEvent *event) {
     if (!m_bgImage.isNull()) {
       // Scale to cover the sidebar while preserving aspect ratio. Centered
       // crop matches the main-view background-position: center semantics.
+      // Cached exactly like the Pattern branch below: the sidebar repaints
+      // during scroll via the sibling damage cascade, and re-running a
+      // SmoothTransformation scale of a wallpaper-sized pixmap per repaint
+      // was the same per-frame rasterization cost the pattern cache removed.
+      // Rebuild only when the source pixmap (cacheKey) or target size change.
       const QSize target = size();
-      QPixmap scaled =
-          m_bgImage.scaled(target, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-      const int x = (target.width() - scaled.width()) / 2;
-      const int y = (target.height() - scaled.height()) / 2;
-      painter.drawPixmap(x, y, scaled);
+      const qint64 srcKey = m_bgImage.cacheKey();
+      if (m_cachedBgScaled.isNull() || m_cachedBgScaledSrcKey != srcKey ||
+          m_cachedBgScaledW != target.width() || m_cachedBgScaledH != target.height()) {
+        m_cachedBgScaled =
+            m_bgImage.scaled(target, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        m_cachedBgScaledSrcKey = srcKey;
+        m_cachedBgScaledW = target.width();
+        m_cachedBgScaledH = target.height();
+      }
+      const int x = (target.width() - m_cachedBgScaled.width()) / 2;
+      const int y = (target.height() - m_cachedBgScaled.height()) / 2;
+      painter.drawPixmap(x, y, m_cachedBgScaled);
     }
     break;
   case DetailsPaneBackgroundType::Pattern: {

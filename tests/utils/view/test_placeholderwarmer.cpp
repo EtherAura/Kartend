@@ -58,6 +58,7 @@ private slots:
   void preflight_acceptsValidConfigAndCreatesArtworkDir();
   void preflight_overrideShadowsSavedArtworkDir();
   void export_writesPngsForEachUnmatchedItem();
+  void export_writesIdenticalBytesForEveryItem();
   void export_skipsItemsWithExistingArtwork();
   void export_filtersByExtensionAndIsCaseInsensitive();
   void export_recursesIntoSubdirectories();
@@ -146,6 +147,35 @@ void TestPlaceholderWarmer::export_writesPngsForEachUnmatchedItem() {
   QVERIFY(QFileInfo(art.path() + "/alpha.png").exists());
   QVERIFY(QFileInfo(art.path() + "/beta.png").exists());
   QVERIFY(QFileInfo(art.path() + "/gamma.png").exists());
+}
+
+void TestPlaceholderWarmer::export_writesIdenticalBytesForEveryItem() {
+  QTemporaryDir media;
+  QTemporaryDir art;
+  QVERIFY(media.isValid() && art.isValid());
+  touchFile(media.path(), "alpha.mp4");
+  touchFile(media.path(), "beta.mp4");
+  touchFile(media.path(), "gamma.mp4");
+
+  auto cfg = collectionWith(media.path(), art.path(), {".mp4"});
+  const auto result =
+      PlaceholderWarmer::exportMissingPlaceholders(cfg, QString(), 4, 4, 0, &fakeTile);
+  QCOMPARE(result.itemsExported, qint64(3));
+
+  // The tile factory's inputs are loop-invariant, so the warmer renders and
+  // PNG-encodes once and fans the same bytes out to every output file —
+  // assert byte identity so a regression back to per-item re-encoding (or a
+  // nondeterministic encode) is caught here.
+  const auto readAll = [](const QString &path) {
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+  };
+  const QByteArray alpha = readAll(art.path() + "/alpha.png");
+  const QByteArray beta = readAll(art.path() + "/beta.png");
+  const QByteArray gamma = readAll(art.path() + "/gamma.png");
+  QVERIFY(!alpha.isEmpty());
+  QCOMPARE(beta, alpha);
+  QCOMPARE(gamma, alpha);
 }
 
 void TestPlaceholderWarmer::export_skipsItemsWithExistingArtwork() {

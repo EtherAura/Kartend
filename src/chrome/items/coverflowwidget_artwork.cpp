@@ -22,7 +22,10 @@
 
 namespace {
 
-QPixmap loadAndScale(const QString &path, int targetSize) {
+// Runs on a QtConcurrent worker, so it must stay in QImage domain — QPixmap
+// construction is GUI-thread-only (same contract as the gallery-strip thumb
+// decode); the finished slot converts with QPixmap::fromImage.
+QImage loadAndScale(const QString &path, int targetSize) {
   // Extension guard: never hand a non-image file (e.g. a scraped .pdf
   // manual) to QImageReader — Qt's PDF image plugin abort()s the process.
   if (path.isEmpty() || !ExtensionUtils::isDecodableImagePath(path)) {
@@ -37,11 +40,7 @@ QPixmap loadAndScale(const QString &path, int targetSize) {
   if (reader.size().isValid() && reader.size().width() > bounded.width()) {
     reader.setScaledSize(reader.size().scaled(bounded, Qt::KeepAspectRatio));
   }
-  QImage img = reader.read();
-  if (img.isNull()) {
-    return {};
-  }
-  return QPixmap::fromImage(img);
+  return reader.read();
 }
 
 } // namespace
@@ -97,15 +96,17 @@ void CoverFlowWidget::startArtworkLoad(const QString &path) {
   // the watcher from sender() — QFutureWatcher<T> isn't Q_OBJECT, so a
   // qobject_cast doesn't work and the previous code linearly scanned
   // m_pendingLoads to recover the typed pointer.
-  auto *watcher = new QFutureWatcher<QPixmap>(this);
+  auto *watcher = new QFutureWatcher<QImage>(this);
   m_pendingLoads.insert(path, watcher);
   const int target = cardSize();
-  connect(watcher, &QFutureWatcher<QPixmap>::finished, this, [this, watcher, path]() {
+  connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
     m_pendingLoads.remove(path);
-    const QPixmap pm = watcher->result();
+    const QImage img = watcher->result();
     watcher->deleteLater();
-    if (!pm.isNull()) {
-      m_pixmapCache.insert(path, pm);
+    if (!img.isNull()) {
+      // QPixmap conversion happens here on the GUI thread; the worker only
+      // ever hands back a QImage.
+      m_pixmapCache.insert(path, QPixmap::fromImage(img));
       update();
     }
   });
@@ -117,24 +118,27 @@ void CoverFlowWidget::requestScaledPixmap(const CoverFlowScaledKey &key, const Q
   if (sourcePm.isNull() || targetSize.isEmpty() || m_pendingScales.contains(key)) {
     return;
   }
-  // QPixmap is implicitly shared so the worker captures a cheap copy; the
-  // scale itself produces a fresh QPixmap that we hand back to the GUI
-  // thread via the QFutureWatcher's finished signal (same pattern as
-  // startArtworkLoad below).
-  auto *watcher = new QFutureWatcher<QPixmap>(this);
+  // QPixmap is GUI-thread-only, so snapshot the source as a QImage here
+  // (still on the GUI thread) and run the Smooth scale in QImage domain on
+  // the worker; the finished slot converts back with QPixmap::fromImage
+  // (same QImage-on-worker / QPixmap-on-GUI split as startArtworkLoad above
+  // and the gallery-strip thumb decode). The toImage() copy only happens on
+  // a cache miss, never in steady-state paint.
+  const QImage sourceImg = sourcePm.toImage();
+  auto *watcher = new QFutureWatcher<QImage>(this);
   m_pendingScales.insert(key, watcher);
-  connect(watcher, &QFutureWatcher<QPixmap>::finished, this, [this, watcher, key]() {
+  connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, key]() {
     m_pendingScales.remove(key);
-    const QPixmap scaled = watcher->result();
+    const QImage scaled = watcher->result();
     watcher->deleteLater();
     if (!scaled.isNull()) {
-      m_scaledPixmapCache.insert(key, scaled);
+      m_scaledPixmapCache.insert(key, QPixmap::fromImage(scaled));
       pruneScaledPixmapCache();
       update();
     }
   });
-  watcher->setFuture(QtConcurrent::run([sourcePm, targetSize]() {
-    return sourcePm.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  watcher->setFuture(QtConcurrent::run([sourceImg, targetSize]() {
+    return sourceImg.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   }));
 }
 

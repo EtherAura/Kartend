@@ -99,6 +99,14 @@ public:
   /// so the input module needs no UI-chrome include.
   void setModalScrapeDialogVisiblePredicate(std::function<bool()> predicate);
 
+  /// Single definition of the "a modal UI is capturing input" gate: a Qt
+  /// modal widget is active, or the (owner-injected) scrape-result dialog is
+  /// visible. filterEvent() applies these predicates per event type for
+  /// keyboard/mouse/wheel input; gamepad input is signal/timer driven and
+  /// never crosses filterEvent, so InteractionManager's gamepad-driven slots
+  /// consult this same gate instead of duplicating the predicates.
+  [[nodiscard]] bool modalInputGateActive() const;
+
   // Main event filter entry point
   [[nodiscard]] bool filterEvent(QObject *obj, QEvent *event);
 

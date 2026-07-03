@@ -17,6 +17,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QImage>
 #include <QList>
 #include <QPixmap>
 #include <QPropertyAnimation>
@@ -178,7 +179,9 @@ private:
   // Schedule a worker-thread Smooth-scale of @p sourcePm to @p targetSize
   // and insert the result into m_scaledPixmapCache under @p key. No-op if
   // a scale for @p key is already in flight. Triggers update() on
-  // completion. See Kartend-g6ft for rationale.
+  // completion. Snapshots @p sourcePm as a QImage before dispatch — the
+  // worker never touches QPixmap (GUI-thread-only). See Kartend-g6ft for
+  // rationale.
   void requestScaledPixmap(const CoverFlowScaledKey &key, const QPixmap &sourcePm,
                            const QSize &targetSize);
   void cancelPendingScales();
@@ -209,6 +212,14 @@ private:
   void renderTitleStrip(QPainter &painter);
   void pruneScaledPixmapCache();
   void prunePixmapCache();
+  // Re-derive the centered card's rect (m_lastCenterRect) from the current
+  // layout inputs and reposition the video preview when it changed. Called
+  // from the state setters that move the center (selection, glide frame,
+  // resize, title/gallery slot changes) — NEVER from paintEvent: mutating
+  // child geometry inside a paint pass schedules another layout/paint round
+  // per glide frame (paint-driven layout). Paint and the preview helpers
+  // below only read m_lastCenterRect.
+  void refreshCenterRect();
   void updateVideoPreviewGeometry();
   void applyVideoPreviewState();
 
@@ -223,7 +234,9 @@ private:
   QPropertyAnimation *m_glide = nullptr;
 
   QHash<QString, QPixmap> m_pixmapCache;
-  QHash<QString, QFutureWatcher<QPixmap> *> m_pendingLoads;
+  // Workers deliver QImage; the finished slots convert to QPixmap on the
+  // GUI thread (QPixmap must not be constructed or scaled off it).
+  QHash<QString, QFutureWatcher<QImage> *> m_pendingLoads;
 
   // Cache of source pixmaps already scaled to card-target size + smooth
   // transform, keyed on "path|WxH" (Kartend-g6ft). paintEvent's
@@ -234,7 +247,7 @@ private:
   // resize, setCards, and setTileColor — between those events every paint
   // hits, and the steady-state paint cost drops to ~8-11ms.
   QHash<CoverFlowScaledKey, QPixmap> m_scaledPixmapCache;
-  QHash<CoverFlowScaledKey, QFutureWatcher<QPixmap> *> m_pendingScales;
+  QHash<CoverFlowScaledKey, QFutureWatcher<QImage> *> m_pendingScales;
 
   // Per-instance placeholder cache (was function-local static — multiple
   // CoverFlowWidget instances with different tile colors would thrash a
@@ -255,13 +268,15 @@ private:
   // middle-click toggles between artwork and video preview on
   // the centered card. The QLabel-based VideoPreviewWidget is reused so we
   // get the same Wayland-friendly QVideoSink pipeline the sidebar uses.
-  // The widget is sized + repositioned every paintEvent to track the
-  // animated center card; when m_videoMode is false or the centered card
-  // has no videoPath, the preview is hidden so the painter renders the
-  // artwork normally.
+  // The widget is sized + repositioned by refreshCenterRect() as the center
+  // card moves (selection change, glide frames, resizes); when m_videoMode
+  // is false or the centered card has no videoPath, the preview is hidden
+  // so the painter renders the artwork normally.
   VideoPreviewWidget *m_videoPreview = nullptr;
   bool m_videoMode = false;
   int m_videoPreviewIndex = -1;
+  /// Centered card's rect, maintained by refreshCenterRect(); read-only
+  /// everywhere else (video-preview positioning).
   QRect m_lastCenterRect;
 
   // Per-item gallery toolbar. m_gallery is replaced on each

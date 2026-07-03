@@ -35,6 +35,7 @@ private slots:
   void missProbe_patchesExternallyDroppedFile();
   void negativeResult_cachedUntilClear();
   void nonexistentDirectory_cachedAsEmpty();
+  void baseNameLookup_doesNotDoubleStripDottedStems();
 };
 
 void TestDirectoryCache::init() {
@@ -114,6 +115,30 @@ void TestDirectoryCache::negativeResult_cachedUntilClear() {
   DirectoryCache::instance().processQueuedDirectories();
   QCOMPARE(DirectoryCache::instance().findInDirectory(QStringLiteral("ghost"), tmp.path()),
            tmp.path() + "/ghost.png");
+}
+
+void TestDirectoryCache::baseNameLookup_doesNotDoubleStripDottedStems() {
+  // Regression pin: findArtworkForFileCached strips its argument itself, so
+  // a caller holding an already-stripped stem must use
+  // findArtworkForBaseNameCached. Passing the stem to the fileName variant
+  // double-strips dotted stems ("Game v1.2" → "Game v1") and, with a
+  // neighboring item of that shorter name, resolves the WRONG item's art —
+  // the details-pane bug this variant exists for.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.path() + "/Game v1.png");
+  writeFile(tmp.path() + "/Game v1.2.png");
+  DirectoryCache::instance().prewarmDirectories({tmp.path()});
+
+  // The stem variant probes exactly the given stem.
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Game v1.2"), tmp.path()),
+           tmp.path() + "/Game v1.2.png");
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Game v1"), tmp.path()),
+           tmp.path() + "/Game v1.png");
+
+  // The fileName variant keeps its strip-then-probe contract for full names.
+  QCOMPARE(ArtworkUtils::findArtworkForFileCached(QStringLiteral("Game v1.2.rom"), tmp.path()),
+           tmp.path() + "/Game v1.2.png");
 }
 
 void TestDirectoryCache::nonexistentDirectory_cachedAsEmpty() {

@@ -324,8 +324,16 @@ void InteractionManager::launchItemWithCollection(const QString &filePath, int c
   // bd choice; users who hit a false-negative from checkLauncherPath can
   // still fix the path or temporarily clear it.
   if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
-    const QStringList issues =
-        LauncherUtils::launcherPathIssues((*m_collections)[collectionIndex].launcher);
+    // Launch-time overload: the gate must judge exactly what launchItem will
+    // execute. Raw inline fields hard-blocked a %collection%-placeholder path
+    // that expands fine at build time, and skipped preset-backed entries
+    // (inline path empty) whose stored preset path is broken — letting those
+    // launches fail moments later anyway.
+    const CollectionConfig &collection = (*m_collections)[collectionIndex];
+    const QStringList issues = LauncherUtils::launcherPathIssues(
+        collection.launcher,
+        m_generalSettings ? m_generalSettings->launchers.launcherPresets : QList<LauncherPreset>{},
+        collection.name);
     if (!issues.isEmpty()) {
       QString body = tr("This collection's launcher paths are unresolvable on this host:");
       for (const QString &issue : issues) {

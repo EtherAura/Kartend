@@ -109,6 +109,10 @@ void EventManager::setModalScrapeDialogVisiblePredicate(std::function<bool()> pr
   m_isModalScrapeDialogVisible = std::move(predicate);
 }
 
+bool EventManager::modalInputGateActive() const {
+  return QApplication::activeModalWidget() || modalScrapeDialogVisible();
+}
+
 bool EventManager::filterEvent(QObject *obj, QEvent *event) {
   if (QApplication::closingDown() || !event) {
     return false;

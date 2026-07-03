@@ -8,10 +8,14 @@
 //   - Gallery owner/active-index bookkeeping (setGalleryForIndex)
 //   - Property-setter early-out and side effects (cache reset on tile color)
 //   - selectionPositionF round-trip (drives the QPropertyAnimation glide)
+//   - Center-rect maintenance: the video-preview overlay follows the centered
+//     card via the state setters (glide frame / resize / title slot), never
+//     via paintEvent — no paint pass runs in those tests
 //
 // To exercise the protected event handlers we use a thin subclass that
 // re-exports them as public methods, plus QSignalSpy for emission checks.
 #include "coverflowwidget.h"
+#include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
 #include <QApplication>
@@ -99,6 +103,16 @@ private slots:
   void setFontSizeClampsTooSmall();
   void setTileColorClearsPixmapCache();
   void setHideTitlesUpdatesFlag();
+
+  // Center-rect maintenance (paint-free layout): the video preview overlay
+  // is repositioned by the state setters that move the centered card —
+  // selection / glide frames / resize / title-slot changes — never from
+  // paintEvent. No paint pass runs in these tests, so a regression back to
+  // paint-driven geometry fails them.
+  void glideFrameRepositionsVisiblePreview();
+  void resizeRepositionsVisiblePreview();
+  void titleSlotChangeRepositionsVisiblePreview();
+  void hiddenPreviewGeometryUntouched();
 
   // Wheel input → selectionChangeRequested
   void wheelDownRequestsForward();
@@ -447,6 +461,101 @@ void TestCoverFlowWidget::setHideTitlesUpdatesFlag() {
   w.setHideTitles(true);
   w.setHideTitles(true); // early-out
   w.setHideTitles(false);
+}
+
+// ----- Center-rect maintenance (paint-free layout) -----
+
+namespace {
+
+// Shared setup: a sized, shown carousel with the (stopped — playVideo is
+// never called, so the QtMultimedia backend stays cold) preview child made
+// visible so the center-rect maintenance applies geometry to it.
+VideoPreviewWidget *showWithVisiblePreview(TestableCoverFlow &w) {
+  w.resize(600, 400);
+  w.setCards(makeCards(9));
+  w.setSelectedIndex(4, false);
+  auto *preview = w.findChild<VideoPreviewWidget *>();
+  if (!preview) {
+    return nullptr;
+  }
+  w.show();
+  preview->show();
+  return preview;
+}
+
+} // namespace
+
+void TestCoverFlowWidget::glideFrameRepositionsVisiblePreview() {
+  TestableCoverFlow w;
+  VideoPreviewWidget *preview = showWithVisiblePreview(w);
+  QVERIFY(preview);
+  QVERIFY(preview->isVisible());
+
+  // A glide frame carries the centered card off stage center; the preview
+  // must follow through the property setter — no paint pass runs here.
+  w.setSelectionPositionF(0.4);
+  const QRect offCenter = preview->geometry();
+  QVERIFY(!offCenter.isEmpty());
+  QVERIFY(offCenter.center().x() < w.width() / 2 - 30);
+
+  // Glide settles back to 0 — the preview re-centers over the stage.
+  w.setSelectionPositionF(0.0);
+  const QRect centered = preview->geometry();
+  QVERIFY(!centered.isEmpty());
+  QVERIFY(centered != offCenter);
+  QVERIFY(qAbs(centered.center().x() - w.width() / 2) <= 2);
+}
+
+void TestCoverFlowWidget::resizeRepositionsVisiblePreview() {
+  TestableCoverFlow w;
+  VideoPreviewWidget *preview = showWithVisiblePreview(w);
+  QVERIFY(preview);
+  // Nudge the glide off/on center so the maintained rect (computed while
+  // the preview was still hidden) is applied to the now-visible preview.
+  w.setSelectionPositionF(0.1);
+  w.setSelectionPositionF(0.0);
+  QVERIFY(qAbs(preview->geometry().center().x() - w.width() / 2) <= 2);
+
+  // Growing the widget moves the stage center; the resize path re-derives
+  // the rect and repositions the visible preview. QTRY: the platform
+  // delivers the top-level resize event asynchronously.
+  w.resize(800, 400);
+  QTRY_VERIFY(qAbs(preview->geometry().center().x() - 400) <= 2);
+}
+
+void TestCoverFlowWidget::titleSlotChangeRepositionsVisiblePreview() {
+  TestableCoverFlow w;
+  VideoPreviewWidget *preview = showWithVisiblePreview(w);
+  QVERIFY(preview);
+  w.setSelectionPositionF(0.1);
+  w.setSelectionPositionF(0.0);
+  const QRect before = preview->geometry();
+  QVERIFY(!before.isEmpty());
+
+  // Hiding titles reclaims the title strip's vertical slot: the stage
+  // center drops and the card grows — the visible preview must follow.
+  w.setHideTitles(true);
+  const QRect after = preview->geometry();
+  QVERIFY(after != before);
+  QVERIFY(after.center().y() > before.center().y());
+  QVERIFY(qAbs(after.center().x() - w.width() / 2) <= 2);
+}
+
+void TestCoverFlowWidget::hiddenPreviewGeometryUntouched() {
+  TestableCoverFlow w;
+  w.resize(600, 400);
+  w.setCards(makeCards(9));
+  w.setSelectedIndex(4, false);
+  auto *preview = w.findChild<VideoPreviewWidget *>();
+  QVERIFY(preview);
+  w.show();
+  // No video source, so the preview stays hidden: center-rect maintenance
+  // keeps tracking state but must not touch the hidden child's geometry.
+  const QRect dormant = preview->geometry();
+  w.setSelectionPositionF(0.4);
+  w.setSelectionPositionF(0.0);
+  QVERIFY(!preview->isVisible());
+  QCOMPARE(preview->geometry(), dormant);
 }
 
 // ----- Wheel input -----

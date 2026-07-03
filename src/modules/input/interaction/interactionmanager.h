@@ -299,6 +299,16 @@ private:
   [[nodiscard]] bool handleSlashKey();
   [[nodiscard]] bool handleEscapeKey();
 
+  // Gamepad input arrives via signals/timers and never crosses
+  // EventManager::filterEvent, so the modal gates that swallow keyboard and
+  // mouse grid input while a dialog is up must be re-checked in the
+  // gamepad-driven slots. Delegates to EventManager::modalInputGateActive() —
+  // the single definition of the predicate (active modal widget OR visible
+  // scrape-result dialog). Dialog-owned gamepad flows (binding capture) run
+  // on GamepadManager's bindingCaptureButtonPressed path, which bypasses
+  // these slots and stays live while gated.
+  [[nodiscard]] bool modalInputGateActive() const;
+
   [[nodiscard]] int resolveDoubleClickIndexCandidate() const;
   [[nodiscard]] QString derivePathFromIndex(int idx) const;
   [[nodiscard]] int resolveOwnerForPath(const QString &path) const;

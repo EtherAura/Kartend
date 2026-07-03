@@ -6,8 +6,8 @@
 //
 // QTEST_GUILESS_MAIN: a QCoreApplication is enough (QFileSystemWatcher + QTimer
 // need no display). We point $XDG_CONFIG_HOME at a temp dir so the watcher
-// watches a kdeglobals we control. QTRY_* pumps the event loop — no fixed
-// sleeps (the project's banned flake pattern).
+// watches a kdeglobals we control. QSignalSpy::wait pumps the event loop — no
+// fixed sleeps (the project's banned flake pattern).
 
 #include "systemthemewatcher.h"
 
@@ -50,20 +50,22 @@ void TestSystemThemeWatcher::emitsThemeChangedWhenKdeglobalsChanges() {
   SystemThemeWatcher watcher;
   QSignalSpy spy(&watcher, &SystemThemeWatcher::themeChanged);
 
-  // Qt's inotify backend registers the watch from the constructor but only
-  // begins delivering events once the event loop has spun at least once. Pump
-  // it briefly so the watch is genuinely live before the triggering write —
-  // otherwise a cold/loaded first run can write the change before the watcher's
-  // socket-notifier is armed and miss it entirely.
-  QTest::qWait(300);
-
   // A runtime accent change rewrites kdeglobals — the watcher must surface it
-  // (once, after its 250ms debounce). QTRY returns as soon as the signal lands,
-  // so the generous ceiling only matters on a saturated box where inotify
-  // delivery stalls (CPU-bound build + desktop-stream encode); it does not slow
-  // the common case.
-  writeAccent("200,40,40");
-  QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 10000);
+  // (once, after its 250ms debounce). Qt's inotify backend registers the watch
+  // from the constructor but only begins delivering events once the event loop
+  // has spun, so a change written before the watcher's socket-notifier is armed
+  // can be missed entirely. Rather than masking that with a fixed arming sleep,
+  // retry the triggering write until the watcher proves the watch is live.
+  // Each wait window must exceed the 250ms debounce (a rewrite restarts the
+  // coalescing timer, so a shorter window could starve it forever); spy.wait
+  // returns as soon as the signal lands, so the common case is one write plus
+  // one debounce interval. 10 attempts keep the old 10s ceiling for a
+  // saturated box (CPU-bound build + desktop-stream encode).
+  for (int attempt = 0; attempt < 10 && spy.isEmpty(); ++attempt) {
+    writeAccent("200,40,40");
+    spy.wait(1000);
+  }
+  QVERIFY2(spy.count() >= 1, "watcher never reported the kdeglobals accent change");
 #endif
 }
 

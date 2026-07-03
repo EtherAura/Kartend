@@ -168,6 +168,13 @@ void GamepadManager::pollSdlState() {
     return;
   }
 
+  // Pump SDL exactly once per poll, BEFORE the attach branch: hot-plug
+  // add/remove only surfaces through SDL_GameControllerUpdate(), so updating
+  // after the !m_controller early-return below would leave the unattached
+  // loop re-reading a stale SDL_NumJoysticks() forever — a pad plugged in
+  // after startup (or re-plugged after a detach) would never attach.
+  SDL_GameControllerUpdate();
+
   if (!m_controller) {
     attachToFirstConnectedController();
     if (!m_controller) {
@@ -184,7 +191,6 @@ void GamepadManager::pollSdlState() {
   }
 
   SDL_GameController *controller = static_cast<SDL_GameController *>(m_controller);
-  SDL_GameControllerUpdate();
 
   // Kartend-tjww5: a hot-unplugged (or Bluetooth-sleeping) controller keeps
   // its handle alive but reads as all-zeros forever, and the !m_controller

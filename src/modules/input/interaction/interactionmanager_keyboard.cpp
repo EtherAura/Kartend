@@ -143,6 +143,14 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
 
 // KeyboardManager callback: handles repeat step during key hold
 void InteractionManager::onKeyboardRepeatStep() {
+  // The hold-repeat timer keeps ticking if a modal widget or the scrape-result
+  // dialog opens while a direction is still held (gamepad stick/d-pad or arrow
+  // key) — the press-time gates can't help because no new press arrives. Skip
+  // the step so the grid doesn't keep scrolling underneath; stepping resumes
+  // when the dialog closes or the hold is released.
+  if (modalInputGateActive()) {
+    return;
+  }
   if (m_arrowHandler) {
     m_arrowHandler->handleRepeatStep();
   }

@@ -10,7 +10,6 @@
 #include <QFile>
 #include <QFontMetrics>
 #include <QFormLayout>
-#include <QFrame>
 #include <QFutureWatcher>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -30,7 +29,6 @@
 #include <QScrollBar>
 #include <QSize>
 #include <QStyle>
-#include <QTabBar>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QTimer>
 #include <QToolButton>
@@ -207,6 +205,11 @@ void DetailsPane::setupWidgets() {
   // visibility transitions) as DetailsPane signals.
   m_galleryView = new DetailsPaneGalleryView(this);
   m_galleryView->setHost(this);
+  // Inject the content column + preview-tile anchors the gallery section
+  // builds against. Narrow-setter wiring instead of friend access — the
+  // helper only needs layout placement, not host state.
+  m_galleryView->setHostAnchors(ui->contentWidget, ui->artworkDisplay,
+                                m_videoPlayback.videoPreview);
 
   // Inline edit-metadata button (Kartend-oewu) — mirrors the gallery's
   // editRequested wiring. Icon resolves from the active theme; the .ui
@@ -224,6 +227,12 @@ void DetailsPane::setupWidgets() {
   // shrinks without disturbing the ~100 existing access sites.
   m_artworkController = new DetailsPaneArtwork(this);
   m_artworkController->setHost(this);
+  // Scroll-idle gate for the gallery's deferred video-thumb extraction —
+  // forwards the artwork controller's isScrollIdle() so the gallery view
+  // doesn't need friend access to reach it. "Idle when no controller"
+  // mirrors the old direct-reach default.
+  m_galleryView->setScrollIdlePredicate(
+      [this]() { return !m_artworkController || m_artworkController->isScrollIdle(); });
 
   // Details-section helper (Kartend-cd2u). Same shape: state stays on
   // the host (m_detailsContainer, m_detailsLayout, etc.); the helper
@@ -244,9 +253,9 @@ void DetailsPane::setupWidgets() {
   // (~2.5s on a slow filesystem — Kartend-jxp5) lands in startup instead
   // of the user's first-click critical path. Section is hidden until
   // setEntries populates it; prewarming has no UI consequence beyond the
-  // up-front allocation. Safe to call after m_videoPlayback.videoPreview is constructed
-  // because ensureSection's insertion-index calculation reads it as the
-  // anchor for placing the gallery container below the video tile.
+  // up-front allocation. Safe to call after setHostAnchors above —
+  // ensureSection's insertion-index calculation reads the injected video
+  // tile as the anchor for placing the gallery container below it.
   if (m_galleryView) {
     m_galleryView->prewarmSection();
   }
@@ -448,141 +457,10 @@ void DetailsPane::clearMetadata() {
   applyTabVisibility();
 }
 
-void DetailsPane::setCollectionSummary(const CollectionSummary &summary) {
-  m_collectionSummary = summary;
-  // Re-render right away when the user is currently viewing the
-  // Collection tab (so live edits in settings or fresh scan results land
-  // immediately). On Item/File tabs the cache is updated silently and
-  // applies the next time the user switches to Collection.
-  if (m_activeTab == DetailsPaneTab::Collection) {
-    renderCollectionSummary();
-  }
-}
-
-void DetailsPane::setArtworkSectionVisible(bool visible) {
-  // Artwork preview tile + (when hiding) the live video widget.
-  // The "Artwork" header label was removed from the .ui to compact the
-  // Item tab — visibility now only toggles the tile and the live video
-  // widget. Artwork and file-info no longer travel together — each tab
-  // decides independently what to show.
-  // Keep the static artwork tile hidden while a preview video is
-  // currently playing — otherwise QVBoxLayout would stack both
-  // widgets vertically (artwork above video) and the live preview
-  // ends up below the scroll fold. The video occupies the artwork
-  // slot for as long as it has a loaded source. setMetadata /
-  // applyTabVisibility get called multiple times per selection
-  // (manager refreshes, post-scrape updates), and we hit this code
-  // path on each one — without the video-aware branch the artwork
-  // re-appears over the video on every refresh.
-  const bool videoPlaying = m_videoPlayback.videoPreview &&
-                            m_videoPlayback.videoPreview->isVisible() &&
-                            !m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
-  ui->artworkDisplay->setVisible(visible && !videoPlaying);
-  if (m_videoPlayback.videoPreview && !visible) {
-    m_videoPlayback.videoPreview->hide();
-  }
-}
-
-void DetailsPane::setFileInfoRowsVisible(bool visible) {
-  ui->fileInfoTitle->setVisible(visible);
-  ui->filePathLabel->setVisible(visible);
-  ui->filePathValue->setVisible(visible);
-  ui->fileSizeLabel->setVisible(visible);
-  ui->fileSizeValue->setVisible(visible);
-  ui->lastModifiedLabel->setVisible(visible);
-  ui->lastModifiedValue->setVisible(visible);
-  ui->fileExtensionLabel->setVisible(visible);
-  ui->fileExtensionValue->setVisible(visible);
-  // Static-UI separators travel with the file-info section. On Item
-  // tab they would otherwise paint as orphaned hairlines between the
-  // gallery and the description (separator2) or above the artwork
-  // tile (separator1) — both unnecessary now that bubble backdrops
-  // delineate sections.
-  if (ui->separator1) ui->separator1->setVisible(visible);
-  if (ui->separator2) ui->separator2->setVisible(visible);
-}
-
-void DetailsPane::renderCollectionSummary() {
-  setArtworkSectionVisible(false);
-  setFileInfoRowsVisible(false);
-  if (m_galleryView) {
-    m_galleryView->hideSection();
-  }
-  ui->titleLabel->setText(tr("Collection Information"));
-  ui->itemNameValue->setText(m_collectionSummary.name);
-
-  // Kartend-4wxmp: drive the metadata view directly (the pass-through
-  // ensureDetailsSection/clearDetailsSection/appendDetailRow forwarders were
-  // removed). ensureDetailsSection() is what creates m_detailsContainer, so a
-  // non-null container past the guard implies m_metadataView is non-null.
-  if (m_metadataView) m_metadataView->ensureDetailsSection();
-  if (!m_detailsContainer) {
-    return;
-  }
-  DetailsPaneMetadataView *mv = m_metadataView;
-  mv->clearDetailsSection();
-
-  if (!m_collectionSummary.type.trimmed().isEmpty()) {
-    mv->appendDetailRow(tr("Type"), m_collectionSummary.type);
-  }
-  if (m_collectionSummary.itemCount >= 0) {
-    mv->appendDetailRow(tr("Items"), QString::number(m_collectionSummary.itemCount));
-  }
-  mv->appendDetailRow(tr("Last scanned"), formatLastScanned(m_collectionSummary.lastScanned));
-  if (!m_collectionSummary.parentName.trimmed().isEmpty()) {
-    mv->appendDetailRow(tr("Parent"), m_collectionSummary.parentName);
-  }
-  mv->appendDetailRow(tr("Media"), m_collectionSummary.mediaDirectory, /*wrap=*/true);
-  mv->appendDetailRow(tr("Artwork"), m_collectionSummary.artworkDirectory, /*wrap=*/true);
-  mv->appendDetailRow(tr("Video"), m_collectionSummary.videoDirectory, /*wrap=*/true);
-  mv->appendDetailRow(tr("Manuals"), m_collectionSummary.manualDirectory, /*wrap=*/true);
-  if (!m_collectionSummary.extensions.isEmpty()) {
-    mv->appendDetailRow(tr("Extensions"), m_collectionSummary.extensions.join(QStringLiteral(", ")),
-                        /*wrap=*/true);
-  }
-  // Kartend-ecky: persistent warning surface for launcher paths that
-  // don't resolve on this host. One row per offending launcher so a
-  // multi-launcher collection makes it clear which entry needs fixing.
-  for (const QString &issue : m_collectionSummary.launcherPathIssues) {
-    mv->appendDetailRow(tr("⚠ Launcher path"), issue, /*wrap=*/true);
-  }
-
-  // pull the just-built summary rows under the active sidebar-
-  // font override so the no-selection view doesn't render in a different font
-  // than the per-item view.
-  applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
-
-  // Collection summaries are short and static — there is no marquee and
-  // on this tab the metadata card is the only content. Left uncapped,
-  // m_metadataScroll's Expanding policy stretches the styled backdrop
-  // bubble to the full sidebar height; on a sparse summary (a not-yet-
-  // scraped subcollection shows just Items + Last scanned) that reads as
-  // an oversized empty card. Cap the scroll area to the rows' real,
-  // wrap-aware height so the bubble hugs the summary and matches a
-  // scraped collection's tighter card. clearDetailsSection lifts the cap
-  // again for the Item tab.
-  if (m_metadataScroll && m_metadataBackdrop) {
-    if (QLayout *inner = m_metadataBackdrop->layout()) {
-      inner->activate();
-    }
-    const int width = m_metadataScroll->viewport() ? m_metadataScroll->viewport()->width() : 0;
-    if (width > 0) {
-      // heightForWidth resolves the wrapped path rows; sizeHint suffices
-      // when no row wraps. Width unknown (pane not yet shown) → leave the
-      // card uncapped rather than risk clipping a row.
-      const int contentHeight = m_metadataBackdrop->hasHeightForWidth()
-                                    ? m_metadataBackdrop->heightForWidth(width)
-                                    : m_metadataBackdrop->sizeHint().height();
-      m_metadataScroll->setMaximumHeight(contentHeight);
-    }
-  }
-
-  m_detailsContainer->show();
-}
-
-QString DetailsPane::formatLastScanned(const QDateTime &lastScanned) {
-  return DetailsFormat::formatLastScanned(lastScanned);
-}
+// setCollectionSummary / renderCollectionSummary live in
+// detailspanesummary.cpp; setupTabBar / setActiveTab / applyTabVisibility
+// and the setArtworkSectionVisible / setFileInfoRowsVisible toggles live
+// in detailspanetabs.cpp — same-class sibling TUs, no state moved.
 
 // Updates file information fields including size, modification date, and file
 // type
@@ -639,7 +517,7 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
     m_fileStatDisplay.resolved = true;
     m_fileStatDisplay.exists = res.exists;
     if (res.exists) {
-      m_fileStatDisplay.sizeText = formatFileSize(res.size);
+      m_fileStatDisplay.sizeText = DetailsFormat::formatFileSize(res.size);
       m_fileStatDisplay.modifiedText = res.lastModified.toString("yyyy-MM-dd hh:mm:ss");
     } else {
       m_fileStatDisplay.sizeText = QStringLiteral("-");
@@ -673,116 +551,6 @@ void DetailsPane::applyFileStatDisplay() {
   }
   ui->fileSizeValue->setText(m_fileStatDisplay.sizeText);
   ui->lastModifiedValue->setText(m_fileStatDisplay.modifiedText);
-}
-
-void DetailsPane::setupTabBar() {
-  // The .ui file's mainLayout is the QVBoxLayout that holds scrollArea.
-  // Find it, create the tab bar, and insert at index 0.
-  auto *mainLayout = qobject_cast<QVBoxLayout *>(layout());
-  if (!mainLayout) {
-    return;
-  }
-  m_tabBar = new QTabBar(this);
-  m_tabBar->setExpanding(true);
-  m_tabBar->setDocumentMode(true);
-  m_tabBar->addTab(tr("Item"));
-  m_tabBar->addTab(tr("Collection"));
-  m_tabBar->addTab(tr("File"));
-  // opaque tab bar so the sidebar pattern doesn't bleed through
-  // the gaps above/below the tabs. Without this, the patternEvent's full-
-  // sidebar fill leaks into the tab strip's transparent regions.
-  m_tabBar->setAutoFillBackground(true);
-  mainLayout->insertWidget(0, m_tabBar);
-
-  connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {
-    DetailsPaneTab newTab = DetailsPaneTab::Item;
-    if (index == static_cast<int>(DetailsPaneTab::Collection))
-      newTab = DetailsPaneTab::Collection;
-    else if (index == static_cast<int>(DetailsPaneTab::File))
-      newTab = DetailsPaneTab::File;
-    if (newTab == m_activeTab) {
-      return;
-    }
-    m_activeTab = newTab;
-    applyTabVisibility();
-    emit activeTabChanged(newTab);
-  });
-}
-
-void DetailsPane::setActiveTab(DetailsPaneTab tab) {
-  if (m_activeTab == tab && m_tabBar && m_tabBar->currentIndex() == static_cast<int>(tab)) {
-    return;
-  }
-  m_activeTab = tab;
-  if (m_tabBar) {
-    QSignalBlocker blocker(m_tabBar);
-    m_tabBar->setCurrentIndex(static_cast<int>(tab));
-  }
-  applyTabVisibility();
-}
-
-void DetailsPane::applyTabVisibility() {
-  // Title row + name row are part of every tab — only the labels' text
-  // and the supporting sections (artwork, file-info, gallery, details)
-  // change. Set them visible up front so individual cases only need to
-  // toggle the parts that differ.
-  ui->titleLabel->setVisible(true);
-  ui->itemNameValue->setVisible(true);
-
-  switch (m_activeTab) {
-  case DetailsPaneTab::Item: {
-    // "What is this?" — artwork preview, video preview, gallery,
-    // extended metadata + usage stats. No filesystem rows.
-    ui->titleLabel->setText(tr("Item Information"));
-    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(m_hasItemDisplayed);
-    setArtworkSectionVisible(true);
-    setFileInfoRowsVisible(false);
-    // Hide the gallery + details containers up front; they may still
-    // hold data from a prior Collection-tab render (m_detailsContainer
-    // is shared with renderCollectionSummary). The per-item setters
-    // (setArtworkGallery / setExtendedMetadata / setUsageStats /
-    // setManualFile) will repopulate and re-show on the manager's
-    // tab-change re-push, so this avoids a flash of stale rows.
-    if (m_galleryView) m_galleryView->hideSection();
-    if (m_detailsContainer) m_detailsContainer->hide();
-    // Prefer the canonical metadata title when one is known; fall back to
-    // the raw filename-derived itemName.
-    const QString name =
-        m_currentMetadataTitle.isEmpty() ? m_currentItemName : m_currentMetadataTitle;
-    if (!m_hasItemDisplayed) {
-      ui->itemNameValue->setText(tr("No item selected"));
-    } else {
-      ui->itemNameValue->setText(name.isEmpty() ? tr("No item selected") : name);
-    }
-    break;
-  }
-  case DetailsPaneTab::Collection:
-    // Collection summary — independent of selection. renderCollectionSummary
-    // toggles its own section visibility (hides artwork, file info, gallery)
-    // and populates the Details container with summary rows.
-    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(false);
-    renderCollectionSummary();
-    break;
-  case DetailsPaneTab::File:
-    // Pure filesystem view — name + path/size/modified/extension.
-    // No artwork, no video, no gallery, no extended metadata.
-    ui->titleLabel->setText(tr("File Information"));
-    if (ui->editMetadataButton) ui->editMetadataButton->setVisible(false);
-    ui->itemNameValue->setText(m_currentItemName.isEmpty() ? tr("No item selected")
-                                                           : m_currentItemName);
-    setArtworkSectionVisible(false);
-    setFileInfoRowsVisible(true);
-    // Re-apply the cached async stat result: if the worker resolved while this
-    // tab was hidden, the size/modified labels would otherwise be stuck on the
-    // '…' placeholder until the next selection (Kartend-kujy5).
-    applyFileStatDisplay();
-    if (m_galleryView) m_galleryView->hideSection();
-    if (m_detailsContainer) m_detailsContainer->hide();
-    break;
-  }
-  // tab change can re-title labels (Name → Collection) and
-  // toggle item visibility — reflect that in the horizontal view.
-  updateHorizontalView();
 }
 
 // Kartend-5nxz: previewBoxSize / applyPreviewSize / pausePreviewVideo /
@@ -899,12 +667,6 @@ void DetailsPane::resizeEvent(QResizeEvent *event) {
   }
 }
 
-// Human-readable file size (KB/MB/GB). Delegates to the shared StringUtils
-// helper so the logic isn't duplicated with DetailPageOverlay (Kartend-kp7up).
-auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
-  return DetailsFormat::formatFileSize(bytes);
-}
-
 // Kartend-4wxmp: removed 7 pass-through forwarders that had no callers or only
 // internal DetailsPane callers — loadArtwork / showArtworkOnly / isScrollIdle
 // (→ m_artworkController), ensureDetailsSection / clearDetailsSection /
@@ -916,16 +678,16 @@ void DetailsPane::setScrollIdlePredicate(std::function<bool()> predicate) {
   if (m_artworkController) m_artworkController->setScrollIdlePredicate(std::move(predicate));
 }
 
+void DetailsPane::setOverlayLayerManager(OverlayZOrderRegistry *manager) {
+  if (m_galleryView) m_galleryView->setLayerManager(manager);
+}
+
 void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
   if (m_metadataView) m_metadataView->setExtendedMetadata(metadata);
 }
 
 void DetailsPane::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
   if (m_metadataView) m_metadataView->setUsageStats(stats);
-}
-
-QString DetailsPane::formatRuntime(int seconds) {
-  return DetailsFormat::formatRuntime(seconds);
 }
 
 // Kartend-cd2u: ensureManualButton / setManualFile / openCurrentManual
@@ -936,10 +698,28 @@ void DetailsPane::setManualFile(const QString &manualPath) {
   if (m_metadataView) m_metadataView->setManualFile(manualPath);
 }
 
-QString DetailsPane::formatPersonalRating(int rating) {
-  return DetailsFormat::formatPersonalRating(rating);
+// ─── Pure formatter wrappers ──────────────────────────────────────────────
+// The bodies live in DetailsFormat (utils/view/detailsformat.h) so the
+// logic isn't duplicated with DetailPageOverlay / UsageStatsStore. These
+// statics stay because downstream callers and the integration tests reach
+// the formatters through DetailsPane; internal call sites (and the family
+// helper TUs) use DetailsFormat directly.
+QString DetailsPane::formatFileSize(qint64 bytes) {
+  return DetailsFormat::formatFileSize(bytes);
+}
+
+QString DetailsPane::formatRuntime(int seconds) {
+  return DetailsFormat::formatRuntime(seconds);
 }
 
 QString DetailsPane::formatTags(const QString &raw) {
   return DetailsFormat::formatTags(raw);
+}
+
+QString DetailsPane::formatPersonalRating(int rating) {
+  return DetailsFormat::formatPersonalRating(rating);
+}
+
+QString DetailsPane::formatLastScanned(const QDateTime &lastScanned) {
+  return DetailsFormat::formatLastScanned(lastScanned);
 }

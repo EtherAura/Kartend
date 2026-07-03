@@ -113,6 +113,13 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   // Wire the per-item artwork-link editor. The sidebar
   // widget itself has no item context, so the manager handles the dialog.
   if (m_DetailsPane) {
+    // Hand the central overlay z-order registry down to the sidebar's
+    // gallery view so its fullscreen preview overlay registers at
+    // Layer::ArtworkPreview — without it the overlay stacks by raw raise()
+    // and any registered overlay's later bringToFront()/restack() buries
+    // the preview. Null ctx (unwired test scenarios) degrades to the
+    // overlay's existing raise() fallback.
+    m_DetailsPane->setOverlayLayerManager(m_ctx ? m_ctx->ui.overlayLayerManager : nullptr);
     connect(m_DetailsPane, &DetailsPane::editArtworkRequested, this,
             &DetailsPaneManager::openArtworkLinksDialog);
     connect(m_DetailsPane, &DetailsPane::editMetadataRequested, this,
@@ -337,7 +344,13 @@ void DetailsPaneManager::refreshCollectionSummary() {
   // the user reinstalls the missing binary and triggers any state that
   // calls refreshCollectionSummary. Helper lives in LauncherUtils so the
   // items-toolbar warning badge (Kartend-w2n0) reuses the same strings.
-  summary.launcherPathIssues = LauncherUtils::launcherPathIssues(collection.launcher);
+  // Launch-time overload: judge the EFFECTIVE config (preset-resolved +
+  // %collection%-expanded) so the pane reaches the same verdict as the
+  // pre-launch gate instead of misreading raw fields.
+  const GeneralSettings *gs = m_ctx ? m_ctx->collection.generalSettings : nullptr;
+  summary.launcherPathIssues = LauncherUtils::launcherPathIssues(
+      collection.launcher, gs ? gs->launchers.launcherPresets : QList<LauncherPreset>{},
+      collection.name);
 
   m_DetailsPane->setCollectionSummary(summary);
 }

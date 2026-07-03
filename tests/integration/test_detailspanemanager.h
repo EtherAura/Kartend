@@ -36,6 +36,7 @@ private slots:
   void testSidebarWidgetReturnsNullBeforeSetup();
 
   void testFixtureExposesDetailsPaneManagerViaApplicationManager();
+  void testCollectionSummaryUsesLaunchTimeLauncherVerdict();
 };
 
 #endif // KARTEND_TESTS_TEST_DETAILSPANEMANAGER_H

@@ -183,7 +183,10 @@ void ArtworkManager::onSilentPrecacheBatchComplete(const QStringList &requestedP
       if (r.loadedFromDiskCache) {
         cache->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
       } else {
-        cache->cacheArtwork(r.artworkPath, pixmap);
+        // Pass the worker-decoded QImage through so the debounced disk flush
+        // can encode it directly instead of deep-copying the pixmap back to
+        // a QImage on the GUI thread.
+        cache->cacheArtwork(r.artworkPath, pixmap, r.image);
       }
     }
     m_pathCatalog.markSilentlyCached(r.artworkPath);

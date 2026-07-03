@@ -6,6 +6,7 @@
 // for the rationale of the friend pattern vs moving state.
 #include "detailspaneartwork.h"
 
+#include "artworkutils.h"
 #include "collection/enumstringhelpers.h"
 #include "detailspane.h"
 #include "extensionutils.h"
@@ -23,6 +24,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QScrollArea>
+#include <QSet>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QTimer>
 
@@ -184,68 +186,61 @@ bool DetailsPaneArtwork::togglePreviewVideoPause() {
 
 void DetailsPaneArtwork::loadArtwork(const QString &baseName, const QString &artworkDirectory) {
   if (!m_host) return;
-  QDir artworkDir(artworkDirectory);
-  if (!artworkDir.exists()) {
+  if (baseName.isEmpty() || artworkDirectory.isEmpty()) {
     return;
   }
 
-  // Phase 1 (synchronous, on main thread): collect ALL candidate paths
-  // that exist on disk, in priority order. Each QFile::exists is a stat
-  // call (cheap). We can't commit to a single resolved path here because
-  // some candidates may be present but undecodable — e.g. a 0-byte
-  // failed-scrape `.jpg` shadowing a valid `.png`. The original
-  // synchronous loop would QPixmap-construct each candidate inline and
-  // continue on null; this version preserves that contract by handing
-  // the whole list to the worker so it can do the decode-to-find
-  // walk off-thread.
+  // Phase 1 (main thread) used to be a synchronous stat sweep: two case
+  // variants x every image extension at the flat root plus the standard-type
+  // subdir walk — ~16+ stats per selection change, always run to exhaustion
+  // for items with no artwork, and measurable per keystroke during
+  // held-arrow navigation on cold or network-mounted artwork dirs. Route the
+  // probe through ArtworkUtils' shared DirectoryCache instead (the same
+  // cached lookup family the grid tiles and PlaceholderWarmer use): once the
+  // directory is warm, lookups — including cached NEGATIVES — are hash
+  // probes, so the common case does zero filesystem work here. The cached
+  // pick also matches what the grid tile resolved for the same item.
   QStringList candidatePaths;
-  for (const QString &ext : ExtensionUtils::imageBaseExtensions()) {
-    QString lowerCandidate = artworkDir.absoluteFilePath(baseName + "." + ext);
-    if (QFile::exists(lowerCandidate)) {
-      candidatePaths.append(lowerCandidate);
+  if (ArtworkUtils::DirectoryCache::instance().isDirectoryCached(artworkDirectory)) {
+    // baseName is already extension-stripped (call sites pass
+    // completeBaseName()), so use the stem-taking variant —
+    // findArtworkForFileCached would strip again and turn a dotted stem
+    // ("Game v1.2") into another item's key ("Game v1").
+    const QString cached = ArtworkUtils::findArtworkForBaseNameCached(baseName, artworkDirectory);
+    if (!cached.isEmpty()) {
+      candidatePaths.append(cached);
     }
-    QString upperCandidate = artworkDir.absoluteFilePath(baseName + "." + ext.toUpper());
-    if (upperCandidate != lowerCandidate && QFile::exists(upperCandidate)) {
-      candidatePaths.append(upperCandidate);
-    }
+  } else {
+    // Cold directory: warm it in the background (root + typed cover subdirs,
+    // capped at one in-flight prewarm) so the next selection takes the O(1)
+    // path. This selection resolves on the worker below instead of paying
+    // the synchronous sweep on the main thread.
+    ArtworkUtils::DirectoryCache::instance().schedulePrewarm({artworkDirectory});
   }
-  // Fall back to typed-subdir scraped art when no top-level mirror exists.
-  // Long-standing behaviour gap (Kartend-wppu): for collections whose
-  // artworkDirectory points at a "wide" Artwork/ tree (parent of typed
-  // subdirs) rather than a single typed subdir like Artwork/covers/, items
-  // without a top-level {baseName}.{ext} mirror would render with a blank
-  // primary tile even though scraped art existed under front/, box/,
-  // screenshot/, etc. Walk the standard types in gallery display priority
-  // (front first) and use the first available file. ItemArtworkStore
-  // already owns the {artworkDirectory}/{type}/{baseName}.{ext} probe so
-  // we just iterate.
-  if (candidatePaths.isEmpty()) {
-    for (const QString &type : ItemArtworkStore::standardTypes()) {
-      const QString sub = ItemArtworkStore::findStandardArtwork(baseName, artworkDirectory, type);
-      if (!sub.isEmpty()) {
-        candidatePaths.append(sub);
-        break;
-      }
-    }
-  }
-  if (candidatePaths.isEmpty()) {
-    return; // Nothing to load — placeholder stays.
-  }
+
   // Tentative primary-artwork path so setArtworkGallery (called later in
   // the same refresh pass) can synthesize the primary-cover thumb in the
   // gallery strip. If the worker ends up choosing a different candidate
   // (because the tentative one fails to decode), the callback updates
-  // m_primaryArtworkPath to match the actual resolved path.
-  m_host->m_primaryArtworkPath = candidatePaths.first();
+  // m_primaryArtworkPath to match the actual resolved path. When the cache
+  // couldn't resolve synchronously the callback also re-pushes the gallery
+  // so the primary thumb still appears.
+  const bool resolvedSynchronously = !candidatePaths.isEmpty();
+  if (resolvedSynchronously) {
+    m_host->m_primaryArtworkPath = candidatePaths.first();
+  }
 
-  // Phase 2 (async, on QThreadPool): walk the candidate list and return
-  // the first one that successfully decodes. Pre-fix this was a
-  // synchronous QPixmap(path) on the main thread (50-280ms per fresh
-  // selection on slow filesystems). Moving the walk off-thread keeps the
-  // UI responsive; the user sees the placeholder briefly then the real
-  // cover. Same pattern as ScrapeResultDialog::appendThumbAsync
-  // (Kartend-j5lc). QImage is thread-safe; QPixmap::fromImage runs on
-  // the main thread in the watcher's finished slot.
+  // Phase 2 (async, on QThreadPool): decode the cached candidate — falling
+  // back to the full legacy walk off-thread when the cache had nothing
+  // (cold directory, a stale cached negative, or art only under a typed
+  // subdir the cover walk doesn't cover, e.g. logo/) or when a candidate is
+  // present but undecodable (a 0-byte failed-scrape `.jpg` shadowing a valid
+  // `.png`) — preserving the original decode-to-find contract. Pre-fix this
+  // was a synchronous QPixmap(path) on the main thread (50-280ms per fresh
+  // selection on slow filesystems). Same pattern as
+  // ScrapeResultDialog::appendThumbAsync (Kartend-j5lc). QImage is
+  // thread-safe; QPixmap::fromImage runs on the main thread in the
+  // watcher's finished slot.
   //
   // Generation counter handles rapid-click races: if a newer loadArtwork
   // call has bumped m_artworkLoadGen by the time this worker finishes,
@@ -255,27 +250,69 @@ void DetailsPaneArtwork::loadArtwork(const QString &baseName, const QString &art
   using LoadResult = QPair<QString, QImage>;
   const quint64 myGen = ++m_host->m_artworkLoadGen;
   auto *watcher = new QFutureWatcher<LoadResult>(this);
-  connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, myGen]() {
-    watcher->deleteLater();
-    if (!m_host || myGen != m_host->m_artworkLoadGen) return;
-    const LoadResult res = watcher->result();
-    if (res.second.isNull()) return;
-    // The worker picks the first decodable candidate; update
-    // m_primaryArtworkPath to match in case the tentative path
-    // we set above wasn't the chosen one.
-    m_host->m_primaryArtworkPath = res.first;
-    // Cache the original-resolution pixmap so applyPreviewSize
-    // can re-render at the new dimension on sidebar resize
-    // without re-reading from disk.
-    m_host->m_artworkSource = QPixmap::fromImage(res.second);
-    applyPreviewSize();
-    m_host->updateHorizontalView();
-  });
-  watcher->setFuture(QtConcurrent::run([candidatePaths]() -> LoadResult {
+  connect(watcher, &QFutureWatcherBase::finished, this,
+          [this, watcher, myGen, resolvedSynchronously]() {
+            watcher->deleteLater();
+            if (!m_host || myGen != m_host->m_artworkLoadGen) return;
+            const LoadResult res = watcher->result();
+            if (res.second.isNull()) return;
+            // The worker picks the first decodable candidate; update
+            // m_primaryArtworkPath to match in case the tentative path
+            // we set above wasn't the chosen one.
+            m_host->m_primaryArtworkPath = res.first;
+            // Cache the original-resolution pixmap so applyPreviewSize
+            // can re-render at the new dimension on sidebar resize
+            // without re-reading from disk.
+            m_host->m_artworkSource = QPixmap::fromImage(res.second);
+            applyPreviewSize();
+            m_host->updateHorizontalView();
+            if (!resolvedSynchronously) {
+              // setArtworkGallery ran (same refresh pass) before the primary
+              // path was known — re-push the current entries so the gallery
+              // strip can synthesize the primary-cover thumb.
+              m_host->setArtworkGallery(m_host->currentGalleryEntries());
+            }
+          });
+  watcher->setFuture(QtConcurrent::run([candidatePaths, baseName,
+                                        artworkDirectory]() -> LoadResult {
     for (const QString &p : candidatePaths) {
       QImage img(p);
       if (!img.isNull()) {
         return {p, img};
+      }
+    }
+    // Fallback: the legacy candidate walk, now safely off the GUI thread.
+    // Flat-root {baseName}.{ext} in both cases first, then the typed
+    // subdirs. The typed walk covers the long-standing Kartend-wppu gap:
+    // for collections whose artworkDirectory points at a "wide" Artwork/
+    // tree, items without a top-level mirror still resolve scraped art
+    // under front/, box/, screenshot/, etc., in gallery display priority.
+    const QDir artworkDir(artworkDirectory);
+    if (!artworkDir.exists()) {
+      return {QString(), QImage()};
+    }
+    const QSet<QString> tried(candidatePaths.cbegin(), candidatePaths.cend());
+    for (const QString &ext : ExtensionUtils::imageBaseExtensions()) {
+      for (const QString &candidate :
+           {artworkDir.absoluteFilePath(baseName + "." + ext),
+            artworkDir.absoluteFilePath(baseName + "." + ext.toUpper())}) {
+        if (tried.contains(candidate) || !QFile::exists(candidate)) {
+          continue;
+        }
+        QImage img(candidate);
+        if (!img.isNull()) {
+          return {candidate, img};
+        }
+      }
+    }
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      const QString sub = ItemArtworkStore::findStandardArtwork(baseName, artworkDirectory, type);
+      if (sub.isEmpty() || tried.contains(sub)) {
+        continue;
+      }
+      QImage img(sub);
+      if (!img.isNull()) {
+        return {sub, img};
       }
     }
     return {QString(), QImage()};

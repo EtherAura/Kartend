@@ -6,6 +6,7 @@
 // the friend privilege declared on DetailsPane (Kartend-cd2u).
 #include "detailspanemetadataview.h"
 
+#include "detailsformat.h"
 #include "detailspane.h"
 #include "ui_detailspane.h"
 #include "usagestatsstore.h"
@@ -396,13 +397,13 @@ void DetailsPaneMetadataView::setExtendedMetadata(const ItemMetadataStore::ItemM
   appendDetailRow(QObject::tr("Release date"), metadata.releaseDate);
   appendDetailRow(QObject::tr("Rating"), metadata.contentRating);
   appendDetailRow(QObject::tr("Players"), metadata.players);
-  appendDetailRow(QObject::tr("Runtime"), DetailsPane::formatRuntime(metadata.runtimeSeconds));
-  appendDetailRow(QObject::tr("Tags"), DetailsPane::formatTags(metadata.tags));
+  appendDetailRow(QObject::tr("Runtime"), DetailsFormat::formatRuntime(metadata.runtimeSeconds));
+  appendDetailRow(QObject::tr("Tags"), DetailsFormat::formatTags(metadata.tags));
   // Personal curation fields. Labeled "Your rating" so it's distinct from
   // the scraper-provided content rating row above. Empty values are
   // suppressed inside appendDetailRow so unset fields don't clutter the
   // sidebar with blank rows.
-  appendDetailRow(QObject::tr("Your rating"), DetailsPane::formatPersonalRating(metadata.rating));
+  appendDetailRow(QObject::tr("Your rating"), DetailsFormat::formatPersonalRating(metadata.rating));
   // Per-item state flags — only render the row when set so unflagged items
   // don't get three blank lines pushed onto the sidebar. The chip text
   // matches the context-menu wording (Pin / Hide / Continue later) so the

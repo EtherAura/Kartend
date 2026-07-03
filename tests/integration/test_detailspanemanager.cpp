@@ -1,6 +1,10 @@
 #include "test_detailspanemanager.h"
 
 #include "applicationmanager.h"
+#include "collection/collectionconfig.h"
+#include "collection/launcherconfig.h"
+#include "collection/launcherpreset.h"
+#include "detailspane.h"
 #include "detailspanemanager.h"
 #include "mainwindow.h"
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
@@ -9,6 +13,7 @@
 #include "mocks/mockedmainwindowfixture.h"
 
 #include <QSignalSpy>
+#include <QStringList>
 #include <QTest>
 
 void TestDetailsPaneManager::testConstructionInitialDefaults() {
@@ -136,4 +141,41 @@ void TestDetailsPaneManager::testFixtureExposesDetailsPaneManagerViaApplicationM
   // applySidebarStateForCollection call (which the fixture doesn't
   // trigger because no collections are configured).
   QCOMPARE(details->currentCollectionIndex(), -1);
+}
+
+void TestDetailsPaneManager::testCollectionSummaryUsesLaunchTimeLauncherVerdict() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *details = win->getApplicationManager()->getDetailsPaneManager();
+  QVERIFY(details);
+  auto *pane = dynamic_cast<DetailsPane *>(details->sidebarWidget());
+  QVERIFY2(pane, "the live fixture must wire a real DetailsPane");
+
+  // A preset-backed slot whose inline fields are empty and whose preset's
+  // stored path is broken: the raw 1-arg launcherPathIssues overload skipped
+  // it as "unconfigured", so the sidebar showed no ⚠ Launcher path row even
+  // though the launch was guaranteed to fail. refreshCollectionSummary must
+  // now push the launch-time verdict (preset-resolved + %collection%-
+  // expanded) — the same one the pre-launch gate and toolbar badge reach.
+  LauncherPreset preset;
+  preset.id = QStringLiteral("preset-player");
+  preset.name = QStringLiteral("Cloud Player");
+  preset.launcherPath = QStringLiteral("/nonexistent/preset/player");
+  win->m_generalSettings.launchers.launcherPresets = {preset};
+
+  CollectionConfig videos;
+  videos.name = QStringLiteral("Videos");
+  LauncherConfig entry;
+  entry.presetId = preset.id; // inline path left empty — the preset supplies it
+  videos.launcher.additionalLaunchers.append(entry);
+  win->m_collections = {videos};
+
+  // Sets m_currentCollectionIndex and refreshes the summary in one pass —
+  // the same entry point a collection switch uses.
+  details->applySidebarStateForCollection(0);
+
+  const QStringList issues = pane->collectionSummaryForTesting().launcherPathIssues;
+  QCOMPARE(issues.size(), 1);
+  QVERIFY2(issues.first().contains(QStringLiteral("/nonexistent/preset/player")),
+           "the issue line must name the preset's stored path (what would actually run)");
 }
