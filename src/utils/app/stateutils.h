@@ -39,25 +39,6 @@ struct SelectionRestoreState {
     // operations
   }
 
-  [[nodiscard]] bool isActive() const { return restoring && targetIndex >= 0; }
-
-  [[nodiscard]] bool matchesTarget(int index) const { return restoring && index == targetIndex; }
-
-  void beginRestore(int index) {
-    restoring = true;
-    targetIndex = index;
-    forceImmediateCenter = true;
-    restorePending = true;
-    ++restoreToken;
-  }
-
-  void finalizeRestore() {
-    restoring = false;
-    targetIndex = -1;
-    forceImmediateCenter = false;
-    restorePending = false;
-  }
-
   void cancel() {
     reset();
     ++restoreToken;

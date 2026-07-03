@@ -33,27 +33,10 @@ void TimerUtils::DebouncedTimer::trigger() {
   }
 }
 
-void TimerUtils::DebouncedTimer::triggerImmediate() {
-  if (m_timer) {
-    m_timer->stop();
-  }
-  if (!QApplication::closingDown()) {
-    emit triggered();
-  }
-}
-
 void TimerUtils::DebouncedTimer::cancel() {
   if (m_timer) {
     m_timer->stop();
   }
-}
-
-auto TimerUtils::DebouncedTimer::isPending() const -> bool {
-  return m_timer && m_timer->isActive();
-}
-
-auto TimerUtils::DebouncedTimer::interval() const -> int {
-  return m_timer ? m_timer->interval() : 0;
 }
 
 void TimerUtils::DebouncedTimer::setInterval(int intervalMs) {
@@ -155,12 +138,4 @@ void TimerUtils::disconnectTimers(const QList<QTimer *> &timers) {
 void TimerUtils::stopAndDisconnectTimers(const QList<QTimer *> &timers) {
   stopTimers(timers);
   disconnectTimers(timers);
-}
-
-// Deletes a timer later and nulls the pointer
-void TimerUtils::deleteLaterTimer(QTimer *&timer) {
-  if (timer) {
-    timer->deleteLater();
-    timer = nullptr;
-  }
 }

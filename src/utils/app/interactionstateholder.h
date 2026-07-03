@@ -233,22 +233,6 @@ public:
     m_expandedItemIndex = -1;
   }
 
-signals:
-  /**
-   * @brief Emitted when glide animation state changes.
-   */
-  void glideAnimatingChanged(bool active);
-
-  /**
-   * @brief Emitted when programmatic scroll state changes.
-   */
-  void programmaticScrollChanged(bool active);
-
-  /**
-   * @brief Emitted when selection suppression state changes.
-   */
-  void selectionSuppressionChanged(bool suppressed, int pendingIndex);
-
 private:
   // Debug-only thread-affinity assertion. Confirms the caller is on the
   // QObject's owning thread (typically the GUI/main thread). No-op in

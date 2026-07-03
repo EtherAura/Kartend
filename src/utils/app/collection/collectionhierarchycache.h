@@ -148,17 +148,6 @@ public:
     return QString();
   }
 
-  // Get all UUIDs for a collection and its descendants (for DB queries).
-  // Precomputed in rebuild() so this is an O(1) lookup on the hot path.
-  [[nodiscard]] const QStringList &descendantUuids(int parentIndex) const {
-    auto it = m_descendantUuids.constFind(parentIndex);
-    if (it == m_descendantUuids.cend()) {
-      static const QStringList kEmpty;
-      return kEmpty;
-    }
-    return it.value();
-  }
-
   [[nodiscard]] bool isValid() const { return m_built; }
 
 private:
@@ -199,7 +188,6 @@ private:
   QHash<QString, QString> m_uuidToArtworkDir;     // UUID -> expanded artwork dir
   QHash<QString, int> m_uuidToCollectionIndex;    // UUID -> collection index
   QHash<QString, QString> m_mediaDirToArtworkDir; // media dir -> artwork dir (for file lookups)
-  QHash<int, QStringList> m_descendantUuids;      // index -> [self_uuid, descendant_uuids...]
 };
 
 #endif

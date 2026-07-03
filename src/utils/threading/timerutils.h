@@ -15,8 +15,8 @@ namespace TimerUtils {
  * @brief A generic debounced timer that coalesces rapid calls into single
  * executions.
  *
- * Thread-affinity: NOT thread-safe. trigger() / triggerImmediate() / cancel()
- * drive an internal QTimer, which Qt requires to be touched only from the thread
+ * Thread-affinity: NOT thread-safe. trigger() / cancel() drive an internal
+ * QTimer, which Qt requires to be touched only from the thread
  * that owns it. These are UI-thread coalescers — call them from the
  * DebouncedTimer's own (typically the GUI) thread; a cross-thread call is
  * undefined behaviour. Marshal through a QueuedConnection if a worker thread
@@ -35,11 +35,8 @@ public:
   explicit DebouncedTimer(int intervalMs, QObject *parent = nullptr);
   ~DebouncedTimer() override;
 
-  void trigger();          // Schedule a debounced trigger
-  void triggerImmediate(); // Trigger immediately, resetting any pending
-  void cancel();           // Cancel any pending trigger
-  [[nodiscard]] bool isPending() const;
-  [[nodiscard]] int interval() const;
+  void trigger(); // Schedule a debounced trigger
+  void cancel();  // Cancel any pending trigger
   void setInterval(int intervalMs);
 
 signals:
@@ -88,7 +85,6 @@ private:
 void stopTimers(const QList<QTimer *> &timers);
 void disconnectTimers(const QList<QTimer *> &timers);
 void stopAndDisconnectTimers(const QList<QTimer *> &timers);
-void deleteLaterTimer(QTimer *&timer);
 
 /**
  * @brief Execute a callback after a delay, with object lifetime guard.
@@ -110,16 +106,6 @@ void singleShotGuarded(int delayMs, T *target, Func &&callback) {
       cb();
     }
   });
-}
-
-/**
- * @brief Execute a callback on next event loop iteration, with object lifetime
- * guard.
- *
- * Convenience overload for the common case of deferring to next event loop.
- */
-template <typename T, typename Func> void deferGuarded(T *target, Func &&callback) {
-  singleShotGuarded(0, target, std::forward<Func>(callback));
 }
 
 } // namespace TimerUtils

@@ -24,7 +24,6 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   m_expandedMediaDirs.clear();
   m_expandedArtworkDirs.clear();
   m_mediaDirToArtworkDir.clear();
-  m_descendantUuids.clear();
   // Mark the cache built. We deliberately do NOT stash &collections: the cache
   // only ever needs to know "has rebuild run", and holding a raw pointer to the
   // caller's list invited a UAF if that list was freed/reallocated without a
@@ -118,24 +117,6 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
       m_uuidToMediaDir[uuid] = mediaDir;
       m_uuidToArtworkDir[uuid] = artworkDir;
       m_uuidToCollectionIndex[uuid] = i;
-    }
-  }
-
-  // Precompute descendantUuids — the accessor was the hottest read on the
-  // navigation/query path and rebuilt the QStringList every call. We have
-  // all the inputs above (m_collectionUuids + m_allDescendants), so do it
-  // once here and let descendantUuids() return-by-const-ref.
-  for (int i = 0; i < collections.size(); ++i) {
-    QStringList &uuids = m_descendantUuids[i];
-    const QString &parentUuid = m_collectionUuids.value(i);
-    if (!parentUuid.isEmpty()) {
-      uuids << parentUuid;
-    }
-    for (int descendant : m_allDescendants.value(i)) {
-      const QString &uuid = m_collectionUuids.value(descendant);
-      if (!uuid.isEmpty()) {
-        uuids << uuid;
-      }
     }
   }
 }
