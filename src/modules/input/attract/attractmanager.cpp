@@ -372,6 +372,9 @@ void AttractManager::onAdvanceSelectionTick() {
   // → onActivityDetected handler skips it (otherwise attract would stop on its
   // own first tick).
   m_drivingSelection = true;
+  // Cleared each tick so the invariant assertion below sees only THIS tick's
+  // observation; the guard slot sets it back to true synchronously (see below).
+  m_drivenSelectionObserved = false;
   // Reset via a scope guard: requestSelectIndex runs slots synchronously and
   // arbitrarily deep — if one throws or tears the manager down, a bare reset
   // would be skipped, leaving the flag stuck true and permanently suppressing
@@ -386,4 +389,15 @@ void AttractManager::onAdvanceSelectionTick() {
   // stops itself on its first tick.
   const auto guard = qScopeGuard([this]() { m_drivingSelection = false; });
   emit requestSelectIndex(next);
+
+  // Enforce the b93at invariant in debug builds: if the selection actually moved
+  // to `next`, its selectionChanged must have fired synchronously within the
+  // emit above and the guard must have recorded it. If not, a Qt::QueuedConnection
+  // deferred it past this scope — exactly the silent regression the invariant
+  // above warns about. Gated on the move actually happening so a rejected/no-op
+  // select can't false-positive. Q_ASSERT_X evaluates its condition in debug only.
+  Q_ASSERT_X(selection->currentSelectedIndex() != next || m_drivenSelectionObserved,
+             "AttractManager::onAdvanceSelectionTick",
+             "attract-driven selectionChanged did not fire synchronously; a "
+             "Qt::QueuedConnection broke the Kartend-b93at Direct chain");
 }

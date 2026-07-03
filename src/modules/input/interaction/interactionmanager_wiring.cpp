@@ -324,6 +324,10 @@ void InteractionManager::connectAttractManagerSignals() {
             // advance-selection timer must not be treated as user activity,
             // otherwise attract mode would immediately stop on its own tick.
             if (m_attractManager->isDrivingSelection()) {
+              // Record that we saw the driven change synchronously — the
+              // AttractManager debug-asserts this to enforce the b93at Direct-
+              // connection invariant (a queued hop would land here too late).
+              m_attractManager->noteDrivenSelectionObserved();
               return;
             }
             m_attractManager->onActivityDetected();

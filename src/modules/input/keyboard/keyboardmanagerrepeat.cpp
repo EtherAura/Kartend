@@ -25,12 +25,49 @@ Q_DECLARE_LOGGING_CATEGORY(lcKeyboardManager)
     }                                                                                              \
   } while (0)
 
+void KeyboardManager::applyRepeatPhase(RepeatPhase phase) {
+  const bool active = phase != RepeatPhase::Idle;
+
+  // Repeat is one continuous-scroll source among several (wheel, mouse-hold,
+  // glide), so it only ASSERTS the shared flag on entry; the clear stays with
+  // the animation/arrow handlers that own the glide tail (unchanged behaviour —
+  // the old stopRepeat likewise never cleared m_continuousScrollActive).
+  if (active) {
+    m_continuousScrollActive = true;
+  }
+
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  if (!state) {
+    return;
+  }
+
+  state->scroll().horizHoldActive = (phase == RepeatPhase::HorizontalRepeat);
+  state->scroll().keyContinuous = active;
+  state->arrow().arrowKeyScrolling = active;
+  state->artwork().suppressArtwork = active;
+  // Forced true in BOTH phases pre-refactor (begin sets it, stop re-sets it): a
+  // deliberate "artwork may show during a programmatic selection" affordance
+  // that repeat never revokes.
+  state->artwork().allowDuringSelection = true;
+
+  if (phase == RepeatPhase::HorizontalRepeat) {
+    // A fast horizontal sweep suppresses arrow-centering for a long safeguard
+    // window so it isn't fighting re-centering on every step.
+    constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
+    state->arrow().suppressArrowCenter = true;
+    state->arrow().suppressArrowCenterUntilMs =
+        QDateTime::currentMSecsSinceEpoch() + kSuppressArrowCenterHoldMs;
+  } else if (phase == RepeatPhase::Idle) {
+    state->clearArrowCenterSuppression();
+  }
+  // VerticalRepeat leaves arrow-center suppression untouched — pre-refactor
+  // beginHoldRepeat only armed it for horizontal and never cleared it here.
+}
+
 void KeyboardManager::beginHoldRepeat() {
   if (m_isShuttingDown) {
     return;
   }
-
-  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
 
   // Check if we're in list mode for faster repeat intervals
   bool isListMode = false;
@@ -59,7 +96,6 @@ void KeyboardManager::beginHoldRepeat() {
   // base could yield a 5ms (200Hz) horizontal timer at high velocity
   // multipliers, defeating the event-loop-saturation guard documented above.
   int horizontalInterval = std::max(10, baseInterval / 2);
-  constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
 
   // m_repeatTimer is created + connected once in initTimers() (ctor), so the
   // lazy create here was dead and a second run would have double-connected
@@ -71,22 +107,8 @@ void KeyboardManager::beginHoldRepeat() {
   m_repeating = true;
   m_repeatInterval = m_repeatVertical ? verticalInterval : horizontalInterval;
 
-  if (state) {
-    state->scroll().horizHoldActive = !m_repeatVertical;
-    state->scroll().keyContinuous = true;
-  }
-  m_continuousScrollActive = true;
-
-  if (state) {
-    state->arrow().arrowKeyScrolling = true;
-    state->artwork().suppressArtwork = true;
-    state->artwork().allowDuringSelection = true;
-    if (!m_repeatVertical) {
-      state->arrow().suppressArrowCenter = true;
-      state->arrow().suppressArrowCenterUntilMs =
-          QDateTime::currentMSecsSinceEpoch() + kSuppressArrowCenterHoldMs;
-    }
-  }
+  // Enter the repeat state: one call sets every repeat-owned flag (Kartend-4su6t).
+  applyRepeatPhase(m_repeatVertical ? RepeatPhase::VerticalRepeat : RepeatPhase::HorizontalRepeat);
 
   m_repeatTimer->start(m_repeatInterval);
 }
@@ -112,12 +134,18 @@ void KeyboardManager::stopRepeat(bool suppressRecentering) {
 
   clearRepeatState();
 
+  // Return every repeat-owned flag to Idle in one place (Kartend-4su6t). The
+  // clear order relative to the overlay refresh below is irrelevant — the
+  // refresh reads none of these flags (only glideAnimating, handled next).
+  applyRepeatPhase(RepeatPhase::Idle);
+
   if (state) {
-    state->scroll().horizHoldActive = false;
-    state->scroll().keyContinuous = false;
+    // Defensive resets of state repeat does NOT own but that must not survive a
+    // stop — a stop doubles as the "cancel any in-flight motion" catch-all.
+    // glideAnimating is cleared BEFORE the overlay refresh (which reads it),
+    // preserving the pre-refactor ordering.
     state->click().armFirstClickDelay = false;
     state->click().pendingInitialCenter = false;
-    state->arrow().arrowKeyScrolling = false;
     state->setGlideAnimating(false);
     if (scroll) {
       scroll->refreshSelectionOverlayState();
@@ -126,12 +154,6 @@ void KeyboardManager::stopRepeat(bool suppressRecentering) {
 
   if (scroll) {
     scroll->setForceSelectionOverlayVisible(false);
-  }
-
-  if (state) {
-    state->artwork().suppressArtwork = false;
-    state->artwork().allowDuringSelection = true;
-    state->clearArrowCenterSuppression();
   }
 
   emit stopRepeatRequested(suppressRecentering);
