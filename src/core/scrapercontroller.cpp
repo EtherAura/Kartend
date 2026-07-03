@@ -12,6 +12,7 @@
 #include <memory>
 
 #include <QAbstractButton>
+#include <QApplication>
 #include <QDateTime>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -136,7 +137,26 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
                     tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
           }
           QWidget *parentWindow = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
-          QMessageBox::information(parentWindow, tr("Scraper"), text);
+          // The unified scrape keeps running while its dialog is hidden, so
+          // completion can land while the user is inside an unrelated modal
+          // exec() loop (settings, bulk edit, kart preflight). An
+          // application-modal summary would then spin its own nested exec() and
+          // stack over that dialog in a surprising order (Kartend-ykidl). When a
+          // modal is already up, surface the summary through a non-modal box
+          // (WA_DeleteOnClose, non-blocking show()) so it waits for the user
+          // instead of hijacking the active dialog; the input grab of the live
+          // modal keeps the box inert until that dialog closes. With nothing
+          // modal up, keep the familiar blocking summary.
+          if (QApplication::activeModalWidget()) {
+            auto *box = new QMessageBox(QMessageBox::Information, tr("Scraper"), text,
+                                        QMessageBox::Ok, parentWindow);
+            box->setAttribute(Qt::WA_DeleteOnClose);
+            box->setModal(false);
+            box->show();
+            box->raise();
+          } else {
+            QMessageBox::information(parentWindow, tr("Scraper"), text);
+          }
         });
   }
   ScrapeResultDialog *dialog = m_scraperDialog;
