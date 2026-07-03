@@ -18,6 +18,7 @@
 // dismiss them. Their one-line "set the line edit on accept" behaviour is
 // exercised indirectly by the checks suite mutating the same line edits.
 
+#include "../../support/modalanswerqueue.h"
 #include "collection/collectionconfig.h"
 #include "settingsdialog.h"
 
@@ -42,72 +43,9 @@ QList<CollectionConfig> singleCollection(const QString &artworkDir = QString()) 
   return {c};
 }
 
-/// Answers a queue of modal QMessageBoxes in order, capturing each box's
-/// text. The zero-interval timer only fires inside a nested exec loop, so
-/// when fewer boxes appear than expected the leftover queue simply reports
-/// how far the flow got. Non-QMessageBox modals (the ErrorDialog raised by
-/// the host-less general-settings save inside handleSaveCollection) are
-/// rejected without consuming the button queue and tallied separately.
-class ModalAnswerQueue : public QObject {
-public:
-  explicit ModalAnswerQueue(QList<QMessageBox::StandardButton> buttons)
-      : m_buttons(std::move(buttons)) {
-    m_timer.setInterval(0);
-    connect(&m_timer, &QTimer::timeout, this, [this] {
-      QWidget *modal = QApplication::activeModalWidget();
-      // A dynamic property marks answered boxes instead of comparing
-      // pointers: consecutive boxes routinely reuse the same heap address,
-      // so a pointer guard mistakes box #2 for box #1 and never answers it —
-      // the exec loop then spins forever (this wedged a full ctest run).
-      if (!modal || modal->property("modalQueueAnswered").toBool()) {
-        return;
-      }
-      auto *box = qobject_cast<QMessageBox *>(modal);
-      if (!box) {
-        // Non-QMessageBox modal: the standalone dialog (constructed with no
-        // settings host) surfaces the general-settings save failure inside
-        // handleSaveCollection through a modal ErrorDialog. Left unanswered
-        // its exec() loop never exits, and this zero-interval timer then
-        // drives that loop at 100% CPU — the suite-wedging spin. Dismiss it
-        // without consuming the QMessageBox button queue and record it so
-        // slots can assert how many appeared.
-        auto *dialog = qobject_cast<QDialog *>(modal);
-        if (!dialog) {
-          return;
-        }
-        dialog->setProperty("modalQueueAnswered", true);
-        otherDialogTitles.append(dialog->windowTitle());
-        dialog->reject();
-        return;
-      }
-      box->setProperty("modalQueueAnswered", true);
-      texts.append(box->text());
-      // Fail loud, never hang: an unexpected box (queue empty) or a box
-      // missing the requested button is dismissed via its escape/default
-      // button and recorded — assertions on `texts`/counts catch the
-      // mismatch instead of a wedged event loop.
-      QAbstractButton *toClick = nullptr;
-      if (!m_buttons.isEmpty()) {
-        toClick = box->button(m_buttons.takeFirst());
-      } else {
-        ++unexpectedBoxes;
-      }
-      if (!toClick) toClick = box->escapeButton();
-      if (!toClick) toClick = box->defaultButton();
-      if (!toClick && !box->buttons().isEmpty()) toClick = box->buttons().first();
-      if (toClick) toClick->click();
-    });
-    m_timer.start();
-  }
-
-  QStringList texts;
-  QStringList otherDialogTitles;
-  int unexpectedBoxes = 0;
-
-private:
-  QList<QMessageBox::StandardButton> m_buttons;
-  QTimer m_timer;
-};
+// ModalAnswerQueue is hoisted to tests/support/modalanswerqueue.h so other
+// host-less dialog suites inherit the same wedge-proof behavior (Kartend-2j8c6).
+using KartendTest::ModalAnswerQueue;
 
 bool invokeRecursiveImport(SettingsDialog &dialog) {
   return QMetaObject::invokeMethod(&dialog, "onRecursiveImportContent", Qt::DirectConnection);
