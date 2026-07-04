@@ -30,6 +30,12 @@ void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preIte
   }
 }
 
+void MainWindow::openEntityScraperDialog(int collectionIndex) {
+  if (m_scraperController) {
+    m_scraperController->openEntityScraperDialog(collectionIndex);
+  }
+}
+
 void MainWindow::openDatAuditDialog() {
   if (m_datAuditController) {
     m_datAuditController->openDialog(); // generic launch (File → DAT Audit…)

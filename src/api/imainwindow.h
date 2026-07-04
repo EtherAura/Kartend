@@ -43,6 +43,11 @@ public:
   virtual void openScraperDialog(int preCollectionIndex = -1,
                                  const QString &preItemPath = QString()) = 0;
 
+  /// Kartend-ckepd.6: launch a one-shot Platform entity (collection artwork)
+  /// scrape for @p collectionIndex. InteractionManager's right-click
+  /// "Scrape platform artwork" entry routes here (sibling of openScraperDialog).
+  virtual void openEntityScraperDialog(int collectionIndex) = 0;
+
   /// Open the DAT Audit window aimed at @p collection: selects the linked audit
   /// profile, or seeds an unsaved one from it. The caller passes the collection
   /// by value so the collection-settings panel can hand over its *working* copy

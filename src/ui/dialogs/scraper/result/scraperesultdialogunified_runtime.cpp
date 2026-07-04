@@ -508,6 +508,46 @@ void ScrapeResultDialogUnified::rescrapeFailedItems() {
   m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
 }
 
+void ScrapeResultDialogUnified::startPlatformEntityScrape(int collectionIndex) {
+  if (!m_dlg->m_service || !m_dlg->m_scraperCtx.collections) return;
+  if (collectionIndex < 0 || collectionIndex >= m_dlg->m_scraperCtx.collections->size()) return;
+
+  // A platform entity scrape has no per-item selection — it is a single
+  // fetchEntity(). So reuse the unified page shell but skip the item-grid setup
+  // phase: init the page, wipe run-scoped state, then start the service directly.
+  // onServiceScrapeStarted flips the dialog to the Live view.
+  m_dlg->m_mode = ScrapeResultDialog::Mode::Unified;
+  m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::Setup;
+  m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
+  m_dlg->m_applyButton->hide();
+  m_dlg->m_scrapeButton->hide(); // no manual Scrape step for a one-shot entity fetch
+  m_dlg->resetRunState();
+
+  // Same collection resolution as onScrapeClicked / rescrape (uuid + artwork dir
+  // keyed off the live CollectionConfig).
+  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+
+  Scraper::ScraperService::CollectionJob job;
+  job.collectionIndex = collectionIndex;
+  job.collectionUuid = uuid;
+  job.collectionName = cfg.name;
+  job.artworkDir = artworkDir;
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  // Empty identity ⇒ the provider resolves the systemeid for this collection
+  // (override → autodetect), the same path the game scrape uses (Kartend-ckepd.6).
+  job.entity.identity = QString();
+  job.entity.collectionIndex = collectionIndex;
+
+  // Auto mode, all platform media, write metadata: a one-click "scrape this
+  // platform's artwork" with sensible defaults. The download → _shared / config
+  // routing is the persistence sink (Kartend-ckepd.3).
+  m_dlg->m_service->startScrape({job}, Scraper::ScraperService::Mode::Auto,
+                                /*mediaFilter=*/{}, /*writeMetadata=*/true);
+}
+
 QSet<QString> ScrapeResultDialogUnified::buildMediaFilter(bool &writeMetadata) const {
   writeMetadata = true;
   QSet<QString> mediaFilter;

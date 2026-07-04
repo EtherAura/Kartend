@@ -266,6 +266,27 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         if (idx < 0 && m_currentCollectionIndex) idx = *m_currentCollectionIndex;
         mw->openScraperDialog(idx, filePath);
       });
+
+      // Kartend-ckepd.6: collection-level companion to "Scraper…" — fetch this
+      // collection's platform artwork via a single ScreenScraper platform-entity
+      // scrape. The provider resolves the systemeid (per-collection override →
+      // autodetect); if it can't, the scrape surfaces the reason in the dialog.
+      QAction *platformArtworkAction = menu.addAction(tr("Scrape platform artwork…"));
+      QObject::connect(platformArtworkAction, &QAction::triggered, this, [this, filePath]() {
+        auto *mw = dynamic_cast<IMainWindow *>(QApplication::activeWindow());
+        if (!mw) {
+          for (QWidget *w = QApplication::focusWidget(); w; w = w->parentWidget()) {
+            mw = dynamic_cast<IMainWindow *>(w);
+            if (mw) break;
+          }
+        }
+        if (!mw) return;
+        int idx = -1;
+        if (databaseMgr()) idx = databaseMgr()->getCollectionIndexForFile(filePath);
+        if (idx < 0 && m_currentCollectionIndex) idx = *m_currentCollectionIndex;
+        if (idx < 0) return;
+        mw->openEntityScraperDialog(idx);
+      });
     }
 
     // --- Set / clear per-item manual override ---

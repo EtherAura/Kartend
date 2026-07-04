@@ -78,12 +78,18 @@ void ScraperController::setContext(const ScraperControllerContext &context) {
   m_ctx = context;
 }
 
-void ScraperController::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
+// Shared open-time setup for both the per-item scrape (openScraperDialog) and
+// the entity scrape (openEntityScraperDialog): construct/reuse the single dialog
+// instance, wire its completion handler once, and bind the live context +
+// service. Returns the ready dialog, or nullptr if the DB isn't up yet — the
+// caller then picks the start method (startUnifiedScrape vs
+// startPlatformEntityScrape) and shows it.
+ScrapeResultDialog *ScraperController::prepareScraperDialog() {
   QWidget *parent = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
   IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
   if (!db) {
     QMessageBox::warning(parent, tr("Scraper"), tr("Database is not ready."));
-    return;
+    return nullptr;
   }
 
   // Single reused dialog instance. The dialog's closeEvent override
@@ -209,8 +215,22 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
   srvCtx.providerBuilder = sctx.providerBuilder;
   m_scraperService->setContext(srvCtx);
   dialog->bindForOpen(sctx, m_scraperService.get());
+  return dialog;
+}
 
+void ScraperController::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
+  ScrapeResultDialog *dialog = prepareScraperDialog();
+  if (!dialog) return;
   dialog->startUnifiedScrape(preCollectionIndex, preItemPath);
+  dialog->show();
+  dialog->raise();
+  dialog->activateWindow();
+}
+
+void ScraperController::openEntityScraperDialog(int collectionIndex) {
+  ScrapeResultDialog *dialog = prepareScraperDialog();
+  if (!dialog) return;
+  dialog->startPlatformEntityScrape(collectionIndex);
   dialog->show();
   dialog->raise();
   dialog->activateWindow();

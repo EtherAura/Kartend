@@ -157,6 +157,48 @@ providers. Highlights:
   the snapshot and either auto-resumes (when `scrapeAutoResume` is
   on) or prompts the user with **Resume / Discard**.
 
+## Entity scraping (non-game)
+
+Scraping has a second dimension beyond per-game items: **entity** scrapes
+that target a whole platform / collection / category rather than one ROM
+(the `Kartend-ckepd` epic). The pieces:
+
+- **Type model** (`core/scrapertypes.h`): `ScrapeEntityType { Game,
+  Platform, Collection, Category }` and `EntityScrapeTarget` (entity type
+  + an identity key whose meaning is per-type — Game = file path, Platform
+  = ScreenScraper systemeid, Collection/Category = collection uuid). It is
+  metatype-registered and rides the same `pending-scrape.json` snapshot as
+  a game job, so an entity job round-trips through resume.
+- **Provider capability**: `MetadataProvider::supportedEntities()` defaults
+  to `{Game}`; a provider opts into more by overriding it (only
+  `ScreenScraperProvider` does today → `{Game, Platform}`).
+  `MetadataLookupProvider::fetchEntity()` is a default-no-op virtual, so the
+  other providers compile unchanged.
+- **Registry**: `MetadataProviderRegistry::forEntity(type)` filters by
+  `supportedEntities()`, so the queue can ask "who can scrape a Platform?".
+- **Queue / runner**: an entity job is a `ScraperService::CollectionJob`
+  with its `entity` field set (`isEntityJob()` is true). `pump()` routes it
+  to `EntityScrapeCoordinator::startEntityCollection()` — a lightweight
+  one-`fetchEntity()` dispatch that shares the ScraperService queue, resume,
+  quota, and result/notFound bucketing — **not** `BatchScrapeRunner`.
+- **Persistence sink** (hybrid, `Kartend-ckepd.3`): platform art is written
+  to the collection's `_shared` artwork dir + `CollectionConfig` /
+  `CollectionBackground`, not `item_metadata` (which stays per-game).
+  Media assets carry `MediaScope::Platform` + a `scopeKey` (the systemeid).
+- **ScreenScraper platform provider**: `fetchEntity()` uses `systemesListe`
+  (catalog) + `mediaSysteme.php` (media tokens). The systemeid comes from the
+  target's identity when the caller already resolved it (e.g. a re-queued
+  failed entity); an **empty** identity means "resolve for this collection" —
+  it autodetects via `resolveSystemId()` (per-collection
+  `scraperOverrides.screenscraperSystemId` override → `ScreenScraperSystems::
+  autodetect` heuristic), the same path the game scrape uses.
+- **UI launch** (`Kartend-ckepd.6`): the item context menu's
+  "Scrape platform artwork…" action → `IMainWindow::openEntityScraperDialog`
+  → `ScraperController::openEntityScraperDialog` → the result dialog's
+  `startPlatformEntityScrape()`, which builds a Platform `EntityScrapeTarget`
+  job (empty identity → autodetect) and starts the service in Auto mode.
+  Progress and errors surface through the same result dialog as a game scrape.
+
 ## ScreenScraper-specific helpers
 
 ScreenScraper has the most domain logic of any provider because of

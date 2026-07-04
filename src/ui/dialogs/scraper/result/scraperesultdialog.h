@@ -162,6 +162,12 @@ public:
   /// the right-click → Scraper… entry to scope down to a single item.
   void startUnifiedScrape(int preCollectionIndex = -1, const QString &preItemPath = QString());
 
+  /// Kartend-ckepd.6: launch a one-shot Platform entity scrape for the given
+  /// collection (right-click → "Scrape platform artwork"). No item grid — the
+  /// provider resolves the collection's ScreenScraper systemeid and its platform
+  /// artwork is fetched; progress/errors surface through this dialog.
+  void startPlatformEntityScrape(int collectionIndex);
+
   /// Artwork directories used to skip downloads for group/company-
   /// scoped assets that already sit on disk. The first entry is the
   /// active collection (where new shared assets will be written); the

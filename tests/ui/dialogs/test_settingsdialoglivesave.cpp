@@ -38,6 +38,7 @@ public:
   }
   void updateWindowTitleForCollection(int) override {}
   void openScraperDialog(int, const QString &) override {}
+  void openEntityScraperDialog(int) override {}
   void openDatAuditForCollection(const CollectionConfig &) override {}
   [[nodiscard]] DatAuditStatus datAuditStatusForCollection(const QString &) override { return {}; }
   [[nodiscard]] GeneralSettings &generalSettings() override { return settings; }

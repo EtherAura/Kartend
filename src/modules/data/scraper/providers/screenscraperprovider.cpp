@@ -186,25 +186,22 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
     }
     return;
   }
-  bool ok = false;
-  const int systemeid = target.identity.toInt(&ok);
-  if (!ok || systemeid <= 0) {
-    if (callback) {
-      callback(ErrorUtils::ErrorContext::error(
-          ErrorUtils::ErrorCode::InvalidArgument,
-          QStringLiteral("ScreenScraper platform scrape needs a numeric systemeid (got \"%1\")")
-              .arg(target.identity),
-          QStringLiteral("ScreenScraperProvider::fetchEntity")));
-    }
-    return;
-  }
+  // The systemeid is either supplied by the caller (a re-queued failed entity
+  // carries the id it already resolved) or left EMPTY to mean "resolve for this
+  // collection" — the fresh UI launch (Kartend-ckepd.6). In the empty case it is
+  // autodetected via resolveSystemId() inside the callback below: the same
+  // override-then-heuristic path the per-game scrape uses, which needs the
+  // runtime catalog.
+  bool explicitOk = false;
+  const int explicitId = target.identity.toInt(&explicitOk);
+  const bool hasExplicitId = explicitOk && explicitId > 0;
   const Credentials creds = currentCredentials();
   // Resolve the system in the catalog (cold-start fetch handled by the catalog
   // manager) for its display name, then emit one media URL per known platform
   // media type. The liveness token guards against the provider being destroyed
   // mid-fetch — same pattern as runLookup (Kartend audit cr950).
   m_catalog.ensureSystemsCatalog(
-      [this, systemeid, creds, alive = std::weak_ptr<int>(m_lifetimeToken),
+      [this, hasExplicitId, explicitId, creds, alive = std::weak_ptr<int>(m_lifetimeToken),
        callback = std::move(callback)](const QList<ScreenScraperSystems::System> &systems) mutable {
         if (alive.expired()) {
           if (callback) {
@@ -230,10 +227,25 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
             callback(ErrorUtils::ErrorContext::error(
                          ErrorUtils::ErrorCode::UnknownError,
                          QStringLiteral("ScreenScraper systems catalog unavailable; cannot resolve "
-                                        "system %1")
-                             .arg(systemeid),
+                                        "the platform system"),
                          QStringLiteral("ScreenScraperProvider::fetchEntity"))
                          .withHttpStatus(503));
+          }
+          return;
+        }
+        // systemeid: caller-supplied (a re-queued entity carries its resolved
+        // id) or resolved for this collection now the catalog is loaded — the
+        // same override → autodetect path as the game scrape. A non-empty
+        // catalog that yields nothing means the collection's platform is
+        // undeterminable: a routine not-found (re-queueable), not an error.
+        const int systemeid = hasExplicitId ? explicitId : resolveSystemId(systems);
+        if (systemeid <= 0) {
+          if (callback) {
+            callback(ErrorUtils::ErrorContext::error(
+                ErrorUtils::ErrorCode::RemoteResourceNotFound,
+                QStringLiteral("Could not determine the ScreenScraper system for this collection; "
+                               "set its System ID in the collection's scraper overrides"),
+                QStringLiteral("ScreenScraperProvider::fetchEntity")));
           }
           return;
         }

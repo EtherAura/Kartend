@@ -185,6 +185,7 @@ public:
   /// orchestration.
   void openScraperDialog(int preCollectionIndex = -1,
                          const QString &preItemPath = QString()) override;
+  void openEntityScraperDialog(int collectionIndex) override;
 
   /// Open the standalone DAT Audit window (File → DAT Audit…, generic). Forwards
   /// to the DatAuditController, which owns the cached dialog.
