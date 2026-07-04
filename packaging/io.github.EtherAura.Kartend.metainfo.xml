@@ -37,6 +37,14 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.15" date="2026-07-04">
+      <description>
+        <p>DAT audit fix:</p>
+        <ul>
+          <li>When one file's content is listed by more than one catalogue entry (e.g. a non-merged clone set that re-lists a shared entry), the audit no longer reports the duplicate entry as Missing while the file is present.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.14" date="2026-06-20">
       <description>
         <p>Adds the DAT Manager — audit your collections against DAT files:</p>
