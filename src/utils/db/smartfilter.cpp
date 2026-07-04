@@ -38,10 +38,6 @@ constexpr const char *TAG_FAVORITE = "favorite";
 constexpr const char *KEY_COLLECTION_UUID = "collection_uuid";
 constexpr const char *KEY_TITLE_SEARCH = "title_search";
 
-QString tr(const char *s) {
-  return QCoreApplication::translate("SmartFilter", s);
-}
-
 } // namespace
 
 QString kindToTag(Kind kind) {
@@ -167,43 +163,6 @@ ErrorUtils::Result<Filter> fromJsonString(const QString &json) {
         .withDetails(err.errorString());
   }
   return fromJson(doc.object());
-}
-
-QString humanLabel(const Filter &filter) {
-  switch (filter.kind) {
-  case Kind::RecentlyLaunched:
-    return tr("Recently launched (top %1)").arg(filter.limit);
-  case Kind::TopPlayed:
-    return tr("Most played (top %1)").arg(filter.limit);
-  case Kind::NeverPlayed:
-    return tr("Never launched (top %1)").arg(filter.limit);
-  case Kind::ByExtension:
-    return filter.extensions.isEmpty()
-               ? tr("By extension (none)")
-               : tr("By extension: %1").arg(filter.extensions.join(QStringLiteral(", ")));
-  case Kind::HasArtwork:
-    return tr("Has artwork");
-  case Kind::ByDateAdded:
-    return tr("Added in last %1 days").arg(filter.days);
-  case Kind::Pinned:
-    return tr("Pinned");
-  case Kind::Hidden:
-    return tr("Hidden");
-  case Kind::ContinueLater:
-    return tr("Continue later");
-  case Kind::ByCollection:
-    return filter.collectionUuid.isEmpty()
-               ? tr("By collection (none)")
-               : tr("By collection (%1…)").arg(filter.collectionUuid.left(8));
-  case Kind::ByTitleSearch:
-    return filter.titleSearch.isEmpty() ? tr("Title contains (empty)")
-                                        : tr("Title contains: %1").arg(filter.titleSearch);
-  case Kind::MissingArtwork:
-    return tr("Missing artwork");
-  case Kind::Favorite:
-    return tr("Favorites");
-  }
-  return tr("Unknown filter");
 }
 
 } // namespace SmartFilter

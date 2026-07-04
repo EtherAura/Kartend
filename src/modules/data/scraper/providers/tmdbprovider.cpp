@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QUrlQuery>
 
+#include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "httpclient.h"
 #include "tmdbparser.h"
@@ -50,8 +51,10 @@ ErrorUtils::ErrorContext notConfiguredError() {
 
 } // namespace
 
-TmdbProvider::TmdbProvider(GeneralSettingsAccessor settingsAccessor)
-    : m_settingsAccessor(std::move(settingsAccessor)) {
+TmdbProvider::TmdbProvider(GeneralSettingsAccessor settingsAccessor,
+                           CollectionAccessor collectionAccessor)
+    : m_settingsAccessor(std::move(settingsAccessor)),
+      m_collectionAccessor(std::move(collectionAccessor)) {
   registerThrottles({{TMDB_HOST, TMDB_RATE_LIMIT_MS}, {TMDB_IMAGE_HOST, TMDB_IMAGE_RATE_LIMIT_MS}});
 }
 
@@ -158,4 +161,65 @@ void TmdbProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
   // 3xx-redirect it to an internal host (SSRF, Kartend audit faz4r).
   getImageBytes(userAgentHeader(), url, std::move(callback),
                 {QString::fromLatin1(TMDB_IMAGE_HOST)});
+}
+
+void TmdbProvider::fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) {
+  if (!callback) return;
+  if (target.type != Scraper::ScrapeEntityType::Collection) {
+    callback(ErrorUtils::ErrorContext::error(
+        ErrorUtils::ErrorCode::InvalidArgument,
+        QStringLiteral("TMDB entity scraping only supports Collection (got type %1)")
+            .arg(static_cast<int>(target.type)),
+        "TmdbProvider::fetchEntity"));
+    return;
+  }
+  const QString token = currentToken();
+  if (token.isEmpty()) {
+    callback(notConfiguredError());
+    return;
+  }
+  // The collection NAME is what TMDB searches on (the target's identity is the
+  // collection uuid, which TMDB doesn't know). Resolve it from the live config.
+  const CollectionConfig *cfg = m_collectionAccessor ? m_collectionAccessor() : nullptr;
+  const QString name = cfg ? cfg->name.trimmed() : QString();
+  if (name.isEmpty()) {
+    callback(ErrorUtils::ErrorContext::error(
+        ErrorUtils::ErrorCode::InvalidArgument,
+        QStringLiteral("Cannot scrape collection art without a collection name"),
+        "TmdbProvider::fetchEntity"));
+    return;
+  }
+
+  QUrl url(QString::fromLatin1(TMDB_API_BASE) + QStringLiteral("/search/collection"));
+  QUrlQuery q;
+  q.addQueryItem(QStringLiteral("query"), name);
+  url.setQuery(q);
+
+  const QString scopeKey = target.identity; // the owning collection uuid
+  getJson<Scraper::ScrapedItem>(
+      authHeaders(token), url,
+      [](const QByteArray &body) { return TmdbParser::parseCollectionSearchResponse(body); },
+      [callback = std::move(callback), scopeKey, name](ErrorUtils::Result<Scraper::ScrapedItem> r) {
+        if (r.isError()) {
+          callback(r.error());
+          return;
+        }
+        Scraper::ScrapedItem item = r.value();
+        if (item.media.isEmpty()) {
+          // Niche collections legitimately have no TMDB match — a routine
+          // not-found (re-queueable, Kartend-e8aag bucketing), not an error.
+          callback(ErrorUtils::ErrorContext::error(
+              ErrorUtils::ErrorCode::RemoteResourceNotFound,
+              QStringLiteral("No TMDB collection matched \"%1\"").arg(name),
+              "TmdbProvider::fetchEntity"));
+          return;
+        }
+        item.sourceProviderId = QString::fromLatin1(TMDB_PROVIDER_ID);
+        // The parser leaves scopeKey empty — stamp the owning collection uuid so
+        // the persistence sink writes `_shared/<type>/collection_<uuid>.<ext>`.
+        for (Scraper::MediaAsset &asset : item.media) {
+          asset.scopeKey = scopeKey;
+        }
+        callback(item);
+      });
 }

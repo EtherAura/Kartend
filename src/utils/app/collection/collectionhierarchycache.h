@@ -48,20 +48,6 @@ public:
     return it.value();
   }
 
-  /// Subset of directChildren(@p parentIndex) reachable only via the
-  /// CollectionConfig::additionalParentNames link list — i.e. the
-  /// "see-also" appearances. Used by the settings tree (
-  /// stage 2) to render linked appearances in italics. Does NOT include
-  /// the primary children.
-  [[nodiscard]] const QList<int> &linkedDirectChildren(int parentIndex) const {
-    auto it = m_linkedDirectChildren.constFind(parentIndex);
-    if (it == m_linkedDirectChildren.cend()) {
-      static const QList<int> kEmpty;
-      return kEmpty;
-    }
-    return it.value();
-  }
-
   /// All descendants of @p parentIndex via the merged child graph
   /// (primary + linked). Deduped and cycle-bounded — even mutual links
   /// resolve to a finite set. The starting node itself is excluded.
@@ -148,17 +134,6 @@ public:
     return QString();
   }
 
-  // Get all UUIDs for a collection and its descendants (for DB queries).
-  // Precomputed in rebuild() so this is an O(1) lookup on the hot path.
-  [[nodiscard]] const QStringList &descendantUuids(int parentIndex) const {
-    auto it = m_descendantUuids.constFind(parentIndex);
-    if (it == m_descendantUuids.cend()) {
-      static const QStringList kEmpty;
-      return kEmpty;
-    }
-    return it.value();
-  }
-
   [[nodiscard]] bool isValid() const { return m_built; }
 
 private:
@@ -187,8 +162,9 @@ private:
   // collection list (Kartend-5zxk) — the cache never dereferenced it, so the
   // pointer was a latent UAF with no upside.
   bool m_built = false;
-  QHash<int, QList<int>> m_directChildren;       // primary ∪ linked, primary first
-  QHash<int, QList<int>> m_linkedDirectChildren; // linked-only subset
+  QHash<int, QList<int>> m_directChildren; // primary ∪ linked, primary first
+  QHash<int, QList<int>>
+      m_linkedDirectChildren; // internal: dedup key while merging links into m_directChildren
   QHash<int, QList<int>> m_allDescendants;
 
   // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)
@@ -199,7 +175,6 @@ private:
   QHash<QString, QString> m_uuidToArtworkDir;     // UUID -> expanded artwork dir
   QHash<QString, int> m_uuidToCollectionIndex;    // UUID -> collection index
   QHash<QString, QString> m_mediaDirToArtworkDir; // media dir -> artwork dir (for file lookups)
-  QHash<int, QStringList> m_descendantUuids;      // index -> [self_uuid, descendant_uuids...]
 };
 
 #endif

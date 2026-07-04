@@ -67,6 +67,15 @@ public:
   /// resulting selectionChanged signal must not be treated as user activity).
   [[nodiscard]] bool isDrivingSelection() const { return m_drivingSelection; }
 
+  /// Called by the wired selectionChanged guard when it observes
+  /// isDrivingSelection() == true — i.e. an attract-driven selectionChanged
+  /// fired SYNCHRONOUSLY within requestSelectIndex(). onAdvanceSelectionTick()
+  /// debug-asserts this against the Kartend-b93at invariant, so a future
+  /// Qt::QueuedConnection anywhere in that chain (which would fire
+  /// selectionChanged after the scope guard cleared m_drivingSelection and
+  /// silently stop attract on its first tick) trips loudly in debug builds.
+  void noteDrivenSelectionObserved() { m_drivenSelectionObserved = true; }
+
 public slots:
   /// Called when user activity is detected; resets the idle timer and
   /// stops attract mode if active.
@@ -130,6 +139,10 @@ private:
   int m_scrollDirection = 1; // 1 = down, -1 = up
   bool m_bouncePaused = false;
   bool m_drivingSelection = false;
+  // Set by noteDrivenSelectionObserved() when the selectionChanged guard sees a
+  // driven change; onAdvanceSelectionTick() asserts the b93at Direct-chain
+  // invariant against it (evaluated in debug builds only, via Q_ASSERT_X).
+  bool m_drivenSelectionObserved = false;
   double m_scrollAccumulator = 0.0; // Fractional-pixel buffer for sub-px speeds
   // external suspend flag. While true, onIdleTimeout refuses
   // to start attract, and resetIdleTimer() refuses to arm the timer. Cleared

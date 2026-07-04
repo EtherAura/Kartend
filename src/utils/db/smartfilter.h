@@ -80,11 +80,6 @@ struct Filter {
 [[nodiscard]] QString toJsonString(const Filter &filter);
 [[nodiscard]] ErrorUtils::Result<Filter> fromJsonString(const QString &json);
 
-/// Short user-facing label like "Recently launched (50)" or
-/// "Has artwork". Used by the create dialog summary and the sidebar
-/// tooltip — translated via QCoreApplication::translate.
-[[nodiscard]] QString humanLabel(const Filter &filter);
-
 } // namespace SmartFilter
 
 #endif // SMARTFILTER_H

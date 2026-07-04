@@ -517,7 +517,7 @@ void TestHttpClient::allowlistedHost_servesBodyWithoutRedirect() {
 // Kartend-pugp.2: the core SSRF-pivot defense. The server 302-redirects to an
 // off-allowlist host; the client must refuse it *before* contacting that host.
 // A refused redirect surfaces as ErrorCode::InvalidArgument — distinct from the
-// HostNotFoundError (DatabaseQueryFailed) we'd see if the redirect were instead
+// HostNotFoundError (NetworkRequestFailed) we'd see if the redirect were instead
 // followed to the unresolved target, so this assertion proves we blocked rather
 // than merely failed to connect.
 void TestHttpClient::redirectOutsideAllowlist_isRefused() {

@@ -225,7 +225,7 @@ void ToolbarController::refreshCollectionWarningBadge() {
     return;
   }
   QStringList issues;
-  const int idx = m_mainWindow->currentCollectionIndex;
+  const int idx = m_mainWindow->m_currentCollectionIndex;
   if (idx >= 0 && idx < m_mainWindow->m_collections.size()) {
     // Launch-time overload: judge the EFFECTIVE config (preset-resolved +
     // %collection%-expanded) so the badge reaches the same verdict as the
@@ -297,15 +297,15 @@ void ToolbarController::refreshFilterToolbar() {
               settingsMgr()->saveGeneralSettings(m_mainWindow->m_generalSettings),
               "general settings", true);
         }
-        if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
-          navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
+        if (navMgr() && m_mainWindow->m_currentCollectionIndex >= 0) {
+          navMgr()->safeReloadCollection(m_mainWindow->m_currentCollectionIndex);
         }
       } else if (role == FilterRole::TitleToggle) {
-        if (m_mainWindow->currentCollectionIndex < 0 ||
-            m_mainWindow->currentCollectionIndex >= m_mainWindow->m_collections.size()) {
+        if (m_mainWindow->m_currentCollectionIndex < 0 ||
+            m_mainWindow->m_currentCollectionIndex >= m_mainWindow->m_collections.size()) {
           return;
         }
-        CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+        CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->m_currentCollectionIndex];
         const bool checked = action->isChecked();
         if (c.filter.titleExclusionEnabled == checked) {
           return;
@@ -316,7 +316,7 @@ void ToolbarController::refreshFilterToolbar() {
               settingsMgr()->saveCollections(m_mainWindow->m_collections), "collections", true);
         }
         if (navMgr()) {
-          navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
+          navMgr()->safeReloadCollection(m_mainWindow->m_currentCollectionIndex);
         }
       } else if (role == FilterRole::TitleEdit) {
         showTitleFilterEditor();
@@ -390,9 +390,9 @@ void ToolbarController::refreshFilterToolbar() {
   toggleAction->setCheckable(true);
   m_filterRoles.insert(toggleAction, FilterRole::TitleToggle);
   bool toggleOn = false;
-  if (m_mainWindow->currentCollectionIndex >= 0 &&
-      m_mainWindow->currentCollectionIndex < m_mainWindow->m_collections.size()) {
-    const CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+  if (m_mainWindow->m_currentCollectionIndex >= 0 &&
+      m_mainWindow->m_currentCollectionIndex < m_mainWindow->m_collections.size()) {
+    const CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->m_currentCollectionIndex];
     toggleOn = c.filter.titleExclusionEnabled && !c.filter.titleExclusionPatterns.isEmpty();
   }
   {
@@ -409,11 +409,11 @@ void ToolbarController::showTitleFilterEditor() {
   if (!m_mainWindow) {
     return;
   }
-  if (m_mainWindow->currentCollectionIndex < 0 ||
-      m_mainWindow->currentCollectionIndex >= m_mainWindow->m_collections.size()) {
+  if (m_mainWindow->m_currentCollectionIndex < 0 ||
+      m_mainWindow->m_currentCollectionIndex >= m_mainWindow->m_collections.size()) {
     return;
   }
-  CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+  CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->m_currentCollectionIndex];
 
   // Modal popup-style dialog. A QDialog with a QPlainTextEdit lets the user
   // see and edit the full pattern list at once; QMenu-with-widget would
@@ -475,7 +475,7 @@ void ToolbarController::showTitleFilterEditor() {
                                         "collections", true);
   }
   refreshFilterToolbar();
-  if (navMgr() && m_mainWindow->currentCollectionIndex >= 0) {
-    navMgr()->safeReloadCollection(m_mainWindow->currentCollectionIndex);
+  if (navMgr() && m_mainWindow->m_currentCollectionIndex >= 0) {
+    navMgr()->safeReloadCollection(m_mainWindow->m_currentCollectionIndex);
   }
 }

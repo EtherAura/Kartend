@@ -187,6 +187,48 @@ ErrorUtils::Result<Scraper::ScrapedItem> parseDetailResponse(const QByteArray &j
   return item;
 }
 
+ErrorUtils::Result<Scraper::ScrapedItem> parseCollectionSearchResponse(const QByteArray &json) {
+  QJsonParseError err;
+  const auto doc = QJsonDocument::fromJson(json, &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "TMDB collection-search response is not valid JSON",
+                               "TmdbParser::parseCollectionSearchResponse");
+  }
+  const QJsonArray results = doc.object().value("results").toArray();
+  Scraper::ScrapedItem item;
+  if (results.isEmpty()) {
+    return item; // successful "no match" — no media; the caller maps this to not-found
+  }
+  // TMDB returns collections in popularity order; take the top match.
+  const QJsonObject top = results.first().toObject();
+  item.title = top.value("name").toString();
+
+  // Poster → the collection's logo/header art; backdrop → its background. The
+  // scopeKey (owning collection uuid) is filled in by the provider.
+  const QString posterPath = top.value("poster_path").toString();
+  if (!posterPath.isEmpty()) {
+    Scraper::MediaAsset logo;
+    logo.type = QStringLiteral("logo");
+    logo.label = QStringLiteral("Collection logo");
+    logo.url = QUrl(QString::fromLatin1(IMAGE_BASE) + posterPath);
+    logo.scope = Scraper::MediaScope::Collection;
+    logo.entityRole = Scraper::EntityArtRole::Logo;
+    item.media.append(logo);
+  }
+  const QString backdropPath = top.value("backdrop_path").toString();
+  if (!backdropPath.isEmpty()) {
+    Scraper::MediaAsset background;
+    background.type = QStringLiteral("background");
+    background.label = QStringLiteral("Collection background");
+    background.url = QUrl(QString::fromLatin1(IMAGE_BASE) + backdropPath);
+    background.scope = Scraper::MediaScope::Collection;
+    background.entityRole = Scraper::EntityArtRole::Background;
+    item.media.append(background);
+  }
+  return item;
+}
+
 void appendImageUrls(Scraper::ScrapedItem &item, const QString &posterPath,
                      const QString &backdropPath) {
   if (!posterPath.isEmpty()) {

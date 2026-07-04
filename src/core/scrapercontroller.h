@@ -101,6 +101,11 @@ public slots:
   /// user closing the window.
   void openScraperDialog(int preCollectionIndex = -1, const QString &preItemPath = QString());
 
+  /// Kartend-ckepd.6: launch a one-shot Platform entity scrape for @p
+  /// collectionIndex (right-click → "Scrape platform artwork"). Reuses the same
+  /// dialog/service as openScraperDialog but skips the per-item grid.
+  void openEntityScraperDialog(int collectionIndex);
+
   /// Startup hook: if the on-disk pending-scrape state file is present
   /// (i.e. the previous run was interrupted mid-batch), prompt the user
   /// to Resume / Discard / Keep. Auto-resume short-circuits the prompt
@@ -108,6 +113,11 @@ public slots:
   void promptResumePendingScrapeIfAny();
 
 private:
+  /// Shared open-time dialog setup used by both openScraperDialog and
+  /// openEntityScraperDialog; returns the bound dialog or nullptr if the DB
+  /// isn't ready. The caller picks the start method and shows it.
+  ScrapeResultDialog *prepareScraperDialog();
+
   ScraperControllerContext m_ctx;
 
   /// Long-lived ScraperService — survives dialog close so a background

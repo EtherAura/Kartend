@@ -80,11 +80,6 @@ loadAllForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &p
 [[nodiscard]] ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
                                               const QString &path, const QString &artworkType);
 
-/// Removes every artwork row for (collectionUuid, path). Used when an item is
-/// removed from the library so its typed artwork doesn't linger.
-[[nodiscard]] ErrorUtils::Result<bool>
-removeAllForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &path);
-
 /// Looks for a standard-type artwork file in the subdirectory layout
 /// `{artworkDirectory}/{artworkType}/{baseName}.{ext}`. Tries the same image
 /// extensions used by `ArtworkUtils::findArtworkForFile` (lower- and upper-

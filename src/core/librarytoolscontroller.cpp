@@ -19,6 +19,7 @@
 
 #include "artworkcandidates.h"
 #include "artworkwizarddialog.h"
+#include "artworkwizardservice.h"
 #include "bulkedit.h"
 #include "bulkeditdialog.h"
 #include "bulkeditservice.h"
@@ -393,61 +394,120 @@ void LibraryToolsController::artworkWizardInteractive() {
           return;
         }
 
-        // Queue = items where items.artwork_path is empty / NULL. Pull the
-        // path list, filter, and build the wizard's per-entry record.
-        const auto rows = db->loadAllItemPathsForCollection(uuid);
-        QList<ArtworkWizardDialog::Entry> queue;
-        for (const IDatabaseManager::ItemPathRow &row : rows) {
-          if (!row.artworkPath.trimmed().isEmpty()) {
-            continue;
-          }
-          ArtworkWizardDialog::Entry entry;
-          entry.filePath = row.path;
-          entry.collectionUuid = uuid;
-          entry.itemName = QFileInfo(row.path).completeBaseName();
-          queue.append(entry);
-        }
-        if (queue.isEmpty()) {
-          QMessageBox::information(parentWindow(), tr("Assign missing artwork"),
-                                   tr("Every item in \"%1\" already has artwork.").arg(cfg.name));
+        // The item-path enumeration + empty-artwork filter + artwork-directory
+        // listing used to run inline here and could stall the window on very
+        // large collections. They now run on the thread pool against a private
+        // SQLite connection (ArtworkWizardService::prepare — read-only, so no
+        // transaction), mirroring bulkEditInteractive; the GUI thread keeps
+        // only the progress surface and the wizard dialog itself.
+        const QString dbPath = db->databaseFilePath();
+        if (dbPath.isEmpty()) {
+          QMessageBox::warning(parentWindow(), tr("Assign missing artwork"),
+                               tr("The database is not available."));
           return;
         }
 
-        // Snapshot the artwork directory listing once. The wizard ranks
-        // candidates per item but re-walking the directory for every entry
-        // would be wasteful — these directories typically contain hundreds of
-        // files and the listing is stable for the wizard's lifetime.
-        QStringList directoryFiles;
-        {
-          QDir dir(artworkDir);
-          const QStringList entries = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
-          directoryFiles.reserve(entries.size());
-          for (const QString &name : entries) {
-            directoryFiles.append(dir.absoluteFilePath(name));
-          }
-        }
-
-        auto candidatesFor = [directoryFiles](const ArtworkWizardDialog::Entry &entry) {
-          return ArtworkCandidates::rank(entry.itemName, directoryFiles);
+        // Progress surface. Application-modal but shown non-blocking (show(),
+        // not exec()) so the event loop keeps painting while the worker scans;
+        // modality also stops a second wizard launch mid-scan. The prep is
+        // read-only, so Cancel/Esc simply abandon the result — nothing to roll
+        // back.
+        auto *progressDialog = new KartProgressDialog(tr("Assign missing artwork"), parentWindow());
+        progressDialog->setAttribute(Qt::WA_DeleteOnClose);
+        auto canceled = std::make_shared<std::atomic_bool>(false);
+        const auto requestCancel = [canceled]() {
+          canceled->store(true, std::memory_order_release);
         };
-        auto onPick = [db](const ArtworkWizardDialog::Entry &entry, const QString &chosenFilePath) {
-          ItemArtworkStore::ItemArtwork row;
-          row.collectionUuid = entry.collectionUuid;
-          row.path = entry.filePath;
-          // "Front" is the cross-provider primary-cover slot used by the
-          // sidebar gallery and tile renderer; saving here makes the picked
-          // image surface as the item's main artwork immediately.
-          row.artworkType = ItemArtworkStore::StandardTypes::Front;
-          row.manualPath = chosenFilePath;
-          return db->saveItemArtwork(row);
+        connect(progressDialog, &KartProgressDialog::cancelRequested, this, requestCancel);
+        connect(progressDialog, &QDialog::rejected, this, requestCancel);
+
+        // Worker → GUI progress hop, resolved ON THE GUI THREAD inside the
+        // queued lambda (same rationale as bulkEditInteractive).
+        QPointer<KartProgressDialog> progressGuard(progressDialog);
+        auto onProgress = [progressGuard](int done, int total) {
+          QMetaObject::invokeMethod(
+              qApp,
+              [progressGuard, done, total]() {
+                if (!progressGuard) {
+                  return;
+                }
+                progressGuard->setFraction(total > 0 ? static_cast<double>(done) / total : 1.0);
+                progressGuard->setEntryName(tr("Scanning %1 of %2 item(s)").arg(done).arg(total));
+              },
+              Qt::QueuedConnection);
         };
 
-        ArtworkWizardDialog dialog(parentWindow());
-        dialog.setQueue(queue, std::move(candidatesFor), std::move(onPick));
-        dialog.exec();
+        // Watcher parented + context-bound to this controller (lifetime matches
+        // the window's), so on teardown mid-scan the continuation never fires;
+        // the worker holds only value captures (no owner member crosses the
+        // thread boundary).
+        auto *watcher = new QFutureWatcher<ArtworkWizardService::Prepared>(this);
+        connect(watcher, &QFutureWatcherBase::finished, this,
+                [this, watcher, progressGuard, canceled, uuid, name = cfg.name]() {
+                  const ArtworkWizardService::Prepared prepared = watcher->result();
+                  watcher->deleteLater();
+                  if (progressGuard) {
+                    progressGuard->close(); // WA_DeleteOnClose frees it
+                  }
+                  if (canceled->load(std::memory_order_acquire)) {
+                    return; // user abandoned the scan
+                  }
+                  if (!prepared.dbOk) {
+                    QMessageBox::warning(parentWindow(), tr("Assign missing artwork"),
+                                         tr("Could not read this collection's items."));
+                    return;
+                  }
+                  if (prepared.queue.isEmpty()) {
+                    QMessageBox::information(
+                        parentWindow(), tr("Assign missing artwork"),
+                        tr("Every item in \"%1\" already has artwork.").arg(name));
+                    return;
+                  }
+                  // Re-resolve the manager on the GUI thread for the picker's saves
+                  // (the captured pointer must not cross the thread boundary).
+                  IDatabaseManager *dbNow =
+                      m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+                  if (!dbNow) {
+                    return;
+                  }
 
-        // safeReloadCollection so newly-assigned artwork surfaces in the grid
-        // and sidebar without requiring a collection switch.
-        reloadActiveCollection();
+                  QList<ArtworkWizardDialog::Entry> queue;
+                  queue.reserve(prepared.queue.size());
+                  for (const ArtworkWizardService::Item &item : prepared.queue) {
+                    ArtworkWizardDialog::Entry entry;
+                    entry.filePath = item.filePath;
+                    entry.collectionUuid = uuid;
+                    entry.itemName = item.itemName;
+                    queue.append(entry);
+                  }
+                  const QStringList directoryFiles = prepared.directoryFiles;
+                  auto candidatesFor = [directoryFiles](const ArtworkWizardDialog::Entry &entry) {
+                    return ArtworkCandidates::rank(entry.itemName, directoryFiles);
+                  };
+                  auto onPick = [dbNow](const ArtworkWizardDialog::Entry &entry,
+                                        const QString &chosenFilePath) {
+                    ItemArtworkStore::ItemArtwork row;
+                    row.collectionUuid = entry.collectionUuid;
+                    row.path = entry.filePath;
+                    // "Front" is the cross-provider primary-cover slot used by the
+                    // sidebar gallery and tile renderer; saving here makes the
+                    // picked image surface as the item's main artwork immediately.
+                    row.artworkType = ItemArtworkStore::StandardTypes::Front;
+                    row.manualPath = chosenFilePath;
+                    return dbNow->saveItemArtwork(row);
+                  };
+
+                  ArtworkWizardDialog dialog(parentWindow());
+                  dialog.setQueue(queue, std::move(candidatesFor), std::move(onPick));
+                  dialog.exec();
+
+                  // safeReloadCollection so newly-assigned artwork surfaces in the
+                  // grid and sidebar without requiring a collection switch.
+                  reloadActiveCollection();
+                });
+        watcher->setFuture(QtConcurrent::run([dbPath, uuid, artworkDir, onProgress]() {
+          return ArtworkWizardService::prepare(dbPath, uuid, artworkDir, onProgress);
+        }));
+        progressDialog->show();
       });
 }

@@ -3,6 +3,8 @@
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "iappearanceapplier.h"
+#include "idataudithost.h"
 #include <QList>
 #include <QString>
 
@@ -22,11 +24,15 @@ class ApplicationManager;
  * base. Cross-cast to it with dynamic_cast, not qobject_cast.
  *
  * Add a method here only when a lower-layer module genuinely needs to call
- * it on the main window.
+ * it on the main window. Per-domain surfaces are split into narrow role
+ * interfaces this class unions (IAppearanceApplier, IDatAuditHost — the way
+ * IScrollManager unions its six scroll roles) so a consumer can depend on just
+ * the role it uses and those role headers stay free of the CollectionConfig /
+ * GeneralSettings god-headers (Kartend-wu2i7).
  */
-class IMainWindow {
+class IMainWindow : public IAppearanceApplier, public IDatAuditHost {
 public:
-  virtual ~IMainWindow() = default;
+  ~IMainWindow() override = default;
 
   /// The live collection list the main window owns. SettingsManager reads
   /// it to resolve a collection's persistent last-selected index;
@@ -43,32 +49,14 @@ public:
   virtual void openScraperDialog(int preCollectionIndex = -1,
                                  const QString &preItemPath = QString()) = 0;
 
-  /// Open the DAT Audit window aimed at @p collection: selects the linked audit
-  /// profile, or seeds an unsaved one from it. The caller passes the collection
-  /// by value so the collection-settings panel can hand over its *working* copy
-  /// (unsaved media-dir / DAT-list edits included), not a saved-list lookup
-  /// (Kartend-4mqkof / Kartend-6wn0p). Goes through IMainWindow so the ui/ panel
-  /// need not #include the concrete MainWindow.
-  virtual void openDatAuditForCollection(const CollectionConfig &collection) = 0;
+  /// Kartend-ckepd.6/.5: launch an entity (collection/platform artwork) scrape
+  /// for @p collectionIndex — one job per non-Game entity type the collection's
+  /// provider supports. InteractionManager's right-click "Scrape collection /
+  /// platform artwork" entry routes here (sibling of openScraperDialog).
+  virtual void openEntityScraperDialog(int collectionIndex) = 0;
 
-  /// Persisted outcome of the most recent completed audit for the profile
-  /// linked to a collection. Default-constructed = "never audited / nothing
-  /// linked". `present` counts catalogue entries whose content exists on disk
-  /// (Have + WrongName). Lives here (not utils/db) so panel code consumes one
-  /// interface type instead of the profile store's status-int hash.
-  struct DatAuditStatus {
-    qint64 lastScanMs = 0;
-    int present = 0;
-    int missing = 0;
-    bool hasResults = false;
-  };
-
-  /// Status of the audit profile linked to @p collectionUuid (most recently
-  /// updated profile wins, matching the audit dialog's own selection). Lets
-  /// the collection-settings panel show "last audited N ago · X present · Y
-  /// missing" without DB access of its own (Kartend-4mqkof, Kartend-m6qsb.8).
-  [[nodiscard]] virtual DatAuditStatus
-  datAuditStatusForCollection(const QString &collectionUuid) = 0;
+  // DAT-audit surface — openDatAuditForCollection / datAuditStatusForCollection
+  // and the DatAuditStatus struct — is the IDatAuditHost role (inherited above).
 
   /// Mutable / const access to the main window's live GeneralSettings.
   /// SettingsDialog panels mirror their working copy onto the main window
@@ -92,29 +80,9 @@ public:
   /// accessor other than this one. check-layering.py enforces that.
   [[nodiscard]] virtual ApplicationManager *applicationManager() const = 0;
 
-  /// Apply this window's current GeneralSettings to the global QApplication
-  /// font. Thin instance shim over MainWindow's static applyGlobalUiFont so
-  /// settings-dialog callers don't have to name MainWindow at all.
-  virtual void applyGlobalUiFontFromSettings() = 0;
-
-  /// Sync the secondary-monitor marquee window to the current
-  /// GeneralSettings.marquee* fields after a settings save. Idempotent.
-  virtual void applyMarqueeSettings() = 0;
-
-  /// Push per-button visibility flags and custom-text overrides from
-  /// GeneralSettings to the items-page toolbar after a settings save.
-  /// Idempotent.
-  virtual void applyToolbarCustomization() = 0;
-
-  /// Apply the user-configured pixmap cache budget (MB) to BOTH Qt's
-  /// process-global QPixmapCache and the CacheManager artworkCache.
-  /// Settings dialogs and startup wiring should call this single entry
-  /// point rather than touching the two caches independently — historic
-  /// drift between them was Kartend-10pb. The implementation also pushes
-  /// the sibling on-disk artwork-cache budget (read from the window's live
-  /// GeneralSettings) so the two cache budgets never diverge across call
-  /// sites. Idempotent.
-  virtual void applyPixmapCacheBudget(int megabytes) = 0;
+  // Appearance-apply surface — applyGlobalUiFontFromSettings / applyMarqueeSettings
+  // / applyToolbarCustomization / applyPixmapCacheBudget — is the IAppearanceApplier
+  // role (inherited above).
 };
 
 #endif // IMAINWINDOW_H

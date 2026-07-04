@@ -508,6 +508,70 @@ void ScrapeResultDialogUnified::rescrapeFailedItems() {
   m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
 }
 
+bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
+  if (!m_dlg->m_service || !m_dlg->m_scraperCtx.collections) return false;
+  if (collectionIndex < 0 || collectionIndex >= m_dlg->m_scraperCtx.collections->size())
+    return false;
+
+  // Same collection resolution as onScrapeClicked / rescrape (uuid + artwork dir
+  // keyed off the live CollectionConfig).
+  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+  const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+
+  // Entity art routes to the collection's OWN provider (the coordinator dispatches
+  // by collectionIndex, not entity type), so enqueue one job per non-Game entity
+  // type THAT provider supports: Platform for a ScreenScraper (games) collection,
+  // Collection for a TMDB (video) collection (Kartend-ckepd.4 / .5).
+  auto provider = m_dlg->m_scraperCtx.providerBuilder
+                      ? m_dlg->m_scraperCtx.providerBuilder(collectionIndex)
+                      : nullptr;
+  if (!provider) {
+    QMessageBox::information(m_dlg, tr("Scrape collection artwork"),
+                             tr("No scraper is configured for \"%1\".").arg(cfg.name));
+    return false;
+  }
+  QList<Scraper::ScraperService::CollectionJob> queue;
+  for (Scraper::ScrapeEntityType type : provider->supportedEntities()) {
+    if (type == Scraper::ScrapeEntityType::Game) continue; // Game is the per-item path
+    Scraper::ScraperService::CollectionJob job;
+    job.collectionIndex = collectionIndex;
+    job.collectionUuid = uuid;
+    job.collectionName = cfg.name;
+    job.artworkDir = artworkDir;
+    job.entity.type = type;
+    // Platform resolves its systemeid from an empty identity (override →
+    // autodetect); Collection/Category carry the collection uuid (Kartend-ckepd.1).
+    job.entity.identity = (type == Scraper::ScrapeEntityType::Platform) ? QString() : uuid;
+    job.entity.collectionIndex = collectionIndex;
+    queue.append(job);
+  }
+  if (queue.isEmpty()) {
+    QMessageBox::information(
+        m_dlg, tr("Scrape collection artwork"),
+        tr("The scraper for \"%1\" has no collection- or platform-level artwork to fetch.")
+            .arg(cfg.name));
+    return false;
+  }
+
+  // No per-item selection for entity scrapes — reuse the unified page shell but
+  // skip the item-grid setup phase: init the page, wipe run-scoped state, then
+  // start the service. onServiceScrapeStarted flips the dialog to the Live view.
+  m_dlg->m_mode = ScrapeResultDialog::Mode::Unified;
+  m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::Setup;
+  m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
+  m_dlg->m_applyButton->hide();
+  m_dlg->m_scrapeButton->hide(); // no manual Scrape step for a one-shot entity fetch
+  m_dlg->resetRunState();
+
+  // Auto mode, all entity media, write metadata. The download → _shared / config
+  // routing is the persistence sink (Kartend-ckepd.3 / .5).
+  m_dlg->m_service->startScrape(queue, Scraper::ScraperService::Mode::Auto,
+                                /*mediaFilter=*/{}, /*writeMetadata=*/true);
+  return true;
+}
+
 QSet<QString> ScrapeResultDialogUnified::buildMediaFilter(bool &writeMetadata) const {
   writeMetadata = true;
   QSet<QString> mediaFilter;

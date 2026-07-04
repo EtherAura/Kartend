@@ -144,7 +144,7 @@ void MainWindow::applyTextZoom(int percent) {
   applyGlobalUiFont(m_generalSettings);
   // Re-run sidebar appearance so its font baselines pick up the new zoom.
   if (m_appManager->getDetailsPaneManager()) {
-    m_appManager->getDetailsPaneManager()->applySidebarStateForCollection(currentCollectionIndex);
+    m_appManager->getDetailsPaneManager()->applySidebarStateForCollection(m_currentCollectionIndex);
   }
   // Tear down + rebuild the virtual scroll content so item widgets are
   // re-instantiated with the new scaled fontSize. Coverflow uses the same

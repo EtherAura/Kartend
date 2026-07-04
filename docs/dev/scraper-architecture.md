@@ -157,6 +157,67 @@ providers. Highlights:
   the snapshot and either auto-resumes (when `scrapeAutoResume` is
   on) or prompts the user with **Resume / Discard**.
 
+## Entity scraping (non-game)
+
+Scraping has a second dimension beyond per-game items: **entity** scrapes
+that target a whole platform / collection / category rather than one ROM
+(the `Kartend-ckepd` epic). The pieces:
+
+- **Type model** (`core/scrapertypes.h`): `ScrapeEntityType { Game,
+  Platform, Collection, Category }` and `EntityScrapeTarget` (entity type
+  + an identity key whose meaning is per-type — Game = file path, Platform
+  = ScreenScraper systemeid, Collection/Category = collection uuid). It is
+  metatype-registered and rides the same `pending-scrape.json` snapshot as
+  a game job, so an entity job round-trips through resume.
+- **Provider capability**: `MetadataProvider::supportedEntities()` defaults
+  to `{Game}`; a provider opts into more by overriding it (only
+  `ScreenScraperProvider` does today → `{Game, Platform}`).
+  `MetadataLookupProvider::fetchEntity()` is a default-no-op virtual, so the
+  other providers compile unchanged.
+- **Registry**: `MetadataProviderRegistry::forEntity(type)` filters by
+  `supportedEntities()`, so the queue can ask "who can scrape a Platform?".
+- **Queue / runner**: an entity job is a `ScraperService::CollectionJob`
+  with its `entity` field set (`isEntityJob()` is true). `pump()` routes it
+  to `EntityScrapeCoordinator::startEntityCollection()` — a lightweight
+  one-`fetchEntity()` dispatch that shares the ScraperService queue, resume,
+  quota, and result/notFound bucketing — **not** `BatchScrapeRunner`.
+- **Persistence sink** (hybrid, `Kartend-ckepd.3` / `.5`): entity art is written
+  to the collection's `_shared` artwork dir + `CollectionConfig` /
+  `CollectionBackground`, not `item_metadata` (which stays per-game). Assets
+  carry a non-`Game` `MediaScope` + a `scopeKey`: `Platform` (systemeid) and
+  `Collection` (collection uuid) both route to `_shared/<type>/<prefix><scopeKey>`
+  via `sharedScopePrefix()`; `EntityArtRole` (`Logo` → `headerLogoImage` /
+  `collectionIcon`, `Background` → `backgroundImage`) wires them into config.
+- **ScreenScraper platform provider**: `fetchEntity()` uses `systemesListe`
+  (catalog) + `mediaSysteme.php` (media tokens). The systemeid comes from the
+  target's identity when the caller already resolved it (e.g. a re-queued
+  failed entity); an **empty** identity means "resolve for this collection" —
+  it autodetects via `resolveSystemId()` (per-collection
+  `scraperOverrides.screenscraperSystemId` override → `ScreenScraperSystems::
+  autodetect` heuristic), the same path the game scrape uses.
+- **TMDB collection provider** (`Kartend-ckepd.5`): `supportedEntities()` adds
+  `Collection`. `fetchEntity(Collection)` searches `/search/collection` by the
+  collection's **name** (via the same collection accessor ScreenScraper uses),
+  and maps the top match's poster → `Collection`-scoped `Logo` art and backdrop
+  → `Background` art (`TmdbParser::parseCollectionSearchResponse`). Kartend
+  collections are usually genre/platform groupings rather than TMDB franchises,
+  so **no match is the common, expected outcome** — surfaced as a routine
+  not-found (`Kartend-e8aag` bucketing), not an error.
+- **Category is deliberately out of scope**: Kartend categories are user-defined
+  groupings with no canonical upstream art source, so no provider advertises
+  `ScrapeEntityType::Category` (`Kartend-ckepd.5`).
+- **UI launch** (`Kartend-ckepd.6`/`.5`): the item context menu's
+  "Scrape collection / platform artwork…" action → `IMainWindow::openEntityScraperDialog`
+  → `ScraperController::openEntityScraperDialog` → the result dialog's
+  `startEntityScrape()`. That method is **provider-aware**: it builds the
+  collection's own provider and enqueues one `EntityScrapeTarget` job per non-Game
+  entity type the provider supports — Platform (empty identity → autodetect) for a
+  ScreenScraper/games collection, Collection (identity = uuid) for a TMDB/video
+  collection — then starts the service in Auto mode. It returns `false` (and shows
+  a message) when the collection has no entity-capable scraper, so the caller skips
+  showing an empty dialog. Progress and errors surface through the same result
+  dialog as a game scrape.
+
 ## ScreenScraper-specific helpers
 
 ScreenScraper has the most domain logic of any provider because of

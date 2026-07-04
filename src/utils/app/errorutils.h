@@ -105,6 +105,13 @@ enum class ErrorCode {
   // with some unmatched items doesn't inflate the error count (Kartend-e8aag).
   RemoteResourceNotFound = 600,
 
+  // A remote HTTP request failed for a reason without a more specific code
+  // above (non-404 status, transport error, malformed reply). The prior code
+  // for this branch was DatabaseQueryFailed — a misnomer that made scraper
+  // network failures read as DB faults in logs; the user-facing summary is
+  // unchanged (it folds in the real "(HTTP <status>)") (Kartend-e6oyu).
+  NetworkRequestFailed = 601,
+
   // Kart packaging errors (700-799)
   KartFormatInvalid = 700,
   KartVersionUnsupported = 701,
@@ -344,6 +351,8 @@ inline void logError(const ErrorContext &ctx) {
     return "WidgetNotFound";
   case ErrorCode::RemoteResourceNotFound:
     return "RemoteResourceNotFound";
+  case ErrorCode::NetworkRequestFailed:
+    return "NetworkRequestFailed";
   case ErrorCode::KartFormatInvalid:
     return "KartFormatInvalid";
   case ErrorCode::KartVersionUnsupported:

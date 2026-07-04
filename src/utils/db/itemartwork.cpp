@@ -41,9 +41,6 @@ constexpr const char *DELETE_ONE_SQL =
     "DELETE FROM item_artwork "
     "WHERE collection_uuid = ? AND path = ? AND artwork_type = ?";
 
-constexpr const char *DELETE_ALL_SQL =
-    "DELETE FROM item_artwork WHERE collection_uuid = ? AND path = ?";
-
 QVariant nullableString(const QString &value) {
   return value.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(value);
 }
@@ -229,30 +226,6 @@ ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to delete item_artwork",
                                "ItemArtworkStore::remove")
-        .withDetails(q.lastError().text());
-  }
-  return true;
-}
-
-ErrorUtils::Result<bool> removeAllForItem(QSqlDatabase &db, const QString &collectionUuid,
-                                          const QString &path) {
-  if (!db.isOpen()) {
-    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
-                                 "ItemArtworkStore::removeAllForItem");
-  }
-  QSqlQuery q(db);
-  if (!q.prepare(DELETE_ALL_SQL)) {
-    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                               "Failed to prepare item_artwork delete-all",
-                               "ItemArtworkStore::removeAllForItem")
-        .withDetails(q.lastError().text());
-  }
-  q.addBindValue(collectionUuid);
-  q.addBindValue(path);
-  if (!q.exec()) {
-    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                               "Failed to delete item_artwork by item",
-                               "ItemArtworkStore::removeAllForItem")
         .withDetails(q.lastError().text());
   }
   return true;

@@ -72,7 +72,7 @@ SettingsDialogContext MainWindow::makeSettingsDialogContext() {
   SettingsDialogContext context;
   context.parent = this;
   context.collections = &m_collections;
-  context.currentCollectionIndex = &currentCollectionIndex;
+  context.currentCollectionIndex = &m_currentCollectionIndex;
   context.detailsPaneManager = m_appManager->getDetailsPaneManager();
   context.scrollManager = m_appManager->getScrollManager();
   context.navigationManager = m_appManager->getNavigationManager();
@@ -137,8 +137,8 @@ void MainWindow::appendCollectionAndPersist(const CollectionConfig &config, bool
   }
   rebuildHierarchyCache();
   if (navigate && m_appManager->getNavigationManager()) {
-    currentCollectionIndex = m_collections.size() - 1;
-    m_appManager->getNavigationManager()->showCollectionItems(currentCollectionIndex);
+    m_currentCollectionIndex = m_collections.size() - 1;
+    m_appManager->getNavigationManager()->showCollectionItems(m_currentCollectionIndex);
   }
 }
 
@@ -162,7 +162,7 @@ void MainWindow::showFirstRunWizard() {
 }
 
 void MainWindow::importThemeInteractive() {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     QMessageBox::information(this, tr("Import Theme"),
                              tr("Open a collection before importing a theme."));
     return;
@@ -179,7 +179,7 @@ void MainWindow::importThemeInteractive() {
     return;
   }
   const ThemePreset preset = imported.value();
-  const CollectionConfig &target = m_collections[currentCollectionIndex];
+  const CollectionConfig &target = m_collections[m_currentCollectionIndex];
   const QStringList changes = ThemePresetIO::describeChanges(preset, target);
 
   // Confirmation surface: list the clusters that will change so the user
@@ -200,7 +200,7 @@ void MainWindow::importThemeInteractive() {
   if (choice != QMessageBox::Apply) {
     return;
   }
-  CollectionConfig &mutableTarget = m_collections[currentCollectionIndex];
+  CollectionConfig &mutableTarget = m_collections[m_currentCollectionIndex];
   ThemePresetIO::applyTo(preset, mutableTarget);
   if (m_appManager->getSettingsManager()) {
     ErrorPresentation::reportSaveResult(
@@ -209,17 +209,17 @@ void MainWindow::importThemeInteractive() {
   // Soft reload so the new appearance values surface immediately without
   // the user having to switch collections.
   if (m_appManager->getNavigationManager()) {
-    m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+    m_appManager->getNavigationManager()->safeReloadCollection(m_currentCollectionIndex);
   }
 }
 
 void MainWindow::exportThemeInteractive() {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     QMessageBox::information(this, tr("Export Theme"),
                              tr("Open a collection before exporting a theme."));
     return;
   }
-  const CollectionConfig &source = m_collections[currentCollectionIndex];
+  const CollectionConfig &source = m_collections[m_currentCollectionIndex];
   const ThemePreset preset = ThemePresetIO::fromCollection(source);
   const QString suggestion =
       (source.name.isEmpty() ? QStringLiteral("theme") : source.name.trimmed()) +
@@ -264,24 +264,24 @@ void MainWindow::manageLayoutProfilesInteractive() {
   // to m_collections / SettingsManager / NavigationManager — the dialog
   // intentionally doesn't touch any of those directly.
   auto onApply = [this](const ThemePreset &preset) {
-    if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
       return;
     }
-    CollectionConfig &target = m_collections[currentCollectionIndex];
+    CollectionConfig &target = m_collections[m_currentCollectionIndex];
     ThemePresetIO::applyTo(preset, target);
     if (m_appManager->getSettingsManager()) {
       ErrorPresentation::reportSaveResult(
           m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", true);
     }
     if (m_appManager->getNavigationManager()) {
-      m_appManager->getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      m_appManager->getNavigationManager()->safeReloadCollection(m_currentCollectionIndex);
     }
   };
 
   LayoutProfilesDialog dialog(this);
   const CollectionConfig *current =
-      (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size())
-          ? &m_collections[currentCollectionIndex]
+      (m_currentCollectionIndex >= 0 && m_currentCollectionIndex < m_collections.size())
+          ? &m_collections[m_currentCollectionIndex]
           : nullptr;
   dialog.setRegistry(&profiles, current, std::move(onApply));
   dialog.exec();
@@ -328,7 +328,7 @@ void MainWindow::navigateToItem(const QString &filePath) {
   // Switch collections only when we're not already viewing the target —
   // showCollectionItems unconditionally triggers an items reload that
   // would needlessly bounce the current view.
-  if (owningIndex != currentCollectionIndex && m_appManager->getNavigationManager()) {
+  if (owningIndex != m_currentCollectionIndex && m_appManager->getNavigationManager()) {
     m_appManager->getNavigationManager()->showCollectionItems(owningIndex);
   }
   // Ask the DB worker for the item's visual index, then select via the

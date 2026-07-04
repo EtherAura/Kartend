@@ -695,9 +695,6 @@ void SettingsDialog::showEvent(QShowEvent *event) {
     m_countedVisible = true;
     ++g_settingsVisibleInstanceCount;
   }
-  // Delay grid width calculation until dialog geometry is finalized
-  QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this,
-                     &SettingsDialog::updateGridWidthLimits);
 }
 
 void SettingsDialog::hideEvent(QHideEvent *event) {
@@ -709,17 +706,4 @@ void SettingsDialog::hideEvent(QHideEvent *event) {
   // settled on is restored the next time the dialog opens.
   saveDialogState();
   QDialog::hideEvent(event);
-}
-
-void SettingsDialog::resizeEvent(QResizeEvent *event) {
-  QDialog::resizeEvent(event);
-  // A drag fires many resizeEvents; use one restartable timer so only the final
-  // resize recalculates the grid-width limits, not one singleShot per tick
-  // (Kartend-20utj).
-  if (!m_gridWidthLimitsTimer) {
-    m_gridWidthLimitsTimer = new QTimer(this);
-    m_gridWidthLimitsTimer->setSingleShot(true);
-    connect(m_gridWidthLimitsTimer, &QTimer::timeout, this, &SettingsDialog::updateGridWidthLimits);
-  }
-  m_gridWidthLimitsTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);
 }

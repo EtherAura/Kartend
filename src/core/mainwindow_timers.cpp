@@ -39,7 +39,7 @@ void MainWindow::setupInitialTimers() {
   // the scroll area has accurate viewport metrics to center against.
   QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
     if (m_appManager->getScrollManager()) {
-      m_appManager->getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex,
+      m_appManager->getScrollManager()->centerHorizontalScrollbar(m_currentCollectionIndex,
                                                                   m_collections);
     }
   });
@@ -154,12 +154,12 @@ void MainWindow::setupInitialTimersEmptyCollections() {
 
     // Now open settings dialog for the user to configure the collection
     if (m_appManager->getSettingsManager()) {
-      currentCollectionIndex = 0;
+      m_currentCollectionIndex = 0;
       SettingsDialogContext context = makeSettingsDialogContext();
       settingsDialogController()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {
-        currentCollectionIndex = 0;
+        m_currentCollectionIndex = 0;
         if (m_appManager->getNavigationManager()) {
           m_appManager->getNavigationManager()->showCollectionItems(0);
         }

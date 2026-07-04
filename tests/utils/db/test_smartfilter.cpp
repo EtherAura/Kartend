@@ -21,7 +21,6 @@ private slots:
   void fromJson_rejectsUnknownKind();
   void fromJsonString_rejectsEmpty();
   void fromJson_defaultsLimitWhenAbsent();
-  void humanLabel_includesParams();
 };
 
 void TestSmartFilter::kindTagRoundTrip_coversEveryKind() {
@@ -156,16 +155,6 @@ void TestSmartFilter::byTitleSearch_roundTripsNeedle() {
   auto parsed = SmartFilter::fromJson(json);
   QVERIFY(parsed.isOk());
   QCOMPARE(parsed.value().titleSearch, QStringLiteral("concert"));
-}
-
-void TestSmartFilter::humanLabel_includesParams() {
-  SmartFilter::Filter f;
-  f.kind = SmartFilter::Kind::TopPlayed;
-  f.limit = 25;
-  const QString label = SmartFilter::humanLabel(f);
-  QVERIFY(label.contains("25"));
-  // Kind-specific text — translatable but the substring must persist.
-  QVERIFY(label.toLower().contains("most played") || label.toLower().contains("top"));
 }
 
 QTEST_MAIN(TestSmartFilter)

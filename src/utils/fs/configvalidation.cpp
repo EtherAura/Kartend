@@ -25,23 +25,6 @@ bool isCommandInPath(const QString &command) {
   return !QStandardPaths::findExecutable(command).isEmpty();
 }
 
-QString ValidationResult::summary() const {
-  QStringList lines;
-  if (!errors.isEmpty()) {
-    lines << "Errors:";
-    for (const QString &e : errors) {
-      lines << "  • " + e;
-    }
-  }
-  if (!warnings.isEmpty()) {
-    lines << "Warnings:";
-    for (const QString &w : warnings) {
-      lines << "  • " + w;
-    }
-  }
-  return lines.join("\n");
-}
-
 ValidationResult validateCollection(const CollectionConfig &config, int index, bool isContainer) {
   ValidationResult result;
   QString prefix = QString("Collection '%1' (index %2): ")

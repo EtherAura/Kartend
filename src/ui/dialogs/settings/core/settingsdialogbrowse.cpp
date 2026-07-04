@@ -247,7 +247,6 @@ void SettingsDialog::loadCollectionToUI(int index) {
 
   updateParentCollectionComboBox(index);
   updateFieldVisibility();
-  updateGridWidthLimits();
   m_isLoading = false;
   // Reflect the now-loaded collection in the rail's context header.
   updateContextHeader();

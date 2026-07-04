@@ -220,6 +220,17 @@ kartend_add_test(NAME BulkEditService
   LINK kartend_utils
 )
 
+# ArtworkWizardService tests: the off-thread prep behind the artwork wizard.
+# prepare() opens its own read-only connection to a db FILE and snapshots the
+# artwork directory, so like BulkEditService these run against a real on-disk
+# SQLite database (QTemporaryDir) — a writer seeds the items table, prepare()
+# reads the same file, and the queue / directory snapshot / dbOk are asserted.
+# No DB mocking.
+kartend_add_test(NAME ArtworkWizardService
+  SOURCES utils/db/test_artworkwizardservice.cpp
+  LINK kartend_utils
+)
+
 # VariantGrouping tests (Kartend-skhk). Pure same-basename grouper.
 kartend_add_test(NAME VariantGrouping
   SOURCES utils/db/test_variantgrouping.cpp

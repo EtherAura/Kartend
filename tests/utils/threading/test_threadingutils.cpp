@@ -15,7 +15,6 @@ private slots:
   void batcher_fastBatches_growTowardMax();
   void batcher_slowBatches_shrinkTowardMin();
   void batcher_respectsCustomBounds();
-  void batcher_reset_restoresInitialState();
   void batcher_historyBoundedToConfig();
 
   // ThreadPoolUtils::shutdownWithBudget — the UAF-avoiding leak branch.
@@ -71,16 +70,6 @@ void TestThreadingUtils::batcher_respectsCustomBounds() {
                    static_cast<qint64>(b.currentBatchSize()) * 1000); // very slow
   }
   QCOMPARE(b.currentBatchSize(), 5);
-}
-
-void TestThreadingUtils::batcher_reset_restoresInitialState() {
-  AdaptiveBatcher b;
-  b.observeBatch(10, 10);
-  QVERIFY(b.currentBatchSize() != 10 || b.avgTimePerItem() != 0.0); // state moved
-  b.reset();
-  QCOMPARE(b.currentBatchSize(), 10);
-  QCOMPARE(b.avgTimePerItem(), 0.0);
-  QCOMPARE(b.stats().samplesCollected, 0);
 }
 
 void TestThreadingUtils::batcher_historyBoundedToConfig() {

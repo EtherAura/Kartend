@@ -120,7 +120,7 @@ void MainWindow::wireInteractionManager() {
   // PlaylistMenuController by InteractionManager's setup.
   setup.dialogs = makeDialogRunners();
 
-  loadingLabel = ui->loadingLabel;
+  m_loadingLabel = ui->loadingLabel;
 
   // ctx is already fully populated by initializeAppContext() — InteractionManager
   // and its owned sub-managers were registered eagerly so every setupReferences()

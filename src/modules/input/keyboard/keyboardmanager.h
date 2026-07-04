@@ -147,6 +147,20 @@ private:
   void configureRepeatProperties();
   void clearRepeatState();
 
+  // Repeat lifecycle as a single state (Kartend-4su6t). The shared interaction
+  // flags hold-repeat touches used to be set in beginHoldRepeat and cleared in a
+  // *different* combination in stopRepeat, which let them drift (recurring
+  // stuck-flag bugs: suppressed artwork, disabled centering). applyRepeatPhase()
+  // is the ONE place that maps a phase onto every repeat-owned flag, so begin and
+  // stop can no longer diverge. Behaviour is identical to the old pair; the
+  // per-phase flag values are just single-sourced here.
+  //
+  // m_continuousScrollActive is only *asserted* here (repeat is one of several
+  // continuous-scroll sources — wheel, mouse-hold, glide); its clear stays with
+  // the animation/arrow handlers that own the glide tail, exactly as before.
+  enum class RepeatPhase { Idle, VerticalRepeat, HorizontalRepeat };
+  void applyRepeatPhase(RepeatPhase phase);
+
   // Repeat state
   QTimer *m_repeatTimer = nullptr;
   QTimer *m_repeatStartTimer = nullptr;

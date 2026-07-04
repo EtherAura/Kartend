@@ -70,7 +70,7 @@ void TestNavigationManager::testOnSubcollectionEnteredIgnoresOutOfRangeIndex() {
   // Seed a single in-range entry so we can assert that the only rejected
   // call paths are the out-of-range ones.
   win->m_collections.append(makeCollectionStub(QStringLiteral("Solo")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   nav->stackManager()->push(42); // sentinel — must remain after the calls
 
   nav->onSubcollectionEntered(-1);
@@ -90,7 +90,7 @@ void TestNavigationManager::testOnSubcollectionEnteredUnwindsPushOnNavigationFai
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Parent")));
   win->m_collections.append(makeCollectionStub(QStringLiteral("Child"), /*parentIndex=*/0));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
 
   QVERIFY(nav->stackManager()->isEmpty());
@@ -111,7 +111,7 @@ void TestNavigationManager::testOnSubcollectionEnteredSkipsPushWhenNoCurrentColl
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Solo")));
-  win->currentCollectionIndex = -1; // pre-startup: nothing selected yet
+  win->m_currentCollectionIndex = -1; // pre-startup: nothing selected yet
   QVERIFY(nav->stackManager()->isEmpty());
 
   // Even though the target index is in range, the stack push is gated on
@@ -127,7 +127,7 @@ void TestNavigationManager::testOnMediaLibraryErrorRendersErrorWidget() {
   KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
-  QWidget *gridContainer = win->gridContainer;
+  QWidget *gridContainer = win->m_gridContainer;
   QVERIFY(gridContainer);
 
   // Pre-existing noItemsWidget children must be removed by the slot so the
@@ -173,7 +173,7 @@ void TestNavigationManager::testLoadRootViewEntersRootState() {
   win->m_collections.append(makeCollectionStub(QStringLiteral("RootA")));
   win->m_collections.append(makeCollectionStub(QStringLiteral("RootB")));
   win->m_collections.append(makeCollectionStub(QStringLiteral("ChildOfA"), /*parentIndex=*/0));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
   nav->stackManager()->push(0); // stale traversal that Home must discard
 
@@ -185,11 +185,11 @@ void TestNavigationManager::testLoadRootViewEntersRootState() {
   // root-view flag drives search routing, and any pending hierarchy
   // traversal is discarded (Back from Home must not pop into stale state).
   QVERIFY(nav->isInRootView());
-  QCOMPARE(win->currentCollectionIndex, -1);
+  QCOMPARE(win->m_currentCollectionIndex, -1);
   QVERIFY(nav->stackManager()->isEmpty());
 
   // Default label when no custom homeViewLabel is configured.
-  auto *titleLabel = win->itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
+  auto *titleLabel = win->m_itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
   QVERIFY(titleLabel);
   QCOMPARE(titleLabel->text(), QStringLiteral("Home"));
 }
@@ -200,7 +200,7 @@ void TestNavigationManager::testLoadRootViewHonorsCustomHomeLabel() {
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
   win->m_generalSettings.startup.homeViewLabel = QStringLiteral("  My Hub  ");
 
@@ -208,7 +208,7 @@ void TestNavigationManager::testLoadRootViewHonorsCustomHomeLabel() {
 
   // The configured label is trimmed before display; only a (trimmed-)empty
   // value falls back to the localized "Home".
-  auto *titleLabel = win->itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
+  auto *titleLabel = win->m_itemsPage->findChild<QLabel *>(QStringLiteral("itemsTitleLabel"));
   QVERIFY(titleLabel);
   QCOMPARE(titleLabel->text(), QStringLiteral("My Hub"));
 }
@@ -223,13 +223,13 @@ void TestNavigationManager::testLoadRootViewWithNoCollectionsShowsEmptyState() {
   nav->loadRootView();
 
   QVERIFY(nav->isInRootView());
-  QCOMPARE(win->currentCollectionIndex, -1);
+  QCOMPARE(win->m_currentCollectionIndex, -1);
 
   // With zero root collections there are no tiles to render, so the empty
   // state widget must explain the situation instead of leaving a blank grid.
-  QVERIFY(win->loadingLabel);
+  QVERIFY(win->m_loadingLabel);
   bool found = false;
-  const auto labels = win->loadingLabel->findChildren<QLabel *>();
+  const auto labels = win->m_loadingLabel->findChildren<QLabel *>();
   for (const QLabel *label : labels) {
     if (label->text().contains(QStringLiteral("No collections yet"))) {
       found = true;
@@ -245,7 +245,7 @@ void TestNavigationManager::testGoBackIsNoOpInRootView() {
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
 
   nav->loadRootView();
@@ -256,7 +256,7 @@ void TestNavigationManager::testGoBackIsNoOpInRootView() {
   nav->goBackToCollections();
 
   QVERIFY(nav->isInRootView());
-  QCOMPARE(win->currentCollectionIndex, -1);
+  QCOMPARE(win->m_currentCollectionIndex, -1);
 }
 
 void TestNavigationManager::testGoBackEscapesToHomeViewForRootCollection() {
@@ -265,7 +265,7 @@ void TestNavigationManager::testGoBackEscapesToHomeViewForRootCollection() {
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
   QVERIFY(nav->stackManager()->isEmpty());
 
@@ -274,14 +274,14 @@ void TestNavigationManager::testGoBackEscapesToHomeViewForRootCollection() {
   win->m_generalSettings.startup.useHomeView = false;
   nav->goBackToCollections();
   QVERIFY(!nav->isInRootView());
-  QCOMPARE(win->currentCollectionIndex, 0);
+  QCOMPARE(win->m_currentCollectionIndex, 0);
 
   // With the opt-in, the same Back routes to the synthetic Home view rather
   // than re-entering the first root collection.
   win->m_generalSettings.startup.useHomeView = true;
   nav->goBackToCollections();
   QVERIFY(nav->isInRootView());
-  QCOMPARE(win->currentCollectionIndex, -1);
+  QCOMPARE(win->m_currentCollectionIndex, -1);
 }
 
 void TestNavigationManager::testGoBackPopsNavigationStack() {
@@ -291,7 +291,7 @@ void TestNavigationManager::testGoBackPopsNavigationStack() {
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("RootA")));
   win->m_collections.append(makeCollectionStub(QStringLiteral("RootB")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
 
   nav->stackManager()->push(1);
@@ -316,7 +316,7 @@ void TestNavigationManager::testVirtualFolderNavigationUpdatesSubfolderPath() {
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
 
   const auto subfolder = [&]() -> QString {
@@ -348,7 +348,7 @@ void TestNavigationManager::testVirtualFolderEnterIgnoredWithoutCurrentCollectio
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = -1; // pre-startup / Home view: no host scope
+  win->m_currentCollectionIndex = -1; // pre-startup / Home view: no host scope
 
   // With no current collection there is no config to scope the subfolder
   // to — the call must bail before mutating any collection entry.
@@ -363,7 +363,7 @@ void TestNavigationManager::testBreadcrumbLinksDriveSubfolderNavigation() {
   NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
 
   win->m_collections.append(makeCollectionStub(QStringLiteral("Root")));
-  win->currentCollectionIndex = 0;
+  win->m_currentCollectionIndex = 0;
   win->rebuildHierarchyCache();
   win->m_collections[0].folderBrowsing.currentSubfolder = QStringLiteral("Videos/2024/Q1");
 

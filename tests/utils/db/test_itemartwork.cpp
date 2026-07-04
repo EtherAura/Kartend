@@ -62,7 +62,6 @@ private slots:
   void distinguishesByArtworkType();
   void loadAllForItemReturnsAllRowsInInsertionOrder();
   void removeDeletesOnlyTargetedRow();
-  void removeAllForItemDeletesEverythingForItem();
   void saveRejectsEmptyPathOrType();
   void findStandardArtworkLooksInTypeSubdirectory();
   void findStandardArtworkRejectsNonStandardTypes();
@@ -257,36 +256,6 @@ void TestItemArtwork::removeDeletesOnlyTargetedRow() {
   QVERIFY(ItemArtworkStore::load(db, "uuid-1", "/p", "box").value().manualPath.isEmpty());
   QCOMPARE(ItemArtworkStore::load(db, "uuid-1", "/p", "screenshot").value().manualPath,
            QStringLiteral("/screenshot.png"));
-
-  closeAndRemove(db, conn);
-}
-
-void TestItemArtwork::removeAllForItemDeletesEverythingForItem() {
-  const QString conn = "ia_remove_all";
-  auto db = openMemoryDb(conn);
-
-  for (const QString &type :
-       {QStringLiteral("box"), QStringLiteral("screenshot"), QStringLiteral("logo")}) {
-    ItemArtwork a;
-    a.collectionUuid = "uuid-1";
-    a.path = "/p";
-    a.artworkType = type;
-    a.manualPath = "/" + type + ".png";
-    QVERIFY(ItemArtworkStore::save(db, a).isOk());
-  }
-  // A second item's rows must NOT be touched.
-  ItemArtwork other;
-  other.collectionUuid = "uuid-1";
-  other.path = "/other";
-  other.artworkType = "box";
-  other.manualPath = "/other-box.png";
-  QVERIFY(ItemArtworkStore::save(db, other).isOk());
-
-  QVERIFY(ItemArtworkStore::removeAllForItem(db, "uuid-1", "/p").isOk());
-
-  QVERIFY(ItemArtworkStore::loadAllForItem(db, "uuid-1", "/p").value().isEmpty());
-  QCOMPARE(ItemArtworkStore::load(db, "uuid-1", "/other", "box").value().manualPath,
-           QStringLiteral("/other-box.png"));
 
   closeAndRemove(db, conn);
 }

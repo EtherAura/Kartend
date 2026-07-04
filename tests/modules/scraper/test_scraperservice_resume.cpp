@@ -20,9 +20,11 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
+#include "../../support/parkedcallbacksink.h"
 #include "../../support/testsandbox.h"
 #include "collection/typehelpers.h"
 #include "metadatalookupprovider.h"
@@ -70,10 +72,13 @@ public:
   /// When set, every fetchMediaBytes call fails with this error instead of
   /// answering from mediaBytes (Kartend-xzqel failure-path tests).
   std::optional<ErrorUtils::ErrorContext> mediaError;
-  /// When set, fetchMediaBytes parks its callback instead of firing — lets a
-  /// test fire it by hand to drive the in-flight / pause window.
-  bool parkMedia = false;
-  mutable MediaCallback lastMediaCallback;
+  /// When set, fetchMediaBytes parks its callback into this fixture-owned sink
+  /// instead of firing — lets a test fire it by hand to drive the in-flight /
+  /// pause window without forming a provider<->callback cycle (see
+  /// ParkedCallbackSink). Enable via parkMediaInto(); the two are coupled so a
+  /// park-mode test cannot forget to provide the sink.
+  KartendTest::ParkedCallbackSink *mediaSink = nullptr;
+  void parkMediaInto(KartendTest::ParkedCallbackSink &sink) { mediaSink = &sink; }
   void lookup(const QString &, LookupCallback cb) override {
     cb(QList<Scraper::ScrapeCandidate>{});
   }
@@ -81,8 +86,8 @@ public:
     cb(Scraper::ScrapedItem{});
   }
   void fetchMediaBytes(const QUrl &url, MediaCallback cb) override {
-    if (parkMedia) {
-      lastMediaCallback = std::move(cb);
+    if (mediaSink) {
+      mediaSink->media = std::move(cb);
       return;
     }
     if (mediaError.has_value()) {
@@ -103,7 +108,11 @@ public:
 /// realistic async-provider case (Kartend-ckepd.2 review regressions).
 class ParkedEntityProvider : public MetadataLookupProvider {
 public:
-  mutable DetailCallback lastEntityCallback;
+  /// Always parks fetchEntity() into this fixture-owned sink; the sink is a
+  /// required ctor argument so the provider<->callback cycle cannot form (see
+  /// ParkedCallbackSink) and cannot be forgotten (it is a compile error to omit).
+  explicit ParkedEntityProvider(KartendTest::ParkedCallbackSink &sink) : entitySink(sink) {}
+  KartendTest::ParkedCallbackSink &entitySink;
   int fetchEntityCalls = 0;
   QString id() const override { return QStringLiteral("parkedentity"); }
   QString displayName() const override { return QStringLiteral("ParkedEntity"); }
@@ -117,7 +126,7 @@ public:
   void fetchMediaBytes(const QUrl &, MediaCallback) override {}
   void fetchEntity(const Scraper::EntityScrapeTarget &, DetailCallback cb) override {
     ++fetchEntityCalls;
-    lastEntityCallback = std::move(cb); // park it; a test fires it by hand
+    entitySink.entity = std::move(cb); // park it; a test fires it by hand
   }
 };
 
@@ -135,6 +144,7 @@ private slots:
   void entityScrapeProcessesViaQueue();
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
+  void entityScrapeCollectionArtToSharedAndConfig();
   void entityJobLoadsFromPendingState();
   void interactiveEntityJobResumedNotSkipped();
   void staleEntityCallbackAfterRestartIgnored();
@@ -146,6 +156,7 @@ private slots:
   void resumeReresolvesCollectionIndexByUuid();
   void resumeDropsJobWhoseUuidNoLongerResolves();
   void failedItemsRoundTripThroughPendingState();
+  void failedItemsAggregateAcrossCollections();
   void persistWritesFailedItemsMidRun();
   void entityFailureRecordsEntityDiscriminator();
   void entityFailedItemRoundTripsDiscriminator();
@@ -162,6 +173,11 @@ private:
   static QString pendingLockFilePath();
   // A small valid pending-scrape snapshot reused by several tests.
   static QByteArray validPendingJson();
+
+  // Fixture-owned home for any callback a stub parks this test (see
+  // ParkedCallbackSink). Drained in cleanup() so the parked closure's captured
+  // provider shared_ptr is released — no per-test clear, no LSan cycle.
+  KartendTest::ParkedCallbackSink m_parkedCallbacks;
 };
 
 QString TestScraperServiceResume::pendingFilePath() {
@@ -212,6 +228,7 @@ void TestScraperServiceResume::init() {
 }
 
 void TestScraperServiceResume::cleanup() {
+  m_parkedCallbacks.clear();
   QFile::remove(pendingFilePath());
   QFile::remove(pendingLockFilePath());
 }
@@ -536,6 +553,74 @@ void TestScraperServiceResume::entityScrapeDownloadsArtToSharedAndConfig() {
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
 }
 
+void TestScraperServiceResume::entityScrapeCollectionArtToSharedAndConfig() {
+  // Kartend-ckepd.5: a COLLECTION entity scrape (TMDB-style) downloads its art and
+  // writes it to _shared/<type>/collection_<uuid>.<ext> — exercising the
+  // MediaScope::Collection branch of sharedScopePrefix() that every platform test
+  // leaves unexercised (they hardcode platform_) — then wires the Logo/Background
+  // roles into the collection config exactly as the platform path does.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString uuid = QStringLiteral("a1b2c3d4");
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Star Wars Collection");
+  Scraper::MediaAsset logo;
+  logo.type = QStringLiteral("logo");
+  logo.scope = Scraper::MediaScope::Collection;
+  logo.scopeKey = uuid;
+  logo.url = QUrl(QStringLiteral("https://example.test/poster.png"));
+  logo.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(logo);
+  Scraper::MediaAsset background;
+  background.type = QStringLiteral("background");
+  background.scope = Scraper::MediaScope::Collection;
+  background.scopeKey = uuid;
+  background.url = QUrl(QStringLiteral("https://example.test/backdrop.png"));
+  background.entityRole = Scraper::EntityArtRole::Background;
+  item.media.append(background);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(logo.url, QByteArray("\x89PNG\x0d\x0a"
+                                                   "logo-bytes"));
+  provider->mediaBytes.insert(background.url, QByteArray("\x89PNG\x0d\x0a"
+                                                         "bg-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("Star Wars");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Collection;
+  job.entity.identity = uuid;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QVERIFY(service.summary().mediaWritten >= 1);
+  // Art landed under _shared with the collection_ prefix (NOT platform_).
+  const QString expectedLogo =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/logo/collection_a1b2c3d4.png"));
+  QVERIFY2(QFile::exists(expectedLogo), qPrintable(expectedLogo));
+  // Same role-driven config wiring as the platform path: Logo → header logo +
+  // icon, Background → background image.
+  QCOMPARE(collections[0].background.headerLogoImage, expectedLogo);
+  QCOMPARE(collections[0].collectionIcon, expectedLogo);
+  const QString expectedBg =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/background/collection_a1b2c3d4.png"));
+  QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
+  QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
 void TestScraperServiceResume::entityJobLoadsFromPendingState() {
   // An entity job round-trips through pending-scrape.json — the descriptor is
   // restored so an interrupted entity scrape resumes (Kartend-ckepd.2).
@@ -574,7 +659,7 @@ void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
   // Kartend-ckepd.2 review: an entity job paused mid-fetch in Interactive mode
   // must be re-dispatched on resume, NOT silently skipped by startInteractiveItem
   // (whose empty-items "done" branch would otherwise eat it).
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   ScraperService service;
   ScraperService::Context ctx;
   ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
@@ -602,18 +687,13 @@ void TestScraperServiceResume::interactiveEntityJobResumedNotSkipped() {
   // again — never finishing the run with the entity unscraped.
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
   QCOMPARE(provider->fetchEntityCalls, 2);
-
-  // Break the provider<->parked-callback cycle: ParkedEntityProvider stores a
-  // production callback that captures the provider shared_ptr, so the provider
-  // transitively owns itself and never frees (LSan flags the closure captures).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   // Kartend-ckepd.2 review: an entity-fetch callback that resolves after its run
   // was cancelled and a NEW run started must NOT mutate the new run (the run
   // generation rejects it; the entity path has no runner to detach).
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   ScraperService service;
   ScraperService::Context ctx;
   ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
@@ -628,7 +708,7 @@ void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   service.startScrape({jobA}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
                       /*writeMetadata=*/true);
   QCOMPARE(provider->fetchEntityCalls, 1);
-  const auto staleCallback = provider->lastEntityCallback; // run A's parked callback
+  const auto staleCallback = m_parkedCallbacks.entity; // run A's parked callback
   QVERIFY(static_cast<bool>(staleCallback));
 
   // Cancel run A, then start a fresh run B (also a parked entity).
@@ -647,9 +727,6 @@ void TestScraperServiceResume::staleEntityCallbackAfterRestartIgnored() {
   staleCallback(Scraper::ScrapedItem{});
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningAuto);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
@@ -668,7 +745,7 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
   wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
   item.media.append(wheel);
   provider->entityResult = item;
-  provider->parkMedia = true; // park the media download so the test controls timing
+  provider->parkMediaInto(m_parkedCallbacks); // park the media download so the test controls timing
 
   ScraperService service;
   ScraperService::Context ctx;
@@ -685,8 +762,8 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
                       /*writeMetadata=*/true);
 
   // Entity fetched (sync); media download dispatched and parked.
-  QVERIFY(static_cast<bool>(provider->lastMediaCallback));
-  const auto staleCallback = provider->lastMediaCallback; // the pre-pause callback
+  QVERIFY(static_cast<bool>(m_parkedCallbacks.media));
+  const auto staleCallback = m_parkedCallbacks.media; // the pre-pause callback
   QCOMPARE(service.summary().scraped, 0);
 
   // Pause (Close) then resume (reopen) — resume re-dispatches the entity.
@@ -700,14 +777,6 @@ void TestScraperServiceResume::pausedEntityMediaCallbackAfterResumeIgnored() {
   staleCallback(QByteArray("\x89PNG-bytes"));
   QCOMPARE(service.summary().scraped, 0);
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
-
-  // Break the provider<->parked-callback cycle before the local provider
-  // shared_ptr drops. The production media callback captures the provider
-  // shared_ptr by value (deliberate lifetime management), and the stub parked
-  // that callback INTO the provider — so the provider transitively owns a
-  // strong ref to itself and never reaches refcount 0 (LSan flags every object
-  // the closure holds). Clearing the parked member releases the cycle.
-  provider->lastMediaCallback = {};
 }
 
 void TestScraperServiceResume::entityFetchQuotaStopsQueueWithResumePoint() {
@@ -895,7 +964,7 @@ void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
   QList<CollectionConfig> collections{alpha, beta};
   const QString betaUuid = CollectionUtils::computeCollectionUuid(collections[1]);
 
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   QList<int> requestedIndices;
   ScraperService service;
   ScraperService::Context ctx;
@@ -925,9 +994,6 @@ void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {
   // The provider must have been built for Beta's LIVE index, not the stale 0.
   QCOMPARE(requestedIndices.size(), 1);
   QCOMPARE(requestedIndices.first(), 1);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  provider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
@@ -937,7 +1003,7 @@ void TestScraperServiceResume::resumeDropsJobWhoseUuidNoLongerResolves() {
   only.name = QStringLiteral("Solo");
   QList<CollectionConfig> collections{only};
 
-  auto provider = std::make_shared<ParkedEntityProvider>();
+  auto provider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
   int builderCalls = 0;
   ScraperService service;
   ScraperService::Context ctx;
@@ -1011,13 +1077,72 @@ void TestScraperServiceResume::failedItemsRoundTripThroughPendingState() {
   QCOMPARE(state.summarySoFar.failedItems.last().path, QStringLiteral("/m/worse.bin"));
 }
 
+void TestScraperServiceResume::failedItemsAggregateAcrossCollections() {
+  // Kartend-jjjo5, criterion 2: two collections, each contributing exactly one
+  // errored item, must BOTH appear in summary().failedItems — proving the
+  // aggregate list accumulates across collections rather than the second
+  // collection's processing dropping the first's failure. Entity jobs are used
+  // because they need no DB (a game batch requires ctx.ctx per the no-DB-mocking
+  // rule); both feed the SAME m_summary.failedItems sink. Each item keeps its
+  // OWN collection's index/uuid so the re-scrape path rebuilds one job per owner.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("boom"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob a;
+  a.collectionIndex = 0;
+  a.collectionUuid = QStringLiteral("uuid-a");
+  a.collectionName = QStringLiteral("Alpha");
+  a.entity.type = Scraper::ScrapeEntityType::Platform;
+  a.entity.identity = QStringLiteral("11");
+  a.entity.collectionIndex = 0;
+  ScraperService::CollectionJob b;
+  b.collectionIndex = 1;
+  b.collectionUuid = QStringLiteral("uuid-b");
+  b.collectionName = QStringLiteral("Beta");
+  b.entity.type = Scraper::ScrapeEntityType::Platform;
+  b.entity.identity = QStringLiteral("22");
+  b.entity.collectionIndex = 1;
+
+  service.startScrape({a, b}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().errors, 2);
+  const auto failed = service.summary().failedItems; // by value — copy outlives temporary
+  QCOMPARE(failed.size(), 2);
+
+  const auto find = [&failed](const QString &identity) {
+    return std::find_if(
+        failed.begin(), failed.end(),
+        [&identity](const ScraperService::Summary::FailedItem &fi) { return fi.path == identity; });
+  };
+  const auto itA = find(QStringLiteral("11"));
+  const auto itB = find(QStringLiteral("22"));
+  QVERIFY(itA != failed.end());
+  QVERIFY(itB != failed.end());
+  // Each failure carries its OWN collection's identity (not the last one's).
+  QVERIFY(itA->isEntity);
+  QCOMPARE(itA->collectionIndex, 0);
+  QCOMPARE(itA->collectionUuid, QStringLiteral("uuid-a"));
+  QVERIFY(itB->isEntity);
+  QCOMPARE(itB->collectionIndex, 1);
+  QCOMPARE(itB->collectionUuid, QStringLiteral("uuid-b"));
+}
+
 void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
   // Kartend-ufmok, persist direction: after an item fails mid-run the next
   // debounced snapshot must carry it in summary_so_far.failed_items.
   auto errorProvider = std::make_shared<EntityStubProvider>();
   errorProvider->entityResult = ErrorUtils::ErrorContext::error(
       ErrorUtils::ErrorCode::InvalidArgument, QStringLiteral("boom"));
-  auto parkedProvider = std::make_shared<ParkedEntityProvider>();
+  auto parkedProvider = std::make_shared<ParkedEntityProvider>(m_parkedCallbacks);
 
   ScraperService service;
   ScraperService::Context ctx;
@@ -1063,9 +1188,6 @@ void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
   QCOMPARE(failed.value(QStringLiteral("collection_uuid")).toString(),
            QStringLiteral("uuid-failing"));
   QCOMPARE(failed.value(QStringLiteral("collection_index")).toInt(), 0);
-
-  // Break the provider<->parked-callback cycle (see interactiveEntityJob...).
-  parkedProvider->lastEntityCallback = {};
 }
 
 void TestScraperServiceResume::entityFailureRecordsEntityDiscriminator() {

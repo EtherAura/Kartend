@@ -128,7 +128,6 @@ signals:
 protected:
   void showEvent(QShowEvent *event) override;
   void hideEvent(QHideEvent *event) override;
-  void resizeEvent(QResizeEvent *event) override;
 
 private slots:
   // Kartend-mnymg: onTreeItemSelectionChanged / onTreeItemChanged migrated into
@@ -227,7 +226,6 @@ private:
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
   void onExtractArchivesToggled(bool checked);
-  void updateGridWidthLimits();
   void loadGeneralSettingsToUI();
   // Mirrors the dialog's working m_generalSettings onto MainWindow's struct,
   // applies live side effects (PixmapCache resize, VideoThumbnailExtractor
@@ -396,10 +394,6 @@ private:
   // the button once attached (Qt manages lifetime via QWidget::setGraphicsEffect).
   QGraphicsDropShadowEffect *m_saveButtonGlow = nullptr;
   QPropertyAnimation *m_saveButtonGlowAnim = nullptr;
-  /// Coalesces resize-driven updateGridWidthLimits: restarted on every
-  /// resizeEvent so only the last resize recalculates, not one singleShot per
-  /// tick (Kartend-20utj). Lazily constructed on first resize.
-  QTimer *m_gridWidthLimitsTimer = nullptr;
   /// Coalesces the live-save panels' GeneralSettings disk writes (see
   /// scheduleLiveSettingsSave). Lazily constructed on the first live edit;
   /// parented to the dialog so an in-flight debounce dies with it.

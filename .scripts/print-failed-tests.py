@@ -15,6 +15,11 @@ file (bypassing the broken stdout pipe). Each test's verdicts + assertion
 text gets dumped to stdout inside a GitHub Actions `::group::` block so
 the workflow log shows the same shape on both OSes.
 
+It ALSO dumps the raw `LastTest.log` first (dump_last_test_log): a flaky test
+that passes on the isolated re-run above would otherwise hide the original
+failure. LastTest.log preserves the actual failing run's output, so a
+heisenbug like Kartend-c5byx stays diagnosable on recurrence.
+
 CI invocation:
     python .scripts/print-failed-tests.py --build-dir build
 
@@ -135,6 +140,30 @@ def dump_failed_test(name: str, exe: Path | None) -> None:
     print("::endgroup::", flush=True)
 
 
+def dump_last_test_log(build_dir: Path) -> None:
+    """Print the raw LastTest.log from the ctest run that just failed.
+
+    This script RE-RUNS each failed test to capture QTest output, but a flaky
+    heisenbug — Kartend-c5byx: a rare `DatabaseManager` subprocess abort under
+    `ctest -j2`, green on an isolated re-run — passes that re-run, so
+    dump_failed_test() reports a misleading success and the original crash is
+    lost. LastTest.log holds the ACTUAL failing run's captured output (including
+    an abort's stderr / signal), which ctest leaves untouched by our direct exe
+    re-invocations. Surface it verbatim before the re-runs so the one artifact
+    c5byx asked to capture "immediately" on recurrence is always in the CI log.
+    """
+    log_path = build_dir / "Testing" / "Temporary" / "LastTest.log"
+    print("::group::LastTest.log (original failing ctest run, pre-rerun)", flush=True)
+    if log_path.is_file():
+        try:
+            print(log_path.read_text(encoding="utf-8", errors="replace"), flush=True)
+        except OSError as err:
+            print(f"(could not read {log_path}: {err})", flush=True)
+    else:
+        print(f"(no {log_path} — ctest wrote no per-run log)", flush=True)
+    print("::endgroup::", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dump QTest output for failed CI tests.")
     parser.add_argument(
@@ -156,6 +185,10 @@ def main() -> int:
         # the failure was at build time. Don't emit a warning; the parent
         # workflow step already surfaced the build failure.
         return 0
+
+    # Surface the original failing run's output first: for a flaky abort the
+    # per-test re-runs below pass and would otherwise hide it (Kartend-c5byx).
+    dump_last_test_log(build_dir)
 
     for name in failed:
         exe = find_test_executable(build_dir, name)

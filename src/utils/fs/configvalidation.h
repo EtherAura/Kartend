@@ -36,8 +36,6 @@ struct ValidationResult {
   }
 
   [[nodiscard]] bool hasIssues() const { return !warnings.isEmpty() || !errors.isEmpty(); }
-
-  [[nodiscard]] QString summary() const;
 };
 
 // Validate a single collection configuration

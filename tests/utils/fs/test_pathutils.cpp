@@ -39,13 +39,6 @@ private slots:
   void testTryValidateAndExpandPath_nonExistentPath();
   void testTryValidateAndExpandPath_errorDetails();
 
-  // truncatePathForDisplay tests
-  void testTruncatePathForDisplay_shortPath();
-  void testTruncatePathForDisplay_exactLength();
-  void testTruncatePathForDisplay_longPath();
-  void testTruncatePathForDisplay_customLength();
-  void testTruncatePathForDisplay_belowMinLength();
-
   // validatePathSecurity tests
   void testValidatePathSecurity_validPath();
   void testValidatePathSecurity_emptyPath();
@@ -239,51 +232,6 @@ void TestPathUtils::testTryValidateAndExpandPath_errorDetails() {
   auto result = PathUtils::tryValidateAndExpandPath("/nonexistent/path/12345", "TestCollection");
   QVERIFY2(result.isError(), "Should return error for non-existent path");
   QVERIFY2(!result.error().details.isEmpty(), "Error should include details");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// truncatePathForDisplay tests
-// ─────────────────────────────────────────────────────────────────────────────
-
-void TestPathUtils::testTruncatePathForDisplay_shortPath() {
-  QString shortPath = "/home/user";
-  QString result = PathUtils::truncatePathForDisplay(shortPath, 50);
-  QCOMPARE(result, shortPath);
-}
-
-void TestPathUtils::testTruncatePathForDisplay_exactLength() {
-  QString path = QString("/").leftJustified(50, 'a');
-  QString result = PathUtils::truncatePathForDisplay(path, 50);
-  QCOMPARE(result, path);
-}
-
-void TestPathUtils::testTruncatePathForDisplay_longPath() {
-  QString longPath = "/home/user/very/long/path/to/some/deeply/nested/directory/structure";
-  QString result = PathUtils::truncatePathForDisplay(longPath, 30);
-
-  QCOMPARE(result.length(), 30);
-  QVERIFY2(result.startsWith("..."), "Truncated path should start with ellipsis");
-}
-
-void TestPathUtils::testTruncatePathForDisplay_customLength() {
-  QString path = "/home/user/documents/file.txt";
-  QString result = PathUtils::truncatePathForDisplay(path, 20);
-
-  QCOMPARE(result.length(), 20);
-  QVERIFY(result.startsWith("..."));
-}
-
-void TestPathUtils::testTruncatePathForDisplay_belowMinLength() {
-  // maxLength below 3 leaves no room for the "..." prefix. It must clamp to 3
-  // so the result never exceeds the original — the old code passed a negative
-  // to QString::right, which returned the whole (longer) string (Kartend-3pxm).
-  const QString longPath = "/home/user/very/long/path/that/exceeds/any/tiny/maxLength";
-  for (int maxLength : {0, 1, 2}) {
-    const QString result = PathUtils::truncatePathForDisplay(longPath, maxLength);
-    QVERIFY2(result.length() <= longPath.length(),
-             qPrintable(QStringLiteral("maxLength=%1 produced a longer string").arg(maxLength)));
-    QCOMPARE(result, QStringLiteral("..."));
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

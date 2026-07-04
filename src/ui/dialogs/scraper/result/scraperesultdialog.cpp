@@ -361,6 +361,10 @@ void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QStrin
   m_unified->startUnifiedScrape(preCollectionIndex, preItemPath);
 }
 
+bool ScrapeResultDialog::startEntityScrape(int collectionIndex) {
+  return m_unified->startEntityScrape(collectionIndex);
+}
+
 void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {
   qCInfo(lcScrapeTimings) << "DIALOG setScraperService called service=" << service
                           << "current=" << m_service << "this=" << this;

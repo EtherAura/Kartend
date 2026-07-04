@@ -216,7 +216,7 @@ void MainWindow::setupUI() {
           if (m_appManager->getArtworkManager()) {
             m_appManager->getArtworkManager()->updateViewportArtwork();
           }
-          m_appManager->getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex,
+          m_appManager->getScrollManager()->centerHorizontalScrollbar(m_currentCollectionIndex,
                                                                       m_collections);
         });
   }
@@ -228,7 +228,7 @@ void MainWindow::setupUI() {
     MarqueeControllerSetup marqueeSetup;
     marqueeSetup.ctx = &m_appContext;
     marqueeSetup.generalSettings = &m_generalSettings;
-    marqueeSetup.currentCollectionIndex = &currentCollectionIndex;
+    marqueeSetup.currentCollectionIndex = &m_currentCollectionIndex;
     marqueeSetup.collections = &m_collections;
     marqueeSetup.isShuttingDown = [this]() { return m_isShuttingDown; };
     m_marqueeController->setupReferences(marqueeSetup);
@@ -315,13 +315,13 @@ void MainWindow::setupUIReferences() {
   VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
       m_generalSettings.media.videoThumbnailExtractionTimeoutMs);
 
-  stackedWidget = ui->stackedWidget;
-  itemsPage = ui->itemsPage;
-  gridContainer = ui->gridContainer;
-  itemGrid = ui->itemGrid;
+  m_stackedWidget = ui->stackedWidget;
+  m_itemsPage = ui->itemsPage;
+  m_gridContainer = ui->gridContainer;
+  m_itemGrid = ui->itemGrid;
   m_mainContentWidget = ui->m_mainContentWidget;
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
-  searchBar = ui->searchBar;
+  m_searchBar = ui->searchBar;
 
   // Hand the toolbar's stateful Qt widgets (layout-picker / filter button /
   // search-bar inline action) over to the controller, then run its setup
@@ -431,19 +431,19 @@ void MainWindow::applyPixmapCacheBudget(int megabytes) {
 void MainWindow::initializeAppContext() {
   // Collection state
   m_appContext.collection.collections = &m_collections;
-  m_appContext.collection.currentCollectionIndex = &currentCollectionIndex;
+  m_appContext.collection.currentCollectionIndex = &m_currentCollectionIndex;
   m_appContext.collection.hierarchyCache = &m_hierarchyCache;
   m_appContext.collection.generalSettings = &m_generalSettings;
   m_appContext.collection.isShuttingDown = &m_isShuttingDown;
 
   // Common UI elements
   m_appContext.ui.itemScrollArea = ui->itemScrollArea;
-  m_appContext.ui.stackedWidget = stackedWidget;
-  m_appContext.ui.itemsPage = itemsPage;
+  m_appContext.ui.stackedWidget = m_stackedWidget;
+  m_appContext.ui.itemsPage = m_itemsPage;
   m_appContext.ui.itemsTopBar = ui->itemsTopBar;
-  m_appContext.ui.gridContainer = gridContainer;
+  m_appContext.ui.gridContainer = m_gridContainer;
   m_appContext.ui.menubar = ui->menubar;
-  m_appContext.ui.searchBar = searchBar;
+  m_appContext.ui.searchBar = m_searchBar;
   m_appContext.ui.searchModeAction =
       m_toolbarController ? m_toolbarController->searchModeAction() : nullptr;
   m_appContext.ui.sidebar = m_MetadataSidebar;
@@ -505,15 +505,15 @@ void MainWindow::createMenuBar() {
   ctx.getArtworkManager = [this]() { return m_appManager->getArtworkManager(); };
   ctx.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
   ctx.getInteractionManager = [this]() { return m_appManager->getInteractionManager(); };
-  ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  ctx.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
   ctx.getCollections = [this]() { return &m_collections; };
   ctx.getGeneralSettings = [this]() { return &m_generalSettings; };
   ctx.getHierarchyCache = [this]() -> const CollectionHierarchyCache * {
     return &m_hierarchyCache;
   };
   ctx.getCurrentViewType = [this]() {
-    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-      return m_collections[currentCollectionIndex].viewType;
+    if (m_currentCollectionIndex >= 0 && m_currentCollectionIndex < m_collections.size()) {
+      return m_collections[m_currentCollectionIndex].viewType;
     }
     return ViewType::Grid;
   };
@@ -531,7 +531,7 @@ void MainWindow::createMenuBar() {
   };
   ctx.onExportKart = [this]() {
     if (auto *km = m_appManager->getKartManager())
-      km->exportCollectionInteractive(currentCollectionIndex);
+      km->exportCollectionInteractive(m_currentCollectionIndex);
   };
   ctx.onImportTheme = [this]() { importThemeInteractive(); };
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
@@ -559,11 +559,11 @@ void MainWindow::createMenuBar() {
 }
 
 void MainWindow::adjustGridWidth(int delta) {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     return;
   }
 
-  CollectionConfig &config = m_collections[currentCollectionIndex];
+  CollectionConfig &config = m_collections[m_currentCollectionIndex];
 
   // figure out which gridWidth field is currently driving the
   // layout, and mutate that one. When sidebar is hidden in Expand mode AND the
@@ -609,11 +609,11 @@ void MainWindow::adjustGridWidth(int delta) {
 }
 
 void MainWindow::setViewType(ViewType viewType) {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     return;
   }
 
-  CollectionConfig &config = m_collections[currentCollectionIndex];
+  CollectionConfig &config = m_collections[m_currentCollectionIndex];
   if (config.viewType == viewType) {
     return; // No change needed
   }

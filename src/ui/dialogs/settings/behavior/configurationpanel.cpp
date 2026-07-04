@@ -2,7 +2,7 @@
 
 #include "collection/typehelpers.h"
 #include "extensionutils.h"
-#include "imainwindow.h"
+#include "idataudithost.h"
 #include "metadataproviderregistry.h"
 #include "pathutils.h"
 #include "screenscrapersystemcache.h"
@@ -247,7 +247,7 @@ void ConfigurationPanel::load() {
   // (null callback in tests → default status → "never"). The collection UUID
   // is computed the same way the audit profile editor's "Linked collection"
   // picker does so the lookup matches.
-  IMainWindow::DatAuditStatus auditStatus;
+  IDatAuditHost::DatAuditStatus auditStatus;
   if (m_model->datAuditStatus) {
     const QString expandedMediaDir =
         PathUtils::validateAndExpandPath(config.mediaDirectory, config.name);

@@ -302,8 +302,9 @@ void TestMetadataProviderRegistry::entityScrapeTarget_defaultsAndMetatypeRoundTr
 
 void TestMetadataProviderRegistry::forEntity_resolvesGameProvidersAndEmptyForUnsupported() {
   // Kartend-ckepd.2: forEntity filters by supportedEntities(). Every provider
-  // supports Game. ScreenScraper opted into Platform (Kartend-ckepd.4) — it's
-  // the only one so far. Collection/Category have no provider yet (ckepd.5).
+  // supports Game. ScreenScraper opted into Platform (Kartend-ckepd.4) and TMDB
+  // into Collection (Kartend-ckepd.5) — each the only one so far. Category has
+  // no upstream source and is deliberately unsupported by every provider.
   const auto all = MetadataProviderRegistry::builtIn();
   const auto gameProviders =
       MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Game);
@@ -312,8 +313,10 @@ void TestMetadataProviderRegistry::forEntity_resolvesGameProvidersAndEmptyForUns
       MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Platform);
   QCOMPARE(platformProviders.size(), 1);
   QCOMPARE(platformProviders.first()->id(), QStringLiteral("screenscraper"));
-  QVERIFY(
-      MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Collection).isEmpty());
+  const auto collectionProviders =
+      MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Collection);
+  QCOMPARE(collectionProviders.size(), 1);
+  QCOMPARE(collectionProviders.first()->id(), QStringLiteral("tmdb"));
   QVERIFY(MetadataProviderRegistry::forEntity(all, Scraper::ScrapeEntityType::Category).isEmpty());
 }
 
