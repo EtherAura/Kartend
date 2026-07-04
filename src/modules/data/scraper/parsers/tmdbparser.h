@@ -38,6 +38,17 @@ parseSearchResponse(const QByteArray &json);
 [[nodiscard]] ErrorUtils::Result<Scraper::ScrapedItem>
 parseDetailResponse(const QByteArray &json, const QString &mediaType);
 
+/// Parse a `/search/collection` response into a Collection entity result
+/// (Kartend-ckepd.5). Takes the top match's poster + backdrop and returns a
+/// ScrapedItem whose title is the collection name and whose media are
+/// `MediaScope::Collection` assets — poster → `EntityArtRole::Logo`, backdrop →
+/// `EntityArtRole::Background`. The `scopeKey` is left empty for the provider to
+/// fill with the owning collection's uuid. An empty `results` array is a
+/// successful "no match": returns a ScrapedItem with no media (the caller maps
+/// that to a not-found outcome).
+[[nodiscard]] ErrorUtils::Result<Scraper::ScrapedItem>
+parseCollectionSearchResponse(const QByteArray &json);
+
 /// Append cover URLs (poster as primary `front`; backdrop as
 /// `fanart`) for the given paths. Paths come straight from TMDB's
 /// `poster_path` / `backdrop_path` fields and include the leading

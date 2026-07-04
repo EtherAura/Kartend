@@ -469,7 +469,8 @@ void TestProviderOrchestration::ol_fetchDetail_missingWorkKey_errorsWithoutReque
 
 void TestProviderOrchestration::tmdb_lookup_missingToken_errorsWithoutRequest() {
   respondWith(TMDB_SEARCH_JSON);
-  TmdbProvider provider([]() -> const GeneralSettings * { return nullptr; });
+  TmdbProvider provider([]() -> const GeneralSettings * { return nullptr; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   bool called = false;
   provider.lookup(QStringLiteral("Movie A"),
@@ -486,7 +487,8 @@ void TestProviderOrchestration::tmdb_lookup_missingToken_errorsWithoutRequest() 
 void TestProviderOrchestration::tmdb_lookup_sendsBearerTokenToMultiSearch_andDeliversCandidates() {
   respondWith(TMDB_SEARCH_JSON);
   const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
-  TmdbProvider provider([&settings]() { return &settings; });
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   bool called = false;
   provider.lookup(QStringLiteral("Movie A"),
@@ -512,7 +514,8 @@ void TestProviderOrchestration::tmdb_lookup_sendsBearerTokenToMultiSearch_andDel
 void TestProviderOrchestration::tmdb_fetchDetail_movieRoute_requestsReleaseDates_andDeliversItem() {
   respondWith(TMDB_MOVIE_DETAIL_JSON);
   const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
-  TmdbProvider provider([&settings]() { return &settings; });
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   Scraper::ScrapeCandidate candidate;
   candidate.providerSpecificId = QStringLiteral("movie:11");
@@ -536,7 +539,8 @@ void TestProviderOrchestration::tmdb_fetchDetail_movieRoute_requestsReleaseDates
 void TestProviderOrchestration::tmdb_fetchDetail_tvRoute_requestsContentRatings() {
   respondWith(TMDB_TV_DETAIL_JSON);
   const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
-  TmdbProvider provider([&settings]() { return &settings; });
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   Scraper::ScrapeCandidate candidate;
   candidate.providerSpecificId = QStringLiteral("tv:4194");
@@ -560,7 +564,8 @@ void TestProviderOrchestration::tmdb_fetchDetail_tvRoute_requestsContentRatings(
 void TestProviderOrchestration::tmdb_fetchDetail_malformedCandidateId_errorsWithoutRequest() {
   respondWith(TMDB_MOVIE_DETAIL_JSON);
   const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
-  TmdbProvider provider([&settings]() { return &settings; });
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   // No media-type prefix, unknown media type, and non-numeric id must all
   // refuse before any request is issued (the Kartend-tjyh injection guard).
@@ -582,7 +587,8 @@ void TestProviderOrchestration::tmdb_fetchDetail_malformedCandidateId_errorsWith
 void TestProviderOrchestration::tmdb_fetchMediaBytes_userAgentOnly_noAuthorizationLeak() {
   respondWith(QByteArrayLiteral("jpeg bytes"));
   const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
-  TmdbProvider provider([&settings]() { return &settings; });
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
 
   const QUrl imageUrl(QStringLiteral("https://image.tmdb.org/t/p/original/poster1.jpg"));
   bool called = false;

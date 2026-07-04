@@ -30,12 +30,15 @@ inline constexpr int kMaxReportedFailures = 1000;
 /// pre-fetch dedup that lets a second game with the same `groupid`
 /// skip the network entirely.
 enum class MediaScope {
-  Game,     ///< Per-game asset — ScreenScraper mediaJeu.php and friends.
-  Group,    ///< Per-genre/theme/family/style — ScreenScraper mediaGroup.php.
-  Company,  ///< Per-publisher/developer — ScreenScraper mediaCompagnie.php.
-  Platform, ///< Per-platform/system art — ScreenScraper mediaSysteme.php (console
-            ///< logo / illustration). Routed to `_shared/` like Group/Company;
-            ///< scopeKey is the systemeid (Kartend-ckepd.3).
+  Game,       ///< Per-game asset — ScreenScraper mediaJeu.php and friends.
+  Group,      ///< Per-genre/theme/family/style — ScreenScraper mediaGroup.php.
+  Company,    ///< Per-publisher/developer — ScreenScraper mediaCompagnie.php.
+  Platform,   ///< Per-platform/system art — ScreenScraper mediaSysteme.php (console
+              ///< logo / illustration). Routed to `_shared/` like Group/Company;
+              ///< scopeKey is the systemeid (Kartend-ckepd.3).
+  Collection, ///< Per-collection art — a whole collection's logo / background (e.g.
+              ///< a TMDB movie collection). Routed to `_shared/` like Platform;
+              ///< scopeKey is the collection uuid (Kartend-ckepd.5).
 };
 
 /// Filename prefix for a `_shared`-scoped media asset, used as
@@ -51,6 +54,8 @@ enum class MediaScope {
     return QStringLiteral("company_");
   case MediaScope::Platform:
     return QStringLiteral("platform_");
+  case MediaScope::Collection:
+    return QStringLiteral("collection_");
   case MediaScope::Game:
     return {};
   }

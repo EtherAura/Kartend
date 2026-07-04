@@ -55,10 +55,11 @@ private slots:
 };
 
 namespace {
-// TmdbProvider needs a GeneralSettings accessor; searchUrl() never reads it,
-// so a null-returning accessor is sufficient for these tests.
+// TmdbProvider needs a GeneralSettings + collection accessor; searchUrl() reads
+// neither, so null-returning accessors are sufficient for these tests.
 TmdbProvider makeTmdb() {
-  return TmdbProvider([]() -> const GeneralSettings * { return nullptr; });
+  return TmdbProvider([]() -> const GeneralSettings * { return nullptr; },
+                      []() -> const CollectionConfig * { return nullptr; });
 }
 } // namespace
 

@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QTest>
 
+#include "scrapertypes.h"
 #include "tmdbparser.h"
 
 class TestTmdbParser : public QObject {
@@ -25,6 +26,9 @@ private slots:
   void parseDetailResponse_contentRatingPrefersUS();
   void parseDetailResponse_runtimeMinutesConvertedToSeconds();
   void parseDetailResponse_appendsPosterAndBackdrop();
+  void parseCollectionSearchResponse_topMatchLogoAndBackground();
+  void parseCollectionSearchResponse_emptyResultsIsSuccessNoMedia();
+  void parseCollectionSearchResponse_malformedJsonReturnsError();
 };
 
 namespace {
@@ -192,6 +196,38 @@ void TestTmdbParser::parseDetailResponse_appendsPosterAndBackdrop() {
   QVERIFY(item.media[0].url.toString().contains("/poster1.jpg"));
   QCOMPARE(item.media[1].type, QStringLiteral("fanart"));
   QVERIFY(item.media[1].url.toString().contains("/backdrop1.jpg"));
+}
+
+void TestTmdbParser::parseCollectionSearchResponse_topMatchLogoAndBackground() {
+  const QByteArray json = R"({"results":[
+    {"id":10,"name":"Star Wars Collection","poster_path":"/poster.jpg","backdrop_path":"/backdrop.jpg"},
+    {"id":99,"name":"Other Collection","poster_path":"/other.jpg","backdrop_path":"/other2.jpg"}
+  ]})";
+  auto result = TmdbParser::parseCollectionSearchResponse(json);
+  QVERIFY(result.isOk());
+  const auto item = result.value();
+  QCOMPARE(item.title, QStringLiteral("Star Wars Collection")); // the top match, not "Other"
+  QCOMPARE(item.media.size(), 2);
+  // Poster → Collection-scoped Logo art; backdrop → Collection-scoped Background.
+  QVERIFY(item.media[0].scope == Scraper::MediaScope::Collection);
+  QVERIFY(item.media[0].entityRole == Scraper::EntityArtRole::Logo);
+  QVERIFY(item.media[0].url.toString().contains("/poster.jpg"));
+  QVERIFY(item.media[1].scope == Scraper::MediaScope::Collection);
+  QVERIFY(item.media[1].entityRole == Scraper::EntityArtRole::Background);
+  QVERIFY(item.media[1].url.toString().contains("/backdrop.jpg"));
+  // scopeKey is left empty for the provider to stamp the owning collection uuid.
+  QVERIFY(item.media[0].scopeKey.isEmpty());
+}
+
+void TestTmdbParser::parseCollectionSearchResponse_emptyResultsIsSuccessNoMedia() {
+  auto result = TmdbParser::parseCollectionSearchResponse(R"({"results":[]})");
+  QVERIFY(result.isOk());                  // successful "no match"
+  QVERIFY(result.value().media.isEmpty()); // caller maps empty media → not-found
+}
+
+void TestTmdbParser::parseCollectionSearchResponse_malformedJsonReturnsError() {
+  auto result = TmdbParser::parseCollectionSearchResponse(QByteArray("{not json"));
+  QVERIFY(result.isError());
 }
 
 QTEST_MAIN(TestTmdbParser)

@@ -267,12 +267,12 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         mw->openScraperDialog(idx, filePath);
       });
 
-      // Kartend-ckepd.6: collection-level companion to "Scraper…" — fetch this
-      // collection's platform artwork via a single ScreenScraper platform-entity
-      // scrape. The provider resolves the systemeid (per-collection override →
-      // autodetect); if it can't, the scrape surfaces the reason in the dialog.
-      QAction *platformArtworkAction = menu.addAction(tr("Scrape platform artwork…"));
-      QObject::connect(platformArtworkAction, &QAction::triggered, this, [this, filePath]() {
+      // Kartend-ckepd.6/.5: collection-level companion to "Scraper…" — fetch this
+      // collection's entity artwork (platform art via ScreenScraper for a games
+      // collection, collection art via TMDB for a video collection, per the
+      // collection's provider). Surfaces the reason in the dialog if none applies.
+      QAction *entityArtworkAction = menu.addAction(tr("Scrape collection / platform artwork…"));
+      QObject::connect(entityArtworkAction, &QAction::triggered, this, [this, filePath]() {
         auto *mw = dynamic_cast<IMainWindow *>(QApplication::activeWindow());
         if (!mw) {
           for (QWidget *w = QApplication::focusWidget(); w; w = w->parentWidget()) {

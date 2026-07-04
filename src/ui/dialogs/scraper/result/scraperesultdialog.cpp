@@ -361,8 +361,8 @@ void ScrapeResultDialog::startUnifiedScrape(int preCollectionIndex, const QStrin
   m_unified->startUnifiedScrape(preCollectionIndex, preItemPath);
 }
 
-void ScrapeResultDialog::startPlatformEntityScrape(int collectionIndex) {
-  m_unified->startPlatformEntityScrape(collectionIndex);
+bool ScrapeResultDialog::startEntityScrape(int collectionIndex) {
+  return m_unified->startEntityScrape(collectionIndex);
 }
 
 void ScrapeResultDialog::setScraperService(Scraper::ScraperService *service) {

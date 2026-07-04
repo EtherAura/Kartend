@@ -82,8 +82,8 @@ void ScraperController::setContext(const ScraperControllerContext &context) {
 // the entity scrape (openEntityScraperDialog): construct/reuse the single dialog
 // instance, wire its completion handler once, and bind the live context +
 // service. Returns the ready dialog, or nullptr if the DB isn't up yet — the
-// caller then picks the start method (startUnifiedScrape vs
-// startPlatformEntityScrape) and shows it.
+// caller then picks the start method (startUnifiedScrape vs startEntityScrape)
+// and shows it.
 ScrapeResultDialog *ScraperController::prepareScraperDialog() {
   QWidget *parent = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
   IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
@@ -230,7 +230,9 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
 void ScraperController::openEntityScraperDialog(int collectionIndex) {
   ScrapeResultDialog *dialog = prepareScraperDialog();
   if (!dialog) return;
-  dialog->startPlatformEntityScrape(collectionIndex);
+  // Don't surface an empty dialog when the collection has no entity-capable
+  // scraper — startEntityScrape shows the reason and returns false.
+  if (!dialog->startEntityScrape(collectionIndex)) return;
   dialog->show();
   dialog->raise();
   dialog->activateWindow();

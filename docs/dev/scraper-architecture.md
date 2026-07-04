@@ -181,10 +181,13 @@ that target a whole platform / collection / category rather than one ROM
   to `EntityScrapeCoordinator::startEntityCollection()` — a lightweight
   one-`fetchEntity()` dispatch that shares the ScraperService queue, resume,
   quota, and result/notFound bucketing — **not** `BatchScrapeRunner`.
-- **Persistence sink** (hybrid, `Kartend-ckepd.3`): platform art is written
+- **Persistence sink** (hybrid, `Kartend-ckepd.3` / `.5`): entity art is written
   to the collection's `_shared` artwork dir + `CollectionConfig` /
-  `CollectionBackground`, not `item_metadata` (which stays per-game).
-  Media assets carry `MediaScope::Platform` + a `scopeKey` (the systemeid).
+  `CollectionBackground`, not `item_metadata` (which stays per-game). Assets
+  carry a non-`Game` `MediaScope` + a `scopeKey`: `Platform` (systemeid) and
+  `Collection` (collection uuid) both route to `_shared/<type>/<prefix><scopeKey>`
+  via `sharedScopePrefix()`; `EntityArtRole` (`Logo` → `headerLogoImage` /
+  `collectionIcon`, `Background` → `backgroundImage`) wires them into config.
 - **ScreenScraper platform provider**: `fetchEntity()` uses `systemesListe`
   (catalog) + `mediaSysteme.php` (media tokens). The systemeid comes from the
   target's identity when the caller already resolved it (e.g. a re-queued
@@ -192,6 +195,17 @@ that target a whole platform / collection / category rather than one ROM
   it autodetects via `resolveSystemId()` (per-collection
   `scraperOverrides.screenscraperSystemId` override → `ScreenScraperSystems::
   autodetect` heuristic), the same path the game scrape uses.
+- **TMDB collection provider** (`Kartend-ckepd.5`): `supportedEntities()` adds
+  `Collection`. `fetchEntity(Collection)` searches `/search/collection` by the
+  collection's **name** (via the same collection accessor ScreenScraper uses),
+  and maps the top match's poster → `Collection`-scoped `Logo` art and backdrop
+  → `Background` art (`TmdbParser::parseCollectionSearchResponse`). Kartend
+  collections are usually genre/platform groupings rather than TMDB franchises,
+  so **no match is the common, expected outcome** — surfaced as a routine
+  not-found (`Kartend-e8aag` bucketing), not an error.
+- **Category is deliberately out of scope**: Kartend categories are user-defined
+  groupings with no canonical upstream art source, so no provider advertises
+  `ScrapeEntityType::Category` (`Kartend-ckepd.5`).
 - **UI launch** (`Kartend-ckepd.6`): the item context menu's
   "Scrape platform artwork…" action → `IMainWindow::openEntityScraperDialog`
   → `ScraperController::openEntityScraperDialog` → the result dialog's

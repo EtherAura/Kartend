@@ -135,15 +135,16 @@ const std::vector<ProviderSpec> &providerSpecs() {
     // supplied (so the user-supplied token comes through); URL fallback
     // capability stays via WebSearch. IMDb has no usable open API and
     // remains URL-only.
-    list.push_back({.id = "tmdb",
-                    .displayName = nullptr,
-                    .categories = {CAT_VIDEO},
-                    .lookupCapable = true,
-                    .urlTemplate = nullptr,
-                    .makeApi = [](const GeneralSettingsAccessor &settings,
-                                  const CollectionAccessor &) -> std::unique_ptr<MetadataProvider> {
-                      return std::make_unique<TmdbProvider>(settings);
-                    }});
+    list.push_back(
+        {.id = "tmdb",
+         .displayName = nullptr,
+         .categories = {CAT_VIDEO},
+         .lookupCapable = true,
+         .urlTemplate = nullptr,
+         .makeApi = [](const GeneralSettingsAccessor &settings,
+                       const CollectionAccessor &collection) -> std::unique_ptr<MetadataProvider> {
+           return std::make_unique<TmdbProvider>(settings, collection);
+         }});
     list.push_back({.id = "imdb",
                     .displayName = "IMDb",
                     .categories = {CAT_VIDEO},

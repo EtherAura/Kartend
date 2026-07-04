@@ -8,6 +8,7 @@
 #include <QUrl>
 
 struct GeneralSettings;
+struct CollectionConfig;
 
 /// TMDB API-backed provider. Requires a v4 read access token (a free
 /// TMDB account → Settings → API → "API Read Access Token (v4 auth)").
@@ -27,8 +28,12 @@ struct GeneralSettings;
 class TmdbProvider : public ProviderBase {
 public:
   using GeneralSettingsAccessor = std::function<const GeneralSettings *()>;
+  /// Getter for the collection being scraped — supplies the collection name a
+  /// Collection entity scrape searches TMDB for (Kartend-ckepd.5). Same shape as
+  /// ScreenScraperProvider's accessor; the registry wires it per collection.
+  using CollectionAccessor = std::function<const CollectionConfig *()>;
 
-  explicit TmdbProvider(GeneralSettingsAccessor settingsAccessor);
+  TmdbProvider(GeneralSettingsAccessor settingsAccessor, CollectionAccessor collectionAccessor);
 
   [[nodiscard]] QString id() const override { return QStringLiteral("tmdb"); }
   [[nodiscard]] QString displayName() const override {
@@ -44,6 +49,16 @@ public:
   void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) override;
   void fetchMediaBytes(const QUrl &url, MediaCallback callback) override;
 
+  /// Kartend-ckepd.5: TMDB scrapes per-game items (Game) and whole-collection
+  /// art (Collection). Category has no TMDB source and is deliberately omitted.
+  [[nodiscard]] QList<Scraper::ScrapeEntityType> supportedEntities() const override {
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Collection};
+  }
+  /// Scrape a Collection entity: search TMDB collections by the collection's
+  /// name and emit the top match's logo/background art. A miss is a routine
+  /// not-found (niche collections legitimately have none — Kartend-e8aag).
+  void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) override;
+
 private:
   /// Returns the current token from credentials, or empty when unset.
   /// Single accessor so the not-configured error is consistent across
@@ -51,6 +66,7 @@ private:
   [[nodiscard]] QString currentToken() const;
 
   GeneralSettingsAccessor m_settingsAccessor;
+  CollectionAccessor m_collectionAccessor;
 };
 
 #endif // TMDBPROVIDER_H
