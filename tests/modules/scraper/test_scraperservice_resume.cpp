@@ -144,6 +144,7 @@ private slots:
   void entityScrapeProcessesViaQueue();
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
+  void entityScrapeCollectionArtToSharedAndConfig();
   void entityJobLoadsFromPendingState();
   void interactiveEntityJobResumedNotSkipped();
   void staleEntityCallbackAfterRestartIgnored();
@@ -548,6 +549,74 @@ void TestScraperServiceResume::entityScrapeDownloadsArtToSharedAndConfig() {
   QCOMPARE(collections[0].collectionIcon, expected);
   const QString expectedBg =
       QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
+  QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
+  QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
+void TestScraperServiceResume::entityScrapeCollectionArtToSharedAndConfig() {
+  // Kartend-ckepd.5: a COLLECTION entity scrape (TMDB-style) downloads its art and
+  // writes it to _shared/<type>/collection_<uuid>.<ext> — exercising the
+  // MediaScope::Collection branch of sharedScopePrefix() that every platform test
+  // leaves unexercised (they hardcode platform_) — then wires the Logo/Background
+  // roles into the collection config exactly as the platform path does.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString uuid = QStringLiteral("a1b2c3d4");
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Star Wars Collection");
+  Scraper::MediaAsset logo;
+  logo.type = QStringLiteral("logo");
+  logo.scope = Scraper::MediaScope::Collection;
+  logo.scopeKey = uuid;
+  logo.url = QUrl(QStringLiteral("https://example.test/poster.png"));
+  logo.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(logo);
+  Scraper::MediaAsset background;
+  background.type = QStringLiteral("background");
+  background.scope = Scraper::MediaScope::Collection;
+  background.scopeKey = uuid;
+  background.url = QUrl(QStringLiteral("https://example.test/backdrop.png"));
+  background.entityRole = Scraper::EntityArtRole::Background;
+  item.media.append(background);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(logo.url, QByteArray("\x89PNG\x0d\x0a"
+                                                   "logo-bytes"));
+  provider->mediaBytes.insert(background.url, QByteArray("\x89PNG\x0d\x0a"
+                                                         "bg-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("Star Wars");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Collection;
+  job.entity.identity = uuid;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QVERIFY(service.summary().mediaWritten >= 1);
+  // Art landed under _shared with the collection_ prefix (NOT platform_).
+  const QString expectedLogo =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/logo/collection_a1b2c3d4.png"));
+  QVERIFY2(QFile::exists(expectedLogo), qPrintable(expectedLogo));
+  // Same role-driven config wiring as the platform path: Logo → header logo +
+  // icon, Background → background image.
+  QCOMPARE(collections[0].background.headerLogoImage, expectedLogo);
+  QCOMPARE(collections[0].collectionIcon, expectedLogo);
+  const QString expectedBg =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/background/collection_a1b2c3d4.png"));
   QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
 }

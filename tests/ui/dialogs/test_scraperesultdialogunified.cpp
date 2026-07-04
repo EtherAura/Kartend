@@ -53,6 +53,7 @@
 #include <QTimer>
 #include <QTreeWidget>
 
+#include "../../support/modalanswerqueue.h"
 #include "../../support/parkedcallbacksink.h"
 #include "../../support/testsandbox.h"
 #include "collection/collectionconfig.h"
@@ -124,8 +125,13 @@ public:
     entityMode = EntityMode::Park;
     entitySink = &sink;
   }
+  // Configurable so a test can model a games provider ({Game, Platform}), a video
+  // provider ({Game, Collection}), or a metadata-only provider ({Game}) — the
+  // provider-aware launch (startEntityScrape) enqueues one job per non-Game type.
+  QList<Scraper::ScrapeEntityType> supportedEntityList{Scraper::ScrapeEntityType::Game,
+                                                       Scraper::ScrapeEntityType::Platform};
   QList<Scraper::ScrapeEntityType> supportedEntities() const override {
-    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+    return supportedEntityList;
   }
   void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback cb) override {
     lastEntityTarget = target;
@@ -291,6 +297,11 @@ private slots:
   void errorDetailsRescrapeRebuildsEntityFailureAsEntityJob();
   void errorDetailsWithoutFailuresOmitsRescrapeButton();
   void quotaExhaustedFinishShowsResumeHint();
+  // Kartend-ckepd.6/.5: provider-aware entity-scrape launch (startEntityScrape).
+  void startEntityScrapePlatformProviderEnqueuesPlatformJobEmptyIdentity();
+  void startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid();
+  void startEntityScrapeGameOnlyProviderReturnsFalseWithMessage();
+  void startEntityScrapeNullProviderReturnsFalseWithMessage();
 
 private:
   // Mirrors ScraperService's private pending-state paths (same approach as
@@ -885,6 +896,151 @@ void TestScrapeResultDialogUnified::quotaExhaustedFinishShowsResumeHint() {
   QVERIFY(scrapeButton);
   QVERIFY(scrapeButton->isVisibleTo(&dlg));
   QVERIFY(scrapeButton->isEnabled());
+}
+
+void TestScrapeResultDialogUnified::
+    startEntityScrapePlatformProviderEnqueuesPlatformJobEmptyIdentity() {
+  // Kartend-ckepd.6: the provider-aware launch enqueues ONE Platform entity job
+  // (empty identity → autodetect) for a collection whose provider supports
+  // {Game, Platform}, re-resolving uuid + artwork dir from the live CollectionConfig.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+  provider->parkEntityInto(m_parkedCallbacks); // fetchEntity parks → run stays live for inspection
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+
+  QVERIFY(dlg.startEntityScrape(1)); // Beta
+
+  // One Platform job dispatched to the collection's own provider, empty identity
+  // so the provider autodetects the systemeid.
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
+  QVERIFY(provider->lastEntityTarget.identity.isEmpty());
+  QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
+
+  // The persisted queue snapshot carries exactly that one entity job, uuid +
+  // artwork dir re-resolved from the live config, no per-item "remaining" list.
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  const QJsonObject job = queue.first().toObject();
+  QCOMPARE(job.value(QStringLiteral("collection_uuid")).toString(), expectedUuid(collections[1]));
+  QCOMPARE(job.value(QStringLiteral("artwork_dir")).toString(), expectedArtworkDir(collections[1]));
+  QVERIFY(job.value(QStringLiteral("remaining")).toArray().isEmpty());
+}
+
+void TestScrapeResultDialogUnified::
+    startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid() {
+  // Kartend-ckepd.5: a video collection whose provider supports {Game, Collection}
+  // enqueues one Collection entity job carrying the collection uuid as identity
+  // (TMDB searches by name but persists under the uuid).
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+  provider->supportedEntityList = {Scraper::ScrapeEntityType::Game,
+                                   Scraper::ScrapeEntityType::Collection};
+  provider->parkEntityInto(m_parkedCallbacks);
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+
+  QVERIFY(dlg.startEntityScrape(0)); // Alpha
+
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Collection);
+  QCOMPARE(provider->lastEntityTarget.identity, expectedUuid(collections[0]));
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+}
+
+void TestScrapeResultDialogUnified::startEntityScrapeGameOnlyProviderReturnsFalseWithMessage() {
+  // A collection whose provider supports ONLY Game has no entity-level artwork —
+  // startEntityScrape enqueues nothing, shows an info message, and returns false so
+  // the caller (openEntityScraperDialog) skips showing an empty dialog.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+  provider->supportedEntityList = {Scraper::ScrapeEntityType::Game};
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+
+  // startEntityScrape shows a modal QMessageBox on the empty-queue branch — the
+  // queue answers it so exec() returns instead of wedging the event loop.
+  KartendTest::ModalAnswerQueue modal({QMessageBox::Ok});
+  QVERIFY(!dlg.startEntityScrape(0));
+  QCOMPARE(modal.texts.size(), 1);
+  QVERIFY2(modal.texts.first().contains(QStringLiteral("no collection- or platform-level artwork")),
+           qPrintable(modal.texts.first()));
+  // No scrape was started and no pending state was written.
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(readPendingRoot().isEmpty());
+}
+
+void TestScrapeResultDialogUnified::startEntityScrapeNullProviderReturnsFalseWithMessage() {
+  // A collection with no configured scraper (providerBuilder → nullptr) → a
+  // DISTINCT "No scraper is configured" info message + false, before any enqueue.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [](int) -> std::shared_ptr<MetadataLookupProvider> { return nullptr; };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+
+  KartendTest::ModalAnswerQueue modal({QMessageBox::Ok});
+  QVERIFY(!dlg.startEntityScrape(0));
+  QCOMPARE(modal.texts.size(), 1);
+  QVERIFY2(modal.texts.first().contains(QStringLiteral("No scraper is configured")),
+           qPrintable(modal.texts.first()));
+  QCOMPARE(service.state(), ScraperService::State::Idle);
 }
 
 QTEST_MAIN(TestScrapeResultDialogUnified)

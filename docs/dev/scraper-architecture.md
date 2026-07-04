@@ -206,12 +206,17 @@ that target a whole platform / collection / category rather than one ROM
 - **Category is deliberately out of scope**: Kartend categories are user-defined
   groupings with no canonical upstream art source, so no provider advertises
   `ScrapeEntityType::Category` (`Kartend-ckepd.5`).
-- **UI launch** (`Kartend-ckepd.6`): the item context menu's
-  "Scrape platform artwork…" action → `IMainWindow::openEntityScraperDialog`
+- **UI launch** (`Kartend-ckepd.6`/`.5`): the item context menu's
+  "Scrape collection / platform artwork…" action → `IMainWindow::openEntityScraperDialog`
   → `ScraperController::openEntityScraperDialog` → the result dialog's
-  `startPlatformEntityScrape()`, which builds a Platform `EntityScrapeTarget`
-  job (empty identity → autodetect) and starts the service in Auto mode.
-  Progress and errors surface through the same result dialog as a game scrape.
+  `startEntityScrape()`. That method is **provider-aware**: it builds the
+  collection's own provider and enqueues one `EntityScrapeTarget` job per non-Game
+  entity type the provider supports — Platform (empty identity → autodetect) for a
+  ScreenScraper/games collection, Collection (identity = uuid) for a TMDB/video
+  collection — then starts the service in Auto mode. It returns `false` (and shows
+  a message) when the collection has no entity-capable scraper, so the caller skips
+  showing an empty dialog. Progress and errors surface through the same result
+  dialog as a game scrape.
 
 ## ScreenScraper-specific helpers
 

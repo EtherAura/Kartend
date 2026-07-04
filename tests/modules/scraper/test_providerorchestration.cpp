@@ -27,6 +27,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "errorutils.h"
 #include "musicbrainzprovider.h"
@@ -201,6 +202,12 @@ private slots:
   void tmdb_fetchDetail_tvRoute_requestsContentRatings();
   void tmdb_fetchDetail_malformedCandidateId_errorsWithoutRequest();
   void tmdb_fetchMediaBytes_userAgentOnly_noAuthorizationLeak();
+  // Kartend-ckepd.5/.6: TMDB Collection entity scraping.
+  void tmdb_fetchEntity_collection_searchesByName_stampsUuidScopeKeyAndProvider();
+  void tmdb_fetchEntity_nonCollectionType_errorsWithoutRequest();
+  void tmdb_fetchEntity_missingToken_errorsWithoutRequest();
+  void tmdb_fetchEntity_emptyName_errorsWithoutRequest();
+  void tmdb_fetchEntity_emptyResults_isNotFound();
 
 private:
   /// Arms the seam to capture every request into m_requests and answer
@@ -605,6 +612,136 @@ void TestProviderOrchestration::tmdb_fetchMediaBytes_userAgentOnly_noAuthorizati
   QVERIFY(headerValue(m_requests.first().headers, QByteArrayLiteral("Authorization")).isEmpty());
   QVERIFY(headerValue(m_requests.first().headers, QByteArrayLiteral("User-Agent"))
               .startsWith(QByteArrayLiteral("Kartend/")));
+}
+
+// --- TMDB Collection entity scraping (Kartend-ckepd.5/.6) ------------------
+
+void TestProviderOrchestration::
+    tmdb_fetchEntity_collection_searchesByName_stampsUuidScopeKeyAndProvider() {
+  // fetchEntity(Collection) searches TMDB by the collection NAME (from the
+  // accessor), maps the top match's poster → Collection-scoped Logo and backdrop
+  // → Collection-scoped Background, stamps the OWNING collection uuid (the target
+  // identity) as scopeKey, and tags sourceProviderId=tmdb. The parser leaves
+  // scopeKey empty, so the PROVIDER is the only place the uuid-stamping and
+  // sourceProviderId are covered.
+  const QByteArray body = R"({"results":[
+    {"id":10,"name":"Star Wars Collection","poster_path":"/poster.jpg","backdrop_path":"/backdrop.jpg"}
+  ]})";
+  respondWith(body);
+  const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Star Wars");
+  TmdbProvider provider([&settings]() { return &settings; },
+                        [&cfg]() -> const CollectionConfig * { return &cfg; });
+
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("coll-uuid-123");
+
+  bool called = false;
+  provider.fetchEntity(target, [&](const ErrorUtils::Result<Scraper::ScrapedItem> &result) {
+    called = true;
+    QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+    const auto &item = result.value();
+    QCOMPARE(item.sourceProviderId, QStringLiteral("tmdb"));
+    QCOMPARE(item.media.size(), 2);
+    QVERIFY(item.media[0].scope == Scraper::MediaScope::Collection);
+    QVERIFY(item.media[0].entityRole == Scraper::EntityArtRole::Logo);
+    QVERIFY(item.media[1].scope == Scraper::MediaScope::Collection);
+    QVERIFY(item.media[1].entityRole == Scraper::EntityArtRole::Background);
+    for (const Scraper::MediaAsset &a : item.media) {
+      QCOMPARE(a.scopeKey, QStringLiteral("coll-uuid-123"));
+    }
+  });
+  QVERIFY(called);
+  QCOMPARE(m_requests.size(), 1);
+  const QUrl url = m_requests.first().url;
+  QCOMPARE(url.host(), QStringLiteral("api.themoviedb.org"));
+  QCOMPARE(url.path(), QStringLiteral("/3/search/collection"));
+  QCOMPARE(QUrlQuery(url).queryItemValue(QStringLiteral("query")), QStringLiteral("Star Wars"));
+  QCOMPARE(headerValue(m_requests.first().headers, QByteArrayLiteral("Authorization")),
+           QByteArrayLiteral("Bearer tok123"));
+}
+
+void TestProviderOrchestration::tmdb_fetchEntity_nonCollectionType_errorsWithoutRequest() {
+  // TMDB entity scraping only supports Collection — a Platform target is rejected
+  // synchronously with InvalidArgument and no HTTP request.
+  respondWith(QByteArrayLiteral("{}"));
+  const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Star Wars");
+  TmdbProvider provider([&settings]() { return &settings; },
+                        [&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+  bool called = false;
+  provider.fetchEntity(target, [&](const ErrorUtils::Result<Scraper::ScrapedItem> &result) {
+    called = true;
+    QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidArgument));
+  });
+  QVERIFY(called);
+  QVERIFY(m_requests.isEmpty());
+}
+
+void TestProviderOrchestration::tmdb_fetchEntity_missingToken_errorsWithoutRequest() {
+  // No API token → InvalidArgument (not configured), before any request.
+  respondWith(QByteArrayLiteral("{}"));
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Star Wars");
+  TmdbProvider provider([]() -> const GeneralSettings * { return nullptr; },
+                        [&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("coll-uuid");
+  bool called = false;
+  provider.fetchEntity(target, [&](const ErrorUtils::Result<Scraper::ScrapedItem> &result) {
+    called = true;
+    QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidArgument));
+  });
+  QVERIFY(called);
+  QVERIFY(m_requests.isEmpty());
+}
+
+void TestProviderOrchestration::tmdb_fetchEntity_emptyName_errorsWithoutRequest() {
+  // Token present but the collection has no resolvable name (null accessor) →
+  // InvalidArgument, no request (TMDB can't be searched without a query).
+  respondWith(QByteArrayLiteral("{}"));
+  const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
+  TmdbProvider provider([&settings]() { return &settings; },
+                        []() -> const CollectionConfig * { return nullptr; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("coll-uuid");
+  bool called = false;
+  provider.fetchEntity(target, [&](const ErrorUtils::Result<Scraper::ScrapedItem> &result) {
+    called = true;
+    QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidArgument));
+  });
+  QVERIFY(called);
+  QVERIFY(m_requests.isEmpty());
+}
+
+void TestProviderOrchestration::tmdb_fetchEntity_emptyResults_isNotFound() {
+  // A search that matches nothing is a routine RemoteResourceNotFound
+  // (re-queueable, e8aag) — niche collections often have no TMDB franchise. The
+  // request DID go out; it just matched nothing.
+  respondWith(QByteArrayLiteral(R"({"results":[]})"));
+  const GeneralSettings settings = settingsWithTmdbToken(QStringLiteral("tok123"));
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("No Such Franchise");
+  TmdbProvider provider([&settings]() { return &settings; },
+                        [&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("coll-uuid");
+  bool called = false;
+  provider.fetchEntity(target, [&](const ErrorUtils::Result<Scraper::ScrapedItem> &result) {
+    called = true;
+    QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::RemoteResourceNotFound));
+  });
+  QVERIFY(called);
+  QCOMPARE(m_requests.size(), 1);
 }
 
 QTEST_MAIN(TestProviderOrchestration)

@@ -27,10 +27,12 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "dbmigrations.h"
 #include "filehashcache.h"
 #include "romhasher.h"
+#include "scrapertypes.h"
 #include "screenscrapercatalogmanager.h"
 #include "screenscraperprovider.h"
 #include "screenscrapersystemcache.h"
@@ -63,6 +65,12 @@ private slots:
   void supportedEntities_includesPlatform();
   void buildSystemeMediaUrl_mapsParamsAndGatesUser();
   void fetchEntity_userCredsRequireBothIdAndPassword();
+  void fetchEntity_platformAssetShapeRolesAndScopeKey();
+  void fetchEntity_absentIdInNonEmptyCatalogIsNotFound();
+  void fetchEntity_nonPlatformTypeIsInvalidArgument();
+  // Kartend-ckepd.6: empty-identity autodetect via the collection accessor.
+  void fetchEntity_emptyIdentityHonorsCollectionSystemIdOverride();
+  void fetchEntity_emptyIdentityUnresolvableIsNotFound();
 
 private:
   std::unique_ptr<ScreenScraperProvider> m_provider;
@@ -384,6 +392,190 @@ void TestScreenScraperProvider::fetchEntity_userCredsRequireBothIdAndPassword() 
   }
 
   // Tidy the sandboxed cache so later runs re-seed deterministically.
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_platformAssetShapeRolesAndScopeKey() {
+  // Kartend-ckepd.4: a successful Platform fetchEntity emits exactly one asset per
+  // kPlatformMediaTypes, each stamped with the EntityArtRole + in-role priority the
+  // ckepd.3 config-wiring (applyEntityArtToConfig) consumes, Platform scope, and
+  // scopeKey == systemeid. Explicit identity "42" is honored over autodetect, so
+  // both the media-URL systemeid and the scopeKey carry it. Headless via the seeded
+  // on-disk system cache — ensureSystemsCatalog resolves synchronously, no network.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY2(result.has_value(), "callback did not fire synchronously from the seeded cache");
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  const Scraper::ScrapedItem &item = result->value();
+  QCOMPARE(item.title, QStringLiteral("Test Platform"));
+  QCOMPARE(item.sourceProviderId, QStringLiteral("screenscraper"));
+  // Four assets, in kPlatformMediaTypes order: wheel/logo → Logo(0/1),
+  // illustration/photo → Background(0/1). asset.type is the CANONICAL type
+  // (e.g. "logo"), distinct from the api token ("logo-monochrome").
+  QCOMPARE(item.media.size(), 4);
+  struct Expect {
+    const char *type;
+    Scraper::EntityArtRole role;
+    int prio;
+  };
+  const Expect expected[] = {
+      {"wheel", Scraper::EntityArtRole::Logo, 0},
+      {"logo", Scraper::EntityArtRole::Logo, 1},
+      {"illustration", Scraper::EntityArtRole::Background, 0},
+      {"photo", Scraper::EntityArtRole::Background, 1},
+  };
+  for (int i = 0; i < 4; ++i) {
+    const Scraper::MediaAsset &a = item.media[i];
+    QCOMPARE(a.type, QString::fromLatin1(expected[i].type));
+    QCOMPARE(a.entityRole, expected[i].role);
+    QCOMPARE(a.entityRolePriority, expected[i].prio);
+    QCOMPARE(a.scope, Scraper::MediaScope::Platform);
+    QCOMPARE(a.scopeKey, QStringLiteral("42"));
+    QCOMPARE(QUrlQuery(a.url).queryItemValue(QStringLiteral("systemeid")), QStringLiteral("42"));
+  }
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_absentIdInNonEmptyCatalogIsNotFound() {
+  // Kartend-ckepd.4 / e8aag: a NON-empty catalog that lacks the requested id is a
+  // routine RemoteResourceNotFound (re-queueable), not an error. Identity MUST be
+  // explicit: with a null CollectionAccessor an empty identity would fail earlier
+  // at resolveSystemId()==0, so the test would pass for the wrong reason.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("999"); // explicit id, absent from the catalog
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY(result->isError());
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::RemoteResourceNotFound);
+  QVERIFY(QFile::remove(cachePath));
+}
+
+// NOTE: the empty-catalog → UnknownError + httpStatus 503 branch
+// (screenscraperprovider.cpp:225-235) is deliberately NOT covered here. Reaching
+// systems.isEmpty() synchronously would need either no dev creds or a null
+// HttpClient, but resolveSsCredentials always falls back to a BUNDLED dev key
+// ("cedar") and the catalog manager holds the real HttpClient::instance() — so
+// with no stale cache it always attempts a live systemesListe.php round-trip. The
+// 503 mapping therefore only triggers on a genuine network/catalog failure and is
+// runtime-gated (a stub HttpClient seam would be needed to test it headlessly).
+
+void TestScreenScraperProvider::fetchEntity_nonPlatformTypeIsInvalidArgument() {
+  // Kartend-ckepd.4: ScreenScraper advertises only Game + Platform. A non-Platform
+  // entity type is rejected synchronously with InvalidArgument, before any catalog
+  // access — pinning advertised vs actual entity support.
+  GeneralSettings settings;
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("some-uuid");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY2(result.has_value(), "non-Platform reject was not synchronous");
+  QVERIFY(result->isError());
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::InvalidArgument);
+}
+
+void TestScreenScraperProvider::fetchEntity_emptyIdentityHonorsCollectionSystemIdOverride() {
+  // Kartend-ckepd.6: the fresh UI launch leaves identity EMPTY → fetchEntity
+  // autodetects via resolveSystemId(), which honors the collection's
+  // screenscraperSystemId override. Prove the CollectionAccessor is consulted and
+  // the override id flows through to scopeKey (deterministic; the autodetect
+  // heuristic itself lives in test_screenscrapersystems).
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  CollectionConfig cfg;
+  cfg.scraperOverrides.screenscraperSystemId = 42;
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 [&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform; // identity left EMPTY → resolve via override
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  QVERIFY(!result->value().media.isEmpty());
+  QCOMPARE(result->value().media.first().scopeKey, QStringLiteral("42"));
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_emptyIdentityUnresolvableIsNotFound() {
+  // Kartend-ckepd.6: empty identity + a collection whose system can't be resolved
+  // (no override; a name that won't autodetect) → resolveSystemId returns 0 →
+  // RemoteResourceNotFound (re-queueable), the "set the System ID override" hint.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  CollectionConfig cfg;
+  cfg.scraperOverrides.screenscraperSystemId = -1; // no override
+  cfg.name = QStringLiteral("zzz-nomatch-zzz");    // won't autodetect vs "Test Platform"
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 [&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform; // identity left EMPTY
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY(result->isError());
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::RemoteResourceNotFound);
   QVERIFY(QFile::remove(cachePath));
 }
 
