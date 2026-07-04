@@ -200,8 +200,10 @@ void TestScrapePersistence::metadataSave_overwritesScrapedFieldsButPreservesUser
   item.releaseDate = QStringLiteral("2020-05-01");
   // contentRating intentionally empty — preserve user value.
 
-  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"), item,
-                            {});
+  // Return value (mediaWritten/skipped) is irrelevant here — this test asserts
+  // the metadata SAVE; explicitly discard the [[nodiscard]] result.
+  (void)Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"),
+                                  item, {});
 
   QCOMPARE(db.metadataSaves.size(), 1);
   const auto saved = db.metadataSaves.first();
@@ -230,8 +232,10 @@ void TestScrapePersistence::metadataSave_mergesCustomFieldsWithExisting() {
   // explicitly picked this scrape).
   item.customFields.insert(QStringLiteral("catalogue_no"), QStringLiteral("XYZ999"));
 
-  Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"), item,
-                            {});
+  // Return value (mediaWritten/skipped) is irrelevant here — this test asserts
+  // the metadata SAVE; explicitly discard the [[nodiscard]] result.
+  (void)Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"),
+                                  item, {});
 
   QCOMPARE(db.metadataSaves.size(), 1);
   const QString mergedJson = db.metadataSaves.first().customFields;

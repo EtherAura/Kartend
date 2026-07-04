@@ -244,7 +244,8 @@ QPair<StubProvider::Canned, QUrl> makeMatchWithCover(const QString &id, const QS
 /// the summary. The 5-second timeout guards against a wedged state
 /// machine — at the stub provider's 0-delay timer cadence a 100-item
 /// run completes in milliseconds.
-Scraper::BatchScrapeRunner::Summary waitForFinish(Scraper::BatchScrapeRunner *runner) {
+Scraper::BatchScrapeRunner::Summary waitForFinish(Scraper::BatchScrapeRunner *runner,
+                                                  int timeoutMs = 5000) {
   Scraper::BatchScrapeRunner::Summary captured;
   bool finished = false;
   QObject::connect(runner, &Scraper::BatchScrapeRunner::finished,
@@ -252,10 +253,9 @@ Scraper::BatchScrapeRunner::Summary waitForFinish(Scraper::BatchScrapeRunner *ru
                      captured = s;
                      finished = true;
                    });
-  const int kTimeoutMs = 5000;
   QElapsedTimer timer;
   timer.start();
-  while (!finished && timer.elapsed() < kTimeoutMs) {
+  while (!finished && timer.elapsed() < timeoutMs) {
     QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
   }
   return captured;
@@ -297,6 +297,7 @@ private slots:
   void notFoundReportedSeparatelyFromErrors();
   void failureMessageIncludesStatusAndDetail();
   void failedPathsCapturedForErrorsOnly();
+  void failedPathsRespectMaxReportedCap();
   void skipCurrentItemSkipsOnlyTheDisplayedItem();
   void remainingPathsEmptyAfterMixedOutcomes();
   void remainingPathsKeepsQuotaStoppedWork();
@@ -450,6 +451,33 @@ void TestBatchScrapeRunner::failedPathsCapturedForErrorsOnly() {
   QCOMPARE(summary.scraped, 1);
   QCOMPARE(summary.failedPaths.size(), 1);
   QCOMPARE(summary.failedPaths.first(), QStringLiteral("/games/Alpha.bin"));
+}
+
+void TestBatchScrapeRunner::failedPathsRespectMaxReportedCap() {
+  // Kartend-jjjo5, criterion 6: failedPaths is bounded by kMaxReportedFailures,
+  // the same cap firstFailures uses (batchscraperunner.cpp:930). This is where
+  // the cap is FIRST applied — the service rollup can never receive more than
+  // the runner reports, so its identical guard is defensive. Drive kMax+2 errored
+  // items: the (uncapped) errors count reflects every failure, but the
+  // re-queueable list stops at the cap. lookupErrorHttpStatus stays 0 so each
+  // error takes the streak-resetting branch and the fatal-error circuit breaker
+  // (401/403/423/426 only) never stops the batch early.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned boom;
+  boom.lookupError = QStringLiteral("boom"); // httpStatus 0 → error bucket, no breaker
+  const int n = Scraper::kMaxReportedFailures + 2;
+  QStringList paths;
+  paths.reserve(n);
+  for (int i = 0; i < n; ++i) {
+    const QString base = QStringLiteral("Item%1").arg(i, 5, 10, QLatin1Char('0'));
+    stub->byQuery[base] = boom;
+    paths.append(QStringLiteral("/games/%1.bin").arg(base));
+  }
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner, /*timeoutMs=*/60000);
+  QCOMPARE(summary.errors, n);                                         // count is uncapped
+  QCOMPARE(summary.failedPaths.size(), Scraper::kMaxReportedFailures); // list is bounded
 }
 
 void TestBatchScrapeRunner::skipCurrentItemSkipsOnlyTheDisplayedItem() {

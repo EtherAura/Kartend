@@ -568,7 +568,7 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                     reply->error() == QNetworkReply::OperationCanceledError && *redirectBlocked;
                 const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError &&
                                       !*sizeCapExceeded && !*redirectBlocked;
-                ErrorCode errorCode = ErrorCode::DatabaseQueryFailed;
+                ErrorCode errorCode = ErrorCode::NetworkRequestFailed;
                 QString errorMsg = QStringLiteral("HTTP request failed");
                 if (oversizedResponse) {
                   errorCode = ErrorCode::ResponseTooLarge;

@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -154,6 +155,7 @@ private slots:
   void resumeReresolvesCollectionIndexByUuid();
   void resumeDropsJobWhoseUuidNoLongerResolves();
   void failedItemsRoundTripThroughPendingState();
+  void failedItemsAggregateAcrossCollections();
   void persistWritesFailedItemsMidRun();
   void entityFailureRecordsEntityDiscriminator();
   void entityFailedItemRoundTripsDiscriminator();
@@ -1004,6 +1006,65 @@ void TestScraperServiceResume::failedItemsRoundTripThroughPendingState() {
   QCOMPARE(state.summarySoFar.failedItems.first().collectionUuid, QStringLiteral("uuid-a"));
   QCOMPARE(state.summarySoFar.failedItems.first().path, QStringLiteral("/m/broken.bin"));
   QCOMPARE(state.summarySoFar.failedItems.last().path, QStringLiteral("/m/worse.bin"));
+}
+
+void TestScraperServiceResume::failedItemsAggregateAcrossCollections() {
+  // Kartend-jjjo5, criterion 2: two collections, each contributing exactly one
+  // errored item, must BOTH appear in summary().failedItems — proving the
+  // aggregate list accumulates across collections rather than the second
+  // collection's processing dropping the first's failure. Entity jobs are used
+  // because they need no DB (a game batch requires ctx.ctx per the no-DB-mocking
+  // rule); both feed the SAME m_summary.failedItems sink. Each item keeps its
+  // OWN collection's index/uuid so the re-scrape path rebuilds one job per owner.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("boom"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob a;
+  a.collectionIndex = 0;
+  a.collectionUuid = QStringLiteral("uuid-a");
+  a.collectionName = QStringLiteral("Alpha");
+  a.entity.type = Scraper::ScrapeEntityType::Platform;
+  a.entity.identity = QStringLiteral("11");
+  a.entity.collectionIndex = 0;
+  ScraperService::CollectionJob b;
+  b.collectionIndex = 1;
+  b.collectionUuid = QStringLiteral("uuid-b");
+  b.collectionName = QStringLiteral("Beta");
+  b.entity.type = Scraper::ScrapeEntityType::Platform;
+  b.entity.identity = QStringLiteral("22");
+  b.entity.collectionIndex = 1;
+
+  service.startScrape({a, b}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().errors, 2);
+  const auto failed = service.summary().failedItems; // by value — copy outlives temporary
+  QCOMPARE(failed.size(), 2);
+
+  const auto find = [&failed](const QString &identity) {
+    return std::find_if(
+        failed.begin(), failed.end(),
+        [&identity](const ScraperService::Summary::FailedItem &fi) { return fi.path == identity; });
+  };
+  const auto itA = find(QStringLiteral("11"));
+  const auto itB = find(QStringLiteral("22"));
+  QVERIFY(itA != failed.end());
+  QVERIFY(itB != failed.end());
+  // Each failure carries its OWN collection's identity (not the last one's).
+  QVERIFY(itA->isEntity);
+  QCOMPARE(itA->collectionIndex, 0);
+  QCOMPARE(itA->collectionUuid, QStringLiteral("uuid-a"));
+  QVERIFY(itB->isEntity);
+  QCOMPARE(itB->collectionIndex, 1);
+  QCOMPARE(itB->collectionUuid, QStringLiteral("uuid-b"));
 }
 
 void TestScraperServiceResume::persistWritesFailedItemsMidRun() {
