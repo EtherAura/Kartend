@@ -10,6 +10,16 @@
 
 namespace Scraper {
 
+bool coreScrapedFieldsComplete(const ItemMetadataStore::ItemMetadata &md) {
+  // See the header: FillMissing treats these six fields as "the scraped metadata".
+  // All must be non-empty; a partially-scraped row is not complete and stays
+  // queued to fill its gaps (Kartend-em3jc). contentRating and players are
+  // deliberately excluded — providers most often leave them blank, so requiring
+  // them would re-scrape nearly every item on every FillMissing run.
+  return !md.title.isEmpty() && !md.description.isEmpty() && !md.genre.isEmpty() &&
+         !md.developer.isEmpty() && !md.publisher.isEmpty() && !md.releaseDate.isEmpty();
+}
+
 bool decideScrapeSkip(const SkipDecisionInputs &in) {
   if (in.mode == Scraper::RescrapeMode::Skip) {
     // Skip mode: any metadata marker is enough — "if scraped, leave it alone."
@@ -18,9 +28,11 @@ bool decideScrapeSkip(const SkipDecisionInputs &in) {
   }
   // FillMissing: only burn a request when at least one ticked field is missing
   // or stale. If every ticked field (metadata + each wanted media type) is
-  // covered and within the window, there is nothing to fetch — skip.
+  // covered and within the window, there is nothing to fetch — skip. "Metadata
+  // covered" means COMPLETE (every core scraped field populated), not merely
+  // present: a partially-scraped row stays queued to fill its gaps (Kartend-em3jc).
   bool fullyCovered = true;
-  if (in.writeMetadata && (!in.metaPresent || !in.metaWithinWindow)) {
+  if (in.writeMetadata && (!in.metaComplete || !in.metaWithinWindow)) {
     fullyCovered = false;
   }
   if (fullyCovered && !in.allWantedMediaCovered) {
@@ -43,10 +55,23 @@ MediaCoverageIndex buildMediaCoverageIndex(const QString &artworkDir,
   // completeBaseName when assembling per-item paths, so the key roundtrips).
   MediaCoverageIndex index;
   if (sidecarCheckPossible) {
-    for (const QString &type : wantedTypes) {
-      const QString subdir = QDir(artworkDir).filePath(type);
-      QDir d(subdir);
-      if (!d.exists()) continue;
+    // Media is stored in per-type subdirs named with the provider's ORIGINAL
+    // casing (e.g. "box-2D-back", "box-3D", "support-2D"), but wantedTypes are
+    // lowercased. On a case-sensitive filesystem, QDir(artworkDir).filePath(
+    // "box-2d-back") misses the real "box-2D-back" folder, so present art reads
+    // as "missing" and FillMissing re-scrapes the item forever. Resolve the
+    // folder case-insensitively via a lowercased-name -> actual-name map so the
+    // wanted (lowercased) type finds its on-disk folder (Kartend-em3jc).
+    QHash<QString, QString> actualDirByLower;
+    const auto subdirs = QDir(artworkDir).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    actualDirByLower.reserve(subdirs.size());
+    for (const QString &dir : subdirs) {
+      actualDirByLower.insert(dir.toLower(), dir);
+    }
+    for (const QString &type : wantedTypes) { // wantedTypes are already lowercase
+      const QString actualDir = actualDirByLower.value(type);
+      if (actualDir.isEmpty()) continue;
+      QDir d(QDir(artworkDir).filePath(actualDir));
       QSet<QString> bases;
       const auto files = d.entryList(QDir::Files | QDir::NoDotAndDotDot);
       bases.reserve(files.size());
@@ -54,7 +79,8 @@ MediaCoverageIndex buildMediaCoverageIndex(const QString &artworkDir,
         bases.insert(QFileInfo(f).completeBaseName().toLower());
       }
       // operator[] returns T& so the assignment is a real move; QHash's
-      // (const Key&, const T&) insert overload would have copied.
+      // (const Key&, const T&) insert overload would have copied. Keyed by the
+      // lowercased type so typeCoveredFor's lookup roundtrips.
       index.presentByType[type] = std::move(bases);
     }
   }
@@ -149,6 +175,15 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
   const QString baseNameLower = baseName.toLower();
   const MetaPresence meta = metadataPresenceFor(path, baseName);
 
+  // FillMissing metadata completeness: the metadata slot counts as covered only
+  // when every core scraped field is populated, so a partially-scraped row stays
+  // queued to fill its gaps (Kartend-em3jc). Only the DB row carries the field
+  // values; without a DB (sidecar-only run) we cannot inspect fields, so fall
+  // back to plain presence to preserve that path's behaviour.
+  const bool metaComplete = ctx.dbCheckPossible
+                                ? coreScrapedFieldsComplete(ctx.metadataByPath.value(path))
+                                : meta.present;
+
   // FillMissing media coverage: every wanted media type must already be on
   // disk for the item to count as fully covered (the metadata + window halves
   // are folded in by decideScrapeSkip).
@@ -160,8 +195,8 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
     }
   }
 
-  return decideScrapeSkip(
-      {ctx.mode, ctx.writeMetadata, meta.present, withinWindow(meta), allWantedMediaCovered});
+  return decideScrapeSkip({ctx.mode, ctx.writeMetadata, meta.present, metaComplete,
+                           withinWindow(meta), allWantedMediaCovered});
 }
 
 } // namespace Scraper

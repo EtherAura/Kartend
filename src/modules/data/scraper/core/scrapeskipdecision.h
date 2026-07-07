@@ -21,7 +21,9 @@ namespace Scraper {
 struct SkipDecisionInputs {
   Scraper::RescrapeMode mode = Scraper::RescrapeMode::Overwrite;
   bool writeMetadata = true;
-  bool metaPresent = false;          ///< Metadata exists (DB row or sidecar).
+  bool metaPresent = false;          ///< A scraped metadata marker exists (DB row or sidecar).
+  bool metaComplete = false;         ///< ...and every core scraped field is populated — the
+                                     ///< FillMissing metadata gate (see coreScrapedFieldsComplete).
   bool metaWithinWindow = true;      ///< ...and within the refresh window (or no window).
   bool allWantedMediaCovered = true; ///< Every wanted media type already on disk.
 };
@@ -31,6 +33,16 @@ struct SkipDecisionInputs {
 /// filesystem context (Kartend audit 2w4wz). Returns true when the item is
 /// already covered and should be dropped from the queue.
 [[nodiscard]] bool decideScrapeSkip(const SkipDecisionInputs &in);
+
+/// True when every CORE scraped metadata field is populated: title, description,
+/// genre, developer, publisher, releaseDate. This is the FillMissing "metadata
+/// already complete → skip" predicate (Kartend-em3jc): a bare scraped row with
+/// empty fields is NOT complete, so it stays queued to fill its gaps.
+/// contentRating and players are excluded — providers usually leave them blank, so
+/// requiring them would re-scrape nearly everything every run; user-authored
+/// fields (notes, personal rating, pin/hide flags, sourceUrl) and optional
+/// structured fields (tags, customFields, runtime) are excluded too.
+[[nodiscard]] bool coreScrapedFieldsComplete(const ItemMetadataStore::ItemMetadata &md);
 
 /// Basename indexes of media-on-disk for the coverage check, pre-built once
 /// per run so the per-item probe is an O(1) hash lookup (Kartend audit 2w4wz).

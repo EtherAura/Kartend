@@ -291,6 +291,9 @@ private slots:
   void fillMissingPreSkipsItemsWithEveryTickedFieldCovered();
   void fillMissingScrapesItemsMissingAnyTickedField();
   void fillMissingHonoursRefreshWindowSameAsSkip();
+  void coreScrapedFieldsCompletePredicate();
+  void fillMissingSkipsOnlyItemsWithAllCoreFields();
+  void mediaCoverageMatchesMixedCaseFolders();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
   void quota429StopsBatch();
@@ -777,29 +780,38 @@ void TestBatchScrapeRunner::sidecarWriteFailureCountedInSummary() {
 void TestBatchScrapeRunner::decideScrapeSkipBranches() {
   // The skip decision, factored out of shouldSkipScrapedItem so its branches
   // are testable without DB/filesystem context (Kartend audit 2w4wz). Field
-  // order: {mode, writeMetadata, metaPresent, metaWithinWindow, allMediaCovered}.
+  // order: {mode, writeMetadata, metaPresent, metaComplete, metaWithinWindow,
+  // allMediaCovered}.
   using Inputs = Scraper::SkipDecisionInputs;
   using Mode = Scraper::RescrapeMode;
   const auto skip = [](Inputs in) { return Scraper::decideScrapeSkip(in); };
 
-  // Skip mode: any present marker within the window is enough; stale or absent
-  // markers release the item back for a re-scrape.
-  QVERIFY(skip({Mode::Skip, true, /*present=*/true, /*within=*/true, /*media=*/true}));
-  QVERIFY(!skip({Mode::Skip, true, true, /*within=*/false, true}));  // stale → released
-  QVERIFY(!skip({Mode::Skip, true, /*present=*/false, true, true})); // never scraped
+  // Skip mode: any present marker within the window is enough — field
+  // completeness is irrelevant; stale or absent markers release the item.
+  QVERIFY(skip({Mode::Skip, true, /*present=*/true, /*complete=*/false, /*within=*/true, true}));
+  QVERIFY(!skip({Mode::Skip, true, true, false, /*within=*/false, true}));  // stale → released
+  QVERIFY(!skip({Mode::Skip, true, /*present=*/false, false, true, true})); // never scraped
 
-  // FillMissing (metadata + media wanted): skip only when everything is covered.
-  QVERIFY(skip({Mode::FillMissing, true, true, true, true}));
-  QVERIFY(!skip({Mode::FillMissing, true, /*present=*/false, true, true})); // metadata missing
-  QVERIFY(!skip({Mode::FillMissing, true, true, true, /*media=*/false}));   // a media type missing
-  QVERIFY(!skip({Mode::FillMissing, true, true, /*within=*/false, true}));  // metadata stale
-
-  // FillMissing media-only (writeMetadata=false): media coverage decides, but a
-  // stale freshness anchor (sidecar/DB timestamp) still releases the item.
-  QVERIFY(skip({Mode::FillMissing, /*writeMeta=*/false, true, true, true}));
-  QVERIFY(!skip({Mode::FillMissing, false, true, true, /*media=*/false})); // media missing
+  // FillMissing (metadata + media wanted): skip only when metadata is COMPLETE,
+  // every wanted media type is on disk, and it is within the window. A
+  // present-but-incomplete row is NOT enough — it stays queued to fill its gaps
+  // (Kartend-em3jc).
+  QVERIFY(skip({Mode::FillMissing, true, /*present=*/true, /*complete=*/true, true, true}));
+  QVERIFY(!skip({Mode::FillMissing, true, /*present=*/true, /*complete=*/false, true,
+                 true})); // partial metadata
   QVERIFY(
-      !skip({Mode::FillMissing, false, /*present=*/true, /*within=*/false, true})); // stale anchor
+      !skip({Mode::FillMissing, true, /*present=*/false, false, true, true})); // metadata missing
+  QVERIFY(!skip(
+      {Mode::FillMissing, true, true, /*complete=*/true, true, /*media=*/false})); // media missing
+  QVERIFY(!skip({Mode::FillMissing, true, true, true, /*within=*/false, true}));   // metadata stale
+
+  // FillMissing media-only (writeMetadata=false): completeness is irrelevant;
+  // media coverage decides, but a stale freshness anchor still releases the item.
+  QVERIFY(skip(
+      {Mode::FillMissing, /*writeMeta=*/false, /*present=*/true, /*complete=*/false, true, true}));
+  QVERIFY(!skip({Mode::FillMissing, false, true, false, true, /*media=*/false})); // media missing
+  QVERIFY(!skip(
+      {Mode::FillMissing, false, /*present=*/true, false, /*within=*/false, true})); // stale anchor
 }
 
 void TestBatchScrapeRunner::coverFetchSkippedWhenNoFrontAsset() {
@@ -1062,6 +1074,99 @@ void TestBatchScrapeRunner::fillMissingHonoursRefreshWindowSameAsSkip() {
   QCOMPARE(summary.scraped, 1);
   QCOMPARE(summary.skipped, 0);
   QCOMPARE(summary.errors, 0);
+}
+
+void TestBatchScrapeRunner::coreScrapedFieldsCompletePredicate() {
+  // Kartend-em3jc: exactly the six core scraped fields gate FillMissing's
+  // "metadata already complete" decision; clearing any one breaks completeness.
+  // The two rarely-filled scraped fields (content rating, players) and
+  // user-authored / optional fields don't affect it.
+  using MD = ItemMetadataStore::ItemMetadata;
+  MD md;
+  md.title = md.description = md.genre = md.developer = md.publisher = md.releaseDate =
+      md.contentRating = md.players = QStringLiteral("x");
+  QVERIFY(Scraper::coreScrapedFieldsComplete(md));
+
+  for (QString MD::*field : {&MD::title, &MD::description, &MD::genre, &MD::developer,
+                             &MD::publisher, &MD::releaseDate}) {
+    MD partial = md;
+    partial.*field = QString();
+    QVERIFY2(!Scraper::coreScrapedFieldsComplete(partial),
+             "clearing any single required field must break completeness");
+  }
+
+  // Excluded fields don't affect completeness: the rarely-filled scraped fields
+  // (content rating, players) and user-authored / optional fields.
+  MD extras = md;
+  extras.contentRating.clear();
+  extras.players.clear();
+  extras.notes.clear();
+  extras.tags.clear();
+  extras.rating = -1;
+  extras.source.clear();
+  QVERIFY(Scraper::coreScrapedFieldsComplete(extras));
+}
+
+void TestBatchScrapeRunner::fillMissingSkipsOnlyItemsWithAllCoreFields() {
+  // Kartend-em3jc: shouldSkipScrapedItem's FillMissing metadata gate uses the DB
+  // row's field COMPLETENESS, not mere presence. A row with all six core fields →
+  // pre-skip; a scraped-but-partial row (empty publisher) → kept for a gap-filling
+  // re-scrape. contentRating + players are left blank on both rows to confirm they
+  // are NOT part of the criterion. Exercised at the context level — the gate is a
+  // pure read over ScrapeSkipContext, so no runner / write-worker / real DB is
+  // needed. Regression: the old !source.isEmpty() check skipped BOTH rows, so the
+  // partial one's gap never filled.
+  using MD = ItemMetadataStore::ItemMetadata;
+  const auto row = [](bool withPublisher) {
+    MD md;
+    md.source = QStringLiteral("screenscraper");
+    md.title = QStringLiteral("T");
+    md.description = QStringLiteral("D");
+    md.genre = QStringLiteral("G");
+    md.developer = QStringLiteral("Dev");
+    md.releaseDate = QStringLiteral("1990");
+    // contentRating + players deliberately blank — not part of the criterion.
+    if (withPublisher) md.publisher = QStringLiteral("Pub");
+    return md;
+  };
+
+  Scraper::ScrapeSkipContext ctx;
+  ctx.mode = Scraper::RescrapeMode::FillMissing;
+  ctx.writeMetadata = true;
+  ctx.dbCheckPossible = true; // field completeness is only consulted with a DB row
+  ctx.sidecarCheckPossible = false;
+  // No media wanted → the metadata-completeness half alone decides.
+  ctx.metadataByPath[QStringLiteral("/games/Complete.bin")] = row(/*withPublisher=*/true);
+  ctx.metadataByPath[QStringLiteral("/games/Partial.bin")] = row(/*withPublisher=*/false);
+
+  QVERIFY(Scraper::shouldSkipScrapedItem(QStringLiteral("/games/Complete.bin"),
+                                         ctx)); // all core fields → skip
+  QVERIFY(!Scraper::shouldSkipScrapedItem(QStringLiteral("/games/Partial.bin"),
+                                          ctx)); // missing publisher → kept
+}
+
+void TestBatchScrapeRunner::mediaCoverageMatchesMixedCaseFolders() {
+  // Kartend-em3jc: media subdirs are named with the provider's ORIGINAL casing
+  // (e.g. "box-2D-back"), but wanted types are lowercased. The coverage index
+  // must resolve the folder case-insensitively — otherwise present art on a
+  // case-sensitive filesystem reads as "missing" and FillMissing re-scrapes the
+  // item on every run (0 skips despite complete artwork).
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString sub = QDir(tmp.path()).filePath(QStringLiteral("box-2D-back"));
+  QVERIFY(QDir().mkpath(sub));
+  QFile f(QDir(sub).filePath(QStringLiteral("Some Game (USA).png")));
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("png");
+  f.close();
+
+  // Wanted type is lowercased ("box-2d-back"); the folder is mixed case.
+  const auto index = Scraper::buildMediaCoverageIndex(tmp.path(), {QStringLiteral("box-2d-back")},
+                                                      /*sidecarCheckPossible=*/true);
+  QVERIFY2(index.presentByType.contains(QStringLiteral("box-2d-back")),
+           "mixed-case media folder not resolved for the lowercased wanted type");
+  QVERIFY(index.presentByType.value(QStringLiteral("box-2d-back"))
+              .contains(QStringLiteral("some game (usa)")));
 }
 
 void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {
