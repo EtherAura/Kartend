@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Scraper — "download only what's missing":** an item is now skipped only when
-  its metadata is fully filled in; items with some fields still blank are
-  re-scraped to fill the gaps. Previously anything scraped even once was skipped,
-  so partially-filled entries never got completed.
+- **Scraper — "download only what's missing":** now correctly skips items that are
+  already complete. Metadata counts as done only when its core fields are filled
+  (so partially-filled entries get completed instead of being skipped forever),
+  and existing artwork is now recognised regardless of the media folder's letter
+  case — previously mixed-case folders (e.g. `box-2D-back`) went unrecognised on
+  case-sensitive filesystems, so every item was needlessly re-scraped on each run.
 
 ## [0.0.15] - 2026-07-04
 

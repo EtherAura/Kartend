@@ -293,6 +293,7 @@ private slots:
   void fillMissingHonoursRefreshWindowSameAsSkip();
   void coreScrapedFieldsCompletePredicate();
   void fillMissingSkipsOnlyItemsWithAllCoreFields();
+  void mediaCoverageMatchesMixedCaseFolders();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
   void quota429StopsBatch();
@@ -1142,6 +1143,30 @@ void TestBatchScrapeRunner::fillMissingSkipsOnlyItemsWithAllCoreFields() {
                                          ctx)); // all core fields → skip
   QVERIFY(!Scraper::shouldSkipScrapedItem(QStringLiteral("/games/Partial.bin"),
                                           ctx)); // missing publisher → kept
+}
+
+void TestBatchScrapeRunner::mediaCoverageMatchesMixedCaseFolders() {
+  // Kartend-em3jc: media subdirs are named with the provider's ORIGINAL casing
+  // (e.g. "box-2D-back"), but wanted types are lowercased. The coverage index
+  // must resolve the folder case-insensitively — otherwise present art on a
+  // case-sensitive filesystem reads as "missing" and FillMissing re-scrapes the
+  // item on every run (0 skips despite complete artwork).
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString sub = QDir(tmp.path()).filePath(QStringLiteral("box-2D-back"));
+  QVERIFY(QDir().mkpath(sub));
+  QFile f(QDir(sub).filePath(QStringLiteral("Some Game (USA).png")));
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("png");
+  f.close();
+
+  // Wanted type is lowercased ("box-2d-back"); the folder is mixed case.
+  const auto index = Scraper::buildMediaCoverageIndex(tmp.path(), {QStringLiteral("box-2d-back")},
+                                                      /*sidecarCheckPossible=*/true);
+  QVERIFY2(index.presentByType.contains(QStringLiteral("box-2d-back")),
+           "mixed-case media folder not resolved for the lowercased wanted type");
+  QVERIFY(index.presentByType.value(QStringLiteral("box-2d-back"))
+              .contains(QStringLiteral("some game (usa)")));
 }
 
 void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {

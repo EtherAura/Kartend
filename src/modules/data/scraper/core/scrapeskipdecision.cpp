@@ -55,10 +55,23 @@ MediaCoverageIndex buildMediaCoverageIndex(const QString &artworkDir,
   // completeBaseName when assembling per-item paths, so the key roundtrips).
   MediaCoverageIndex index;
   if (sidecarCheckPossible) {
-    for (const QString &type : wantedTypes) {
-      const QString subdir = QDir(artworkDir).filePath(type);
-      QDir d(subdir);
-      if (!d.exists()) continue;
+    // Media is stored in per-type subdirs named with the provider's ORIGINAL
+    // casing (e.g. "box-2D-back", "box-3D", "support-2D"), but wantedTypes are
+    // lowercased. On a case-sensitive filesystem, QDir(artworkDir).filePath(
+    // "box-2d-back") misses the real "box-2D-back" folder, so present art reads
+    // as "missing" and FillMissing re-scrapes the item forever. Resolve the
+    // folder case-insensitively via a lowercased-name -> actual-name map so the
+    // wanted (lowercased) type finds its on-disk folder (Kartend-em3jc).
+    QHash<QString, QString> actualDirByLower;
+    const auto subdirs = QDir(artworkDir).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    actualDirByLower.reserve(subdirs.size());
+    for (const QString &dir : subdirs) {
+      actualDirByLower.insert(dir.toLower(), dir);
+    }
+    for (const QString &type : wantedTypes) { // wantedTypes are already lowercase
+      const QString actualDir = actualDirByLower.value(type);
+      if (actualDir.isEmpty()) continue;
+      QDir d(QDir(artworkDir).filePath(actualDir));
       QSet<QString> bases;
       const auto files = d.entryList(QDir::Files | QDir::NoDotAndDotDot);
       bases.reserve(files.size());
@@ -66,7 +79,8 @@ MediaCoverageIndex buildMediaCoverageIndex(const QString &artworkDir,
         bases.insert(QFileInfo(f).completeBaseName().toLower());
       }
       // operator[] returns T& so the assignment is a real move; QHash's
-      // (const Key&, const T&) insert overload would have copied.
+      // (const Key&, const T&) insert overload would have copied. Keyed by the
+      // lowercased type so typeCoveredFor's lookup roundtrips.
       index.presentByType[type] = std::move(bases);
     }
   }
