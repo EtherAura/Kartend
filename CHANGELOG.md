@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scraper — "download only what's missing":** an item is now skipped only when
+  its metadata is fully filled in; items with some fields still blank are
+  re-scraped to fill the gaps. Previously anything scraped even once was skipped,
+  so partially-filled entries never got completed.
+
 ## [0.0.15] - 2026-07-04
 
 ### Fixed

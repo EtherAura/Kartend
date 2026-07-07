@@ -10,6 +10,16 @@
 
 namespace Scraper {
 
+bool coreScrapedFieldsComplete(const ItemMetadataStore::ItemMetadata &md) {
+  // See the header: FillMissing treats these six fields as "the scraped metadata".
+  // All must be non-empty; a partially-scraped row is not complete and stays
+  // queued to fill its gaps (Kartend-em3jc). contentRating and players are
+  // deliberately excluded — providers most often leave them blank, so requiring
+  // them would re-scrape nearly every item on every FillMissing run.
+  return !md.title.isEmpty() && !md.description.isEmpty() && !md.genre.isEmpty() &&
+         !md.developer.isEmpty() && !md.publisher.isEmpty() && !md.releaseDate.isEmpty();
+}
+
 bool decideScrapeSkip(const SkipDecisionInputs &in) {
   if (in.mode == Scraper::RescrapeMode::Skip) {
     // Skip mode: any metadata marker is enough — "if scraped, leave it alone."
@@ -18,9 +28,11 @@ bool decideScrapeSkip(const SkipDecisionInputs &in) {
   }
   // FillMissing: only burn a request when at least one ticked field is missing
   // or stale. If every ticked field (metadata + each wanted media type) is
-  // covered and within the window, there is nothing to fetch — skip.
+  // covered and within the window, there is nothing to fetch — skip. "Metadata
+  // covered" means COMPLETE (every core scraped field populated), not merely
+  // present: a partially-scraped row stays queued to fill its gaps (Kartend-em3jc).
   bool fullyCovered = true;
-  if (in.writeMetadata && (!in.metaPresent || !in.metaWithinWindow)) {
+  if (in.writeMetadata && (!in.metaComplete || !in.metaWithinWindow)) {
     fullyCovered = false;
   }
   if (fullyCovered && !in.allWantedMediaCovered) {
@@ -149,6 +161,15 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
   const QString baseNameLower = baseName.toLower();
   const MetaPresence meta = metadataPresenceFor(path, baseName);
 
+  // FillMissing metadata completeness: the metadata slot counts as covered only
+  // when every core scraped field is populated, so a partially-scraped row stays
+  // queued to fill its gaps (Kartend-em3jc). Only the DB row carries the field
+  // values; without a DB (sidecar-only run) we cannot inspect fields, so fall
+  // back to plain presence to preserve that path's behaviour.
+  const bool metaComplete = ctx.dbCheckPossible
+                                ? coreScrapedFieldsComplete(ctx.metadataByPath.value(path))
+                                : meta.present;
+
   // FillMissing media coverage: every wanted media type must already be on
   // disk for the item to count as fully covered (the metadata + window halves
   // are folded in by decideScrapeSkip).
@@ -160,8 +181,8 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
     }
   }
 
-  return decideScrapeSkip(
-      {ctx.mode, ctx.writeMetadata, meta.present, withinWindow(meta), allWantedMediaCovered});
+  return decideScrapeSkip({ctx.mode, ctx.writeMetadata, meta.present, metaComplete,
+                           withinWindow(meta), allWantedMediaCovered});
 }
 
 } // namespace Scraper
