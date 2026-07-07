@@ -286,6 +286,15 @@ kartend_add_test(NAME TitleFilter
   SOURCES utils/text/test_titlefilter.cpp
   LINK kartend_utils
 )
+# concurrentApplyAndRebuildIsRaceFree spins 4 reader + 1 writer hammer threads;
+# under ctest -jN oversubscription on few-core CI runners (observed on macOS
+# Release) they get descheduled and miss the 60s post-stop join watchdog, after
+# which the stack writer QThread destructs while still running and aborts the
+# process ("Subprocess aborted"). RUN_SERIAL runs this test with no co-scheduled
+# binaries so the hammers get the whole runner and drain in ~1s (it passes alone
+# in <1s), removing the oversubscription without loosening the race-freedom
+# check or the watchdog.
+set_tests_properties(TitleFilter PROPERTIES RUN_SERIAL TRUE)
 
 # CollectionUtils tests — split by concern into three sibling binaries so
 # CTest's per-binary output names the failing concern (enum conversion vs
