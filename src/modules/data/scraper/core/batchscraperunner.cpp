@@ -543,7 +543,15 @@ void BatchScrapeRunner::onDetailComplete(
     recordError(state->path, detailResult.error());
     return;
   }
-  const auto &scraped = detailResult.value();
+  // Mutable copy so we can stamp the known-absent set (wanted media the provider
+  // returned nothing for) before it rides the queued Q_ARG(ScrapedItem) invoke
+  // into the write worker, where it accumulates into ItemMetadata::mediaAbsent
+  // (Kartend-kihyx). Computed here, the one place both m_mediaTypeFilter and the
+  // provider's returned assets (scraped.media) are known together. The set logic
+  // lives in the pure computeMediaAbsentTypes so it is unit-testable.
+  Scraper::ScrapedItem scraped = detailResult.value();
+  scraped.mediaAbsentThisRun =
+      computeMediaAbsentTypes(m_rescrapeMode, m_mediaTypeFilter, scraped.media);
   if (m_quotaStopped) {
     // Kartend-fv3yr: quota was exhausted by a sibling between this
     // item's detail fetch and now. Keep the metadata we already have
@@ -654,6 +662,12 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
   // Custom fields collapse to empty so the merge becomes a no-op.
   // sourceProviderId is also cleared so the item's `source` column
   // doesn't get overwritten to attribute the (skipped) text scrape.
+  // INVARIANT (Kartend-kihyx): do NOT clear effective.mediaAbsentThisRun or
+  // effective.media here. Known-absent media tracking is independent of the
+  // text-metadata opt-out — a media-only FillMissing run (metadata already
+  // complete, only filling art) is precisely where it must keep working, and
+  // the merge needs `media` to prune types the provider now supplies. Clearing
+  // either would silently reintroduce the perpetual re-scrape this feature fixes.
   Scraper::ScrapedItem effective = scraped;
   if (!m_writeMetadata) {
     effective.title.clear();

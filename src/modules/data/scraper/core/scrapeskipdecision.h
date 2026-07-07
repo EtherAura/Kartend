@@ -3,11 +3,14 @@
 
 #include <QDateTime>
 #include <QHash>
+#include <QList>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include "itemmetadata.h"
 #include "scrapepersistence.h"
+#include "scrapertypes.h"
 
 /// Pure skip/coverage decision logic for the batch scraper's Skip and
 /// FillMissing pre-filter, extracted from BatchScrapeRunner so its branches
@@ -43,6 +46,18 @@ struct SkipDecisionInputs {
 /// fields (notes, personal rating, pin/hide flags, sourceUrl) and optional
 /// structured fields (tags, customFields, runtime) are excluded too.
 [[nodiscard]] bool coreScrapedFieldsComplete(const ItemMetadataStore::ItemMetadata &md);
+
+/// The wanted media types (lowercase) a provider returned NO asset for, given the
+/// run's rescrape @p mode, the @p wantedTypes filter, and the @p media the
+/// provider actually supplied (only assets with a valid URL count as supplied).
+/// The producer half of the known-absent bookkeeping (Kartend-kihyx): its result
+/// is persisted into ItemMetadata::mediaAbsent (accumulate + prune) so FillMissing
+/// stops re-chasing media a provider doesn't supply. Empty unless the mode is
+/// FillMissing with a non-empty filter — pure so the guard / URL-validity / set
+/// difference are unit-testable without a runner. @p wantedTypes are lowercase.
+[[nodiscard]] QStringList computeMediaAbsentTypes(Scraper::RescrapeMode mode,
+                                                  const QSet<QString> &wantedTypes,
+                                                  const QList<Scraper::MediaAsset> &media);
 
 /// Basename indexes of media-on-disk for the coverage check, pre-built once
 /// per run so the per-item probe is an O(1) hash lookup (Kartend audit 2w4wz).

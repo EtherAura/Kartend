@@ -41,7 +41,7 @@ constexpr const char *SELECT_SQL =
     "SELECT title, description, genre, developer, publisher, release_date, "
     "content_rating, players, runtime_seconds, tags, custom_fields, "
     "manual_path, launcher_index, source, updated_at, notes, rating, source_url, "
-    "is_pinned, is_hidden, continue_later "
+    "is_pinned, is_hidden, continue_later, media_absent "
     "FROM item_metadata WHERE collection_uuid = ? AND path = ?";
 
 constexpr const char *UPSERT_SQL =
@@ -49,8 +49,8 @@ constexpr const char *UPSERT_SQL =
     "collection_uuid, path, title, description, genre, developer, publisher, "
     "release_date, content_rating, players, runtime_seconds, tags, "
     "custom_fields, manual_path, launcher_index, source, updated_at, "
-    "notes, rating, source_url, is_pinned, is_hidden, continue_later"
-    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "notes, rating, source_url, is_pinned, is_hidden, continue_later, media_absent"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
     "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
     "title=excluded.title, description=excluded.description, "
     "genre=excluded.genre, developer=excluded.developer, "
@@ -62,7 +62,8 @@ constexpr const char *UPSERT_SQL =
     "source=excluded.source, updated_at=excluded.updated_at, "
     "notes=excluded.notes, rating=excluded.rating, "
     "source_url=excluded.source_url, is_pinned=excluded.is_pinned, "
-    "is_hidden=excluded.is_hidden, continue_later=excluded.continue_later";
+    "is_hidden=excluded.is_hidden, continue_later=excluded.continue_later, "
+    "media_absent=excluded.media_absent";
 
 constexpr const char *DELETE_SQL =
     "DELETE FROM item_metadata WHERE collection_uuid = ? AND path = ?";
@@ -142,6 +143,7 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   metadata.isPinned = q.value(18).toInt() != 0;
   metadata.isHidden = q.value(19).toInt() != 0;
   metadata.continueLater = q.value(20).toInt() != 0;
+  metadata.mediaAbsent = parseTags(q.value(21).toString());
   return metadata;
 }
 
@@ -171,7 +173,7 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
         "SELECT path, title, description, genre, developer, publisher, release_date, "
         "content_rating, players, runtime_seconds, tags, custom_fields, "
         "manual_path, launcher_index, source, updated_at, notes, rating, source_url, "
-        "is_pinned, is_hidden, continue_later "
+        "is_pinned, is_hidden, continue_later, media_absent "
         "FROM item_metadata WHERE collection_uuid = ? AND path IN (");
     for (qsizetype i = 0; i < chunkLen; ++i) {
       if (i > 0) sql.append(QLatin1Char(','));
@@ -225,6 +227,7 @@ loadBatch(QSqlDatabase &db, const QString &collectionUuid, const QStringList &pa
       md.isPinned = q.value(19).toInt() != 0;
       md.isHidden = q.value(20).toInt() != 0;
       md.continueLater = q.value(21).toInt() != 0;
+      md.mediaAbsent = parseTags(q.value(22).toString());
       out.insert(md.path, md);
     }
   }
@@ -286,6 +289,7 @@ ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   q.addBindValue(metadata.isPinned ? 1 : 0);
   q.addBindValue(metadata.isHidden ? 1 : 0);
   q.addBindValue(metadata.continueLater ? 1 : 0);
+  q.addBindValue(nullableString(serializeTags(metadata.mediaAbsent)));
 
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to upsert item_metadata",

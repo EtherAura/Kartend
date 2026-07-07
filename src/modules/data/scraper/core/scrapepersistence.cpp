@@ -470,6 +470,29 @@ ItemMetadataStore::ItemMetadata mergeScrapedIntoExisting(ItemMetadataStore::Item
   if (!scraped.sourceProviderId.isEmpty()) {
     existing.source = scraped.sourceProviderId;
   }
+  // Known-absent media accumulation + pruning (Kartend-kihyx). Carry forward the
+  // existing row's known-absent set, add the types the provider was asked for on
+  // this run but returned nothing for (scraped.mediaAbsentThisRun), then drop any
+  // type the provider DID return an asset for — so a provider that later starts
+  // supplying a type stops being treated as absent. Prune against the full
+  // returned union (not just the wanted set) and dedup, lowercase. Because both
+  // save paths load `existing` first, accumulation across runs falls out of this
+  // load-modify-store without any runner-side bookkeeping.
+  QSet<QString> returnedTypes;
+  for (const MediaAsset &m : scraped.media) {
+    if (m.url.isValid()) returnedTypes.insert(m.type.toLower());
+  }
+  QStringList mergedAbsent = existing.mediaAbsent;
+  mergedAbsent += scraped.mediaAbsentThisRun;
+  QStringList prunedAbsent;
+  QSet<QString> seenAbsent;
+  for (const QString &t : mergedAbsent) {
+    const QString lower = t.toLower();
+    if (returnedTypes.contains(lower) || seenAbsent.contains(lower)) continue;
+    seenAbsent.insert(lower);
+    prunedAbsent.append(lower);
+  }
+  existing.mediaAbsent = prunedAbsent;
   return existing;
 }
 

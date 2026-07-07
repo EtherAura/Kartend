@@ -85,6 +85,12 @@ struct ItemMetadata {
   /// Origin identifier (e.g. "user", "screenscraper", "imdb").
   QString source;
   QString updatedAt;
+  /// Wanted media types (lowercase) the provider was ASKED for but returned
+  /// nothing for, recorded per FillMissing run so they count as "covered" and
+  /// are not re-chased on every scrape (Kartend-kihyx). Stored as a JSON array
+  /// string in the nullable `media_absent` column; accumulates across runs and
+  /// is pruned when the provider later starts supplying the type.
+  QStringList mediaAbsent;
 
   /// True when no extended fields have meaningful values. Used by the sidebar
   /// to skip rendering the Details section entirely on bare items.

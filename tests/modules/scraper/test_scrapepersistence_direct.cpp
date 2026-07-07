@@ -65,6 +65,7 @@ private slots:
   void nonStandardArtworkRowsLandViaItemArtworkStore();
   void runtimeSecondsHonoredOnlyWhenNonNegative();
   void sourceProviderIdSkippedWhenScrapeEmpty();
+  void mediaAbsentAccumulatesAcrossRunsAndPrunesReturned();
 };
 
 void TestScrapePersistenceDirect::writesNewMetadataRowAndArtworkRows() {
@@ -364,6 +365,43 @@ void TestScrapePersistenceDirect::sourceProviderIdSkippedWhenScrapeEmpty() {
   auto loaded = ItemMetadataStore::load(db, QStringLiteral("u1"), QStringLiteral("/m/g.bin"));
   QVERIFY(loaded.isOk());
   QCOMPARE(loaded.value().source, QStringLiteral("user-tagged"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestScrapePersistenceDirect::mediaAbsentAccumulatesAcrossRunsAndPrunesReturned() {
+  // Kartend-kihyx: the known-absent media set accumulates across FillMissing runs
+  // (load-modify-store in mergeScrapedIntoExisting) and drops a type the moment
+  // the provider starts returning it — so a wanted set that outruns what the
+  // provider supplies stops re-scraping forever. Exercised through the real
+  // save/load path.
+  const QString conn = QStringLiteral("test_direct_media_absent");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+
+  const QString uuid = QStringLiteral("u1");
+  const QString path = QStringLiteral("/m/g.bin");
+
+  // Run 1: provider returned no asset for marquee + map (no media at all).
+  Scraper::ScrapedItem run1;
+  run1.sourceProviderId = QStringLiteral("screenscraper");
+  run1.mediaAbsentThisRun = {QStringLiteral("marquee"), QStringLiteral("map")};
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run1, {}));
+  QCOMPARE(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent,
+           (QStringList{QStringLiteral("marquee"), QStringLiteral("map")}));
+
+  // Run 2: a new type (fanart) came back empty, but the provider NOW supplies map
+  // (a valid asset) → map is pruned, marquee carries over, fanart is added.
+  Scraper::ScrapedItem run2;
+  run2.sourceProviderId = QStringLiteral("screenscraper");
+  run2.mediaAbsentThisRun = {QStringLiteral("fanart")};
+  Scraper::MediaAsset mapAsset;
+  mapAsset.type = QStringLiteral("map");
+  mapAsset.url = QUrl(QStringLiteral("https://example.test/map.png"));
+  run2.media.append(mapAsset);
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run2, {}));
+  QCOMPARE(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent,
+           (QStringList{QStringLiteral("marquee"), QStringLiteral("fanart")}));
 
   closeAndRemove(db, conn);
 }

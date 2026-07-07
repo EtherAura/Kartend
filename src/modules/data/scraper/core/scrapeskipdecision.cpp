@@ -20,6 +20,26 @@ bool coreScrapedFieldsComplete(const ItemMetadataStore::ItemMetadata &md) {
          !md.developer.isEmpty() && !md.publisher.isEmpty() && !md.releaseDate.isEmpty();
 }
 
+QStringList computeMediaAbsentTypes(Scraper::RescrapeMode mode, const QSet<QString> &wantedTypes,
+                                    const QList<Scraper::MediaAsset> &media) {
+  // Only meaningful under FillMissing with an explicit media filter: the set of
+  // wanted types the provider returned NO asset for. Non-FillMissing runs and the
+  // legacy filter-less (front-only) path record nothing — the accumulate/prune
+  // bookkeeping only affects the FillMissing skip decision (Kartend-kihyx).
+  if (mode != Scraper::RescrapeMode::FillMissing || wantedTypes.isEmpty()) {
+    return {};
+  }
+  QSet<QString> returned;
+  for (const Scraper::MediaAsset &m : media) {
+    if (m.url.isValid()) returned.insert(m.type.toLower());
+  }
+  QStringList absent;
+  for (const QString &wanted : wantedTypes) { // wantedTypes are lowercase
+    if (!returned.contains(wanted)) absent.append(wanted);
+  }
+  return absent;
+}
+
 bool decideScrapeSkip(const SkipDecisionInputs &in) {
   if (in.mode == Scraper::RescrapeMode::Skip) {
     // Skip mode: any metadata marker is enough — "if scraped, leave it alone."
@@ -186,13 +206,22 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
 
   // FillMissing media coverage: every wanted media type must already be on
   // disk for the item to count as fully covered (the metadata + window halves
-  // are folded in by decideScrapeSkip).
+  // are folded in by decideScrapeSkip). Exception: a wanted type recorded as
+  // "known-absent" for this item — the provider was asked on a prior run and
+  // returned nothing — counts as covered so FillMissing stops re-chasing media
+  // the provider simply doesn't supply (Kartend-kihyx). Only the DB row carries
+  // the set; a sidecar-only run leaves it empty and keeps the prior behaviour.
+  QSet<QString> knownAbsent;
+  if (ctx.dbCheckPossible) {
+    const auto &absentList = ctx.metadataByPath.value(path).mediaAbsent;
+    for (const QString &t : absentList) knownAbsent.insert(t.toLower());
+  }
   bool allWantedMediaCovered = true;
-  for (const QString &type : ctx.wantedTypes) {
-    if (!typeCoveredFor(baseNameLower, type)) {
-      allWantedMediaCovered = false;
-      break;
-    }
+  for (const QString &type : ctx.wantedTypes) { // ctx.wantedTypes are lowercase
+    if (typeCoveredFor(baseNameLower, type)) continue;
+    if (knownAbsent.contains(type)) continue; // provider never supplies it → covered
+    allWantedMediaCovered = false;
+    break;
   }
 
   return decideScrapeSkip({ctx.mode, ctx.writeMetadata, meta.present, metaComplete,

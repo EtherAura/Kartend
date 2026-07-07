@@ -61,6 +61,7 @@ private slots:
   void parseTagsPreservesOrderAndDedupes();
   void serializeTagsPrunesEmptyAndDeduplicates();
   void tagsRoundTripThroughDb();
+  void mediaAbsentRoundTripsThroughDb();
   void parseCustomFieldsHandlesEmptyAndMalformed();
   void parseCustomFieldsPreservesOrderAndCoercesValues();
   void serializeCustomFieldsPrunesEmptyKeys();
@@ -421,6 +422,36 @@ void TestItemMetadata::tagsRoundTripThroughDb() {
   auto loaded = ItemMetadataStore::load(db, "uuid-1", "/v").value();
   QCOMPARE(loaded.tags, m.tags);
   QCOMPARE(ItemMetadataStore::parseTags(loaded.tags), (QStringList{"live", "concert", "jazz"}));
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::mediaAbsentRoundTripsThroughDb() {
+  // Kartend-kihyx: the known-absent media set survives save/load and loadBatch
+  // unchanged — which also proves the v28 `media_absent` column exists after
+  // migration. An empty set round-trips to NULL (no stray "[]").
+  const QString conn = "im_media_absent_roundtrip";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/g";
+  m.mediaAbsent = {"map", "marquee", "pictoliste"};
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+
+  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/g").value();
+  QCOMPARE(loaded.mediaAbsent, (QStringList{"map", "marquee", "pictoliste"}));
+
+  // Same via the batched loader the scrape pre-filter uses.
+  auto batch = ItemMetadataStore::loadBatch(db, "uuid-1", {"/g"}).value();
+  QCOMPARE(batch.value("/g").mediaAbsent, (QStringList{"map", "marquee", "pictoliste"}));
+
+  // Empty set -> NULL column -> empty list on reload (no "[]").
+  ItemMetadata blank;
+  blank.collectionUuid = "uuid-1";
+  blank.path = "/h";
+  QVERIFY(ItemMetadataStore::save(db, blank).isOk());
+  QVERIFY(ItemMetadataStore::load(db, "uuid-1", "/h").value().mediaAbsent.isEmpty());
 
   closeAndRemove(db, conn);
 }

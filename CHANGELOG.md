@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and existing artwork is now recognised regardless of the media folder's letter
   case — previously mixed-case folders (e.g. `box-2D-back`) went unrecognised on
   case-sensitive filesystems, so every item was needlessly re-scraped on each run.
+- **Scraper — "download only what's missing" no longer re-chases unavailable art:**
+  when you request media types a provider doesn't supply for an item (e.g.
+  ScreenScraper has no map/marquee for most PlayStation games), the item is now
+  remembered as complete instead of being re-scraped on every run. The provider is
+  asked once; if it later starts supplying the type, that's picked up automatically.
 
 ## [0.0.15] - 2026-07-04
 

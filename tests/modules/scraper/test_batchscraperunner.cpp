@@ -294,6 +294,8 @@ private slots:
   void coreScrapedFieldsCompletePredicate();
   void fillMissingSkipsOnlyItemsWithAllCoreFields();
   void mediaCoverageMatchesMixedCaseFolders();
+  void fillMissingKnownAbsentMediaCountsAsCovered();
+  void computeMediaAbsentTypesDerivesUnsuppliedWantedTypes();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
   void quota429StopsBatch();
@@ -1167,6 +1169,91 @@ void TestBatchScrapeRunner::mediaCoverageMatchesMixedCaseFolders() {
            "mixed-case media folder not resolved for the lowercased wanted type");
   QVERIFY(index.presentByType.value(QStringLiteral("box-2d-back"))
               .contains(QStringLiteral("some game (usa)")));
+}
+
+void TestBatchScrapeRunner::fillMissingKnownAbsentMediaCountsAsCovered() {
+  // Kartend-kihyx: FillMissing must not re-chase media types the provider
+  // doesn't supply. A wanted type recorded in the item's mediaAbsent set counts
+  // as "covered" so the item skips even though that art isn't on disk — but a
+  // genuinely-missing type the provider CAN supply still forces a re-scrape, and
+  // the exemption applies only with a DB row (sidecar-only runs can't carry it).
+  using MD = ItemMetadataStore::ItemMetadata;
+  const auto completeRow = [](const QStringList &absent) {
+    MD md;
+    md.source = QStringLiteral("screenscraper");
+    md.title = QStringLiteral("T");
+    md.description = QStringLiteral("D");
+    md.genre = QStringLiteral("G");
+    md.developer = QStringLiteral("Dev");
+    md.publisher = QStringLiteral("Pub");
+    md.releaseDate = QStringLiteral("1990");
+    md.mediaAbsent = absent;
+    return md;
+  };
+  const QString path = QStringLiteral("/games/PS1.bin");
+  const QString baseLower = QStringLiteral("ps1"); // completeBaseName("PS1.bin").toLower()
+
+  Scraper::ScrapeSkipContext ctx;
+  ctx.mode = Scraper::RescrapeMode::FillMissing;
+  ctx.writeMetadata = true;
+  ctx.dbCheckPossible = true;
+  ctx.sidecarCheckPossible = false;
+  ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
+  ctx.presentByType[QStringLiteral("front")] = {baseLower}; // front on disk; marquee is not
+
+  // marquee is known-absent → treated as covered → the item pre-skips.
+  ctx.metadataByPath[path] = completeRow({QStringLiteral("marquee")});
+  QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // A wanted type that is NOT known-absent and NOT on disk still forces a scrape.
+  ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("screenshot")};
+  ctx.metadataByPath[path] = completeRow({QStringLiteral("marquee")}); // screenshot not absent
+  QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // Sidecar-only (no DB): the known-absent set is unavailable, so marquee is not
+  // exempted and the item is kept — preserving the pre-fix behaviour. writeMetadata
+  // off isolates the media half from the (now DB-less) metadata gate.
+  ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
+  ctx.dbCheckPossible = false;
+  ctx.writeMetadata = false;
+  QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
+}
+
+void TestBatchScrapeRunner::computeMediaAbsentTypesDerivesUnsuppliedWantedTypes() {
+  // Kartend-kihyx: direct coverage for the PRODUCER of the known-absent set (the
+  // runner's write path can't be observed via the mock, so the logic is pulled
+  // into this pure function). A wanted type is "absent" iff the provider returned
+  // no VALID-URL asset of that type. Guarded to FillMissing + non-empty filter.
+  // Result order is QSet-iteration-defined, so compare as sets.
+  using Scraper::computeMediaAbsentTypes;
+  const auto asSet = [](const QStringList &l) { return QSet<QString>(l.begin(), l.end()); };
+
+  Scraper::MediaAsset front; // genuinely supplied
+  front.type = QStringLiteral("front");
+  front.url = QUrl(QStringLiteral("https://example.invalid/f.png"));
+  Scraper::MediaAsset marqueeBroken; // present type but invalid URL → NOT supplied
+  marqueeBroken.type = QStringLiteral("marquee");
+  marqueeBroken.url = QUrl();
+  const QList<Scraper::MediaAsset> media{front, marqueeBroken};
+  const QSet<QString> wanted{QStringLiteral("front"), QStringLiteral("marquee"),
+                             QStringLiteral("map")};
+
+  // FillMissing: front supplied → covered; marquee has only an invalid URL → absent;
+  // map never offered → absent. (An inverted set-difference would yield {front}.)
+  QCOMPARE(asSet(computeMediaAbsentTypes(Scraper::RescrapeMode::FillMissing, wanted, media)),
+           (QSet<QString>{QStringLiteral("marquee"), QStringLiteral("map")}));
+
+  // Guard: non-FillMissing modes record nothing (a dropped guard would populate here).
+  QVERIFY(computeMediaAbsentTypes(Scraper::RescrapeMode::Overwrite, wanted, media).isEmpty());
+  QVERIFY(computeMediaAbsentTypes(Scraper::RescrapeMode::Skip, wanted, media).isEmpty());
+
+  // Short-circuit: an empty filter records nothing (legacy front-only path).
+  QVERIFY(computeMediaAbsentTypes(Scraper::RescrapeMode::FillMissing, {}, media).isEmpty());
+
+  // Every wanted type supplied → empty absent set.
+  QVERIFY(
+      computeMediaAbsentTypes(Scraper::RescrapeMode::FillMissing, {QStringLiteral("front")}, media)
+          .isEmpty());
 }
 
 void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {

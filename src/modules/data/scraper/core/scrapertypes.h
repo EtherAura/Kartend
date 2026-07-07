@@ -6,6 +6,7 @@
 #include <QList>
 #include <QMetaType>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 /// Common data shapes shared by every API-based MetadataLookupProvider
@@ -181,6 +182,14 @@ struct ScrapedItem {
   /// "screenscraper", etc.).
   QString sourceProviderId;
   QList<MediaAsset> media;
+  /// Wanted media types (lowercase) the provider was asked for on THIS run but
+  /// returned no asset for — computed by BatchScrapeRunner against
+  /// m_mediaTypeFilter minus the types actually present in `media`. Rides the
+  /// existing queued Q_ARG(ScrapedItem) invoke into the write worker, where it
+  /// accumulates into ItemMetadata::mediaAbsent (and is pruned when a type is
+  /// later supplied) so FillMissing stops re-chasing provider-absent media
+  /// (Kartend-kihyx). Empty for non-FillMissing / filter-less runs.
+  QStringList mediaAbsentThisRun;
 };
 
 /// Snapshot of the provider's per-account request quota, surfaced live

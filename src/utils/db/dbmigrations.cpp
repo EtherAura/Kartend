@@ -235,7 +235,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 27;
+  constexpr int CURRENT_SCHEMA_VERSION = 28;
   const int version = getUserVersion(db, origin);
 
   // A failed version read (already logged with its SQL error by
@@ -1068,9 +1068,24 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 27; // read by the v28 block below
+  }
+
+  if (mutableVersion < 28) {
+    // v28 (Kartend-kihyx): item_metadata.media_absent — JSON array of wanted
+    // media types the provider was asked for but returned nothing for. Lets
+    // FillMissing treat provider-absent types as "covered" so an item whose
+    // wanted media set exceeds what the provider actually supplies (e.g. no
+    // map/marquee for most PS1 games) stops being re-scraped on every run.
+    // Nullable; NULL / '' means "nothing known-absent yet".
+    if (!runBlock(db, 28, origin, [&]() -> bool {
+          return ensureColumn(db, "item_metadata", "media_absent", "TEXT", origin);
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v28 block stays a pure copy-paste.
-    mutableVersion = 27; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v29 block stays a pure copy-paste.
+    mutableVersion = 28; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
