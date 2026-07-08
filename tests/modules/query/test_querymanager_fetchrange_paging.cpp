@@ -188,6 +188,28 @@ void TestQueryManagerFetchRangePaging::orderingAndPagingHoldAt50kRows() {
   QCOMPARE(tail.size(), 50);
   QCOMPARE(tail.first(), expectedPath(kItemCount - 50));
   QCOMPARE(tail.last(), expectedPath(kItemCount - 1));
+
+  // Random sort forces a synchronous sorted-items cache build over all 50k
+  // rows — far more than one flush batch of SortedCacheInsertBatch (332)
+  // rows, so the multi-batch (position, path, uuid) insert in
+  // insertSortedRows runs against the real 999-bind invariant
+  // (Kartend-309nh.4). Switching sort modes is a cache-hash mismatch, so the
+  // first random fetch may answer via the slow path while dropping the stale
+  // NameAscending cache; fetch once to settle, then pin the cache-backed
+  // permutation.
+  ctx.sortMode = SortMode::Random;
+  (void)fetchPage(0, 100);
+  const QStringList shuffled = fetchPage(0, 100);
+  QCOMPARE(shuffled.size(), 100);
+  // A shuffle of 50k rows matching alphabetical order would mean the cache
+  // build failed and the alphabetical slow-path fallback answered instead.
+  QVERIFY(shuffled != first);
+  // The permutation is stable across pages once the cache is built.
+  QCOMPARE(fetchPage(0, 100), shuffled);
+  // The tail page only has rows if every flush batch landed: positions this
+  // deep exist iff all 50k rows made it into sorted_items_cache.
+  const QStringList shuffledTail = fetchPage(kItemCount - 50, 100);
+  QCOMPARE(shuffledTail.size(), 50);
 }
 
 QTEST_MAIN(TestQueryManagerFetchRangePaging)

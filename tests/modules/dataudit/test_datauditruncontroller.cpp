@@ -17,6 +17,7 @@
 
 #include "../../support/testsandbox.h"
 #include "databaseschema.h"
+#include "datauditprofile.h" // DatAuditProfile::insert / load / loadProfileResultRows
 #include "datauditruncontroller.h"
 #include "datauditrunner.h" // DatAudit::AuditOutput
 
@@ -46,6 +47,7 @@ private slots:
   void cleanup();
 
   void startRunsOffThreadAndDeliversFinished();
+  void persistsSnapshotOnWorkerBeforeFinished();
 
 private:
   static QString writeDat(const QTemporaryDir &dir);
@@ -114,6 +116,95 @@ void TestDatAuditRunController::startRunsOffThreadAndDeliversFinished() {
   // The DAT is valid XML, so the catalogue built without a load failure — i.e.
   // the worker really processed the injected inputs and handed the result back.
   QVERIFY(captured.failedDats.isEmpty());
+}
+
+void TestDatAuditRunController::persistsSnapshotOnWorkerBeforeFinished() {
+  // Kartend-h7xnr.5: the result snapshot for a saved profile is written by the
+  // WORKER (on its own app-DB connection), and snapshotPersisted is delivered
+  // strictly before finished() with the rows already queryable — the ordering
+  // contract the audit page's view-only finish handler now relies on.
+  const QString conn = QStringLiteral("setup_datauditrun_persist");
+  qint64 profileId = -1;
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    QVERIFY(DatabaseSchema::openConnection(db, appDataDir()));
+    DatabaseSchema::applyConnectionPragmas(db);
+    DatabaseSchema::createTables(db);
+    DatAuditProfile::Profile p;
+    p.name = QStringLiteral("persist-test");
+    const auto inserted = DatAuditProfile::insert(db, p);
+    QVERIFY(inserted.isOk());
+    profileId = inserted.value();
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(conn);
+  QVERIFY(profileId >= 0);
+
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString datPath = writeDat(dir);
+  QVERIFY(!datPath.isEmpty());
+  const QString scanDir = dir.filePath(QStringLiteral("roms"));
+  QVERIFY(QDir().mkpath(scanDir));
+
+  DatAuditRunController ctrl;
+  bool done = false;
+  bool persistedSeen = false;
+  bool persistedBeforeFinished = false;
+  qint64 signalledProfileId = -1;
+  qint64 stampedMs = 0;
+  QList<DatAuditProfile::ResultRow> rowsAtSignal;
+  connect(&ctrl, &DatAuditRunController::snapshotPersisted, &ctrl, [&](qint64 id, qint64 whenMs) {
+    persistedSeen = true;
+    persistedBeforeFinished = !done;
+    signalledProfileId = id;
+    stampedMs = whenMs;
+    // The signal's contract: the snapshot is committed, so the rows
+    // must be queryable the moment it is delivered.
+    const QString readConn = QStringLiteral("read_datauditrun_persist");
+    {
+      QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), readConn);
+      if (DatabaseSchema::openConnection(db, appDataDir())) {
+        if (auto r = DatAuditProfile::loadProfileResultRows(db, id); r.isOk()) {
+          rowsAtSignal = r.value();
+        }
+      }
+      db.close();
+    }
+    QSqlDatabase::removeDatabase(readConn);
+  });
+  connect(&ctrl, &DatAuditRunController::finished, &ctrl,
+          [&done](const DatAudit::AuditOutput &) { done = true; });
+
+  DatAuditRunController::Request req;
+  req.datPaths = {datPath};
+  req.scanRoots = {scanDir};
+  req.persistProfileId = profileId;
+  ctrl.start(req);
+
+  QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+  QVERIFY(persistedSeen);
+  QVERIFY(persistedBeforeFinished);
+  QCOMPARE(signalledProfileId, profileId);
+  QVERIFY(stampedMs > 0);
+  // Empty scan dir + one-ROM DAT: exactly one entry-only (Missing) row.
+  QCOMPARE(rowsAtSignal.size(), 1);
+  QVERIFY(rowsAtSignal.first().entryKey.startsWith(QStringLiteral("entry:")));
+  QVERIFY(rowsAtSignal.first().filePath.isEmpty());
+
+  // The last-scan stamp landed in the same worker-side persist.
+  const QString verifyConn = QStringLiteral("verify_datauditrun_persist");
+  qint64 lastScanAtMs = 0;
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), verifyConn);
+    QVERIFY(DatabaseSchema::openConnection(db, appDataDir()));
+    const auto loaded = DatAuditProfile::load(db, profileId);
+    QVERIFY(loaded.isOk() && loaded.value().has_value());
+    lastScanAtMs = loaded.value()->lastScanAtMs;
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(verifyConn);
+  QCOMPARE(lastScanAtMs, stampedMs);
 }
 
 QTEST_MAIN(TestDatAuditRunController)

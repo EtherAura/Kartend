@@ -179,11 +179,10 @@ public:
   /// connection; no caching since the dashboard is a one-shot read.
   [[nodiscard]] QList<IDatabaseManager::ItemPathRow>
   loadAllItemPathsForCollection(const QString &collectionUuid) const override;
-  /// Single SQL pass over item_metadata for the collection's per-item state
-  /// flags. Only rows with at least one flag set are returned so the result
-  /// hash stays small for libraries where most items have no markers.
-  [[nodiscard]] QHash<QString, IDatabaseManager::ItemStateFlags>
-  loadItemStateFlagsForCollection(const QString &collectionUuid) const override;
+  /// Queues the per-item state-flags read onto the query worker
+  /// (Kartend-h7xnr.6) so the collection-switch path never runs it on the
+  /// main-thread connection; the result comes back on itemStateFlagsLoaded.
+  void fetchItemStateFlagsForCollection(const QString &collectionUuid) override;
   void purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) override;
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -217,6 +216,7 @@ signals:
   void requestLoadItemDetail(int requestToken, const QString &collectionUuid,
                              const QString &filePath, const QString &artworkDir,
                              const QString &videoDir, const QString &manualDir);
+  void requestFetchItemStateFlags(const QString &collectionUuid);
   void requestInvalidateCache(const QString &collectionUuid);
   // Queued -> QueryManager::invalidateUsageSensitiveCaches on the worker
   // thread. Fired after usage-stat writes (launch / reset — Kartend-s9jw) and

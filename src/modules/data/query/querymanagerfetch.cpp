@@ -565,8 +565,14 @@ void QueryManager::loadItemDetail(int requestToken, const QString &collectionUui
     data.fallbackCoverPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(filePath).fileName(), artworkDir);
   }
+  // Two video roots in priority order (matches detailspanemanagermetadata.cpp):
+  // the explicit videoDirectory, then {artworkDir}/video/ — the single-root
+  // layout the scraper writes to.
   if (!videoDir.isEmpty()) {
     data.videoPath = VideoUtils::findVideoForFile(filePath, videoDir);
+  }
+  if (data.videoPath.isEmpty() && !artworkDir.isEmpty()) {
+    data.videoPath = VideoUtils::findVideoForFile(filePath, QDir(artworkDir).filePath("video"));
   }
 
   // File info — the per-open stat is part of the stall this moves off the UI
@@ -580,4 +586,55 @@ void QueryManager::loadItemDetail(int requestToken, const QString &collectionUui
 
   data.valid = true;
   emit itemDetailLoaded(data, requestToken);
+}
+
+void QueryManager::fetchItemStateFlagsForCollection(const QString &collectionUuid) {
+  assertOwnerThread();
+  QStringList pinned;
+  QStringList hidden;
+  QStringList continueLater;
+  if (!ensureDatabaseAvailable("QueryManager::fetchItemStateFlagsForCollection") ||
+      collectionUuid.isEmpty()) {
+    emit itemStateFlagsLoaded(collectionUuid, pinned, hidden, continueLater);
+    return;
+  }
+  // Flag toggles commit on the main-thread connection; refresh this
+  // connection's WAL view (same guard as the other fetch paths) so a pin
+  // made just before the collection switch is visible to the query.
+  refreshWalView();
+
+  QSqlQuery q(m_db);
+  if (!q.prepare("SELECT path, is_pinned, is_hidden, continue_later "
+                 "FROM item_metadata "
+                 "WHERE collection_uuid = ? "
+                 "AND (is_pinned = 1 OR is_hidden = 1 OR continue_later = 1)")) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to prepare item-state-flags query",
+                                             "QueryManager::fetchItemStateFlagsForCollection")
+                             .withDetails(q.lastError().text()));
+    emit itemStateFlagsLoaded(collectionUuid, pinned, hidden, continueLater);
+    return;
+  }
+  q.addBindValue(collectionUuid);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                             "Failed to enumerate item state flags",
+                                             "QueryManager::fetchItemStateFlagsForCollection")
+                             .withDetails(q.lastError().text()));
+    emit itemStateFlagsLoaded(collectionUuid, pinned, hidden, continueLater);
+    return;
+  }
+  while (q.next()) {
+    const QString path = q.value(0).toString();
+    if (q.value(1).toInt() != 0) {
+      pinned.append(path);
+    }
+    if (q.value(2).toInt() != 0) {
+      hidden.append(path);
+    }
+    if (q.value(3).toInt() != 0) {
+      continueLater.append(path);
+    }
+  }
+  emit itemStateFlagsLoaded(collectionUuid, pinned, hidden, continueLater);
 }

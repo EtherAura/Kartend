@@ -33,6 +33,7 @@
 
 #include "collection/collectionconfig.h"
 #include "databaseschema.h"
+#include "errorutils.h"
 #include "preparedstatementcache.h"
 #include "scanservice.h"
 
@@ -146,6 +147,8 @@ private slots:
   void emptiedDirectoryRescan_prunesAllAndStampsMetadata();
   void missingDirectoryScan_reportsNotCompleted();
   void fileSize_persistsAndUpdatesOnRescan();
+  void metaUpdateFailure_isReportedAndRolledBack();
+  void lockContentionApply_retriesBoundedAndReportsOnce();
 };
 
 void TestScanServicePersist::initTestCase() {
@@ -397,6 +400,98 @@ void TestScanServicePersist::fileSize_persistsAndUpdatesOnRescan() {
   scanAndSave(fx.service(), cfg);
   QCOMPARE(sizeOf(QStringLiteral("a.bin")), qint64(10));
   QCOMPARE(sizeOf(QStringLiteral("b.bin")), qint64(5));
+}
+
+void TestScanServicePersist::metaUpdateFailure_isReportedAndRolledBack() {
+  // The legacy save pipeline used to run `metaOk = meta.exec()` and, on
+  // failure, simply skip the commit: the guard's dtor rolled back with no log
+  // and no errorOccurred, last_scanned never advanced, and needsRescan
+  // re-walked the directory on every load — invisibly. The failure must now
+  // be surfaced through errorOccurred and the whole apply rolled back.
+  PersistFixture fx;
+  QVERIFY2(fx.opened(), "failed to open + seed the test SQLite database");
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "a"));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("b.bin")), "b"));
+
+  // Deterministic meta-only fault injection with real SQLite (no mocking):
+  // the metadata stamp is the only apply statement that touches last_scanned,
+  // so a RAISE trigger scoped to that column fails meta.exec() while leaving
+  // prepareCollectionForItemsInsert (name/ext_signature upsert) and the items
+  // writes untouched.
+  {
+    QSqlQuery trig(fx.db());
+    QVERIFY(trig.exec(
+        QStringLiteral("CREATE TRIGGER fail_meta BEFORE UPDATE OF last_scanned ON collections "
+                       "BEGIN SELECT RAISE(ABORT, 'injected meta failure'); END")));
+  }
+
+  const CollectionConfig cfg = makeConfig(media.path());
+  QSignalSpy errorSpy(fx.service(), &ScanService::errorOccurred);
+  scanAndSave(fx.service(), cfg);
+
+  // A non-lock failure reports immediately (no retry ladder churn): exactly
+  // one errorOccurred, carrying the meta step's message + driver details.
+  QCOMPARE(errorSpy.count(), 1);
+  const auto err = errorSpy.at(0).at(0).value<ErrorUtils::ErrorContext>();
+  QVERIFY2(err.message.contains(QStringLiteral("collection scan metadata")),
+           qPrintable(err.message));
+  QVERIFY2(err.details.contains(QStringLiteral("injected meta failure")), qPrintable(err.details));
+
+  // The whole apply rolled back: no items landed and last_scanned still holds
+  // the epoch-0 stamp prepareCollectionForItemsInsert seeds a new row with.
+  QCOMPARE(itemCount(fx.db()), 0);
+  {
+    QSqlQuery q(fx.db());
+    QVERIFY(q.exec(QStringLiteral("SELECT last_scanned FROM collections LIMIT 1")));
+    QVERIFY(q.next());
+    QCOMPARE(q.value(0).toString(), QDateTime::fromSecsSinceEpoch(0).toString(Qt::ISODate));
+  }
+
+  // Self-heals once the fault clears: the next save applies and stamps.
+  {
+    QSqlQuery drop(fx.db());
+    QVERIFY(drop.exec(QStringLiteral("DROP TRIGGER fail_meta")));
+  }
+  scanAndSave(fx.service(), cfg);
+  QCOMPARE(errorSpy.count(), 1); // no new error
+  QCOMPARE(itemCount(fx.db()), 2);
+}
+
+void TestScanServicePersist::lockContentionApply_retriesBoundedAndReportsOnce() {
+  // A failure classified as lock contention (KartendDb::isLockContentionError
+  // matches on "locked" in the details) must engage the bounded retry ladder:
+  // non-final attempts stay quiet (debug-only), and only the exhausted final
+  // attempt reports through errorOccurred — mirroring the streaming twin.
+  PersistFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("a.bin")), "a"));
+
+  // Persistent injected fault whose text classifies as lock contention. A
+  // RAISE aborts the statement, so all three attempts fail identically.
+  {
+    QSqlQuery trig(fx.db());
+    QVERIFY(trig.exec(
+        QStringLiteral("CREATE TRIGGER fail_meta BEFORE UPDATE OF last_scanned ON collections "
+                       "BEGIN SELECT RAISE(ABORT, 'database is locked'); END")));
+  }
+
+  const CollectionConfig cfg = makeConfig(media.path());
+  QSignalSpy errorSpy(fx.service(), &ScanService::errorOccurred);
+  scanAndSave(fx.service(), cfg);
+
+  // Three attempts ran, but only the final one may report.
+  QCOMPARE(errorSpy.count(), 1);
+  const auto err = errorSpy.at(0).at(0).value<ErrorUtils::ErrorContext>();
+  QVERIFY2(err.details.contains(QStringLiteral("database is locked")), qPrintable(err.details));
+  QCOMPARE(itemCount(fx.db()), 0); // every attempt rolled back completely
 }
 
 QTEST_MAIN(TestScanServicePersist)

@@ -7,9 +7,6 @@
 
 namespace PathUtils {
 
-// Reason for validation failure
-enum class PathValidationError { EmptyPath, NotAbsolute, DoesNotExist };
-
 // Legacy function - returns empty string on failure (backward compatible)
 [[nodiscard]] QString validateAndExpandPath(const QString &path,
                                             const QString &collectionName = QString());

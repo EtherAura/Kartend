@@ -382,7 +382,7 @@ QString QueryManager::buildSortedSelectSql(const QStringList &uuids, bool useTem
 
 bool QueryManager::insertSortedRows(QSqlQuery &selectQuery, bool isRandomSort,
                                     const QVector<SortedRow> &shuffledItems, int &position) {
-  constexpr int INSERT_BATCH_SIZE = KartendDb::BatchSizes::PathInsertBatch;
+  constexpr int INSERT_BATCH_SIZE = KartendDb::BatchSizes::SortedCacheInsertBatch;
   QStringList paths;
   QStringList pathUuids;
   paths.reserve(INSERT_BATCH_SIZE);
@@ -654,9 +654,13 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 // ============================================================================
 // Materialises the (uuid, path) pairs for a single playlist into a temp table
 // the existing fetch SQL can join against via EXISTS. We rebuild whenever the
-// cached scope key changes — the key is "playlistId|max(rowid)" so any insert
-// or removal in playlist_items invalidates it without us needing explicit
-// signals from PlaylistManager.
+// cached scope key changes — for static playlists the key is
+// "playlistId|max(rowid)|updated_at". MAX(rowid) alone is unsound:
+// playlist_items is a non-AUTOINCREMENT rowid table and removeItem's
+// wipe-and-reinsert frees the top rowids, so a subsequent addItem re-mints
+// the previous MAX for different contents. Folding in the parent playlist's
+// updated_at stamp (touched inside both mutations' transactions) catches
+// remove-then-add sequences without explicit signals from PlaylistManager.
 
 bool QueryManager::ensurePlaylistScopeTempTable() {
   return ensureTempTable("CREATE TEMP TABLE IF NOT EXISTS query_playlist_scope ("
@@ -760,8 +764,10 @@ bool QueryManager::ensurePlaylistScopePopulated(const QString &playlistId) {
   }
 
   // Sniff is_smart so we can pick the right invalidation token. Static
-  // playlists key on max(rowid) of playlist_items (cheap, perfectly
-  // accurate). Smart playlists hash the filter JSON: identical JSON =
+  // playlists key on max(rowid) of playlist_items plus the playlist's
+  // updated_at stamp (rowid reuse after removeItem's wipe-and-reinsert
+  // means max(rowid) alone can miss a remove-then-add — see the header
+  // comment above). Smart playlists hash the filter JSON: identical JSON =
   // safe to reuse the scope; new JSON (filter edited) = re-evaluate.
   // The smart key intentionally does NOT include a per-call timestamp —
   // re-evaluation on every fetch during scrolling would be wasteful.
@@ -771,7 +777,7 @@ bool QueryManager::ensurePlaylistScopePopulated(const QString &playlistId) {
   // editing the filter or restarting the app. A periodic-invalidation
   // hook is a follow-up if this proves unsatisfactory.
   QSqlQuery flagProbe(m_db);
-  flagProbe.prepare("SELECT is_smart, smart_filter FROM playlists WHERE id = ?");
+  flagProbe.prepare("SELECT is_smart, smart_filter, updated_at FROM playlists WHERE id = ?");
   flagProbe.addBindValue(playlistId);
   if (!flagProbe.exec() || !flagProbe.next()) {
     return false;
@@ -791,7 +797,8 @@ bool QueryManager::ensurePlaylistScopePopulated(const QString &playlistId) {
     if (!rowProbe.exec() || !rowProbe.next()) {
       return false;
     }
-    key = playlistId + QStringLiteral("|") + rowProbe.value(0).toString();
+    key = playlistId + QStringLiteral("|") + rowProbe.value(0).toString() + QStringLiteral("|") +
+          flagProbe.value(2).toString();
   }
   if (key == m_cachedPlaylistScopeKey) {
     return true;

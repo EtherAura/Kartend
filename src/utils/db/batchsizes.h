@@ -42,10 +42,18 @@ inline constexpr int ScanCommitInterval = 500;
 // plenty of headroom for additional filter binds.
 inline constexpr int UuidListBatch = 500;
 
-// Path-insertion batch size for the file-map cache replenisher in
-// querymanagercache. Each row carries one path bind; 500 stays under the
-// limit while keeping per-flush cost amortised.
-inline constexpr int PathInsertBatch = 500;
+// Column count for the sorted_items_cache insert in
+// QueryManager::insertSortedRows (position, path, uuid). Keep in sync with
+// the SQL column list — a column addition shrinks the batch automatically.
+inline constexpr int SortedCacheColumns = 3;
+
+// Flush-batch row count for the sorted-items cache rebuild in
+// querymanagercache. 332 rows * 3 columns = 996 binds, leaving headroom
+// under SqliteVariableLimit (999). Derived rather than written as a literal
+// so a column addition can't silently blow the limit at runtime.
+inline constexpr int SortedCacheInsertBatch = SqliteVariableLimit / SortedCacheColumns - 1;
+static_assert(SortedCacheInsertBatch * SortedCacheColumns < SqliteVariableLimit,
+              "sorted-items cache insert batch exceeds SQLite bind limit");
 
 } // namespace KartendDb::BatchSizes
 
