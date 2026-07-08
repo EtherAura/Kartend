@@ -341,12 +341,18 @@ CacheDiskStorage::CacheDiskStorage()
 
 CacheDiskStorage::~CacheDiskStorage() {
   // Cooperative shutdown: m_cancelToken is captured by the dispatched
-  // lambda so tasks bail quickly. drainWithBudget() handles the bounded
-  // wait + leaked-pool fallback; callers can also invoke it explicitly
-  // (CacheManager does this for visibility into the failure mode), so
-  // we just clear the queue here.
+  // lambda so tasks bail quickly. Owners normally call drainWithBudget()
+  // first (CacheManager does, for visibility into the failure mode), which
+  // deletes-or-leaks the pool and nulls the pointer; if the pool is still
+  // live here, fall back to the same bounded drain so no user of this class
+  // silently leaks a running QThreadPool.
   if (m_pool) {
-    m_pool->clear();
+    constexpr int kDtorDrainMs = 500;
+    cancel();
+    if (!ThreadPoolUtils::shutdownWithBudget(m_pool, kDtorDrainMs)) {
+      qCWarning(lcCacheManager) << "CacheDiskStorage dtor drain expired after" << kDtorDrainMs
+                                << "ms — abandoning the IO pool (leak-on-timeout fallback)";
+    }
   }
 }
 
@@ -373,13 +379,15 @@ QString CacheDiskStorage::cacheDirectory() {
   QDir dir(cacheDir);
   const QString artworkDirPath = cacheDir + QStringLiteral("/artwork");
   const QString metadataDirPath = cacheDir + QStringLiteral("/metadata");
-  static bool loggedMkpathFailure = false;
+  // Atomic: reached concurrently from the cache-IO pool, the QtConcurrent
+  // init worker, and the GUI thread; exchange keeps the log single-shot
+  // without a data race.
+  static std::atomic<bool> loggedMkpathFailure{false};
 
   bool ensured = true;
   if (!dir.exists("artwork") && !dir.mkpath(artworkDirPath)) {
     ensured = false;
-    if (!loggedMkpathFailure) {
-      loggedMkpathFailure = true;
+    if (!loggedMkpathFailure.exchange(true)) {
       ErrorUtils::logError(
           ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
                                             "Failed to create artwork cache directory",
@@ -389,8 +397,7 @@ QString CacheDiskStorage::cacheDirectory() {
   }
   if (!dir.exists("metadata") && !dir.mkpath(metadataDirPath)) {
     ensured = false;
-    if (!loggedMkpathFailure) {
-      loggedMkpathFailure = true;
+    if (!loggedMkpathFailure.exchange(true)) {
       ErrorUtils::logError(
           ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
                                             "Failed to create cache metadata directory",

@@ -1,6 +1,8 @@
 #ifndef ARTWORKPATHCATALOG_H
 #define ARTWORKPATHCATALOG_H
 
+#include <memory>
+
 #include <QFuture>
 #include <QList>
 #include <QMutex>
@@ -23,11 +25,14 @@ class ArtworkPathCatalog {
 public:
   ArtworkPathCatalog() = default;
 
-  /// Drains ALL in-flight build tasks, not just the most recent one. A
-  /// superseded build (rapid collection switch) keeps running after the
-  /// owner's QFutureWatcher stops watching it — generation-guarded, but it
-  /// still locks m_mutex and reads m_buildGeneration, so it must never
-  /// outlive this object (Kartend-lz1zp).
+  /// Supersedes and drains (bounded) ALL in-flight build tasks, not just the
+  /// most recent one (Kartend-lz1zp). The build lambdas co-own the mutable
+  /// state via shared_ptr, so a build that outlasts the drain budget — a
+  /// QDir::entryList wedged on a network mount has no cancellation point and
+  /// QFuture can't be force-cancelled mid-scan — is abandoned (with a
+  /// warning) instead of hanging GUI-thread shutdown forever: it finishes
+  /// into the co-owned state and discards its results via the generation
+  /// check (Kartend-52b4j.3).
   ~ArtworkPathCatalog();
 
   ArtworkPathCatalog(const ArtworkPathCatalog &) = delete;
@@ -79,20 +84,28 @@ public:
   void clearAll();
 
 private:
-  mutable QMutex m_mutex;
-  QStringList m_allPaths;
-  int m_index = 0;
-  QSet<QString> m_silentlyCached;
-  QSet<QString> m_silentPending;
-  /// Kartend-cl86n: bumped on every buildFromCollection. A background scan
-  /// captures the value at kick time and only appends while it still matches,
-  /// so a superseded build (rapid collection switch) can't pour stale paths
-  /// into the list the newer build just cleared.
-  int m_buildGeneration = 0;
-  /// Every live build future, including superseded ones (Kartend-lz1zp).
-  /// Pruned of finished entries on each new build; drained in the dtor.
-  /// Guarded by m_mutex.
-  QList<QFuture<void>> m_inFlightBuilds;
+  /// All mutable catalog state, co-owned (shared_ptr) by every build lambda
+  /// so an abandoned build can never touch freed memory after the dtor's
+  /// bounded drain gives up on it (Kartend-52b4j.3; same pattern as
+  /// ArtworkDispatcherCacheHandle / the scan queue).
+  struct State {
+    QMutex mutex;
+    QStringList allPaths;
+    int index = 0;
+    QSet<QString> silentlyCached;
+    QSet<QString> silentPending;
+    /// Kartend-cl86n: bumped on every buildFromCollection (and once more in
+    /// the dtor). A background scan captures the value at kick time and only
+    /// appends while it still matches, so a superseded build (rapid
+    /// collection switch) — or one abandoned at teardown — drops its stale
+    /// paths instead of polluting the list the newer build just cleared.
+    int buildGeneration = 0;
+    /// Every live build future, including superseded ones (Kartend-lz1zp).
+    /// Pruned of finished entries on each new build; drained (bounded) in
+    /// the dtor. Guarded by mutex.
+    QList<QFuture<void>> inFlightBuilds;
+  };
+  std::shared_ptr<State> m_state = std::make_shared<State>();
 };
 
 #endif // ARTWORKPATHCATALOG_H

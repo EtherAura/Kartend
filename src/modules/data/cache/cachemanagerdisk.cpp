@@ -28,10 +28,25 @@ void CacheManager::initialize() {
   if (!m_initStarted.testAndSetOrdered(0, 1)) {
     return;
   }
+  // Read the store into a local map with NO lock held: the SQLite open +
+  // SELECT + row loop can take a while on a large store or slow disk, and
+  // holding m_mutex across it blocked every GUI-thread cache call (early
+  // cacheArtwork / getArtworkFromMemoryOnly) for the whole load.
+  QHash<QString, qint64> loaded;
+  m_diskStorage->readTimestampsInto(loaded);
+
+  // Merge under the lock, keeping existing in-memory entries: they were
+  // recorded by cache calls that ran while this load was in flight, so they
+  // are always fresher than the store rows. (The old clear+reload replaced
+  // them with stale rows, making the next revalidation spuriously invalidate
+  // a freshly-decoded pixmap.) Keys queued for removal stay out too — a
+  // store row must not resurrect an entry invalidated during the load.
   QMutexLocker locker(&m_mutex);
-  fileTimestamps.clear();
-  m_lastRevalidatedMs.clear();
-  m_diskStorage->readTimestampsInto(fileTimestamps);
+  for (auto it = loaded.cbegin(); it != loaded.cend(); ++it) {
+    if (!fileTimestamps.contains(it.key()) && !dirtyRemovals.contains(it.key())) {
+      fileTimestamps.insert(it.key(), it.value());
+    }
+  }
 }
 
 void CacheManager::scheduleSaveToDisk(int delayMs) {

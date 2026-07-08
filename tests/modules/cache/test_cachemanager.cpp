@@ -66,6 +66,10 @@ private slots:
   void testShutdownSnapshotPersistsAllTimestamps();
   void testPruneSweepsDeadBookkeeping();
 
+  // initialize() merge rule: in-memory entries are always fresher than the
+  // store (Kartend-52b4j.2)
+  void testInitializeMergeKeepsFresherInMemoryTimestamps();
+
   // Disk-budget eviction (piggybacked on the getCacheSize walk)
   void testEvictArtworkOverDiskBudget();
 
@@ -610,6 +614,50 @@ void TestCacheManager::testPruneSweepsDeadBookkeeping() {
   // sweep with nothing newly dead is a no-op.
   m_cacheManager->pruneStaleEntriesForTesting();
   QCOMPARE(m_cacheManager->fileTimestampCountForTesting(), countWithBoth - 1);
+}
+
+void TestCacheManager::testInitializeMergeKeepsFresherInMemoryTimestamps() {
+  // Kartend-52b4j.2: initialize() runs on a background thread while early
+  // GUI-thread cacheArtwork calls may already have recorded fresh timestamps.
+  // The old clear+reload replaced those with stale store rows, so the next
+  // revalidation spuriously invalidated a freshly-decoded pixmap. The merge
+  // must keep in-memory entries (always fresher than the store) while still
+  // seeding keys only the store knows about.
+  const QString cachedPath = m_tempDir->path() + "/init_merge_cached.png";
+  const QString storeOnlyPath = m_tempDir->path() + "/init_merge_store_only.png";
+  QPixmap onDisk(300, 300);
+  onDisk.fill(Qt::cyan);
+  QVERIFY(onDisk.save(cachedPath, "PNG"));
+  QVERIFY(onDisk.save(storeOnlyPath, "PNG"));
+
+  // Seed the store with a deliberately STALE row for the soon-to-be-cached
+  // key, plus a row for a key the manager has never seen in memory.
+  const qint64 staleTs = QFileInfo(cachedPath).lastModified().toMSecsSinceEpoch() - 12345;
+  const qint64 storeOnlyTs = QFileInfo(storeOnlyPath).lastModified().toMSecsSinceEpoch();
+  QVERIFY(CacheDiskStorage::writeTimestamps(
+      QHash<QString, qint64>{{cachedPath, staleTs}, {storeOnlyPath, storeOnlyTs}}));
+
+  // Fresh manager; cache BEFORE initialize() — models the early insert that
+  // races the background store load in production.
+  CacheManager manager;
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  manager.cacheArtwork(cachedPath, pixmap);
+  QCOMPARE(manager.fileTimestampCountForTesting(), 1);
+
+  manager.initialize();
+
+  // Store-only keys were seeded in (>= because earlier slots in this process
+  // may have left unrelated rows in the shared test-mode store)...
+  QVERIFY2(manager.fileTimestampCountForTesting() >= 2,
+           "initialize() must still seed keys only the store knows about");
+  // ...and the in-memory row survived the merge: the first memory hit after
+  // an insert always revalidates, so if the stale store row had clobbered
+  // the fresher in-memory timestamp this hit would spuriously invalidate
+  // and return a null pixmap.
+  QVERIFY2(!manager.getArtworkFromMemoryOnly(cachedPath).isNull(),
+           "a stale store row must not clobber the fresher in-memory timestamp");
+  QCOMPARE(manager.metrics().invalidations, qint64(0));
 }
 
 // ─── Invalidation propagation to the timestamp store (Kartend-9lm54) ─────────

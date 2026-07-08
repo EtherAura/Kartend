@@ -110,14 +110,14 @@ struct ArtworkManagerSetup {
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
 
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
@@ -239,7 +239,7 @@ private:
                                      const QList<ArtworkPrecacheResult> &results);
 
   QList<CollectionConfig> *collections;
-  int *currentCollectionIndex;
+  const int *currentCollectionIndex;
 
   QStackedWidget *stackedWidget;
   QWidget *itemsPage;
