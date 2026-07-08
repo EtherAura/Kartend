@@ -38,6 +38,13 @@ struct ScrollEventsControllerContext {
   /// change and as a fallback owner when CoverFlow item-activate can't
   /// resolve the owning collection from DatabaseManager.
   std::function<int()> getCurrentCollectionIndex;
+
+  /// Debounced general-settings persist (MainWindow's coalescing saver).
+  /// The list-header column-width slots fire once per mouse-move tick of a
+  /// drag; when this hook is wired they write the new width into the live
+  /// struct and defer the full-INI write to it. When unset they fall back
+  /// to an immediate save so partial wirings keep persisting.
+  std::function<void()> scheduleSettingsSave;
 };
 
 class ScrollEventsController : public QObject {

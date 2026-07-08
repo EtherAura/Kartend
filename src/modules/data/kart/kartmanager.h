@@ -161,6 +161,21 @@ public:
   [[nodiscard]] ErrorUtils::Result<QString>
   importKart(const QString &kartPath, const QString &destDir, bool registerCollection);
 
+  /// Kartend-h7xnr.1: asynchronous import through the same worker path as
+  /// the menu-driven flow — QtConcurrent extraction, kartProgress* dialog
+  /// signals, and cooperative cancel. The drop-handler drain uses this so a
+  /// dropped .kart never blocks the GUI thread; the synchronous importKart
+  /// entry above stays for tests and headless callers. Registers the
+  /// collection on success (matching the old drop path's importKart(...,
+  /// true)). One operation runs at a time — callers sequence follow-up
+  /// imports off the collectionImported / importFailed terminal signals.
+  void importKartAsync(const QString &kartPath, const QString &destDir);
+
+  /// True while an import/export future is in flight (m_activeWatcher set).
+  /// Lets owners defer a new operation instead of clobbering the active
+  /// reader/writer the running QtConcurrent task captured by raw pointer.
+  [[nodiscard]] bool operationInFlight() const { return m_activeWatcher != nullptr; }
+
   /// Headless (no-confirmer) import. Because there is no interactive
   /// suspicious-path gate, a manifest whose launcherPath resolves INSIDE the
   /// extracted tree (a self-bundled executable) is refused unless

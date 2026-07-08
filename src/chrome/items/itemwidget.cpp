@@ -49,7 +49,7 @@ bool ItemWidget::s_showTitleInPlaceholder = false;
 
 // Per-item state-flag registry (Kartend-elte). Keyed by absolute filePath
 // because that's what every ItemWidget carries; MainWindow populates the
-// hash from IDatabaseManager::loadItemStateFlagsForCollection on every
+// hash from IDatabaseManager::fetchItemStateFlagsForCollection on every
 // collection switch. Function-local static lets the sibling TU
 // (itemwidgetpaint.cpp) reach the same storage via stateFlagsRegistry()
 // without the linker drama of an anonymous-namespace global.

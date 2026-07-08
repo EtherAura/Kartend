@@ -104,6 +104,25 @@ kartend_add_test(NAME QueryManagerAbsPath
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Regression test (Kartend-h7xnr.11): loadItemDetail's preview-video lookup
+# follows the documented two-root chain — the explicit videoDirectory first,
+# then {artworkDir}/video/, the single-root layout the scraper writes to.
+kartend_add_test(NAME QueryManagerItemDetailVideo
+  SOURCES modules/query/test_querymanager_itemdetail_video.cpp
+          modules/query/workersignalspy.h
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# The badge state-flags read runs on the query worker (Kartend-h7xnr.6):
+# fetchItemStateFlagsForCollection sees rows committed on another connection,
+# returns only flagged rows scoped to the requested uuid, echoes the uuid for
+# stale-reply dropping, and still replies (empty) for an empty uuid.
+kartend_add_test(NAME QueryManagerStateFlags
+  SOURCES modules/query/test_querymanager_stateflags.cpp
+          modules/query/workersignalspy.h
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Regression test: same-named files across collections count separately
 # under queryIncludeAllCollections / showAllSubcollectionItems (Kartend-oyi2).
 # Reuses the same query-stack source list as QueryManagerCancelScan.

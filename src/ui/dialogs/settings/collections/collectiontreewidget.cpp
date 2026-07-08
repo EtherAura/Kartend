@@ -31,7 +31,11 @@ void CollectionTreeWidget::dropEvent(QDropEvent *event) {
       }
     }
   }
+  // Flag the move so selection observers can tell this transient
+  // selection-clear apart from a user deselect (see dropInProgress()).
+  m_dropInProgress = true;
   QTreeWidget::dropEvent(event);
+  m_dropInProgress = false;
   if (event->isAccepted()) {
     emit treeRearranged();
   }

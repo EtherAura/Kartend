@@ -1,7 +1,5 @@
 // Sibling TU: initial timer setup methods for MainWindow.
 #include <QApplication>
-#include <QInputDialog>
-#include <QMessageBox>
 #include <QPixmapCache>
 #include <QTimer>
 
@@ -11,25 +9,20 @@
 #include "detailspane.h"
 #include "detailspanemanager.h"
 #include "dialogcontroller.h"
-#include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
 #include "idatabasemanager.h"
 #include "idetailspanemanager.h"
 #include "interactionmanager.h"
 #include "isessionmanager.h"
-#include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
-#include "pathutils.h"
 #include "scrollmanager.h"
-#include "settingsdialogcontroller.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants/detailspaneconstants.h"
-#include "uiconstants/grid.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
@@ -102,70 +95,10 @@ void MainWindow::runDeferredStartupTasks() {
 
 void MainWindow::setupInitialTimersEmptyCollections() {
   // Defer collection creation until after the main window is fully shown -
-  // ensures proper parent-child relationship and window stacking order
-  QTimer::singleShot(0, this, [this]() {
-    // Prompt for the first collection's name, re-prompting on an empty or
-    // invalid entry so a typo isn't a dead end. An explicit Cancel means the
-    // user doesn't want to set one up now: the app needs a collection to do
-    // anything, so close gracefully instead of stranding a collection-less
-    // window with a "please restart" box and no path forward (Kartend-uklyw).
-    QString trimmed;
-    while (true) {
-      bool ok = false;
-      QString name = QInputDialog::getText(this, tr("Create First Collection"),
-                                           tr("Enter a name for your first collection:"),
-                                           QLineEdit::Normal, "", &ok);
-      if (!ok) {
-        close();
-        return;
-      }
-      trimmed = name.trimmed();
-      if (trimmed.isEmpty()) {
-        QMessageBox::information(this, tr("Name Required"),
-                                 tr("Please enter a name for your collection, or Cancel "
-                                    "to exit."));
-        continue;
-      }
-      if (PathUtils::validateCollectionNameForSubstitution(trimmed).isError()) {
-        QMessageBox::warning(this, tr("Invalid Collection Name"),
-                             tr("Collection names cannot contain '/', '\\\\', or '..'. "
-                                "Please choose a different name."));
-        continue;
-      }
-      break;
-    }
-
-    // Create the first collection with the given name
-    CollectionConfig newCollection;
-    newCollection.name = trimmed;
-    newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
-    newCollection.parentCollectionIndex = -1;
-    newCollection.isSubcollection = false;
-    m_collections.append(newCollection);
-
-    // Save the new collection
-    if (m_appManager->getSettingsManager()) {
-      ErrorPresentation::reportSaveResult(
-          m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
-    }
-
-    // Rebuild hierarchy cache with the new collection
-    rebuildHierarchyCache();
-
-    // Now open settings dialog for the user to configure the collection
-    if (m_appManager->getSettingsManager()) {
-      m_currentCollectionIndex = 0;
-      SettingsDialogContext context = makeSettingsDialogContext();
-      settingsDialogController()->openSettingsDialog(context);
-
-      if (!m_collections.isEmpty()) {
-        m_currentCollectionIndex = 0;
-        if (m_appManager->getNavigationManager()) {
-          m_appManager->getNavigationManager()->showCollectionItems(0);
-        }
-      }
-    }
-  });
+  // ensures proper parent-child relationship and window stacking order. The
+  // interactive flow itself lives in mainwindow_dialogs.cpp per the partials
+  // charter — this partial only owns the deferral.
+  QTimer::singleShot(0, this, &MainWindow::promptCreateFirstCollectionInteractive);
 }
 
 void MainWindow::setupInitialTimersWithCollections() {

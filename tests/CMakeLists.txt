@@ -165,9 +165,20 @@ endif()
 # This covers tests registered in THIS directory; the integration subdir does
 # the same for its own. APPEND (not set) so tests that already set ENVIRONMENT
 # (e.g. QT_QPA_PLATFORM=offscreen) keep it.
+#
+# The same loop applies a default per-test TIMEOUT: without one, ctest's
+# 1500s default is the only bound, so a single hung test eats a whole CI job
+# budget with no attribution (the Windows 90-min hang). 300s is an order of
+# magnitude above any current unit test; legitimately slow suites (the
+# integration classes) set their own explicit, higher TIMEOUT. The guard
+# keeps any future explicit set_tests_properties(... TIMEOUT ...) authoritative.
 get_property(_kartend_tests DIRECTORY PROPERTY TESTS)
 foreach(_test IN LISTS _kartend_tests)
   set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
   file(MAKE_DIRECTORY "${_test_home}")
   set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+  get_test_property(${_test} TIMEOUT _test_timeout)
+  if (NOT _test_timeout)
+    set_property(TEST ${_test} PROPERTY TIMEOUT 300)
+  endif()
 endforeach()

@@ -134,6 +134,13 @@ private:
   QHash<QTreeWidgetItem *, int> m_itemToIndex;
   QHash<int, QTreeWidgetItem *> m_indexToItem;
   QHash<int, QList<QTreeWidgetItem *>> m_indexToLinkedItems;
+
+  /// True while rebuild() is clearing/repopulating the widget. The clear
+  /// fires itemSelectionChanged, and onWidgetSelectionChanged's deselect
+  /// gate must not run for that programmatic clear: the mutation flows
+  /// (add / duplicate / remove) manage save state themselves around the
+  /// rebuild, and the index maps still point at just-deleted items.
+  bool m_rebuilding = false;
 };
 
 #endif // TREEMANAGER_H

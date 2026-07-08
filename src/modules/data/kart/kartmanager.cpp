@@ -299,10 +299,11 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
                                                     bool registerCollection) {
   auto extracted = extractKart(kartPath, destDir);
   if (extracted.isError()) return extracted.error();
-  // Kartend-s6mj: importKart is the synchronous entry the drop-handler and
-  // tests use. It still consults a wired confirmer so dropping a malicious
-  // .kart prompts the user before the manifest's launcher path is
-  // registered.
+  // Kartend-s6mj: importKart is the synchronous entry kept for tests and
+  // headless-style callers (the drag-drop drain used to run it on the GUI
+  // thread; Kartend-h7xnr.1 rerouted drops through importKartAsync's worker
+  // path). It still consults a wired confirmer so a malicious .kart prompts
+  // the user before the manifest's launcher path is registered.
   if (m_setup.suspiciousPathConfirmer) {
     const auto suspicious = collectSuspiciousKartPaths(extracted.value().manifest.collectionConfig,
                                                        previouslyTrustedLauncherPaths());
@@ -314,6 +315,10 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
   }
   return finalizeImport(extracted.value(), registerCollection,
                         makeFixedChoiceResolver(MergeChoice::Skip));
+}
+
+void KartManager::importKartAsync(const QString &kartPath, const QString &destDir) {
+  runImport(kartPath, destDir);
 }
 
 ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartPath,

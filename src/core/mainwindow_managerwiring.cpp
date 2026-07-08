@@ -46,6 +46,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStringList>
+#include <QTimer>
 #include <QUrl>
 
 DialogRunners MainWindow::makeDialogRunners() {
@@ -201,6 +202,57 @@ void MainWindow::wireInteractionManager() {
         m_nowPlayingOverlay->hideOverlay();
       }
     });
+
+    // Kartend-3232r.1: detached (fire-and-forget) launches — the default,
+    // runtime detection off — get the same attract/gamepad suspension as
+    // tracked ones, via their own signal pair: no "Now Playing" overlay (the
+    // child is unsupervised) and no raise()/activateWindow() on the ended
+    // side (a double-forking launcher's QProcess exits seconds in while the
+    // program keeps running; raising would steal its focus).
+    connect(launch, &LaunchManager::detachedSessionStarted, this,
+            [this](const QString & /*filePath*/, const QString & /*displayName*/) {
+              if (m_MetadataSidebar) {
+                m_MetadataSidebar->pausePreviewVideo();
+              }
+              if (auto *interaction = m_appManager->getInteractionManager()) {
+                if (auto *attract = interaction->attractManager()) {
+                  attract->setSuspended(true);
+                }
+                if (auto *gamepad = interaction->gamepadManager()) {
+                  gamepad->setSuspended(true);
+                }
+              }
+              m_detachedSuspendActive = true;
+              m_detachedSessionSawDeactivate = false;
+              m_detachedSuspendSince.start();
+              // singleShot: a detached child carries no focus guarantee — a
+              // launcher with no window of its own (audio player, CLI tool)
+              // never deactivates us, so the WindowActivate resume backstop
+              // could never fire and the gamepad would stay dead under a
+              // fully focused frontend. Probe once after the program has had
+              // time to take focus and resume if it never did; `this` scopes
+              // the probe to the window's lifetime, and the elapsed check
+              // makes a stale probe from an already-ended session a no-op
+              // for a newer one (the newer start restarted the timer, so its
+              // own probe is the one that counts).
+              QTimer::singleShot(kDetachedFocusProbeMs, this, [this]() {
+                if (m_detachedSuspendActive && !m_detachedSessionSawDeactivate &&
+                    m_detachedSuspendSince.isValid() &&
+                    m_detachedSuspendSince.elapsed() >= kDetachedFocusProbeMs) {
+                  resumeAfterDetachedSession();
+                }
+              });
+            });
+    connect(launch, &LaunchManager::detachedSessionEnded, this,
+            [this](const QString & /*filePath*/) {
+              // A detached child's final finished can land during shutdown
+              // teardown; don't re-arm attract/gamepad then (same guard as
+              // runtimeFinished above, Kartend-42n7u).
+              if (m_isShuttingDown) {
+                return;
+              }
+              resumeAfterDetachedSession();
+            });
   }
 
   // EventManager gates item-grid input while a modal scrape dialog is up,
@@ -219,6 +271,41 @@ void MainWindow::wireInteractionManager() {
         return m_dialogController->chooseLauncher(collectionName, launcherNames, defaultIndex);
       });
     }
+  }
+}
+
+void MainWindow::resumeAfterDetachedSession() {
+  // Kartend-3232r.1: lift the detached-session suspension exactly once —
+  // whichever of the balanced detachedSessionEnded, the WindowActivate focus
+  // backstop, or the never-took-focus probe fires first wins; the others
+  // no-op on the cleared flag. setSuspended(false) re-arms a fresh attract
+  // idle countdown (the only sanctioned attract entry point — no
+  // selection-driving here).
+  if (!m_detachedSuspendActive) {
+    return;
+  }
+  m_detachedSuspendActive = false;
+  auto *interaction = m_appManager ? m_appManager->getInteractionManager() : nullptr;
+  if (!interaction) {
+    return;
+  }
+  if (auto *launch = interaction->launchManager()) {
+    // The user is demonstrably back (or the child exited): a new launch is
+    // intentional again, so drop the detached single-child block even while
+    // the previous child (or its double-forked descendant) lives on.
+    launch->releaseDetachedLaunchBlock();
+    // A live tracked session owns the suspension now (the runtime-detection
+    // setting flipped mid-detached-session): leave attract/gamepad suspended
+    // — that session's own runtimeFinished resumes them.
+    if (launch->isRuntimeChildRunning()) {
+      return;
+    }
+  }
+  if (auto *attract = interaction->attractManager()) {
+    attract->setSuspended(false);
+  }
+  if (auto *gamepad = interaction->gamepadManager()) {
+    gamepad->setSuspended(false);
   }
 }
 
@@ -398,5 +485,19 @@ void MainWindow::wireKartManager() {
     connect(km, &kart::KartManager::kartProgressStarted, this, [this, km](const QString &title) {
       m_dialogController->startKartProgressDialog(km, title);
     });
+
+    // Kartend-h7xnr.1: sequential drop-drain continuation. While a drag-drop
+    // drain is active (m_kartImportInProgress), each operation's terminal
+    // signal dispatches the next queued job, so dropped .kart files extract
+    // one at a time on the worker and the guard stays up until the queue
+    // empties. Exactly one of collectionImported / importFailed fires per
+    // runImport; the export pair covers a drain that started while a
+    // menu-driven export was mid-run (dispatchNextKartImport defers on
+    // operationInFlight and resumes here). Menu-driven operations leave the
+    // guard false, so this is a no-op for them.
+    connect(km, &kart::KartManager::collectionImported, this, &MainWindow::onKartOperationFinished);
+    connect(km, &kart::KartManager::importFailed, this, &MainWindow::onKartOperationFinished);
+    connect(km, &kart::KartManager::kartExported, this, &MainWindow::onKartOperationFinished);
+    connect(km, &kart::KartManager::exportFailed, this, &MainWindow::onKartOperationFinished);
   }
 }

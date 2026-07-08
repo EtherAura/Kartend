@@ -13,6 +13,8 @@
 #include <QPointer>
 #include <QString>
 
+class QLabel;
+class QScrollArea;
 class QWidget;
 class IDetailsPaneManager;
 class IScrollManager;
@@ -36,6 +38,17 @@ struct SettingsDialogContext {
   // signals and display the "X of Y items added" confirmation box when a
   // newly-added collection finishes its first scan.
   IDatabaseManager *databaseManager = nullptr;
+
+  // MainWindow chrome the post-save refresh touches directly: the items-page
+  // breadcrumb label (plain-text title fallback until NavigationManager
+  // rebuilds the real breadcrumb) and the grid scroll area (scrollbar
+  // visibility re-apply). Injected by the owner instead of located with a
+  // stringly-typed findChild() so an objectName rename in mainwindow.ui
+  // breaks compilation at the population site rather than silently skipping
+  // the refresh. Null is tolerated (headless callers): the refresh steps
+  // that need a widget just no-op.
+  QLabel *itemsTitleLabel = nullptr;
+  QScrollArea *itemScrollArea = nullptr;
 
   // Factory that builds the concrete settings dialog and wires its
   // collectionSaved / rescanRequired signals to the supplied callbacks.
@@ -107,14 +120,14 @@ private:
                             IArtworkManager *artworkManager, ICacheManager *cacheManager,
                             int currentCollectionIndex);
 
-  void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
-                           int viewingCollectionIndex, bool titleChangedForView,
-                           bool scrollbarChangedForView, bool sidebarModeChangedForView,
-                           bool gridWidthChangedForView, bool spacingChangedForView,
-                           bool alignmentChangedForView, bool fontSizeChangedForView,
-                           bool hideTitlesChangedForView, IDetailsPaneManager *detailsPaneManager,
-                           IScrollManager *scrollManager, IArtworkManager *artworkManager,
-                           int currentCollectionIndex);
+  void handleLayoutChanges(QWidget *parent, QLabel *itemsTitleLabel, QScrollArea *itemScrollArea,
+                           const QList<CollectionConfig> &collections, int viewingCollectionIndex,
+                           bool titleChangedForView, bool scrollbarChangedForView,
+                           bool sidebarModeChangedForView, bool gridWidthChangedForView,
+                           bool spacingChangedForView, bool alignmentChangedForView,
+                           bool fontSizeChangedForView, bool hideTitlesChangedForView,
+                           IDetailsPaneManager *detailsPaneManager, IScrollManager *scrollManager,
+                           IArtworkManager *artworkManager, int currentCollectionIndex);
 
   // ctx is the single source of truth for sibling managers (SettingsManager,
   // ArtworkManager, CacheManager).

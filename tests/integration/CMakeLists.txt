@@ -18,6 +18,7 @@ set(INTEGRATION_TEST_SOURCES
   mocks/mockedmainwindowfixture.cpp
   test_mainwindow_smoke.cpp
   test_menucontroller.cpp
+  test_dialogcontroller.cpp
   test_scrapercontroller.cpp
   test_toolbarcontroller.cpp
   test_marqueecontroller.cpp
@@ -54,6 +55,7 @@ set(INTEGRATION_TEST_HEADERS
   mainwindowfixture.h
   test_mainwindow_smoke.h
   test_menucontroller.h
+  test_dialogcontroller.h
   test_scrapercontroller.h
   test_toolbarcontroller.h
   test_marqueecontroller.h
@@ -135,6 +137,7 @@ target_include_directories(test_integration PRIVATE
 set(INTEGRATION_TEST_CLASSES
   TestMainWindowSmoke
   TestMenuController
+  TestDialogController
   TestScraperController
   TestToolbarController
   TestMarqueeController
@@ -179,9 +182,16 @@ endforeach()
 # mode (~/.qttest) is isolated from the unit tests under `ctest -j`. Mirrors
 # the per-test HOME loop at the end of tests/CMakeLists.txt — that loop only
 # sees tests registered in that directory, not this subdirectory's.
+#
+# Explicit TIMEOUT, higher than the 300s unit-test default in
+# tests/CMakeLists.txt: each class boots the full MainWindow fixture (and
+# TestLaunchFlow additionally round-trips launcher subprocesses), so these are
+# the legitimately slow suites — but 900s still converts a hang into one named
+# red test instead of a consumed job budget.
 get_property(_kartend_integration_tests DIRECTORY PROPERTY TESTS)
 foreach(_test IN LISTS _kartend_integration_tests)
   set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
   file(MAKE_DIRECTORY "${_test_home}")
   set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+  set_property(TEST ${_test} PROPERTY TIMEOUT 900)
 endforeach()

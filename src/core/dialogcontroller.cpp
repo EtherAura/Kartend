@@ -79,7 +79,17 @@ DialogController::runKartMergeDialog(const QString &itemPath,
 }
 
 void DialogController::startKartProgressDialog(kart::KartManager *km, const QString &title) {
+  // Kartend-h7xnr.1: sequential drop imports start the next operation while
+  // the previous dialog may still be up in its finished "Close" state. Every
+  // dialog stays connected to the same KartManager signals until it is
+  // deleted, so a stale one would keep tracking the new operation (and the
+  // dialogs would stack, one per dropped file). Close it — WA_DeleteOnClose
+  // then deletes it, dropping its km connections.
+  if (m_kartProgressDialog) {
+    m_kartProgressDialog->close();
+  }
   auto *dlg = new KartProgressDialog(title, m_parent);
+  m_kartProgressDialog = dlg;
   dlg->setAttribute(Qt::WA_DeleteOnClose);
   connect(km, &kart::KartManager::kartProgressFraction, dlg, &KartProgressDialog::setFraction);
   connect(km, &kart::KartManager::kartProgressEntry, dlg, &KartProgressDialog::setEntryName);

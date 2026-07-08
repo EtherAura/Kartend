@@ -145,6 +145,14 @@ bool MainWindow::event(QEvent *event) {
   if (event && !m_isShuttingDown && !QApplication::closingDown()) {
     switch (event->type()) {
     case QEvent::WindowDeactivate:
+      // A deactivation during a detached launch session is the evidence the
+      // launched program really took focus — it arms the WindowActivate
+      // resume backstop below and stands down the never-took-focus probe
+      // (Kartend-3232r.1). Recorded unconditionally: even our own dialog
+      // stealing focus proves activation events flow.
+      if (m_detachedSuspendActive) {
+        m_detachedSessionSawDeactivate = true;
+      }
       // Skip tracking deactivation that was caused by our own scraper
       // or settings dialog taking focus — re-entering the main window
       // afterwards is not a "welcome back" moment.
@@ -155,6 +163,17 @@ bool MainWindow::event(QEvent *event) {
       }
       break;
     case QEvent::WindowActivate:
+      // Kartend-3232r.1 backstop: regaining activation while a detached
+      // launch keeps attract/gamepad suspended means the user is back at the
+      // frontend (alt-tab, or a double-forking launcher whose QProcess never
+      // signals the real program's exit) — resume. Guarded to detached
+      // sessions only (tracked ones resume on their real finished()) and to
+      // activations past the grace window, so the launcher-chooser / error
+      // dialog closing right after the spawn doesn't instantly lift it.
+      if (m_detachedSuspendActive && m_detachedSuspendSince.isValid() &&
+          m_detachedSuspendSince.elapsed() >= kDetachedResumeGraceMs) {
+        resumeAfterDetachedSession();
+      }
       if (m_windowWasInactive) {
         m_windowWasInactive = false;
         if (m_startupSplashHandled && !QApplication::activeModalWidget() &&
@@ -407,8 +426,8 @@ void MainWindow::dropEvent(QDropEvent *event) {
   if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) return;
   // Collect the dropped .kart paths and accept the drop immediately. The
   // destination prompt + import are deferred (processPendingKartImports) so the
-  // modal file dialog and the blocking import don't run inside the DnD handler
-  // — running them here keeps the drag source blocked until we return and lets
+  // modal file dialog and the import don't start inside the DnD handler —
+  // running them here keeps the drag source blocked until we return and lets
   // a second drop re-enter dropEvent through the modal's nested loop
   // (Kartend-tubnr).
   for (const QUrl &url : event->mimeData()->urls()) {
@@ -443,9 +462,23 @@ void MainWindow::processPendingKartImports() {
     return;
   }
   m_kartImportInProgress = true;
-  // Drain the queue. Each getExistingDirectory spins a nested event loop, so a
-  // drop arriving mid-prompt appends to m_pendingKartImports and is handled by
-  // this same loop before it exits — no second drain starts (guard above).
+  // Two-phase drain (Kartend-h7xnr.1 — this used to call the synchronous
+  // importKart per file, freezing the GUI for the whole extraction with no
+  // progress or cancel). Phase 1 resolves a destination for every queued
+  // path up front via the modal prompts; phase 2 feeds the resolved jobs one
+  // at a time through KartManager's async worker path (QtConcurrent +
+  // progress dialog + cancel — the same flow the Import menu uses). The
+  // guard stays up until the job queue is empty, so a drop landing
+  // mid-import can't start a second drain.
+  promptPendingKartDestinations();
+  dispatchNextKartImport();
+}
+
+void MainWindow::promptPendingKartDestinations() {
+  // Each getExistingDirectory spins a nested event loop, so a drop arriving
+  // mid-prompt appends to m_pendingKartImports and is consumed by this same
+  // loop before it exits — no second drain starts (guard in
+  // processPendingKartImports / dropEvent).
   while (!m_pendingKartImports.isEmpty()) {
     const QString path = m_pendingKartImports.takeFirst();
     auto peeked = KartReader::peekManifest(path);
@@ -459,12 +492,57 @@ void MainWindow::processPendingKartImports() {
     const QString destDir = QFileDialog::getExistingDirectory(
         this, tr("Import %1 to...").arg(peeked.value().name), suggested);
     if (destDir.isEmpty()) continue;
-    auto res = km->importKart(path, destDir, true);
-    if (res.isError()) {
-      QMessageBox::warning(this, tr("Import Kart"), res.error().message);
-    }
+    m_kartImportJobs.append({path, destDir});
   }
-  m_kartImportInProgress = false;
+}
+
+void MainWindow::dispatchNextKartImport() {
+  if (m_isShuttingDown || QApplication::closingDown()) {
+    m_pendingKartImports.clear();
+    m_kartImportJobs.clear();
+    m_kartImportInProgress = false;
+    return;
+  }
+  // A drop that landed while an import was running queued paths without
+  // scheduling a drain (the guard was up) — prompt for their destinations
+  // before deciding the queue is empty.
+  if (m_kartImportJobs.isEmpty() && !m_pendingKartImports.isEmpty()) {
+    promptPendingKartDestinations();
+  }
+  if (m_kartImportJobs.isEmpty()) {
+    m_kartImportInProgress = false;
+    return;
+  }
+  auto *km = m_appManager ? m_appManager->getKartManager() : nullptr;
+  if (!km) {
+    m_pendingKartImports.clear();
+    m_kartImportJobs.clear();
+    m_kartImportInProgress = false;
+    return;
+  }
+  if (km->operationInFlight()) {
+    // A menu-driven import/export is mid-run; starting now would clobber the
+    // reader/writer its QtConcurrent task captured. Its terminal signal
+    // re-enters here via onKartOperationFinished, so just wait.
+    return;
+  }
+  const auto job = m_kartImportJobs.takeFirst();
+  // Async worker-path import: extraction runs on the thread pool while the
+  // kartProgressStarted-driven dialog shows progress and offers cancel. One
+  // worker at a time — the next job dispatches from onKartOperationFinished
+  // when this one's terminal signal fires.
+  km->importKartAsync(job.first, job.second);
+}
+
+void MainWindow::onKartOperationFinished() {
+  if (!m_kartImportInProgress) {
+    return; // no drop-drain active — a menu-driven operation, nothing to chain
+  }
+  // Defer one event-loop turn: on failure, runImport emits importFailed
+  // *before* kartProgressFailed and the warning modal, so dispatching the
+  // next import synchronously here would open its progress dialog only for
+  // the previous operation's trailing kartProgressFailed to reject it.
+  QTimer::singleShot(0, this, &MainWindow::dispatchNextKartImport);
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
@@ -581,6 +659,11 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   // immediately and shutdown() below persists m_collections synchronously, so the
   // final width is saved without the debounced timer's separate INI write
   // (Kartend-rbkf6).
+  //
+  // GeneralSettings has no such shutdown persist, so a debounced save still in
+  // its window (volume / column-width / text-zoom burst) must flush now —
+  // before m_isShuttingDown gates the timer's own callback.
+  flushPendingGeneralSettingsSave();
   m_isShuttingDown = true;
 
   // Hide window immediately so user sees instant visual response

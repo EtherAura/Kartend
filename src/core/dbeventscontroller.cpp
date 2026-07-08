@@ -43,7 +43,9 @@ void DbEventsController::refreshFilterToolbarOnItemsLoaded(
   // a raw pointer (no Qt signal), so this is the most reliable post-switch
   // hook available — by the time itemsLoaded fires, the index points at the
   // collection the user is now viewing, and the popup's title-pattern toggle
-  // needs to mirror that collection's flag.
+  // needs to mirror that collection's flag. This precondition (and where this
+  // slot sits among itemsLoaded's receivers) is part of the ordering contract
+  // documented in mainwindow_wiring.cpp's file header.
   if (m_ctx.refreshFilterToolbar) {
     m_ctx.refreshFilterToolbar();
   }

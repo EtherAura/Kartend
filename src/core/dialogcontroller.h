@@ -12,12 +12,15 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
 QT_BEGIN_NAMESPACE
 class QWidget;
 QT_END_NAMESPACE
+
+class KartProgressDialog;
 
 namespace kart {
 class KartManager;
@@ -70,7 +73,11 @@ public:
 
   /// Creates the long-lived KartProgressDialog and wires it to the given
   /// KartManager (progress signals + cancellation routing). Dialog
-  /// deletes itself on close (WA_DeleteOnClose).
+  /// deletes itself on close (WA_DeleteOnClose). A previous progress dialog
+  /// still open (e.g. finished in its "Close" state while a sequential
+  /// drop-import chain starts the next operation, Kartend-h7xnr.1) is
+  /// closed first so stacked stale dialogs don't keep tracking the new
+  /// operation's signals.
   void startKartProgressDialog(kart::KartManager *km, const QString &title);
 
   /// True iff a ScrapeResultDialog or SettingsDialog is currently showing.
@@ -117,6 +124,10 @@ public:
 
 private:
   QWidget *m_parent = nullptr;
+  /// Weak handle to the currently-showing KartProgressDialog so a new
+  /// startKartProgressDialog can close a stale predecessor. The dialog owns
+  /// its own lifetime (WA_DeleteOnClose); QPointer nulls itself on delete.
+  QPointer<KartProgressDialog> m_kartProgressDialog;
 };
 
 #endif // DIALOGCONTROLLER_H

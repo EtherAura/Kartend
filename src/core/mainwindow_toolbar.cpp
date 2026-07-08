@@ -9,6 +9,7 @@
 #include <QKeySequence>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -23,6 +24,7 @@
 #include "textzoomhud.h"
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
+#include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 
 void MainWindow::setupTextZoomShortcuts() {
@@ -113,12 +115,47 @@ void MainWindow::setupPreviewVolumeSlider() {
     }
     m_generalSettings.media.previewVideoVolume = value;
     VideoPreviewWidget::setGlobalVolume(value);
-    if (m_appManager->getSettingsManager()) {
+    // The audible volume above applies per tick; the full-INI persist is
+    // debounced — a slider drag emits valueChanged once per pixel and used
+    // to pay a QSettings write + sync for each one.
+    scheduleGeneralSettingsSave();
+  });
+}
+
+void MainWindow::scheduleGeneralSettingsSave() {
+  // Lazily constructed: many sessions never touch a debounced-save path.
+  if (!m_generalSettingsSaveTimer) {
+    // Single-shot restarted per edit (trailing edge): the burst's last edit
+    // wins the window and only one INI write lands once input settles.
+    m_generalSettingsSaveTimer = new QTimer(this);
+    m_generalSettingsSaveTimer->setSingleShot(true);
+    m_generalSettingsSaveTimer->setInterval(UIConstants::Timing::SETTINGS_LIVE_SAVE_DEBOUNCE_MS);
+    connect(m_generalSettingsSaveTimer, &QTimer::timeout, this, [this]() {
+      if (m_isShuttingDown || !m_appManager->getSettingsManager()) {
+        return;
+      }
+      // The edit sites already mirrored their state into m_generalSettings;
+      // this flush only pays the disk write. userInitiated=true so a failed
+      // write surfaces once per settled burst instead of once per tick.
       ErrorPresentation::reportSaveResult(
           m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
           "general settings", true);
-    }
-  });
+    });
+  }
+  m_generalSettingsSaveTimer->start();
+}
+
+void MainWindow::flushPendingGeneralSettingsSave() {
+  if (!m_generalSettingsSaveTimer || !m_generalSettingsSaveTimer->isActive()) {
+    return;
+  }
+  m_generalSettingsSaveTimer->stop();
+  if (m_appManager->getSettingsManager()) {
+    // Shutdown path: no dialogs — log-only reporting for a failed write.
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+        "general settings", false);
+  }
 }
 
 void MainWindow::applyTextZoom(int percent) {
@@ -135,11 +172,9 @@ void MainWindow::applyTextZoom(int percent) {
   }
   TextZoom::setPercent(clamped);
   m_generalSettings.appearance.uiTextZoomPercent = clamped;
-  if (m_appManager->getSettingsManager()) {
-    ErrorPresentation::reportSaveResult(
-        m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
-        "general settings", true);
-  }
+  // Holding Ctrl+= auto-repeats this slot; the INI write is debounced so a
+  // repeat burst persists once after it settles instead of once per step.
+  scheduleGeneralSettingsSave();
   // Re-push the global font with the new multiplier baked in.
   applyGlobalUiFont(m_generalSettings);
   // Re-run sidebar appearance so its font baselines pick up the new zoom.
@@ -149,10 +184,24 @@ void MainWindow::applyTextZoom(int percent) {
   // Tear down + rebuild the virtual scroll content so item widgets are
   // re-instantiated with the new scaled fontSize. Coverflow uses the same
   // scroll module entry point, so this covers grid, list, and 3D modes.
-  if (m_appManager->getScrollManager()) {
-    m_appManager->getScrollManager()->preCalculateLayout();
-    m_appManager->getScrollManager()->forceVirtualViewUpdate();
+  // Debounced: the rebuild is the expensive part of a zoom step, and a
+  // key-repeat burst only needs the final zoom level's layout. The HUD and
+  // the font push above stay immediate for per-step feedback.
+  if (!m_textZoomRebuildTimer) {
+    // Single-shot restarted per step (trailing edge), same shape as the
+    // grid-width debouncer's precalc stage.
+    m_textZoomRebuildTimer = new QTimer(this);
+    m_textZoomRebuildTimer->setSingleShot(true);
+    m_textZoomRebuildTimer->setInterval(UIConstants::Timing::LONG_DELAY_MS);
+    connect(m_textZoomRebuildTimer, &QTimer::timeout, this, [this]() {
+      if (m_isShuttingDown || !m_appManager->getScrollManager()) {
+        return;
+      }
+      m_appManager->getScrollManager()->preCalculateLayout();
+      m_appManager->getScrollManager()->forceVirtualViewUpdate();
+    });
   }
+  m_textZoomRebuildTimer->start();
 }
 
 void MainWindow::applyToolbarCustomization() {

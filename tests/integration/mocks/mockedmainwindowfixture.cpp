@@ -6,14 +6,20 @@
 
 namespace KartendTest {
 
-MockedMainWindowFixture::MockedMainWindowFixture() {
+MockedMainWindowFixture::MockedMainWindowFixture()
+    : MockedMainWindowFixture(QList<CollectionConfig>{}) {}
+
+MockedMainWindowFixture::MockedMainWindowFixture(QList<CollectionConfig> seedCollections) {
   ApplicationManager::setDatabaseManagerFactory(
       [](const ApplicationContext *, QObject *parent) -> std::unique_ptr<IDatabaseManager> {
         return std::make_unique<MockDatabaseManager>(parent);
       });
   ApplicationManager::setSettingsManagerFactory(
-      [](const ApplicationContext *, QObject *parent) -> std::unique_ptr<ISettingsManager> {
-        return std::make_unique<MockSettingsManager>(parent);
+      [seed = std::move(seedCollections)](const ApplicationContext *,
+                                          QObject *parent) -> std::unique_ptr<ISettingsManager> {
+        auto mock = std::make_unique<MockSettingsManager>(parent);
+        mock->setSeedCollections(seed);
+        return mock;
       });
   m_inner = std::make_unique<MainWindowFixture>();
 }

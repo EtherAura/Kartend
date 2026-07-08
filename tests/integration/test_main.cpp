@@ -23,6 +23,7 @@
 #include "test_detailpagemanager.h"
 #include "test_detailspane_coverflow.h"
 #include "test_detailspanemanager.h"
+#include "test_dialogcontroller.h"
 #include "test_eventmanager_detailspane.h"
 #include "test_filtermanager.h"
 #include "test_interactionmanager.h"
@@ -94,6 +95,11 @@ const Suite kSuites[] = {
     {"TestMenuController",
      [](int c, char **v) {
        TestMenuController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestDialogController",
+     [](int c, char **v) {
+       TestDialogController t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestScraperController",

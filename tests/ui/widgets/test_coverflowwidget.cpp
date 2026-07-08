@@ -71,6 +71,12 @@ private slots:
   void setCardsStoresCount();
   void setCardsClampsSelectionWhenShrinking();
 
+  // Accessible name/description track the centered card — the carousel is
+  // one custom-painted widget, so this is the only selection channel a
+  // screen reader can see.
+  void accessibleNameTracksSelection();
+  void accessibleNameFollowsCardMutations();
+
   // updateCard (incremental patch, Kartend-x7bn8)
   void cardAtOutOfRangeReturnsDefault();
   void updateCardOutOfRangeNoOp();
@@ -181,6 +187,52 @@ void TestCoverFlowWidget::setCardsClampsSelectionWhenShrinking() {
   w.setCards(makeCards(5));
   QCOMPARE(w.cardCount(), 5);
   QCOMPARE(w.selectedIndex(), 4);
+}
+
+// ----- Accessible name/description -----
+
+void TestCoverFlowWidget::accessibleNameTracksSelection() {
+  TestableCoverFlow w;
+  // Empty carousel gets a baseline name from the constructor.
+  QCOMPARE(w.accessibleName(), QStringLiteral("Cover flow, no items"));
+
+  w.setCards(makeCards(10));
+  QCOMPARE(w.accessibleName(), QStringLiteral("Card 0, item 1 of 10"));
+  QVERIFY(!w.accessibleDescription().isEmpty());
+
+  // Snap path (widget hidden → animate flag short-circuits).
+  w.setSelectedIndex(3, false);
+  QCOMPARE(w.accessibleName(), QStringLiteral("Card 3, item 4 of 10"));
+
+  // Animated path: the name tracks the logical selection immediately, not
+  // the glide's visual position.
+  w.resize(600, 400);
+  w.show();
+  w.setSelectedIndex(4, true);
+  QCOMPARE(w.selectedIndex(), 4);
+  QCOMPARE(w.accessibleName(), QStringLiteral("Card 4, item 5 of 10"));
+}
+
+void TestCoverFlowWidget::accessibleNameFollowsCardMutations() {
+  TestableCoverFlow w;
+  w.setCards(makeCards(20));
+  w.setSelectedIndex(15, false);
+  QCOMPARE(w.accessibleName(), QStringLiteral("Card 15, item 16 of 20"));
+
+  // Retitling the selected slot via the incremental patch refreshes the name.
+  CoverFlowCardData patch;
+  patch.title = QStringLiteral("Patched Title");
+  patch.artworkPath = QStringLiteral("/art/patched.png");
+  w.updateCard(15, patch);
+  QCOMPARE(w.accessibleName(), QStringLiteral("Patched Title, item 16 of 20"));
+
+  // Shrinking the card list clamps the selection — name follows the clamp.
+  w.setCards(makeCards(5));
+  QCOMPARE(w.accessibleName(), QStringLiteral("Card 4, item 5 of 5"));
+
+  // Emptying the list restores the baseline.
+  w.setCards({});
+  QCOMPARE(w.accessibleName(), QStringLiteral("Cover flow, no items"));
 }
 
 // ----- updateCard (incremental patch, Kartend-x7bn8) -----

@@ -152,7 +152,7 @@ public:
   // The grid renders pinned/hidden/continue-later glyph badges over each
   // tile's top-right corner. MainWindow populates the registry once per
   // collection switch with the result of
-  // IDatabaseManager::loadItemStateFlagsForCollection; the paint path
+  // IDatabaseManager::fetchItemStateFlagsForCollection; the paint path
   // consults it via the item's filePath. Keeping the lookup table static
   // avoids threading a context pointer through every widget pool slot.
   struct StateFlags {

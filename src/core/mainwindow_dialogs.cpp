@@ -24,6 +24,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHash>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QPair>
 
@@ -54,6 +55,7 @@
 #include "scrollmanager.h"
 #include "settingsdialogcontroller.h"
 #include "settingsutils.h"
+#include "ui_mainwindow.h"
 #include "uiconstants/dialog.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
@@ -77,6 +79,11 @@ SettingsDialogContext MainWindow::makeSettingsDialogContext() {
   context.scrollManager = m_appManager->getScrollManager();
   context.navigationManager = m_appManager->getNavigationManager();
   context.databaseManager = m_appManager->getDatabaseManager();
+  // Chrome the controller's post-save refresh touches, injected here so an
+  // objectName rename in mainwindow.ui surfaces as a compile error on these
+  // two lines instead of a silently dead findChild() in the controller.
+  context.itemsTitleLabel = ui->itemsTitleLabel;
+  context.itemScrollArea = ui->itemScrollArea;
   context.createSettingsDialog = DialogController::makeSettingsDialogFactory(&m_appContext);
   // Kartend-sqoq0: generic runners for the "Collection Added" scan-summary
   // message boxes SettingsManager used to construct directly.
@@ -146,7 +153,7 @@ void MainWindow::showFirstRunWizard() {
   const auto result = m_dialogController->runFirstRunWizard();
 
   if (result.accepted && !result.pickedConfig.mediaDirectory.isEmpty()) {
-    // Mirrors the post-add sequence in setupInitialTimersEmptyCollections.
+    // Mirrors the post-add sequence in promptCreateFirstCollectionInteractive.
     appendCollectionAndPersist(result.pickedConfig, /*navigate=*/true);
   }
 
@@ -158,6 +165,70 @@ void MainWindow::showFirstRunWizard() {
     ErrorPresentation::reportSaveResult(
         m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
         "general settings", true);
+  }
+}
+
+void MainWindow::promptCreateFirstCollectionInteractive() {
+  // Prompt for the first collection's name, re-prompting on an empty or
+  // invalid entry so a typo isn't a dead end. An explicit Cancel means the
+  // user doesn't want to set one up now: the app needs a collection to do
+  // anything, so close gracefully instead of stranding a collection-less
+  // window with a "please restart" box and no path forward (Kartend-uklyw).
+  QString trimmed;
+  while (true) {
+    bool ok = false;
+    QString name = QInputDialog::getText(this, tr("Create First Collection"),
+                                         tr("Enter a name for your first collection:"),
+                                         QLineEdit::Normal, "", &ok);
+    if (!ok) {
+      close();
+      return;
+    }
+    trimmed = name.trimmed();
+    if (trimmed.isEmpty()) {
+      QMessageBox::information(this, tr("Name Required"),
+                               tr("Please enter a name for your collection, or Cancel "
+                                  "to exit."));
+      continue;
+    }
+    if (PathUtils::validateCollectionNameForSubstitution(trimmed).isError()) {
+      QMessageBox::warning(this, tr("Invalid Collection Name"),
+                           tr("Collection names cannot contain '/', '\\\\', or '..'. "
+                              "Please choose a different name."));
+      continue;
+    }
+    break;
+  }
+
+  // Create the first collection with the given name
+  CollectionConfig newCollection;
+  newCollection.name = trimmed;
+  newCollection.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+  newCollection.parentCollectionIndex = -1;
+  newCollection.isSubcollection = false;
+  m_collections.append(newCollection);
+
+  // Save the new collection
+  if (m_appManager->getSettingsManager()) {
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
+  }
+
+  // Rebuild hierarchy cache with the new collection
+  rebuildHierarchyCache();
+
+  // Now open settings dialog for the user to configure the collection
+  if (m_appManager->getSettingsManager()) {
+    m_currentCollectionIndex = 0;
+    SettingsDialogContext context = makeSettingsDialogContext();
+    settingsDialogController()->openSettingsDialog(context);
+
+    if (!m_collections.isEmpty()) {
+      m_currentCollectionIndex = 0;
+      if (m_appManager->getNavigationManager()) {
+        m_appManager->getNavigationManager()->showCollectionItems(0);
+      }
+    }
   }
 }
 
