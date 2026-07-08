@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 namespace Scraper {
 class HttpClient;
@@ -60,8 +61,14 @@ public:
 
   using SystemsReadyCallback = std::function<void(QList<ScreenScraperSystems::System>)>;
 
+  /// @p allowedHostSuffixes pins both catalog fetches — whose URLs carry
+  /// devpassword/sspassword in the query string — and any redirect they
+  /// follow to the provider's trusted domains (Kartend-8xs72). Injected
+  /// because the manager is provider-agnostic; empty leaves the requests
+  /// unrestricted (tests).
   ScreenScraperCatalogManager(Scraper::HttpClient *httpClient, QString userAgent,
-                              CredentialsResolver credentialsResolver, ErrorMapper errorMapper);
+                              CredentialsResolver credentialsResolver, ErrorMapper errorMapper,
+                              QStringList allowedHostSuffixes = {});
 
   /// Ensure the systems catalog is loaded — from the disk cache when
   /// fresh, otherwise via a network fetch of systemesListe.php. The
@@ -87,6 +94,7 @@ private:
   QString m_userAgent;
   CredentialsResolver m_credentialsResolver;
   ErrorMapper m_errorMapper;
+  QStringList m_allowedHostSuffixes;
   mutable QHash<QString, QString> m_mediaTypeLabels;
 
   // Liveness token for in-flight HttpClient callbacks that capture `this`.

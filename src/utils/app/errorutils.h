@@ -129,6 +129,13 @@ enum class ErrorCode {
   // archive extraction, Kartend-ijglg) was exhausted and the operation was
   // aborted to protect the host.
   ResourceLimitExceeded = 903,
+  // A queued (never-dispatched) request was dropped by a deliberate local
+  // queue clear (Scraper::HttpClient::clearPending during a batch cancel).
+  // Distinct from OperationCancelled so retry policy can tell "the transport
+  // timed out" (worth retrying) from "we cancelled it on purpose" (must not
+  // be retried — re-issuing burns provider quota for a killed run,
+  // Kartend-jjyst.2).
+  RequestQueueCleared = 904,
   UnknownError = 999
 };
 
@@ -375,6 +382,8 @@ inline void logError(const ErrorContext &ctx) {
     return "ResponseTooLarge";
   case ErrorCode::ResourceLimitExceeded:
     return "ResourceLimitExceeded";
+  case ErrorCode::RequestQueueCleared:
+    return "RequestQueueCleared";
   case ErrorCode::UnknownError:
     return "UnknownError";
   }

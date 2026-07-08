@@ -95,9 +95,33 @@ struct ScrapeSkipContext {
   QHash<QString, QSet<QString>> presentByType;
   /// `front` basenames in the flat artwork dir mirror (lowercase).
   QSet<QString> frontFlatBases;
+  /// Wanted media types present for a large-enough share of the collection that
+  /// their absence should block the FillMissing skip (Kartend-ib46d). A wanted
+  /// type NOT in this set is treated as optional — the provider doesn't reliably
+  /// supply it for this system (e.g. video/figurine/pictograms on PlayStation),
+  /// so requiring it would keep every item unskippable. Built by
+  /// computePrevalentMediaTypes from the collection-wide presence index.
+  QSet<QString> requiredMediaTypes;
   bool hasWindow = false;
   QDateTime cutoff;
 };
+
+/// Fraction of the collection a wanted media type must be present for before its
+/// absence blocks the FillMissing skip. Media on a system is bimodal — the types
+/// a provider populates broadly sit near-universal (~85-100%), the rest are
+/// sparse — so a high threshold cleanly separates "reliably supplied" from
+/// "optional / never delivered" without a per-item learning pass (Kartend-ib46d).
+inline constexpr double kMediaPrevalenceThreshold = 0.85;
+
+/// The wanted media types present for at least @p threshold of @p itemCount items
+/// (via @p presentByType, with @p frontFlatBases folded into `front`). These are
+/// the types whose absence should block a FillMissing skip; sparse types the
+/// provider doesn't reliably supply fall out. Pure so the threshold logic is
+/// unit-testable. Returns empty when @p itemCount <= 0.
+[[nodiscard]] QSet<QString>
+computePrevalentMediaTypes(const QHash<QString, QSet<QString>> &presentByType,
+                           const QSet<QString> &frontFlatBases, const QSet<QString> &wantedTypes,
+                           int itemCount, double threshold);
 
 /// Per-item predicate extracted from filterAlreadyScraped's loop. Returns
 /// true when @p path should be dropped from the queue under the active

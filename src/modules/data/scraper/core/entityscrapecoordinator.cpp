@@ -90,6 +90,21 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
       m_svc->stopForQuotaExhaustion();
       return;
     }
+    // Consecutive-429 escalation (Kartend-jjyst.15): a lone 429 fails just
+    // this entity below, but a streak escalates to the same graceful stop as
+    // a quota death — the job stays queued as the resume point (an entity
+    // retry costs one fetch).
+    if (err.httpStatus == 429) {
+      if (m_svc->noteRateLimited429()) {
+        qCWarning(lcEntityScrape) << "entity fetch for" << job.collectionName
+                                  << "hit repeated HTTP 429 rate limits — stopping the queue "
+                                     "with a resume point";
+        m_svc->stopForQuotaExhaustion();
+        return;
+      }
+    } else {
+      m_svc->m_consecutive429Count = 0;
+    }
     // Kartend-e8aag: a not-found entity (e.g. a niche platform with no catalog
     // entry) is counted apart from genuine errors.
     if (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404) {
@@ -112,6 +127,9 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
     return;
   }
   const Scraper::ScrapedItem &item = result.value();
+  // A delivered entity proves the limiter let us through — it ends any
+  // consecutive-429 run (Kartend-jjyst.15).
+  m_svc->m_consecutive429Count = 0;
   m_svc->m_lastScrapedItem = item;
   if (item.media.isEmpty() || !provider) {
     // No art to download (or no provider for the media fetch) — count the
@@ -152,6 +170,9 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
     /// Any provider-classified quota failure — stops the queue with a
     /// resume point once the fan-out settles.
     bool quotaHit = false;
+    /// Set when the shared consecutive-429 streak tripped during this
+    /// fan-out — same settle-time stop as quotaHit (Kartend-jjyst.15).
+    bool rateLimit429Stop = false;
   };
   auto agg = std::make_shared<MediaAgg>();
   agg->pending = static_cast<int>(item.media.size());
@@ -163,6 +184,8 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
                                           rescrapeMode](const ErrorUtils::Result<QByteArray> &r) {
       if (self.isNull() || self->m_runGeneration != generation) return;
       if (r.isOk() && !r.value().isEmpty()) {
+        // A delivered asset ends any consecutive-429 run (Kartend-jjyst.15).
+        self->m_consecutive429Count = 0;
         Scraper::PendingMediaWrite w;
         w.asset = asset;
         w.bytes = r.value();
@@ -179,6 +202,11 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
           }
           if (provider && provider->isQuotaExhausted(err)) {
             agg->quotaHit = true;
+          } else if (err.httpStatus == 429 && self->noteRateLimited429()) {
+            // Media CDNs are the realistic 429 source; a streak across the
+            // fan-out escalates to the same settle-time stop as a quota hit
+            // (Kartend-jjyst.15).
+            agg->rateLimit429Stop = true;
           }
         } else if (agg->firstFailureSummary.isEmpty()) {
           agg->firstFailureSummary = QStringLiteral("empty media response");
@@ -197,6 +225,16 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
         // than consuming it with whatever art beat the quota to the door.
         qCWarning(lcEntityScrape) << "platform media fetch for" << collectionName
                                   << "hit provider quota — stopping the queue with a resume point";
+        self->stopForQuotaExhaustion();
+        return;
+      }
+      if (agg->rateLimit429Stop) {
+        // Same reasoning as the quota stop above: the job is atomic and cheap
+        // to retry, so leave it queued as the resume point instead of erroring
+        // it against a limiter that isn't letting up (Kartend-jjyst.15).
+        qCWarning(lcEntityScrape) << "platform media fetches for" << collectionName
+                                  << "hit repeated HTTP 429 rate limits — stopping the queue "
+                                     "with a resume point";
         self->stopForQuotaExhaustion();
         return;
       }
@@ -305,7 +343,13 @@ void EntityScrapeCoordinator::onEntityMediaWriteFinished(const Scraper::ScrapedI
     return;
   if (m_svc->m_queueCursor >= m_svc->m_queue.size()) return;
   m_svc->m_summary.mediaWritten += res.mediaWritten;
-  applyEntityArtToConfig(collectionUuid, collectionIndex, item.media, res.writtenPaths);
+  // Include skip-because-present destinations: a FillMissing/UpdateChanged
+  // re-run whose files already exist must still wire them into the config —
+  // an empty writtenPaths otherwise left the collection art unset after e.g.
+  // a config reset (Kartend-jjyst.5). Written paths first so a fresh write
+  // wins when both report the same type.
+  applyEntityArtToConfig(collectionUuid, collectionIndex, item.media,
+                         res.writtenPaths + res.existingPaths);
   ++m_svc->m_summary.scraped;
   emit m_svc->itemCompleted(m_svc->m_itemsCompleted + 1, m_svc->m_totalItemsAtStart, item,
                             res.writtenPaths);
@@ -315,7 +359,7 @@ void EntityScrapeCoordinator::onEntityMediaWriteFinished(const Scraper::ScrapedI
 void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUuid,
                                                      int collectionIndex,
                                                      const QList<Scraper::MediaAsset> &assets,
-                                                     const QStringList &writtenPaths) {
+                                                     const QStringList &landedPaths) {
   if (!m_svc->m_ctx.collections) return;
   // Defensive re-resolution (Kartend-8zd3q): the index was captured when the
   // job dispatched, but the collections list can change under a live run
@@ -340,13 +384,14 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
   if (collectionIndex < 0 || collectionIndex >= m_svc->m_ctx.collections->size()) {
     return;
   }
-  // Resolve a written path by the `_shared/<type>/` segment the router wrote it
+  // Resolve a landed path (written this run, or kept-existing under the
+  // rescrape policy) by the `_shared/<type>/` segment the router placed it
   // under — anchored on the full segment so a parent artworkDir component can't
   // false-match, and queried by explicit type so the result is deterministic
   // regardless of network-completion order (Kartend-ckepd.3 review).
-  const auto pathForType = [&writtenPaths](const QString &type) -> QString {
+  const auto pathForType = [&landedPaths](const QString &type) -> QString {
     const QString seg = QStringLiteral("/_shared/") + type + QStringLiteral("/");
-    for (const QString &p : writtenPaths) {
+    for (const QString &p : landedPaths) {
       if (p.contains(seg)) return p;
     }
     return {};
@@ -356,7 +401,7 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
   // type-string vocabulary — a second entity-capable provider tags its own
   // assets instead of mimicking another provider's canonical names. Lower
   // entityRolePriority wins within a role; assets whose file never landed
-  // (fetch miss, write skip) are passed over for the next-best candidate.
+  // (fetch miss, write failure) are passed over for the next-best candidate.
   const auto pathForRole = [&](Scraper::EntityArtRole role) -> QString {
     QString best;
     int bestPriority = std::numeric_limits<int>::max();

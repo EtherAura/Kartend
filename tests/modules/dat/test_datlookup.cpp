@@ -51,6 +51,7 @@ private slots:
   void parsesClrMameProDat();
   void parseClrMameProSkipsNodumpAndHashless();
   void parseDatDispatchesToClrMamePro();
+  void parseClrMameProRejectsTruncated();
   void probeHeaderReadsClrMameProFields();
   void parsesCloneOfAcrossDialects();
   void parsesMiaAcrossDialects();
@@ -551,6 +552,36 @@ void TestDatLookup::parseDatDispatchesToClrMamePro() {
   auto result = DatLookup::parseDat(QByteArray(kClrMameProDat));
   QVERIFY(result.isOk());
   QCOMPARE(result.value().size(), 3);
+}
+
+void TestDatLookup::parseClrMameProRejectsTruncated() {
+  // Kartend-u4sdu counterpart for the text dialect: both XML dialects reject
+  // a stream missing its closing root tag, but the clrmamepro tokeniser just
+  // stops at token exhaustion — a partial download cut mid-game-block used to
+  // "parse" successfully to a partial record set. Paren balance IS the
+  // dialect's block structure, so an unclosed block at EOF must be rejected.
+  const QByteArray full(kClrMameProDat);
+  QVERIFY(DatLookup::parseClrMameProDat(full).isOk()); // the complete file parses
+
+  // Cut mid-way through the second game block (inside a rom entry).
+  const int cut = full.indexOf("Beta Disc 2");
+  QVERIFY(cut > 0);
+  const QByteArray truncated = full.left(cut);
+  auto result = DatLookup::parseClrMameProDat(truncated);
+  QVERIFY2(result.isError(), "a DAT cut mid-game-block must not parse to a partial record set");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+  QVERIFY2(result.error().message.contains(QStringLiteral("truncated or incomplete")),
+           qPrintable(result.error().message));
+
+  // The dispatch path surfaces the same rejection: the intact header at the
+  // top still sniffs as clrmamepro, so parseDat routes to the guarded parser.
+  QVERIFY(DatLookup::parseDat(truncated).isError());
+
+  // A stray extra close paren is unbalanced in the other direction — also
+  // rejected rather than silently tolerated.
+  QVERIFY(DatLookup::parseClrMameProDat(QByteArrayLiteral("game ( name x rom ( name y crc "
+                                                          "12345678 ) ) )"))
+              .isError());
 }
 
 void TestDatLookup::probeHeaderReadsClrMameProFields() {

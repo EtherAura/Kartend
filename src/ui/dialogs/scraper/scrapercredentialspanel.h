@@ -26,7 +26,7 @@ public:
 
   /// Restrict the panel to a single provider's fields. Pass "tmdb" or
   /// "screenscraper". Empty string keeps the all-providers layout
-  /// (used as the legacy fallback during transition).
+  /// (used by the standalone ScraperCredentialsDialog).
   void setProvider(const QString &providerId);
 
   void setModel(SettingsModel *model);

@@ -62,6 +62,17 @@ constexpr const char *kLogiqxDatEdited = R"xml(<?xml version="1.0"?>
 </datafile>
 )xml";
 
+// Minimal complete clrmamepro text DAT (header block + one game).
+constexpr const char *kClrMameProDat = R"cmp(clrmamepro (
+	name "Test"
+)
+
+game (
+	name "Game Alpha (USA)"
+	rom ( name "Game Alpha (USA).bin" size 32768 crc deadbeef sha1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa )
+)
+)cmp";
+
 QString writeDat(const QString &path, const char *bytes) {
   QFile f(path);
   if (!f.open(QIODevice::WriteOnly)) return QString();
@@ -90,6 +101,7 @@ private slots:
   void emptyPathErrors();
   void missingFileErrors();
   void unparseableDatPropagatesError();
+  void truncatedClrMameProDatRefusedByIngest();
   void cacheSurvivesStoreReopen();
   void clearAllWipesEverything();
   void invalidSourceHandleSkipsLookup();
@@ -262,6 +274,36 @@ void TestDatCache::unparseableDatPropagatesError() {
   auto result = store.openOrIngest(datPath());
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+}
+
+void TestDatCache::truncatedClrMameProDatRefusedByIngest() {
+  // A partial clrmamepro download cut mid-game-block must be refused at
+  // ingest: a committed partial parse would be served sticky on (path, mtime)
+  // and skew Have/Miss audit verdicts until the file is touched. The XML
+  // dialects already reject truncation via the closing-root-tag check
+  // (Kartend-u4sdu); the text dialect's guard is paren balance.
+  const QByteArray full(kClrMameProDat);
+  const int cut = full.indexOf("crc");
+  QVERIFY(cut > 0); // cut inside the rom block: game + rom blocks left open
+  {
+    QFile f(datPath());
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(full.left(cut));
+  }
+  DatCache::Store store(cachePath());
+  QVERIFY(store.isOpen());
+  auto result = store.openOrIngest(datPath());
+  QVERIFY2(result.isError(), "a truncated clrmamepro DAT must not be ingested");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+  // Nothing was committed: the refused source must not be peekable.
+  QVERIFY(!store.peek(datPath()).has_value());
+
+  // The repaired (complete) file ingests normally through the same path.
+  writeDat(datPath(), kClrMameProDat);
+  auto fixed = store.openOrIngest(datPath());
+  QVERIFY(fixed.isOk());
+  QCOMPARE(fixed.value().dialect, DatLookup::Dialect::ClrMamePro);
+  QCOMPARE(fixed.value().recordCount, 1);
 }
 
 void TestDatCache::cacheSurvivesStoreReopen() {

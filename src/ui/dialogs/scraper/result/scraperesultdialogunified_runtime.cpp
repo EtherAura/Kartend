@@ -414,8 +414,8 @@ void ScrapeResultDialogUnified::showScrapeErrorDetails() {
   // a true not-found won't change on retry against the same provider. Only
   // when the run recorded re-queueable failures AND the service is idle so a
   // fresh scrape can actually start — during a live run (where the phase is
-  // still Setup for auto scrapes) startScrape would refuse with only a
-  // warning, so offering the button mid-run is a silent no-op.
+  // still Setup for auto scrapes) startScrape would refuse (returning false),
+  // so offering the button mid-run would be a pointless dead end.
   bool doRescrape = false;
   const bool canRescrape = m_dlg->m_service && !m_dlg->m_service->isActive() &&
                            !m_dlg->m_service->summary().failedItems.isEmpty() &&
@@ -505,13 +505,26 @@ void ScrapeResultDialogUnified::rescrapeFailedItems() {
                           << serviceQueue.size();
   setUnifiedSetupEnabled(false);
   if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
-  m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
+  if (!m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata)) {
+    // Refused (service went active since the idle guard above) — restore the
+    // setup view rather than leaving it disabled with no run driving it.
+    setUnifiedSetupEnabled(true);
+  }
 }
 
 bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   if (!m_dlg->m_service || !m_dlg->m_scraperCtx.collections) return false;
   if (collectionIndex < 0 || collectionIndex >= m_dlg->m_scraperCtx.collections->size())
     return false;
+  // A run may be live with the dialog hidden (Close detaches, the service keeps
+  // going). Launching entity art now would wipe the live-view state below and
+  // startScrape would refuse anyway — surface the reason and leave the running
+  // scrape's dialog state untouched (same idle guard as rescrapeFailedItems).
+  if (m_dlg->m_service->isActive()) {
+    QMessageBox::information(m_dlg, tr("Scrape collection artwork"),
+                             tr("A scrape is already running — wait for it to finish."));
+    return false;
+  }
 
   // Same collection resolution as onScrapeClicked / rescrape (uuid + artwork dir
   // keyed off the live CollectionConfig).
@@ -566,10 +579,11 @@ bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   m_dlg->resetRunState();
 
   // Auto mode, all entity media, write metadata. The download → _shared / config
-  // routing is the persistence sink (Kartend-ckepd.3 / .5).
-  m_dlg->m_service->startScrape(queue, Scraper::ScraperService::Mode::Auto,
-                                /*mediaFilter=*/{}, /*writeMetadata=*/true);
-  return true;
+  // routing is the persistence sink (Kartend-ckepd.3 / .5). startScrape can
+  // only refuse if the service went active behind the guard above — propagate
+  // the false so the controller doesn't show a dialog with nothing running.
+  return m_dlg->m_service->startScrape(queue, Scraper::ScraperService::Mode::Auto,
+                                       /*mediaFilter=*/{}, /*writeMetadata=*/true);
 }
 
 QSet<QString> ScrapeResultDialogUnified::buildMediaFilter(bool &writeMetadata) const {
@@ -664,7 +678,11 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
                           << "writeMetadata=" << writeMetadata << "mediaFilter=" << mediaFilter;
   setUnifiedSetupEnabled(false);
   if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
-  m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata);
+  if (!m_dlg->m_service->startScrape(serviceQueue, mode, mediaFilter, writeMetadata)) {
+    // Refused (a run is already active) — restore the setup view rather than
+    // leaving it disabled with no run driving it.
+    setUnifiedSetupEnabled(true);
+  }
 }
 
 void ScrapeResultDialogUnified::finishCurrentApply() {

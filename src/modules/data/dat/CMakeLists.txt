@@ -7,6 +7,8 @@ target_sources(kartend_data PRIVATE
   datcollectionmatch.h
   datlibraryscan.cpp
   datlibraryscan.h
+  dathttp.cpp
+  dathttp.h
   nointroparse.cpp
   nointroparse.h
   nointrodownloader.cpp

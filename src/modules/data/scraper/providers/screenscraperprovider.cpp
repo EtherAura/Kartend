@@ -30,7 +30,6 @@
 #include "filehashcache.h"
 #include "httpclient.h"
 #include "romhasher.h"
-#include "scraperretrypolicy.h"
 #include "screenscraperaccount.h"
 #include "screenscraperparser.h"
 #include "screenscraperregion.h"
@@ -115,9 +114,10 @@ ScreenScraperProvider::ScreenScraperProvider(GeneralSettingsAccessor settingsAcc
                                              CollectionAccessor collectionAccessor)
     : m_settingsAccessor(std::move(settingsAccessor)),
       m_collectionAccessor(std::move(collectionAccessor)),
-      m_catalog(
-          Scraper::HttpClient::instance(), userAgent(), [this]() { return currentCredentials(); },
-          &ScreenScraperUrls::mapScreenScraperHttpError) {
+      m_catalog(Scraper::HttpClient::instance(), userAgent(),
+                [this]() { return currentCredentials(); },
+                &ScreenScraperUrls::mapScreenScraperHttpError,
+                {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)}) {
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
 }
 
@@ -150,16 +150,8 @@ ScreenScraperProvider::~ScreenScraperProvider() {
     delete w;
   }
   m_inFlightHashes.clear();
-
-  // Stop + delete every pending transient-failure retry timer (Kartend audit
-  // vrqzk — was a single shared m_retryTimer). Their lambdas capture `this`
-  // raw, so they must not fire after we're gone. A retry that already fired
-  // removed itself in its lambda, so it isn't here.
-  for (auto *t : m_inFlightRetryTimers) {
-    t->stop();
-    delete t;
-  }
-  m_inFlightRetryTimers.clear();
+  // Pending transient-retry timers are torn down by ~ProviderBase, which now
+  // owns the retry loop (Kartend-jjyst.10).
 }
 
 ScreenScraperProvider::Credentials ScreenScraperProvider::currentCredentials() const {
@@ -429,12 +421,23 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
   auto *watcher = new QFutureWatcher<RomHasher::Result>();
   m_inFlightHashes.insert(watcher, cancelToken);
   QObject::connect(watcher, &QFutureWatcher<RomHasher::Result>::finished, watcher,
-                   [this, watcher, trimmed, callback = std::move(callback)]() mutable {
+                   [this, watcher, trimmed, cancelToken, callback = std::move(callback)]() mutable {
                      const RomHasher::Result hashes = watcher->result();
                      m_inFlightHashes.remove(watcher);
                      watcher->deleteLater();
                      if (m_stageReporter) {
                        m_stageReporter(QString());
+                     }
+                     // Cancel/skip flipped the token mid-hash: resolve cancelled
+                     // instead of firing a filename-only jeuInfos request — that
+                     // burned one quota request per skipped item, dispatched
+                     // AFTER the runner's clearPending already ran.
+                     if (cancelToken && cancelToken->load(std::memory_order_acquire)) {
+                       callback(ErrorUtils::ErrorContext::error(
+                           ErrorUtils::ErrorCode::OperationCancelled,
+                           QStringLiteral("Lookup cancelled during ROM hashing"),
+                           "ScreenScraperProvider::runLookup"));
+                       return;
                      }
                      runLookupAfterHash(trimmed, hashes, std::move(callback));
                    });
@@ -455,7 +458,12 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
         // falling back to filename-only matching. Without this log the only
         // observable symptom was a missing md5/sha1 in the jeuInfos.php URL
         // — easy to miss, and the next layer's SS response looked superficially
-        // normal (just matched the wrong region's ROM record).
+        // normal (just matched the wrong region's ROM record). A cancel/skip
+        // is not a hash failure — the continuation resolves it cancelled, so
+        // the fallback warning would be a lie.
+        if (r.hasErrorCode(ErrorUtils::ErrorCode::OperationCancelled)) {
+          return RomHasher::Result{};
+        }
         qCWarning(lcScreenScraperProvider).nospace()
             << "ROM hashing failed; jeuInfos.php will fall back to filename-only "
                "matching. This is what produces wrong-region matches when a "
@@ -607,78 +615,46 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
       filenameRegionOverride = ScreenScraperRegion::detectFromFilename(trimmed);
     }
 
-    fetchJeuInfos(url, filenameRegionOverride, std::move(callback), /*attempt=*/0);
+    fetchJeuInfos(url, filenameRegionOverride, std::move(callback));
   });
 }
 
 void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
-                                          LookupCallback callback, int attempt) {
-  Scraper::HttpClient::instance()->get(
-      url, userAgentHeader(),
-      [this, url, filenameRegionOverride, callback = std::move(callback),
-       alive = std::weak_ptr<int>(m_lifetimeToken),
-       attempt](ErrorUtils::Result<QByteArray> response) mutable {
-        // Kartend audit cr950: the provider can be destroyed (cancel during a
-        // scrape) while this jeuInfos reply is in flight on the qApp-lifetime
-        // HttpClient, which holds this lambda's raw `this` with no QObject
-        // connection to sever on teardown. Bail before any member access, but
-        // invoke the callback (cancelled) so the batch item resolves instead of
-        // hanging — the finished-emission invariant.
-        if (alive.expired()) {
-          callback(ErrorUtils::ErrorContext::error(
-              ErrorUtils::ErrorCode::OperationCancelled,
-              QStringLiteral("ScreenScraper provider destroyed during jeuInfos lookup"),
-              "ScreenScraperProvider::fetchJeuInfos"));
-          return;
-        }
-        // Kartend-1rtrt: bounded retry for transient transport/server faults.
-        // The GET is idempotent, so re-issuing the same URL is safe. Permanent
-        // failures (auth/quota/404/parse) and successes are handled inline.
-        if (response.isError() && attempt < Scraper::RetryPolicy::kDefaultMaxRetries &&
-            Scraper::RetryPolicy::isTransient(response.error())) {
-          const int delayMs =
-              Scraper::RetryPolicy::retryDelayMs(attempt, response.error().retryAfterSeconds);
-          qCInfo(lcScreenScraperProvider).nospace()
-              << "Transient jeuInfos failure (httpStatus=" << response.error().httpStatus
-              << ", code=" << static_cast<int>(response.error().code) << "); retry "
-              << (attempt + 1) << "/" << Scraper::RetryPolicy::kDefaultMaxRetries << " in "
-              << delayMs << "ms";
-          // Per-retry timer (Kartend audit vrqzk): a single shared m_retryTimer
-          // made two concurrent lookups' retries clobber each other (stop() +
-          // disconnect() dropped the prior schedule), losing the dropped retry's
-          // callback and leaking its batch item — the same class of bug as the
-          // hash watcher. Each retry owns a timer, tracked in m_inFlightRetryTimers
-          // so the destructor stops + deletes it (the lambda captures `this` raw,
-          // so it must not fire after free). Uses the timer as its own connection
-          // context (the provider is not a QObject).
-          auto *retryTimer = new QTimer();
-          retryTimer->setSingleShot(true);
-          m_inFlightRetryTimers.insert(retryTimer);
-          QObject::connect(retryTimer, &QTimer::timeout, retryTimer,
-                           [this, retryTimer, url, filenameRegionOverride,
-                            callback = std::move(callback), attempt]() mutable {
-                             m_inFlightRetryTimers.remove(retryTimer);
-                             retryTimer->deleteLater();
-                             fetchJeuInfos(url, filenameRegionOverride, std::move(callback),
-                                           attempt + 1);
-                           });
-          retryTimer->start(delayMs);
-          return;
-        }
-        handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
-      },
-      Scraper::HttpClient::kDefaultMaxResponseBytes,
-      // No Content-Type constraint: api2 returns JSON (output=json) but SS
-      // also serves text/plain error bodies under 4xx that the parser path
-      // surfaces verbatim — pinning "application/json" would mask those.
-      QString(),
-      // Kartend-8xs72: this URL carries devpassword/sspassword in the query
-      // string. Pin the request — and any redirect it follows — to
-      // ScreenScraper's domain so a cross-host redirect can't silently forward
-      // the credential-bearing URL to an attacker host. Reuses the same
-      // allowlist mechanism (hostMatchesAllowlist + UserVerifiedRedirectPolicy)
-      // that fetchMediaBytes already applies to response-derived media URLs.
-      {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)});
+                                          LookupCallback callback) {
+  // Kartend-1rtrt retry, hoisted: ProviderBase::getWithRetry owns the bounded
+  // transient-retry loop (classification via RetryPolicy::isTransient, tracked
+  // per-retry timers); this handler only sees the final Result.
+  getWithRetry(userAgentHeader(), url,
+               [this, filenameRegionOverride, callback = std::move(callback),
+                alive = std::weak_ptr<int>(m_lifetimeToken)](
+                   ErrorUtils::Result<QByteArray> response) mutable {
+                 // Kartend audit cr950: the provider can be destroyed (cancel during a
+                 // scrape) while this jeuInfos reply is in flight on the qApp-lifetime
+                 // HttpClient, which holds this lambda's raw `this` with no QObject
+                 // connection to sever on teardown. Bail before any member access, but
+                 // invoke the callback (cancelled) so the batch item resolves instead of
+                 // hanging — the finished-emission invariant.
+                 if (alive.expired()) {
+                   callback(ErrorUtils::ErrorContext::error(
+                       ErrorUtils::ErrorCode::OperationCancelled,
+                       QStringLiteral("ScreenScraper provider destroyed during jeuInfos lookup"),
+                       "ScreenScraperProvider::fetchJeuInfos"));
+                   return;
+                 }
+                 handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
+               },
+               Scraper::HttpClient::kDefaultMaxResponseBytes,
+               // No Content-Type constraint: api2 returns JSON (output=json) but SS
+               // also serves text/plain error bodies under 4xx that the parser path
+               // surfaces verbatim — pinning "application/json" would mask those.
+               QString(),
+               // Kartend-8xs72: this URL carries devpassword/sspassword in the query
+               // string. Pin the request — and any redirect it follows — to
+               // ScreenScraper's domain so a cross-host redirect can't silently forward
+               // the credential-bearing URL to an attacker host. Reuses the same
+               // allowlist mechanism (hostMatchesAllowlist + UserVerifiedRedirectPolicy)
+               // that fetchMediaBytes already applies to response-derived media URLs.
+               {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)});
 }
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
@@ -873,11 +849,45 @@ void ScreenScraperProvider::fetchHealthStatus(HealthCallback callback) {
 }
 
 void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callback) {
+  // No asset type known here — empty type classifies as Image, keeping the
+  // pre-existing conservative image/ pin + image-sized cap.
+  fetchMediaBytesForType(url, QString(), std::move(callback));
+}
+
+void ScreenScraperProvider::fetchMediaBytesForType(const QUrl &url, const QString &mediaType,
+                                                   MediaCallback callback) {
   if (!callback) return;
   // Re-apply the per-host throttle on every media fetch so changes in
   // the Scraper settings panel take effect without restarting. Cheap:
   // HttpClient::setRateLimit just replaces the policy entry.
   registerHostThrottles(m_settingsAccessor ? m_settingsAccessor() : nullptr);
+  // Per-kind response guards (Kartend-jjyst.1). The Content-Type prefix keeps
+  // the Kartend-9ryx defence — ScreenScraper serves 200-OK text/html "Access
+  // denied" / "NOMEDIA" pages under expired or absent media URLs, which the
+  // prefix check turns into structured errors instead of decode failures —
+  // while matching what the endpoint legitimately serves per kind:
+  //   image  → image/*        + the tight image cap (fan-out RAM bound);
+  //   video  → video/*        + the wide default cap (videos run tens of MB,
+  //            far over kImageMaxResponseBytes);
+  //   manual → application/*  + the wide default cap. Manuals are PDFs
+  //            (application/pdf) but SS may also serve zip/epub-style docs, so
+  //            the broader application/ prefix is checked rather than a single
+  //            exact type — it still rejects the text/html error pages.
+  const Scraper::MediaKind kind = Scraper::kindForType(mediaType);
+  qint64 maxResponseBytes = Scraper::HttpClient::kImageMaxResponseBytes;
+  QString expectedContentTypePrefix = QStringLiteral("image/");
+  switch (kind) {
+  case Scraper::MediaKind::Video:
+    maxResponseBytes = Scraper::HttpClient::kDefaultMaxResponseBytes;
+    expectedContentTypePrefix = QStringLiteral("video/");
+    break;
+  case Scraper::MediaKind::Manual:
+    maxResponseBytes = Scraper::HttpClient::kDefaultMaxResponseBytes;
+    expectedContentTypePrefix = QStringLiteral("application/");
+    break;
+  case Scraper::MediaKind::Image:
+    break;
+  }
   Scraper::HttpClient::instance()->get(
       url, userAgentHeader(),
       [callback = std::move(callback)](const ErrorUtils::Result<QByteArray> &response) {
@@ -887,17 +897,7 @@ void ScreenScraperProvider::fetchMediaBytes(const QUrl &url, MediaCallback callb
         }
         callback(response);
       },
-      // Image-sized cap (not the wide default): this path is pinned to
-      // image/* below, media fetches fan out per the user's mediaConcurrency
-      // setting, and every reply is buffered whole — the tighter per-request
-      // bound limits worst-case in-flight RAM from a hostile CDN.
-      Scraper::HttpClient::kImageMaxResponseBytes,
-      // Kartend-9ryx: media fetches must come back as image/*.
-      // ScreenScraper has been observed to serve 200-OK HTML
-      // "Access denied" pages under expired media URLs; the prefix
-      // check turns those into structured errors instead of decode
-      // failures.
-      QStringLiteral("image/"),
+      maxResponseBytes, expectedContentTypePrefix,
       // Kartend-pugp.2: url is response-derived; pin it (and its
       // redirects) to ScreenScraper's domain so it can't be steered at
       // an internal https host.

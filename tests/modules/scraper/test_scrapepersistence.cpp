@@ -72,6 +72,8 @@ private slots:
   void manualAsset_routesToManualDirectoryWithUrlExtension();
   void videoAsset_doesNotCreateItemArtworkRow();
   void videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix();
+  void kindForType_classifiesVideoVariantsAndManual();
+  void videoNormalizedAsset_routesToVideoDirectoryAsVideoKind();
   void screenshot_writesIntoTypedSubdirNotFlatRoot();
   void logo_writesIntoTypedSubdirNotFlatRoot();
   void multipleCovers_eachWriteIntoOwnTypedSubdir();
@@ -83,6 +85,9 @@ private slots:
   void updateChanged_identicalBytesSkipped();
   void updateChanged_sizeMismatchRewritten();
   void updateChanged_sameSizeDifferentBytesRewritten();
+  void writeFailures_separatesGenuineFailuresFromPolicySkips();
+  void policySkip_reportsExistingDestinationPath();
+  void interactiveFailedFetchKeepsAbsentMarkerDeselectedPrunes();
   void cancelToken_stopsWriteFanOut();
 };
 
@@ -366,6 +371,46 @@ void TestScrapePersistence::videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix(
   QVERIFY(!QFile::exists(tmp.path() + "/video/foo.php"));
 }
 
+void TestScrapePersistence::kindForType_classifiesVideoVariantsAndManual() {
+  // Kartend-jjyst.1: kindForType matched only the exact "video" token, so
+  // ScreenScraper's "video-normalized" classified as an image — fetched under
+  // the image/ Content-Type pin (always rejected) and, had it downloaded,
+  // written as .png. Every "video-*" variant must classify as Video.
+  QCOMPARE(Scraper::kindForType(QStringLiteral("video")), Scraper::MediaKind::Video);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("video-normalized")), Scraper::MediaKind::Video);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("Video-Normalized")), Scraper::MediaKind::Video);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("  video ")), Scraper::MediaKind::Video);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("manual")), Scraper::MediaKind::Manual);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("Manual")), Scraper::MediaKind::Manual);
+  // Non-video/manual tags stay images — including lookalikes that only
+  // contain (rather than start with) the video token.
+  QCOMPARE(Scraper::kindForType(QStringLiteral("front")), Scraper::MediaKind::Image);
+  QCOMPARE(Scraper::kindForType(QStringLiteral("videotheme")), Scraper::MediaKind::Image);
+  QCOMPARE(Scraper::kindForType(QString()), Scraper::MediaKind::Image);
+}
+
+void TestScrapePersistence::videoNormalizedAsset_routesToVideoDirectoryAsVideoKind() {
+  // End-to-end: a "video-normalized" asset must ride the Video routing —
+  // video/ subdir + mp4 default extension — not the per-type image layout
+  // ("video-normalized/foo.png") the old exact-token match produced.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  const QList<Scraper::PendingMediaWrite> media = {makeMediaWithUrl(
+      QStringLiteral("video-normalized"), QStringLiteral("Video (normalized)"),
+      QUrl(QStringLiteral("https://api.screenscraper.fr/api2/media.php?id=2")), QByteArray("V"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/video/foo.mp4"));
+  QVERIFY(!QDir(tmp.path() + "/video-normalized").exists());
+  // Videos are not artwork — no item_artwork row.
+  QCOMPARE(db.artworkSaves.size(), 0);
+}
+
 void TestScrapePersistence::screenshot_writesIntoTypedSubdirNotFlatRoot() {
   // SS regularly returns games without a `front` (box-2D) asset —
   // only screenshot / fanart / marquee / etc. Whatever the type, the
@@ -567,6 +612,9 @@ void TestScrapePersistence::updateChanged_identicalBytesSkipped() {
 
   QCOMPARE(result.mediaWritten, 0);
   QCOMPARE(result.mediaSkipped, 1);
+  // A rescrape-policy skip is benign — it must never read as a write failure
+  // in the batch summary (Kartend-jjyst.4).
+  QVERIFY(result.writeFailures.isEmpty());
   QFile after(tmp.path() + "/screenshot/foo.png");
   QVERIFY(after.open(QIODevice::ReadOnly));
   QCOMPARE(after.readAll(), bytes);
@@ -622,6 +670,110 @@ void TestScrapePersistence::updateChanged_sameSizeDifferentBytesRewritten() {
   QFile after(tmp.path() + "/screenshot/foo.png");
   QVERIFY(after.open(QIODevice::ReadOnly));
   QCOMPARE(after.readAll(), incoming);
+}
+
+void TestScrapePersistence::writeFailures_separatesGenuineFailuresFromPolicySkips() {
+  // Kartend-jjyst.4: MediaWriteResult::firstFailures is the reason channel
+  // for EVERY mediaSkipped tick, so it mixes benign rescrape-policy skips
+  // with genuine failures. writeFailures must carry only the genuine ones —
+  // the batch summary folds that list, and a FillMissing run's kept-existing
+  // files must not read as failures. One call with both shapes: an existing
+  // file under FillMissing (benign) and an unsafe traversal type (genuine).
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir().mkpath(tmp.path() + "/screenshot"));
+  {
+    QFile seed(tmp.path() + "/screenshot/foo.png");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    QVERIFY(seed.write(QByteArray("EXISTING")) > 0);
+  }
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"),
+                QByteArray("NEW_BYTES")),
+      makeMedia(QStringLiteral("../evil"), QStringLiteral("Evil"), QByteArray("X"))};
+
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::FillMissing);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QCOMPARE(result.mediaSkipped, 2);
+  QCOMPARE(result.firstFailures.size(), 2); // both reasons surfaced
+  QCOMPARE(result.writeFailures.size(), 1); // only the genuine failure
+  QVERIFY2(result.writeFailures.first().contains(QStringLiteral("unsafe media subdirectory")),
+           qPrintable(result.writeFailures.first()));
+}
+
+void TestScrapePersistence::policySkip_reportsExistingDestinationPath() {
+  // Kartend-jjyst.5: a skip-because-present must still report WHERE the
+  // existing file lives (existingPaths) — the entity path wires the
+  // collection-config art fields from it, and an empty writtenPaths on a
+  // FillMissing re-run otherwise left the config unwired. Genuine failures
+  // (unsafe type here) must NOT land in existingPaths.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir().mkpath(tmp.path() + "/screenshot"));
+  {
+    QFile seed(tmp.path() + "/screenshot/foo.png");
+    QVERIFY(seed.open(QIODevice::WriteOnly));
+    QVERIFY(seed.write(QByteArray("EXISTING")) > 0);
+  }
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Screenshot"),
+                QByteArray("NEW_BYTES")),
+      makeMedia(QStringLiteral("../evil"), QStringLiteral("Evil"), QByteArray("X"))};
+
+  const auto result = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), media,
+                                               Scraper::RescrapeMode::FillMissing);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QVERIFY(result.writtenPaths.isEmpty());
+  QCOMPARE(result.existingPaths,
+           QStringList{QDir(tmp.path()).filePath(QStringLiteral("screenshot/foo.png"))});
+
+  // UpdateChanged byte-match reports the kept file the same way.
+  const QList<Scraper::PendingMediaWrite> identical = {makeMedia(
+      QStringLiteral("screenshot"), QStringLiteral("Screenshot"), QByteArray("EXISTING"))};
+  const auto result2 = Scraper::writeMediaFiles(tmp.path(), QStringLiteral("foo"), identical,
+                                                Scraper::RescrapeMode::UpdateChanged);
+  QCOMPARE(result2.mediaWritten, 0);
+  QCOMPARE(result2.existingPaths,
+           QStringList{QDir(tmp.path()).filePath(QStringLiteral("screenshot/foo.png"))});
+}
+
+void TestScrapePersistence::interactiveFailedFetchKeepsAbsentMarkerDeselectedPrunes() {
+  // Kartend-jjyst.14: the interactive apply path (dialog → applyScrapedItem)
+  // stamps ScrapedItem::mediaFetchFailedThisRun from the download dispatcher.
+  // A returned type whose fetch FAILED keeps its known-absent marker; a
+  // returned type the user merely DESELECTED (never dispatched, so never in
+  // the failed list) still prunes — the provider does supply it.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  db.preloadedMetadata.collectionUuid = QStringLiteral("u1");
+  db.preloadedMetadata.path = QStringLiteral("/m/g.bin");
+  db.preloadedMetadata.mediaAbsent = {QStringLiteral("video"), QStringLiteral("marquee")};
+
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  Scraper::MediaAsset video;
+  video.type = QStringLiteral("video");
+  video.url = QUrl(QStringLiteral("https://example.test/clip.mp4"));
+  item.media.append(video);
+  Scraper::MediaAsset marquee;
+  marquee.type = QStringLiteral("marquee");
+  marquee.url = QUrl(QStringLiteral("https://example.test/marquee.png"));
+  item.media.append(marquee);
+  // video's download failed (dispatcher reported it); marquee was deselected.
+  // Neither delivered bytes, so the media write list is empty.
+  item.mediaFetchFailedThisRun = {QStringLiteral("video")};
+
+  const auto result =
+      Scraper::applyScrapedItem(&db, "u1", "/m/g.bin", tmp.path(), QStringLiteral("g"), item, {},
+                                Scraper::RescrapeMode::FillMissing);
+
+  QVERIFY(result.metadataSaved);
+  QCOMPARE(db.metadataSaves.size(), 1);
+  QCOMPARE(db.metadataSaves.first().mediaAbsent, QStringList{QStringLiteral("video")});
 }
 
 void TestScrapePersistence::cancelToken_stopsWriteFanOut() {

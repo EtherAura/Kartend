@@ -51,9 +51,9 @@ QString findExistingPerGameAsset(const Scraper::MediaAsset &asset, const QString
   // Skip videos / manuals / non-image kinds — the CRC short-circuit is
   // documented for SS's mediaJeu.php image endpoints. Videos
   // (`mediaVideoJeu.php`) and manuals (`mediaManuelJeu.php`) don't accept the
-  // hash params per SS docs.
-  static const QStringList kSkipTypes = {QStringLiteral("video"), QStringLiteral("manual")};
-  if (kSkipTypes.contains(asset.type.toLower())) return {};
+  // hash params per SS docs. Kind-based (not an exact-token list) so
+  // "video-normalized" and friends are skipped too (Kartend-jjyst.1).
+  if (Scraper::kindForType(asset.type) != Scraper::MediaKind::Image) return {};
   const QString dir = QDir(artworkDir).filePath(asset.type);
   for (const char *ext : {"png", "jpg", "jpeg", "webp"}) {
     const QString candidate = QDir(dir).filePath(baseName + QLatin1Char('.') + QLatin1String(ext));

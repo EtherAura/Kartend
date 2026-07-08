@@ -66,6 +66,7 @@ private slots:
   void runtimeSecondsHonoredOnlyWhenNonNegative();
   void sourceProviderIdSkippedWhenScrapeEmpty();
   void mediaAbsentAccumulatesAcrossRunsAndPrunesReturned();
+  void mediaAbsentKeptWhenReturnedTypeFailedToDownload();
 };
 
 void TestScrapePersistenceDirect::writesNewMetadataRowAndArtworkRows() {
@@ -402,6 +403,50 @@ void TestScrapePersistenceDirect::mediaAbsentAccumulatesAcrossRunsAndPrunesRetur
   QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run2, {}));
   QCOMPARE(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent,
            (QStringList{QStringLiteral("marquee"), QStringLiteral("fanart")}));
+
+  closeAndRemove(db, conn);
+}
+
+void TestScrapePersistenceDirect::mediaAbsentKeptWhenReturnedTypeFailedToDownload() {
+  // Kartend-jjyst.1: pruning keyed off returned URLs alone. A type the
+  // provider returns but whose byte-fetch FAILS (mediaFetchFailedThisRun) is
+  // not satisfied — pruning its marker would flip the item back to
+  // unskippable and re-chase (and re-fail) the download every FillMissing
+  // run. The marker must survive until a fetch actually succeeds.
+  const QString conn = QStringLiteral("test_direct_media_absent_failed");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+
+  const QString uuid = QStringLiteral("u1");
+  const QString path = QStringLiteral("/m/g.bin");
+
+  // Run 1: provider returned nothing for video → marker recorded.
+  Scraper::ScrapedItem run1;
+  run1.sourceProviderId = QStringLiteral("screenscraper");
+  run1.mediaAbsentThisRun = {QStringLiteral("video")};
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run1, {}));
+  QCOMPARE(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent,
+           (QStringList{QStringLiteral("video")}));
+
+  // Run 2: provider now returns a video URL, but the download failed —
+  // the absent marker must be kept, not pruned as satisfied.
+  Scraper::ScrapedItem run2;
+  run2.sourceProviderId = QStringLiteral("screenscraper");
+  Scraper::MediaAsset videoAsset;
+  videoAsset.type = QStringLiteral("video");
+  videoAsset.url = QUrl(QStringLiteral("https://example.test/clip.mp4"));
+  run2.media.append(videoAsset);
+  run2.mediaFetchFailedThisRun = {QStringLiteral("video")};
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run2, {}));
+  QCOMPARE(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent,
+           (QStringList{QStringLiteral("video")}));
+
+  // Run 3: same asset, download succeeded this time → marker pruned.
+  Scraper::ScrapedItem run3;
+  run3.sourceProviderId = QStringLiteral("screenscraper");
+  run3.media.append(videoAsset);
+  QVERIFY(Scraper::saveScrapedMetadataDirect(db, uuid, path, run3, {}));
+  QVERIFY(ItemMetadataStore::load(db, uuid, path).value().mediaAbsent.isEmpty());
 
   closeAndRemove(db, conn);
 }

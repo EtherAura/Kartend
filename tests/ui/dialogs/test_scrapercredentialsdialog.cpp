@@ -1,19 +1,22 @@
-// Kartend-0eeuk: ScraperCredentialsDialog dialog-level save mapping (the
-// inline ScraperCredentialsPanel internals are covered by
-// test_scrapercredentialspanel.cpp; this legacy modal composes its own
-// field set). Pins the provider/field composition (tmdb token + the two
-// ScreenScraper member fields, sensitive ones in Password echo),
-// pre-population from the live GeneralSettings, Save's trimmed write-through
-// into scraper.credentials, the empty-value remove-key/remove-provider
-// cleanup, and the legacy dev_id / dev_password scrub. The ISettingsManager
-// is null throughout — persistence is the manager's job, the mapping is the
-// dialog's. Driven headlessly — never shown or exec()'d.
+// ScraperCredentialsDialog dialog-level behavior. The form itself is the
+// shared ScraperCredentialsPanel embedded in filterless mode (its internals
+// are covered by test_scrapercredentialspanel.cpp); this suite pins what the
+// modal wrapper adds: the single filterless panel embedding, the working-copy
+// isolation (Save commits to the caller's GeneralSettings, Cancel discards
+// edits), pre-population from the live GeneralSettings, Save's trimmed
+// write-through into scraper.credentials, the empty-value
+// remove-key/remove-provider cleanup, and the legacy dev_id / dev_password
+// scrub. The ISettingsManager is null throughout — persistence is the
+// manager's job, the mapping is the dialog's. Driven headlessly — never
+// shown or exec()'d.
 
 #include "scrapercredentialsdialog.h"
+#include "scrapercredentialspanel.h"
 
 #include "collection/generalsettings.h"
 
 #include <QDialogButtonBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -69,12 +72,28 @@ class TestScraperCredentialsDialog : public QObject {
   Q_OBJECT
 
 private slots:
+  void embedsSingleFilterlessPanel();
   void composesThreeFieldsWithSensitiveEchoGating();
   void prepopulatesFromLiveSettings();
   void saveWritesTrimmedValuesAndAccepts();
+  void cancelDiscardsEditsAndRejects();
   void emptyValueRemovesFieldAndEmptyProviderBlob();
   void saveScrubsLegacyDevCredentials();
 };
+
+void TestScraperCredentialsDialog::embedsSingleFilterlessPanel() {
+  GeneralSettings settings;
+  ScraperCredentialsDialog dlg(&settings, /*settingsManager=*/nullptr);
+
+  // Exactly one shared panel supplies the whole form — the dialog builds
+  // no fields of its own.
+  QCOMPARE(dlg.findChildren<ScraperCredentialsPanel *>().size(), 1);
+  // The panel's storage-demotion banner rides along; with no demotion
+  // reason (null settings manager) it stays hidden.
+  auto *banner = dlg.findChild<QLabel *>(QStringLiteral("credentialStorageWarningLabel"));
+  QVERIFY(banner);
+  QVERIFY(banner->isHidden());
+}
 
 void TestScraperCredentialsDialog::composesThreeFieldsWithSensitiveEchoGating() {
   GeneralSettings settings;
@@ -126,6 +145,34 @@ void TestScraperCredentialsDialog::saveWritesTrimmedValuesAndAccepts() {
   QCOMPARE(creds.value(QStringLiteral("screenscraper")).value(QStringLiteral("user_password")),
            QStringLiteral("secret"));
   QCOMPARE(accepted.count(), 1);
+}
+
+void TestScraperCredentialsDialog::cancelDiscardsEditsAndRejects() {
+  // The embedded panel writes through to its model on every keystroke, so
+  // the dialog must point it at a working copy — otherwise editing then
+  // Cancel would leak the edit into the caller's live GeneralSettings.
+  GeneralSettings settings;
+  settings.scraper.credentials[QStringLiteral("tmdb")][QStringLiteral("api_token")] =
+      QStringLiteral("keep-me");
+
+  ScraperCredentialsDialog dlg(&settings, nullptr);
+  QSignalSpy rejected(&dlg, &QDialog::rejected);
+
+  QLineEdit *token = tmdbTokenEdit(dlg);
+  QVERIFY(token);
+  token->setText(QString());
+  QTest::keyClicks(token, QStringLiteral("junk")); // real edits → textEdited write-through
+
+  auto *box = dlg.findChild<QDialogButtonBox *>();
+  QVERIFY(box);
+  QPushButton *cancel = box->button(QDialogButtonBox::Cancel);
+  QVERIFY(cancel);
+  cancel->click();
+
+  QCOMPARE(
+      settings.scraper.credentials.value(QStringLiteral("tmdb")).value(QStringLiteral("api_token")),
+      QStringLiteral("keep-me"));
+  QCOMPARE(rejected.count(), 1);
 }
 
 void TestScraperCredentialsDialog::emptyValueRemovesFieldAndEmptyProviderBlob() {

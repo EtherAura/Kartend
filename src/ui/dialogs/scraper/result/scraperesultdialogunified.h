@@ -61,8 +61,8 @@ public:
   /// Kartend-ckepd.6/.5: launch an entity (collection/platform artwork) scrape
   /// for @p collectionIndex — one job per non-Game entity type the collection's
   /// provider supports, no item grid. Returns false (and shows a message) when
-  /// the collection has no entity-capable scraper, so the caller can skip showing
-  /// an empty dialog.
+  /// the collection has no entity-capable scraper or a scrape is already
+  /// running, so the caller can skip showing an empty dialog.
   [[nodiscard]] bool startEntityScrape(int collectionIndex);
 
   // ── Slot bodies (forwarded from host) ──────────────────────────────────

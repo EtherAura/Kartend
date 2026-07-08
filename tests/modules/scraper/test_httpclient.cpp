@@ -748,7 +748,10 @@ void TestHttpClient::clearPending_cancelsQueuedRequestsViaCallback() {
   QVERIFY(queuedFired);
   QVERIFY(queuedResult.has_value());
   QVERIFY(queuedResult->isError());
-  QCOMPARE(queuedResult->error().code, ErrorCode::OperationCancelled);
+  // RequestQueueCleared, not OperationCancelled: the deliberate-cancel code is
+  // excluded from RetryPolicy::isTransient so a batch cancel can't re-issue
+  // the dropped lookups through the provider's retry gate (Kartend-jjyst.2).
+  QCOMPARE(queuedResult->error().code, ErrorCode::RequestQueueCleared);
 
   // Drain the in-flight request (fast connection-refused) so no reply lingers
   // past the test, then drop the per-host rule to leave the singleton clean.
@@ -890,7 +893,7 @@ void TestHttpClient::unconfiguredHost_defaultsToOneInFlightRequest() {
   QVERIFY2(queuedFired, "second request to an unconfigured host was not queued behind the first");
   QVERIFY(queuedResult.has_value());
   QVERIFY(queuedResult->isError());
-  QCOMPARE(queuedResult->error().code, ErrorCode::OperationCancelled);
+  QCOMPARE(queuedResult->error().code, ErrorCode::RequestQueueCleared);
 
   // Drain the in-flight request (fast connection-refused) so no reply lingers
   // past the test.

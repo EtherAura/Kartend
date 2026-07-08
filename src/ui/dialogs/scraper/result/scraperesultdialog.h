@@ -166,7 +166,8 @@ public:
   /// for the given collection (right-click → "Scrape collection / platform
   /// artwork"). No item grid — one job per non-Game entity type the collection's
   /// provider supports is fetched; progress/errors surface through this dialog.
-  /// Returns false when the collection has no entity-capable scraper.
+  /// Returns false when the collection has no entity-capable scraper or a
+  /// scrape is already running.
   [[nodiscard]] bool startEntityScrape(int collectionIndex);
 
   /// Artwork directories used to skip downloads for group/company-

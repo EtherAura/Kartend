@@ -10,6 +10,8 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include "pathutils.h"
+
 namespace Scraper {
 namespace ScrapePendingState {
 
@@ -47,6 +49,10 @@ QByteArray serialize(const ScraperService::PendingState &snap) {
   sumObj[QStringLiteral("errors")] = summary.errors;
   sumObj[QStringLiteral("not_found")] = summary.notFound;
   sumObj[QStringLiteral("media_written")] = summary.mediaWritten;
+  // Media failure counters mirror the runner's; without them a resumed run
+  // under-reports its media failures in the final dialog (Kartend-jjyst.16).
+  sumObj[QStringLiteral("media_fetch_failures")] = summary.mediaFetchFailures;
+  sumObj[QStringLiteral("media_write_failures")] = summary.mediaWriteFailures;
   QJsonArray failArr;
   for (const auto &f : summary.firstFailures) failArr.append(f);
   sumObj[QStringLiteral("first_failures")] = failArr;
@@ -134,6 +140,11 @@ ScraperService::PendingState deserialize(const QByteArray &bytes) {
   out.summarySoFar.errors = sumObj.value(QStringLiteral("errors")).toInt(0);
   out.summarySoFar.notFound = sumObj.value(QStringLiteral("not_found")).toInt(0);
   out.summarySoFar.mediaWritten = sumObj.value(QStringLiteral("media_written")).toInt(0);
+  // Default 0 on legacy snapshots that never wrote them (Kartend-jjyst.16).
+  out.summarySoFar.mediaFetchFailures =
+      sumObj.value(QStringLiteral("media_fetch_failures")).toInt(0);
+  out.summarySoFar.mediaWriteFailures =
+      sumObj.value(QStringLiteral("media_write_failures")).toInt(0);
   const auto failArr = sumObj.value(QStringLiteral("first_failures")).toArray();
   for (const auto &v : failArr) out.summarySoFar.firstFailures.append(v.toString());
   // Restore the re-scrape-failed state. All three default to their zero
@@ -197,6 +208,10 @@ bool atomicWrite(const QString &path, const QByteArray &bytes) {
     qCWarning(lcScrapePendingState) << "Failed to commit pending state to" << path;
     return false;
   }
+  // stopForQuotaExhaustion flushes this file precisely because the user may
+  // quit right after — flush the directory entry too so the rename survives a
+  // crash/power-cut (QSaveFile + syncDirectory, the sanctioned pattern).
+  PathUtils::syncDirectory(QFileInfo(path).absolutePath());
   return true;
 }
 

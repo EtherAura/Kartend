@@ -14,6 +14,7 @@
 #include "batchprogressview.h"
 #include "flowlayout.h"
 #include "formbuilders.h"
+#include "isettingsmanager.h"
 #include "mediatypecheckboxbuilder.h"
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
@@ -54,6 +55,7 @@
 #include <QRadioButton>
 #include <QSet>
 #include <QShowEvent>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QtConcurrent/QtConcurrentRun>
@@ -297,6 +299,7 @@ QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
   candLbl->setMinimumWidth(UIConstants::ScrapeResultDialog::CANDIDATE_LABEL_MIN_WIDTH);
   candRow->addWidget(candLbl);
   m_dlg->m_interactiveCandidateCombo = new QComboBox(m_dlg->m_interactiveCandidateRow);
+  m_dlg->m_interactiveCandidateCombo->setObjectName(QStringLiteral("interactiveCandidateCombo"));
   m_dlg->m_interactiveCandidateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   candRow->addWidget(m_dlg->m_interactiveCandidateCombo, /*stretch=*/1);
   // Combobox is the visible candidate picker in the unified live view;

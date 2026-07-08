@@ -42,14 +42,16 @@ private:
   void onEntityFetchComplete(const ErrorUtils::Result<Scraper::ScrapedItem> &result,
                              const std::shared_ptr<MetadataLookupProvider> &provider,
                              quint64 generation);
-  /// Map scraped platform art (the paths writeMediaFiles wrote under _shared/)
-  /// onto the collection's CollectionConfig art fields and persist via the
-  /// settings manager. `collectionUuid` is verified against the collection at
-  /// `collectionIndex` (re-resolving by UUID on mismatch) so a collections
-  /// list edited mid-run can't receive another collection's art.
+  /// Map scraped platform art (the _shared/ paths writeMediaFiles wrote this
+  /// run PLUS the ones it kept because they already satisfied the rescrape
+  /// policy, Kartend-jjyst.5) onto the collection's CollectionConfig art
+  /// fields and persist via the settings manager. `collectionUuid` is
+  /// verified against the collection at `collectionIndex` (re-resolving by
+  /// UUID on mismatch) so a collections list edited mid-run can't receive
+  /// another collection's art.
   void applyEntityArtToConfig(const QString &collectionUuid, int collectionIndex,
                               const QList<Scraper::MediaAsset> &assets,
-                              const QStringList &writtenPaths);
+                              const QStringList &landedPaths);
   /// File-I/O phase of an entity scrape: run writeMediaFiles on the global
   /// QThreadPool (mirroring BatchScrapeRunner's media-write phase) so a slow
   /// or wedged mount can't block the GUI thread, guarded by the per-run

@@ -12,6 +12,7 @@
 // fields are populated; the endpoint stays https + the api host with
 // credentials in the query (never the path); and a credential containing
 // query delimiters cannot inject or override other params.
+#include <atomic>
 #include <memory>
 #include <optional>
 
@@ -60,6 +61,9 @@ private slots:
   // Kartend-3p42r: the FileHashCache hash-reuse path.
   void hashRegularFileCached_cacheHit_returnsCachedNotRehashed();
   void hashRegularFileCached_cacheMiss_hashesAndStores();
+
+  // Kartend-jjyst.6: cancel/skip observed by the hash continuation.
+  void lookup_cancelledDuringHash_resolvesCancelledWithoutRequest();
 
   // Kartend-ckepd.4: platform-entity scraping.
   void supportedEntities_includesPlatform();
@@ -290,6 +294,45 @@ void TestScreenScraperProvider::hashRegularFileCached_cacheMiss_hashesAndStores(
     db.close();
   }
   QSqlDatabase::removeDatabase(verifyConn);
+}
+
+// Kartend-jjyst.6: a skip/cancel token flipped before (or during) the ROM hash
+// must resolve the lookup with OperationCancelled — NOT fall back to a
+// filename-only jeuInfos request, which burned one quota-counting request per
+// skipped item and dispatched it after the runner's clearPending already ran.
+void TestScreenScraperProvider::lookup_cancelledDuringHash_resolvesCancelledWithoutRequest() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString romPath = dir.filePath(QStringLiteral("game.rom"));
+  {
+    QFile f(romPath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QByteArrayLiteral("rom-bytes"));
+  }
+
+  GeneralSettings settings; // default hashMode == Always → the hash path runs
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+
+  MetadataLookupProvider::LookupContext ctx;
+  ctx.query = QStringLiteral("game.rom");
+  ctx.filePath = romPath;
+  ctx.cancelToken = std::make_shared<std::atomic<bool>>(true); // already skipped
+
+  std::optional<ErrorUtils::Result<QList<Scraper::ScrapeCandidate>>> result;
+  provider.lookup(ctx, [&result](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
+    result = std::move(r);
+  });
+  // The hash runs on the QtConcurrent pool and the continuation lands on the
+  // main thread — spin the event loop until the callback resolves. On a
+  // regression this instead attempts a live systemesListe/jeuInfos round-trip
+  // and the cancelled expectation below fails.
+  QTRY_VERIFY(result.has_value());
+  QVERIFY(result->isError());
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::OperationCancelled);
 }
 
 void TestScreenScraperProvider::supportedEntities_includesPlatform() {
