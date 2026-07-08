@@ -61,6 +61,13 @@ The fan-out report (Kartend-5y7zm) is an informational metric: it counts how
 many call sites reach each sibling manager through `ctx->xxxManager()` so that
 coupling growth around the ApplicationContext hub is visible in review.
 
+The currentCollectionIndex back-channel guardrail (Kartend-dl0uz.1) keeps the
+raw `int *` into MainWindow's m_currentCollectionIndex read-only: every holder
+outside a small writer allowlist (NavigationManager, TreeManager,
+SettingsDialogController, plus the ApplicationContext conduit) must spell it
+`const int *` — in setup-struct fields, SETUP_GETTER types, and members alike —
+so none of the ~20 read-only consumers can silently become a writer.
+
 The fan-out RATCHET (Kartend-n1hpy.1) turns the report's OUTGOING dimension
 into a soft gate: it CAN fail the build when a single file's ctx-> breadth
 (distinct managers reached) grows past its recorded baseline, or a new file
@@ -331,6 +338,35 @@ def main() -> int:
         )
         return 1
 
+    # Sixth guardrail: the raw `int *currentCollectionIndex` back-channel
+    # stays read-only outside the writer allowlist. MainWindow's
+    # `int m_currentCollectionIndex` fans out as a raw pointer through ~20
+    # setup structs and manager members (Kartend-dl0uz.1); every read-only
+    # holder was flipped to `const int *` so a consumer can't silently become
+    # a writer. Only the classes in CURRENT_INDEX_WRITER_ALLOWLIST may still
+    # hold it non-const.
+    backchannel_findings = check_current_index_backchannel()
+    if backchannel_findings:
+        print(
+            "check-layering: non-const `int *currentCollectionIndex` "
+            "back-channel holder outside the writer allowlist:"
+        )
+        for rel, line, snippet in backchannel_findings:
+            print(f"  {rel}:{line}  ->  {snippet}")
+        print(
+            "\nFix: declare the holder `const int *` — the setup-struct field, "
+            "the SETUP_GETTER type, and the member all flip together. "
+            "MainWindow's currentCollectionIndex fans out as a raw pointer "
+            "back-channel; only the writer classes in "
+            "CURRENT_INDEX_WRITER_ALLOWLIST (NavigationManager, TreeManager, "
+            "SettingsDialogController, plus the ApplicationContext conduit "
+            "they draw from) may hold it writable. A genuine new writer needs "
+            "an explicit allowlist entry AND a review of the write-before-"
+            "signal ordering existing readers rely on (see "
+            "dbeventscontroller.cpp)."
+        )
+        return 1
+
     print(
         "check-layering: OK — src/utils/, src/chrome/, and "
         "src/modules/{data,input,media}/ stay within their layers; setup "
@@ -338,7 +374,8 @@ def main() -> int:
         "no legacy MainWindow::getXxxManager() callers outside mainwindow*; "
         "IMainWindow exposes only applicationManager(); ctx accessor styles "
         "stay distinct (ApplicationContext no-get-prefix, controller-ctx "
-        "get-prefixed)"
+        "get-prefixed); the currentCollectionIndex back-channel is const "
+        "outside its writer allowlist"
     )
     # Informational coupling metric (Kartend-5y7zm) — never fails the lint.
     by_manager, _ = compute_ctx_fanout()
@@ -623,7 +660,66 @@ def check_ctx_accessor_styles() -> tuple[
     return appctx_findings, controller_findings
 
 
-# ── Sixth concern (metric, not guardrail): ApplicationContext fan-out ────────
+# ── Sixth guardrail helpers: currentCollectionIndex back-channel const-ness ──
+#
+# Kartend-dl0uz.1. MainWindow's `int m_currentCollectionIndex` is threaded as a
+# raw pointer through setup structs (`int *currentCollectionIndex`), their
+# SETUP_GETTER types, and manager members (`int *m_currentCollectionIndex`).
+# Every read-only holder declares it `const int *`; the regex flags any
+# remaining non-const spelling — field, getter TYPE argument
+# (`SETUP_GETTER_DECL(int *, CurrentCollectionIndex)`), member, or parameter —
+# outside the writer allowlist below. Comments are blanked first so doc
+# examples don't trip it.
+CURRENT_INDEX_PTR_RE = re.compile(
+    r"(?<!const\s)\bint\s*\*\s*(?:,\s*)?(?:m_)?[Cc]urrentCollectionIndex\b"
+)
+
+# Files that legitimately hold the pointer WRITABLE. Each entry names the
+# write sites that justify it; everything else in src/ must use `const int *`.
+# Adding a new writer here requires reviewing the write-before-signal ordering
+# that read-only consumers rely on (dbeventscontroller.cpp documents it).
+CURRENT_INDEX_WRITER_ALLOWLIST: set[str] = {
+    # NavigationManager — writes in navigationmanager.cpp:141,
+    # navigationmanagerroute.cpp:147, navigationmanagersubcollection.cpp:248.
+    "src/modules/input/navigation/navigationmanager.h",
+    # TreeManager — writes in treemanager.cpp:288,325; setSelectionState()
+    # takes the writable pointer (declared in the .h, defined in the .cpp).
+    "src/ui/dialogs/settings/core/treemanager.h",
+    "src/ui/dialogs/settings/core/treemanager.cpp",
+    # SettingsDialogController — writes the resolved index back through
+    # `int &currentCollectionIndex = *context.currentCollectionIndex;`
+    # (settingsdialogcontroller.cpp:303, assigned at :508), so its context
+    # struct field stays writable.
+    "src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.h",
+    # ApplicationContext.collection is the conduit the setup-getter ctx
+    # fallback draws from; the writer NavigationManager receives its pointer
+    # through it, so the ctx field itself must stay `int *`.
+    "src/utils/app/applicationcontext.h",
+}
+
+
+def check_current_index_backchannel() -> list[tuple[str, int, str]]:
+    """Find non-const `int *currentCollectionIndex` holders outside the allowlist.
+
+    Returns (relative_path, line_number, source_line_excerpt).
+    """
+    findings: list[tuple[str, int, str]] = []
+    for path in sorted(SRC.rglob("*")):
+        if path.suffix not in (".cpp", ".h"):
+            continue
+        rel = str(path.relative_to(REPO))
+        if rel in CURRENT_INDEX_WRITER_ALLOWLIST:
+            continue
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        text = _blank_comments(raw)
+        for m in CURRENT_INDEX_PTR_RE.finditer(text):
+            line_number = raw[: m.start()].count("\n") + 1
+            snippet = raw.splitlines()[line_number - 1].strip()
+            findings.append((rel, line_number, snippet))
+    return findings
+
+
+# ── Seventh concern (metric, not guardrail): ApplicationContext fan-out ──────
 #
 # Kartend-5y7zm. The include-layering DAG is enforced vertically, but the
 # ApplicationContext is a horizontal back-channel: any manager holding `ctx`

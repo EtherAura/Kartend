@@ -3,9 +3,7 @@
   "floor": 3,
   "by_file_outgoing": {
     "src/modules/data/restore/selectionrestoremanager.h": 4,
-    "src/modules/input/event/eventmanager.h": 7,
     "src/modules/input/event/hoverscrollhandler.h": 3,
-    "src/modules/input/event/wheeleventhandler.h": 6,
     "src/modules/input/interaction/arrownavigationhandler.h": 4,
     "src/modules/input/interaction/interactionmanager.h": 9,
     "src/modules/input/navigation/navigationmanager.h": 7,
@@ -16,22 +14,21 @@
     "src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.cpp": 3
   },
   "by_manager_incoming": {
-    "animationManager": 4,
-    "artworkManager": 15,
+    "animationManager": 3,
+    "artworkManager": 14,
     "cacheManager": 2,
-    "databaseManager": 22,
+    "databaseManager": 21,
     "detailPageManager": 1,
-    "detailsPaneManager": 7,
+    "detailsPaneManager": 6,
     "filterManager": 1,
     "interactionManager": 6,
-    "keyboardManager": 3,
-    "mouseManager": 2,
+    "keyboardManager": 2,
     "navigationManager": 3,
     "playlistManager": 2,
-    "scrollManager": 8,
-    "selectionManager": 7,
+    "scrollManager": 6,
+    "selectionManager": 5,
     "sessionManager": 7,
-    "settingsManager": 18,
-    "viewportManager": 5
+    "settingsManager": 21,
+    "viewportManager": 3
   }
 }

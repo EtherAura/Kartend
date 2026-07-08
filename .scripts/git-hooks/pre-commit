@@ -42,7 +42,12 @@ if [ ${#STAGED_SRC[@]} -gt 0 ]; then
     drift=()
     for file in "${STAGED_SRC[@]}"; do
       [ -n "$file" ] || continue
-      if ! "$CF" --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+      # Check the STAGED blob, not the worktree file (Kartend-pnlot.10): with
+      # partial staging (git add -p) the two differ — the worktree copy can be
+      # clean while the staged content drifts, or vice versa. `git show :path`
+      # reads the index; --assume-filename keeps clang-format's .clang-format
+      # lookup and language detection keyed to the real path.
+      if ! git show ":$file" | "$CF" --style=file --dry-run --Werror --assume-filename="$file" >/dev/null 2>&1; then
         drift+=("$file")
       fi
     done
@@ -50,6 +55,7 @@ if [ ${#STAGED_SRC[@]} -gt 0 ]; then
       red "clang-format drift detected in $(printf '%d' "${#drift[@]}") staged file(s):"
       printf '  %s\n' "${drift[@]}"
       yellow "Run '.scripts/build.sh --maintenance --format-apply' to auto-fix, then re-stage."
+      yellow "  (the check reads staged content — if the worktree copy is already clean, just re-stage it)"
       yellow "  (using $CF)"
       fail=1
     fi

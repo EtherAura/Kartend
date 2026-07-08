@@ -97,7 +97,7 @@ Binary and method counts drift fast — prefer `ctest --output-on-failure
 Every `src/modules/<group>/<feature>/` owns a matching
 `tests/modules/<feature>/` (group level dropped). The mapping is
 machine-checked by `.scripts/check-test-mapping.py` in the
-maintenance-check CI job — adding a new module without a test folder, or
+script-lint CI job — adding a new module without a test folder, or
 leaving a test folder behind after deleting a module, fails the lint.
 
 | Source folder | Test folder |

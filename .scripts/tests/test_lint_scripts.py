@@ -108,6 +108,28 @@ class TestCheckLayering(unittest.TestCase):
         r = run_script(LAYERING, REPO)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_nonconst_current_index_holder_fails(self) -> None:
+        # Sixth guardrail (Kartend-dl0uz.1): a non-const `int *` holder of the
+        # currentCollectionIndex back-channel outside the writer allowlist
+        # must fail. This guardrail is self-contained (single regex over src/),
+        # so unlike the include-layering rules a minimal fixture is stable.
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            make_tree(
+                base,
+                ["src/utils"],
+                {
+                    "src/utils/holder.h": (
+                        "struct HolderSetup {\n"
+                        "  int *m_currentCollectionIndex = nullptr;\n"
+                        "};\n"
+                    )
+                },
+            )
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("back-channel", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

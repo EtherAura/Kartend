@@ -86,7 +86,11 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev lcov pulseaudio
+          # unzip + p7zip-full (Kartend-pnlot.4): the archive paths of the
+          # romhasher/launchmanager tests need real extractors. Without them
+          # those tests QSKIP silently and deflate the very numbers the
+          # coverage floors below gate on.
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev lcov pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -129,6 +133,11 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
+          # Kartend-pnlot.4 (extends Kartend-68wbk): the extractors are
+          # installed above, so a missing archive tool here is a real
+          # regression — QFAIL loudly instead of QSKIPping and silently
+          # deflating the measured coverage.
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: ctest --test-dir build/coverage --output-on-failure -LE benchmark
 
       - name: Capture coverage data
@@ -241,26 +250,35 @@ jobs:
           fi
           [ "$failed" -eq 0 ] || [ "$enforce" = "0" ]
 
-      - name: Nudge the function-coverage floor ratchet (non-fatal)
+      - name: Nudge the coverage floor ratchets (non-fatal)
         # Companion to the manual-ratchet policy above, mirroring the
         # ctx-fanout soft ratchet (.scripts/check-layering.py): lowering a
         # floor is always a deliberate decision, but silent slack — observed
         # coverage sitting far above the floor — lets hard-won gains erode
-        # invisibly. When observed FUNCTION coverage beats the floor by more
-        # than KARTEND_COVERAGE_RATCHET_SLACK points, emit a ::warning asking
-        # for a floor bump. Never fails the job, and never rewrites the floor
-        # itself — the bump stays a reviewed edit to this file.
+        # invisibly. When observed coverage (line or function) beats its floor
+        # by more than KARTEND_COVERAGE_RATCHET_SLACK points, emit a ::warning
+        # asking for a floor bump. Never fails the job, and never rewrites the
+        # floor itself — the bump stays a reviewed edit to this file.
         run: |
+          line_pct="$(lcov --summary build/coverage/coverage.filtered.info \
+                          --ignore-errors inconsistent 2>&1 \
+                      | awk '/^[[:space:]]+lines/ { gsub("%","",$2); print $2; exit }')"
           fn_pct="$(lcov --summary build/coverage/coverage.filtered.info \
                         --ignore-errors inconsistent 2>&1 \
                     | awk '/^[[:space:]]+functions/ { gsub("%","",$2); print $2; exit }')"
+          line_floor="${KARTEND_COVERAGE_MIN_LINES:-0}"
           fn_floor="${KARTEND_COVERAGE_MIN_FUNCTIONS:-0}"
           slack="${KARTEND_COVERAGE_RATCHET_SLACK:-3}"
-          if [ -z "$fn_pct" ] || [ "$fn_floor" -le 0 ]; then
-            echo "Ratchet nudge skipped (no measured value, or function-floor enforcement disabled)."
-            exit 0
+          if [ -z "$line_pct" ] || [ "$line_floor" -le 0 ]; then
+            echo "Line ratchet nudge skipped (no measured value, or line-floor enforcement disabled)."
+          elif [ "$(awk -v p="$line_pct" -v f="$line_floor" -v s="$slack" 'BEGIN { print (p - f > s) ? "1" : "0" }')" = "1" ]; then
+            echo "::warning::Line coverage ${line_pct}% exceeds the ${line_floor}% floor by more than ${slack} points — ratchet KARTEND_COVERAGE_MIN_LINES up in coverage.yml to lock in the gain (deliberate edit; lowering is always allowed, silent slack is not)."
+          else
+            echo "Line coverage ${line_pct}% is within ${slack} points of the ${line_floor}% floor — no ratchet nudge."
           fi
-          if [ "$(awk -v p="$fn_pct" -v f="$fn_floor" -v s="$slack" 'BEGIN { print (p - f > s) ? "1" : "0" }')" = "1" ]; then
+          if [ -z "$fn_pct" ] || [ "$fn_floor" -le 0 ]; then
+            echo "Function ratchet nudge skipped (no measured value, or function-floor enforcement disabled)."
+          elif [ "$(awk -v p="$fn_pct" -v f="$fn_floor" -v s="$slack" 'BEGIN { print (p - f > s) ? "1" : "0" }')" = "1" ]; then
             echo "::warning::Function coverage ${fn_pct}% exceeds the ${fn_floor}% floor by more than ${slack} points — ratchet KARTEND_COVERAGE_MIN_FUNCTIONS up in coverage.yml to lock in the gain (deliberate edit; lowering is always allowed, silent slack is not)."
           else
             echo "Function coverage ${fn_pct}% is within ${slack} points of the ${fn_floor}% floor — no ratchet nudge."

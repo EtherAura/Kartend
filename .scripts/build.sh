@@ -614,6 +614,7 @@ EOF
   fi
 
   step_final "Build completed successfully."
+  publish_current_build_dir "$build_dir"
   if $make_archive; then
     step_final "Archive created: ${backups_dir}/${fname}"
   fi
@@ -999,6 +1000,7 @@ if ! $keep_builds; then
 fi
 
 step_final "Build completed successfully."
+publish_current_build_dir "$build_dir"
 if $make_archive; then
   step_final "Archive created: ${backups_dir}/${fname}"
 fi
@@ -1135,6 +1137,7 @@ if ! $pgo_build; then
   fi
 
   step_final "Build completed successfully."
+  publish_current_build_dir "$build_dir"
   if $make_archive; then
     step_final "Archive created: ${backups_dir}/${fname}"
   fi
