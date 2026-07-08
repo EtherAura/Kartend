@@ -40,7 +40,7 @@ struct SearchManagerSetup {
   QWidget *collectionPage = nullptr;
   QWidget *itemsPage = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
@@ -49,7 +49,7 @@ struct SearchManagerSetup {
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
 };
 
@@ -140,7 +140,7 @@ private:
   QWidget *m_collectionPage = nullptr;
   QWidget *m_itemsPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
 
   // Memoizes hasDirectItemsForIndex() so toggling search mode / entering a
   // collection doesn't re-stat one or many media directories on the UI thread

@@ -23,16 +23,14 @@
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "hoverscrollhandler.h"
-#include "ianimationmanager.h"
-#include "iartworkmanager.h"
-#include "idatabasemanager.h"
-#include "idetailspanemanager.h"
-#include "ikeyboardmanager.h"
-#include "imousemanager.h"
+#include "iartworkpreviewscroll.h"
+#include "igridlayoutscroll.h"
+#include "ikeyeventsink.h"
+#include "imouseholdcontrol.h"
 #include "interactionstateholder.h"
-#include "iselectionmanager.h"
-#include "iviewportmanager.h"
-#include "scrollmanager.h"
+#include "iselectioncore.h"
+#include "iuseractivitysink.h"
+#include "iviewportscrollstate.h"
 #include "uiconstants/mouse.h"
 #include "uiconstants/timing.h"
 #include "wheeleventhandler.h"
@@ -54,7 +52,8 @@ SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, ItemsTopBar, itemsTopBar)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, const int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
 
 EventManager::EventManager(QObject *parent)
@@ -180,8 +179,8 @@ bool EventManager::filterEvent(QObject *obj, QEvent *event) {
 
 bool EventManager::isRestoringSelection() const {
   // Query SelectionManager as the single source of truth
-  if (selectionMgr()) {
-    return selectionMgr()->isRestoringSelection();
+  if (selectionCore()) {
+    return selectionCore()->isRestoringSelection();
   }
   return false;
 }
@@ -191,8 +190,8 @@ bool EventManager::handleActivityEvent(QEvent *event) {
     return false;
   }
 
-  if (artworkMgr()) {
-    artworkMgr()->updateUserActivity();
+  if (userActivity()) {
+    userActivity()->updateUserActivity();
   }
 
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -211,8 +210,8 @@ bool EventManager::handleActivityEvent(QEvent *event) {
 bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
   if ((obj && qobject_cast<QScrollBar *>(obj)) ||
       qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr)) {
-    if (viewportMgr()) {
-      viewportMgr()->setContinuousScrollActive(true);
+    if (viewportScrollState()) {
+      viewportScrollState()->setContinuousScrollActive(true);
     }
     // Clear continuous-scroll state once the user stops interacting. One
     // restartable timer so rapid presses restart the countdown instead of
@@ -222,8 +221,8 @@ bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
       m_continuousScrollClearTimer = new QTimer(this);
       m_continuousScrollClearTimer->setSingleShot(true);
       connect(m_continuousScrollClearTimer, &QTimer::timeout, this, [this]() {
-        if (viewportMgr()) {
-          viewportMgr()->setContinuousScrollActive(false);
+        if (viewportScrollState()) {
+          viewportScrollState()->setContinuousScrollActive(false);
         }
       });
     }
@@ -240,11 +239,11 @@ bool EventManager::handleMouseButtonRelease(QObject *obj, QEvent *event) {
   Q_UNUSED(obj);
   auto *mouseReleaseEvent = static_cast<QMouseEvent *>(event);
   if (mouseReleaseEvent && mouseReleaseEvent->button() == Qt::LeftButton) {
-    if (mouseMgr()) {
-      mouseMgr()->setLeftMouseDown(false);
-      mouseMgr()->stopClickHoldTimer();
-      if (mouseMgr()->isMouseHoldScrolling()) {
-        mouseMgr()->stopMouseHoldScrolling();
+    if (mouseHold()) {
+      mouseHold()->setLeftMouseDown(false);
+      mouseHold()->stopClickHoldTimer();
+      if (mouseHold()->isMouseHoldScrolling()) {
+        mouseHold()->stopMouseHoldScrolling();
       }
     }
     if (state()) {
@@ -292,9 +291,9 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   }
 
   // Delegate to KeyboardManager for key handling
-  if (keyboardMgr()) {
+  if (keyEventSink()) {
     const bool searchBarFocused = (m_searchBar) && m_searchBar->hasFocus();
-    const bool handled = keyboardMgr()->handleKeyPress(keyEvent, searchBarFocused);
+    const bool handled = keyEventSink()->handleKeyPress(keyEvent, searchBarFocused);
     if (handled) {
       event->accept();
       return true;
@@ -317,8 +316,8 @@ bool EventManager::handleKeyReleaseEvent(QObject *obj, QEvent *event) {
   }
 
   // Delegate to KeyboardManager for key release handling
-  if (keyboardMgr()) {
-    const bool handled = keyboardMgr()->handleKeyRelease(keyEvent);
+  if (keyEventSink()) {
+    const bool handled = keyEventSink()->handleKeyRelease(keyEvent);
     if (handled) {
       event->accept();
       return true;
@@ -341,8 +340,8 @@ int EventManager::getCurrentGridWidth() const {
 
 QList<int> EventManager::getSubcollections(int parentIndex) const {
   // Delegate to SelectionManager which owns the canonical implementation
-  if (selectionMgr()) {
-    return selectionMgr()->getSubcollections(parentIndex);
+  if (selectionCore()) {
+    return selectionCore()->getSubcollections(parentIndex);
   }
   // Fallback to O(n) scan
   if (!m_collections) {

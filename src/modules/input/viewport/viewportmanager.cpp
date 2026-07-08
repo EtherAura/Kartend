@@ -36,7 +36,7 @@ Q_LOGGING_CATEGORY(lcViewportManager, "kartend.viewportmanager")
 // ViewportManagerSetup getter definitions (non-manager fields only).
 SETUP_GETTER_DEF_UI_SAME(ViewportManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, const GeneralSettings *, GeneralSettings,

@@ -57,6 +57,19 @@ class IViewportManager;
 class IInteractionManager;
 class IMouseManager;
 class IKeyboardManager;
+// Role views of the input-side managers (Kartend-dl0uz.2), same aliasing
+// pattern as the scroll roles above: each pointer names the same object as
+// its facade slot, narrowed to one role. Seed/unseed via the seedXxxRoles()
+// helpers so facade + roles never diverge.
+class IWheelScrollAnimator;
+class IMouseWheelState;
+class IMouseHoldControl;
+class IViewportScrollState;
+class IViewportPositioner;
+class ISelectionCore;
+class IKeyEventSink;
+class IUserActivitySink;
+class IFileCollectionLookup;
 class EventManager;
 class IFilterManager;
 class SearchManager;
@@ -166,6 +179,20 @@ struct ApplicationContext {
     IInteractionManager *interactionManager = nullptr;
     IMouseManager *mouseManager = nullptr;
     IKeyboardManager *keyboardManager = nullptr;
+    /// Role views of the input-side managers (Kartend-dl0uz.2): raw aliases
+    /// to the same objects as the facade slots above, stored separately
+    /// because this header only forward-declares the interfaces (the upcasts
+    /// need the complete facade hierarchy). Seed/unseed each pair via its
+    /// seedXxxRoles() helper so facade + roles never diverge.
+    IWheelScrollAnimator *wheelAnimator = nullptr;
+    IMouseWheelState *mouseWheelState = nullptr;
+    IMouseHoldControl *mouseHold = nullptr;
+    IViewportScrollState *viewportScrollState = nullptr;
+    IViewportPositioner *viewportPositioner = nullptr;
+    ISelectionCore *selectionCore = nullptr;
+    IKeyEventSink *keyEventSink = nullptr;
+    IUserActivitySink *userActivity = nullptr;
+    IFileCollectionLookup *fileCollectionLookup = nullptr;
     EventManager *eventManager = nullptr;
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
@@ -204,6 +231,71 @@ struct ApplicationContext {
       scrollSearch = nullptr;
       scrollPreview = nullptr;
       scrollData = nullptr;
+    }
+
+    /// Seed helpers for the input-side role views (Kartend-dl0uz.2). Same
+    /// shape as seedScrollRoles: templates so the upcasts resolve at the
+    /// call site (where the complete facade hierarchy is visible), plus a
+    /// nullptr_t teardown overload that nulls facade + roles in lockstep.
+    template <typename AnimT> void seedAnimationRoles(AnimT *anim) {
+      animationManager = anim;
+      wheelAnimator = anim;
+    }
+    void seedAnimationRoles(std::nullptr_t) {
+      animationManager = nullptr;
+      wheelAnimator = nullptr;
+    }
+    template <typename MouseT> void seedMouseRoles(MouseT *mouse) {
+      mouseManager = mouse;
+      mouseWheelState = mouse;
+      mouseHold = mouse;
+    }
+    void seedMouseRoles(std::nullptr_t) {
+      mouseManager = nullptr;
+      mouseWheelState = nullptr;
+      mouseHold = nullptr;
+    }
+    template <typename ViewportT> void seedViewportRoles(ViewportT *viewport) {
+      viewportManager = viewport;
+      viewportScrollState = viewport;
+      viewportPositioner = viewport;
+    }
+    void seedViewportRoles(std::nullptr_t) {
+      viewportManager = nullptr;
+      viewportScrollState = nullptr;
+      viewportPositioner = nullptr;
+    }
+    template <typename SelectionT> void seedSelectionRoles(SelectionT *selection) {
+      selectionManager = selection;
+      selectionCore = selection;
+    }
+    void seedSelectionRoles(std::nullptr_t) {
+      selectionManager = nullptr;
+      selectionCore = nullptr;
+    }
+    template <typename KeyboardT> void seedKeyboardRoles(KeyboardT *keyboard) {
+      keyboardManager = keyboard;
+      keyEventSink = keyboard;
+    }
+    void seedKeyboardRoles(std::nullptr_t) {
+      keyboardManager = nullptr;
+      keyEventSink = nullptr;
+    }
+    template <typename ArtworkT> void seedArtworkRoles(ArtworkT *artwork) {
+      artworkManager = artwork;
+      userActivity = artwork;
+    }
+    void seedArtworkRoles(std::nullptr_t) {
+      artworkManager = nullptr;
+      userActivity = nullptr;
+    }
+    template <typename DatabaseT> void seedDatabaseRoles(DatabaseT *database) {
+      databaseManager = database;
+      fileCollectionLookup = database;
+    }
+    void seedDatabaseRoles(std::nullptr_t) {
+      databaseManager = nullptr;
+      fileCollectionLookup = nullptr;
     }
   } managers;
   // INVARIANT (Kartend-rdzu9): every IXxxManager* slot in ManagerRefs above must
@@ -268,6 +360,24 @@ struct ApplicationContext {
   }
   [[nodiscard]] IMouseManager *mouseManager() const { return managers.mouseManager; }
   [[nodiscard]] IKeyboardManager *keyboardManager() const { return managers.keyboardManager; }
+  // Input-side role accessors (Kartend-dl0uz.2) — same objects as their
+  // facade accessors above, narrowed to one role each. Each pair/triple is
+  // seeded and nulled together with its facade via seedXxxRoles().
+  [[nodiscard]] IWheelScrollAnimator *wheelAnimator() const { return managers.wheelAnimator; }
+  [[nodiscard]] IMouseWheelState *mouseWheelState() const { return managers.mouseWheelState; }
+  [[nodiscard]] IMouseHoldControl *mouseHold() const { return managers.mouseHold; }
+  [[nodiscard]] IViewportScrollState *viewportScrollState() const {
+    return managers.viewportScrollState;
+  }
+  [[nodiscard]] IViewportPositioner *viewportPositioner() const {
+    return managers.viewportPositioner;
+  }
+  [[nodiscard]] ISelectionCore *selectionCore() const { return managers.selectionCore; }
+  [[nodiscard]] IKeyEventSink *keyEventSink() const { return managers.keyEventSink; }
+  [[nodiscard]] IUserActivitySink *userActivity() const { return managers.userActivity; }
+  [[nodiscard]] IFileCollectionLookup *fileCollectionLookup() const {
+    return managers.fileCollectionLookup;
+  }
   [[nodiscard]] EventManager *eventManager() const { return managers.eventManager; }
   [[nodiscard]] SearchManager *searchManager() const { return managers.searchManager; }
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }

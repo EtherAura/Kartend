@@ -14,6 +14,7 @@
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "timerutils.h"
+#include "uiconstants/selection.h"
 #include "uiconstants/timing.h"
 
 #include <QApplication>
@@ -58,24 +59,29 @@ auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
 auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
                                                  int subcollectionVisualIndex) -> void {
   // Delay navigation return to allow current animations to complete -
-  // nested timer handles selection restoration after layout settles
+  // selection restore is handed to the tokenized coordinator after the switch
   QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this,
                      [this, targetCollectionIndex, subcollectionVisualIndex]() {
-                       showCollectionItems(targetCollectionIndex);
+                       if (!showCollectionItems(targetCollectionIndex)) {
+                         // The pop already ran cleanup synchronously, so a target that fails
+                         // validation (e.g. collection removed while browsing) would strand
+                         // a blank items view — route to the validated fallback instead.
+                         handleNavigationFallback();
+                         return;
+                       }
 
                        if (interactionMgr()) {
                          interactionMgr()->setNavigationInProgress(false);
                        }
 
-                       if (subcollectionVisualIndex >= 0 && interactionMgr()) {
-                         // Delay selection restore until layout is stable after navigation
-                         QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
-                                            [this, subcollectionVisualIndex]() {
-                                              if (interactionMgr()) {
-                                                interactionMgr()->beginSelectionRestore(
-                                                    subcollectionVisualIndex);
-                                              }
-                                            });
+                       if (subcollectionVisualIndex >= 0) {
+                         // Route through SelectionRestoreCoordinator rather than a bare
+                         // delayed beginSelectionRestore: its token + scheduled-collection
+                         // validation cancels this restore if the user navigates again (or a
+                         // rescan reloads the view) before it fires, instead of applying a
+                         // stale index to whatever collection is current by then.
+                         scheduleSelectionRestore(subcollectionVisualIndex,
+                                                  UIConstants::Selection::RESTORE_MAX_DELAY_MS);
                        }
                      });
 }

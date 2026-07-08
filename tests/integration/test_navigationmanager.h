@@ -36,6 +36,12 @@ private slots:
   void testGoBackEscapesToHomeViewForRootCollection();
   void testGoBackPopsNavigationStack();
 
+  // Stack invalidation on collection edits: raw indices in the stack can't
+  // survive removal/reorder, so collectionsModified drops the history and a
+  // pop whose target fails validation reroutes to the fallback.
+  void testCollectionsModifiedClearsNavigationStack();
+  void testGoBackFallsBackWhenPoppedTargetIsInvalid();
+
   // Virtual-folder navigation (Kartend-ood0m): the currentSubfolder state
   // machine driven by onVirtualFolderEntered / goBackFromVirtualFolder /
   // onBreadcrumbLinkClicked.

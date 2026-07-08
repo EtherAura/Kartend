@@ -22,17 +22,16 @@ class QWidget;
 QT_END_NAMESPACE
 
 class ItemWidget;
-class IScrollManager;
 class IScrollDataSource;
 class IGridLayoutScroll;
 class ISearchStateScroll;
 class IArtworkPreviewScroll;
-class IKeyboardManager;
-class IMouseManager;
-class IViewportManager;
-class ISelectionManager;
-class IArtworkManager;
-class IDatabaseManager;
+class IKeyEventSink;
+class IMouseHoldControl;
+class IViewportScrollState;
+class ISelectionCore;
+class IUserActivitySink;
+class IFileCollectionLookup;
 class InteractionStateHolder;
 class HoverScrollHandler;
 class WheelEventHandler;
@@ -55,7 +54,7 @@ struct EventManagerSetup {
   QWidget *itemsTopBar = nullptr;
   QLineEdit *searchBar = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -65,7 +64,7 @@ struct EventManagerSetup {
   SETUP_GETTER_DECL(QWidget *, ItemsTopBar)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
 };
 
@@ -175,27 +174,25 @@ private:
   [[nodiscard]] IArtworkPreviewScroll *scrollPreview() const {
     return m_ctx ? m_ctx->scrollPreview() : nullptr;
   }
-  // Kartend-d2q3l: the full facade is still needed for the one pass-through to
-  // MouseManager::findBestWidgetForClick(), whose static signature takes an
-  // IScrollManager* (a forbidden cross-module file we don't touch here).
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-dl0uz.2: the remaining sibling reads go through role views too —
+  // each accessor names exactly the slice this event filter drives.
+  [[nodiscard]] IKeyEventSink *keyEventSink() const {
+    return m_ctx ? m_ctx->keyEventSink() : nullptr;
   }
-  [[nodiscard]] IKeyboardManager *keyboardMgr() const {
-    return m_ctx ? m_ctx->keyboardManager() : nullptr;
+  [[nodiscard]] IMouseHoldControl *mouseHold() const {
+    return m_ctx ? m_ctx->mouseHold() : nullptr;
   }
-  [[nodiscard]] IMouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
-  [[nodiscard]] IViewportManager *viewportMgr() const {
-    return m_ctx ? m_ctx->viewportManager() : nullptr;
+  [[nodiscard]] IViewportScrollState *viewportScrollState() const {
+    return m_ctx ? m_ctx->viewportScrollState() : nullptr;
   }
-  [[nodiscard]] ISelectionManager *selectionMgr() const {
-    return m_ctx ? m_ctx->selectionManager() : nullptr;
+  [[nodiscard]] ISelectionCore *selectionCore() const {
+    return m_ctx ? m_ctx->selectionCore() : nullptr;
   }
-  [[nodiscard]] IArtworkManager *artworkMgr() const {
-    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  [[nodiscard]] IUserActivitySink *userActivity() const {
+    return m_ctx ? m_ctx->userActivity() : nullptr;
   }
-  [[nodiscard]] IDatabaseManager *databaseMgr() const {
-    return m_ctx ? m_ctx->databaseManager() : nullptr;
+  [[nodiscard]] IFileCollectionLookup *fileCollectionLookup() const {
+    return m_ctx ? m_ctx->fileCollectionLookup() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
@@ -214,7 +211,7 @@ private:
   QWidget *m_itemsTopBar = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   /// Restartable countdown that clears continuous-scroll state after the user
   /// stops interacting with the scrollbar. Coalesces rapid presses so an earlier
   /// timer can't clear the flag mid-drag (Kartend-otha). Lazily constructed.

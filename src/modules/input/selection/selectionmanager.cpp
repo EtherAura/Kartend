@@ -52,7 +52,7 @@ SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridCo
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections,
                           collections)
-SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
                           hierarchyCache)
@@ -122,10 +122,6 @@ void SelectionManager::setSelectedFilePath(const QString &path) {
   m_selectedFilePath = path;
 }
 
-void SelectionManager::setSelectedWidget(ItemWidget *widget) {
-  m_selectedMediaItem = widget;
-}
-
 void SelectionManager::clearWidgetSelectionStates() {
   if (!scrollData()) {
     return;
@@ -152,7 +148,6 @@ void SelectionManager::notifyScrollManagerOfSelection(int index) {
 
 void SelectionManager::clearSelection(bool isShuttingDown) {
   if (isShuttingDown) {
-    m_selectedMediaItem = nullptr;
     m_selectedFilePath.clear();
     m_selectedItemIndex = -1;
     return;
@@ -160,7 +155,6 @@ void SelectionManager::clearSelection(bool isShuttingDown) {
 
   clearWidgetSelectionStates();
 
-  m_selectedMediaItem = nullptr;
   m_selectedFilePath.clear();
   m_selectedItemIndex = -1;
 
@@ -347,7 +341,6 @@ void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) 
   bool skipCenter = state() && state()->click().suppressInitialClickCenter;
 
   if (widget) {
-    m_selectedMediaItem = widget;
     updateFilePathForSelection(index, subcollections);
     if (!suppressed) {
       handleSuccessfulSelection(index);
@@ -394,7 +387,6 @@ void SelectionManager::selectItemByHover(int index) {
   }
 
   const QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
-  m_selectedMediaItem = widgetForIndex(index);
   updateFilePathForSelection(index, subcollections);
   persistSelectionForIndex(*m_currentCollectionIndex, index);
 
@@ -505,7 +497,6 @@ void SelectionManager::trySelectWidget(int index, const QList<int> &subcollectio
   const auto &activeWidgets = scrollData()->getActiveWidgets();
   ItemWidget *widget = activeWidgets.value(index, nullptr);
   if (widget) {
-    m_selectedMediaItem = widget;
     updateFilePathForSelection(index, subcollections);
     handleSuccessfulSelection(index);
     return;
@@ -514,9 +505,17 @@ void SelectionManager::trySelectWidget(int index, const QList<int> &subcollectio
   constexpr int kSelectRetryBaseMs = 30;
   constexpr int kSelectRetryStepMs = 30;
   int delay = kSelectRetryBaseMs + (attempt * kSelectRetryStepMs);
+  const int collSnapshot = m_currentCollectionIndex ? *m_currentCollectionIndex : -1;
   // Retry widget selection with increasing delays - widget may not be
-  // materialized yet during virtual scroll population
-  QTimer::singleShot(delay, this, [this, index, subcollections, attempt]() {
+  // materialized yet during virtual scroll population. Bail if the selection
+  // or collection moved on while the timer was pending — a stale retry would
+  // otherwise persist and re-center an outdated index (mirrors the guard in
+  // InteractionManager::trySelectWidget).
+  QTimer::singleShot(delay, this, [this, index, subcollections, attempt, collSnapshot]() {
+    if (QApplication::closingDown() || index != m_selectedItemIndex ||
+        collSnapshot != (m_currentCollectionIndex ? *m_currentCollectionIndex : -1)) {
+      return;
+    }
     trySelectWidget(index, subcollections, attempt + 1);
   });
 }

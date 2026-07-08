@@ -4,6 +4,7 @@
 #include "collection/collectionconfig.h"
 #include "emptystatewidget.h"
 #include "errorutils.h"
+#include "isettingsmanager.h"
 #include "mainwindow.h"
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
 // (never on persisted rows/INI), so it runs against the mocked fixture —
@@ -281,6 +282,55 @@ void TestNavigationManager::testGoBackEscapesToHomeViewForRootCollection() {
   win->m_generalSettings.startup.useHomeView = true;
   nav->goBackToCollections();
   QVERIFY(nav->isInRootView());
+  QCOMPARE(win->m_currentCollectionIndex, -1);
+}
+
+void TestNavigationManager::testCollectionsModifiedClearsNavigationStack() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+  ISettingsManager *settings = win->getApplicationManager()->getSettingsManager();
+  QVERIFY(settings);
+
+  nav->stackManager()->push(3);
+  nav->stackManager()->push(5);
+  QVERIFY(!nav->stackManager()->isEmpty());
+
+  // The stack stores raw collection indices. A removal/reorder (announced by
+  // the coarse collectionsModified signal) shifts them, so keeping the
+  // history would silently retarget Back — the handler must drop it.
+  emit settings->collectionsModified();
+
+  QVERIFY(nav->stackManager()->isEmpty());
+}
+
+void TestNavigationManager::testGoBackFallsBackWhenPoppedTargetIsInvalid() {
+  // Seeding ctor: this test pumps the event loop (QTRY below), so the window
+  // must construct with a non-empty library — an empty one queues the modal
+  // empty-collections prompt during construction, which would block the
+  // pumped loop forever.
+  KartendTest::MockedMainWindowFixture fixture({makeCollectionStub(QStringLiteral("Root"))});
+  MainWindow *win = fixture.window();
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+
+  win->m_currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+  win->m_generalSettings.startup.useHomeView = true;
+
+  // A stack entry that no longer resolves to a valid collection (e.g. the
+  // collection was removed while the user was browsing). The pop runs its
+  // cleanup synchronously; the deferred showCollectionItems then fails
+  // validation, and the lambda must reroute to handleNavigationFallback —
+  // observable here as the home-view escape — instead of stopping silently
+  // and stranding a blank items view.
+  nav->stackManager()->push(99);
+  nav->goBackToCollections();
+  QVERIFY(nav->stackManager()->isEmpty());
+  QVERIFY(!nav->isInRootView());
+
+  // The view switch is deferred on a SHORT_DELAY timer; spin the event loop
+  // until the fallback lands in the synthetic Home view.
+  QTRY_VERIFY_WITH_TIMEOUT(nav->isInRootView(), 2000);
   QCOMPARE(win->m_currentCollectionIndex, -1);
 }
 

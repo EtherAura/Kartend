@@ -99,6 +99,9 @@ void VirtualScrollEngine::updateVirtualView() {
                << "itemWxH=" << m_owner->m_metrics.itemWidth << "x" << m_owner->m_metrics.itemHeight
                << ")");
     }
+    // An empty band still needs to evict stale widgets (e.g. the item count
+    // dropped to 0); with nothing needed this releases everything.
+    removeUnneededWidgets(needed);
     return;
   }
 
@@ -310,10 +313,10 @@ void VirtualScrollEngine::handleLayoutChange() {
   // Release all active widgets back to the pool - they need to be recreated
   // because layout changes (especially view type changes) require fresh widgets
   // with different configurations (e.g., list mode has no image label)
+  const int visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
-    ItemWidget *widget = it.value();
-    if (widget && m_owner->m_widgetPool) {
-      m_owner->m_widgetPool->release(widget);
+    if (ItemWidget *widget = it.value()) {
+      m_owner->releaseWidget(widget, visibleRows);
     }
   }
   m_owner->clearActiveWidgets();

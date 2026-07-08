@@ -37,7 +37,7 @@ Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager",
 
 // Non-manager fields only — sibling managers are read directly from ctx.
 SETUP_GETTER_DEF_UI_SAME(SelectionRestoreManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, QList<CollectionConfig> *, Collections,
                           collections)

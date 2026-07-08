@@ -30,7 +30,6 @@
 #include "collection/validationhelpers.h"
 #include "fakescrollmanager.h"
 #include "idetailspane.h"
-#include "idetailspanemanager.h"
 #include "interactionstateholder.h"
 #include "stubselectionmanager.h"
 #include "wheeleventhandler.h"
@@ -49,7 +48,9 @@ int gridWidthFor(const CollectionConfig &config) {
 
 /// Fake IDetailsPane whose asWidget() hands back a caller-owned QWidget, so
 /// eventBelongsToSidebar()'s visibility short-circuit can run without a real
-/// sidebar (Kartend audit 8ipd4).
+/// sidebar (Kartend audit 8ipd4). The handler reads the pane straight off
+/// ctx->ui.sidebar (Kartend-dl0uz.2), so no IDetailsPaneManager double is
+/// needed.
 class FakeDetailsPane : public IDetailsPane {
 public:
   explicit FakeDetailsPane(QWidget *widget) : m_widget(widget) {}
@@ -60,24 +61,6 @@ public:
 
 private:
   QWidget *m_widget;
-};
-
-/// Fake IDetailsPaneManager: eventBelongsToSidebar() only consults
-/// sidebarWidget(); the rest are no-ops.
-class FakeDetailsPaneManager : public IDetailsPaneManager {
-public:
-  void toggleSidebar() override {}
-  void updateSidebarMetadata(ItemWidget *) override {}
-  void updateSidebarMetadata(const QString &, const QString &) override {}
-  void refreshSidebarMetadataImmediate() override {}
-  void applySidebarStateForCollection(int, bool) override {}
-  void updateSidebarLayout(int) override {}
-  [[nodiscard]] bool isSidebarVisible() const override { return false; }
-  [[nodiscard]] IDetailsPane *sidebarWidget() const override { return pane; }
-  [[nodiscard]] const ItemContext &currentItemContext() const override { return ctx; }
-
-  IDetailsPane *pane = nullptr;
-  ItemContext ctx;
 };
 
 } // namespace
@@ -142,10 +125,10 @@ void TestWheelEventHandler::cleanup() {}
 void TestWheelEventHandler::wire(int viewIndex) {
   m_viewIndex = viewIndex;
   m_ctx.managers.seedScrollRoles(&m_scroll);
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
   m_ctx.managers.interactionState = &m_state;
-  // ViewportManager / MouseManager / AnimationManager intentionally left null:
-  // the handler's null-guards skip them, keeping the delta-math deterministic.
+  // Viewport / mouse / animation roles intentionally left null: the
+  // handler's null-guards skip them, keeping the delta-math deterministic.
 
   WheelEventHandler::Setup setup;
   setup.ctx = &m_ctx;
@@ -302,7 +285,7 @@ void TestWheelEventHandler::deltaZeroTotalItemsBailsSafely() {
 void TestWheelEventHandler::deltaNoScrollManagerBails() {
   // Wire everything EXCEPT the scroll roles.
   m_viewIndex = -1;
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
   m_ctx.managers.interactionState = &m_state;
   WheelEventHandler::Setup setup;
   setup.ctx = &m_ctx;
@@ -349,7 +332,7 @@ void TestWheelEventHandler::modalWidgetActiveBailsBeforeSelectionMoves() {
 
   m_viewIndex = -1; // synthetic home view: interactive, no backing collection
   m_ctx.managers.seedScrollRoles(&m_scroll);
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
   m_ctx.managers.interactionState = &m_state;
   WheelEventHandler::Setup setup;
   setup.ctx = &m_ctx;
@@ -391,13 +374,13 @@ void TestWheelEventHandler::eventBelongsToSidebarBailsOnNullAndHiddenPane() {
   // QCursor::pos() hit-test, which stays manual — all return false.
   wire(/*viewIndex=*/-1);
 
-  // (b1) no details-pane manager wired at all.
+  // (b1) no sidebar pane wired into ctx->ui at all.
+  QVERIFY(m_ctx.ui.sidebar == nullptr);
   QVERIFY(!m_handler.eventBelongsToSidebar());
 
-  // (b2) manager present but sidebarWidget() is null.
-  FakeDetailsPaneManager mgr;
-  m_ctx.managers.detailsPaneManager = &mgr;
-  mgr.pane = nullptr;
+  // (b2) pane present but its asWidget() is null.
+  FakeDetailsPane widgetlessPane(nullptr);
+  m_ctx.ui.sidebar = &widgetlessPane;
   QVERIFY(!m_handler.eventBelongsToSidebar());
 
   // (b3) sidebar pane present but its widget is hidden -> isVisible() short-
@@ -405,7 +388,7 @@ void TestWheelEventHandler::eventBelongsToSidebarBailsOnNullAndHiddenPane() {
   QWidget hiddenSidebar;
   hiddenSidebar.hide();
   FakeDetailsPane pane(&hiddenSidebar);
-  mgr.pane = &pane;
+  m_ctx.ui.sidebar = &pane;
   QVERIFY(!hiddenSidebar.isVisible());
   QVERIFY(!m_handler.eventBelongsToSidebar());
 }

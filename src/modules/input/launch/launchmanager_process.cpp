@@ -3,7 +3,8 @@
 // construction lives in launchcommandbuilder.cpp). Same class, separate
 // translation unit — the launchmanagerarchive.cpp / mainwindow_*.cpp partials
 // convention — because this half is inseparable from the manager's QObject
-// state: it emits the manager's runtimeStarted/runtimeFinished signals,
+// state: it emits the manager's runtimeStarted/runtimeFinished and
+// detachedSessionStarted/Ended signals,
 // mutates m_trackedChild / m_survivedDetachedChildren (which the destructor
 // in launchmanager.cpp reaps), and routes every spawn through the
 // m_launcherSpawner test seam. A standalone QObject runner would have needed
@@ -89,9 +90,30 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
   // play_count. Spawn an OWNED QProcess instead and keep an errorOccurred /
   // early-finished handler armed for a short window so an immediate failure is
   // reported and the play_count increment suppressed. This is a watcher, not a
-  // tracked session: we never measure duration, never block a second launch,
-  // and once the window elapses with the child alive we record success and let
-  // the child run on (fire-and-forget) until it exits on its own.
+  // tracked session: we never measure duration, and once the window elapses
+  // with the child alive we record success and let the child run on
+  // (fire-and-forget) until it exits on its own.
+
+  // Kartend-3232r.1: mirror launchTracked's single-child rejection while the
+  // previous detached session is still live. Gamepad input is suspended for
+  // the session's duration, but keyboard/mouse still reach the frontend and a
+  // Confirm past the 500ms debounce used to spawn a second child (inflating
+  // play_count). The block lifts at the child's final finished or when
+  // MainWindow's focus backstop calls releaseDetachedLaunchBlock().
+  if (m_detachedSessionActive && m_activeDetachedChild) {
+    ErrorPresentation::showError(
+        nullptr, ErrorContext::info(
+                     ErrorCode::OperationCancelled,
+                     tr("Another launched item appears to be running:\n%1").arg(m_detachedFilePath),
+                     QStringLiteral("LaunchManager::launchDetachedWatched")));
+    // The caller (finishLaunch) has already dismissed its extraction scope
+    // guard for this path, so the reject owns reclaiming the extracted dir.
+    if (!extractedDir.isEmpty()) {
+      QDir(extractedDir).removeRecursively();
+    }
+    return false;
+  }
+
   auto *child = new QProcess(this);
 
   // Mirror the tracked path: pin CWD to the launcher's own directory so
@@ -140,10 +162,23 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
             m_survivedDetachedChildren.append(child);
             connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), child,
                     [child](int, QProcess::ExitStatus) { child->deleteLater(); });
+            // Kartend-3232r.1: re-arm the balanced detachedSessionEnded for
+            // the child's REAL exit — the attract/gamepad suspend wiring
+            // waits on it. Contexted on `this` (unlike the deleteLater above,
+            // which must survive us): the orphan outlives the manager at
+            // shutdown, and a `this` capture firing then would dangle.
+            connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+                    [this, child, originalFilePath](int, QProcess::ExitStatus) {
+                      if (m_activeDetachedChild == child) {
+                        m_detachedSessionActive = false;
+                        emit detachedSessionEnded(originalFilePath);
+                      }
+                    });
           });
 
   connect(child, &QProcess::errorOccurred, this,
-          [settled, child, cmd, launcherPath, reclaimExtraction](QProcess::ProcessError error) {
+          [this, settled, child, cmd, launcherPath, originalFilePath,
+           reclaimExtraction](QProcess::ProcessError error) {
             if (*settled) {
               return;
             }
@@ -163,6 +198,13 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
                   ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
                                          QStringLiteral("LaunchManager::launchDetachedWatched")));
               reclaimExtraction();
+              // Balanced ended for the suspend wiring (started was emitted
+              // just before the spawn call). Guarded so a superseded child
+              // can't close a newer session's pair.
+              if (m_activeDetachedChild == child) {
+                m_detachedSessionActive = false;
+                emit detachedSessionEnded(originalFilePath);
+              }
               child->deleteLater();
             }
           });
@@ -192,8 +234,23 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
             } else {
               recordSuccessfulLaunch(originalFilePath, collectionUuid);
             }
+            // Balanced ended for the suspend wiring; guarded so a superseded
+            // child can't close a newer session's pair.
+            if (m_activeDetachedChild == child) {
+              m_detachedSessionActive = false;
+              emit detachedSessionEnded(originalFilePath);
+            }
             child->deleteLater();
           });
+
+  // Kartend-3232r.1: session bookkeeping + the suspend signal BEFORE the
+  // spawn call — Windows delivers FailedToStart synchronously inside
+  // start(), and the ended emission in the errorOccurred handler above must
+  // follow (not precede) detachedSessionStarted.
+  m_detachedSessionActive = true;
+  m_activeDetachedChild = child;
+  m_detachedFilePath = originalFilePath;
+  emit detachedSessionStarted(originalFilePath, QFileInfo(originalFilePath).completeBaseName());
 
   spawnLauncherProcess(child, launcherPath, cmd.arguments);
   window->start();

@@ -24,7 +24,7 @@ struct ItemMetadataActionControllerSetup {
 
   // Sibling managers come from ctx; only non-manager fields stay here.
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
 
   /// Owner-supplied modal edit dialog (Kartend-n8kh): same signature as
   /// InteractionManager's EditMetadataDialogRunner, restated here so this
@@ -93,7 +93,7 @@ private:
                       const std::function<void(ItemMetadataStore::ItemMetadata &)> &mutate);
 
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   std::function<std::optional<EditMetadataPayload>(const QString &, const EditMetadataPayload &)>
       m_runEditMetadataDialog;
 };

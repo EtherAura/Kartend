@@ -1,6 +1,7 @@
 #ifndef ISELECTIONMANAGER_H
 #define ISELECTIONMANAGER_H
 
+#include "iselectioncore.h"
 #include <QList>
 #include <QString>
 
@@ -14,32 +15,25 @@
  * on the concrete class, which InteractionManager owns directly as a
  * unique_ptr and connects signals against).
  *
+ * The core read/step slice (current index, bare setter + notify, restore
+ * query, file-path resolution, subcollection lookup) lives on
+ * ISelectionCore, which this interface unions (Kartend-dl0uz.2) —
+ * input handlers that only move the selection take ctx->selectionCore().
+ *
  * Plain abstract class, not a QObject — SelectionManager derives QObject
  * directly; see its multiple-inheritance declaration. Add a method here
  * only when a sibling genuinely needs to call it via ctx.
  */
-class ISelectionManager {
+class ISelectionManager : public ISelectionCore {
 public:
-  virtual ~ISelectionManager() = default;
-
-  // Core selection state
-  [[nodiscard]] virtual int currentSelectedIndex() const = 0;
-  virtual void setSelectedIndex(int index) = 0;
-  virtual void notifySelectionChanged() = 0;
+  ~ISelectionManager() override = default;
 
   // Selection restore operations
   virtual void cancelPendingSelectionRestore() = 0;
-  [[nodiscard]] virtual bool isRestoringSelection() const = 0;
   [[nodiscard]] virtual int targetRestoreIndex() const = 0;
   virtual void setRestoringSelection(bool restoring) = 0;
   virtual void setTargetRestoreIndex(int index) = 0;
   virtual bool checkAndFinalizeRestore(int index) = 0;
-
-  // File path resolution for selection
-  virtual void updateFilePathForSelection(int index, const QList<int> &subcollections) = 0;
-
-  // Subcollections lookup
-  [[nodiscard]] virtual QList<int> getSubcollections(int parentIndex) const = 0;
 
   // Row tracking for click detection
   virtual void setLastSelectedRow(int row) = 0;

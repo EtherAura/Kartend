@@ -6,10 +6,10 @@
 #include "collection/generalsettings.h"
 #include "collection/validationhelpers.h"
 #include "gridlayoutcalculator.h"
+#include "igridlayoutscroll.h"
 #include "ikeyboardmanager.h"
 #include "interactionstateholder.h"
 #include "iscrolldatasource.h"
-#include "iscrollmanager.h"
 #include "iselectionmanager.h"
 #include "itemwidget.h"
 #include "mousehelpers.h"
@@ -339,13 +339,14 @@ void MouseManager::onMouseHoldScrollStep() {
 // --- Widget Finding Utilities (static) ---
 
 std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &clickPos,
-                                                                  IScrollManager *scrollManager,
+                                                                  IScrollDataSource *scrollData,
+                                                                  IGridLayoutScroll *scrollGrid,
                                                                   QWidget *gridContainer) {
-  if (!scrollManager || !gridContainer) {
+  if (!scrollData || !scrollGrid || !gridContainer) {
     return {nullptr, -1};
   }
 
-  const auto &active = scrollManager->getActiveWidgets();
+  const auto &active = scrollData->getActiveWidgets();
   if (active.isEmpty()) {
     return {nullptr, -1};
   }
@@ -369,8 +370,8 @@ std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &
   // contains the point — that defers inter-tile gaps, out-of-grid clicks, and
   // any index-space skew (filtering / subcollection rows) to the snap-to-nearest
   // fallback below, so the observable result is unchanged.
-  const int fastIdx = GridLayoutCalculator::indexAtPosition(posInVC, scrollManager->getMetrics(),
-                                                            scrollManager->getTotalItems());
+  const int fastIdx = GridLayoutCalculator::indexAtPosition(posInVC, scrollGrid->getMetrics(),
+                                                            scrollData->getTotalItems());
   if (fastIdx >= 0) {
     ItemWidget *hit = active.value(fastIdx);
     if (hit && hit->isVisible() && hit->geometry().contains(posInVC)) {

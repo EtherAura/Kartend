@@ -53,14 +53,9 @@ void ScrollManager::updateMediaItemCount(int mediaItemCount) {
   m_dataManager->resizeStorage(mediaItemCount);
   m_totalItems = m_dataManager->totalItemCount();
 
-  if (m_totalItems == 0) {
-    // Keep container and metrics consistent even when empty.
-    calculateVirtualMetrics();
-    positionVirtualContainer();
-    updateVirtualView();
-    return;
-  }
-
+  // Same sequence whether empty or not: updateVirtualView evicts every
+  // active widget when the needed band is empty, keeping container and
+  // metrics consistent for the zero-item case too.
   calculateVirtualMetrics();
   positionVirtualContainer();
   updateVirtualView();

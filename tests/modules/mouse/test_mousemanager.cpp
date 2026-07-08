@@ -445,11 +445,11 @@ void TestMouseManager::step_stopsWhenItemsVanish() {
 
 void TestMouseManager::find_nullArgumentsReturnNoWidget() {
   QWidget container;
-  auto [w1, i1] = MouseManager::findBestWidgetForClick(QPoint(0, 0), nullptr, &container);
+  auto [w1, i1] = MouseManager::findBestWidgetForClick(QPoint(0, 0), nullptr, nullptr, &container);
   QVERIFY(!w1);
   QCOMPARE(i1, -1);
 
-  auto [w2, i2] = MouseManager::findBestWidgetForClick(QPoint(0, 0), &m_scroll, nullptr);
+  auto [w2, i2] = MouseManager::findBestWidgetForClick(QPoint(0, 0), &m_scroll, &m_scroll, nullptr);
   QVERIFY(!w2);
   QCOMPARE(i2, -1);
 }
@@ -457,7 +457,8 @@ void TestMouseManager::find_nullArgumentsReturnNoWidget() {
 void TestMouseManager::find_emptyActiveWidgetsReturnsNoWidget() {
   QWidget container;
   m_scroll.activeWidgets.clear();
-  auto [widget, index] = MouseManager::findBestWidgetForClick(QPoint(0, 0), &m_scroll, &container);
+  auto [widget, index] =
+      MouseManager::findBestWidgetForClick(QPoint(0, 0), &m_scroll, &m_scroll, &container);
   QVERIFY(!widget);
   QCOMPARE(index, -1);
 }
@@ -490,13 +491,13 @@ void TestMouseManager::find_clickInsideWidgetReturnsIt() {
 
   // Click at (60,60) in container coords -> (55,55) inside tile0.
   auto [widget, index] =
-      MouseManager::findBestWidgetForClick(QPoint(60, 60), &m_scroll, &container);
+      MouseManager::findBestWidgetForClick(QPoint(60, 60), &m_scroll, &m_scroll, &container);
   QCOMPARE(widget, tile0);
   QCOMPARE(index, 0);
 
   // Click inside the second column's tile.
   auto [widget1, index1] =
-      MouseManager::findBestWidgetForClick(QPoint(160, 60), &m_scroll, &container);
+      MouseManager::findBestWidgetForClick(QPoint(160, 60), &m_scroll, &m_scroll, &container);
   QCOMPARE(widget1, tile1);
   QCOMPARE(index1, 1);
 }
@@ -525,7 +526,7 @@ void TestMouseManager::find_clickInGapSnapsToNearestWidget() {
   // (103,50) lands in the inter-tile gap: closer to tile0's center (50,50)
   // than tile1's (160,50), so the snap-to-nearest fallback picks tile0.
   auto [widget, index] =
-      MouseManager::findBestWidgetForClick(QPoint(103, 50), &m_scroll, &container);
+      MouseManager::findBestWidgetForClick(QPoint(103, 50), &m_scroll, &m_scroll, &container);
   QCOMPARE(widget, tile0);
   QCOMPARE(index, 0);
 }

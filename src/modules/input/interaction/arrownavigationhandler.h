@@ -36,7 +36,7 @@ struct ArrowNavigationHandlerSetup {
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -44,7 +44,7 @@ struct ArrowNavigationHandlerSetup {
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
 };
 
@@ -145,7 +145,7 @@ private:
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_itemsPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 
   // Callbacks for parent data access

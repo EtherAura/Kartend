@@ -58,6 +58,7 @@ private slots:
 
   // parseParameters entry point
   void testParseParametersUnclosedQuoteFails();
+  void testParseParametersKeepsQuotedEmptyArgument();
 };
 
 void TestLaunchCommandBuilder::testFilePlaceholder_data() {
@@ -250,6 +251,30 @@ void TestLaunchCommandBuilder::testParseParametersUnclosedQuoteFails() {
   const auto result = LaunchCommandBuilder::parseParameters(QStringLiteral("--title \"Unfinished"));
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+}
+
+void TestLaunchCommandBuilder::testParseParametersKeepsQuotedEmptyArgument() {
+  // An explicitly quoted empty argument is a real positional token: dropping
+  // it would shift subsequent argv for launchers that require it.
+  auto result =
+      LaunchCommandBuilder::parseParameters(QStringLiteral("--profile \"\" --fullscreen"));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value(), (QStringList{"--profile", "", "--fullscreen"}));
+
+  // Sole parameter, double- and single-quoted.
+  result = LaunchCommandBuilder::parseParameters(QStringLiteral("\"\""));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value(), QStringList{QString()});
+
+  result = LaunchCommandBuilder::parseParameters(QStringLiteral("''"));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value(), QStringList{QString()});
+
+  // Quoted-empty at the end of the template (exercises the end-of-string
+  // append) and adjacent to a non-empty token.
+  result = LaunchCommandBuilder::parseParameters(QStringLiteral("--profile \"\""));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value(), (QStringList{"--profile", ""}));
 }
 
 QTEST_APPLESS_MAIN(TestLaunchCommandBuilder)

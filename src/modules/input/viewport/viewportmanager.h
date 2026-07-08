@@ -27,12 +27,12 @@ struct ViewportManagerSetup {
 
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   const bool *isShuttingDown = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
   SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
 };
@@ -187,7 +187,7 @@ private:
   const GeneralSettings *m_generalSettings = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   const bool *m_isShuttingDown = nullptr;
 };
 

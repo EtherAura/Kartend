@@ -359,9 +359,10 @@ void InteractionManager::launchItemWithCollection(const QString &filePath, int c
   if (m_attractManager) {
     m_attractManager->onActivityDetected();
   }
-  // Stamp the debounce window only once we actually proceed — stamping on a
-  // validation-rejected launch used to block a corrective retry for 500ms.
-  m_launchManager->recordLaunch(filePath);
+  // The debounce window is stamped inside launchItem once the launch actually
+  // proceeds — stamping here used to block a corrective retry for 500ms when
+  // the user cancelled the multi-launcher chooser (and, before that, when
+  // validation rejected the launch).
   m_launchManager->launchItem(filePath, collectionIndex);
 }
 

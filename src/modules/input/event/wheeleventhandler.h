@@ -15,13 +15,16 @@ class QStackedWidget;
 class QWidget;
 QT_END_NAMESPACE
 
-class IAnimationManager;
-class IDetailsPaneManager;
+class IArtworkPreviewScroll;
+class IGridLayoutScroll;
+class IMouseWheelState;
 class InteractionStateHolder;
-class IMouseManager;
-class IScrollManager;
-class ISelectionManager;
-class IViewportManager;
+class IScrollDataSource;
+class ISelectionCore;
+class ISelectionOverlayScroll;
+class IViewportPositioner;
+class IViewportScrollState;
+class IWheelScrollAnimator;
 
 /**
  * @brief Owns the wheel-scrolling state machine extracted from EventManager.
@@ -57,7 +60,7 @@ public:
     QStackedWidget *stackedWidget = nullptr;
     QWidget *itemsPage = nullptr;
     QList<CollectionConfig> *collections = nullptr;
-    int *currentCollectionIndex = nullptr;
+    const int *currentCollectionIndex = nullptr;
     GeneralSettings *generalSettings = nullptr;
   };
   void setupReferences(const Setup &setup);
@@ -85,23 +88,36 @@ private:
 
   // ctx is the single source of truth for sibling managers + state.
   const ApplicationContext *m_ctx = nullptr;
-  // Kartend-h1l8f: keeps the IScrollManager facade — spans four scroll roles
-  // (grid, data, preview, overlay).
-  [[nodiscard]] IScrollManager *scrollMgr() const {
-    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  // Kartend-dl0uz.2: every sibling reach goes through a role view — the
+  // four scroll roles this handler spans (grid, overlay, preview, data) plus
+  // the wheel-scoped input roles. Read through ctx on every call, never
+  // cached.
+  [[nodiscard]] IGridLayoutScroll *scrollGrid() const {
+    return m_ctx ? m_ctx->scrollGrid() : nullptr;
   }
-  [[nodiscard]] ISelectionManager *selectionMgr() const {
-    return m_ctx ? m_ctx->selectionManager() : nullptr;
+  [[nodiscard]] ISelectionOverlayScroll *scrollOverlay() const {
+    return m_ctx ? m_ctx->scrollOverlay() : nullptr;
   }
-  [[nodiscard]] IViewportManager *viewportMgr() const {
-    return m_ctx ? m_ctx->viewportManager() : nullptr;
+  [[nodiscard]] IArtworkPreviewScroll *scrollPreview() const {
+    return m_ctx ? m_ctx->scrollPreview() : nullptr;
   }
-  [[nodiscard]] IAnimationManager *animMgr() const {
-    return m_ctx ? m_ctx->animationManager() : nullptr;
+  [[nodiscard]] IScrollDataSource *scrollData() const {
+    return m_ctx ? m_ctx->scrollData() : nullptr;
   }
-  [[nodiscard]] IMouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
-  [[nodiscard]] IDetailsPaneManager *detailsPaneMgr() const {
-    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  [[nodiscard]] ISelectionCore *selectionCore() const {
+    return m_ctx ? m_ctx->selectionCore() : nullptr;
+  }
+  [[nodiscard]] IViewportScrollState *viewportScrollState() const {
+    return m_ctx ? m_ctx->viewportScrollState() : nullptr;
+  }
+  [[nodiscard]] IViewportPositioner *viewportPositioner() const {
+    return m_ctx ? m_ctx->viewportPositioner() : nullptr;
+  }
+  [[nodiscard]] IWheelScrollAnimator *wheelAnimator() const {
+    return m_ctx ? m_ctx->wheelAnimator() : nullptr;
+  }
+  [[nodiscard]] IMouseWheelState *mouseWheelState() const {
+    return m_ctx ? m_ctx->mouseWheelState() : nullptr;
   }
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
@@ -111,7 +127,7 @@ private:
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_itemsPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 
   // Reentrancy guard: animation completion + signal processing can re-enter.

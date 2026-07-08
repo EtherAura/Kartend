@@ -156,6 +156,15 @@ private slots:
   // frontend used to take the user's launched program down with it.
   void testDetachedChildReparentedAfterWatchWindow();
 
+  // Kartend-3232r.1: the detached (default) path now emits a
+  // detachedSessionStarted/Ended pair so MainWindow can suspend attract +
+  // gamepad for the child's whole life, and blocks a second detached launch
+  // while the previous session is still live.
+  void testDetachedSessionSignals_balancedWithinWatchWindow();
+  void testDetachedSessionSignals_balancedAcrossWatchWindowSettle();
+  void testDetachedSessionSignals_failedStartStillBalances();
+  void testDetachedLaunch_blockedWhileSessionActive();
+
   // Kartend-ijglg: decompressed-size bound on launch-time extraction.
   void testExtractArchive_rejectsArchiveLargerThanCap();
   void testExtractArchive_enforcesDecompressedSizeCap();
@@ -173,6 +182,12 @@ private:
   // extracted-dir cleanup. Returns the absolute path (empty on failure); the
   // owning temp dir is tracked in m_fixtureDirs.
   QString makeFailingLauncher();
+
+  // Creates a media file with the given name in a fresh fixture temp dir and
+  // returns its absolute path (empty on failure). Shared by the
+  // detached-session-signal tests (Kartend-3232r.1); the owning temp dir is
+  // tracked in m_fixtureDirs.
+  QString makeDetachedMediaFile(const QString &name);
 
   // Builds a .zip named <baseName>.zip holding the given (name -> bytes) files
   // in a fresh temp dir. Returns the archive path, or an empty string when no
@@ -1874,6 +1889,182 @@ void TestLaunchManager::testDetachedChildReparentedAfterWatchWindow() {
   // ~LaunchManager must reap the never-started (NotRunning) orphan rather
   // than leaking it — and must not have crashed doing so.
   QVERIFY(child.isNull());
+}
+
+QString TestLaunchManager::makeDetachedMediaFile(const QString &name) {
+  auto *dir = new QTemporaryDir();
+  if (!dir->isValid()) {
+    delete dir;
+    return QString();
+  }
+  m_fixtureDirs.append(dir);
+  const QString path = dir->filePath(name);
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return QString();
+  }
+  f.write("MEDIA");
+  return path;
+}
+
+void TestLaunchManager::testDetachedSessionSignals_balancedWithinWatchWindow() {
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  const QString mediaFile = makeDetachedMediaFile(QStringLiteral("item_a.bin"));
+  QVERIFY(!mediaFile.isEmpty());
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Detached Collection");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  // Runtime detection stays off (no ctx wired) -> the detached path. The fake
+  // synthesizes started + an immediate clean finished: a legitimate
+  // short-lived launcher that exits INSIDE the early-failure watch window.
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeLauncherSpawner(0, 0));
+
+  QSignalSpy startedSpy(&manager, &LaunchManager::detachedSessionStarted);
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+
+  manager.launchItem(mediaFile, 0);
+
+  // Started is emitted synchronously at spawn time — deliberately BEFORE the
+  // spawn call, so a synchronously-delivered FailedToStart (the Windows
+  // shape) can never precede it.
+  QCOMPARE(startedSpy.count(), 1);
+  QCOMPARE(startedSpy.first().at(0).toString(), mediaFile);
+  QCOMPARE(startedSpy.first().at(1).toString(), QFileInfo(mediaFile).completeBaseName());
+
+  // The clean early exit must close the pair.
+  QTRY_COMPARE(endedSpy.count(), 1);
+  QCOMPARE(endedSpy.first().at(0).toString(), mediaFile);
+
+  // Session over -> the single-child block lifted on its own; a follow-up
+  // launch reaches the spawner.
+  const QString mediaFileB = makeDetachedMediaFile(QStringLiteral("item_b.bin"));
+  QVERIFY(!mediaFileB.isEmpty());
+  manager.launchItem(mediaFileB, 0);
+  QCOMPARE(startedSpy.count(), 2);
+  QTRY_COMPARE(endedSpy.count(), 2);
+}
+
+void TestLaunchManager::testDetachedSessionSignals_balancedAcrossWatchWindowSettle() {
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  const QString mediaFile = makeDetachedMediaFile(QStringLiteral("item.bin"));
+  QVERIFY(!mediaFile.isEmpty());
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Detached Collection");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  // The fake's finished lands at 2600ms — PAST the 1500ms early-failure
+  // window — so the watcher settles, disconnects its in-window handlers and
+  // reparents the child away; the balanced ended must ride the re-armed
+  // final-finished connection made at settle time.
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeLauncherSpawner(2600, 0));
+
+  QSignalSpy startedSpy(&manager, &LaunchManager::detachedSessionStarted);
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+
+  manager.launchItem(mediaFile, 0);
+  QCOMPARE(startedSpy.count(), 1);
+
+  QTRY_COMPARE_WITH_TIMEOUT(endedSpy.count(), 1, 10000);
+  QCOMPARE(endedSpy.first().at(0).toString(), mediaFile);
+  QCOMPARE(startedSpy.count(), 1); // still exactly one pair
+}
+
+void TestLaunchManager::testDetachedSessionSignals_failedStartStillBalances() {
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  const QString mediaFile = makeDetachedMediaFile(QStringLiteral("item.bin"));
+  QVERIFY(!mediaFile.isEmpty());
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Detached Collection");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  // The Windows shape: errorOccurred(FailedToStart) delivered synchronously
+  // INSIDE the spawn call. The pair must come out ordered and balanced, and
+  // the failed session must not leave the single-child block armed. The
+  // failure dialog routes through ErrorPresentation's logging default
+  // (Kartend-dyu1k), so nothing modal hangs this headless run.
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeSyncFailingLauncherSpawner());
+
+  QSignalSpy startedSpy(&manager, &LaunchManager::detachedSessionStarted);
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+
+  manager.launchItem(mediaFile, 0);
+  QCOMPARE(startedSpy.count(), 1);
+  QCOMPARE(endedSpy.count(), 1);
+
+  // An immediate retry must not be blocked by the failed session (launchItem
+  // stamps the debounce but does not consult it — that's the caller's gate).
+  manager.launchItem(mediaFile, 0);
+  QCOMPARE(startedSpy.count(), 2);
+  QCOMPARE(endedSpy.count(), 2);
+}
+
+void TestLaunchManager::testDetachedLaunch_blockedWhileSessionActive() {
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  const QString mediaFileA = makeDetachedMediaFile(QStringLiteral("item_a.bin"));
+  const QString mediaFileB = makeDetachedMediaFile(QStringLiteral("item_b.bin"));
+  QVERIFY(!mediaFileA.isEmpty());
+  QVERIFY(!mediaFileB.isEmpty());
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Detached Collection");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  // A spawner that synthesizes NO lifecycle: the child object stays alive,
+  // modelling a detached child still running — the session only closes at
+  // its final finished.
+  int spawnCalls = 0;
+  manager.setLauncherSpawnerForTesting(
+      [&spawnCalls](QProcess *, const QString &, const QStringList &) { ++spawnCalls; });
+
+  QSignalSpy startedSpy(&manager, &LaunchManager::detachedSessionStarted);
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+
+  manager.launchItem(mediaFileA, 0);
+  QCOMPARE(spawnCalls, 1);
+  QCOMPARE(startedSpy.count(), 1);
+
+  // A second detached launch while the session is live is rejected before it
+  // reaches the spawner (mirrors launchTracked's single-child rejection; the
+  // info dialog routes through ErrorPresentation's logging default).
+  manager.launchItem(mediaFileB, 0);
+  QCOMPARE(spawnCalls, 1);
+  QCOMPARE(startedSpy.count(), 1);
+  QCOMPARE(endedSpy.count(), 0);
+
+  // MainWindow's focus backstop lifts the block once the user is
+  // demonstrably back at the frontend: the same launch now proceeds.
+  manager.releaseDetachedLaunchBlock();
+  manager.launchItem(mediaFileB, 0);
+  QCOMPARE(spawnCalls, 2);
+  QCOMPARE(startedSpy.count(), 2);
 }
 
 void TestLaunchManager::testExtractArchive_rejectsArchiveLargerThanCap() {
