@@ -188,6 +188,14 @@ public:
   /// Always false when runtime detection is disabled.
   [[nodiscard]] bool isRuntimeChildRunning() const { return m_trackedChild; }
 
+  /// Lifts the detached single-child launch block before the child exits
+  /// (Kartend-3232r.1). Called by MainWindow's focus backstop: once the user
+  /// is demonstrably back at the frontend, a new launch is intentional even
+  /// though the previous detached child (or its double-forked descendant)
+  /// may still be running. Idempotent; the block also lifts on its own at
+  /// the child's final finished.
+  void releaseDetachedLaunchBlock() { m_detachedSessionActive = false; }
+
   /// True while a launch-time archive extraction is running on the worker
   /// thread. Only one extraction runs at a time; a second archive launch
   /// while one is in flight is rejected.
@@ -256,6 +264,26 @@ signals:
   /// normal exit, crash, or failure to start.
   void runtimeFinished(const QString &filePath);
 
+  /// Emitted when a detached (fire-and-forget) launch is handed to the OS —
+  /// the default path, runtime detection off (Kartend-3232r.1). Deliberately
+  /// fired just BEFORE the spawn call: Windows delivers FailedToStart
+  /// synchronously inside start(), and emitting after the spawn would invert
+  /// the started/ended order the attract/gamepad suspend wiring relies on.
+  /// A separate signal from runtimeStarted because that pair's consumers
+  /// also show the "Now Playing" overlay and raise() the window when it
+  /// closes — wrong for an unsupervised child (a double-forking launcher's
+  /// QProcess exits seconds in while the program keeps running; raising
+  /// would steal its focus).
+  void detachedSessionStarted(const QString &filePath, const QString &displayName);
+
+  /// Balanced counterpart of detachedSessionStarted, emitted at the child's
+  /// FINAL QProcess::finished (or FailedToStart) — even long after the
+  /// early-failure watcher forgot the child. Not emitted for a superseded
+  /// child (a newer detached launch after releaseDetachedLaunchBlock): the
+  /// pair always describes the most recent detached session. Children the
+  /// destructor abandons at shutdown never emit it.
+  void detachedSessionEnded(const QString &filePath);
+
 private:
   const ApplicationContext *m_ctx = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
@@ -301,6 +329,19 @@ private:
   /// finished→deleteLater fires; the destructor deletes only already-exited
   /// stragglers and intentionally abandons running ones to the OS.
   QList<QPointer<QProcess>> m_survivedDetachedChildren;
+
+  /// Kartend-3232r.1: detached single-child launch block —
+  /// launchDetachedWatched rejects a new launch while the previous detached
+  /// session is still live (spawn → final finished), mirroring
+  /// launchTracked's m_trackedChild rejection. m_detachedSessionActive flips
+  /// false at the balanced detachedSessionEnded or via
+  /// releaseDetachedLaunchBlock (MainWindow's focus backstop); the QPointer
+  /// self-nulls if the child object dies, so a missed clear can never wedge
+  /// launching permanently. m_detachedFilePath only feeds the rejection
+  /// message.
+  bool m_detachedSessionActive = false;
+  QPointer<QProcess> m_activeDetachedChild;
+  QString m_detachedFilePath;
 
   /// In-flight archive-extraction state (Kartend-mkcak). The cancel flag is
   /// shared with the worker lambda so it stays valid even if this manager
@@ -351,8 +392,13 @@ private:
   /// recordSuccessfulLaunch is suppressed. Once the window elapses with the
   /// child still alive (the genuine-success case) the launch is recorded and
   /// the watcher detaches — it stops reporting and never measures a session.
-  /// Returns true when the spawn was issued (mirrors the historical
-  /// startDetached return contract well enough for the caller's scope guard).
+  /// Kartend-3232r.1: emits the detachedSessionStarted/Ended pair around the
+  /// child's whole life (spawn → final finished) so the UI can suspend
+  /// attract/gamepad, and rejects a new detached launch while the previous
+  /// session is still live (see m_detachedSessionActive), reclaiming
+  /// `extractedDir` on that reject path. Returns true when the spawn was
+  /// issued (mirrors the historical startDetached return contract well
+  /// enough for the caller's scope guard).
   bool launchDetachedWatched(const QString &launcherPath, const LaunchCommand &cmd,
                              const QString &originalFilePath, const QString &extractedDir,
                              const QString &collectionUuid);

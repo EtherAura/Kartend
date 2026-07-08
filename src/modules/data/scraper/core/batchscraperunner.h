@@ -107,6 +107,17 @@ public:
     /// Ticks per-write, not per-item, so the Live view can show
     /// "12 items, 47 media" rather than just the item count.
     int mediaWritten = 0;
+    /// Media asset fetches that failed or returned empty across the run
+    /// (404, refused redirect, oversize abort, Content-Type rejection).
+    /// Non-fatal per item — the item still counts as scraped with whatever
+    /// assets landed — but surfaced so a "scraped N, 0 media" run carries a
+    /// diagnosis instead of silence (Kartend-jjyst.4).
+    int mediaFetchFailures = 0;
+    /// Genuine media write failures from writeMediaFiles (disk full, mkpath
+    /// failure, unsafe remote-derived path, empty payload) — distinct from
+    /// benign rescrape-policy skips, which are not failures. The per-asset
+    /// reasons are folded into firstFailures (Kartend-jjyst.4).
+    int mediaWriteFailures = 0;
     /// First N (≤5) per-item failure messages — for the summary box.
     /// Bounded so a 10k-item rescrape with a broken provider doesn't
     /// produce an unreadable wall of text.
@@ -269,6 +280,12 @@ public:
   /// env knob instead of growing a second, subtly-different timeout.
   [[nodiscard]] static int stepWatchdogMs();
 
+  /// Consecutive HTTP 429 responses that escalate to a graceful queue stop.
+  /// Public so ScraperService's entity and interactive paths share the same
+  /// threshold as this runner's noteRateLimited429() instead of growing a
+  /// second, subtly-different streak length (Kartend-jjyst.15).
+  static constexpr int kConsecutive429StopThreshold = 3;
+
 private:
   /// Per-item state captured by the async callback chain. Each item's
   /// lookup → detail → media → apply path operates on its own
@@ -333,6 +350,11 @@ private:
   struct MediaAggregator {
     int pending = 0;
     QList<Scraper::PendingMediaWrite> writes;
+    /// Asset types (lowercase) whose byte-fetch failed or returned empty.
+    /// Stamped onto ScrapedItem::mediaFetchFailedThisRun at commit so the
+    /// mediaAbsent merge doesn't prune a returned-but-undownloadable type's
+    /// absent marker as if it were satisfied (Kartend-jjyst.1).
+    QStringList failedTypes;
   };
   /// Dispatch every wanted asset in parallel onto a shared MediaAggregator.
   void fetchMediaAndFinish(const std::shared_ptr<ItemState> &state,
@@ -511,7 +533,24 @@ private:
   void resetFatalStreak() {
     m_consecutiveFatalCount = 0;
     m_lastFatalStatus = 0;
+    // A healthy response (or a differently-shaped error) also ends any
+    // consecutive-429 run — the limiter demonstrably let a request through.
+    m_consecutive429Count = 0;
   }
+
+  /// Consecutive-429 escalation (Kartend-jjyst.3). A single HTTP 429 is
+  /// transient throttling — the provider retry already waited out any
+  /// Retry-After hint — so it no longer stops the queue the way a 430/431
+  /// daily quota does (a seconds-long burst limit stranded unattended
+  /// multi-collection runs). But a limiter that answers 429 to this many
+  /// consecutive requests isn't letting up: noteRateLimited429() then stops
+  /// new dispatch through the same machinery as a quota stop (in-flight
+  /// items drain; un-dispatched work persists as the resume point). Any
+  /// success, not-found, or differently-coded error resets the streak. The
+  /// kConsecutive429StopThreshold constant lives in the public section so
+  /// ScraperService's paths share it.
+  int m_consecutive429Count = 0;
+  void noteRateLimited429();
 
   /// Per-item state captured between dispatch to the write worker and
   /// the queued writeCompleted reply. With itemConcurrency > 1 several

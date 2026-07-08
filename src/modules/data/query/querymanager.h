@@ -79,6 +79,13 @@ public slots:
   void loadItemDetail(int requestToken, const QString &collectionUuid, const QString &filePath,
                       const QString &artworkDir, const QString &videoDir, const QString &manualDir);
 
+  /// Off-thread reader for the items grid's per-item state-flag badges
+  /// (Kartend-h7xnr.6). Runs the item_metadata flags query on this worker's
+  /// own connection — only rows with at least one flag set are returned —
+  /// then emits itemStateFlagsLoaded with the echoed uuid so the receiver
+  /// can drop a reply for a collection the user has already left.
+  void fetchItemStateFlagsForCollection(const QString &collectionUuid);
+
   // Scans the current collection (and descendants when
   // showAllSubcollectionItems is set) if a rescan is needed, without blocking
   // query operations in another worker. Handles connection availability and
@@ -144,6 +151,10 @@ signals:
   /// Emitted when the visual index for a specific file path is found.
   /// Index is -1 if the file was not found in the collection.
   void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
+  /// Result of fetchItemStateFlagsForCollection — see
+  /// IDatabaseManager::itemStateFlagsLoaded for the payload contract.
+  void itemStateFlagsLoaded(const QString &collectionUuid, const QStringList &pinnedPaths,
+                            const QStringList &hiddenPaths, const QStringList &continueLaterPaths);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsComputed(quint64 generation, qint64 globalCount,
                             const QHash<QString, qint64> &directCountsByUuid);

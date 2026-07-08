@@ -164,8 +164,10 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
   }
 }
 
-// Title update logic separated from handleLayoutChanges
-void updateWindowTitle(QWidget *parent, int viewingIndex,
+// Title update logic separated from handleLayoutChanges. titleLabel is the
+// owner-injected items-page breadcrumb label (SettingsDialogContext), null
+// when the caller has no such chrome.
+void updateWindowTitle(QWidget *parent, QLabel *titleLabel, int viewingIndex,
                        const QList<CollectionConfig> &collections) {
   // dynamic_cast (not qobject_cast): IMainWindow is a plain abstract base
   // with no Qt meta-object. The cross-cast still resolves whenever `parent`
@@ -173,7 +175,6 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
   if (auto *mw = dynamic_cast<IMainWindow *>(parent)) {
     mw->updateWindowTitleForCollection(viewingIndex);
   }
-  auto *titleLabel = parent->findChild<QLabel *>("itemsTitleLabel");
   if (titleLabel) {
     // Show full ancestor chain so the post-save refresh matches
     // the breadcrumb rendered by NavigationManager::updateItemsPageTitle.
@@ -189,10 +190,11 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
   }
 }
 
-// Applies scrollbar settings for the viewing collection
-void applyScrollbarSettings(QWidget *parent, int viewingIndex,
+// Applies scrollbar settings for the viewing collection. scrollArea is the
+// owner-injected items grid scroll area (SettingsDialogContext), null when
+// the caller has no such chrome.
+void applyScrollbarSettings(QScrollArea *scrollArea, int viewingIndex,
                             const QList<CollectionConfig> &collections) {
-  auto *scrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
   if (scrollArea) {
     SettingsUtils::applyHorizontalScrollbarSetting(scrollArea, viewingIndex, collections);
     SettingsUtils::applyVerticalScrollbarSetting(scrollArea, viewingIndex, collections);
@@ -525,11 +527,11 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
                          detailsPaneManager, scrollManager, navigationManager, art, cache,
                          currentCollectionIndex);
   } else {
-    handleLayoutChanges(parent, collections, viewingCollectionIndex, titleChangedForView,
-                        scrollbarChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
-                        spacingChangedForView, alignmentChangedForView, fontSizeChangedForView,
-                        hideTitlesChangedForView, detailsPaneManager, scrollManager, art,
-                        currentCollectionIndex);
+    handleLayoutChanges(parent, context.itemsTitleLabel, context.itemScrollArea, collections,
+                        viewingCollectionIndex, titleChangedForView, scrollbarChangedForView,
+                        sidebarModeChangedForView, gridWidthChangedForView, spacingChangedForView,
+                        alignmentChangedForView, fontSizeChangedForView, hideTitlesChangedForView,
+                        detailsPaneManager, scrollManager, art, currentCollectionIndex);
 
     // If only appearance changed, still refresh widgets to show new colors
     if (appearanceChangedForView && scrollManager) {
@@ -602,7 +604,8 @@ auto SettingsDialogController::handleReloadRequired(
 }
 
 auto SettingsDialogController::handleLayoutChanges(
-    QWidget *parent, const QList<CollectionConfig> &collections, int viewingCollectionIndex,
+    QWidget *parent, QLabel *itemsTitleLabel, QScrollArea *itemScrollArea,
+    const QList<CollectionConfig> &collections, int viewingCollectionIndex,
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
     bool fontSizeChangedForView, bool hideTitlesChangedForView,
@@ -612,10 +615,10 @@ auto SettingsDialogController::handleLayoutChanges(
     return;
   }
   if (titleChangedForView) {
-    updateWindowTitle(parent, viewingCollectionIndex, collections);
+    updateWindowTitle(parent, itemsTitleLabel, viewingCollectionIndex, collections);
   }
   if (scrollbarChangedForView) {
-    applyScrollbarSettings(parent, viewingCollectionIndex, collections);
+    applyScrollbarSettings(itemScrollArea, viewingCollectionIndex, collections);
   }
   if (sidebarModeChangedForView) {
     refreshSidebar(detailsPaneManager, collections, currentCollectionIndex);

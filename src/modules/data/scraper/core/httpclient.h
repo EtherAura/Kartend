@@ -83,8 +83,10 @@ public:
   /// across multiple in-flight items), so the per-request cap bounds the
   /// worst-case in-flight memory a hostile or misconfigured CDN can pin.
   /// 64 MiB is still far above any real cover / screenshot / fanart
-  /// (low single-digit MB); video/manual kinds, if a caller ever fetches
-  /// them without the image pin, keep the wide default.
+  /// (low single-digit MB); video/manual kinds run to tens of MB and are
+  /// fetched under the wide kDefaultMaxResponseBytes instead — the
+  /// provider's kind-aware media fetch selects cap + Content-Type prefix
+  /// per MediaKind (Kartend-jjyst.1).
   static constexpr qint64 kImageMaxResponseBytes = 64LL * 1024 * 1024;
 
   /// Issue an HTTP GET. @p headers are applied verbatim as raw request
@@ -146,10 +148,12 @@ public:
   void setRateLimit(const QString &host, int intervalMs, int maxConcurrent = 1);
 
   /// Cancels any queued (not-yet-dispatched) requests, invoking each one's
-  /// callback once with ErrorCode::OperationCancelled so a caller waiting on it
-  /// always resolves rather than hanging (Kartend audit nujso). Already
-  /// in-flight requests are left alone — they still complete and fire their
-  /// callbacks. Useful for test teardown.
+  /// callback once with ErrorCode::RequestQueueCleared so a caller waiting on
+  /// it always resolves rather than hanging (Kartend audit nujso). The code is
+  /// distinct from OperationCancelled (the transfer-timeout shape) so retry
+  /// gates never re-issue a deliberately-cancelled request (Kartend-jjyst.2).
+  /// Already in-flight requests are left alone — they still complete and fire
+  /// their callbacks. Useful for test teardown.
   void clearPending();
 
 private:

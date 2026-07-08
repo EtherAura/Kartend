@@ -128,6 +128,10 @@ void TestScrapeAssetDedup::findExistingPerGame_skipsNonGameAndVideoManual() {
   QVERIFY(
       findExistingPerGameAsset(makeAsset("manual", Scraper::MediaScope::Game), tmp.path(), "MyGame")
           .isEmpty());
+  // Kind-based skip (Kartend-jjyst.1): "video-*" variants are videos too.
+  QVERIFY(findExistingPerGameAsset(makeAsset("video-normalized", Scraper::MediaScope::Game),
+                                   tmp.path(), "MyGame")
+              .isEmpty());
 }
 
 void TestScrapeAssetDedup::hashLocalFile_knownDigests() {

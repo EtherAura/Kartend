@@ -131,6 +131,21 @@ struct MediaWriteResult {
   int mediaSkipped = 0;
   QStringList writtenPaths;
   QStringList firstFailures;
+  /// The subset of `firstFailures` that is a GENUINE failure (empty payload,
+  /// unsafe remote-derived path, mkpath or atomic-write error) rather than a
+  /// benign rescrape-policy skip ("FillMissing — kept existing file", ...).
+  /// firstFailures mixes both because it is the reason channel for the
+  /// mediaSkipped counter; the batch summary folds only this list so a
+  /// FillMissing run's kept-existing files don't read as failures
+  /// (Kartend-jjyst.4). Bounded like firstFailures.
+  QStringList writeFailures;
+  /// Absolute destination paths whose write was SKIPPED because the file
+  /// already on disk satisfies the rescrape policy (FillMissing — present;
+  /// UpdateChanged — bytes match). Lets a caller resolve where an asset
+  /// lives even when nothing was rewritten — the entity path wires these
+  /// into the collection config so a FillMissing re-run doesn't leave
+  /// headerLogoImage/backgroundImage/collectionIcon unset (Kartend-jjyst.5).
+  QStringList existingPaths;
   /// (artworkType, absolute on-disk path) pairs for newly-written
   /// non-standard images. The DB phase saves one `item_artwork` row
   /// per entry so the sidebar gallery surfaces them.

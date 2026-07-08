@@ -16,6 +16,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "../../support/inspectordb.h"
 #include "databaseschema.h"
 #include "playlistmanager.h"
 #include "smartfilter.h"
@@ -40,6 +41,7 @@ private slots:
   void deletePlaylist_cascadesItems();
   void addItem_appendsAtEndAndIsIdempotent();
   void removeItem_redensifiesPositions();
+  void removeThenAdd_stampsUpdatedAtDespiteRowidReuse();
   void containsItem_reflectsCurrentMembership();
   void loadAll_returnsAllPlaylists();
   void loadItems_returnsItemsInPositionOrder();
@@ -307,6 +309,64 @@ void TestPlaylistManager::removeItem_redensifiesPositions() {
   // Removing a non-member returns false rather than throwing, mirroring the
   // pattern in renamePlaylist for unknown ids.
   QVERIFY(!m_pm->removeItem(id, "u", "/never-added"));
+}
+
+void TestPlaylistManager::removeThenAdd_stampsUpdatedAtDespiteRowidReuse() {
+  // Regression for the static-playlist scope cache key (Kartend-309nh.5):
+  // playlist_items is a non-AUTOINCREMENT rowid table and removeItem's
+  // wipe-and-reinsert frees the top rowids, so remove-one-then-add-one
+  // re-mints the previous MAX(rowid) for different contents. QueryManager's
+  // scope key therefore folds in playlists.updated_at, which both mutations
+  // must stamp inside their transactions.
+  auto created = m_pm->createPlaylist("Scope");
+  QVERIFY(created.isOk());
+  const QString id = created.value();
+
+  QVERIFY(m_pm->addItem(id, "u", "/a"));
+  QVERIFY(m_pm->addItem(id, "u", "/b"));
+
+  const QString dbPath =
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/media.db";
+  KartendTest::InspectorDb inspector(dbPath, QStringLiteral("test_playlistmanager_scope_inspect"));
+  QVERIFY2(inspector.isOpen(), "Failed to open inspector database");
+
+  struct Snapshot {
+    qlonglong maxRowid = -1;
+    QString updatedAt;
+  };
+  const auto snapshot = [&]() -> Snapshot {
+    Snapshot s;
+    QSqlQuery q(inspector.db());
+    q.prepare(QStringLiteral(
+        "SELECT (SELECT COALESCE(MAX(rowid), 0) FROM playlist_items WHERE playlist_id = ?), "
+        "(SELECT updated_at FROM playlists WHERE id = ?)"));
+    q.addBindValue(id);
+    q.addBindValue(id);
+    if (q.exec() && q.next()) {
+      s.maxRowid = q.value(0).toLongLong();
+      s.updatedAt = q.value(1).toString();
+    }
+    return s;
+  };
+
+  const Snapshot before = snapshot();
+  QVERIFY(before.maxRowid > 0);
+  QVERIFY(!before.updatedAt.isEmpty());
+
+  // isoNow() has millisecond precision; make sure the mutation below lands on
+  // a later tick than the setup adds so a same-stamp pass can't mask a
+  // missing touch.
+  QTest::qSleep(2);
+  QVERIFY(m_pm->removeItem(id, "u", "/b"));
+  QVERIFY(m_pm->addItem(id, "u", "/c"));
+
+  const Snapshot after = snapshot();
+  // The re-densify wipe empties the playlist's rowids, so the reinsert + add
+  // re-mint the same MAX(rowid) — this is exactly why the raw rowid probe is
+  // not a sufficient invalidation token on its own.
+  QCOMPARE(after.maxRowid, before.maxRowid);
+  // updated_at must have moved, so the folded scope key still changes.
+  QVERIFY(after.updatedAt != before.updatedAt);
 }
 
 void TestPlaylistManager::containsItem_reflectsCurrentMembership() {

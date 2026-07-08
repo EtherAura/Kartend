@@ -93,12 +93,12 @@ int ScraperService::countQueueRemaining() const {
   return total;
 }
 
-void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
+bool ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
                                  const QSet<QString> &mediaFilter, bool writeMetadata) {
   if (m_state != State::Idle) {
     qCWarning(lcScraperService) << "startScrape called while not idle, state="
                                 << static_cast<int>(m_state);
-    return;
+    return false;
   }
   // Take the ownership lock so a second instance sees this scrape as
   // live and won't offer to resume it. If another instance already
@@ -114,6 +114,7 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   m_mode = mode;
   m_mediaFilter = mediaFilter;
   m_writeMetadata = writeMetadata;
+  m_consecutive429Count = 0;
   m_summary = Summary{};
   m_totalItemsAtStart = countQueueRemaining();
   m_itemsCompleted = 0;
@@ -135,6 +136,7 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   emit scrapeStarted(m_totalItemsAtStart);
   persistState();
   pump();
+  return true;
 }
 
 void ScraperService::resumeFromState(const PendingState &state) {
@@ -156,6 +158,7 @@ void ScraperService::resumeFromState(const PendingState &state) {
   m_mode = state.mode;
   m_mediaFilter = state.mediaFilter;
   m_writeMetadata = state.writeMetadata;
+  m_consecutive429Count = 0;
   m_summary = state.summarySoFar;
   // The persisted flag documents WHY the previous leg stopped; the user chose
   // to resume (quota presumably reset), so the new leg starts unexhausted —
@@ -459,6 +462,10 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
   m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
   m_summary.notFound = m_summaryAtCollectionStart.notFound + runnerSummary.notFound;
   m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+  m_summary.mediaFetchFailures =
+      m_summaryAtCollectionStart.mediaFetchFailures + runnerSummary.mediaFetchFailures;
+  m_summary.mediaWriteFailures =
+      m_summaryAtCollectionStart.mediaWriteFailures + runnerSummary.mediaWriteFailures;
   m_summary.sidecarFailures =
       m_summaryAtCollectionStart.sidecarFailures + runnerSummary.sidecarFailures;
   m_summary.firstFailures = m_summaryAtCollectionStart.firstFailures;
@@ -478,6 +485,30 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
     if (m_summary.failedItems.size() >= kMaxReportedFailures) break;
     m_summary.failedItems.append({curIdx, p, curUuid, /*isEntity=*/false, {}});
   }
+}
+
+bool ScraperService::noteRateLimited429() {
+  ++m_consecutive429Count;
+  if (m_consecutive429Count < BatchScrapeRunner::kConsecutive429StopThreshold) return false;
+  // The limiter answered 429 to every recent request — it isn't a burst we
+  // can ride out. The caller escalates through stopForQuotaExhaustion() so
+  // the un-finished work persists as the resume point (Kartend-jjyst.15,
+  // mirroring the runner's noteRateLimited429). Log/report only at the
+  // tripping call: an entity media fan-out settles all its assets before
+  // the stop lands, so post-trip 429s re-enter here.
+  if (m_consecutive429Count == BatchScrapeRunner::kConsecutive429StopThreshold) {
+    qCWarning(lcScraperService) << m_consecutive429Count
+                                << "consecutive HTTP 429 rate-limit responses — stopping the "
+                                   "queue; un-finished work stays queued for resume";
+    if (m_summary.firstFailures.size() < kMaxReportedFailures) {
+      m_summary.firstFailures.append(
+          QStringLiteral("Stopped after %1 consecutive HTTP 429 rate-limit responses — the "
+                         "provider is throttling this run; remaining items were left queued "
+                         "for resume")
+              .arg(m_consecutive429Count));
+    }
+  }
+  return true;
 }
 
 void ScraperService::stopForQuotaExhaustion() {
@@ -595,6 +626,10 @@ void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
     return;
   }
 
+  // A collection that finished without a quota/429 stop proves the limiter
+  // is letting requests through — end any entity/interactive 429 streak
+  // (Kartend-jjyst.15; the runner keeps its own counter).
+  m_consecutive429Count = 0;
   // Backfill itemsCompleted to the full collection size — progress
   // signal stops just before the last item completes (no signal fires
   // for "the last item is done"), so we explicitly snap to the total
@@ -703,6 +738,18 @@ void ScraperService::interactiveLookupComplete(
       stopForQuotaExhaustion();
       return;
     }
+    // Consecutive-429 escalation (Kartend-jjyst.15): a lone 429 just fails
+    // this item below, but a streak means the limiter isn't letting up —
+    // stop like a quota death, with THIS item still queued as part of the
+    // resume point (its lookup consumed nothing scrapable).
+    if (err.httpStatus == 429) {
+      if (noteRateLimited429()) {
+        stopForQuotaExhaustion();
+        return;
+      }
+    } else {
+      m_consecutive429Count = 0;
+    }
     // Kartend-e8aag: a 404 / RemoteResourceNotFound is a routine "not found",
     // counted apart from errors and kept out of the failure list.
     if (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404) {
@@ -734,6 +781,9 @@ void ScraperService::interactiveLookupComplete(
     pump();
     return;
   }
+  // A delivered lookup result (match or clean not-found) proves the limiter
+  // let the request through — it ends any consecutive-429 run.
+  m_consecutive429Count = 0;
   if (result.value().isEmpty()) {
     // Kartend-e8aag: provider returned no match — "not found", not skipped.
     ++m_summary.notFound;

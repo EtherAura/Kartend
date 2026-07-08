@@ -19,10 +19,8 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QList>
-#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
 #include <QUrl>
 
 struct CollectionConfig;
@@ -82,7 +80,18 @@ public:
   /// path is empty or hashing fails.
   void lookup(const LookupContext &ctx, LookupCallback callback) override;
   void fetchDetail(const Scraper::ScrapeCandidate &candidate, DetailCallback callback) override;
+  /// URL-only entry point — no asset type known, so it keeps the
+  /// conservative image/ guards (delegates to the kind-aware variant
+  /// with an empty type).
   void fetchMediaBytes(const QUrl &url, MediaCallback callback) override;
+  /// Kind-aware media fetch: selects the expected Content-Type prefix and
+  /// response-size cap from kindForType(mediaType) — image/ + the image cap
+  /// for artwork, video/ + the wide default cap for video kinds, and
+  /// application/ + the wide default cap for manuals — so video/mp4 and
+  /// application/pdf payloads stop being rejected by the image/ pin
+  /// (Kartend-jjyst.1).
+  void fetchMediaBytesForType(const QUrl &url, const QString &mediaType,
+                              MediaCallback callback) override;
   /// Scrape PLATFORM-level art (console logo / system illustration) for the
   /// ScreenScraper systemeid carried in `target.identity`. Resolves the system
   /// in the cached systemesListe.php catalog for its display name, then emits
@@ -132,14 +141,14 @@ private:
   void runLookupAfterHash(const QString &query, const RomHasher::Result &hashes,
                           LookupCallback callback);
 
-  /// Issue the jeuInfos.php GET and route the response. Kartend-1rtrt:
-  /// on a transient failure (timeout / 5xx / 423) it schedules a bounded,
-  /// backoff-paced retry of the same idempotent URL via m_retryTimer
-  /// (honouring Retry-After) instead of surfacing the error on the first
-  /// attempt; permanent errors and successes fall straight through to
-  /// handleJeuInfosResponse. @p attempt is 0 on the initial call.
+  /// Issue the jeuInfos.php GET and route the response. Delegates to
+  /// ProviderBase::getWithRetry, so a transient failure (timeout / 5xx /
+  /// 423 / Retry-After'd 429) is retried a bounded number of times on the
+  /// same idempotent URL (Kartend-1rtrt, loop hoisted to the base by
+  /// Kartend-jjyst.10); permanent errors and successes fall straight
+  /// through to handleJeuInfosResponse.
   void fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
-                     LookupCallback callback, int attempt);
+                     LookupCallback callback);
 
   /// HTTP-response tail of runLookupAfterHash. Lifted out of the
   /// deeply-nested HttpClient::get lambda so the lookup chain stops
@@ -202,29 +211,13 @@ private:
   /// and the batch item leaked forever (the scrape hung at <100% and never
   /// emitted finished). Per-lookup watchers let concurrent hashes coexist.
   QHash<QFutureWatcher<RomHasher::Result> *, std::shared_ptr<std::atomic<bool>>> m_inFlightHashes;
-  /// In-flight single-shot timers driving Kartend-1rtrt's transient-failure
-  /// retries, one per scheduled retry. Each timer's lambda captures `this` raw;
-  /// the destructor stops + deletes every entry so none fires after free.
-  ///
-  /// Kartend audit vrqzk: this was a SINGLE shared QTimer m_retryTimer on the
-  /// (false) "lookups are sequential" assumption — two concurrent lookups both
-  /// retrying clobbered each other (stop()+disconnect() dropped the prior
-  /// schedule), so the dropped retry never fired and its lookup callback was
-  /// lost (same leak class as the per-lookup hash watcher above). One timer per
-  /// retry lets concurrent retries coexist.
-  QSet<QTimer *> m_inFlightRetryTimers;
-  /// Liveness token (Kartend audit cr950). The provider's async HTTP
-  /// continuations — the ensureSystemsCatalog cold-start callback and the
-  /// fetchJeuInfos reply — capture raw `this` and are held by the qApp-lifetime
-  /// HttpClient with NO QObject connection to sever on teardown (unlike the hash
-  /// watcher + retry timers above), so they can outlive the provider, which is
-  /// owned only by BatchScrapeRunner::m_provider — a cancel mid-cold-start
-  /// destroys it before the reply lands. Those callbacks capture
-  /// weak_ptr(m_lifetimeToken) and, if it has expired, invoke their callback with
-  /// a cancelled error and bail before touching any member. Same discipline
-  /// ScreenScraperCatalogManager already uses; the token expires automatically
-  /// when the provider is destroyed.
-  std::shared_ptr<int> m_lifetimeToken = std::make_shared<int>(0);
+  // The Kartend-1rtrt transient-retry timers and the cr950 liveness token
+  // used to live here; both moved to ProviderBase with the shared retry loop
+  // (Kartend-jjyst.10). The ensureSystemsCatalog / jeuInfos continuations
+  // below still guard with weak_ptr(m_lifetimeToken) — now the inherited
+  // token — and, when it has expired, invoke their callback with a cancelled
+  // error and bail before touching any member (the finished-emission
+  // invariant).
   /// SS's jeuInfos.php returns the candidate AND the full detail in one
   /// response — there's no separate detail endpoint. We cache the full
   /// ScrapedItem during lookup() keyed on the candidate's providerSpecificId so

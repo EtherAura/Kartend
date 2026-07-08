@@ -601,12 +601,19 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
               updateSingleItemProgress(completed);
             });
     connect(m_downloadDispatcher, &Scraper::ScrapeDownloadDispatcher::finished, this,
-            [this](const QList<Scraper::PendingMediaWrite> &downloads, qint64 totalBytes) {
+            [this](const QList<Scraper::PendingMediaWrite> &downloads, qint64 totalBytes,
+                   const QStringList &failedTypes) {
               m_downloadedBytes = totalBytes;
               // m_result.downloads was cleared in onApply() before dispatch.
               for (const auto &d : downloads) {
                 m_result.downloads.append(MediaDownload{d.asset, d.bytes});
               }
+              // Stamp the failed fetches the way the batch aggregator does, so
+              // the applyResult persistence hook's mediaAbsent merge keeps the
+              // marker for a returned-but-undownloadable type instead of
+              // pruning it as satisfied. User-deselected assets were never
+              // dispatched, so they still prune (Kartend-jjyst.14).
+              m_result.item.mediaFetchFailedThisRun = failedTypes;
               // finishCurrentApply() may accept()/delete the dialog — last touch.
               m_unified->finishCurrentApply();
             });

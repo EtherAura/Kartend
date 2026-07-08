@@ -1,0 +1,12 @@
+# Paths excluded from graphify ingest (gitignore syntax; read by
+# `graphify update` / `graphify watch`). Rationale: the graph's god-node list
+# was dominated by noise — test fixtures, changelog headings, a stale worktree
+# copy, and graphify's own query-memory outputs ingested as first-class nodes —
+# burying genuine hubs (mainwindow, ScrollManager, ApplicationContext).
+#
+# NOTE: Q_OBJECT (a macro symbol, 254 edges) cannot be excluded here —
+# .graphifyignore is path-based only; graphify has no symbol-level exclude.
+tests/
+CHANGELOG.md
+.claude/worktrees/
+graphify-out/

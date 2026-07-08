@@ -166,7 +166,8 @@ public:
   /// for the given collection (right-click → "Scrape collection / platform
   /// artwork"). No item grid — one job per non-Game entity type the collection's
   /// provider supports is fetched; progress/errors surface through this dialog.
-  /// Returns false when the collection has no entity-capable scraper.
+  /// Returns false when the collection has no entity-capable scraper or a
+  /// scrape is already running.
   [[nodiscard]] bool startEntityScrape(int collectionIndex);
 
   /// Artwork directories used to skip downloads for group/company-
@@ -321,6 +322,16 @@ private:
   QHash<QString, QCheckBox *> m_mediaTypeChecks;
   QRadioButton *m_modeAutoRadio = nullptr;
   QRadioButton *m_modeInteractiveRadio = nullptr;
+  // Setup-panel duplicates of the Settings → Scraper options, so the user can
+  // tune them without leaving the scrape window (Kartend-1hose). Changes persist
+  // straight back into ScraperOptions via SettingsManager. Named m_setup* to keep
+  // them distinct from the per-game m_rescrapeMode short-circuit context below.
+  QWidget *m_setupOptionsContainer = nullptr; // wraps all rows; hidden during a run
+  class QComboBox *m_setupRescrapeCombo = nullptr;
+  class QComboBox *m_setupRegionCombo = nullptr;
+  class QSpinBox *m_setupRefreshWindowSpin = nullptr;
+  class QSpinBox *m_setupItemConcurrencySpin = nullptr;
+  class QComboBox *m_setupPresetCombo = nullptr;
   QProgressBar *m_unifiedProgressBar = nullptr;
   QLabel *m_unifiedTimingLabel = nullptr;
   QLabel *m_unifiedCountsLabel = nullptr;
@@ -368,6 +379,12 @@ private:
   /// Live view (metadata + thumbnails + progress) gets the full
   /// vertical space.
   QWidget *m_unifiedSplitterContainer = nullptr;
+  /// Vertical splitter wrapping the whole setup view — the collection/items
+  /// panel on top, the "What to scrape" + mode + scrape-options controls below —
+  /// so the tree/list gets the lion's share by default and the user can drag the
+  /// divider to give it even more room (Kartend-1hose). Hidden as a unit during a
+  /// run, when the live view takes over.
+  class QSplitter *m_setupVerticalSplitter = nullptr;
   QWidget *m_modeRowContainer = nullptr;
   /// Candidate picker row shown only during interactive scraping
   /// while the unified live view is the active page. Holds a label

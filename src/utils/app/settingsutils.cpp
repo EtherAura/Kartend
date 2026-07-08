@@ -7,8 +7,10 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutex>
 #include <QSaveFile>
 #include <QScrollArea>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -67,9 +69,10 @@ ErrorUtils::Result<void> atomicReplaceFile(const QString &srcPath, const QString
 // contains none of the characters that the reader would otherwise mangle:
 // '%' (the escape introducer itself), '=', CR, LF, and a leading '[', ';' or
 // '#'. Anything else is percent-encoded. Because '%' itself forces encoding, a
-// value written verbatim can never contain '%' — that is the invariant the
-// decoder relies on to tell a legacy/plain value (trim, as the old reader did)
-// from an escaped one (percent-decode exactly, no trimming).
+// value written verbatim can never contain '%' — but that invariant only holds
+// for files this encoder wrote. Pre-v0.0.15 builds wrote raw values unescaped,
+// so a '%' on disk may be legacy user data; decodeIniValue disambiguates with
+// a round-trip check (Kartend-309nh.6).
 QString encodeIniValue(const QString &value) {
   bool needsEncoding = value != value.trimmed();
   if (!needsEncoding) {
@@ -108,9 +111,18 @@ QString encodeIniValue(const QString &value) {
 
 // Reverse encodeIniValue. A raw value containing no '%' is a legacy/plain value
 // (or a freshly-written plain value); both are .trimmed() to reproduce the
-// historical reader behavior exactly. A value containing '%' was produced by
-// encodeIniValue, so it is percent-decoded verbatim with no trimming.
-QString decodeIniValue(const QString &raw) {
+// historical reader behavior exactly. A '%'-bearing value is percent-decoded
+// only when it could have been produced by encodeIniValue — verified by
+// re-encoding the decoded result and requiring the original raw bytes back
+// (the encoder is deterministic, so everything it wrote passes this check).
+// A mismatch means the '%' is legacy user data from a pre-v0.0.15 build that
+// wrote values unescaped (e.g. a literal "file%20name" launch parameter);
+// decoding it would silently corrupt the value, so it is kept verbatim
+// (trimmed, as the legacy reader did) and flagged via @p legacySuspect so the
+// caller can snapshot the file before its first re-encoded rewrite. Accepted
+// residue (Kartend-309nh.6): a legacy literal that happens to round-trip,
+// like "100%25", still decodes.
+QString decodeIniValue(const QString &raw, bool *legacySuspect) {
   if (!raw.contains('%')) {
     return raw.trimmed();
   }
@@ -129,12 +141,52 @@ QString decodeIniValue(const QString &raw) {
     }
     out += ch;
   }
+  if (encodeIniValue(out) != raw) {
+    if (legacySuspect) *legacySuspect = true;
+    return raw.trimmed();
+  }
   return out;
+}
+
+// Config files whose last parse surfaced at least one legacy-suspect value
+// (see decodeIniValue). writeIniFile consults this to snapshot such a file
+// once before its first rewrite. Mutex-guarded: QSettings on our registered
+// format may be driven from worker threads.
+Q_GLOBAL_STATIC(QSet<QString>, g_legacySuspectFiles)
+Q_GLOBAL_STATIC(QMutex, g_legacySuspectFilesMutex)
+
+// One-time safety net for pre-v0.0.15 files: before the first rewrite of a
+// file that loaded with legacy-suspect '%' values, copy the untouched on-disk
+// bytes to "<path>.legacy.bak" (same shape as SettingsManager's corrupt-file
+// snapshot and importConfig's .bak). writeIniFile rewrites the whole map
+// re-encoded, so this is the last chance to preserve a value the round-trip
+// heuristic could have misjudged. QSettings hands writeIniFile a QSaveFile,
+// so the original file is still intact on disk at this point. An existing
+// .legacy.bak is never overwritten — the earliest snapshot is the valuable
+// one. Best-effort: a failed copy is logged, not retried.
+void snapshotLegacySuspectFile(QIODevice &device) {
+  const auto *fileDevice = qobject_cast<QFileDevice *>(&device);
+  if (!fileDevice || fileDevice->fileName().isEmpty()) return;
+  const QString path = fileDevice->fileName();
+  {
+    QMutexLocker lock(g_legacySuspectFilesMutex());
+    if (!g_legacySuspectFiles()->remove(path)) return;
+  }
+  const QString backupPath = path + QStringLiteral(".legacy.bak");
+  if (QFile::exists(backupPath) || !QFile::exists(path)) return;
+  if (!QFile::copy(path, backupPath)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to snapshot legacy config before rewrite",
+                                          "SettingsUtils::writeIniFile")
+            .withDetails(QString("From: %1, To: %2").arg(path, backupPath)));
+  }
 }
 
 bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
   QTextStream in(&device);
   QString currentSection;
+  bool legacySuspect = false;
   while (!in.atEnd()) {
     QString line = in.readLine().trimmed();
     if (line.isEmpty() || line.startsWith(';') || line.startsWith('#')) continue;
@@ -144,7 +196,7 @@ bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
       int eqPos = line.indexOf('=');
       if (eqPos != -1) {
         QString key = line.left(eqPos).trimmed();
-        QString value = decodeIniValue(line.mid(eqPos + 1));
+        QString value = decodeIniValue(line.mid(eqPos + 1), &legacySuspect);
         if (!currentSection.isEmpty()) {
           map[currentSection + "/" + key] = value;
         } else {
@@ -153,10 +205,20 @@ bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
       }
     }
   }
+  if (legacySuspect) {
+    // Remember this file so snapshotLegacySuspectFile can back it up before
+    // the first rewrite re-encodes every value.
+    if (const auto *fileDevice = qobject_cast<QFileDevice *>(&device);
+        fileDevice && !fileDevice->fileName().isEmpty()) {
+      QMutexLocker lock(g_legacySuspectFilesMutex());
+      g_legacySuspectFiles()->insert(fileDevice->fileName());
+    }
+  }
   return true;
 }
 
 bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
+  snapshotLegacySuspectFile(device);
   QTextStream out(&device);
   QMap<QString, QMap<QString, QVariant>> sections;
   QMap<QString, QVariant> rootKeys;

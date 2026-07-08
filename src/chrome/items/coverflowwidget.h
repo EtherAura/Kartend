@@ -222,6 +222,12 @@ private:
   void refreshCenterRect();
   void updateVideoPreviewGeometry();
   void applyVideoPreviewState();
+  // Mirror the centered card into the widget-level accessible name /
+  // description ("<title>, item N of M"). The carousel is one custom-
+  // painted widget — assistive tech can't see individual cards, so this
+  // is the only channel that carries the selection. Called from every
+  // mutation of m_selectedIndex or the card list.
+  void updateAccessibleSelection();
 
   // Gallery toolbar moved to CoverFlowGalleryStrip (Kartend-y3ia step 1).
   // m_galleryStrip below is the owner; its public methods replace the

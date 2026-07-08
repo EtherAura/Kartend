@@ -33,6 +33,10 @@ prune_other_builds() {
   shopt -s nullglob
   for d in "$build_root"/*; do
     [ -d "$d" ] || continue
+    # Never treat a symlink as a prunable build dir (Kartend-pnlot.9): the
+    # `current` convenience link resolves into a real build dir, so the
+    # marker/CMakeCache checks below would match through it.
+    [ -L "$d" ] && continue
     [ "$(basename "$d")" = "$keep_basename" ] && continue
     # Prune dirs created by this script (.kartend-build-dir marker) AND
     # any dir that looks like a CMake build dir (CMakeCache.txt) so
@@ -51,6 +55,28 @@ prune_other_builds() {
     rm -f -- "$f"
   done
   shopt -u nullglob
+  # If the sweep above removed the dir the `current` convenience symlink
+  # (Kartend-pnlot.9) pointed at — a mode switch prunes the previous mode's
+  # dir — drop the link rather than leave it dangling. A successful build
+  # repoints it via publish_current_build_dir right after this step.
+  if [ -L "$build_root/current" ] && [ ! -e "$build_root/current" ]; then
+    rm -f -- "$build_root/current"
+  fi
+}
+
+# Post-success epilogue (Kartend-pnlot.9): refresh the stable build/current
+# convenience symlink and print the exact ctest invocation for the dir this
+# run just wrote. The per-mode dir names (ninja-release, ninja-maintenance,
+# ...) force developers to track which dir is fresh — and ctest run in a
+# stale sibling passes silently against old binaries. Relative link target
+# so a moved checkout stays valid; ln -sfn repoints atomically. Call only
+# after a successful build (alongside the final step_final).
+publish_current_build_dir() {
+  local dir="$1"
+  ln -sfn "$(basename "$dir")" "$root_dir/build/current"
+  if $build_tests; then
+    step_final "Run tests: ctest --test-dir ${dir#"$root_dir/"} --output-on-failure -LE benchmark -j $build_jobs (build/current also points there)"
+  fi
 }
 
 write_build_marker() {

@@ -15,6 +15,8 @@
 #include "collectiontreewidget.h"
 #include "settingstreehost.h"
 
+#include <functional>
+
 #include <QSignalSpy>
 #include <QTest>
 #include <QTreeWidgetItem>
@@ -35,6 +37,10 @@ public:
   bool allowSwitch = true;
   bool unsaved = false;
 
+  int resolveCalls = 0;
+  /// Optional dialog-side effect to run inside resolveUnsavedChanges —
+  /// stands in for handleSaveCollection's tree refresh + re-selection.
+  std::function<void()> onResolve;
   QList<int> loadCalls;
   int saveStyleCalls = 0;
   int deleteStateCalls = 0;
@@ -43,7 +49,13 @@ public:
   int removeCalls = 0;
   int copyFromCalls = 0;
 
-  [[nodiscard]] bool resolveUnsavedChanges(const QString &, bool) override { return allowSwitch; }
+  [[nodiscard]] bool resolveUnsavedChanges(const QString &, bool) override {
+    ++resolveCalls;
+    if (onResolve) {
+      onResolve();
+    }
+    return allowSwitch;
+  }
   void loadCollectionToUI(int index) override { loadCalls.append(index); }
   void updateSaveButtonStyle() override { ++saveStyleCalls; }
   void updateDeleteButtonState() override { ++deleteStateCalls; }
@@ -91,6 +103,7 @@ private slots:
   void rename_blankNameReverts();
   void rename_backToOriginalRestoresSavedFlag();
   void selectionChange_loadsRowAndGuardsUnsaved();
+  void deselect_guardsUnsavedAndClearsState();
   void rearranged_resyncsParentsAndSignals();
 };
 
@@ -251,6 +264,58 @@ void TestTreeManager::selectionChange_loadsRowAndGuardsUnsaved() {
   f.widget.setCurrentItem(f.manager.itemAt(0));
   QCOMPARE(f.currentIndex, 0);
   QCOMPARE(f.host.loadCalls, (QList<int>{1, 0}));
+}
+
+void TestTreeManager::deselect_guardsUnsavedAndClearsState() {
+  Fixture f({makeCol(QStringLiteral("A")), makeCol(QStringLiteral("B"))});
+
+  // Establish a selection so the deselect has a previous row to protect.
+  f.widget.setCurrentItem(f.manager.itemAt(0));
+  QCOMPARE(f.currentIndex, 0);
+  const int resolveCallsAfterSelect = f.host.resolveCalls;
+
+  // Whitespace-click deselect with the host vetoing (Cancel): the gate must
+  // fire once, the previous row must come back, and the borrowed state must
+  // stay on the old collection — no silent drop into index -1.
+  f.host.allowSwitch = false;
+  f.widget.clearSelection();
+  QCOMPARE(f.host.resolveCalls, resolveCallsAfterSelect + 1);
+  QCOMPARE(f.currentIndex, 0);
+  QCOMPARE(f.currentItem, f.manager.itemAt(0));
+  QCOMPARE(f.widget.currentItem(), f.manager.itemAt(0));
+  QVERIFY(f.manager.itemAt(0)->isSelected());
+  // The blocked restore must not re-enter the handler and double-prompt.
+  QCOMPARE(f.host.resolveCalls, resolveCallsAfterSelect + 1);
+
+  // Host allows it (Save/Discard resolved): the deselect completes and the
+  // selection state clears.
+  f.host.allowSwitch = true;
+  f.widget.clearSelection();
+  QCOMPARE(f.currentIndex, -1);
+  QCOMPARE(f.currentItem, nullptr);
+  QVERIFY(f.widget.selectedItems().isEmpty());
+
+  // Deselecting with nothing selected must not prompt at all.
+  const int resolveCallsAfterClear = f.host.resolveCalls;
+  f.widget.clearSelection();
+  QCOMPARE(f.host.resolveCalls, resolveCallsAfterClear);
+
+  // Save path: handleSaveCollection's tree refresh re-selects the saved row
+  // (signals blocked) from inside the resolver. The deselect must still win
+  // — state cleared AND the restored selection cleared, no extra prompt.
+  f.widget.setCurrentItem(f.manager.itemAt(1));
+  QCOMPARE(f.currentIndex, 1);
+  f.host.onResolve = [&f]() {
+    QSignalBlocker blocker(&f.widget);
+    f.widget.setCurrentItem(f.manager.itemAt(1));
+    f.manager.itemAt(1)->setSelected(true);
+  };
+  const int resolveCallsBeforeSave = f.host.resolveCalls;
+  f.widget.clearSelection();
+  QCOMPARE(f.host.resolveCalls, resolveCallsBeforeSave + 1);
+  QCOMPARE(f.currentIndex, -1);
+  QCOMPARE(f.currentItem, nullptr);
+  QVERIFY(f.widget.selectedItems().isEmpty());
 }
 
 void TestTreeManager::rearranged_resyncsParentsAndSignals() {

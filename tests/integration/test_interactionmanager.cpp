@@ -34,16 +34,15 @@ void TestInteractionManager::testSubManagersAreWired() {
 }
 
 void TestInteractionManager::testClearSelectionYieldsNoSelection() {
-  // No selection invariant: after clearSelection() the index is -1, no widget
-  // is held, and the selected file path is empty. The whole input stack treats
-  // index == -1 as "nothing selected", so this contract is load-bearing.
+  // No selection invariant: after clearSelection() the index is -1 and the
+  // selected file path is empty. The whole input stack treats index == -1 as
+  // "nothing selected", so this contract is load-bearing.
   KartendTest::MockedMainWindowFixture fixture;
   InteractionManager *im = interaction(fixture);
   QVERIFY(im);
 
   im->clearSelection();
   QCOMPARE(im->currentSelectedIndex(), -1);
-  QVERIFY(im->getSelectedMediaItem() == nullptr);
   QVERIFY(im->selectedFilePath().isEmpty());
 }
 
@@ -56,19 +55,6 @@ void TestInteractionManager::testClearSelectionAndFocusYieldsNoSelection() {
   QVERIFY(im);
 
   im->clearSelectionAndFocus();
-  QCOMPARE(im->currentSelectedIndex(), -1);
-  QVERIFY(im->getSelectedMediaItem() == nullptr);
-}
-
-void TestInteractionManager::testSetSelectedMediaItemNullRoundTrips() {
-  // Setting the selected widget to null clears the held pointer (the
-  // recycle/teardown path relies on this to drop a dangling ItemWidget*).
-  KartendTest::MockedMainWindowFixture fixture;
-  InteractionManager *im = interaction(fixture);
-  QVERIFY(im);
-
-  im->setSelectedMediaItem(nullptr);
-  QVERIFY(im->getSelectedMediaItem() == nullptr);
   QCOMPARE(im->currentSelectedIndex(), -1);
 }
 

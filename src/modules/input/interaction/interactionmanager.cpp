@@ -282,16 +282,6 @@ auto InteractionManager::currentSelectedIndex() const -> int {
   return m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
 }
 
-auto InteractionManager::getSelectedMediaItem() const -> ItemWidget * {
-  return m_selectionManager ? m_selectionManager->selectedWidget() : nullptr;
-}
-
-void InteractionManager::setSelectedMediaItem(ItemWidget *widget) {
-  if (m_selectionManager) {
-    m_selectionManager->setSelectedWidget(widget);
-  }
-}
-
 auto InteractionManager::selectedFilePath() const -> QString {
   return m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
 }
@@ -415,9 +405,6 @@ void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll
   bool skipCenter = m_state.click().suppressInitialClickCenter;
 
   if (widget) {
-    if (m_selectionManager) {
-      m_selectionManager->setSelectedWidget(widget);
-    }
     updateFilePathForSelection(index, subcollections);
     if (!suppressed) {
       handleSuccessfulSelection(index);
@@ -518,7 +505,6 @@ void InteractionManager::trySelectWidget(int index, const QList<int> &subcollect
 
   if (widget) {
     if (m_selectionManager) {
-      m_selectionManager->setSelectedWidget(widget);
       m_selectionManager->applyWidgetSelection(widget);
     }
     updateFilePathForSelection(index, subcollections);

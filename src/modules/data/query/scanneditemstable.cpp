@@ -104,8 +104,12 @@ bool ScannedItemsTable::insertBatch(const QStringList &paths,
   return true;
 }
 
-bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid) {
+bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid,
+                                     QString *errorDetailsOut) {
   if (!m_db.isOpen()) {
+    if (errorDetailsOut) {
+      *errorDetailsOut = QStringLiteral("database connection not open");
+    }
     return false;
   }
 
@@ -132,20 +136,30 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
           "name=excluded.name, "
           "last_modified=excluded.last_modified, "
           "file_size=excluded.file_size")) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to prepare scanned_items upsert",
-                                               "ScannedItemsTable::applyToItems")
-                             .withDetails(upsert.lastError().text()));
+    if (errorDetailsOut) {
+      *errorDetailsOut = upsert.lastError().text();
+    } else {
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to prepare scanned_items upsert",
+                                                 "ScannedItemsTable::applyToItems")
+                               .withDetails(upsert.lastError().text()));
+    }
     return false;
   }
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
   upsert.addBindValue(QDateTime::currentSecsSinceEpoch());
   if (!upsert.exec()) {
-    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to apply scanned_items upsert",
-                                               "ScannedItemsTable::applyToItems")
-                             .withDetails(upsert.lastError().text()));
+    if (errorDetailsOut) {
+      // Caller owns reporting (it classifies lock contention for its retry
+      // ladder) — logging here too would double up.
+      *errorDetailsOut = upsert.lastError().text();
+    } else {
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to apply scanned_items upsert",
+                                                 "ScannedItemsTable::applyToItems")
+                               .withDetails(upsert.lastError().text()));
+    }
     return false;
   }
   return true;

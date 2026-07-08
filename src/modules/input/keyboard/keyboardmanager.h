@@ -29,7 +29,7 @@ struct KeyboardManagerSetup {
   QStackedWidget *stackedWidget = nullptr;
   QLineEdit *searchBar = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
 
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
@@ -37,7 +37,7 @@ struct KeyboardManagerSetup {
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
 };
 
 /**
@@ -192,7 +192,7 @@ private:
   QStackedWidget *m_stackedWidget = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
 };
 
 #endif // KEYBOARDMANAGER_H

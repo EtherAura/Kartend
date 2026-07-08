@@ -50,7 +50,7 @@ struct PlaylistMenuControllerSetup {
 
   // Sibling managers come from ctx; only non-manager fields stay here.
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
 
   /// Owner-supplied modal smart-playlist dialog (Kartend-n8kh). Null in
   /// headless contexts; the smart-playlist actions guard before invoking.
@@ -113,7 +113,7 @@ private:
   [[nodiscard]] SmartPlaylistCollectionEntries collectSmartPlaylistCollectionEntries() const;
 
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   SmartPlaylistDialogRunner m_runSmartPlaylistDialog;
   DialogRunners m_dialogs;
 

@@ -4,7 +4,6 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
-#include <QDateTime>
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -155,6 +154,8 @@ void DatAuditAuditPage::wireAuditActions() {
   connect(m_exportMissButton, &QPushButton::clicked, this, &DatAuditAuditPage::onExportMissList);
   connect(&m_runController, &DatAuditRunController::progress, this,
           &DatAuditAuditPage::onAuditProgress);
+  connect(&m_runController, &DatAuditRunController::snapshotPersisted, this,
+          &DatAuditAuditPage::onSnapshotPersisted);
   connect(&m_runController, &DatAuditRunController::finished, this,
           &DatAuditAuditPage::onAuditFinished);
 }
@@ -511,6 +512,13 @@ void DatAuditAuditPage::onRun() {
   req.ignoreHashCache = ignoreHashCache;
   req.layout = layout;
   req.mergeMode = mergeMode;
+  // Persist the snapshot + last-scan stamp for a SAVED profile so the
+  // collection settings can show "last audited / have / missing" without
+  // re-running anything (Kartend-m6qsb.8). The worker does the writes on its
+  // own DB connection (Kartend-h7xnr.5) — a large snapshot replayed GUI-side
+  // stalled the dialog at scan finish. Ad-hoc (unsaved) runs stay ephemeral
+  // by design: id is -1, which the controller treats as "don't persist".
+  req.persistProfileId = m_currentProfile.id;
   m_runController.start(req);
 }
 
@@ -531,48 +539,26 @@ void DatAuditAuditPage::onAuditProgress(const DatAudit::AuditProgress &p) {
   }
 }
 
+void DatAuditAuditPage::onSnapshotPersisted(qint64 profileId, qint64 whenMs) {
+  // The worker committed the run's snapshot + last-scan stamp; mirror the
+  // stamp into the working copy so the UI reflects it without a reload. The
+  // id guard covers a profile switch during the run (the panel stays enabled
+  // while an audit is in flight).
+  if (profileId == m_currentProfile.id) {
+    m_currentProfile.lastScanAtMs = whenMs;
+  }
+}
+
 void DatAuditAuditPage::onAuditFinished(const DatAudit::AuditOutput &out) {
   m_model->setRows(out.rows);
   updateSummary(out.summary);
   if (out.cancelled) {
     m_summaryLabel->setText(m_summaryLabel->text() + tr("  (cancelled)"));
   }
-  // Persist the snapshot + last-scan stamp for a SAVED profile so the
-  // collection settings can show "last audited / have / missing" without
-  // re-running anything (Kartend-m6qsb.8). A cancelled audit is a partial
-  // statement of the world — never persisted. Ad-hoc (unsaved) runs stay
-  // ephemeral by design: no auto-created profile rows.
-  if (!out.cancelled && m_currentProfile.id >= 0) {
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    QList<DatAuditProfile::ResultRow> rows;
-    rows.reserve(out.rows.size());
-    for (const DatAudit::AuditRow &r : out.rows) {
-      DatAuditProfile::ResultRow row;
-      // File-backed rows key by path (unique per enumeration); entry-only
-      // rows (Missing) key by the canonical name. Prefixes keep the two key
-      // spaces from colliding in the shared primary key.
-      row.entryKey = r.filePath.isEmpty() ? QStringLiteral("entry:") + r.expectedName
-                                          : QStringLiteral("file:") + r.filePath;
-      row.status = static_cast<int>(r.status);
-      row.filePath = r.filePath;
-      row.detail = r.expectedName;
-      // Source DAT + game + MIA so the browser's tree/game-list rollups are
-      // grouped queries (Kartend-34lab, schema v22).
-      row.sourceName = r.sourceName;
-      row.gameName = r.gameName;
-      row.mia = r.mia;
-      row.zipIndex = r.zipIndex; // archive member index for the ZipIndex column
-      rows.append(row);
-    }
-    const qint64 profileId = m_currentProfile.id;
-    if (auto stamped = m_profileController.touchLastScan(profileId, now); stamped.isError()) {
-      ErrorUtils::logError(stamped.error());
-    }
-    if (auto replaced = m_profileController.replaceResults(profileId, rows); replaced.isError()) {
-      ErrorUtils::logError(replaced.error());
-    }
-    m_currentProfile.lastScanAtMs = now;
-  }
+  // The result snapshot for a saved profile was already persisted by the run
+  // controller's worker (Kartend-h7xnr.5) — snapshotPersisted arrived before
+  // this slot, so onSnapshotPersisted has stamped m_currentProfile. Only view
+  // updates remain here.
   // Surface DATs that failed to load so the user knows the audit ran against a
   // partial catalogue (Kartend-2zcrz) — otherwise real games show as Missing /
   // files as Unknown with no explanation. Full list in the tooltip.

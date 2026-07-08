@@ -19,11 +19,16 @@ inline constexpr int kDefaultMaxDelayMs = 30000;
 
 /// True when @p err is the kind of failure a retry can plausibly recover:
 ///   - a transfer timeout (surfaced as OperationCancelled with no HTTP status),
-///   - a server-side 5xx, or
-///   - SS's 423 "infrastructure down".
+///   - a server-side 5xx,
+///   - SS's 423 "infrastructure down", or
+///   - a 429 rate limit that carries a Retry-After hint (the wait is bounded:
+///     retryDelayMs clamps the hint to maxDelayMs) (Kartend-jjyst.3).
 /// Everything else (4xx auth/quota/not-found, malformed request, parse
-/// failures) is permanent for this request and must not be retried — retrying
-/// a 430 daily-quota error just burns more quota.
+/// failures, a hint-less 429) is permanent for this request and must not be
+/// retried — retrying a 430 daily-quota error just burns more quota. A
+/// deliberate local cancel (RequestQueueCleared from HttpClient::clearPending)
+/// is never transient — retrying it would re-issue requests for a run the
+/// user killed (Kartend-jjyst.2).
 [[nodiscard]] bool isTransient(const ErrorUtils::ErrorContext &err);
 
 /// Delay before the next attempt. Honours the server's Retry-After when

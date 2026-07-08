@@ -20,13 +20,18 @@
 #include "collection/validationhelpers.h"
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
+#include "iartworkpreviewscroll.h"
 #include "idetailspane.h"
-#include "idetailspanemanager.h"
+#include "igridlayoutscroll.h"
+#include "imousewheelstate.h"
 #include "interactionstateholder.h"
-#include "iselectionmanager.h"
-#include "iviewportmanager.h"
+#include "iscrolldatasource.h"
+#include "iselectioncore.h"
+#include "iselectionoverlayscroll.h"
+#include "iviewportpositioner.h"
+#include "iviewportscrollstate.h"
+#include "iwheelscrollanimator.h"
 #include "mousemanager.h"
-#include "scrollmanager.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/mouse.h"
 
@@ -48,11 +53,11 @@ bool WheelEventHandler::eventBelongsToSidebar() const {
   // wheel routing rather than driving grid selection. The cursor position is
   // the source of truth — when the sidebar's QScrollArea has nothing to scroll,
   // Qt propagates the wheel up past it and `obj` would point at an ancestor
-  // like the items page, so an obj-based check would miss it.
-  if (!detailsPaneMgr()) {
-    return false;
-  }
-  IDetailsPane *sidebar = detailsPaneMgr()->sidebarWidget();
+  // like the items page, so an obj-based check would miss it. The pane is
+  // read straight off ctx->ui — DetailsPaneManager's sidebarWidget() is the
+  // same object, and the widget reference is all this hit-test needs
+  // (Kartend-dl0uz.2).
+  IDetailsPane *sidebar = m_ctx ? m_ctx->ui.sidebar : nullptr;
   if (!sidebar) {
     return false;
   }
@@ -73,12 +78,12 @@ int WheelEventHandler::computeTargetScroll(int selectedIndex, const CollectionCo
   // ScrollManager metrics override the per-collection defaults — both code
   // paths must agree on itemsPerRow / itemHeight / verticalSpacing.
   int gridWidth = CollectionUtils::effectiveGridWidth(
-      collection, scrollMgr() ? scrollMgr()->sidebarShrinkingActive() : false);
+      collection, scrollGrid() ? scrollGrid()->sidebarShrinkingActive() : false);
   int itemHeight = collection.gridLayout.itemHeight;
   int vSpacing = collection.gridLayout.verticalSpacing;
   int headerOffset = 0;
-  if (scrollMgr()) {
-    const auto &metrics = scrollMgr()->getMetrics();
+  if (scrollGrid()) {
+    const auto &metrics = scrollGrid()->getMetrics();
     gridWidth = metrics.itemsPerRow;
     itemHeight = metrics.itemHeight;
     vSpacing = metrics.verticalSpacing;
@@ -89,46 +94,46 @@ int WheelEventHandler::computeTargetScroll(int selectedIndex, const CollectionCo
   const QRect viewport = m_itemScrollArea->viewport()->rect();
   int targetPos = 0;
 
-  if (horizontalView && scrollMgr()) {
+  if (horizontalView && scrollGrid()) {
     // itemsPerRow means items-per-column in horizontal view; derive the
     // column index from selectedIndex / itemsPerCol and center it.
-    const auto &metrics = scrollMgr()->getMetrics();
+    const auto &metrics = scrollGrid()->getMetrics();
     targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
         selectedIndex, viewport.width(), axisScrollBar->maximum(), metrics);
   } else {
     const int logicalTargetY = EventHelpers::computeLogicalCenteredScrollY(
         selectedIndex, gridWidth, itemHeight, vSpacing, margins, headerOffset, viewport.height());
     targetPos = logicalTargetY;
-    if (viewportMgr() && viewportMgr()->getScrollScale() > 1.0) {
-      targetPos = viewportMgr()->toWidgetScrollY(logicalTargetY);
+    if (viewportPositioner() && viewportPositioner()->getScrollScale() > 1.0) {
+      targetPos = viewportPositioner()->toWidgetScrollY(logicalTargetY);
     }
   }
   return qBound(0, targetPos, axisScrollBar->maximum());
 }
 
 void WheelEventHandler::onAnimationFinished() {
-  if (mouseMgr()) {
-    mouseMgr()->setWheelScrolling(false);
+  if (mouseWheelState()) {
+    mouseWheelState()->setWheelScrolling(false);
   }
-  if (viewportMgr()) {
-    viewportMgr()->setContinuousScrollActive(false);
+  if (viewportScrollState()) {
+    viewportScrollState()->setContinuousScrollActive(false);
   }
   if (state()) {
     state()->scroll().userScrollActive = false;
     state()->scroll().programmaticScroll = false;
     state()->clearArrowCenterSuppression();
-    if (scrollMgr()) {
-      scrollMgr()->refreshSelectionOverlayState();
+    if (scrollOverlay()) {
+      scrollOverlay()->refreshSelectionOverlayState();
     }
   }
-  const int selectedIndex = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
-  if (scrollMgr() && selectedIndex >= 0) {
-    scrollMgr()->updateSelectionForIndex(selectedIndex);
+  const int selectedIndex = selectionCore() ? selectionCore()->currentSelectedIndex() : -1;
+  if (scrollOverlay() && selectedIndex >= 0) {
+    scrollOverlay()->updateSelectionForIndex(selectedIndex);
   }
   // Selection might have scrolled outside the viewport during chained wheel
   // events; bring it back in before signaling the scroll-ended consumers.
-  if (viewportMgr() && selectedIndex >= 0) {
-    viewportMgr()->ensureItemVisible(selectedIndex, false);
+  if (viewportPositioner() && selectedIndex >= 0) {
+    viewportPositioner()->ensureItemVisible(selectedIndex, false);
   }
   emit scrollEnded();
 }
@@ -148,7 +153,7 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
   // When the expand-mode artwork preview overlay is visible, let the wheel
   // event propagate to it so it can cycle through the gallery entries
   // instead of moving the underlying grid selection.
-  if (scrollMgr() && scrollMgr()->isArtworkPreviewVisible()) {
+  if (scrollPreview() && scrollPreview()->isArtworkPreviewVisible()) {
     return false;
   }
   if (eventBelongsToSidebar()) {
@@ -202,23 +207,23 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
   if (applySelectionDelta(wheelSteps)) {
     // Wrap detected: bail out of animation and let updateVirtualView re-paint
     // the new visible page.
-    if (mouseMgr()) {
-      mouseMgr()->setWheelScrolling(false);
+    if (mouseWheelState()) {
+      mouseWheelState()->setWheelScrolling(false);
     }
-    if (viewportMgr()) {
-      viewportMgr()->setContinuousScrollActive(false);
+    if (viewportScrollState()) {
+      viewportScrollState()->setContinuousScrollActive(false);
     }
-    if (animMgr() && animMgr()->isVerticalAnimRunning()) {
-      animMgr()->verticalAnimation()->stop();
+    if (wheelAnimator() && wheelAnimator()->isVerticalAnimRunning()) {
+      wheelAnimator()->verticalAnimation()->stop();
     }
-    if (scrollMgr()) {
-      scrollMgr()->updateVirtualView();
+    if (scrollGrid()) {
+      scrollGrid()->updateVirtualView();
     }
     event->accept();
     return true;
   }
 
-  const int selectedIndex = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
+  const int selectedIndex = selectionCore() ? selectionCore()->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
@@ -227,31 +232,31 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
   const int targetPos =
       computeTargetScroll(selectedIndex, collection, axisScrollBar, horizontalView);
 
-  if (mouseMgr()) {
-    mouseMgr()->setWheelScrolling(true);
+  if (mouseWheelState()) {
+    mouseWheelState()->setWheelScrolling(true);
   }
-  if (viewportMgr()) {
-    viewportMgr()->setContinuousScrollActive(true);
+  if (viewportScrollState()) {
+    viewportScrollState()->setContinuousScrollActive(true);
   }
 
-  if (animMgr()) {
+  if (wheelAnimator()) {
     auto onFinished = [this]() { onAnimationFinished(); };
     if (horizontalView) {
-      animMgr()->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
-                                                     onFinished);
+      wheelAnimator()->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
+                                                           onFinished);
     } else {
-      animMgr()->startWheelScrollAnimation(axisScrollBar, currentPos, targetPos, onFinished);
+      wheelAnimator()->startWheelScrollAnimation(axisScrollBar, currentPos, targetPos, onFinished);
     }
   }
 
-  if (scrollMgr()) {
+  if (scrollGrid()) {
     // Defer the virtual-view update one event-loop tick so the scrollbar's
     // position (mutated synchronously above by startWheelScrollAnimation /
     // the manual setValue path) settles before we recompute which items are
     // visible. Running it inline samples a transient mid-animation value.
     QTimer::singleShot(0, this, [this]() {
-      if (scrollMgr()) {
-        scrollMgr()->updateVirtualView();
+      if (scrollGrid()) {
+        scrollGrid()->updateVirtualView();
       }
     });
   }
@@ -262,8 +267,8 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
 }
 
 QList<int> WheelEventHandler::getSubcollections(int parentIndex) const {
-  if (selectionMgr()) {
-    return selectionMgr()->getSubcollections(parentIndex);
+  if (selectionCore()) {
+    return selectionCore()->getSubcollections(parentIndex);
   }
   if (!m_collections) {
     return {};
@@ -272,7 +277,9 @@ QList<int> WheelEventHandler::getSubcollections(int parentIndex) const {
 }
 
 bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
-  if (wheelSteps == 0 || !scrollMgr() ||
+  // scrollGrid / scrollData alias the same ScrollManager and are seeded in
+  // lockstep; both are checked because both roles are read below.
+  if (wheelSteps == 0 || !scrollGrid() || !scrollData() ||
       !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
@@ -295,10 +302,10 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   // vertical jitter. Route both gridWidth and horizontalGridHeight reads
   // through the effective-value helpers so the alt fields kick in when
   // sidebar is hidden in Expand mode.
-  const bool shrink = scrollMgr()->sidebarShrinkingActive();
+  const bool shrink = scrollGrid()->sidebarShrinkingActive();
   int gridWidth = CollectionUtils::effectiveGridWidth(collection, shrink);
   if (collection.viewType == ViewType::Horizontal) {
-    const auto &metrics = scrollMgr()->getMetrics();
+    const auto &metrics = scrollGrid()->getMetrics();
     if (metrics.itemsPerRow > 0) {
       gridWidth = metrics.itemsPerRow;
     } else {
@@ -312,12 +319,12 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
     return false;
   }
 
-  int totalItems = scrollMgr()->getTotalItems();
+  int totalItems = scrollData()->getTotalItems();
   if (totalItems <= 0) {
     return false;
   }
 
-  int currentSelection = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
+  int currentSelection = selectionCore() ? selectionCore()->currentSelectedIndex() : -1;
   if (currentSelection < 0) {
     currentSelection = 0;
   }
@@ -380,29 +387,29 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
     return wrapTriggered;
   }
 
-  if (viewportMgr()) {
+  if (viewportScrollState()) {
     if (wrapTriggered) {
-      viewportMgr()->setForceImmediateCenter(true);
-      viewportMgr()->setWrapSequenceActive(true);
-      viewportMgr()->setContinuousScrollActive(false);
+      viewportScrollState()->setForceImmediateCenter(true);
+      viewportScrollState()->setWrapSequenceActive(true);
+      viewportScrollState()->setContinuousScrollActive(false);
     } else {
-      viewportMgr()->setContinuousScrollActive(true);
+      viewportScrollState()->setContinuousScrollActive(true);
     }
   }
 
-  if (selectionMgr()) {
-    selectionMgr()->setSelectedIndex(newSelection);
+  if (selectionCore()) {
+    selectionCore()->setSelectedIndex(newSelection);
     QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-    selectionMgr()->updateFilePathForSelection(newSelection, subs);
+    selectionCore()->updateFilePathForSelection(newSelection, subs);
   }
-  if (scrollMgr()) {
-    scrollMgr()->updateSelectionForIndex(newSelection);
+  if (scrollOverlay()) {
+    scrollOverlay()->updateSelectionForIndex(newSelection);
   }
 
-  if (wrapTriggered && viewportMgr()) {
-    viewportMgr()->applyImmediateViewportPositioningForSelection(newSelection);
-    if (scrollMgr()) {
-      scrollMgr()->updateVirtualView();
+  if (wrapTriggered && viewportPositioner()) {
+    viewportPositioner()->applyImmediateViewportPositioningForSelection(newSelection);
+    if (scrollGrid()) {
+      scrollGrid()->updateVirtualView();
     }
   }
 
@@ -410,8 +417,8 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   // selectionChanged. Without this notify, listeners wired to
   // SelectionManager::selectionChanged (e.g. the toolbar's itemPositionLabel
   // via InteractionManager forwarding) stay frozen during wheel navigation.
-  if (selectionMgr()) {
-    selectionMgr()->notifySelectionChanged();
+  if (selectionCore()) {
+    selectionCore()->notifySelectionChanged();
   }
 
   return wrapTriggered;

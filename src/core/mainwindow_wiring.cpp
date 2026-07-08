@@ -16,6 +16,23 @@
 // additionally guarded by a one-bool early return — a second invocation is
 // a no-op rather than a double-wire.
 //
+// Ordering: when one signal has several receivers, Qt invokes them in
+// connect order — i.e. line order in the connect*() tables below — so
+// receiver order in this file is a behavioural contract, not formatting.
+// DatabaseManager::itemsLoaded is the edge that leans on it. Its three
+// receivers run (1) NavigationManager::onItemsLoaded (rebuilds the item
+// grid), (2) MainWindow::refreshItemStateFlagsRegistry (dispatches the
+// async badge-flags fetch), (3) DbEventsController::
+// refreshFilterToolbarOnItemsLoaded (rebuilds the filter popup).
+// Receivers (2) and (3) share a precondition: by the time itemsLoaded
+// fires, MainWindow::m_currentCollectionIndex already points at the
+// collection whose items just loaded — NavigationManager updates that
+// index through a raw pointer (no Qt signal) before it dispatches the
+// load, which makes itemsLoaded the earliest reliable post-switch hook
+// (see the comment in DbEventsController::refreshFilterToolbarOnItemsLoaded).
+// Wire new itemsLoaded receivers after NavigationManager's, and don't
+// reorder the existing three without re-checking those assumptions.
+//
 // The slot handlers that those connections target live in companion TUs
 // extracted by responsibility:
 //
@@ -61,6 +78,9 @@
 //     errorOccurred             → onMediaLibraryError
 //   DatabaseManager → ScrollManager
 //     visualIndexForPathLoaded  → onVisualIndexForPathLoaded
+//   DatabaseManager → MainWindow (item-state badge registry — handlers in this TU)
+//     itemsLoaded               → refreshItemStateFlagsRegistry
+//     itemStateFlagsLoaded      → onItemStateFlagsLoaded
 //   DatabaseManager → MainWindow (UI/title/overlay state — handlers in dbeventscontroller.cpp)
 //     itemCountLoaded           → releaseStartupOverlaySuppressionIfIdle
 //     cachedCountsUpdated       → refreshTitleCountsIfActive
@@ -73,9 +93,14 @@
 //     collectionScanCompleted   → refreshCollectionSummaryOnScanCompleted
 //     cachedCountsUpdated       → refreshCollectionSummary
 //
+//   NavigationManager → MainWindow
+//     mediaLibraryErrorRaised   → onMediaLibraryErrorRaised
+//
 //   SettingsManager → MainWindow / DetailsPaneManager
 //     collectionsModified       → rebuildHierarchyCache
 //     collectionsModified       → refreshCollectionSummary
+//     collectionsModified       → refreshCollectionWarningBadge
+//     launcherProfileChanged    → refreshCollectionWarningBadge
 //
 //   ScrollManager → NavigationManager
 //     subcollectionEntered      → onSubcollectionEntered
@@ -199,6 +224,16 @@ void MainWindow::onArtworkLayoutUpdateRequested() {
   }
 }
 
+void MainWindow::onMediaLibraryErrorRaised(const ErrorUtils::ErrorContext &error) {
+  ErrorPresentation::showError(window(), error);
+}
+
+void MainWindow::refreshCollectionWarningBadge() {
+  if (m_toolbarController) {
+    m_toolbarController->refreshCollectionWarningBadge();
+  }
+}
+
 void MainWindow::onScrollFilterChanged(int visible, int total) {
   if (!QApplication::closingDown()) {
     updateWindowTitleWithFilter(visible, total);
@@ -267,11 +302,11 @@ void MainWindow::onSidebarLayoutChanged() {
 // =====================================================================
 
 void MainWindow::connectDatabaseManager() {
-  // One-shot wiring (called once from setup). Several edges below — and the
-  // lambda connects, which Qt::UniqueConnection can't dedup — would double-fire
-  // on a second run: two scan overlays, two rebuildHierarchyCache, two error
-  // dialogs. Make the function idempotent rather than rely on per-connect
-  // UniqueConnection that can't cover the lambdas (Kartend-x8spn).
+  // One-shot wiring (called once from setup). Several edges below lack
+  // Qt::UniqueConnection and would double-fire on a second run: two scan
+  // overlays, two rebuildHierarchyCache, two error dialogs. Make the function
+  // idempotent rather than sprinkle UniqueConnection on every low-frequency
+  // connect (Kartend-x8spn).
   if (m_databaseManagerConnected) {
     return;
   }
@@ -288,10 +323,15 @@ void MainWindow::connectDatabaseManager() {
                    Qt::UniqueConnection);
   // Kartend-elte: refresh the per-item state-flag registry whenever a
   // collection's items reload so the badges paint without a per-tile DB
-  // hop. Slot body lives in refreshItemStateFlagsRegistry() so this TU
-  // stays lambda-free per the file-header convention.
+  // hop. The slot dispatches the flags query to the query worker
+  // (Kartend-h7xnr.6); the result lands on itemStateFlagsLoaded below.
+  // Slot bodies live in refreshItemStateFlagsRegistry() /
+  // onItemStateFlagsLoaded() so this TU stays lambda-free per the
+  // file-header convention.
   QObject::connect(db, &DatabaseManager::itemsLoaded, this,
                    &MainWindow::refreshItemStateFlagsRegistry, Qt::UniqueConnection);
+  QObject::connect(db, &DatabaseManager::itemStateFlagsLoaded, this,
+                   &MainWindow::onItemStateFlagsLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::itemCountLoadedWithToken, nav,
                    &NavigationManager::onItemCountLoaded, Qt::UniqueConnection);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, nav,
@@ -303,9 +343,7 @@ void MainWindow::connectDatabaseManager() {
   // NavigationManager raises media-library errors as a signal; MainWindow owns
   // the ErrorDialog so the input layer stays free of UI-chrome includes.
   QObject::connect(nav, &NavigationManager::mediaLibraryErrorRaised, this,
-                   [this](const ErrorUtils::ErrorContext &error) {
-                     ErrorPresentation::showError(window(), error);
-                   });
+                   &MainWindow::onMediaLibraryErrorRaised);
 
   // DatabaseManager → ScrollManager
   QObject::connect(db, &DatabaseManager::visualIndexForPathLoaded, scroll,
@@ -374,17 +412,10 @@ void MainWindow::connectDatabaseManager() {
   // collections. archiveOptionsChanged has no UI surface yet (LaunchManager
   // reads collections fresh per launch — see docs/dev/settings-hotreload.md).
   if (m_toolbarController) {
-    auto refreshBadge = [this](int, const LauncherProfile &) {
-      if (m_toolbarController) {
-        m_toolbarController->refreshCollectionWarningBadge();
-      }
-    };
-    QObject::connect(settings, &SettingsManager::launcherProfileChanged, this, refreshBadge);
-    QObject::connect(settings, &SettingsManager::collectionsModified, this, [this]() {
-      if (m_toolbarController) {
-        m_toolbarController->refreshCollectionWarningBadge();
-      }
-    });
+    QObject::connect(settings, &SettingsManager::launcherProfileChanged, this,
+                     &MainWindow::refreshCollectionWarningBadge);
+    QObject::connect(settings, &SettingsManager::collectionsModified, this,
+                     &MainWindow::refreshCollectionWarningBadge);
   }
   // scraperOptionsChanged / scraperOverridesChanged: ScreenScraperProvider
   //   re-reads ctx-routed scraper options on every fetch, and ScraperService
@@ -538,6 +569,9 @@ void MainWindow::connectScrollManager() {
   sec.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
   sec.getGeneralSettings = [this]() { return &m_generalSettings; };
   sec.getCurrentCollectionIndex = [this]() { return m_currentCollectionIndex; };
+  // Column-width drags persist through the debounced saver (one INI write per
+  // settled drag, flushed in closeEvent) instead of one write per mouse move.
+  sec.scheduleSettingsSave = [this]() { scheduleGeneralSettingsSave(); };
   m_scrollEventsController->setContext(sec);
 
   auto *secCtl = m_scrollEventsController.get();
@@ -653,6 +687,13 @@ void MainWindow::refreshFilterToolbar() {
 }
 
 void MainWindow::refreshItemStateFlagsRegistry() {
+  // Runs inside the itemsLoaded cascade, so it must stay cheap: resolve the
+  // collection uuid (relies on the itemsLoaded ordering contract in the file
+  // header — m_currentCollectionIndex already points at the new collection)
+  // and hand the SQL to the query worker. The stale registry from the
+  // previous collection is harmless in the interim — it's keyed by absolute
+  // filePath, so the new collection's tiles simply find no entries until
+  // onItemStateFlagsLoaded() publishes the fresh hash a beat later.
   if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
     ItemWidget::clearStateFlagsRegistry();
     return;
@@ -665,15 +706,34 @@ void MainWindow::refreshItemStateFlagsRegistry() {
     ItemWidget::clearStateFlagsRegistry();
     return;
   }
-  const auto raw = db->loadItemStateFlagsForCollection(uuid);
+  db->fetchItemStateFlagsForCollection(uuid);
+}
+
+void MainWindow::onItemStateFlagsLoaded(const QString &collectionUuid,
+                                        const QStringList &pinnedPaths,
+                                        const QStringList &hiddenPaths,
+                                        const QStringList &continueLaterPaths) {
+  // Apply only when the echoed uuid still matches the collection being
+  // viewed — the user may have switched again while the worker query was in
+  // flight, and a stale reply must not overwrite the newer dispatch's result.
+  if (m_currentCollectionIndex < 0 || m_currentCollectionIndex >= m_collections.size()) {
+    return;
+  }
+  const CollectionConfig &cfg = m_collections.at(m_currentCollectionIndex);
+  const QString expanded = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+  if (collectionUuid != CollectionUtils::computeCollectionUuid(cfg.name, expanded)) {
+    return;
+  }
   QHash<QString, ItemWidget::StateFlags> registry;
-  registry.reserve(raw.size());
-  for (auto it = raw.constBegin(); it != raw.constEnd(); ++it) {
-    ItemWidget::StateFlags f;
-    f.pinned = it->isPinned;
-    f.hidden = it->isHidden;
-    f.continueLater = it->continueLater;
-    registry.insert(it.key(), f);
+  registry.reserve(pinnedPaths.size() + hiddenPaths.size() + continueLaterPaths.size());
+  for (const QString &path : pinnedPaths) {
+    registry[path].pinned = true;
+  }
+  for (const QString &path : hiddenPaths) {
+    registry[path].hidden = true;
+  }
+  for (const QString &path : continueLaterPaths) {
+    registry[path].continueLater = true;
   }
   ItemWidget::setStateFlagsRegistry(registry);
 }

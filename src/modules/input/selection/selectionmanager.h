@@ -41,7 +41,7 @@ struct SelectionManagerSetup {
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
   QLineEdit *searchBar = nullptr;
 
@@ -50,7 +50,7 @@ struct SelectionManagerSetup {
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
 };
@@ -84,12 +84,10 @@ public:
   // Core selection state accessors
   [[nodiscard]] int currentSelectedIndex() const override { return m_selectedItemIndex; }
   [[nodiscard]] const QString &selectedFilePath() const { return m_selectedFilePath; }
-  [[nodiscard]] ItemWidget *selectedWidget() const { return m_selectedMediaItem; }
 
   // Selection state mutators
   void setSelectedIndex(int index) override;
   void setSelectedFilePath(const QString &path);
-  void setSelectedWidget(ItemWidget *widget);
 
   // Emit selectionChanged for the current index. Use after calling
   // setSelectedIndex() from paths that don't go through selectItemByIndex /
@@ -208,7 +206,6 @@ private:
   [[nodiscard]] int getCurrentGridWidth() const;
 
   // Core selection state
-  ItemWidget *m_selectedMediaItem = nullptr;
   QString m_selectedFilePath;
   int m_selectedItemIndex = -1;
   int m_lastSelectedRow = -1;
@@ -272,7 +269,7 @@ private:
   QWidget *m_gridContainer = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
 };
 
 #endif // SELECTIONMANAGER_H

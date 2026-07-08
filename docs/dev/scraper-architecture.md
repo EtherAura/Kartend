@@ -234,6 +234,9 @@ provider-specific helpers (`providers/screenscraper*.{h,cpp}`):
 
 ## Adding a new provider
 
+An authed lookup provider (TMDB is the precedent) touches ~12 files
+end-to-end. The steps below name every one of them.
+
 1. **Pick a stable id**. Lowercase ASCII, no whitespace, no
    underscores-or-dashes-with-a-strong-opinion (e.g. `igdb`,
    `discogs`). The id goes into the wire format
@@ -241,16 +244,20 @@ provider-specific helpers (`providers/screenscraper*.{h,cpp}`):
    — renaming later is a config-migration story.
 
 2. **Subclass `MetadataProvider`** (if URL-only / WebSearch) or
-   `MetadataLookupProvider` (if API + media). Implement at minimum
+   `MetadataLookupProvider` (if API + media) in
+   `providers/<id>provider.{h,cpp}`. Implement at minimum
    `id()`, `displayName()`, `categories()`, `capabilities()`. For
    Stage-2 providers, also `lookup()`, `fetchDetail()`,
-   `fetchMediaBytes()`.
+   `fetchMediaBytes()`. List the new sources in
+   [providers/CMakeLists.txt](../../src/modules/data/scraper/providers/CMakeLists.txt).
 
 3. **Add a parser** if the upstream returns JSON/XML the existing
    parsers don't already cover. Parsers live in
    [src/modules/data/scraper/parsers/](../../src/modules/data/scraper/parsers/),
    take a raw `QByteArray` (or `QJsonDocument`), and return a
    `Scraper::ScrapedItem`. Keep them stateless and unit-testable.
+   List the new sources in
+   [parsers/CMakeLists.txt](../../src/modules/data/scraper/parsers/CMakeLists.txt).
 
 4. **Register in `MetadataProviderRegistry::builtIn()`**. Append a
    `std::make_unique<MyProvider>(...)` to the returned vector. The
@@ -258,26 +265,50 @@ provider-specific helpers (`providers/screenscraper*.{h,cpp}`):
    available if your provider needs credentials or per-collection
    context.
 
-5. **Add a credentials panel** in
+5. **Add the credential fields** (if your provider has auth) to
    [scrapercredentialspanel.cpp](../../src/ui/dialogs/scraper/scrapercredentialspanel.cpp)
-   if your provider has auth. The panel writes into
+   — a new group box gated on the provider filter, plus `addField`
+   rows. The panel writes into
    `GeneralSettings::scraperCredentials[<provider_id>]`, which the
-   provider reads at request time via the `settingsAccessor`.
+   provider reads at request time via the `settingsAccessor`. The
+   panel is the **single** credentials surface: the standalone
+   `ScraperCredentialsDialog` (menu entry) embeds it in filterless
+   mode, so the new fields appear there with no extra work. Then
+   wire the provider's Settings → Scrapers presence — three files:
+   - [settingsdialog.ui](../../src/ui/dialogs/settings/core/settingsdialog.ui):
+     add the provider's header label and a promoted
+     `ScraperCredentialsPanel` instance to the Scrapers sub-tab.
+   - [settingsdialog.cpp](../../src/ui/dialogs/settings/core/settingsdialog.cpp):
+     `setProvider(<id>)` + `setModel(&m_model)` + `changed` →
+     `checkForChanges` wiring, and add the new panel to the
+     storage-demotion `applyDemotionNotice` fan-out.
+   - [settingsdialogform.cpp](../../src/ui/dialogs/settings/core/settingsdialogform.cpp):
+     add the panel's `load()` call to `loadGeneralSettingsToUI()`.
 
 6. **(If applicable) Add the category to the synonym table** in
    `metadataproviderregistry.cpp`'s `normaliseCategory()` so the
    free-form `CollectionConfig::type` resolves to your category
    without users having to type the canonical tag exactly.
 
-7. **Add unit tests** for the parser. The HTTP path is hard to
-   unit-test (live upstream), so parser tests are the cheap and
-   high-value place to defend regressions. See
-   `tests/utils/test_screenscraperparser.cpp` for the existing
+7. **Add unit tests** for the parser
+   (`tests/modules/scraper/test_<id>parser.cpp`, registered in
+   [tests/cmake/04-scraper-and-dat.cmake](../../tests/cmake/04-scraper-and-dat.cmake)).
+   The HTTP path is hard to unit-test (live upstream), so parser
+   tests are the cheap and high-value place to defend regressions.
+   See `tests/modules/scraper/test_tmdbparser.cpp` for the existing
    pattern.
 
 8. **Document the credentials** in
    [docs/user/Scraper.md](../user/Scraper.md) (user-facing) and
    [docs/user/Keychain.md](../user/Keychain.md) (storage).
+
+Caveat: per-collection provider *overrides* in
+[createcollectiondialog.cpp](../../src/ui/dialogs/collection/createcollectiondialog.cpp)
+are not generic — it hard-includes ScreenScraper-specific headers for
+the SS system-override combo. A provider needing its own
+per-collection override UI currently means forking that dialog
+per-provider; budget for it if your provider has an equivalent to
+SS's system id.
 
 ## Related code
 

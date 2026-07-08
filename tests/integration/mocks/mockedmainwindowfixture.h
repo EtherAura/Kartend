@@ -3,7 +3,10 @@
 
 #include "mainwindowfixture.h"
 
+#include "collection/collectionconfig.h"
+
 #include <memory>
+#include <QList>
 
 class MainWindow;
 
@@ -28,6 +31,14 @@ namespace KartendTest {
 class MockedMainWindowFixture {
 public:
   MockedMainWindowFixture();
+  /**
+   * Variant that seeds MockSettingsManager::loadCollections so MainWindow
+   * constructs with a non-empty library. Required for tests that pump the
+   * event loop: an empty library queues the modal "create your first
+   * collection" prompt during construction, which blocks the pumped loop
+   * forever (the wizard is already suppressed via firstRunComplete=true).
+   */
+  explicit MockedMainWindowFixture(QList<CollectionConfig> seedCollections);
   ~MockedMainWindowFixture();
 
   MockedMainWindowFixture(const MockedMainWindowFixture &) = delete;

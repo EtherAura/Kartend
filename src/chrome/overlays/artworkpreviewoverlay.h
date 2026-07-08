@@ -5,9 +5,11 @@
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
+class QImage;
 class QLabel;
 class QPushButton;
 class QWheelEvent;
+template <typename T> class QFutureWatcher;
 QT_END_NAMESPACE
 
 class OverlayZOrderRegistry;
@@ -144,10 +146,29 @@ private:
   /// supply entries). Cycle wraps modulo m_galleryEntries.size().
   int m_galleryIndex = -1;
   OverlayZOrderRegistry *m_layerManager = nullptr;
+  /// In-flight main-preview decode (mirrors MarqueeController's watcher).
+  /// Null when no decode is pending. A newer request supersedes the current
+  /// one via cancelPreviewLoad(), so rapid Left/Right cycling never queues a
+  /// backlog — the last request wins.
+  QFutureWatcher<QImage> *m_previewLoadWatcher = nullptr;
 
   void setupUI();
   void ensureVideoPreview();
   void centerContent();
+  /// Decode the image at @p artworkPath off the GUI thread (at display size)
+  /// and hand the result to displayPixmap when it lands. On the initial open
+  /// the overlay appears immediately with a loading placeholder; while
+  /// cycling, the previous image/video stays up until the new decode lands.
+  void startPreviewLoad(const QString &artworkPath);
+  /// Discard any in-flight main-preview decode so its late result can't
+  /// overwrite a newer request or re-show a closed overlay.
+  void cancelPreviewLoad();
+  /// Present the overlay with a neutral "Loading…" box while the first decode
+  /// runs — the click responds instantly instead of blocking on the decode.
+  void showLoadingPlaceholder();
+  /// Shared presentation tail: cover the parent, center content, show, raise
+  /// through the layer manager, and take focus.
+  void presentOverlay();
   void displayPixmap(const QPixmap &pixmap);
   void displayVideo(const QString &absoluteVideoPath);
   /// Swap the main preview to the given gallery entry (image → load

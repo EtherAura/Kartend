@@ -23,7 +23,6 @@ private slots:
   void testSubManagersAreWired();
   void testClearSelectionYieldsNoSelection();
   void testClearSelectionAndFocusYieldsNoSelection();
-  void testSetSelectedMediaItemNullRoundTrips();
   void testIsWheelScrollingInitiallyFalse();
 };
 

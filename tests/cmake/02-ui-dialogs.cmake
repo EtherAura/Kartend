@@ -174,7 +174,9 @@ kartend_add_test(NAME ScraperProvidersDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
-# ScraperCredentialsDialog (legacy modal): field composition + echo gating,
+# ScraperCredentialsDialog (modal wrapper around the shared filterless
+# ScraperCredentialsPanel): single-panel embedding, working-copy isolation
+# (Cancel discards, Save commits), field composition + echo gating,
 # pre-population, Save's trimmed write-through, empty-value key/provider
 # cleanup, legacy dev_* scrub. Panel internals covered by Kartend-ztc64.
 kartend_add_test(NAME ScraperCredentialsDialog

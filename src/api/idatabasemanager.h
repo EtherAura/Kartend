@@ -10,6 +10,7 @@
 #include "collection/collectioncontext.h"
 #include "errorutils.h"
 #include "historystore.h"
+#include "ifilecollectionlookup.h"
 #include "itemartwork.h"
 #include "itemdetaildata.h"
 #include "itemmetadata.h"
@@ -25,8 +26,11 @@
  * Thread-safe accessors (resolveFilePath, resolveRelativeFilePath,
  * getCollectionIndexForFile, findArtworkDirectoryForFile) keep the same
  * any-thread guarantee as the concrete class — implementers must preserve it.
+ * getCollectionIndexForFile lives on the IFileCollectionLookup role this
+ * interface unions (Kartend-dl0uz.2) — consumers needing only that lookup
+ * take ctx->fileCollectionLookup().
  */
-class IDatabaseManager : public QObject {
+class IDatabaseManager : public QObject, public IFileCollectionLookup {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(IDatabaseManager)
 public:
@@ -57,7 +61,6 @@ public:
 
   virtual void invalidateCollectionCache(const QString &collectionUuid) = 0;
 
-  [[nodiscard]] virtual int getCollectionIndexForFile(const QString &filePath) const = 0;
   [[nodiscard]] virtual QString findArtworkDirectoryForFile(const QString &filePath) const = 0;
 
   [[nodiscard]] virtual QString resolveFilePath(const QString &rawEntry,
@@ -170,23 +173,18 @@ public:
     return {};
   }
 
-  /// Returns the per-item boolean state flags (Kartend-elte / Kartend-t4n0)
-  /// for every row in the collection that has at least one flag set. Empty
-  /// (collectionUuid → []) by default so headless mocks don't need to
-  /// override; production DatabaseManager fulfills via direct SQL. Used by
-  /// the items grid to render pinned/hidden/continue-later badges without
-  /// a per-tile DB roundtrip — MainWindow calls this once on collection
-  /// switch and pushes the resulting hash through ItemWidget's static
-  /// registry.
-  struct ItemStateFlags {
-    bool isPinned = false;
-    bool isHidden = false;
-    bool continueLater = false;
-  };
-  [[nodiscard]] virtual QHash<QString, ItemStateFlags>
-  loadItemStateFlagsForCollection(const QString & /*collectionUuid*/) const {
-    return {};
-  }
+  /// Asynchronously collect the per-item boolean state flags (Kartend-elte /
+  /// Kartend-t4n0) for every row in the collection that has at least one
+  /// flag set — the query runs on the query-worker connection so the
+  /// collection-switch path never blocks on it (Kartend-h7xnr.6) — then
+  /// emits itemStateFlagsLoaded with the echoed @p collectionUuid so a
+  /// reply for a collection the user has already left can be dropped.
+  /// Default no-op so headless mocks don't need to override (they simply
+  /// never emit the result signal). Used by the items grid to render
+  /// pinned/hidden/continue-later badges without a per-tile DB roundtrip —
+  /// MainWindow dispatches this once per itemsLoaded and pushes the result
+  /// through ItemWidget's static registry.
+  virtual void fetchItemStateFlagsForCollection(const QString & /*collectionUuid*/) {}
 
   /// Delete `items` / `collections` rows that belong to no collection
   /// in `liveCollections` — purges orphans left by past renames /
@@ -223,6 +221,13 @@ signals:
                         const QHash<QString, int> &fileToCollectionIndex,
                         int requestedCollectionIndex);
   void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
+  /// Result of fetchItemStateFlagsForCollection. @p collectionUuid echoes the
+  /// call so a stale reply (the user switched collections again while the
+  /// worker query was in flight) can be dropped; each list holds the item
+  /// paths with that flag set. Plain Qt list payloads so the queued
+  /// worker→main hop needs no custom meta-type registration.
+  void itemStateFlagsLoaded(const QString &collectionUuid, const QStringList &pinnedPaths,
+                            const QStringList &hiddenPaths, const QStringList &continueLaterPaths);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsUpdated();
   void scanProgress(int current, int total, const QString &collectionName);

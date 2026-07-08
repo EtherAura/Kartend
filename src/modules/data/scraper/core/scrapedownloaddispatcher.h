@@ -69,8 +69,14 @@ signals:
   /// mirroring the dialog's original cadence). completed == total - pending.
   void progressed(int completed, int total, qint64 bytesSoFar);
   /// Emitted exactly once when every selected asset has resolved. Carries the
-  /// payloads to persist and the running byte total.
-  void finished(const QList<PendingMediaWrite> &downloads, qint64 totalBytes);
+  /// payloads to persist, the running byte total, and the types (lowercase)
+  /// whose fetch errored or returned no bytes. The failed list feeds
+  /// ScrapedItem::mediaFetchFailedThisRun so the mediaAbsent merge doesn't
+  /// prune a marker as "satisfied" when the download actually failed — only
+  /// user-deselected assets (never dispatched, so never in this list) prune
+  /// (Kartend-jjyst.14). Dedup hits and hash short-circuits are successes.
+  void finished(const QList<PendingMediaWrite> &downloads, qint64 totalBytes,
+                const QStringList &failedTypes);
 
 private:
   /// Emit finished() exactly once, when every asset has resolved AND the
@@ -86,6 +92,9 @@ private:
   // Per-dispatch accumulators. One dispatch runs at a time (the dialog disables
   // Apply for the duration of a download run), so a single set suffices.
   QList<PendingMediaWrite> m_downloads;
+  /// Lowercased asset types whose fetch errored or came back empty — the
+  /// finished() payload the caller stamps onto mediaFetchFailedThisRun.
+  QStringList m_failedTypes;
   qint64 m_bytes = 0;
   int m_total = 0;
   int m_pending = 0;

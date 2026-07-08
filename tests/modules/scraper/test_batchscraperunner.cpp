@@ -74,6 +74,10 @@ public:
   /// URLs in this set fail the fetchMediaBytes call. The bytes from
   /// `mediaByUrl` (if any) are ignored when the URL is also here.
   QSet<QUrl> mediaErrorUrls;
+  /// HTTP status stamped onto every mediaErrorUrls failure. 0 = leave it
+  /// unset. 429 exercises the runner's consecutive-429 escalation on the
+  /// media path (Kartend-jjyst.3).
+  int mediaErrorHttpStatus = 0;
   /// Track which URLs the runner asked us to fetch — tests assert
   /// against the call shape to verify the fetchPrimaryCover toggle.
   mutable QList<QUrl> mediaRequestLog;
@@ -141,8 +145,12 @@ public:
     mediaRequestLog.append(url);
     QTimer::singleShot(0, [this, url, cb = std::move(cb)]() {
       if (mediaErrorUrls.contains(url)) {
-        cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                           QStringLiteral("media fetch failed"), "stub"));
+        auto err = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                   QStringLiteral("media fetch failed"), "stub");
+        if (mediaErrorHttpStatus != 0) {
+          err.withHttpStatus(mediaErrorHttpStatus);
+        }
+        cb(err);
         return;
       }
       cb(mediaByUrl.value(url));
@@ -294,11 +302,19 @@ private slots:
   void coreScrapedFieldsCompletePredicate();
   void fillMissingSkipsOnlyItemsWithAllCoreFields();
   void mediaCoverageMatchesMixedCaseFolders();
+  void mediaCoverageProbesKindDirectoryForVideoVariants();
   void fillMissingKnownAbsentMediaCountsAsCovered();
   void computeMediaAbsentTypesDerivesUnsuppliedWantedTypes();
+  void fillMissingIgnoresCollectionWideUnobtainableMedia();
+  void computePrevalentMediaTypesAppliesThreshold();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
-  void quota429StopsBatch();
+  void defaultQuotaClassificationExcludes429();
+  void single429CountsAsErrorWithoutStoppingBatch();
+  void repeated429sEscalateToQueueStop();
+  void media429sEscalateToQueueStop();
+  void mediaFetchFailuresCountedInSummary();
+  void mediaWriteFailuresCountedInSummary();
   void notFoundReportedSeparatelyFromErrors();
   void failureMessageIncludesStatusAndDetail();
   void failedPathsCapturedForErrorsOnly();
@@ -380,30 +396,168 @@ void TestBatchScrapeRunner::notFoundReportedSeparatelyFromErrors() {
   QVERIFY(summary.firstFailures.first().contains(QStringLiteral("Gamma")));
 }
 
-void TestBatchScrapeRunner::quota429StopsBatch() {
-  // Kartend-oa1ry: a plain HTTP 429 (Too Many Requests) from any provider —
-  // not just ScreenScraper's non-standard 430/431 — stops the batch and leaves
-  // a resume point, mirroring quotaExhaustedStopsBatchAndSkipsRemainingItems.
+void TestBatchScrapeRunner::defaultQuotaClassificationExcludes429() {
+  // Kartend-jjyst.3 (revisits the Kartend-oa1ry design): the default
+  // isQuotaExhausted no longer counts RFC 6585's 429 — that's burst
+  // throttling handled by retry + the runner's consecutive-429 escalation.
+  // ScreenScraper's non-standard 430/431 daily quotas stay immediate stops.
+  StubProvider p;
+  const auto err = [](int status) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           QStringLiteral("x"), QStringLiteral("t"))
+        .withHttpStatus(status);
+  };
+  QVERIFY(!p.isQuotaExhausted(err(429)));
+  QVERIFY(p.isQuotaExhausted(err(430)));
+  QVERIFY(p.isQuotaExhausted(err(431)));
+}
+
+void TestBatchScrapeRunner::single429CountsAsErrorWithoutStoppingBatch() {
+  // Kartend-jjyst.3: a lone HTTP 429 is a seconds-long burst limit, not
+  // quota exhaustion — it must NOT strand the rest of an unattended run.
+  // The 429'd items land in `errors` (re-queueable via failedPaths); every
+  // success in between resets the consecutive-429 streak, so alternating
+  // 429/success never trips the escalation.
   auto stub = std::make_shared<StubProvider>();
-  StubProvider::Canned quotaHit;
-  quotaHit.lookupError = QStringLiteral("rate limited");
-  quotaHit.lookupErrorHttpStatus = 429;
-  stub->byQuery[QStringLiteral("Item0")] = quotaHit;
-  for (int i = 1; i < 10; ++i) {
-    const QString name = QStringLiteral("Item%1").arg(i);
-    stub->byQuery[name] = makeMatch(QString::number(i), name);
+  StubProvider::Canned rateLimited;
+  rateLimited.lookupError = QStringLiteral("rate limited");
+  rateLimited.lookupErrorHttpStatus = 429;
+  stub->byQuery[QStringLiteral("Item0")] = rateLimited;
+  stub->byQuery[QStringLiteral("Item1")] = makeMatch("1", "Item1");
+  stub->byQuery[QStringLiteral("Item2")] = rateLimited;
+  stub->byQuery[QStringLiteral("Item3")] = makeMatch("3", "Item3");
+  QStringList paths;
+  for (int i = 0; i < 4; ++i) {
+    paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
   }
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QVERIFY(!summary.quotaExhausted); // the run kept going
+  QCOMPARE(summary.scraped, 2);
+  QCOMPARE(summary.errors, 2);
+  QCOMPARE(summary.processedItems(), 4); // every item got its shot
+}
+
+void TestBatchScrapeRunner::repeated429sEscalateToQueueStop() {
+  // Kartend-jjyst.3: a limiter that answers 429 to every consecutive request
+  // isn't a burst we can ride out — after the escalation threshold (3) the
+  // runner stops new dispatch through the quota-stop machinery, so the
+  // un-dispatched work persists as the resume point.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned rateLimited;
+  rateLimited.lookupError = QStringLiteral("rate limited");
+  rateLimited.lookupErrorHttpStatus = 429;
   QStringList paths;
   for (int i = 0; i < 10; ++i) {
+    stub->byQuery[QStringLiteral("Item%1").arg(i)] = rateLimited;
     paths.append(QStringLiteral("/games/Item%1.bin").arg(i));
   }
   Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
   runner.start();
   const auto summary = waitForFinish(&runner);
   QVERIFY(summary.quotaExhausted);
-  const int processed = summary.processedItems();
-  QVERIFY(processed < 10);      // stopped dispatching before the other nine
-  QCOMPARE(summary.scraped, 0); // nothing after the wall scraped
+  QCOMPARE(summary.errors, 3);  // exactly the escalation threshold
+  QCOMPARE(summary.scraped, 0); // nothing scraped against the throttle wall
+  QVERIFY(summary.processedItems() < 10);
+  // The escalation left its own explanation in the failure list.
+  QVERIFY(summary.firstFailures.join(QLatin1Char('\n'))
+              .contains(QStringLiteral("consecutive HTTP 429")));
+  // Item2 (the streak-tripping error) and the 7 never-dispatched items stay
+  // in the resume list; the two pre-stop errors are terminal.
+  QCOMPARE(runner.remainingPaths().size(), 8);
+  QVERIFY(runner.remainingPaths().contains(QStringLiteral("/games/Item2.bin")));
+}
+
+void TestBatchScrapeRunner::media429sEscalateToQueueStop() {
+  // Kartend-jjyst.3, media path: image CDNs are the realistic 429 source.
+  // Three parallel asset fetches all answering 429 trip the same escalation
+  // — the item itself still commits (metadata is not hostage to throttled
+  // art), but no new items dispatch.
+  auto stub = std::make_shared<StubProvider>();
+  StubProvider::Canned canned = makeMatch("1", "Alpha");
+  for (const QString &type :
+       {QStringLiteral("front"), QStringLiteral("screenshot"), QStringLiteral("fanart")}) {
+    Scraper::MediaAsset asset;
+    asset.type = type;
+    asset.url = QUrl(QStringLiteral("https://example.invalid/%1/1.png").arg(type));
+    canned.detail.media.append(asset);
+    stub->mediaErrorUrls.insert(asset.url);
+  }
+  stub->mediaErrorHttpStatus = 429;
+  stub->byQuery[QStringLiteral("Alpha")] = canned;
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
+      QString());
+  runner.setMediaTypeFilter(
+      {QStringLiteral("front"), QStringLiteral("screenshot"), QStringLiteral("fanart")});
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QVERIFY(summary.quotaExhausted);
+  QCOMPARE(summary.scraped, 1); // Alpha committed (metadata kept)
+  QCOMPARE(summary.errors, 0);
+  QCOMPARE(summary.mediaFetchFailures, 3);
+  QCOMPARE(summary.processedItems(), 1); // Beta never dispatched
+}
+
+void TestBatchScrapeRunner::mediaFetchFailuresCountedInSummary() {
+  // Kartend-jjyst.4: a failed asset fetch used to tick nothing — a run full
+  // of dead media URLs reported "scraped N, 0 media" with zero diagnostics.
+  // Both failure shapes count: an errored fetch and an ok-but-empty payload.
+  auto stub = std::make_shared<StubProvider>();
+  auto [alphaCanned, alphaUrl] = makeMatchWithCover("1", "Alpha");
+  stub->byQuery[QStringLiteral("Alpha")] = alphaCanned;
+  stub->mediaErrorUrls.insert(alphaUrl); // errored fetch
+  auto [betaCanned, betaUrl] = makeMatchWithCover("2", "Beta");
+  stub->byQuery[QStringLiteral("Beta")] = betaCanned;
+  Q_UNUSED(betaUrl); // absent from mediaByUrl → empty payload
+
+  Scraper::BatchScrapeRunner runner(
+      nullptr, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")},
+      QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 2); // fetch failures stay non-fatal per item
+  QCOMPARE(summary.errors, 0);
+  QCOMPARE(summary.mediaFetchFailures, 2);
+  // Each loss carries a bounded diagnosis in the failure list.
+  const QString joined = summary.firstFailures.join(QLatin1Char('\n'));
+  QVERIFY2(joined.contains(QStringLiteral("fetch failed")), qPrintable(joined));
+  QVERIFY2(joined.contains(QStringLiteral("returned no data")), qPrintable(joined));
+}
+
+void TestBatchScrapeRunner::mediaWriteFailuresCountedInSummary() {
+  // Kartend-jjyst.4: writeMediaFiles' genuine failures (here: mkpath blocked
+  // by a regular file occupying the {artworkDir}/front subdir path — same
+  // trick as the sidecar test) must tick mediaWriteFailures and fold the
+  // per-asset reason into firstFailures instead of vanishing.
+  QTemporaryDir artworkRoot;
+  QVERIFY(artworkRoot.isValid());
+  const QString artworkDir = artworkRoot.path();
+  QFile blocker(QDir(artworkDir).filePath(QStringLiteral("front")));
+  QVERIFY(blocker.open(QIODevice::WriteOnly)); // occupy {artworkDir}/front as a file
+  blocker.close();
+
+  auto stub = std::make_shared<StubProvider>();
+  auto [canned, coverUrl] = makeMatchWithCover("1", "Alpha");
+  stub->byQuery[QStringLiteral("Alpha")] = canned;
+  stub->mediaByUrl[coverUrl] = QByteArrayLiteral("\x89PNG\r\nfakebytes");
+
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"),
+                                    QStringList{QStringLiteral("/games/Alpha.bin")}, artworkDir);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 1); // metadata still lands; only the write is lost
+  QCOMPARE(summary.errors, 0);
+  QCOMPARE(summary.mediaWritten, 0);
+  QCOMPARE(summary.mediaFetchFailures, 0); // the bytes arrived fine
+  QCOMPARE(summary.mediaWriteFailures, 1);
+  const QString joined = summary.firstFailures.join(QLatin1Char('\n'));
+  QVERIFY2(joined.contains(QStringLiteral("could not create")), qPrintable(joined));
 }
 
 void TestBatchScrapeRunner::failureMessageIncludesStatusAndDetail() {
@@ -993,6 +1147,18 @@ void TestBatchScrapeRunner::fillMissingPreSkipsItemsWithEveryTickedFieldCovered(
     QVERIFY(shot.open(QIODevice::WriteOnly));
     shot.write("png");
   }
+  // A second item's front + screenshot make those types prevalent (>= 85% of the
+  // 2-item batch) so they count as "reliably supplied" and their absence blocks the
+  // skip (Kartend-ib46d). Without this a type present for only 1 of 2 items (50%)
+  // would be treated as optional and Beta would wrongly pre-skip.
+  {
+    QFile front(QDir(tmp.path()).filePath(QStringLiteral("Common.png")));
+    QVERIFY(front.open(QIODevice::WriteOnly));
+    front.write("png");
+    QFile shot(QDir(tmp.path()).filePath(QStringLiteral("screenshot/Common.png")));
+    QVERIFY(shot.open(QIODevice::WriteOnly));
+    shot.write("png");
+  }
   // Beta: sidecar only — missing front + screenshot
   QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Beta")).isEmpty());
 
@@ -1020,7 +1186,7 @@ void TestBatchScrapeRunner::fillMissingScrapesItemsMissingAnyTickedField() {
   // A single missing field is enough to force the provider request —
   // FillMissing is "fill the gap", and the only way the runner knows
   // what the gap is, is to ask. Plant the sidecar + front cover but
-  // NOT the ticked screenshot. The item must flow through to scrape.
+  // NOT the ticked screenshot for Alpha. The item must flow through to scrape.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   QVERIFY(!writeStubSidecar(tmp.path(), QStringLiteral("Alpha")).isEmpty());
@@ -1029,7 +1195,15 @@ void TestBatchScrapeRunner::fillMissingScrapesItemsMissingAnyTickedField() {
     QVERIFY(front.open(QIODevice::WriteOnly));
     front.write("png");
   }
-  // No screenshot subdir → screenshot is uncovered for Alpha.
+  // screenshot exists for a DIFFERENT item, so it is obtainable collection-wide
+  // (not auto-ignored, Kartend-ib46d) but is missing for Alpha → Alpha uncovered.
+  {
+    const QString ssDir = QDir(tmp.path()).filePath(QStringLiteral("screenshot"));
+    QVERIFY(QDir().mkpath(ssDir));
+    QFile ss(QDir(ssDir).filePath(QStringLiteral("OtherGame.png")));
+    QVERIFY(ss.open(QIODevice::WriteOnly));
+    ss.write("png");
+  }
 
   auto stub = std::make_shared<StubProvider>();
   stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
@@ -1171,6 +1345,32 @@ void TestBatchScrapeRunner::mediaCoverageMatchesMixedCaseFolders() {
               .contains(QStringLiteral("some game (usa)")));
 }
 
+void TestBatchScrapeRunner::mediaCoverageProbesKindDirectoryForVideoVariants() {
+  // Kartend-jjyst.1: writeMediaFiles routes every video-* asset into video/
+  // (and manuals into manual/) by MediaKind, so the coverage index must probe
+  // that kind directory for those wanted types. Probing a literal
+  // "video-normalized/" folder would read the present video as missing and
+  // FillMissing would re-download it on every run.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString sub = QDir(tmp.path()).filePath(QStringLiteral("video"));
+  QVERIFY(QDir().mkpath(sub));
+  QFile f(QDir(sub).filePath(QStringLiteral("Some Game (USA).mp4")));
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("mp4");
+  f.close();
+
+  const auto index = Scraper::buildMediaCoverageIndex(
+      tmp.path(), {QStringLiteral("video-normalized"), QStringLiteral("video")},
+      /*sidecarCheckPossible=*/true);
+  // Both wanted video types resolve to the shared video/ slot.
+  QVERIFY2(index.presentByType.value(QStringLiteral("video-normalized"))
+               .contains(QStringLiteral("some game (usa)")),
+           "video-normalized coverage did not probe the kind-routed video/ directory");
+  QVERIFY(index.presentByType.value(QStringLiteral("video"))
+              .contains(QStringLiteral("some game (usa)")));
+}
+
 void TestBatchScrapeRunner::fillMissingKnownAbsentMediaCountsAsCovered() {
   // Kartend-kihyx: FillMissing must not re-chase media types the provider
   // doesn't supply. A wanted type recorded in the item's mediaAbsent set counts
@@ -1199,21 +1399,27 @@ void TestBatchScrapeRunner::fillMissingKnownAbsentMediaCountsAsCovered() {
   ctx.dbCheckPossible = true;
   ctx.sidecarCheckPossible = false;
   ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
-  ctx.presentByType[QStringLiteral("front")] = {baseLower}; // front on disk; marquee is not
+  ctx.presentByType[QStringLiteral("front")] = {baseLower}; // front on disk for this item
+  // marquee is a REQUIRED (prevalent) media type — the provider reliably supplies
+  // it collection-wide — but it is missing on disk for THIS item, exactly the case
+  // the per-item known-absent set must handle.
+  ctx.requiredMediaTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
 
-  // marquee is known-absent → treated as covered → the item pre-skips.
+  // marquee required + missing here, but known-absent → treated as covered → skip.
   ctx.metadataByPath[path] = completeRow({QStringLiteral("marquee")});
   QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
 
-  // A wanted type that is NOT known-absent and NOT on disk still forces a scrape.
+  // A required type that is NOT known-absent and NOT on disk still forces a scrape.
   ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("screenshot")};
+  ctx.requiredMediaTypes = {QStringLiteral("front"), QStringLiteral("screenshot")};
   ctx.metadataByPath[path] = completeRow({QStringLiteral("marquee")}); // screenshot not absent
   QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
 
-  // Sidecar-only (no DB): the known-absent set is unavailable, so marquee is not
-  // exempted and the item is kept — preserving the pre-fix behaviour. writeMetadata
-  // off isolates the media half from the (now DB-less) metadata gate.
+  // Sidecar-only (no DB): the known-absent set is unavailable, so the required
+  // marquee is not exempted and the item is kept. writeMetadata off isolates the
+  // media half from the (now DB-less) metadata gate.
   ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
+  ctx.requiredMediaTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
   ctx.dbCheckPossible = false;
   ctx.writeMetadata = false;
   QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
@@ -1254,6 +1460,77 @@ void TestBatchScrapeRunner::computeMediaAbsentTypesDerivesUnsuppliedWantedTypes(
   QVERIFY(
       computeMediaAbsentTypes(Scraper::RescrapeMode::FillMissing, {QStringLiteral("front")}, media)
           .isEmpty());
+}
+
+void TestBatchScrapeRunner::fillMissingIgnoresCollectionWideUnobtainableMedia() {
+  // Kartend-ib46d: a wanted media type that NO item in the collection has on disk
+  // (0 files collection-wide) is unobtainable here and must not block the skip. A
+  // type present for OTHER items but missing for this one still blocks — until the
+  // per-item known-absent set records it.
+  using MD = ItemMetadataStore::ItemMetadata;
+  const auto completeRow = []() {
+    MD md;
+    md.source = QStringLiteral("screenscraper");
+    md.title = QStringLiteral("T");
+    md.description = QStringLiteral("D");
+    md.genre = QStringLiteral("G");
+    md.developer = QStringLiteral("Dev");
+    md.publisher = QStringLiteral("Pub");
+    md.releaseDate = QStringLiteral("1990");
+    return md;
+  };
+  const QString path = QStringLiteral("/games/PS1.bin");
+  const QString baseLower = QStringLiteral("ps1"); // completeBaseName("PS1.bin").toLower()
+
+  Scraper::ScrapeSkipContext ctx;
+  ctx.mode = Scraper::RescrapeMode::FillMissing;
+  ctx.writeMetadata = true;
+  ctx.dbCheckPossible = true;
+  ctx.wantedTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
+  ctx.presentByType[QStringLiteral("front")] = {baseLower}; // front on disk for this item
+  // marquee is NOT prevalent (absent from requiredMediaTypes) → optional → skip.
+  ctx.requiredMediaTypes = {QStringLiteral("front")};
+  ctx.metadataByPath[path] = completeRow();
+  QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // marquee now required (prevalent) but missing for this item and not known-absent
+  // → it blocks the skip.
+  ctx.requiredMediaTypes = {QStringLiteral("front"), QStringLiteral("marquee")};
+  QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // ...unless recorded absent for this item (kihyx) → covered again.
+  MD withAbsent = completeRow();
+  withAbsent.mediaAbsent = {QStringLiteral("marquee")};
+  ctx.metadataByPath[path] = withAbsent;
+  QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
+}
+
+void TestBatchScrapeRunner::computePrevalentMediaTypesAppliesThreshold() {
+  // Kartend-ib46d: only media types present for >= threshold of the collection are
+  // "required" (their absence blocks a FillMissing skip); sparse types fall out.
+  using Scraper::computePrevalentMediaTypes;
+  const auto bases = [](int n) {
+    QSet<QString> s;
+    for (int i = 0; i < n; ++i) s.insert(QString::number(i));
+    return s;
+  };
+  QHash<QString, QSet<QString>> present;
+  present[QStringLiteral("front")] = bases(90);      // 90/100 = 90% >= 85% → required
+  present[QStringLiteral("screenshot")] = bases(85); // exactly 85% → required (inclusive)
+  present[QStringLiteral("video")] = bases(3);       // 3% → optional
+  // "map" absent from the hash → 0% → optional.
+  const QSet<QString> wanted{QStringLiteral("front"), QStringLiteral("screenshot"),
+                             QStringLiteral("video"), QStringLiteral("map")};
+
+  QCOMPARE(computePrevalentMediaTypes(present, {}, wanted, 100, 0.85),
+           (QSet<QString>{QStringLiteral("front"), QStringLiteral("screenshot")}));
+
+  // itemCount 0 → nothing is "reliably supplied".
+  QVERIFY(computePrevalentMediaTypes(present, {}, wanted, 0, 0.85).isEmpty());
+
+  // front counts its flat-mirror basenames too (subdir empty, flat carries it).
+  QCOMPARE(computePrevalentMediaTypes({}, bases(90), {QStringLiteral("front")}, 100, 0.85),
+           (QSet<QString>{QStringLiteral("front")}));
 }
 
 void TestBatchScrapeRunner::quotaExhaustedStopsBatchAndSkipsRemainingItems() {

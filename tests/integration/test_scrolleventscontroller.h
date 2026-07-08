@@ -21,6 +21,7 @@ class TestScrollEventsController : public QObject {
 private slots:
   void listColumnWidths_persistThroughSettingsManager();
   void listColumnWidths_updateSettingsEvenWithoutSettingsManager();
+  void listColumnWidths_preferDebouncedSaverOverDirectSave();
   void sortModeChange_withoutNavigationManagerLeavesSettingsUntouched();
   void sortModeChange_updatesAndPersistsSortMode();
 };

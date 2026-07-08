@@ -80,7 +80,12 @@ void TreeManager::rebuild() {
   if (!m_widget) {
     return;
   }
+  // clear() fires itemSelectionChanged when rows were selected; flag the
+  // programmatic clear so the deselect gate in onWidgetSelectionChanged
+  // stays out of the way (see m_rebuilding).
+  m_rebuilding = true;
   m_widget->clear();
+  m_rebuilding = false;
   m_itemToIndex.clear();
   m_indexToItem.clear();
   m_indexToLinkedItems.clear();
@@ -284,6 +289,37 @@ void TreeManager::onWidgetSelectionChanged() {
   }
   QList<QTreeWidgetItem *> selectedItems = m_widget->selectedItems();
   if (selectedItems.isEmpty()) {
+    // A blank-area click clears the selection. Run the same unsaved-changes
+    // gate a collection→collection switch uses: once the index drops to -1,
+    // hasUnsavedChanges() short-circuits false and the pending form edits
+    // become silently unrecoverable (saveCollectionFromUI is the only path
+    // into m_workingCollections).
+    const int previousIndex = *m_currentCollectionIndex;
+    // Skip the gate for programmatic clears: a rebuild() or an in-flight
+    // drag-drop move empties the selection transiently, manages its own save
+    // state, and may hold item pointers a prompt-triggered save would delete.
+    if (!m_rebuilding && !m_widget->dropInProgress() && previousIndex >= 0 &&
+        previousIndex < m_workingCollections->size()) {
+      if (!m_host->resolveUnsavedChanges(tr("deselecting"), true)) {
+        // Cancel: restore the previous row with the widget's signals blocked
+        // so the programmatic re-selection can't re-enter this handler and
+        // re-prompt — same shape as the switch guard below.
+        if (auto *previousItem = itemAt(previousIndex)) {
+          QSignalBlocker blocker(m_widget);
+          m_widget->setCurrentItem(previousItem);
+          previousItem->setSelected(true);
+        }
+        return;
+      }
+      // Save rebuilds the tree and re-selects the saved row (refreshTree in
+      // handleSaveCollection). The user asked to deselect, so clear that
+      // restored selection — blocked, or the clear re-enters this handler.
+      if (!m_widget->selectedItems().isEmpty()) {
+        QSignalBlocker blocker(m_widget);
+        m_widget->clearSelection();
+        m_widget->setCurrentItem(nullptr);
+      }
+    }
     *m_currentTreeItem = nullptr;
     *m_currentCollectionIndex = -1;
     m_host->updateDeleteButtonState();

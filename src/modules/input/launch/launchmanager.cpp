@@ -346,6 +346,11 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= launcherProfile.launcherCount()) {
     resolvedLauncherIndex = 0;
   }
+  // Stamp the double-launch debounce window only now that the launch actually
+  // proceeds — a chooser cancel above must not consume the window and reject
+  // a fast retry (same stamp-only-once-we-proceed rule the caller applies to
+  // validation-rejected launches).
+  recordLaunch(filePath);
   // resolve preset references at launch time. When the
   // entry's presetId names a registered preset, its fields override the
   // inline ones; otherwise the inline fields are used as-is.

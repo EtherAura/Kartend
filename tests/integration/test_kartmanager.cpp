@@ -451,6 +451,121 @@ void TestKartManager::testImportSkipsReporterWhenAllLauncherPathsResolve() {
   QCOMPARE(reporterCalls, 0);
 }
 
+void TestKartManager::testImportKartAsyncSequentialImportsRegisterBoth() {
+  // 1. One real .kart bundle, imported twice — the drop-chain shape for a
+  // multi-file drop (each file goes through the same worker entry, one at
+  // a time).
+  auto src = buildSyntheticCollection(QStringLiteral("Async Seq"), QStringLiteral("clip.bin"),
+                                      QByteArray("async-bytes"));
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("async-seq-uuid"), {});
+  QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("asyncseq.kart"));
+  KartWriter::Writer writer;
+  QVERIFY(writer.writeKart(kartPath, prep.value()).isOk());
+
+  // 2. Wire a KartManager the way MainWindow does for the drop path:
+  // registerCollection is implicit (runImport always registers), so the
+  // collections list + ctx must be live. No confirmer/resolver — the
+  // bundle carries no suspicious paths and no conflicts.
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+  QList<CollectionConfig> collections;
+  kart::KartManagerSetup setup;
+  setup.ctx = &appCtx;
+  setup.getCollections = [&collections]() -> QList<CollectionConfig> * { return &collections; };
+  setup.getLauncherPresets = []() -> QList<LauncherPreset> { return {}; };
+  setup.getParentWindow = []() -> QWidget * { return nullptr; };
+  setup.getPlaylistManager = []() -> IPlaylistManager * { return nullptr; };
+  kartMgr->setupReferences(setup);
+
+  QSignalSpy startedSpy(kartMgr, &kart::KartManager::kartProgressStarted);
+  QSignalSpy finishedSpy(kartMgr, &kart::KartManager::kartProgressFinished);
+  QSignalSpy importedSpy(kartMgr, &kart::KartManager::collectionImported);
+  QSignalSpy failedSpy(kartMgr, &kart::KartManager::importFailed);
+
+  // 3. First import: the entry returns immediately (extraction runs on the
+  // thread pool), the progress lifecycle has started, and the future is in
+  // flight until the finished continuation runs on the event loop.
+  QTemporaryDir destA;
+  QVERIFY(destA.isValid());
+  kartMgr->importKartAsync(kartPath, destA.path());
+  QCOMPARE(startedSpy.count(), 1);
+  QVERIFY2(kartMgr->operationInFlight(),
+           "the worker future must be live right after importKartAsync returns");
+  QVERIFY2(importedSpy.wait(30000), "first async import must reach collectionImported");
+  QVERIFY2(!kartMgr->operationInFlight(),
+           "the terminal signal fires only after the watcher slot cleared the operation");
+
+  // 4. Second import, dispatched only after the first one's terminal
+  // signal — exactly the sequencing the drop chain enforces.
+  QTemporaryDir destB;
+  QVERIFY(destB.isValid());
+  kartMgr->importKartAsync(kartPath, destB.path());
+  QCOMPARE(startedSpy.count(), 2);
+  QVERIFY2(importedSpy.wait(30000), "second async import must reach collectionImported");
+
+  QCOMPARE(failedSpy.count(), 0);
+  QCOMPARE(finishedSpy.count(), 2);
+  QCOMPARE(importedSpy.count(), 2);
+
+  // 5. Both imports registered; the second got the uniqueness suffix
+  // instead of colliding with the first.
+  QCOMPARE(collections.size(), 2);
+  QCOMPARE(collections.at(0).name, QStringLiteral("Async Seq"));
+  QCOMPARE(collections.at(1).name, QStringLiteral("Async Seq (2)"));
+  // On-disk payload landed under each collection's registered media dir.
+  for (const CollectionConfig &c : std::as_const(collections)) {
+    QVERIFY(QFile::exists(QDir(c.mediaDirectory).filePath(QStringLiteral("clip.bin"))));
+  }
+}
+
+void TestKartManager::testImportKartAsyncFailureEmitsTerminalSignals() {
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QStringList warnings; // "title|text" per warn call — no modal headlessly
+  kart::KartManagerSetup setup;
+  setup.ctx = &appCtx;
+  setup.getParentWindow = []() -> QWidget * { return nullptr; };
+  setup.dialogs.warn = [&warnings](const QString &title, const QString &text) {
+    warnings.append(title + QStringLiteral("|") + text);
+  };
+  kartMgr->setupReferences(setup);
+
+  QSignalSpy failedSpy(kartMgr, &kart::KartManager::importFailed);
+  QSignalSpy progressFailedSpy(kartMgr, &kart::KartManager::kartProgressFailed);
+  QSignalSpy importedSpy(kartMgr, &kart::KartManager::collectionImported);
+
+  QTemporaryDir destRoot;
+  QVERIFY(destRoot.isValid());
+  kartMgr->importKartAsync(QStringLiteral("/nonexistent/bundle.kart"), destRoot.path());
+  QVERIFY2(failedSpy.wait(30000), "a nonexistent bundle must end in importFailed");
+
+  // Exactly one terminal outcome: the failure pair fired, success didn't,
+  // and the drop chain is free to dispatch the next job.
+  QCOMPARE(failedSpy.count(), 1);
+  QCOMPARE(progressFailedSpy.count(), 1);
+  QCOMPARE(importedSpy.count(), 0);
+  QVERIFY(!kartMgr->operationInFlight());
+  QCOMPARE(warnings.size(), 1);
+  QVERIFY(warnings.first().startsWith(QStringLiteral("Import Kart|")));
+}
+
 namespace {
 // Build a .kart whose primary launcherPath resolves inside `extractRoot` (the
 // directory the import will extract into), simulating a malicious kart that

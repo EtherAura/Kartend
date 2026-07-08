@@ -29,6 +29,13 @@ public:
   void setCycleCheck(CycleCheck check) { m_cycleCheck = std::move(check); }
   void setItemToIndex(ItemToIndex resolver) { m_itemToIndex = std::move(resolver); }
 
+  /// True while the base-class drop handler is relocating items. An internal
+  /// move takes the dragged rows out of the tree first, which transiently
+  /// empties the selection — TreeManager's deselect gate must not treat that
+  /// as a user deselect (item pointers are mid-move and a prompt-triggered
+  /// save could rebuild the tree under the drop).
+  [[nodiscard]] bool dropInProgress() const { return m_dropInProgress; }
+
 signals:
   /// Emitted after a drag-and-drop reparenting completes successfully. The
   /// host should re-walk the tree and update parentCollectionIndex on each
@@ -41,6 +48,7 @@ protected:
 private:
   CycleCheck m_cycleCheck;
   ItemToIndex m_itemToIndex;
+  bool m_dropInProgress = false;
 };
 
 #endif

@@ -13,10 +13,17 @@
 //   - transport errors propagate to the caller's callback unchanged;
 //   - parser errors (malformed body) surface as error Results;
 //   - guard paths (blank query, missing candidate id, missing TMDB
-//     token) answer synchronously without issuing a request.
+//     token) answer synchronously without issuing a request;
+//   - the shared bounded transient-retry loop in ProviderBase::getWithRetry
+//     (Kartend-jjyst.10): a transient failure re-dispatches the same request
+//     (each attempt is a separate captured request — the seam sits below the
+//     loop), a deliberate RequestQueueCleared cancel never retries, and the
+//     attempt count is bounded. Classification/backoff math is owned by
+//     test_scraperretrypolicy.cpp.
 // WebSearchProvider is deliberately absent: it has no HTTP path at all
 // (it only builds a browser URL), and that surface is already covered
 // by test_providerrequests.cpp.
+#include <memory>
 #include <utility>
 
 #include <QByteArray>
@@ -33,6 +40,7 @@
 #include "musicbrainzprovider.h"
 #include "openlibraryprovider.h"
 #include "providerbase.h"
+#include "scraperretrypolicy.h"
 #include "scrapertypes.h"
 #include "tmdbprovider.h"
 
@@ -165,6 +173,23 @@ ErrorUtils::ErrorContext cannedTransportError() {
                                          QStringLiteral("FakeFetch"));
 }
 
+/// A server-side 5xx — RetryPolicy::isTransient classifies it retryable, so
+/// it exercises ProviderBase's bounded retry loop (Kartend-jjyst.10).
+ErrorUtils::ErrorContext transient503Error() {
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::NetworkRequestFailed,
+                                         QStringLiteral("simulated HTTP 503"),
+                                         QStringLiteral("FakeFetch"))
+      .withHttpStatus(503);
+}
+
+/// HttpClient::clearPending's marker for a deliberately cancelled queued
+/// request (batch cancel). Must NEVER be retried (Kartend-jjyst.2).
+ErrorUtils::ErrorContext queueClearedError() {
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::RequestQueueCleared,
+                                         QStringLiteral("request queue cleared"),
+                                         QStringLiteral("FakeFetch"));
+}
+
 GeneralSettings settingsWithTmdbToken(const QString &token) {
   GeneralSettings settings;
   settings.scraper.credentials[QStringLiteral("tmdb")][QStringLiteral("api_token")] = token;
@@ -209,11 +234,22 @@ private slots:
   void tmdb_fetchEntity_emptyName_errorsWithoutRequest();
   void tmdb_fetchEntity_emptyResults_isNotFound();
 
+  // ProviderBase transient-retry loop (Kartend-jjyst.10), driven through
+  // MusicBrainz as a representative getJson consumer.
+  void retry_transient503ThenSuccess_redispatchesAndDeliversOneResult();
+  void retry_transient503Persisting_boundedAttemptsThenSurfacesError();
+  void retry_requestQueueCleared_isNotRetried();
+
 private:
   /// Arms the seam to capture every request into m_requests and answer
   /// with @p response (one canned response reused for every request the
   /// test issues — each test drives exactly one HTTP roundtrip).
   void respondWith(ErrorUtils::Result<QByteArray> response);
+
+  /// Sequence variant for the retry tests: each captured request consumes
+  /// the next canned response; the last one repeats once the list is down
+  /// to a single entry (so "always 503" is just a one-element sequence).
+  void respondWithSequence(QList<ErrorUtils::Result<QByteArray>> responses);
 
   QList<CapturedRequest> m_requests;
 };
@@ -234,6 +270,22 @@ void TestProviderOrchestration::respondWith(ErrorUtils::Result<QByteArray> respo
                                              Scraper::HttpClient::ResponseCallback callback,
                                              const QStringList & /*allowedHostSuffixes*/) {
         m_requests.append({url, headers});
+        callback(response);
+      });
+}
+
+void TestProviderOrchestration::respondWithSequence(
+    QList<ErrorUtils::Result<QByteArray>> responses) {
+  // shared_ptr: the seam lambda must be copyable (std::function), and the
+  // remaining-responses list mutates across dispatches.
+  auto remaining = std::make_shared<QList<ErrorUtils::Result<QByteArray>>>(std::move(responses));
+  ProviderBase::setFetchFunctionForTesting(
+      [this, remaining](const QUrl &url, const Scraper::HttpClient::RawHeaders &headers,
+                        Scraper::HttpClient::ResponseCallback callback,
+                        const QStringList & /*allowedHostSuffixes*/) {
+        m_requests.append({url, headers});
+        const ErrorUtils::Result<QByteArray> response =
+            remaining->size() > 1 ? remaining->takeFirst() : remaining->first();
         callback(response);
       });
 }
@@ -741,6 +793,84 @@ void TestProviderOrchestration::tmdb_fetchEntity_emptyResults_isNotFound() {
     QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::RemoteResourceNotFound));
   });
   QVERIFY(called);
+  QCOMPARE(m_requests.size(), 1);
+}
+
+// --- ProviderBase transient-retry loop (Kartend-jjyst.10) ---------------
+
+void TestProviderOrchestration::retry_transient503ThenSuccess_redispatchesAndDeliversOneResult() {
+  respondWithSequence({transient503Error(), MB_SEARCH_JSON});
+  MusicBrainzProvider provider;
+
+  int deliveries = 0;
+  QList<Scraper::ScrapeCandidate> delivered;
+  provider.lookup(QStringLiteral("Album A"),
+                  [&](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
+                    ++deliveries;
+                    QVERIFY(result.isOk());
+                    delivered = result.value();
+                  });
+
+  // The first attempt answered 503 synchronously; the loop must NOT surface
+  // it — the retry waits out the backoff on the event loop.
+  QCOMPARE(deliveries, 0);
+  QCOMPARE(m_requests.size(), 1);
+
+  QTRY_COMPARE_WITH_TIMEOUT(deliveries, 1, 10000);
+  // Exactly two dispatches (initial + one retry), one delivered result.
+  QCOMPARE(m_requests.size(), 2);
+  // Both attempts re-issued the SAME idempotent request.
+  QCOMPARE(m_requests.at(1).url, m_requests.at(0).url);
+  QCOMPARE(delivered.size(), 2);
+}
+
+void TestProviderOrchestration::retry_transient503Persisting_boundedAttemptsThenSurfacesError() {
+  respondWithSequence({transient503Error()}); // every attempt answers 503
+  MusicBrainzProvider provider;
+
+  int deliveries = 0;
+  ErrorUtils::ErrorContext surfaced;
+  provider.lookup(QStringLiteral("Album A"),
+                  [&](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
+                    ++deliveries;
+                    QVERIFY(result.isError());
+                    surfaced = result.error();
+                  });
+
+  QCOMPARE(deliveries, 0);
+  // Backoff between attempts is 500ms then 1000ms (RetryPolicy defaults);
+  // give the two waits generous headroom.
+  QTRY_COMPARE_WITH_TIMEOUT(deliveries, 1, 15000);
+  // Bounded: initial attempt + kDefaultMaxRetries retries, then the last
+  // error surfaces exactly once.
+  QCOMPARE(m_requests.size(), 1 + Scraper::RetryPolicy::kDefaultMaxRetries);
+  QCOMPARE(surfaced.httpStatus, 503);
+}
+
+void TestProviderOrchestration::retry_requestQueueCleared_isNotRetried() {
+  respondWithSequence({queueClearedError(), MB_SEARCH_JSON});
+  MusicBrainzProvider provider;
+
+  int deliveries = 0;
+  ErrorUtils::ErrorContext surfaced;
+  provider.lookup(QStringLiteral("Album A"),
+                  [&](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
+                    ++deliveries;
+                    QVERIFY(result.isError());
+                    surfaced = result.error();
+                  });
+
+  // A deliberate local cancel surfaces synchronously — no retry timer may be
+  // scheduled for a run the user killed (Kartend-jjyst.2), even though a
+  // "success" is queued up behind it.
+  QCOMPARE(deliveries, 1);
+  QCOMPARE(m_requests.size(), 1);
+  QCOMPARE(surfaced.code, ErrorUtils::ErrorCode::RequestQueueCleared);
+
+  // And nothing fires later either: pump the event loop past the first-retry
+  // backoff window and re-assert.
+  QTest::qWait(700);
+  QCOMPARE(deliveries, 1);
   QCOMPARE(m_requests.size(), 1);
 }
 

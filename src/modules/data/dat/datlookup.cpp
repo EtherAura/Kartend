@@ -674,6 +674,34 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
 
 ErrorUtils::Result<QList<DatRecord>> parseClrMameProDat(const QByteArray &xml) {
   const QList<CmpToken> toks = tokenizeClrMamePro(decodeDatText(xml));
+  // Truncation guard, mirroring the XML dialects' closing-root-tag check
+  // (Kartend-u4sdu): the tokeniser simply stops at EOF, so a partial download
+  // cut mid-file would otherwise "parse" to a partial record set — which
+  // DatCache then commits sticky on (path, mtime). Parens inside quoted
+  // strings are consumed as string payload by the tokeniser, so token-level
+  // paren balance IS the block structure: a nonzero depth (or a stray close)
+  // at EOF means the stream ended inside a block.
+  {
+    int depth = 0;
+    bool unbalanced = false;
+    for (const CmpToken &t : toks) {
+      if (t.kind == CmpToken::Open) {
+        ++depth;
+      } else if (t.kind == CmpToken::Close) {
+        if (depth == 0) {
+          unbalanced = true;
+          break;
+        }
+        --depth;
+      }
+    }
+    if (unbalanced || depth != 0) {
+      return ErrorContext::error(ErrorCode::InvalidArgument,
+                                 "clrmamepro DAT has unbalanced block parentheses — file is "
+                                 "truncated or incomplete",
+                                 "DatLookup::parseClrMameProDat");
+    }
+  }
   QList<DatRecord> out;
   const int n = toks.size();
   int i = 0;

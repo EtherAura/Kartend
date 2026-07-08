@@ -58,7 +58,7 @@ public:
     QStackedWidget *stackedWidget = nullptr;
     QWidget *itemsPage = nullptr;
     QList<CollectionConfig> *collections = nullptr;
-    int *currentCollectionIndex = nullptr;
+    const int *currentCollectionIndex = nullptr;
     GeneralSettings *generalSettings = nullptr;
   };
   void setupReferences(const Setup &setup);
@@ -109,7 +109,7 @@ private:
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_itemsPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 
   // Pending dwell state — null widget pointer means "no dwell active".

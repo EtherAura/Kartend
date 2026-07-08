@@ -79,8 +79,15 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   m_hasSubAndItemsCache.clear();
   QObject::disconnect(m_collectionsModifiedConn);
   if (auto *settings = settingsMgr()) {
-    m_collectionsModifiedConn = connect(settings, &ISettingsManager::collectionsModified, this,
-                                        [this]() { m_hasSubAndItemsCache.clear(); });
+    m_collectionsModifiedConn =
+        connect(settings, &ISettingsManager::collectionsModified, this, [this]() {
+          m_hasSubAndItemsCache.clear();
+          // The navigation stack holds raw collection indices too — after a
+          // removal/reorder a Back pop would silently land in the wrong
+          // collection. Drop the history; Back then takes the validated
+          // fallback path instead.
+          m_stackManager->clear();
+        });
   }
 
   // Callbacks

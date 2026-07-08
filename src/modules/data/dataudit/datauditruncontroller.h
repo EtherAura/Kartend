@@ -7,8 +7,11 @@
 // run DatAudit::run, and marshal throttled progress back — lives here. The
 // controller owns the QFutureWatcher and the shared cancel flag, and emits
 // progress()/finished() on its own (UI) thread; the dialog keeps pure view
-// concerns (progress bar, summary, snapshot persistence) and connects to those
-// signals.
+// concerns (progress bar, summary) and connects to those signals. The
+// result-snapshot persistence for a saved profile also runs on the worker
+// (Kartend-h7xnr.5): replaying tens of thousands of result rows through
+// replaceResults on the GUI thread stalled the dialog exactly when the user
+// expected interactivity back.
 //
 // Named *RunController, not DatAuditRunner, because namespace DatAudit already
 // owns datauditrunner.h — the stateless audit ENGINE (DatAudit::run) this
@@ -40,6 +43,12 @@ public:
     bool ignoreHashCache = false;
     DatAudit::Layout layout = DatAudit::Layout::Unknown;
     DatAudit::MergeMode mergeMode = DatAudit::MergeMode::Split;
+    /// Saved profile whose result snapshot + last-scan stamp the worker
+    /// persists after a completed (non-cancelled) run, on the worker's own DB
+    /// connection. -1 (the default) skips persistence — ad-hoc/unsaved runs
+    /// stay ephemeral by design. Snapshotted at start like everything else
+    /// here, so a profile switch mid-run can't retarget the write.
+    qint64 persistProfileId = -1;
   };
 
   explicit DatAuditRunController(QObject *parent = nullptr);
@@ -54,6 +63,12 @@ public:
 signals:
   /// Throttled (~200/run) progress, already marshalled to this object's thread.
   void progress(const DatAudit::AuditProgress &p);
+  /// The result snapshot + last-scan stamp for Request::persistProfileId are
+  /// committed and queryable. Emitted only when persistence was requested, the
+  /// run completed uncancelled, and both writes succeeded (failures are
+  /// logged). Queued from the worker BEFORE its future completes, so it always
+  /// arrives before finished(). @p whenMs is the stamped last-scan time.
+  void snapshotPersisted(qint64 profileId, qint64 whenMs);
   /// The completed audit output (carries cancelled + failedDats).
   void finished(const DatAudit::AuditOutput &out);
 

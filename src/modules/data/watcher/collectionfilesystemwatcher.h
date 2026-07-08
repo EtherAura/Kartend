@@ -20,12 +20,15 @@ QT_END_NAMESPACE
 ///
 /// QFileSystemWatcher is not recursive on Linux/macOS, so configure() walks
 /// each collection's media directory once at registration time and registers
-/// every subdirectory it finds. When a `directoryChanged` event fires we
-/// re-walk that branch and reconcile the watch set so newly-created
-/// subdirectories are picked up automatically.
+/// every subdirectory it finds. When a `directoryChanged` event fires, the
+/// per-collection debounce timer is (re)started; when it fires, the
+/// collection's tree is re-walked on a QtConcurrent worker and the watch set
+/// reconciled (on this object's thread) so newly-created subdirectories are
+/// picked up automatically — one walk per event burst, off the GUI thread.
 ///
 /// The rescan callback runs on the GUI thread (the watcher's QObject lives on
-/// it). Callers are expected to forward the collectionIndex argument to
+/// it), after the reconcile walk for that burst has been applied. Callers are
+/// expected to forward the collectionIndex argument to
 /// NavigationManager::forceRescanCollection or equivalent.
 class CollectionFilesystemWatcher : public QObject {
   Q_OBJECT
@@ -72,6 +75,8 @@ private:
   };
 
   void onDirectoryChanged(const QString &path);
+  void startReconcileWalk(int collectionIndex);
+  void onWalkFinished(int collectionIndex, int generation, const QStringList &freshDirs);
   void emitRescan(int collectionIndex);
 
   QFileSystemWatcher *m_watcher = nullptr;
@@ -80,6 +85,14 @@ private:
   QHash<int, QTimer *> m_debounceTimers;
   RescanCallback m_callback;
   int m_debounceMs = 2000;
+  // Bumped by configure(); in-flight reconcile walks carry the generation
+  // they were launched under and are discarded when it no longer matches.
+  int m_configGeneration = 0;
+  // Collections with a reconcile walk currently running on the worker pool,
+  // and those that received another debounce expiry mid-walk and need the
+  // walk re-run when the current one lands (coalescing).
+  QSet<int> m_walksInFlight;
+  QSet<int> m_walkRerunPending;
 };
 
 #endif // KARTEND_MODULES_DATA_WATCHER_COLLECTIONFILESYSTEMWATCHER_H

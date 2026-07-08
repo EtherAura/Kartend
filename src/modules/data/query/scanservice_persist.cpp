@@ -706,30 +706,107 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
       return;
     }
 
-    // Apply staged results atomically.
-    KartendDb::DbTransaction applyTxn(
-        m_db, m_txnDepth, "ScanService::saveItemsToDatabase",
-        [this](const ErrorUtils::ErrorContext &e) { emit errorOccurred(e); });
-    if (!applyTxn.activeOrReport("Failed to start transaction to apply staged scan results")) {
-      return;
-    }
+    // Apply staged results atomically, under the same bounded lock-contention
+    // retry + classification as commitStagedScanResults (Kartend-kt39d — see
+    // the ladder rationale there). This legacy path previously ran the apply
+    // once and swallowed a meta.exec() failure entirely (metaOk just skipped
+    // the commit; the guard's dtor rolled back with no log and no
+    // errorOccurred), so last_scanned never advanced and needsRescan re-walked
+    // the directory on every load, invisibly. Every step now routes through a
+    // classifying reporter: lock contention on a non-final attempt logs at
+    // debug and retries the whole transaction on a fresh snapshot; the final
+    // attempt and every non-lock failure keep the warning log + errorOccurred.
+    // The staged temp table is connection-local and only read by the apply,
+    // and a failed attempt rolls back completely, so the apply is restartable.
+    const auto applyAttempt = [&](bool finalAttempt, bool &lockContention) -> bool {
+      lockContention = false;
+      const auto reportFailure = [&](const ErrorUtils::ErrorContext &err) {
+        if (KartendDb::isLockContentionError(err)) {
+          lockContention = true;
+          if (!finalAttempt) {
+            qCDebug(lcQueryManager).nospace()
+                << err.source << ": " << err.message << " (" << err.details
+                << ") — transient lock contention; retrying the apply on a fresh snapshot";
+            return;
+          }
+        }
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+      };
+      const auto stepError = [](const QString &what, const QString &details) {
+        return ErrorContext::warning(ErrorCode::DatabaseQueryFailed, what,
+                                     "ScanService::saveItemsToDatabase")
+            .withDetails(details);
+      };
 
-    const bool upsertOk = m_scannedItems.applyToItems(legacyId, uuid);
-    const bool deleteOk = m_scannedItems.deleteItemsMissingFromScan(uuid);
+      // No error sink on the guard: failures route through reportFailure so
+      // retried attempts stay quiet (same shape as applyStagedScanResultsAttempt).
+      KartendDb::DbTransaction applyTxn(m_db, m_txnDepth, "ScanService::saveItemsToDatabase");
+      if (!applyTxn.active()) {
+        reportFailure(
+            applyTxn.beginError("Failed to start transaction to apply staged scan results"));
+        return false;
+      }
 
-    QSqlQuery &meta = m_cache.get(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
-    meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
-    meta.bindValue(1, dirSignature);
-    meta.bindValue(2, uuid);
-    const bool metaOk = meta.exec();
+      QString upsertErrorDetails;
+      if (!m_scannedItems.applyToItems(legacyId, uuid, &upsertErrorDetails)) {
+        // The hot lock-contention site: the txn's first write.
+        reportFailure(stepError("Failed to apply scanned_items upsert", upsertErrorDetails));
+        return false;
+      }
 
-    if (upsertOk && deleteOk && metaOk) {
+      QString deleteErrorDetails;
+      if (!m_scannedItems.deleteItemsMissingFromScan(uuid, &deleteErrorDetails)) {
+        reportFailure(
+            stepError("Failed to delete missing items using scanned_items", deleteErrorDetails));
+        return false;
+      }
+
+      QSqlQuery &meta = m_cache.get(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+      meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
+      meta.bindValue(1, dirSignature);
+      meta.bindValue(2, uuid);
+      if (!meta.exec()) {
+        reportFailure(
+            stepError("Failed to update collection scan metadata", meta.lastError().text()));
+        return false;
+      }
+
       // A dropped commit leaves the scan metadata unpersisted, so
       // needsRescan() keeps returning true and the collection re-scans every
       // launch (Kartend-gv7f). Surface it rather than swallow; the guard's
       // dtor rolls back the aborted transaction.
-      (void)applyTxn.commitOrReport("Failed to commit staged scan results");
+      if (!applyTxn.commit()) {
+        reportFailure(applyTxn.commitError("Failed to commit staged scan results"));
+        return false;
+      }
+      return true;
+    };
+
+    constexpr int MAX_APPLY_ATTEMPTS = 3;
+    constexpr int BASE_DELAY_MS = 100;
+    for (int attempt = 0; attempt < MAX_APPLY_ATTEMPTS; ++attempt) {
+      if (attempt > 0) {
+        if (isScanCancelled()) {
+          return;
+        }
+        // Brief backoff (100ms, 200ms) so a writer mid-commit can clear.
+        QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+      }
+      bool lockContention = false;
+      if (applyAttempt(attempt == MAX_APPLY_ATTEMPTS - 1, lockContention)) {
+        if (attempt > 0) {
+          qCWarning(lcQueryManager).nospace()
+              << "ScanService::saveItemsToDatabase: apply landed on attempt " << (attempt + 1)
+              << " after database-is-locked contention";
+        }
+        return;
+      }
+      if (!lockContention) {
+        return; // genuine failure — already reported by the attempt
+      }
+      // Lock contention with retries remaining: loop for a fresh snapshot.
     }
-    // On any step failure the guard's dtor rolls back.
+    // Terminal: the final attempt reported at warning + errorOccurred.
   }
 }

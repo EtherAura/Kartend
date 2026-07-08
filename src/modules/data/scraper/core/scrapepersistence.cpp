@@ -61,30 +61,22 @@ bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
     f.cancelWriting();
     return false;
   }
-  return f.commit();
+  if (!f.commit()) {
+    return false;
+  }
+  // Durable-write contract: the rename above isn't crash-safe until the
+  // parent directory entry itself is flushed (same as kartwriter et al).
+  PathUtils::syncDirectory(QFileInfo(filePath).absolutePath());
+  return true;
 }
 
 bool isStandardArtworkType(const QString &type) {
   return ItemArtworkStore::isStandardType(type);
 }
 
-/// Coarse classification of a scraped media asset. Drives which
-/// collection directory the file lands in (artwork vs video vs
-/// manual) and which file extension we default to when the URL
-/// doesn't carry one.
-enum class MediaKind { Image, Video, Manual };
-
-MediaKind kindForType(const QString &type) {
-  const QString lower = type.trimmed().toLower();
-  if (lower == QLatin1String("video")) return MediaKind::Video;
-  if (lower == QLatin1String("manual")) return MediaKind::Manual;
-  // Everything else (front / box / screenshot / fanart / marquee /
-  // logo / mixrbv1-2 / custom user types) is treated as an image.
-  // ScreenScraper's "trailer" is *technically* a video but ships
-  // rarely and falls through here for now; can be added once a
-  // provider start surfacing it.
-  return MediaKind::Image;
-}
+// MediaKind + kindForType moved to scrapertypes.h (Kartend-jjyst.1) so the
+// providers (per-kind Content-Type prefix / size cap) and the skip-decision
+// coverage index share the same classification as this file's write router.
 
 /// Picks the on-disk extension for a written asset. Honours the URL
 /// suffix when present so an MP4 stays MP4 and a WebM stays WebM;
@@ -224,6 +216,19 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   // resolve the primary cover straight from the typed subdirectories
   // (see ArtworkUtils::findArtworkForFile).
 
+  // Genuine per-asset failures go to BOTH lists: firstFailures (the
+  // human-readable reason channel paired with mediaSkipped) and
+  // writeFailures (the failure-only list the batch summary folds in, kept
+  // apart from benign rescrape-policy skips, Kartend-jjyst.4).
+  auto recordFailure = [&result](const QString &reason) {
+    if (result.firstFailures.size() < kMaxReportedFailures) {
+      result.firstFailures.append(reason);
+    }
+    if (result.writeFailures.size() < kMaxReportedFailures) {
+      result.writeFailures.append(reason);
+    }
+  };
+
   if (!artworkDirectory.isEmpty() && !baseName.isEmpty()) {
     const QDir artRoot(artworkDirectory);
     for (const auto &write : media) {
@@ -235,10 +240,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       }
       if (write.bytes.isEmpty() || write.asset.type.isEmpty()) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < kMaxReportedFailures) {
-          result.firstFailures.append(
-              QStringLiteral("%1: empty bytes or type").arg(write.asset.type));
-        }
+        recordFailure(QStringLiteral("%1: empty bytes or type").arg(write.asset.type));
         continue;
       }
       const MediaKind kind = kindForType(write.asset.type);
@@ -265,10 +267,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // are safe; this matters for the Image case where subdir == asset.type.
       if (!PathUtils::isSafePathComponent(subdir)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < kMaxReportedFailures) {
-          result.firstFailures.append(
-              QStringLiteral("%1: unsafe media subdirectory").arg(write.asset.type));
-        }
+        recordFailure(QStringLiteral("%1: unsafe media subdirectory").arg(write.asset.type));
         continue;
       }
       // Group/Company-scoped assets land in `_shared/` and use the
@@ -284,20 +283,14 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // traverse out of the _shared/ directory.
       if (sharedScope && !PathUtils::isSafePathComponent(write.asset.scopeKey)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < kMaxReportedFailures) {
-          result.firstFailures.append(
-              QStringLiteral("%1: unsafe shared scope key").arg(write.asset.type));
-        }
+        recordFailure(QStringLiteral("%1: unsafe shared scope key").arg(write.asset.type));
         continue;
       }
       const QString destDir = sharedScope ? artRoot.filePath(QStringLiteral("_shared/") + subdir)
                                           : artRoot.filePath(subdir);
       if (!QDir().mkpath(destDir)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < kMaxReportedFailures) {
-          result.firstFailures.append(
-              QStringLiteral("%1: could not create %2").arg(write.asset.type, destDir));
-        }
+        recordFailure(QStringLiteral("%1: could not create %2").arg(write.asset.type, destDir));
         continue;
       }
       // Shared filename: `<scope>_<scopeKey>.<ext>`. Per-game keeps
@@ -315,6 +308,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
         // in firstFailures so the dialog can surface it to the user
         // instead of an opaque "N skipped".
         ++result.mediaSkipped;
+        result.existingPaths.append(destFile);
         if (result.firstFailures.size() < kMaxReportedFailures) {
           result.firstFailures.append(QStringLiteral("%1: %2").arg(write.asset.type, *reason));
         }
@@ -322,10 +316,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       }
       if (!writeBytesAtomically(destFile, write.bytes)) {
         ++result.mediaSkipped;
-        if (result.firstFailures.size() < kMaxReportedFailures) {
-          result.firstFailures.append(
-              QStringLiteral("%1: write failed (%2)").arg(write.asset.type, destFile));
-        }
+        recordFailure(QStringLiteral("%1: write failed (%2)").arg(write.asset.type, destFile));
         continue;
       }
       ++result.mediaWritten;
@@ -478,17 +469,25 @@ ItemMetadataStore::ItemMetadata mergeScrapedIntoExisting(ItemMetadataStore::Item
   // returned union (not just the wanted set) and dedup, lowercase. Because both
   // save paths load `existing` first, accumulation across runs falls out of this
   // load-modify-store without any runner-side bookkeeping.
+  //
+  // Exception (Kartend-jjyst.1): a returned type whose byte-fetch FAILED this
+  // run (scraped.mediaFetchFailedThisRun) is not satisfied — pruning its marker
+  // would flip the item back to unskippable and re-chase (and re-fail) the same
+  // download every FillMissing run. Keep the marker until a fetch succeeds.
   QSet<QString> returnedTypes;
   for (const MediaAsset &m : scraped.media) {
     if (m.url.isValid()) returnedTypes.insert(m.type.toLower());
   }
+  QSet<QString> failedTypes;
+  for (const QString &t : scraped.mediaFetchFailedThisRun) failedTypes.insert(t.toLower());
   QStringList mergedAbsent = existing.mediaAbsent;
   mergedAbsent += scraped.mediaAbsentThisRun;
   QStringList prunedAbsent;
   QSet<QString> seenAbsent;
   for (const QString &t : mergedAbsent) {
     const QString lower = t.toLower();
-    if (returnedTypes.contains(lower) || seenAbsent.contains(lower)) continue;
+    if (seenAbsent.contains(lower)) continue;
+    if (returnedTypes.contains(lower) && !failedTypes.contains(lower)) continue;
     seenAbsent.insert(lower);
     prunedAbsent.append(lower);
   }

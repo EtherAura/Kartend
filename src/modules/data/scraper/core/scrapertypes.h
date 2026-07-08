@@ -101,6 +101,34 @@ enum class EntityArtRole {
   Background, ///< Feeds backgroundImage.
 };
 
+/// Coarse classification of a scraped media asset. Drives which
+/// collection directory the file lands in (artwork vs video vs
+/// manual), which file extension we default to when the URL doesn't
+/// carry one, and which Content-Type prefix / response-size cap the
+/// provider's media fetch enforces (Kartend-jjyst.1). Shared here so
+/// the persistence router, the skip-decision coverage index, and the
+/// providers can't drift apart on what counts as a video.
+enum class MediaKind { Image, Video, Manual };
+
+[[nodiscard]] inline MediaKind kindForType(const QString &type) {
+  const QString lower = type.trimmed().toLower();
+  // "video" plus every "video-*" variant (ScreenScraper serves
+  // "video-normalized" alongside the raw "video") — matching only the
+  // exact token classified the normalized variant as an image, so it
+  // was fetched with the image/ Content-Type pin and written as .png
+  // (Kartend-jjyst.1).
+  if (lower == QLatin1String("video") || lower.startsWith(QLatin1String("video-"))) {
+    return MediaKind::Video;
+  }
+  if (lower == QLatin1String("manual")) return MediaKind::Manual;
+  // Everything else (front / box / screenshot / fanart / marquee /
+  // logo / mixrbv1-2 / custom user types) is treated as an image.
+  // ScreenScraper's "trailer" is *technically* a video but ships
+  // rarely and falls through here for now; can be added once a
+  // provider starts surfacing it.
+  return MediaKind::Image;
+}
+
 /// One downloadable media asset attached to a scraped item — typically
 /// a cover/screenshot/fanart/marquee/video URL plus enough metadata
 /// for the result dialog to label and group it.
@@ -190,6 +218,14 @@ struct ScrapedItem {
   /// later supplied) so FillMissing stops re-chasing provider-absent media
   /// (Kartend-kihyx). Empty for non-FillMissing / filter-less runs.
   QStringList mediaAbsentThisRun;
+  /// Media types (lowercase) whose byte-fetch FAILED (or came back empty) on
+  /// THIS run even though the provider returned a URL for them. The
+  /// known-absent merge must not prune these from ItemMetadata::mediaAbsent as
+  /// if they were satisfied — a type that is returned but consistently fails
+  /// to download would otherwise flip back to "re-chase every FillMissing run"
+  /// and re-burn quota (Kartend-jjyst.1). Stamped by BatchScrapeRunner's media
+  /// aggregator; empty on paths that don't track per-asset download outcomes.
+  QStringList mediaFetchFailedThisRun;
 };
 
 /// Snapshot of the provider's per-account request quota, surfaced live

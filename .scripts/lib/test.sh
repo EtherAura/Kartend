@@ -43,7 +43,14 @@ run_ctest() {
   # and the "skipped by default" contract in docs/dev/testing.md — a CMake
   # LABELS property does NOT exclude a test from a bare run, so it must be done
   # here. Run benchmarks explicitly with `ctest -L benchmark` in the build dir.
-  ctest --test-dir "$dir" --output-on-failure -LE benchmark
+  #
+  # -j matches the staged CI parallelism rollout (Kartend-pnlot.1); the harness
+  # isolates per-test HOME so parallel runs are safe. build_jobs is build.sh's
+  # --jobs=N global (defaults to nproc), always set before any mode runs — same
+  # guarantee as root_dir above. Known flakes under -j + host load: the
+  # DatabaseManager and QueryManagerCrossCollectionCount integration tests —
+  # re-run one isolated before assuming a regression.
+  ctest --test-dir "$dir" --output-on-failure -LE benchmark -j "$build_jobs"
 }
 
 # Run `cmake --install` and transparently elevate with sudo when the install

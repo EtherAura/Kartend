@@ -16,22 +16,31 @@ target_sources(kartend_api PRIVATE
   idetailpageoverlay.h
   idetailspane.h
   idetailspanemanager.h
+  ifilecollectionlookup.h
   ifiltermanager.h
   igridlayoutscroll.h
   iinteractionmanager.h
   ikeyboardmanager.h
+  ikeyeventsink.h
   imainwindow.h
+  imouseholdcontrol.h
   imousemanager.h
+  imousewheelstate.h
   inavigationmanager.h
   iplaylistmanager.h
   iscrolldatasource.h
   iscrollmanager.h
   isearchstatescroll.h
+  iselectioncore.h
   iselectionmanager.h
   iselectionoverlayscroll.h
   isessionmanager.h
   isettingsdialog.h
   isettingsmanager.h
+  iuseractivitysink.h
   ivirtualscrolllifecycle.h
   iviewportmanager.h
+  iviewportpositioner.h
+  iviewportscrollstate.h
+  iwheelscrollanimator.h
 )

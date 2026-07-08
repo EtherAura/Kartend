@@ -283,41 +283,6 @@ DatabaseManager::loadAllItemPathsForCollection(const QString &collectionUuid) co
   return out;
 }
 
-QHash<QString, IDatabaseManager::ItemStateFlags>
-DatabaseManager::loadItemStateFlagsForCollection(const QString &collectionUuid) const {
-  QHash<QString, IDatabaseManager::ItemStateFlags> out;
-  if (!m_db.isOpen() || collectionUuid.isEmpty()) {
-    return out;
-  }
-  QSqlQuery q(const_cast<QSqlDatabase &>(m_db));
-  if (!q.prepare("SELECT path, is_pinned, is_hidden, continue_later "
-                 "FROM item_metadata "
-                 "WHERE collection_uuid = ? "
-                 "AND (is_pinned = 1 OR is_hidden = 1 OR continue_later = 1)")) {
-    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                             "Failed to prepare item-state-flags query",
-                                             "DatabaseManager::loadItemStateFlagsForCollection")
-                             .withDetails(q.lastError().text()));
-    return out;
-  }
-  q.addBindValue(collectionUuid);
-  if (!q.exec()) {
-    ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                             "Failed to enumerate item state flags",
-                                             "DatabaseManager::loadItemStateFlagsForCollection")
-                             .withDetails(q.lastError().text()));
-    return out;
-  }
-  while (q.next()) {
-    IDatabaseManager::ItemStateFlags flags;
-    flags.isPinned = q.value(1).toInt() != 0;
-    flags.isHidden = q.value(2).toInt() != 0;
-    flags.continueLater = q.value(3).toInt() != 0;
-    out.insert(q.value(0).toString(), flags);
-  }
-  return out;
-}
-
 namespace {
 
 /// Meta-table key for the purge gate (Kartend-dbqt5): SHA-1 of the sorted

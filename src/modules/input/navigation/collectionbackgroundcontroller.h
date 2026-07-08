@@ -30,7 +30,7 @@ struct CollectionBackgroundControllerSetup {
   QWidget *itemsTopBar = nullptr;
   QMenuBar *menubar = nullptr;
   QLineEdit *searchBar = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 };
 
@@ -78,7 +78,7 @@ private:
   QWidget *m_itemsTopBar = nullptr;
   QMenuBar *m_menubar = nullptr;
   QLineEdit *m_searchBar = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
 
   // lazy-created on first collection that requests a video background.

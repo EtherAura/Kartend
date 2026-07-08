@@ -302,6 +302,7 @@ private slots:
   void startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid();
   void startEntityScrapeGameOnlyProviderReturnsFalseWithMessage();
   void startEntityScrapeNullProviderReturnsFalseWithMessage();
+  void startEntityScrapeWhileServiceActiveReturnsFalseWithMessage();
 
 private:
   // Mirrors ScraperService's private pending-state paths (same approach as
@@ -474,7 +475,10 @@ void TestScrapeResultDialogUnified::pickerNeededRendersCandidatesAndLiveMetadata
   service.startScrape({makeJob(0, collections[0].name, {QStringLiteral("/m/one.bin")})},
                       ScraperService::Mode::Interactive, {}, /*writeMetadata=*/true);
 
-  auto *combo = dlg.findChild<QComboBox *>();
+  // Target the candidate picker by name — the unified setup page carries
+  // other QComboBoxes (rescrape policy, region), so a bare findChild would
+  // grab whichever was constructed first.
+  auto *combo = dlg.findChild<QComboBox *>(QStringLiteral("interactiveCandidateCombo"));
   QVERIFY(combo);
   QCOMPARE(combo->count(), 2);
   // Label format: displayName, then " — subtitle" when present, then the
@@ -1041,6 +1045,51 @@ void TestScrapeResultDialogUnified::startEntityScrapeNullProviderReturnsFalseWit
   QVERIFY2(modal.texts.first().contains(QStringLiteral("No scraper is configured")),
            qPrintable(modal.texts.first()));
   QCOMPARE(service.state(), ScraperService::State::Idle);
+}
+
+void TestScrapeResultDialogUnified::startEntityScrapeWhileServiceActiveReturnsFalseWithMessage() {
+  // Kartend-jjyst.8: launching entity art while a scrape is live must be
+  // refused UP FRONT — message + false — without touching the running run.
+  // Regression: no isActive() guard meant the dialog wiped its live-view
+  // state, the service silently refused, and startEntityScrape still
+  // returned true → the controller showed a dead dialog.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+  provider->parkEntityInto(m_parkedCallbacks); // first run parks → stays live
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+
+  QVERIFY(dlg.startEntityScrape(1)); // Beta — parks in flight, service active
+  QVERIFY(service.isActive());
+
+  KartendTest::ModalAnswerQueue modal({QMessageBox::Ok});
+  QVERIFY(!dlg.startEntityScrape(0)); // Alpha — refused while Beta's run is live
+  QCOMPARE(modal.texts.size(), 1);
+  QVERIFY2(modal.texts.first().contains(QStringLiteral("already running")),
+           qPrintable(modal.texts.first()));
+  // The live run is untouched: still active, still Beta's dispatched target,
+  // and the persisted queue still carries Beta's job (not Alpha's).
+  QVERIFY(service.isActive());
+  QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.first().toObject().value(QStringLiteral("collection_uuid")).toString(),
+           expectedUuid(collections[1]));
 }
 
 QTEST_MAIN(TestScrapeResultDialogUnified)

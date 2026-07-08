@@ -103,12 +103,19 @@ void ScrollEventsController::onCoverFlowItemActivated(int index) {
 }
 
 void ScrollEventsController::onListColumnWidthChanged(int width) {
-  // Persist list column width when user resizes.
+  // Persist list column width when user resizes. The header emits this once
+  // per mouse-move tick during a drag, so the write-through to the live
+  // struct is immediate (the resize applies visually elsewhere) while the
+  // full-INI persist goes through the host's debounced saver when wired.
   auto *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
   if (!settings) {
     return;
   }
   settings->view.listCollectionColumnWidth = width;
+  if (m_ctx.scheduleSettingsSave) {
+    m_ctx.scheduleSettingsSave();
+    return;
+  }
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
     ErrorPresentation::reportSaveResult(sm->saveGeneralSettings(*settings), "general settings",
                                         false);
@@ -116,12 +123,17 @@ void ScrollEventsController::onListColumnWidthChanged(int width) {
 }
 
 void ScrollEventsController::onListArtworkColumnWidthChanged(int width) {
-  // Persist list artwork column width when user resizes.
+  // Persist list artwork column width when user resizes. Same per-tick
+  // emission + debounced-persist shape as onListColumnWidthChanged above.
   auto *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
   if (!settings) {
     return;
   }
   settings->view.listArtworkColumnWidth = width;
+  if (m_ctx.scheduleSettingsSave) {
+    m_ctx.scheduleSettingsSave();
+    return;
+  }
   if (auto *sm = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
     ErrorPresentation::reportSaveResult(sm->saveGeneralSettings(*settings), "general settings",
                                         false);

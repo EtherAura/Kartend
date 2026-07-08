@@ -55,6 +55,21 @@ private slots:
   // "No collection selected" failure instead of a modal popping.
   void testInteractiveFlowsUseStubbedDialogRunners();
 
+  // Kartend-h7xnr.1: importKartAsync (the drop-drain entry) runs the same
+  // QtConcurrent worker path as the menu import — kartProgressStarted /
+  // kartProgressFinished bracket each run, operationInFlight() is true
+  // while the future is live, and two back-to-back imports of the same
+  // bundle (sequenced off collectionImported, exactly how MainWindow's
+  // drop chain does it) register both collections with the name-dedup
+  // suffix on the second.
+  void testImportKartAsyncSequentialImportsRegisterBoth();
+
+  // Kartend-h7xnr.1: the async failure path — a nonexistent bundle — must
+  // end in exactly the terminal signals the drop chain sequences on
+  // (importFailed + kartProgressFailed), route the message through the
+  // warn runner, and leave no operation in flight.
+  void testImportKartAsyncFailureEmitsTerminalSignals();
+
   // Kartend-u8wf0: a headless import whose launcher path resolves inside
   // the extracted kart tree (a self-bundled executable) is refused by
   // default, with an error that names the opt-in flag.

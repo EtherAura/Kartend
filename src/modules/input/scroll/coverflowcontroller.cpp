@@ -364,6 +364,8 @@ void CoverFlowController::resolveAndPushVideo(int visualIndex) {
   // even though the active context is the parent.
   QString videoDirectory = m_context->config.videoDirectory;
   QString videoExpansionName = m_context->config.name;
+  QString artworkDirectory = m_context->config.artworkDirectory;
+  QString artworkExpansionName = m_context->config.name;
   if (db) {
     const int owningIndex = db->getCollectionIndexForFile(fullPath);
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
@@ -375,14 +377,27 @@ void CoverFlowController::resolveAndPushVideo(int visualIndex) {
         videoDirectory = CollectionUtils::resolveVideoDirectory(owningIndex, *m_collections);
         videoExpansionName = owning.name;
       }
+      if (!owning.artworkDirectory.trimmed().isEmpty()) {
+        artworkDirectory = owning.artworkDirectory;
+        artworkExpansionName = owning.name;
+      } else if (artworkDirectory.trimmed().isEmpty() && m_collections) {
+        artworkDirectory = CollectionUtils::resolveArtworkDirectory(owningIndex, *m_collections);
+        artworkExpansionName = owning.name;
+      }
     }
   }
-  if (videoDirectory.trimmed().isEmpty()) {
-    m_widget->setVideoPathForIndex(visualIndex, QString());
-    return;
+  // Two lookup roots in priority order (matches detailspanemanagermetadata.cpp):
+  // the explicit videoDirectory, then {artworkDirectory}/video/ — the
+  // single-root layout the scraper writes to.
+  QString videoPath;
+  if (!videoDirectory.trimmed().isEmpty()) {
+    videoDirectory = PathUtils::validateAndExpandPath(videoDirectory, videoExpansionName);
+    videoPath = VideoUtils::findVideoForFile(fullPath, videoDirectory);
   }
-  videoDirectory = PathUtils::validateAndExpandPath(videoDirectory, videoExpansionName);
-  const QString videoPath = VideoUtils::findVideoForFile(fullPath, videoDirectory);
+  if (videoPath.isEmpty() && !artworkDirectory.trimmed().isEmpty()) {
+    artworkDirectory = PathUtils::validateAndExpandPath(artworkDirectory, artworkExpansionName);
+    videoPath = VideoUtils::findVideoForFile(fullPath, QDir(artworkDirectory).filePath("video"));
+  }
   m_widget->setVideoPathForIndex(visualIndex, videoPath);
 }
 
@@ -493,12 +508,18 @@ void CoverFlowController::resolveAndPushGallery(int visualIndex) {
     pushEntry(type, type);
   }
   // Prepend the preview video so the gallery follows the video-first
-  // ordering the rest of the preview flow uses (matches sidebar).
+  // ordering the rest of the preview flow uses (matches sidebar). Two lookup
+  // roots in priority order: the explicit videoDirectory, then
+  // {artworkDirectory}/video/ — the single-root layout the scraper writes to.
+  QString videoPath;
   if (!videoDirectory.isEmpty()) {
-    const QString videoPath = VideoUtils::findVideoForFile(fullPath, videoDirectory);
-    if (!videoPath.isEmpty()) {
-      entries.prepend({QObject::tr("Video"), videoPath, /*isVideo=*/true});
-    }
+    videoPath = VideoUtils::findVideoForFile(fullPath, videoDirectory);
+  }
+  if (videoPath.isEmpty() && !artworkDirectory.isEmpty()) {
+    videoPath = VideoUtils::findVideoForFile(fullPath, QDir(artworkDirectory).filePath("video"));
+  }
+  if (!videoPath.isEmpty()) {
+    entries.prepend({QObject::tr("Video"), videoPath, /*isVideo=*/true});
   }
 
   m_widget->setGalleryForIndex(visualIndex, entries);

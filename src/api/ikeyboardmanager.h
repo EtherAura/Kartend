@@ -1,6 +1,7 @@
 #ifndef IKEYBOARDMANAGER_H
 #define IKEYBOARDMANAGER_H
 
+#include "ikeyeventsink.h"
 #include <Qt>
 
 QT_BEGIN_NAMESPACE
@@ -17,17 +18,17 @@ QT_END_NAMESPACE
  * helpers stay on the concrete class, which InteractionManager owns
  * directly as a unique_ptr and connects signals against).
  *
+ * The raw key press / release delegation lives on IKeyEventSink, which
+ * this interface unions (Kartend-dl0uz.2) — the event filter takes
+ * ctx->keyEventSink() instead of the full repeat-state surface.
+ *
  * Plain abstract class, not a QObject — KeyboardManager derives QObject
  * directly; see its multiple-inheritance declaration. Add a method here
  * only when a sibling genuinely needs to call it via ctx.
  */
-class IKeyboardManager {
+class IKeyboardManager : public IKeyEventSink {
 public:
-  virtual ~IKeyboardManager() = default;
-
-  // Key event handling
-  [[nodiscard]] virtual bool handleKeyPress(QKeyEvent *event, bool searchBarFocused) = 0;
-  [[nodiscard]] virtual bool handleKeyRelease(QKeyEvent *event) = 0;
+  ~IKeyboardManager() override = default;
 
   // Key repeat management
   virtual void stopRepeat(bool suppressRecentering = false) = 0;

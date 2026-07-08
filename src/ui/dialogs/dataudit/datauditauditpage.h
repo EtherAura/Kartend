@@ -100,6 +100,7 @@ private:
   void onRun();
   void onCancel();
   void onAuditProgress(const DatAudit::AuditProgress &p);
+  void onSnapshotPersisted(qint64 profileId, qint64 whenMs);
   void onAuditFinished(const DatAudit::AuditOutput &out);
   void onFilterChanged(int index);
   void updateSummary(const DatAudit::AuditSummary &s);

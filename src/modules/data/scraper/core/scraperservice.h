@@ -98,6 +98,15 @@ public:
     /// dialog's Live view can render "items: X · media: Y" instead
     /// of just an item count.
     int mediaWritten = 0;
+    /// Media asset fetches that failed or returned empty, accumulated across
+    /// the queue — mirrors BatchScrapeRunner::Summary::mediaFetchFailures.
+    /// Without the mirror a resumed or multi-collection run under-reported
+    /// its media failures (Kartend-jjyst.16).
+    int mediaFetchFailures = 0;
+    /// Genuine media write failures (disk full, mkpath failure, unsafe path)
+    /// across the queue — mirrors BatchScrapeRunner::Summary::
+    /// mediaWriteFailures (Kartend-jjyst.16).
+    int mediaWriteFailures = 0;
     QStringList firstFailures;
     /// Full source path of an errored item, tagged with the index of the
     /// collection that owns it — enough for the dialog to rebuild a
@@ -178,8 +187,11 @@ public:
   /// Begin a fresh scrape. Walks the supplied jobs in order. Each
   /// `job.items` is the explicit list of paths to scrape (already
   /// filtered by the dialog). The service takes ownership of the
-  /// orchestration; clients observe via signals.
-  void startScrape(const QList<CollectionJob> &jobs, Mode mode, const QSet<QString> &mediaFilter,
+  /// orchestration; clients observe via signals. Returns false — and
+  /// touches no run state — when a run is already active (state !=
+  /// Idle), so callers can surface the refusal instead of presenting
+  /// a scrape that never started.
+  bool startScrape(const QList<CollectionJob> &jobs, Mode mode, const QSet<QString> &mediaFilter,
                    bool writeMetadata);
 
   /// Resume from a previously-persisted state. Behaviour matches
@@ -308,6 +320,16 @@ private:
   /// persisted state as the resume point — mirrors onAutoFinished's quota
   /// branch. Shared by the interactive and entity paths.
   void stopForQuotaExhaustion();
+  /// Consecutive-429 escalation shared by the interactive and entity paths
+  /// (Kartend-jjyst.15) — mirrors BatchScrapeRunner's noteRateLimited429():
+  /// a single HTTP 429 is burst throttling and only fails the item/asset,
+  /// but a limiter answering 429 to kConsecutive429StopThreshold consecutive
+  /// requests isn't letting up. Returns true when the streak just reached the
+  /// threshold; the caller then escalates via stopForQuotaExhaustion() so the
+  /// un-finished work persists as the resume point. Any success, not-found,
+  /// or differently-coded error resets the streak. The auto path keeps its
+  /// own counter inside the runner (its quotaExhausted rolls up here).
+  bool noteRateLimited429();
   void onAutoItemBegan(int doneInCol, int totalInCol, const QString &name);
   void onAutoItemCompleted(int doneInCol, int totalInCol, const Scraper::ScrapedItem &scraped,
                            const QStringList &mediaPaths);
@@ -346,6 +368,9 @@ private:
   /// path has no m_autoRunner to detach the way the batch path does). Kartend-
   /// ckepd.2 review.
   quint64 m_runGeneration = 0;
+  /// Consecutive HTTP 429 count across the interactive/entity paths — see
+  /// noteRateLimited429(). Reset on run start and on any non-429 outcome.
+  int m_consecutive429Count = 0;
   Summary m_summary;
   int m_totalItemsAtStart = 0;
   int m_itemsCompleted = 0;

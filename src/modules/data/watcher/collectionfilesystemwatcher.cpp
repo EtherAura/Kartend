@@ -3,10 +3,35 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QFutureWatcher>
+#include <QLoggingCategory>
 #include <QQueue>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QTimer>
 
 #include "settingsutils.h"
+
+Q_LOGGING_CATEGORY(lcCollectionWatcher, "kartend.collectionwatcher")
+
+namespace {
+// addPaths returns the subset it could NOT register (e.g. inotify watch
+// exhaustion). Directories on that list get no change events — mutations under
+// them silently stop triggering rescans — so leave a loud breadcrumb. Returns
+// the failed subset so callers can keep their bookkeeping honest (a dir we
+// don't actually watch must not be recorded as watched, or a later reconcile
+// would never retry it).
+QStringList addPathsLogged(QFileSystemWatcher *watcher, const QStringList &dirs,
+                           const QString &rootPath) {
+  const QStringList failed = watcher->addPaths(dirs);
+  if (!failed.isEmpty()) {
+    qCWarning(lcCollectionWatcher)
+        << "Failed to watch" << failed.size() << "of" << dirs.size() << "directories under"
+        << rootPath << "(watch descriptor limit?); changes there will not trigger rescans."
+        << "First failed paths:" << failed.mid(0, 5);
+  }
+  return failed;
+}
+} // namespace
 
 CollectionFilesystemWatcher::CollectionFilesystemWatcher(QObject *parent) : QObject(parent) {
   m_watcher = new QFileSystemWatcher(this);
@@ -85,6 +110,11 @@ void CollectionFilesystemWatcher::configure(const QList<CollectionConfig> &colle
   for (auto it = m_debounceTimers.begin(); it != m_debounceTimers.end(); ++it) {
     if (it.value()) it.value()->stop();
   }
+  // Invalidate in-flight reconcile walks the same way: their results describe
+  // the layout being torn down and must be dropped when they land.
+  ++m_configGeneration;
+  m_walksInFlight.clear();
+  m_walkRerunPending.clear();
 
   for (int i = 0; i < collections.size(); ++i) {
     const CollectionConfig &cfg = collections.at(i);
@@ -93,8 +123,13 @@ void CollectionFilesystemWatcher::configure(const QList<CollectionConfig> &colle
     const QString mediaDir = SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name);
     if (mediaDir.trimmed().isEmpty()) continue;
 
-    const QStringList dirs = enumerateWatchableSubdirs(mediaDir);
+    QStringList dirs = enumerateWatchableSubdirs(mediaDir);
     if (dirs.isEmpty()) continue;
+
+    if (m_watcher) {
+      const QStringList failed = addPathsLogged(m_watcher, dirs, mediaDir);
+      for (const QString &f : failed) dirs.removeOne(f);
+    }
 
     WatchEntry entry;
     entry.collectionIndex = i;
@@ -102,8 +137,6 @@ void CollectionFilesystemWatcher::configure(const QList<CollectionConfig> &colle
     for (const QString &d : dirs) entry.watchedSubdirs.insert(d);
     m_entries.insert(i, entry);
     for (const QString &d : dirs) m_pathToCollection.insert(d, i);
-
-    if (m_watcher) m_watcher->addPaths(dirs);
   }
 }
 
@@ -112,13 +145,66 @@ void CollectionFilesystemWatcher::onDirectoryChanged(const QString &path) {
   if (it == m_pathToCollection.cend()) return;
   const int collectionIndex = it.value();
 
-  // Reconcile the watch set for this collection — directoryChanged can fire
-  // because a subfolder was created or removed; the QFSW only sees the
-  // mutation event, not the resulting tree. Re-walking from the root is
-  // O(n) in directory count which is fine for a debounced path.
+  // Debounce the reconcile walk + rescan: bursts of filesystem events (e.g.
+  // copying a folder) should coalesce into a single tree walk and a single
+  // rescan, instead of one O(all-subdirs) walk per mutation on the GUI thread.
+  // QTimer::singleShot won't work because we need to reset the deadline on
+  // each new event for the same collection.
+  QTimer *&timer = m_debounceTimers[collectionIndex];
+  if (!timer) {
+    timer = new QTimer(this);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, this,
+            [this, collectionIndex]() { startReconcileWalk(collectionIndex); });
+  }
+  timer->start(m_debounceMs);
+}
+
+void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex) {
+  const auto entryIt = m_entries.constFind(collectionIndex);
+  if (entryIt == m_entries.cend()) {
+    // No watch bookkeeping for this collection (shouldn't happen while a
+    // debounce timer for it is live) — still honor the pending rescan.
+    emitRescan(collectionIndex);
+    return;
+  }
+  if (m_walksInFlight.contains(collectionIndex)) {
+    // A walk for this collection is already on the pool. Coalesce: re-run it
+    // once the current one lands so events that arrived mid-walk still get
+    // their reconcile + rescan, without ever stacking concurrent walks.
+    m_walkRerunPending.insert(collectionIndex);
+    return;
+  }
+  m_walksInFlight.insert(collectionIndex);
+
+  // The re-walk is needed because directoryChanged only reports the mutated
+  // directory, not the resulting tree — but a BFS stat of every subdirectory
+  // is too slow for the GUI thread on a large or network-mounted library, so
+  // it runs on the global pool. Only the pure static helper (capturing a copy
+  // of rootPath) runs there; QFileSystemWatcher is touched exclusively from
+  // this object's (GUI) thread when the future lands. The QFutureWatcher is
+  // parented to `this`, so destruction mid-walk just drops the result.
+  const int generation = m_configGeneration;
+  const QString rootPath = entryIt->rootPath;
+  auto *walkWatcher = new QFutureWatcher<QStringList>(this);
+  connect(walkWatcher, &QFutureWatcher<QStringList>::finished, this,
+          [this, walkWatcher, collectionIndex, generation]() {
+            walkWatcher->deleteLater();
+            onWalkFinished(collectionIndex, generation, walkWatcher->result());
+          });
+  walkWatcher->setFuture(
+      QtConcurrent::run(&CollectionFilesystemWatcher::enumerateWatchableSubdirs, rootPath));
+}
+
+void CollectionFilesystemWatcher::onWalkFinished(int collectionIndex, int generation,
+                                                 const QStringList &freshDirs) {
+  // configure() ran while the walk was in flight: the result describes a torn
+  // down layout (and the in-flight/rerun sets were already cleared) — drop it.
+  if (generation != m_configGeneration) return;
+  m_walksInFlight.remove(collectionIndex);
+
   auto entryIt = m_entries.find(collectionIndex);
   if (entryIt != m_entries.end()) {
-    const QStringList freshDirs = enumerateWatchableSubdirs(entryIt->rootPath);
     QSet<QString> freshSet;
     for (const QString &d : freshDirs) freshSet.insert(d);
 
@@ -132,7 +218,13 @@ void CollectionFilesystemWatcher::onDirectoryChanged(const QString &path) {
     }
 
     if (m_watcher) {
-      if (!toAdd.isEmpty()) m_watcher->addPaths(toAdd);
+      if (!toAdd.isEmpty()) {
+        const QStringList failed = addPathsLogged(m_watcher, toAdd, entryIt->rootPath);
+        for (const QString &f : failed) {
+          toAdd.removeOne(f);
+          freshSet.remove(f);
+        }
+      }
       if (!toRemove.isEmpty()) m_watcher->removePaths(toRemove);
     }
     for (const QString &d : toRemove) m_pathToCollection.remove(d);
@@ -140,18 +232,13 @@ void CollectionFilesystemWatcher::onDirectoryChanged(const QString &path) {
     entryIt->watchedSubdirs = freshSet;
   }
 
-  // Debounce the rescan: bursts of filesystem events (e.g. copying a folder)
-  // should coalesce into a single rescan. QTimer::singleShot won't work
-  // because we need to reset the deadline on each new event for the same
-  // collection.
-  QTimer *&timer = m_debounceTimers[collectionIndex];
-  if (!timer) {
-    timer = new QTimer(this);
-    timer->setSingleShot(true);
-    connect(timer, &QTimer::timeout, this,
-            [this, collectionIndex]() { emitRescan(collectionIndex); });
+  emitRescan(collectionIndex);
+
+  // A debounce window elapsed while we were walking — run the deferred walk
+  // now so those later events get reconciled and rescanned too.
+  if (m_walkRerunPending.remove(collectionIndex)) {
+    startReconcileWalk(collectionIndex);
   }
-  timer->start(m_debounceMs);
 }
 
 void CollectionFilesystemWatcher::emitRescan(int collectionIndex) {

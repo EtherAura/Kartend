@@ -408,6 +408,15 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
     QPoint vpPos = collectionTreeWidget->viewport()->mapFrom(src, mouseEvent->pos());
     const QTreeWidgetItem *hit = collectionTreeWidget->itemAt(vpPos);
     if (!hit) {
+      // Deselecting discards the form's route into m_workingCollections, so
+      // run the same Save/Discard/Cancel gate a collection switch uses before
+      // clearing. On Cancel, swallow the click and keep the selection. After
+      // Save/Discard the state is clean, so TreeManager's own deselect gate
+      // (driven by clearSelection() below) passes without a second prompt.
+      if (!resolveUnsavedChanges(tr("deselecting"), true)) {
+        event->accept();
+        return true;
+      }
       collectionTreeWidget->clearSelection();
       collectionTreeWidget->setCurrentItem(nullptr);
       currentTreeItem = nullptr;

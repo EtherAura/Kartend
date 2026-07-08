@@ -9,6 +9,7 @@
 #include "videopreviewwidget.h"
 #include "videoutils.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QFrame>
 #include <QFutureWatcher>
@@ -49,8 +50,11 @@ void ArtworkPreviewOverlay::setupUI() {
                                 "border: 2px solid palette(highlight); "
                                 "border-radius: 8px; }");
 
-  // Close button
+  // Close button. The visible label is a bare glyph, so give assistive
+  // tech (and hover users) a real name.
   m_closeButton = new QPushButton(tr("✕"), this);
+  m_closeButton->setAccessibleName(tr("Close"));
+  m_closeButton->setToolTip(tr("Close"));
   m_closeButton->setFixedSize(32, 32);
   m_closeButton->setCursor(Qt::PointingHandCursor);
   m_closeButton->setStyleSheet("QPushButton { background-color: palette(window); border: 1px solid "
@@ -89,12 +93,8 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
   if (!ExtensionUtils::isDecodableImagePath(artworkPath)) {
     return;
   }
-  QPixmap artwork(artworkPath);
-  if (artwork.isNull()) {
-    return;
-  }
   m_currentArtworkPath = artworkPath;
-  displayPixmap(artwork);
+  startPreviewLoad(artworkPath);
 }
 
 void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath) {
@@ -109,12 +109,8 @@ void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath
   if (!ExtensionUtils::isDecodableImagePath(absoluteArtworkPath)) {
     return;
   }
-  QPixmap artwork(absoluteArtworkPath);
-  if (artwork.isNull()) {
-    return;
-  }
   m_currentArtworkPath = absoluteArtworkPath;
-  displayPixmap(artwork);
+  startPreviewLoad(absoluteArtworkPath);
 }
 
 void ArtworkPreviewOverlay::showVideoAtPath(const QString &absoluteVideoPath) {
@@ -133,32 +129,156 @@ bool ArtworkPreviewOverlay::showMediaForFile(const QString &filePath,
                                              const QString &videoDirectory) {
   m_currentFilePath = filePath;
 
-  // Video-first per user preference.
+  // Video-first per user preference. Two lookup roots in priority order
+  // (matches detailspanemanagermetadata.cpp): the explicit videoDirectory,
+  // then {artworkDirectory}/video/ — the single-root layout the scraper
+  // writes to.
+  QString videoPath;
   if (!videoDirectory.isEmpty()) {
-    const QString videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
-    if (!videoPath.isEmpty()) {
-      m_currentArtworkPath = videoPath;
-      displayVideo(videoPath);
-      m_currentFilePath = filePath;
-      return true;
-    }
+    videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
+  }
+  if (videoPath.isEmpty() && !artworkDirectory.isEmpty()) {
+    videoPath = VideoUtils::findVideoForFile(filePath, QDir(artworkDirectory).filePath("video"));
+  }
+  if (!videoPath.isEmpty()) {
+    m_currentArtworkPath = videoPath;
+    displayVideo(videoPath);
+    m_currentFilePath = filePath;
+    return true;
   }
 
-  // Fall back to artwork.
+  // Fall back to artwork. The decode is async, so "shown" here means the
+  // overlay opened on its loading placeholder; a decode failure closes it
+  // again (see startPreviewLoad's delivery lambda).
   if (!artworkDirectory.isEmpty()) {
     const QString artworkPath =
         ArtworkUtils::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDirectory);
     if (!artworkPath.isEmpty() && ExtensionUtils::isDecodableImagePath(artworkPath)) {
-      QPixmap artwork(artworkPath);
-      if (!artwork.isNull()) {
-        m_currentArtworkPath = artworkPath;
-        displayPixmap(artwork);
-        m_currentFilePath = filePath;
-        return true;
-      }
+      m_currentArtworkPath = artworkPath;
+      startPreviewLoad(artworkPath);
+      return true;
     }
   }
   return false;
+}
+
+void ArtworkPreviewOverlay::startPreviewLoad(const QString &artworkPath) {
+  QWidget *parentWidget = this->parentWidget();
+  if (!parentWidget) {
+    return;
+  }
+  // Decode off the GUI thread, mirroring the gallery-thumb loads in
+  // rebuildGalleryStrip and the marquee's watcher pattern: a synchronous
+  // QPixmap(path) here blocked the UI for the largest image the overlay ever
+  // shows, and Left/Right cycling re-paid that per keypress (Kartend-h7xnr.4).
+  // A newer request supersedes any in-flight decode so rapid cycling can't
+  // queue a backlog — the last request wins.
+  cancelPreviewLoad();
+
+  const int maxWidth = parentWidget->width() * 0.8;
+  const int maxHeight = parentWidget->height() * 0.8;
+
+  // Initial open: put the overlay up immediately on a neutral loading box so
+  // the click responds instantly. While cycling, whatever is currently on
+  // screen (image or video) stays up until the new decode lands — same
+  // blank-until-decoded behaviour as the thumb strip.
+  if (!isVisible() || m_displayWidget == nullptr) {
+    showLoadingPlaceholder();
+  }
+
+  auto *watcher = new QFutureWatcher<QImage>(this);
+  m_previewLoadWatcher = watcher;
+  connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher]() {
+    if (m_previewLoadWatcher == watcher) {
+      m_previewLoadWatcher = nullptr;
+    }
+    const QImage img = watcher->result();
+    watcher->deleteLater();
+    if (!img.isNull()) {
+      displayPixmap(QPixmap::fromImage(img));
+      return;
+    }
+    // Decode failed. If the overlay is still on its loading placeholder
+    // (initial open, no pixmap ever landed), close it — matching the old
+    // synchronous behaviour where a null pixmap meant the overlay never
+    // appeared. A failed cycle target keeps the previous image instead.
+    if (m_displayWidget == m_artworkLabel && m_artworkLabel->pixmap().isNull()) {
+      hideOverlay();
+    }
+  });
+  watcher->setFuture(QtConcurrent::run([artworkPath, maxWidth, maxHeight]() -> QImage {
+    // Re-guard on the worker: gallery-cycle entries reach here without the
+    // entry points' PDFium-abort gate (Kartend-wquq).
+    if (!ExtensionUtils::isDecodableImagePath(artworkPath)) {
+      return {};
+    }
+    QImageReader reader(artworkPath);
+    reader.setAutoTransform(true);
+    reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
+    const QSize originalSize = reader.size();
+    if (originalSize.isValid()) {
+      // Decode at up to 2x the display box so displayPixmap's final
+      // SmoothTransformation fit has headroom for a crisp result, but never
+      // above the source size — that would just burn memory on an upscale
+      // the display pass redoes anyway.
+      QSize decodeSize = originalSize;
+      decodeSize.scale(maxWidth * 2, maxHeight * 2, Qt::KeepAspectRatio);
+      if (decodeSize.width() < originalSize.width()) {
+        reader.setScaledSize(decodeSize);
+      }
+    }
+    return reader.read();
+  }));
+}
+
+void ArtworkPreviewOverlay::cancelPreviewLoad() {
+  // Drop any in-flight decode so its late result can't overwrite a newer
+  // request or re-show a closed overlay. The QtConcurrent worker can't be
+  // cancelled, but disconnecting + deleting the watcher discards its result.
+  if (m_previewLoadWatcher) {
+    m_previewLoadWatcher->disconnect(this);
+    m_previewLoadWatcher->deleteLater();
+    m_previewLoadWatcher = nullptr;
+  }
+}
+
+void ArtworkPreviewOverlay::showLoadingPlaceholder() {
+  QWidget *parentWidget = this->parentWidget();
+  if (!parentWidget) {
+    return;
+  }
+  // Stop any video preview that may have been left from a prior request.
+  if (m_videoPreview) {
+    m_videoPreview->stop();
+    m_videoPreview->hide();
+  }
+  m_artworkLabel->setText(tr("Loading…"));
+  // Neutral box while the first decode runs; displayPixmap re-sizes the label
+  // to the real image when it lands. Clamped so a tiny parent still fits it.
+  m_artworkLabel->setFixedSize(qMin(320, static_cast<int>(parentWidget->width() * 0.8)),
+                               qMin(180, static_cast<int>(parentWidget->height() * 0.8)));
+  m_artworkLabel->show();
+  m_displayWidget = m_artworkLabel;
+  presentOverlay();
+}
+
+void ArtworkPreviewOverlay::presentOverlay() {
+  QWidget *parentWidget = this->parentWidget();
+  if (!parentWidget) {
+    return;
+  }
+  // Resize overlay to cover parent
+  resize(parentWidget->size());
+  centerContent();
+
+  show();
+  if (m_layerManager) {
+    m_layerManager->bringToFront(this);
+  } else {
+    raise();
+  }
+  activateWindow();
+  setFocus(Qt::PopupFocusReason);
 }
 
 void ArtworkPreviewOverlay::displayPixmap(const QPixmap &pixmap) {
@@ -185,18 +305,7 @@ void ArtworkPreviewOverlay::displayPixmap(const QPixmap &pixmap) {
   m_artworkLabel->show();
   m_displayWidget = m_artworkLabel;
 
-  // Resize overlay to cover parent
-  resize(parentWidget->size());
-  centerContent();
-
-  show();
-  if (m_layerManager) {
-    m_layerManager->bringToFront(this);
-  } else {
-    raise();
-  }
-  activateWindow();
-  setFocus(Qt::PopupFocusReason);
+  presentOverlay();
 }
 
 void ArtworkPreviewOverlay::displayVideo(const QString &absoluteVideoPath) {
@@ -204,6 +313,9 @@ void ArtworkPreviewOverlay::displayVideo(const QString &absoluteVideoPath) {
   if (!parentWidget) {
     return;
   }
+
+  // A stale image decode landing after this would paint over the video.
+  cancelPreviewLoad();
 
   ensureVideoPreview();
 
@@ -219,20 +331,13 @@ void ArtworkPreviewOverlay::displayVideo(const QString &absoluteVideoPath) {
   m_videoPreview->playVideo(absoluteVideoPath);
   m_displayWidget = m_videoPreview;
 
-  resize(parentWidget->size());
-  centerContent();
-
-  show();
-  if (m_layerManager) {
-    m_layerManager->bringToFront(this);
-  } else {
-    raise();
-  }
-  activateWindow();
-  setFocus(Qt::PopupFocusReason);
+  presentOverlay();
 }
 
 void ArtworkPreviewOverlay::hideOverlay() {
+  // Discard any pending decode: its delivery calls show() and would re-open
+  // the overlay the user just dismissed.
+  cancelPreviewLoad();
   hide();
   m_currentFilePath.clear();
   if (m_artworkLabel) {
@@ -550,8 +655,6 @@ void ArtworkPreviewOverlay::showGalleryEntry(int index) {
   if (entry.isVideo) {
     displayVideo(entry.path);
   } else {
-    QPixmap pix(entry.path);
-    if (pix.isNull()) return;
-    displayPixmap(pix);
+    startPreviewLoad(entry.path);
   }
 }

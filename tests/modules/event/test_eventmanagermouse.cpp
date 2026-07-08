@@ -127,7 +127,7 @@ void TestEventManagerMouse::cleanup() {}
 
 void TestEventManagerMouse::wire() {
   m_ctx.managers.seedScrollRoles(&m_scroll);
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
 
   EventManagerSetup setup;
   setup.ctx = &m_ctx;
@@ -141,7 +141,7 @@ void TestEventManagerMouse::wireWithUi(QScrollArea *scrollArea, QWidget *gridCon
                                        QStackedWidget *stack, QWidget *itemsPage,
                                        QWidget *itemsTopBar) {
   m_ctx.managers.seedScrollRoles(&m_scroll);
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
 
   EventManagerSetup setup;
   setup.ctx = &m_ctx;
@@ -181,7 +181,7 @@ void TestEventManagerMouse::doubleClickOnMediaItemEmitsWidgetDoubleClicked() {
 void TestEventManagerMouse::doubleClickUsesDatabaseCollectionIndexWhenAvailable() {
   FixedIndexDatabaseManager db;
   db.collectionIndex = 7;
-  m_ctx.managers.databaseManager = &db;
+  m_ctx.managers.seedDatabaseRoles(&db);
   wire();
   ItemWidget widget;
   widget.setFilePath(QStringLiteral("video.mp4"));
@@ -333,7 +333,7 @@ void TestEventManagerMouse::handleWheelEventRejectsTargetInForeignWindow() {
   setup.currentCollectionIndex = &m_viewIndex;
   setup.generalSettings = &m_settings;
   m_ctx.managers.seedScrollRoles(&m_scroll);
-  m_ctx.managers.selectionManager = &m_sel;
+  m_ctx.managers.seedSelectionRoles(&m_sel);
   m_mgr.setupReferences(setup);
 
   QWidget windowB; // distinct top-level window

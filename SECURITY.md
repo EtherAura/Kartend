@@ -26,24 +26,45 @@ SQL queries use parameterized binding throughout; FTS input is sanitized.
 
 ## Bundled Scraper Credentials — Security Theater
 
-`src/modules/data/scraper/core/bundledcredentials.cpp` ships a small XOR-obfuscated
-blob containing the default API credentials for built-in scrapers. The header is
-honest about what this is: protection against `strings(1)` casual harvesting and
-nothing more. The deployed binary contains both the obfuscated bytes and the
-deobfuscation routine, so anyone with `objdump` / `radare2` / a debugger can
-recover the embedded keys in minutes. Do not treat this as a defect — it is the
-deliberate trade-off for shipping a working out-of-the-box scraper experience.
+`src/modules/data/scraper/core/bundledcredentials.cpp` ships the shared
+ScreenScraper.fr **developer** credential pair: `dev_id` in plain text (it
+appears in every API URL anyway) and `dev_password` behind a single-byte XOR.
+The obfuscation is not secrecy: the deployed binary contains both the
+obfuscated bytes and the deobfuscation routine, so anyone with `objdump` /
+`radare2` / a debugger can recover the password in minutes. It exists solely
+so `strings(1)` over the binary doesn't hand it out. Do not treat this as a
+defect — it is the deliberate trade-off for shipping a working out-of-the-box
+scraper experience, and the same trade-off other open-source scrapers make.
 
-If you operate a deployment where credential leakage matters, supply your own
-keys via the Scraper Credentials dialog (Settings → Scraper) and disable the
-bundled fallback. The QtKeychain integration (built when `KARTEND_HAVE_QTKEYCHAIN`
-is defined) stores per-user credentials in the platform keyring rather than on
-disk in plaintext.
+**Blast radius**: the dev account is shared by every Kartend install.
+ScreenScraper rejects every API request without a valid dev pair, so a leak
+that gets the shared account throttled or banned degrades or breaks
+ScreenScraper scraping for **all users** — including those with their own
+member account — until a release rotates the bundled pair. No user data or
+user credentials are exposed; the exposure is quota/abuse against that one
+shared account.
 
-Because user-supplied credentials always override the bundled fallback, the
-embedded provider account can be **rotated or revoked** without breaking
-existing installs — a leaked bundled key is a quota/abuse concern for that one
-shared account, not a user-data exposure.
+**Mitigations available to users** (user-supplied values take precedence over
+the bundled fallback):
+
+- Your own ScreenScraper **member** account (Settings → Scrapers →
+  ScreenScraper.fr, or the standalone Scraper credentials dialog) raises your
+  per-account quota, but still rides on the shared dev pair.
+- Your own **dev** pair (issued via the ScreenScraper forum's development
+  section) fully replaces the bundled one: set `screenscraper/dev_id=` and
+  `screenscraper/dev_password=` under `[Scrapers]` directly in the INI. These
+  keys are deliberately not surfaced in the UI (users kept mis-pasting member
+  credentials into them), and saving the credentials UI clears them — re-add
+  them after a UI save if you rely on this override.
+
+The QtKeychain integration (built when `KARTEND_HAVE_QTKEYCHAIN` is defined)
+stores user-supplied credentials in the platform keyring rather than on disk
+in plaintext.
+
+The real fix — a server-side proxy minting per-client tokens so no shared
+secret ships in the binary — is **deferred unless abuse appears**: it would
+add hosting cost and a single point of failure that field precedent shows is
+unnecessary in practice.
 
 ## Launcher Path TOCTOU — Accepted Residual Risk
 

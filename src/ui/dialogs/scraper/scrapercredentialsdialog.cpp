@@ -1,22 +1,18 @@
-// Per-provider scraper credentials dialog. Currently configures TMDB
-// (one field). When ScreenScraper.fr support lands, add a second
-// section in buildUi() with the SS dev/user fields — the save flow
-// is provider-agnostic via the m_fields map.
+// Modal wrapper around the shared ScraperCredentialsPanel. The panel is
+// the single source of truth for the credential forms (which providers,
+// which fields, help text); this dialog only adds the intro blurb, the
+// Save/Cancel buttons, and working-copy isolation so Cancel discards.
 #include "scrapercredentialsdialog.h"
 
 #include "uiconstants/color.h"
 
 #include <QDialogButtonBox>
-#include <QFormLayout>
-#include <QGroupBox>
 #include <QLabel>
-#include <QLineEdit>
-#include <QPushButton>
 #include <QVBoxLayout>
 
-#include "collection/generalsettings.h"
 #include "errordialog.h"
 #include "isettingsmanager.h"
+#include "scrapercredentialspanel.h"
 
 ScraperCredentialsDialog::ScraperCredentialsDialog(GeneralSettings *generalSettings,
                                                    ISettingsManager *settingsManager,
@@ -43,47 +39,25 @@ void ScraperCredentialsDialog::buildUi() {
   intro->setStyleSheet(UIConstants::Color::MUTED_TEXT);
   root->addWidget(intro);
 
-  // ── TMDB ────────────────────────────────────────────────────────
-  auto *tmdbGroup = new QGroupBox(tr("The Movie Database (TMDB)"), this);
-  auto *tmdbForm = new QFormLayout(tmdbGroup);
-  auto *tmdbHelp = new QLabel(tr("Sign up free at themoviedb.org → Settings → API → "
-                                 "<b>API Read Access Token (v4 auth)</b>. Paste the token below."),
-                              tmdbGroup);
-  tmdbHelp->setWordWrap(true);
-  tmdbHelp->setOpenExternalLinks(true);
-  tmdbForm->addRow(tmdbHelp);
-  addField(tmdbForm, QStringLiteral("tmdb"), QStringLiteral("api_token"), tr("API token:"),
-           /*sensitive=*/true, QStringLiteral("eyJhbGciOiJIUzI1NiJ9..."));
-  root->addWidget(tmdbGroup);
-
-  // ── ScreenScraper.fr ───────────────────────────────────────────
-  // Member-only UI: the developer credentials are bundled into Kartend
-  // and shared across every install. Surfacing them as overrideable
-  // fields encouraged users to paste their *member* credentials into
-  // the dev slot by mistake, which silently downgraded their effective
-  // tier. The bundled dev_id stays in source (BundledCredentials::
-  // screenscraper()); only the member account fields are user-facing.
-  auto *ssGroup = new QGroupBox(tr("ScreenScraper.fr"), this);
-  auto *ssForm = new QFormLayout(ssGroup);
-  auto *ssHelp = new QLabel(tr("Sign in with your own ScreenScraper.fr account at "
-                               "<a href=\"https://www.screenscraper.fr/membreinscription.php\">"
-                               "screenscraper.fr/membreinscription.php</a>. Member credentials "
-                               "raise your per-account request quota; premium members get more "
-                               "concurrent threads + higher throughput than the shared default. "
-                               "Leave blank to scrape without an account (much lower limits). "
-                               "The per-collection ScreenScraper system is auto-detected from "
-                               "the collection's name / type / extensions; override it from "
-                               "the collection's <b>Configuration</b> tab if autodetect picks "
-                               "the wrong one."),
-                            ssGroup);
-  ssHelp->setOpenExternalLinks(true);
-  ssHelp->setWordWrap(true);
-  ssForm->addRow(ssHelp);
-  addField(ssForm, QStringLiteral("screenscraper"), QStringLiteral("user_id"), tr("Username:"),
-           /*sensitive=*/false);
-  addField(ssForm, QStringLiteral("screenscraper"), QStringLiteral("user_password"),
-           tr("Password:"), /*sensitive=*/true);
-  root->addWidget(ssGroup);
+  // The panel live-mutates its model on every edit, so it edits a working
+  // copy of the caller's settings: Save copies it back, Cancel drops it —
+  // preserving the old hand-built dialog's edit-then-Cancel semantics.
+  if (m_generalSettings) {
+    m_working = *m_generalSettings;
+  }
+  m_model.generalSettings = &m_working;
+  // No setProvider() call — the default (empty) filter renders every
+  // provider's fields, which is exactly this dialog's job.
+  m_panel = new ScraperCredentialsPanel(this);
+  m_panel->setModel(&m_model);
+  if (m_settingsManager) {
+    // Mirror the settings dialog's storage-demotion banner wiring so the
+    // "credentials stored unencrypted" warning also surfaces here.
+    m_panel->setStorageDemotionNotice(m_settingsManager->credentialDemotionReason());
+    connect(m_settingsManager, &ISettingsManager::credentialStorageDemotionChanged, m_panel,
+            &ScraperCredentialsPanel::setStorageDemotionNotice);
+  }
+  root->addWidget(m_panel);
 
   root->addStretch();
 
@@ -93,62 +67,12 @@ void ScraperCredentialsDialog::buildUi() {
   root->addWidget(buttons);
 }
 
-void ScraperCredentialsDialog::addField(QFormLayout *form, const QString &providerId,
-                                        const QString &fieldName, const QString &label,
-                                        bool sensitive, const QString &placeholder) {
-  auto *edit = new QLineEdit(this);
-  if (!placeholder.isEmpty()) {
-    edit->setPlaceholderText(placeholder);
-  }
-  if (sensitive) {
-    // Password mode hides the token at rest. Users who want to verify
-    // the value can copy it (Ctrl+C still works on a password field
-    // when text is selected) — we don't add a "show password" toggle
-    // because the token is visible in the INI on disk anyway.
-    edit->setEchoMode(QLineEdit::Password);
-  }
-  // Pre-populate from the live settings so editing-then-Cancel
-  // doesn't lose the existing value.
-  if (m_generalSettings) {
-    edit->setText(m_generalSettings->scraper.credentials.value(providerId).value(fieldName));
-  }
-  form->addRow(label, edit);
-  m_fields.insert(providerId + QLatin1Char('/') + fieldName, edit);
-}
-
 void ScraperCredentialsDialog::onSave() {
   if (m_generalSettings) {
-    for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it) {
-      const QString &fullKey = it.key();
-      const int slash = fullKey.indexOf('/');
-      if (slash <= 0) continue;
-      const QString providerId = fullKey.left(slash);
-      const QString fieldName = fullKey.mid(slash + 1);
-      const QString value = it.value()->text().trimmed();
-      if (value.isEmpty()) {
-        // Empty = "remove this credential". Cleaning up keeps the
-        // [Scrapers] section honest about what's configured.
-        m_generalSettings->scraper.credentials[providerId].remove(fieldName);
-        if (m_generalSettings->scraper.credentials[providerId].isEmpty()) {
-          m_generalSettings->scraper.credentials.remove(providerId);
-        }
-      } else {
-        m_generalSettings->scraper.credentials[providerId][fieldName] = value;
-      }
-    }
-    // Scrub legacy dev_* keys. They used to be editable from this
-    // dialog; since they're not surfaced any more, anyone who set
-    // them by mistake would otherwise keep silently overriding the
-    // bundled dev key. Saving the dialog now clears them. Power users
-    // who genuinely registered their own dev_id can drop the value
-    // back into `[Scrapers] screenscraper/dev_id=` directly in the
-    // INI; that path still works at runtime.
-    auto &ssBlob = m_generalSettings->scraper.credentials[QStringLiteral("screenscraper")];
-    ssBlob.remove(QStringLiteral("dev_id"));
-    ssBlob.remove(QStringLiteral("dev_password"));
-    if (ssBlob.isEmpty()) {
-      m_generalSettings->scraper.credentials.remove(QStringLiteral("screenscraper"));
-    }
+    // Flush the panel into the working copy (trimmed write-through, empty-
+    // value key cleanup, legacy dev_* scrub), then commit to the caller.
+    m_panel->save();
+    *m_generalSettings = m_working;
     if (m_settingsManager) {
       // Logout silently leaving credentials on disk would defeat the purpose
       // — surface the disk-write failure so the user knows their password is

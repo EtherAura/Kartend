@@ -2,15 +2,14 @@
 #include "redumpdownload.h"
 
 #include <QDir>
-#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QTimer>
 #include <QUrl>
 
+#include "dathttp.h"
 #include "nointroparse.h" // filenameFromContentDisposition
 
 using ErrorUtils::ErrorCode;
@@ -21,19 +20,8 @@ namespace RedumpDownload {
 namespace {
 
 constexpr char kBase[] = "https://redump.org/";
-constexpr char kUserAgent[] =
-    "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0";
 
-// Response-size cap (Kartend-85zrx). The whole body is buffered with readAll()
-// before inspection, so a hostile/compromised upstream or a MITM could stream
-// unbounded data into memory and OOM the process. Abort once received bytes
-// cross this ceiling, mirroring the scraper HttpClient's downloadProgress→abort
-// pattern. 200 MiB comfortably fits real DAT packs (~tens of MiB).
-constexpr qint64 kMaxResponseBytes = 200LL * 1024 * 1024;
-
-bool cancelled(const CancelToken &c) {
-  return c && c->load(std::memory_order_relaxed);
-}
+using DatHttp::cancelled;
 
 // True when a redirect target stays on https + redump.org (or a subdomain).
 // The leading-dot boundary is load-bearing — a plain endsWith("redump.org")
@@ -47,66 +35,18 @@ bool isAllowedRedirectTarget(const QUrl &target) {
   return host == QLatin1String("redump.org") || host.endsWith(QLatin1String(".redump.org"));
 }
 
-// Blocking GET driven by a local event loop (so the caller runs it on a worker
-// thread). Follows redirects (no token/session to preserve, unlike No-Intro),
-// but only within https + redump.org: like the No-Intro flow's SEC-01 check
-// and the scraper HttpClient's host pinning, a 3xx from a compromised
-// upstream must not be able to steer the download — whose body feeds the
-// archive extractor — to an arbitrary HTTPS host. UserVerifiedRedirectPolicy
-// makes QNAM pause on each hop until redirectAllowed(), so an off-host target
-// is aborted before it is ever contacted.
+// Blocking GET via the shared DatHttp event loop. Follows redirects (no
+// token/session to preserve, unlike No-Intro), but only within https +
+// redump.org: like the No-Intro flow's SEC-01 check and the scraper
+// HttpClient's host pinning, a 3xx from a compromised upstream must not be
+// able to steer the download — whose body feeds the archive extractor — to an
+// arbitrary HTTPS host. An off-host/off-scheme target is aborted before it is
+// ever contacted.
 // Returns the owned reply; caller inspects error()/headers/body.
 QNetworkReply *blockingGet(QNetworkAccessManager &nam, const QUrl &url, const CancelToken &cancel,
                            const std::function<void(qint64, qint64)> &onProgress) {
-  QNetworkRequest req(url);
-  req.setRawHeader("User-Agent", kUserAgent);
-  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                   QNetworkRequest::UserVerifiedRedirectPolicy);
-  // Bound a stalled/slowloris server so the download worker can't hang
-  // indefinitely (the cancel token only fires on explicit user cancel).
-  // Matches the scraper HttpClient's 30s transfer timeout (Kartend-vu8io).
-  req.setTransferTimeout(30000);
-  QNetworkReply *reply = nam.get(req);
-  QObject::connect(reply, &QNetworkReply::redirected, reply, [reply](const QUrl &target) {
-    if (isAllowedRedirectTarget(target)) {
-      emit reply->redirectAllowed();
-      return;
-    }
-    // Off-host/off-scheme redirect: abort before the target is contacted.
-    // Surfaces as OperationCanceledError, which the callers report as a
-    // download failure.
-    reply->abort();
-  });
-
-  QEventLoop loop;
-  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-  if (onProgress) {
-    QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
-                     [&onProgress](qint64 rcv, qint64 total) { onProgress(rcv, total); });
-  }
-  // Response-size cap: abort the reply once received bytes cross the ceiling so
-  // a runaway response can't be buffered into memory before readAll() inspects
-  // it (Kartend-85zrx). The aborted reply finishes with OperationCanceledError,
-  // which the caller surfaces as a download failure.
-  QObject::connect(reply, &QNetworkReply::downloadProgress, &loop,
-                   [reply](qint64 rcv, qint64 /*total*/) {
-                     if (rcv > kMaxResponseBytes && reply->isRunning()) {
-                       reply->abort();
-                     }
-                   });
-  QTimer cancelTimer;
-  if (cancel) {
-    QObject::connect(&cancelTimer, &QTimer::timeout, &loop, [reply, &cancel]() {
-      if (cancelled(cancel) && reply->isRunning()) {
-        reply->abort();
-      }
-    });
-    cancelTimer.start(200);
-  }
-  if (!reply->isFinished()) {
-    loop.exec();
-  }
-  return reply;
+  return DatHttp::blockingRequest(nam, url, QByteArray(), QString(), cancel, onProgress,
+                                  isAllowedRedirectTarget);
 }
 
 } // namespace

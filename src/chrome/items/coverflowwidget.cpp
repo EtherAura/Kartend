@@ -98,6 +98,10 @@ CoverFlowWidget::CoverFlowWidget(QWidget *parent) : QWidget(parent) {
             }
             update();
           });
+
+  // Baseline name for the empty carousel; refreshed on every selection /
+  // card-list change so screen readers track the centered card.
+  updateAccessibleSelection();
 }
 
 CoverFlowWidget::~CoverFlowWidget() {
@@ -133,6 +137,7 @@ void CoverFlowWidget::setCards(const QList<CoverFlowCardData> &cards) {
   // the possibly-clamped selection) shifts what sits at stage center.
   refreshCenterRect();
   applyVideoPreviewState();
+  updateAccessibleSelection();
   update();
 }
 
@@ -162,6 +167,11 @@ void CoverFlowWidget::updateCard(int index, const CoverFlowCardData &card) {
       }
     }
   }
+  // The accessible name carries the centered card's title, so a patch that
+  // retitles the selected slot must refresh it.
+  if (index == m_selectedIndex) {
+    updateAccessibleSelection();
+  }
   // Repaint only when the patched card is inside the drawn window around the
   // (possibly animating) center — off-screen patches are pure data updates.
   if (std::abs(index - currentPositionF()) <= kVisibleSideCards + 1) {
@@ -173,6 +183,7 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   if (m_cards.isEmpty()) {
     m_selectedIndex = 0;
     m_selectionPositionF = 0.0;
+    updateAccessibleSelection();
     refreshCenterRect();
     update();
     return;
@@ -192,6 +203,7 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   if (!animate || !isVisible() || delta > kVisibleSideCards * 2) {
     m_selectedIndex = index;
     m_selectionPositionF = 0.0;
+    updateAccessibleSelection();
     // Fresh center rect before applyVideoPreviewState reads it to place
     // the preview over the newly-centered card.
     refreshCenterRect();
@@ -206,6 +218,9 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   qreal startPos = (m_selectedIndex - index) + m_selectionPositionF;
   m_selectedIndex = index;
   m_selectionPositionF = startPos;
+  // Name tracks the logical selection immediately; the glide only animates
+  // the visual position toward it.
+  updateAccessibleSelection();
   m_glide->stop();
   m_glide->setStartValue(startPos);
   m_glide->setEndValue(0.0);
@@ -217,6 +232,24 @@ void CoverFlowWidget::setSelectedIndex(int index, bool animate) {
   refreshCenterRect();
   applyVideoPreviewState();
   update();
+}
+
+void CoverFlowWidget::updateAccessibleSelection() {
+  // The carousel is a single custom-painted widget: screen readers can't
+  // enumerate the cards, so surface the centered card's title and position
+  // through the widget-level accessible name. setAccessibleName() emits the
+  // NameChanged accessibility event, so assistive tech re-announces on each
+  // selection change.
+  if (m_cards.isEmpty()) {
+    setAccessibleName(tr("Cover flow, no items"));
+    setAccessibleDescription(tr("Cover flow item carousel"));
+    return;
+  }
+  const int count = static_cast<int>(m_cards.size());
+  const int index = std::clamp(m_selectedIndex, 0, count - 1);
+  setAccessibleName(tr("%1, item %2 of %3").arg(m_cards[index].title).arg(index + 1).arg(count));
+  setAccessibleDescription(
+      tr("Cover flow item carousel. Use the arrow keys to change the selection."));
 }
 
 void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGalleryEntry> &entries) {

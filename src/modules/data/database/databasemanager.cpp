@@ -101,6 +101,8 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   connect(this, &DatabaseManager::requestFetchVisualIndexForPath, m_worker,
           &QueryManager::fetchVisualIndexForPath);
   connect(this, &DatabaseManager::requestLoadItemDetail, m_worker, &QueryManager::loadItemDetail);
+  connect(this, &DatabaseManager::requestFetchItemStateFlags, m_worker,
+          &QueryManager::fetchItemStateFlagsForCollection);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
           &QueryManager::invalidateCollectionCache);
   connect(this, &DatabaseManager::requestInvalidateUsageSensitiveCaches, m_worker,
@@ -149,6 +151,9 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
           &DatabaseManager::visualIndexForPathLoaded);
   // Forward the worker's detail-load result straight out as our own signal.
   connect(m_worker, &QueryManager::itemDetailLoaded, this, &IDatabaseManager::itemDetailLoaded);
+  // Same forward for the per-item state-flags result (Kartend-h7xnr.6).
+  connect(m_worker, &QueryManager::itemStateFlagsLoaded, this,
+          &IDatabaseManager::itemStateFlagsLoaded);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
   connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
 
@@ -355,6 +360,10 @@ void DatabaseManager::loadItemDetailAsync(int requestToken, const QString &colle
                                           const QString &videoDir, const QString &manualDir) {
   emit requestLoadItemDetail(requestToken, collectionUuid, filePath, artworkDir, videoDir,
                              manualDir);
+}
+
+void DatabaseManager::fetchItemStateFlagsForCollection(const QString &collectionUuid) {
+  emit requestFetchItemStateFlags(collectionUuid);
 }
 
 void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {

@@ -40,6 +40,24 @@ QStringList computeMediaAbsentTypes(Scraper::RescrapeMode mode, const QSet<QStri
   return absent;
 }
 
+QSet<QString> computePrevalentMediaTypes(const QHash<QString, QSet<QString>> &presentByType,
+                                         const QSet<QString> &frontFlatBases,
+                                         const QSet<QString> &wantedTypes, int itemCount,
+                                         double threshold) {
+  QSet<QString> required;
+  if (itemCount <= 0) return required; // nothing scraped yet → nothing is "reliably supplied"
+  for (const QString &type : wantedTypes) {
+    qsizetype have = presentByType.value(type).size();
+    if (type == QLatin1String("front")) {
+      have = qMax(have, frontFlatBases.size()); // front also mirrors to the flat artwork dir
+    }
+    if (static_cast<double>(have) >= threshold * itemCount) {
+      required.insert(type);
+    }
+  }
+  return required;
+}
+
 bool decideScrapeSkip(const SkipDecisionInputs &in) {
   if (in.mode == Scraper::RescrapeMode::Skip) {
     // Skip mode: any metadata marker is enough — "if scraped, leave it alone."
@@ -89,7 +107,23 @@ MediaCoverageIndex buildMediaCoverageIndex(const QString &artworkDir,
       actualDirByLower.insert(dir.toLower(), dir);
     }
     for (const QString &type : wantedTypes) { // wantedTypes are already lowercase
-      const QString actualDir = actualDirByLower.value(type);
+      // Kind-routing parity with writeMediaFiles (Kartend-jjyst.1): every
+      // video-* asset is written under video/ and every manual under manual/,
+      // so coverage for those wanted types must probe the kind directory —
+      // probing a literal "video-normalized/" folder would read present media
+      // as missing and re-scrape the item forever.
+      QString diskDirName = type;
+      switch (kindForType(type)) {
+      case MediaKind::Video:
+        diskDirName = QStringLiteral("video");
+        break;
+      case MediaKind::Manual:
+        diskDirName = QStringLiteral("manual");
+        break;
+      case MediaKind::Image:
+        break;
+      }
+      const QString actualDir = actualDirByLower.value(diskDirName);
       if (actualDir.isEmpty()) continue;
       QDir d(QDir(artworkDir).filePath(actualDir));
       QSet<QString> bases;
@@ -219,7 +253,15 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
   bool allWantedMediaCovered = true;
   for (const QString &type : ctx.wantedTypes) { // ctx.wantedTypes are lowercase
     if (typeCoveredFor(baseNameLower, type)) continue;
-    if (knownAbsent.contains(type)) continue; // provider never supplies it → covered
+    if (knownAbsent.contains(type)) continue; // this item's provider never supplied it → covered
+    // Prevalence gate (Kartend-ib46d): only a media type the provider reliably
+    // supplies for this collection (present for >= kMediaPrevalenceThreshold of
+    // items) blocks the skip. Sparse types — ones the provider has for few games
+    // or advertises but never delivers as files (video/figurine/pictograms/
+    // background on PlayStation) — are optional, so their absence doesn't keep the
+    // item unskippable forever. Types genuinely missing for a specific item but
+    // common overall stay handled per-item by the known-absent set above.
+    if (!ctx.requiredMediaTypes.contains(type)) continue;
     allWantedMediaCovered = false;
     break;
   }

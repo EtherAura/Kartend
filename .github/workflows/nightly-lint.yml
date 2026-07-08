@@ -7,8 +7,9 @@ name: Nightly Lint Sweep
 # enforcement. Pushes to main now run a cheap(er) ENFORCING curated-check
 # clang-tidy gate inside maintenance-check instead; this nightly keeps the
 # full breadth — the modernize/readability/misc/google clang-tidy families,
-# IWYU, and cppcheck — visible without taxing every merge. Its logs are the
-# feedstock for the quarterly lint review.
+# IWYU, cppcheck, and a Qt-specific clazy (level0+level1) pass — visible
+# without taxing every merge. Its logs are the feedstock for the quarterly
+# lint review.
 #
 # Advisory by design: this sweep runs build.sh WITHOUT --format-check, so it
 # exits 0 on all lint findings — including a promoted (WarningsAsErrors) check
@@ -47,10 +48,11 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install dependencies
-        # Same toolchain set as build.yml's maintenance-check job.
+        # Same toolchain set as build.yml's maintenance-check job, plus
+        # clazy — the Qt-specific analyzer only this nightly runs.
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu clazy jq
 
       - name: Cache ccache
         # Content-addressed primary key; restore-keys deliberately fall back
@@ -86,6 +88,42 @@ jobs:
       - name: ccache stats
         run: ccache --show-stats
 
+      - name: Run clazy sweep (advisory)
+        # Qt-specific analysis the clang-tidy/IWYU/cppcheck trio doesn't
+        # cover: container detachments, connect pitfalls, QString allocation
+        # churn, Q_PROPERTY hygiene. level0+level1 are the low-false-positive
+        # tiers; promote zero-hit checks later via the same ratchet pattern
+        # the curated clang-tidy gate uses. src/ TUs only (taken from the
+        # compile DB, so excluded/generated TUs never 'no compile command'
+        # here) — clazy targets the shipping Qt code; tests/ stays with the
+        # clang-tidy/cppcheck passes above.
+        #
+        # Ubuntu 24.04's clazy 1.11 runs a clang-15 frontend, which rejects
+        # the -std=gnu++23 spelling the clang-18 compile DB records (clang 15
+        # only knows gnu++2b), so point it at a rewritten copy. Verified
+        # 2026-07-07: with that one rewrite clang 15 parses this codebase's
+        # TUs cleanly (PCH is already off under KARTEND_MAINTENANCE, so no
+        # PCH-version mismatch either).
+        #
+        # Advisory: findings (some at error severity) make clazy-standalone
+        # exit non-zero, so only the analysis pipeline gets `|| true`; a
+        # missing compile DB or broken jq still fails the step, keeping the
+        # sweep's "only compile errors or infra failures turn it red"
+        # contract. The log lands next to the other tools' logs so the
+        # summary step and artifact upload below pick it up unchanged.
+        run: |
+          set -o pipefail
+          COMPDB=build/ninja-maintenance/compile_commands.json
+          LOGS=build/ninja-maintenance/logs
+          CLAZY_DB="$(mktemp -d)"
+          jq 'map(if has("command") then .command |= gsub("-std=gnu\\+\\+23"; "-std=gnu++2b") else . end)' \
+            "$COMPDB" > "$CLAZY_DB/compile_commands.json"
+          jq -r --arg src "$PWD/src/" \
+            '.[].file | select(startswith($src) and endswith(".cpp"))' \
+            "$CLAZY_DB/compile_commands.json" | sort -u > "$CLAZY_DB/tus.txt"
+          xargs -r -n1 -P"$(nproc)" clazy-standalone -p "$CLAZY_DB" --checks=level0,level1 \
+            < "$CLAZY_DB/tus.txt" > "$LOGS/clazy.log" 2>&1 || true
+
       - name: Summarize finding counts
         if: ${{ always() }}
         run: |
@@ -97,11 +135,14 @@ jobs:
             echo
             echo '| tool | finding lines |'
             echo '|---|---|'
-            for tool in clang-tidy iwyu cppcheck; do
+            for tool in clang-tidy clazy iwyu cppcheck; do
               log="$LOGS/$tool.log"
               if [ -f "$log" ]; then
                 case "$tool" in
                   clang-tidy) n="$(grep -cE '^/.*\.(cpp|h):[0-9]+:[0-9]+: warning:' "$log" || true)" ;;
+                  # clazy emits some checks at error severity, so count both;
+                  # keying on the -Wclazy tag keeps real compile errors out.
+                  clazy)      n="$(grep -cE '^/.*\.(cpp|h):[0-9]+:[0-9]+: (warning|error): .*\[-Wclazy-' "$log" || true)" ;;
                   iwyu)       n="$(grep -cE 'should (add|remove) these lines:' "$log" || true)" ;;
                   cppcheck)   n="$(grep -cE ': (error|warning|style|performance|portability):' "$log" || true)" ;;
                 esac

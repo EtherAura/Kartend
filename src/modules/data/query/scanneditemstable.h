@@ -50,7 +50,11 @@ public:
 
   /// Upsert every staged row into the persistent `items` table for the
   /// given collection. False on prepare/exec failure.
-  [[nodiscard]] bool applyToItems(int legacyId, const QString &collectionUuid);
+  /// @p errorDetailsOut (optional) receives the driver error text on failure
+  /// so callers can classify lock contention (KartendDb::isLockContentionError)
+  /// for their retry ladders — same contract as deleteItemsMissingFromScan.
+  [[nodiscard]] bool applyToItems(int legacyId, const QString &collectionUuid,
+                                  QString *errorDetailsOut = nullptr);
 
   /// Delete `items` rows for `collectionUuid` whose path is absent from
   /// scanned_items — i.e. files removed from disk since the last scan.

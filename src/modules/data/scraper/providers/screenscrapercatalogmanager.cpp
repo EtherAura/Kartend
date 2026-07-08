@@ -19,10 +19,11 @@ constexpr const char *SS_MEDIAS_JEU_LISTE = "https://api.screenscraper.fr/api2/m
 ScreenScraperCatalogManager::ScreenScraperCatalogManager(Scraper::HttpClient *httpClient,
                                                          QString userAgent,
                                                          CredentialsResolver credentialsResolver,
-                                                         ErrorMapper errorMapper)
+                                                         ErrorMapper errorMapper,
+                                                         QStringList allowedHostSuffixes)
     : m_httpClient(httpClient), m_userAgent(std::move(userAgent)),
-      m_credentialsResolver(std::move(credentialsResolver)), m_errorMapper(std::move(errorMapper)) {
-}
+      m_credentialsResolver(std::move(credentialsResolver)), m_errorMapper(std::move(errorMapper)),
+      m_allowedHostSuffixes(std::move(allowedHostSuffixes)) {}
 
 void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback callback) const {
   if (!callback) return;
@@ -96,43 +97,49 @@ void ScreenScraperCatalogManager::ensureSystemsCatalog(SystemsReadyCallback call
     }
     return;
   }
-  m_httpClient->get(url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
-                    [callback = std::move(callback), cachePath, staleFallback, servedStale,
-                     errorMapper = m_errorMapper](ErrorUtils::Result<QByteArray> response) {
-                      // When we already served a stale copy (servedStale), this fetch is
-                      // a pure background disk-cache refresh — never invoke the callback a
-                      // second time. The !servedStale guards below preserve the original
-                      // blocking behavior only for the no-on-disk-copy case.
-                      if (response.isError()) {
-                        // Surface a structured warning when the systems-catalog fetch
-                        // fails; the scrape already proceeded (stale) or falls back to
-                        // whatever the disk cache had, but the log tells the user *why*
-                        // the live refresh fell back.
-                        ErrorUtils::ErrorContext remapped =
-                            errorMapper ? errorMapper(response.error()) : response.error();
-                        ErrorUtils::logError(remapped);
-                        if (!servedStale) {
-                          callback(staleFallback);
-                        }
-                        return;
-                      }
-                      auto parsed =
-                          ScreenScraperSystemCache::parseSystemsResponse(response.value());
-                      if (parsed.isError() || parsed.value().isEmpty()) {
-                        if (!servedStale) {
-                          callback(staleFallback);
-                        }
-                        return;
-                      }
-                      if (!cachePath.isEmpty()) {
-                        // Best-effort: cache write failure is logged inside saveSystems
-                        // and falls back to in-memory-only — the lookup still proceeds.
-                        (void)ScreenScraperSystemCache::saveSystems(cachePath, parsed.value());
-                      }
-                      if (!servedStale) {
-                        callback(parsed.value());
-                      }
-                    });
+  m_httpClient->get(
+      url, {{QByteArrayLiteral("User-Agent"), m_userAgent.toUtf8()}},
+      [callback = std::move(callback), cachePath, staleFallback, servedStale,
+       errorMapper = m_errorMapper](ErrorUtils::Result<QByteArray> response) {
+        // When we already served a stale copy (servedStale), this fetch is
+        // a pure background disk-cache refresh — never invoke the callback a
+        // second time. The !servedStale guards below preserve the original
+        // blocking behavior only for the no-on-disk-copy case.
+        if (response.isError()) {
+          // Surface a structured warning when the systems-catalog fetch
+          // fails; the scrape already proceeded (stale) or falls back to
+          // whatever the disk cache had, but the log tells the user *why*
+          // the live refresh fell back.
+          ErrorUtils::ErrorContext remapped =
+              errorMapper ? errorMapper(response.error()) : response.error();
+          ErrorUtils::logError(remapped);
+          if (!servedStale) {
+            callback(staleFallback);
+          }
+          return;
+        }
+        auto parsed = ScreenScraperSystemCache::parseSystemsResponse(response.value());
+        if (parsed.isError() || parsed.value().isEmpty()) {
+          if (!servedStale) {
+            callback(staleFallback);
+          }
+          return;
+        }
+        if (!cachePath.isEmpty()) {
+          // Best-effort: cache write failure is logged inside saveSystems
+          // and falls back to in-memory-only — the lookup still proceeds.
+          (void)ScreenScraperSystemCache::saveSystems(cachePath, parsed.value());
+        }
+        if (!servedStale) {
+          callback(parsed.value());
+        }
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+      // Kartend-8xs72: systemesListe.php carries devpassword/sspassword
+      // in the query string — pin it (and its redirects) to the
+      // injected host allowlist so a cross-host redirect can't forward
+      // the credential-bearing URL.
+      m_allowedHostSuffixes);
 }
 
 void ScreenScraperCatalogManager::ensureMediaTypeCatalog() const {
@@ -208,5 +215,9 @@ void ScreenScraperCatalogManager::ensureMediaTypeCatalog() const {
         if (!cachePath.isEmpty()) {
           (void)ScreenScraperMediaTypeCache::saveMediaTypes(cachePath, parsed.value());
         }
-      });
+      },
+      Scraper::HttpClient::kDefaultMaxResponseBytes, QString(),
+      // Kartend-8xs72: mediasJeuListe.php carries devpassword/sspassword in the
+      // query string — same host pin as systemesListe.php above.
+      m_allowedHostSuffixes);
 }

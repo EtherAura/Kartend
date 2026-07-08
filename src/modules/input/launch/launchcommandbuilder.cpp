@@ -275,6 +275,9 @@ auto parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringLi
 
   QString params = paramString.trimmed();
   bool inQuotes = false;
+  // Set when a quote opens so an explicitly quoted empty argument ("" or '')
+  // still produces a token instead of being silently dropped.
+  bool tokenStarted = false;
   QString currentParam;
   QChar quoteChar;
 
@@ -297,13 +300,15 @@ auto parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringLi
 
     if (!inQuotes && (currentChar == '"' || currentChar == '\'')) {
       inQuotes = true;
+      tokenStarted = true;
       quoteChar = currentChar;
     } else if (inQuotes && currentChar == quoteChar) {
       inQuotes = false;
     } else if (currentChar == ' ' && !inQuotes) {
-      if (!currentParam.isEmpty()) {
+      if (tokenStarted || !currentParam.isEmpty()) {
         result.append(currentParam);
         currentParam.clear();
+        tokenStarted = false;
       }
     } else {
       currentParam.append(currentChar);
@@ -317,7 +322,7 @@ auto parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringLi
         .withDetails(QString("Quote character '%1' was not closed").arg(quoteChar));
   }
 
-  if (!currentParam.isEmpty()) {
+  if (tokenStarted || !currentParam.isEmpty()) {
     result.append(currentParam);
   }
 

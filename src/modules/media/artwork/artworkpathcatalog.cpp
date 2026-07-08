@@ -7,24 +7,51 @@
 
 #include <algorithm>
 
+#include <QDeadlineTimer>
 #include <QDir>
+#include <QLoggingCategory>
 #include <QMutexLocker>
 #include <QtConcurrent>
+#include <QThread>
+
+Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
 
 ArtworkPathCatalog::~ArtworkPathCatalog() {
-  // Drain every in-flight build, not just the latest: a superseded build
-  // keeps running after the owner's watcher moved on, and its lambda locks
-  // m_mutex / reads m_buildGeneration (Kartend-lz1zp). Snapshot under the
-  // mutex but wait WITHOUT holding it — the build lambdas need the mutex to
-  // make progress and finish.
+  // Supersede every in-flight build — not just the latest (Kartend-lz1zp) —
+  // then drain with a bounded budget. A build's QDir::entryList over a
+  // network mount can block indefinitely with no cancellation point and a
+  // QFuture can't be force-cancelled mid-scan, so waiting unbounded here hung
+  // GUI-thread shutdown forever (Kartend-52b4j.3). The build lambdas co-own
+  // the catalog state via shared_ptr, so a build that outlasts the budget is
+  // abandoned safely: it finishes into state nothing else reads and the
+  // generation bump makes it discard its results.
   QList<QFuture<void>> pending;
   {
-    QMutexLocker locker(&m_mutex);
-    pending = m_inFlightBuilds;
-    m_inFlightBuilds.clear();
+    QMutexLocker locker(&m_state->mutex);
+    ++m_state->buildGeneration;
+    pending = m_state->inFlightBuilds;
+    m_state->inFlightBuilds.clear();
   }
+  constexpr int kDrainBudgetMs = 2000;
+  QDeadlineTimer deadline(kDrainBudgetMs);
+  bool drained = true;
   for (QFuture<void> &future : pending) {
-    future.waitForFinished();
+    // QFuture has no bounded wait; poll against the shared deadline (the
+    // 10 ms granularity is noise next to the budget).
+    while (!future.isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!future.isFinished()) {
+      drained = false;
+      break;
+    }
+  }
+  if (!drained) {
+    qCWarning(lcArtworkManager)
+        << "ArtworkPathCatalog: build task(s) still enumerating artwork directories"
+        << kDrainBudgetMs
+        << "ms into shutdown; abandoning them to avoid blocking exit (they finish into"
+           " co-owned state and drop their results via the generation guard)";
   }
 }
 
@@ -67,10 +94,10 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
                                                       int currentIndex) {
   int generation = 0;
   {
-    QMutexLocker locker(&m_mutex);
-    generation = ++m_buildGeneration;
-    m_allPaths.clear();
-    m_index = 0;
+    QMutexLocker locker(&m_state->mutex);
+    generation = ++m_state->buildGeneration;
+    m_state->allPaths.clear();
+    m_state->index = 0;
   }
 
   if (!collections || currentIndex < 0 || currentIndex >= collections->size()) {
@@ -91,9 +118,12 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
   // cost off the GUI thread and avoids the nested-pool exhaustion a parallel
   // map dispatched from a pool task could hit; allDirs is captured by value so
   // it outlives this call. Appends are generation-guarded so a superseded
-  // build (a newer collection switch) drops its stale results instead of
-  // polluting the list the newer build cleared.
-  QFuture<void> future = QtConcurrent::run([this, generation, allDirs]() {
+  // build (a newer collection switch, or teardown) drops its stale results
+  // instead of polluting the list the newer build cleared. The lambda co-owns
+  // the state (shared_ptr by value), so it stays safe even when the dtor's
+  // bounded drain abandons it mid-scan (Kartend-52b4j.3).
+  std::shared_ptr<State> state = m_state;
+  QFuture<void> future = QtConcurrent::run([state, generation, allDirs]() {
     const QStringList exts = ExtensionUtils::imageFilters();
     for (const QString &dirPath : allDirs) {
       QDir dir(dirPath);
@@ -110,102 +140,97 @@ QFuture<void> ArtworkPathCatalog::buildFromCollection(const QList<CollectionConf
       for (const QString &file : files) {
         fullPaths.append(dir.absoluteFilePath(file));
       }
-      // NOLINTBEGIN(clang-analyzer-core.NullDereference) — analyzer can't see
-      // that ~ArtworkPathCatalog drains every registered build future
-      // (m_inFlightBuilds, Kartend-lz1zp), so this lambda never outlives
-      // `this` — including when a newer build superseded it and the owner's
-      // QFutureWatcher is no longer watching. The captured pointer is safe.
-      QMutexLocker locker(&m_mutex);
-      if (generation != m_buildGeneration) {
-        return; // a newer build superseded this one
+      QMutexLocker locker(&state->mutex);
+      if (generation != state->buildGeneration) {
+        return; // a newer build (or the dtor) superseded this one
       }
-      m_allPaths.append(fullPaths);
-      // NOLINTEND(clang-analyzer-core.NullDereference)
+      state->allPaths.append(fullPaths);
     }
   });
 
   // Register the build so the dtor can drain it even after a newer build
   // supersedes it; prune finished entries so the list stays O(live builds).
   {
-    QMutexLocker locker(&m_mutex);
-    m_inFlightBuilds.erase(std::remove_if(m_inFlightBuilds.begin(), m_inFlightBuilds.end(),
-                                          [](const QFuture<void> &f) { return f.isFinished(); }),
-                           m_inFlightBuilds.end());
-    m_inFlightBuilds.append(future);
+    QMutexLocker locker(&m_state->mutex);
+    m_state->inFlightBuilds.erase(
+        std::remove_if(m_state->inFlightBuilds.begin(), m_state->inFlightBuilds.end(),
+                       [](const QFuture<void> &f) { return f.isFinished(); }),
+        m_state->inFlightBuilds.end());
+    m_state->inFlightBuilds.append(future);
   }
   return future;
 }
 
 int ArtworkPathCatalog::totalPaths() const {
-  QMutexLocker locker(&m_mutex);
-  return m_allPaths.size();
+  QMutexLocker locker(&m_state->mutex);
+  return m_state->allPaths.size();
 }
 
 bool ArtworkPathCatalog::isEmpty() const {
-  QMutexLocker locker(&m_mutex);
-  return m_allPaths.isEmpty();
+  QMutexLocker locker(&m_state->mutex);
+  return m_state->allPaths.isEmpty();
 }
 
 bool ArtworkPathCatalog::isExhausted() const {
-  QMutexLocker locker(&m_mutex);
-  return m_index >= m_allPaths.size();
+  QMutexLocker locker(&m_state->mutex);
+  return m_state->index >= m_state->allPaths.size();
 }
 
 QStringList ArtworkPathCatalog::takeNextBatch(int maxCount) {
   if (maxCount <= 0) {
     return {};
   }
-  QMutexLocker locker(&m_mutex);
-  const int available = m_allPaths.size() - m_index;
+  QMutexLocker locker(&m_state->mutex);
+  const int available = m_state->allPaths.size() - m_state->index;
   if (available <= 0) {
     return {};
   }
   const int take = qMin(maxCount, available);
-  QStringList out = m_allPaths.mid(m_index, take);
-  m_index += take;
+  QStringList out = m_state->allPaths.mid(m_state->index, take);
+  m_state->index += take;
   return out;
 }
 
 QStringList ArtworkPathCatalog::filterAndMarkPending(const QStringList &batch) {
   QStringList out;
   out.reserve(batch.size());
-  QMutexLocker locker(&m_mutex);
+  QMutexLocker locker(&m_state->mutex);
   for (const QString &path : batch) {
-    if (m_silentlyCached.contains(path) || m_silentPending.contains(path)) {
+    if (m_state->silentlyCached.contains(path) || m_state->silentPending.contains(path)) {
       continue;
     }
-    m_silentPending.insert(path);
+    m_state->silentPending.insert(path);
     out.append(path);
   }
   return out;
 }
 
 void ArtworkPathCatalog::markSilentlyCached(const QString &path) {
-  QMutexLocker locker(&m_mutex);
-  m_silentlyCached.insert(path);
+  QMutexLocker locker(&m_state->mutex);
+  m_state->silentlyCached.insert(path);
 }
 
 void ArtworkPathCatalog::unmarkSilentPending(const QString &path) {
-  QMutexLocker locker(&m_mutex);
-  m_silentPending.remove(path);
+  QMutexLocker locker(&m_state->mutex);
+  m_state->silentPending.remove(path);
 }
 
 void ArtworkPathCatalog::clearSilentPendingOnly() {
-  QMutexLocker locker(&m_mutex);
-  m_silentPending.clear();
+  QMutexLocker locker(&m_state->mutex);
+  m_state->silentPending.clear();
 }
 
 void ArtworkPathCatalog::clearPathsAndPending() {
-  QMutexLocker locker(&m_mutex);
-  m_allPaths.clear();
-  m_index = 0;
-  m_silentPending.clear();
+  QMutexLocker locker(&m_state->mutex);
+  m_state->allPaths.clear();
+  m_state->index = 0;
+  m_state->silentPending.clear();
 }
 
 void ArtworkPathCatalog::clearAll() {
-  QMutexLocker locker(&m_mutex);
-  m_allPaths.clear();
-  m_index = 0;
-  m_silentlyCached.clear();
-  m_silentPending.clear();
+  QMutexLocker locker(&m_state->mutex);
+  m_state->allPaths.clear();
+  m_state->index = 0;
+  m_state->silentlyCached.clear();
+  m_state->silentPending.clear();
 }

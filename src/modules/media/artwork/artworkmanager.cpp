@@ -25,6 +25,7 @@
 #include <memory>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -92,12 +93,28 @@ ICacheManager *ArtworkManager::cacheMgr() const {
 
 // Destructor stops timers, cancels in-flight dispatch, and clears widget state.
 ArtworkManager::~ArtworkManager() {
-  // Kartend-cl86n: the off-thread catalog build task captures &m_pathCatalog,
-  // so it must not outlive this manager. This waits only for the CURRENT
-  // (watched) build; superseded builds from rapid collection switches are
-  // drained by ~ArtworkPathCatalog itself, which tracks every live build
-  // future (Kartend-lz1zp). No-op when no build was ever kicked.
-  m_catalogBuildWatcher.waitForFinished();
+  // Kartend-cl86n / Kartend-52b4j.3: give the CURRENT (watched) catalog build
+  // a bounded window to finish, then abandon it — a build wedged inside
+  // QDir::entryList on a network mount has no cancellation point, and the old
+  // unbounded waitForFinished hung GUI-thread shutdown forever. Abandoning is
+  // safe: the build lambda co-owns the catalog state (shared_ptr), so it
+  // never touches freed memory, and ~ArtworkPathCatalog (member teardown
+  // below) supersedes it so its results are dropped via the generation guard.
+  // Superseded builds from rapid collection switches are drained (bounded)
+  // by ~ArtworkPathCatalog itself (Kartend-lz1zp).
+  {
+    constexpr int kCatalogDrainBudgetMs = 2000;
+    QDeadlineTimer deadline(kCatalogDrainBudgetMs);
+    const QFuture<void> buildFuture = m_catalogBuildWatcher.future();
+    while (!buildFuture.isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!buildFuture.isFinished()) {
+      qCWarning(lcArtworkManager)
+          << "ArtworkManager: catalog build still enumerating artwork directories"
+          << kCatalogDrainBudgetMs << "ms into shutdown; abandoning it to avoid blocking exit";
+    }
+  }
 
   // Tell the dispatcher to stop accepting new work; its destructor (run when
   // Qt's parent-child cleanup tears it down below) will drain the pool.
@@ -162,7 +179,7 @@ SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(ArtworkManagerSetup, InteractionStateHolder *, InteractionState,
                               interactionState)

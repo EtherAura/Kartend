@@ -464,12 +464,13 @@ void MainWindow::initializeAppContext() {
     // which is reached through the filtermanager.h include below.
     m_appContext.managers.filterManager = sm->filterManager();
   }
-  m_appContext.managers.artworkManager = m_appManager->getArtworkManager();
+  // Facade + role views seeded in lockstep (Kartend-dl0uz.2).
+  m_appContext.managers.seedArtworkRoles(m_appManager->getArtworkManager());
   m_appContext.managers.settingsManager = m_appManager->getSettingsManager();
   m_appContext.managers.sessionManager = m_appManager->getSessionManager();
   m_appContext.managers.detailsPaneManager = m_appManager->getDetailsPaneManager();
   m_appContext.managers.detailPageManager = m_appManager->getDetailPageManager();
-  m_appContext.managers.databaseManager = m_appManager->getDatabaseManager();
+  m_appContext.managers.seedDatabaseRoles(m_appManager->getDatabaseManager());
   m_appContext.managers.navigationManager = m_appManager->getNavigationManager();
   m_appContext.managers.interactionManager = m_appManager->getInteractionManager();
   m_appContext.managers.playlistManager = m_appManager->getPlaylistManager();
@@ -480,11 +481,12 @@ void MainWindow::initializeAppContext() {
   // them here, before any setupReferences() runs, so dependents can resolve
   // siblings exclusively through ctx.
   if (auto *im = m_appManager->getInteractionManager()) {
-    m_appContext.managers.animationManager = im->animationManager();
-    m_appContext.managers.selectionManager = im->selectionManager();
-    m_appContext.managers.viewportManager = im->viewportManager();
-    m_appContext.managers.mouseManager = im->mouseManager();
-    m_appContext.managers.keyboardManager = im->keyboardManager();
+    // Facade + role views seeded in lockstep (Kartend-dl0uz.2).
+    m_appContext.managers.seedAnimationRoles(im->animationManager());
+    m_appContext.managers.seedSelectionRoles(im->selectionManager());
+    m_appContext.managers.seedViewportRoles(im->viewportManager());
+    m_appContext.managers.seedMouseRoles(im->mouseManager());
+    m_appContext.managers.seedKeyboardRoles(im->keyboardManager());
     m_appContext.managers.eventManager = im->eventManager();
     m_appContext.managers.searchManager = im->searchManager();
     m_appContext.managers.launchManager = im->launchManager();

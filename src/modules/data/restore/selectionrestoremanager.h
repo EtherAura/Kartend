@@ -28,13 +28,13 @@ struct SelectionRestoreManagerSetup {
 
   // Sibling managers come from ctx; only non-manager fields stay here.
   QLineEdit *searchBar = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   GeneralSettings *generalSettings = nullptr;
   std::function<bool()> isShuttingDown;
 
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
-  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
 };
@@ -160,7 +160,7 @@ private:
   QLineEdit *m_searchBar = nullptr;
 
   // State references
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
   std::function<bool()> m_isShuttingDown;

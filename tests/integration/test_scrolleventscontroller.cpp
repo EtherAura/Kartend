@@ -65,6 +65,32 @@ void TestScrollEventsController::listColumnWidths_updateSettingsEvenWithoutSetti
   QCOMPARE(settings.view.listArtworkColumnWidth, 97);
 }
 
+void TestScrollEventsController::listColumnWidths_preferDebouncedSaverOverDirectSave() {
+  // A header drag fires these slots once per mouse-move tick. With the
+  // host's debounced saver wired, each tick must write through to the live
+  // struct and route the persist to the saver — never a direct (per-tick)
+  // saveGeneralSettings.
+  GeneralSettings settings;
+  RecordingSettingsManager recorder;
+  int scheduleCalls = 0;
+  ScrollEventsController controller;
+  ScrollEventsControllerContext ctx;
+  ctx.getGeneralSettings = [&settings]() { return &settings; };
+  ctx.getSettingsManager = [&recorder]() -> ISettingsManager * { return &recorder; };
+  ctx.scheduleSettingsSave = [&scheduleCalls]() { ++scheduleCalls; };
+  controller.setContext(ctx);
+
+  controller.onListColumnWidthChanged(300);
+  controller.onListColumnWidthChanged(301);
+  controller.onListColumnWidthChanged(302);
+  controller.onListArtworkColumnWidthChanged(96);
+
+  QCOMPARE(settings.view.listCollectionColumnWidth, 302);
+  QCOMPARE(settings.view.listArtworkColumnWidth, 96);
+  QCOMPARE(scheduleCalls, 4);
+  QCOMPARE(recorder.saveGeneralSettingsCalls, 0);
+}
+
 void TestScrollEventsController::sortModeChange_withoutNavigationManagerLeavesSettingsUntouched() {
   // The slot bails before touching settings when no NavigationManager is
   // available — a reload it can't perform must not desync the persisted

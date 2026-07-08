@@ -9,10 +9,12 @@
 #include "isettingsdialog.h" // for SettingsPage on openSettingsDialog signature
 #include <functional>
 #include <memory>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
+#include <QPair>
 #include <QStringList>
 #include <QTimer>
 
@@ -68,6 +70,9 @@ class LibraryToolsController;
 class ScrollEventsController;
 class TextZoomHud;
 class OverlayZOrderRegistry;
+namespace ErrorUtils {
+struct ErrorContext;
+}
 
 namespace kart {
 class KartManager;
@@ -294,6 +299,18 @@ public:
   /// VideoPreviewWidget::setGlobalVolume and persist on change.
   void setupPreviewVolumeSlider();
 
+  /// Debounced persist of m_generalSettings. Continuous-input paths (volume
+  /// slider drag, list-header column drag, text-zoom key repeat) mirror
+  /// their edit into the live struct immediately and route the full-INI
+  /// write through here so a burst costs one disk write, not one per tick.
+  /// Same trailing-edge shape as SettingsDialog::scheduleLiveSettingsSave.
+  void scheduleGeneralSettingsSave();
+  /// Synchronously write a still-pending debounced general-settings save.
+  /// Called from closeEvent(): ApplicationManager::shutdown persists
+  /// collections but not GeneralSettings, so quitting inside the debounce
+  /// window would otherwise drop the last edit.
+  void flushPendingGeneralSettingsSave();
+
   /// Reflect @p viewType onto the toolbar layout-picker. Called from
   /// setViewType() and updateWindowTitleForCollection(). Delegates to the
   /// ToolbarController.
@@ -313,7 +330,21 @@ private:
   // Drains m_pendingKartImports — runs the per-kart destination prompt + import
   // off the drop handler (see dropEvent) so modals don't nest inside the DnD
   // event and a second drop can't re-enter mid-import (Kartend-tubnr).
+  // Kartend-h7xnr.1: prompts all destinations first (modal loop), then chains
+  // the imports one at a time through KartManager's async worker path.
   void processPendingKartImports();
+  /// Phase 1 of the drop drain: peek each queued .kart and run the modal
+  /// destination prompt, filling m_kartImportJobs. Drops arriving inside a
+  /// prompt's nested loop are consumed by the same pass.
+  void promptPendingKartDestinations();
+  /// Phase 2: start the next queued job via KartManager::importKartAsync (one
+  /// worker at a time), or release m_kartImportInProgress when both queues are
+  /// empty. Re-entered from onKartOperationFinished after each import.
+  void dispatchNextKartImport();
+  /// Continuation for the drop drain — connected to KartManager's terminal
+  /// signals (collectionImported / importFailed / kartExported / exportFailed)
+  /// in wireKartManager. No-op unless a drop drain is active.
+  void onKartOperationFinished();
 
   bool m_isShuttingDown = false;
   bool m_deferredStartupDone = false;
@@ -343,11 +374,15 @@ private:
   // Kart drag-drop import queue + re-entrancy guard (Kartend-tubnr). dropEvent
   // collects .kart paths here and accepts immediately; processPendingKartImports
   // drains them on the next event-loop turn so the per-file destination prompt
-  // and (blocking) import run outside the DnD handler. The guard stops a second
+  // and the import run outside the DnD handler. The guard stops a second
   // drop — or one delivered inside a prompt's nested loop — from starting a
-  // concurrent drain.
+  // concurrent drain, and stays up across the async import chain
+  // (Kartend-h7xnr.1) until dispatchNextKartImport finds both queues empty.
   bool m_kartImportInProgress = false;
   QStringList m_pendingKartImports;
+  /// (kartPath, destDir) jobs with their destination already prompted,
+  /// awaiting sequential dispatch through KartManager::importKartAsync.
+  QList<QPair<QString, QString>> m_kartImportJobs;
   // Pristine application font, captured per-instance on the first
   // applyGlobalUiFont call so clearing a font override restores Qt's default.
   // Kartend-r2722: was a process-wide static that captured whatever font the
@@ -402,6 +437,27 @@ private:
   std::unique_ptr<DialogController> m_dialogController;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
+  /// True while attract/gamepad are suspended for a detached (fire-and-forget)
+  /// launch — LaunchManager::detachedSessionStarted set it, and either the
+  /// balanced detachedSessionEnded or the focus backstop in event() clears it
+  /// (Kartend-3232r.1). A detached child gives no process knowledge beyond
+  /// spawn/exit, so the window regaining activation is the "user is back"
+  /// signal; tracked sessions never touch this flag (they have a real
+  /// finished()).
+  bool m_detachedSuspendActive = false;
+  /// Set when the window deactivates during a detached session — evidence the
+  /// launched program actually took focus. The started handler's probe timer
+  /// resumes if this never happens: a launcher with no window of its own
+  /// (audio player, CLI tool) would otherwise leave the gamepad suspended
+  /// under a fully focused frontend until its child exits.
+  bool m_detachedSessionSawDeactivate = false;
+  /// Started at detachedSessionStarted; the WindowActivate backstop ignores
+  /// activations inside kDetachedResumeGraceMs — the launcher-chooser or an
+  /// error dialog closing re-activates the window right after the spawn, and
+  /// that must not instantly lift the suspension.
+  QElapsedTimer m_detachedSuspendSince;
+  static constexpr qint64 kDetachedResumeGraceMs = 1500;
+  static constexpr int kDetachedFocusProbeMs = 5000;
   /// Coalesces the burst of QEvent::ApplicationPaletteChange / ThemeChange
   /// events KDE fires during one color-scheme rewrite into a single
   /// re-theme on the next event-loop turn. See
@@ -412,6 +468,15 @@ private:
   // (menu shortcuts) into a single settings save + layout/artwork refresh
   // chain. Owns the QTimers and generation counters internally.
   GridWidthDebouncer *m_gridWidthDebouncer = nullptr;
+
+  /// Trailing-edge coalescer behind scheduleGeneralSettingsSave(). Lazily
+  /// constructed on the first schedule; isActive() doubles as the
+  /// "save still pending" flag flushPendingGeneralSettingsSave() checks.
+  QTimer *m_generalSettingsSaveTimer = nullptr;
+  /// Coalesces applyTextZoom()'s virtual-view teardown/rebuild across a
+  /// key-repeat burst. The HUD, font push, and sidebar refresh stay
+  /// immediate; only the expensive grid rebuild waits for the burst to end.
+  QTimer *m_textZoomRebuildTimer = nullptr;
 
   // Owns the items-page toolbar's stateful Qt widgets (layout-picker,
   // search-mode QAction inside the search field, filter button + popup) and
@@ -494,11 +559,21 @@ private:
   /// edits that may have added or removed type tags. Delegates to the
   /// ToolbarController.
   void refreshFilterToolbar();
-  /// Pull the per-item state flags for the current collection from
-  /// IDatabaseManager and publish them into ItemWidget's static registry
-  /// so the grid badges paint without a per-tile DB hop. Connected to
-  /// DatabaseManager::itemsLoaded (Kartend-elte).
+  /// Dispatch the per-item state-flags fetch for the current collection to
+  /// IDatabaseManager's query worker (Kartend-elte / Kartend-h7xnr.6) so the
+  /// grid badges paint without a per-tile DB hop and the collection-switch
+  /// path never runs the flags SQL on the main thread. Connected to
+  /// DatabaseManager::itemsLoaded; the result lands in
+  /// onItemStateFlagsLoaded a beat later.
   void refreshItemStateFlagsRegistry();
+  /// Delivery half of refreshItemStateFlagsRegistry(): publish the fetched
+  /// flags into ItemWidget's static registry. Drops the reply when the
+  /// echoed uuid no longer matches the collection being viewed (the user
+  /// switched again while the worker query was in flight). Connected to
+  /// DatabaseManager::itemStateFlagsLoaded.
+  void onItemStateFlagsLoaded(const QString &collectionUuid, const QStringList &pinnedPaths,
+                              const QStringList &hiddenPaths,
+                              const QStringList &continueLaterPaths);
 
   // Wiring slot handlers — each method below is the named target of one
   // signal/slot connection in mainwindow_wiring.cpp. Extracted from inline
@@ -521,6 +596,12 @@ private:
   // DetailsPaneManager edges
   void onSidebarVisibilityChanged(bool visible);
   void onSidebarLayoutChanged();
+  // NavigationManager edge — MainWindow owns the ErrorDialog so the input
+  // layer stays free of UI-chrome includes.
+  void onMediaLibraryErrorRaised(const ErrorUtils::ErrorContext &error);
+  // SettingsManager edges (launcherProfileChanged / collectionsModified) —
+  // refresh the items-toolbar warning badge via the ToolbarController.
+  void refreshCollectionWarningBadge();
 
   // UI Setup Methods
   void setupUI();
@@ -556,6 +637,14 @@ private:
   void showAbout();
   void showFocusReturnSplash();
 
+  /// Lifts the detached-session attract/gamepad suspension (no-op unless
+  /// m_detachedSuspendActive) and releases LaunchManager's detached launch
+  /// block. Shared by the detachedSessionEnded handler, the WindowActivate
+  /// focus backstop in event(), and the never-took-focus probe — defined in
+  /// mainwindow_managerwiring.cpp beside the wiring that arms it
+  /// (Kartend-3232r.1). Attract suspension goes through setSuspended only.
+  void resumeAfterDetachedSession();
+
   /// Re-apply every *derived* color (one computed from the system accent /
   /// palette and then cached, baked into a stylesheet/HTML string, or pinned
   /// via an explicit setPalette resolve-mask) after the system color scheme
@@ -581,6 +670,13 @@ private:
   /// never fires twice. Safe to call from both the deferred startup timer
   /// and the Help-menu action.
   void showFirstRunWizard();
+
+  /// Legacy empty-library backstop: modally prompts for a first collection
+  /// name (re-prompting on empty/invalid input, closing the window on
+  /// Cancel), persists it, then opens the settings dialog so the user can
+  /// finish configuring it. Queued by setupInitialTimersEmptyCollections
+  /// once the window is shown; defined in mainwindow_dialogs.cpp.
+  void promptCreateFirstCollectionInteractive();
 
   /// Pops a file dialog for the user to pick a *.kartend-theme.json,
   /// previews the would-be changes against the active collection, then

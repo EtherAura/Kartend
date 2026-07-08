@@ -18,6 +18,7 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
                                         const std::shared_ptr<QElapsedTimer> &applyTimer) {
   m_downloads.clear();
   m_downloads.reserve(selected.size());
+  m_failedTypes.clear();
   m_bytes = 0;
   m_total = selected.size();
   m_pending = selected.size();
@@ -69,13 +70,20 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
       if (!bytes.isEmpty()) {
         m_bytes += bytes.size();
         m_downloads.append(PendingMediaWrite{asset, bytes});
+        // Don't finish from inside the loop: finished()'s slot can delete the
+        // owning dialog (and this dispatcher), and the next iteration would
+        // deref freed state (Kartend-5g0g2). Just tally; the post-loop check
+        // finishes exactly once after every asset is dispatched.
+        --m_pending;
+        continue;
       }
-      // Don't finish from inside the loop: finished()'s slot can delete the
-      // owning dialog (and this dispatcher), and the next iteration would
-      // deref freed state (Kartend-5g0g2). Just tally; the post-loop check
-      // finishes exactly once after every asset is dispatched.
-      --m_pending;
-      continue;
+      // The dedup copy exists but couldn't be read (permissions, truncated to
+      // zero bytes, vanishing mount). Resolving here would make the asset
+      // vanish silently — neither downloaded nor in failedTypes — so fall
+      // through to the network fetch instead; its error path records the
+      // type if that fails too (Kartend-jjyst.17).
+      qCWarning(lcScrapeTimings) << "DISPATCH dedup copy unreadable" << existing
+                                 << "— falling back to network fetch for" << asset.type;
     }
 
     // (2) Per-game CRC short-circuit: append md5/sha1 hints to the URL when the
@@ -94,9 +102,10 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
       }
     }
 
-    // (3) Network fetch.
-    m_config.provider->fetchMediaBytes(
-        fetchUrl, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
+    // (3) Network fetch. Kind-aware entry point: the asset type selects the
+    // provider's per-kind Content-Type prefix + response cap (Kartend-jjyst.1).
+    m_config.provider->fetchMediaBytesForType(
+        fetchUrl, asset.type, [guard, asset, applyTimer](ErrorUtils::Result<QByteArray> response) {
           if (guard.isNull()) return; // dispatcher gone — drop the reply
           if (applyTimer) {
             qCInfo(lcScrapeTimings)
@@ -110,13 +119,22 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
             if (ScrapeAssetDedup::isHashShortCircuit(bytes)) {
               qCInfo(lcScrapeTimings)
                   << "DISPATCH hash-hit (skip)" << asset.type << "body=" << bytes.trimmed();
-            } else {
+            } else if (!bytes.isEmpty()) {
               guard->m_bytes += bytes.size();
               guard->m_downloads.append(PendingMediaWrite{asset, bytes});
+            } else {
+              // Ok-but-empty is a failed fetch, same as the batch aggregator's
+              // "isOk && !isEmpty" success test (Kartend-jjyst.14).
+              guard->m_failedTypes.append(asset.type.toLower());
             }
+          } else {
+            // The asset itself is skipped — partial success beats failing the
+            // whole scrape because one asset 404'd — but the type is recorded
+            // so the mediaAbsent merge keeps its marker instead of re-chasing
+            // (and re-failing) the download every FillMissing run
+            // (Kartend-jjyst.14).
+            guard->m_failedTypes.append(asset.type.toLower());
           }
-          // On error we silently skip — partial success beats failing the whole
-          // scrape because one asset 404'd.
           --guard->m_pending;
           const int completed = guard->m_total - guard->m_pending;
           emit guard->progressed(completed, guard->m_total, guard->m_bytes);
@@ -142,7 +160,7 @@ void ScrapeDownloadDispatcher::emitFinishedIfDone() {
   m_finishedEmitted = true;
   // LAST touch — the slot may delete this dispatcher (Kartend-5g0g2); no member
   // access after the emit.
-  emit finished(m_downloads, m_bytes);
+  emit finished(m_downloads, m_bytes, m_failedTypes);
 }
 
 } // namespace Scraper

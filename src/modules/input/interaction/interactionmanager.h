@@ -102,7 +102,7 @@ struct InteractionManagerSetup {
 
   // State references (can be overridden or taken from ctx)
   QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
+  const int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
@@ -130,7 +130,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
   SETUP_GETTER_INLINE_UI_SAME(QAction *, SearchModeAction, searchModeAction)
   SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_COL_SAME(const int *, CurrentCollectionIndex, currentCollectionIndex)
   SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
   SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
   SETUP_GETTER_INLINE_COL_SAME(const bool *, IsShuttingDown, isShuttingDown)
@@ -201,8 +201,6 @@ public:
   [[nodiscard]] bool isWheelScrolling() const override;
   auto eventFilter(QObject *obj, QEvent *event) -> bool override;
   auto handleGlobalKeyPress(QKeyEvent *event) -> bool;
-  [[nodiscard]] ItemWidget *getSelectedMediaItem() const;
-  void setSelectedMediaItem(ItemWidget *widget);
   [[nodiscard]] QString selectedFilePath() const override;
   void ensureItemVisible(int index, bool allowHorizontalScroll);
   void applyImmediateViewportPositioningForSelection(int targetIndex);
@@ -412,7 +410,7 @@ private:
   QPointer<QStackedWidget> m_stackedWidget;
   QPointer<QWidget> m_itemsPage;
   QList<CollectionConfig> *m_collections = nullptr;
-  int *m_currentCollectionIndex = nullptr;
+  const int *m_currentCollectionIndex = nullptr;
   QPointer<QLineEdit> m_searchBar;
   GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;

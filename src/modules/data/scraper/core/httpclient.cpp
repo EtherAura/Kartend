@@ -193,7 +193,12 @@ void HttpClient::clearPending() {
   for (const QQueue<PendingRequest> &queue : dropped) {
     for (const PendingRequest &req : queue) {
       if (req.callback) {
-        req.callback(ErrorContext::error(ErrorCode::OperationCancelled,
+        // RequestQueueCleared, NOT OperationCancelled: the latter doubles as
+        // QNAM's transfer-timeout shape, which RetryPolicy::isTransient
+        // deliberately retries — a queue clear is the opposite (a user cancel)
+        // and re-issuing it would burn provider quota for a killed run
+        // (Kartend-jjyst.2).
+        req.callback(ErrorContext::error(ErrorCode::RequestQueueCleared,
                                          "Request cancelled: HTTP queue cleared",
                                          "Scraper::HttpClient::clearPending"));
       }

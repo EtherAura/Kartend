@@ -13,11 +13,13 @@
 #include "applicationcontext.h"
 #include "collection/validationhelpers.h"
 #include "hoverscrollhandler.h"
-#include "idatabasemanager.h"
-#include "iselectionmanager.h"
+#include "ifilecollectionlookup.h"
+#include "igridlayoutscroll.h"
+#include "imouseholdcontrol.h"
+#include "iscrolldatasource.h"
+#include "isearchstatescroll.h"
 #include "itemwidget.h"
 #include "mousemanager.h"
-#include "scrollmanager.h"
 #include "wheeleventhandler.h"
 
 #include <QLoggingCategory>
@@ -99,8 +101,8 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
   }
 
   int collIdx = -1;
-  if (databaseMgr()) {
-    collIdx = databaseMgr()->getCollectionIndexForFile(path);
+  if (fileCollectionLookup()) {
+    collIdx = fileCollectionLookup()->getCollectionIndexForFile(path);
   } else if (m_currentCollectionIndex) {
     collIdx = *m_currentCollectionIndex;
   }
@@ -219,9 +221,9 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     }
   }
 
-  if (mouseMgr()) {
-    mouseMgr()->setLeftMouseDown(true);
-    mouseMgr()->clearHorizontalCandidate();
+  if (mouseHold()) {
+    mouseHold()->setLeftMouseDown(true);
+    mouseHold()->clearHorizontalCandidate();
   }
 
   bool target = (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
@@ -237,14 +239,16 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     }
   }
 
-  if (!scrollMgr()) {
+  // scrollData / scrollGrid alias the same ScrollManager and are seeded in
+  // lockstep; both are checked because findBestWidgetForClick reads both roles.
+  if (!scrollData() || !scrollGrid()) {
     emit clearSelectionRequested();
     event->accept();
     return true;
   }
 
   auto [chosen, visualIndex] =
-      MouseManager::findBestWidgetForClick(clickPos, scrollMgr(), m_gridContainer);
+      MouseManager::findBestWidgetForClick(clickPos, scrollData(), scrollGrid(), m_gridContainer);
   if (chosen && visualIndex >= 0) {
     emit widgetClicked(chosen, visualIndex, clickPos, mouseEvent);
     event->accept();

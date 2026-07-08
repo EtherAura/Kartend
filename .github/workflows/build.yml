@@ -67,7 +67,9 @@ jobs:
           fi
 
       - name: Install lint dependencies
-        run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils
+        # qt6-l10n-tools ships lupdate for the translation drift check below
+        # (Kartend-pnlot.3); it pulls only Qt core libs, no GUI stack.
+        run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils qt6-l10n-tools
 
       - name: Shellcheck
         # -x follows `source` directives into .scripts/lib/*.sh so build.sh is
@@ -120,6 +122,41 @@ jobs:
         run: |
           appstreamcli validate --pedantic packaging/*.metainfo.xml
           desktop-file-validate packaging/*.desktop
+
+      - name: Check translation-source drift (lupdate, non-fatal)
+        # Kartend-pnlot.3: translations/kartend_en.ts (the translator seed) is
+        # refreshed manually — `cmake --build <builddir> --target
+        # update_translations` — which is easy to forget after touching tr()
+        # strings, and nothing else in CI runs lupdate at all. Cheap,
+        # configure-less cross-check: run lupdate straight over src/ into a
+        # temp .ts and compare message counts against the committed seed.
+        # Count comparison (not a byte diff) because a project-less lupdate
+        # walk isn't guaranteed to match the CMake qt_add_lupdate extraction
+        # byte-for-byte; for the same reason drift is a ::warning, not a
+        # failure — it flags rot, it can't prove staleness.
+        run: |
+          # lupdate lands in different places per distro: on PATH, as
+          # lupdate6 (Arch), or off PATH in /usr/lib/qt6/bin (Debian/Ubuntu's
+          # qt6-l10n-tools) — try each so the snippet also runs locally.
+          LUPDATE="$(command -v lupdate || command -v lupdate6 || true)"
+          if [ -z "$LUPDATE" ] && [ -x /usr/lib/qt6/bin/lupdate ]; then
+            LUPDATE=/usr/lib/qt6/bin/lupdate
+          fi
+          if [ -z "$LUPDATE" ]; then
+            echo "::warning::lupdate not found (qt6-l10n-tools missing from the lint dependencies?) — translation drift check skipped."
+            exit 0
+          fi
+          "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts"
+          fresh="$(grep -c '<message' "$RUNNER_TEMP/kartend_fresh.ts" || true)"
+          total="$(grep -c '<message' translations/kartend_en.ts || true)"
+          # vanished/obsolete entries are kept in the seed for translators but
+          # correspond to no current source string — exclude them.
+          stale="$(grep -cE '<translation type="(vanished|obsolete)"' translations/kartend_en.ts || true)"
+          live=$(( total - stale ))
+          echo "Fresh lupdate extract: $fresh messages; committed kartend_en.ts: $live live ($stale vanished/obsolete)."
+          if [ "$fresh" -ne "$live" ]; then
+            echo "::warning file=translations/kartend_en.ts::Translation seed looks stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. Refresh with 'cmake --build <builddir> --target update_translations' and commit the result (docs/dev/i18n.md)."
+          fi
 
   build:
     runs-on: ubuntu-24.04
@@ -231,6 +268,15 @@ jobs:
           KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: |
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
+          # Staged ctest parallelism rollout (Kartend-pnlot.1): the harness is
+          # engineered for -j (per-test HOME isolation, per-class integration
+          # entries, RUN_SERIAL on the one known conflict), but enable it on the
+          # primary Release/gcc cell only for now — widen to the remaining jobs
+          # (sanitizers LAST; TSan timing shifts under load) once a few runs
+          # prove stable.
+          if [ "${{ matrix.build_type }}-${{ matrix.compiler }}" = "Release-gcc" ]; then
+            export CTEST_PARALLEL_LEVEL="$(nproc)"
+          fi
           ctest --output-on-failure -LE benchmark
 
       - name: Dump failed-test diagnostics
@@ -327,6 +373,10 @@ jobs:
       - name: Run Tests
         env:
           QT_QPA_PLATFORM: offscreen
+          # Kartend-pnlot.4: unzip/p7zip-full are installed above, so a
+          # missing extractor is a real regression — QFAIL instead of a
+          # silent QSKIP (same guard as the build job, Kartend-68wbk).
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: |
           cd build/no-zstd
           ctest --output-on-failure -LE benchmark
@@ -412,6 +462,10 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/suppressions/lsan.txt
+          # Kartend-pnlot.4: unzip/p7zip-full are installed above, so a
+          # missing extractor is a real regression — QFAIL instead of a
+          # silent QSKIP (same guard as the build job, Kartend-68wbk).
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: |
           cd build/Sanitize
           ctest --output-on-failure -LE benchmark
@@ -509,6 +563,10 @@ jobs:
           # involved in a lock-order inversion, which is how Qt event loop
           # deadlocks usually surface.
           TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/suppressions/tsan.txt
+          # Kartend-pnlot.4: unzip/p7zip-full are installed above, so a
+          # missing extractor is a real regression — QFAIL instead of a
+          # silent QSKIP (same guard as the build job, Kartend-68wbk).
+          KARTEND_REQUIRE_ARCHIVE_TOOLS: 1
         run: |
           cd build/TSan
           ctest --output-on-failure -LE benchmark
@@ -801,6 +859,13 @@ jobs:
         # passes; the remaining symlink-shaped tests carry QSKIP-on-
         # Q_OS_WIN gates in-source rather than ctest-level exclusion so
         # the gate stays close to the reason.
+        # KARTEND_REQUIRE_ARCHIVE_TOOLS is deliberately NOT set here
+        # (Kartend-pnlot.4): the Linux jobs install unzip/p7zip-full
+        # themselves, so a missing extractor there is a workflow regression
+        # worth a QFAIL. Here extractor availability tracks the
+        # windows-latest runner image (7z/tar preinstalled today), which
+        # this workflow doesn't control — enforcing would turn an image
+        # change into a red wall. QSKIP stays the intended fallback.
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -LE benchmark
@@ -979,7 +1044,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-
             ${{ runner.os }}-macos14-ccache-
-            ${{ runner.os }}-ccache-
 
       - name: Configure ccache
         run: |
@@ -1001,6 +1065,14 @@ jobs:
         run: cmake --build build --parallel $(sysctl -n hw.ncpu)
 
       - name: Run tests
+        # KARTEND_REQUIRE_ARCHIVE_TOOLS is deliberately NOT set here
+        # (Kartend-pnlot.4): the Linux jobs install unzip/p7zip-full
+        # themselves, so a missing extractor there is a workflow regression
+        # worth a QFAIL. Here extractor availability tracks the macos-14
+        # runner image (unzip ships with macOS; 7z only if the image adds
+        # it), which this workflow doesn't control — enforcing would turn
+        # an image change into a red wall. QSKIP stays the intended
+        # fallback.
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -LE benchmark

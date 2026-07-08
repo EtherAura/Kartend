@@ -28,7 +28,7 @@ SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedW
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
                           collections)
-SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
                           generalSettings)

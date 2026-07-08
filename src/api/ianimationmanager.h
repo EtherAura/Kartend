@@ -1,7 +1,7 @@
 #ifndef IANIMATIONMANAGER_H
 #define IANIMATIONMANAGER_H
 
-#include <functional>
+#include "iwheelscrollanimator.h"
 #include <QtGlobal>
 
 QT_BEGIN_NAMESPACE
@@ -19,13 +19,17 @@ QT_END_NAMESPACE
  * calculators stay on the concrete class, which InteractionManager owns
  * directly as a unique_ptr and connects signals against).
  *
+ * The wheel-scroll slice (start/query/stop of the chained wheel animations)
+ * lives on IWheelScrollAnimator, which this interface unions
+ * (Kartend-dl0uz.2) — wheel-only consumers take ctx->wheelAnimator().
+ *
  * Plain abstract class, not a QObject — AnimationManager derives QObject
  * directly; see its multiple-inheritance declaration. Add a method here
  * only when a sibling genuinely needs to call it via ctx.
  */
-class IAnimationManager {
+class IAnimationManager : public IWheelScrollAnimator {
 public:
-  virtual ~IAnimationManager() = default;
+  ~IAnimationManager() override = default;
 
   // --- Vertical Animation ---
   virtual void ensureVAnimCreated(QScrollBar *vScrollBar) = 0;
@@ -33,12 +37,10 @@ public:
                                                   int duration, bool clickScroll,
                                                   bool clickHoldAdv) = 0;
   virtual void stopActiveVerticalAnims(QScrollBar *verticalScrollBar) = 0;
-  [[nodiscard]] virtual bool isVerticalAnimRunning() const = 0;
   [[nodiscard]] virtual bool handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar,
                                                                  int targetY, bool clickScroll,
                                                                  bool clickHoldAdv, int &curY,
                                                                  int &distance) = 0;
-  [[nodiscard]] virtual QPropertyAnimation *verticalAnimation() const = 0;
 
   // --- Horizontal Animation ---
   virtual void initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) = 0;
@@ -50,12 +52,6 @@ public:
   // --- Ensure Visible Animation ---
   virtual void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
                                        int itemHeight, int verticalSpacing, bool isRepeating) = 0;
-
-  // --- Wheel Scroll Animation ---
-  virtual void startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal, int endVal,
-                                         std::function<void()> onFinished) = 0;
-  virtual void startWheelScrollAnimationHorizontal(QScrollBar *hScrollBar, int startVal, int endVal,
-                                                   std::function<void()> onFinished) = 0;
 };
 
 #endif // IANIMATIONMANAGER_H

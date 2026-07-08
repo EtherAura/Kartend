@@ -509,17 +509,22 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
     }
   }
 
-  // Previously a silent failure; the guard now logs it (Kartend-l94tw).
-  if (!txn.commitOrReport("Failed to commit remove-item transaction",
-                          ErrorUtils::Severity::Warning)) {
-    return false; // guard dtor rolls back the aborted transaction (no-op)
-  }
-
+  // Stamp the parent's updated_at inside the transaction so it commits (or
+  // rolls back) atomically with the removal — QueryManager folds the stamp
+  // into its static-playlist scope key to disambiguate remove-then-add
+  // sequences that re-mint the same MAX(rowid). Best-effort like addItem's
+  // stamp: a failed touch does not abort the transaction in SQLite.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
   touch.addBindValue(PlaylistIo::isoNow());
   touch.addBindValue(playlistId);
   touch.exec();
+
+  // Previously a silent failure; the guard now logs it (Kartend-l94tw).
+  if (!txn.commitOrReport("Failed to commit remove-item transaction",
+                          ErrorUtils::Severity::Warning)) {
+    return false; // guard dtor rolls back the aborted transaction (no-op)
+  }
 
   emit playlistsChanged();
   return true;

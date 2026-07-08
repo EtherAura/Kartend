@@ -93,6 +93,23 @@ public:
   /// checked MediaAsset on Apply.
   virtual void fetchMediaBytes(const QUrl &url, MediaCallback callback) = 0;
 
+  /// Kind-aware variant: @p mediaType is the asset's free-form type tag
+  /// (MediaAsset::type, e.g. "front" / "video-normalized" / "manual").
+  /// Providers whose response guards vary per media kind — the expected
+  /// Content-Type prefix and the response-size cap differ between images,
+  /// videos and manuals — override this so video/pdf payloads aren't
+  /// rejected by an image/ pin (Kartend-jjyst.1). The default ignores the
+  /// type and forwards to the URL-only method, so image-only providers need
+  /// no change. Callers that hold the MediaAsset should prefer this entry
+  /// point. Deliberately NOT a fetchMediaBytes overload: subclasses override
+  /// only one of the pair, which -Woverloaded-virtual (clang -Wall, -Werror
+  /// under KARTEND_MAINTENANCE) flags as hiding.
+  virtual void fetchMediaBytesForType(const QUrl &url, const QString &mediaType,
+                                      MediaCallback callback) {
+    Q_UNUSED(mediaType);
+    fetchMediaBytes(url, std::move(callback));
+  }
+
   /// Entity-scope counterpart to lookup()+fetchDetail(): fetch metadata + art
   /// for a non-game entity (platform / collection / category) the provider
   /// supports. Reuses the ScrapedItem result shape — its `media` list carries
@@ -156,15 +173,21 @@ public:
   /// scrape drivers then stop dispatching, keep the un-finished work queued,
   /// and persist it as the resume point instead of machine-gunning doomed
   /// requests (which, on ScreenScraper, deepens the failed-lookup ban).
-  /// The default covers RFC 6585's 429 plus ScreenScraper's non-standard 430
-  /// (daily request quota) / 431 (daily failed-lookup quota) — the latter two
-  /// are unassigned codes no other integrated provider emits, so inheriting
-  /// the default is harmless for them. A provider whose upstream signals
-  /// quota differently (custom status, an error-body marker mapped into the
-  /// ErrorContext) overrides this; the drivers carry no per-provider
-  /// status-code knowledge of their own.
+  /// The default covers ScreenScraper's non-standard 430 (daily request
+  /// quota) / 431 (daily failed-lookup quota) — unassigned codes no other
+  /// integrated provider emits, so inheriting the default is harmless.
+  /// RFC 6585's 429 is deliberately NOT quota exhaustion (Kartend-jjyst.3):
+  /// realistic 429 sources (TMDB's image CDN, OpenLibrary, Cover Art Archive)
+  /// are seconds-long burst limits, and a first 429 halting a whole
+  /// multi-collection overnight run stranded it. 429 is handled as transient
+  /// throttling instead — RetryPolicy::isTransient waits out a Retry-After
+  /// hint, and BatchScrapeRunner escalates to a queue stop only on repeated
+  /// consecutive 429s. A provider whose upstream signals quota differently
+  /// (custom status, an error-body marker mapped into the ErrorContext)
+  /// overrides this; the drivers carry no per-provider status-code knowledge
+  /// of their own.
   [[nodiscard]] virtual bool isQuotaExhausted(const ErrorUtils::ErrorContext &err) const {
-    return err.httpStatus == 429 || err.httpStatus == 430 || err.httpStatus == 431;
+    return err.httpStatus == 430 || err.httpStatus == 431;
   }
 
   /// Optional progress reporter for long-running lookup stages

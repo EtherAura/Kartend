@@ -26,6 +26,7 @@
 
 #include "../../support/parkedcallbacksink.h"
 #include "../../support/testsandbox.h"
+#include "collection/generalsettings.h"
 #include "collection/typehelpers.h"
 #include "metadatalookupprovider.h"
 #include "scrapependingstate.h"
@@ -140,17 +141,23 @@ private slots:
   void loadDefaultsMediaWrittenToZeroForLegacyFile();
   void loadSkipsResumeWhenOwnedByLiveInstance();
   void startScrapePersistsInitialSnapshot();
+  void startScrapeWhileActiveRefusesAndKeepsRunState();
   void cancelledInteractiveScrapeIgnoresLateLookupResult();
   void entityScrapeProcessesViaQueue();
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
   void entityScrapeCollectionArtToSharedAndConfig();
+  void entityScrapeFillMissingWiresExistingArtIntoConfig();
   void entityJobLoadsFromPendingState();
   void interactiveEntityJobResumedNotSkipped();
   void staleEntityCallbackAfterRestartIgnored();
   void pausedEntityMediaCallbackAfterResumeIgnored();
   void entityFetchQuotaStopsQueueWithResumePoint();
   void interactiveQuotaErrorStopsQueueWithResumePoint();
+  void interactiveConsecutive429sEscalateToQuotaStop();
+  void interactive429StreakResetByDeliveredResult();
+  void entityConsecutive429sEscalateToQuotaStop();
+  void entityMedia429sEscalateToQuotaStop();
   void entityMediaQuotaKeepsJobQueuedForResume();
   void entityAllMediaFetchesFailedCountsError();
   void resumeReresolvesCollectionIndexByUuid();
@@ -248,6 +255,8 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
       "errors": 1,
       "not_found": 4,
       "media_written": 27,
+      "media_fetch_failures": 6,
+      "media_write_failures": 2,
       "first_failures": ["foo.bin: timeout"]
     },
     "queue": [
@@ -276,6 +285,10 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
   QCOMPARE(state.summarySoFar.errors, 1);
   // notFound must round-trip too (Kartend-e8aag).
   QCOMPARE(state.summarySoFar.notFound, 4);
+  // Media failure counters must round-trip too — a resumed run used to come
+  // back reporting zero media failures (Kartend-jjyst.16).
+  QCOMPARE(state.summarySoFar.mediaFetchFailures, 6);
+  QCOMPARE(state.summarySoFar.mediaWriteFailures, 2);
 }
 
 void TestScraperServiceResume::loadDefaultsMediaWrittenToZeroForLegacyFile() {
@@ -310,6 +323,9 @@ void TestScraperServiceResume::loadDefaultsMediaWrittenToZeroForLegacyFile() {
   QVERIFY(state.isValid());
   QCOMPARE(state.summarySoFar.mediaWritten, 0);
   QCOMPARE(state.summarySoFar.scraped, 5);
+  // Legacy snapshots without media failure counters default to 0 too.
+  QCOMPARE(state.summarySoFar.mediaFetchFailures, 0);
+  QCOMPARE(state.summarySoFar.mediaWriteFailures, 0);
 }
 
 void TestScraperServiceResume::loadSkipsResumeWhenOwnedByLiveInstance() {
@@ -383,6 +399,49 @@ void TestScraperServiceResume::startScrapePersistsInitialSnapshot() {
   const QJsonArray queue = doc.object().value(QStringLiteral("queue")).toArray();
   QCOMPARE(queue.size(), 1);
   QCOMPARE(queue.first().toObject().value(QStringLiteral("remaining")).toArray().size(), 2);
+}
+
+void TestScraperServiceResume::startScrapeWhileActiveRefusesAndKeepsRunState() {
+  // Kartend-jjyst.8: a busy service must REPORT the refusal, not just log it.
+  // A second startScrape while a run is live returns false and leaves the
+  // live run untouched — no scrapeStarted, no queue/counter reset — so a
+  // caller (e.g. the entity-scrape launcher) can tell nothing was started
+  // instead of presenting a dead dialog.
+  ScraperService service;
+  ScraperService::Context ctx;
+  // Interactive mode parks on the first item's lookup (ParkedProvider never
+  // calls back), so the run stays RunningInteractive for the whole test.
+  ctx.providerBuilder = [](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return std::make_shared<ParkedProvider>();
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionUuid = QStringLiteral("uuid-1");
+  job.collectionName = QStringLiteral("Coll");
+  job.artworkDir = QStringLiteral("/art");
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+
+  QSignalSpy startedSpy(&service, &ScraperService::scrapeStarted);
+  QVERIFY(service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                              /*writeMetadata=*/true));
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(startedSpy.count(), 1);
+  QCOMPARE(service.totalItems(), 2);
+
+  // Second launch while live: refused, and every observable piece of the
+  // first run survives — state, mode, total, and no second scrapeStarted.
+  ScraperService::CollectionJob other = job;
+  other.collectionUuid = QStringLiteral("uuid-2");
+  other.collectionName = QStringLiteral("Other");
+  other.items = QStringList{QStringLiteral("/m/c.bin")};
+  QVERIFY(!service.startScrape({other}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                               /*writeMetadata=*/false));
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(service.currentMode(), ScraperService::Mode::Interactive);
+  QCOMPARE(service.totalItems(), 2);
+  QCOMPARE(startedSpy.count(), 1);
 }
 
 void TestScraperServiceResume::cancelledInteractiveScrapeIgnoresLateLookupResult() {
@@ -619,6 +678,88 @@ void TestScraperServiceResume::entityScrapeCollectionArtToSharedAndConfig() {
       QDir(tmp.path()).filePath(QStringLiteral("_shared/background/collection_a1b2c3d4.png"));
   QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
+void TestScraperServiceResume::entityScrapeFillMissingWiresExistingArtIntoConfig() {
+  // Kartend-jjyst.5: a FillMissing re-run whose platform art already sits on
+  // disk skips the file writes — but the kept files must still be wired into
+  // the collection config (headerLogoImage / collectionIcon / backgroundImage).
+  // applyEntityArtToConfig used to read only writtenPaths, which skip-because-
+  // present leaves empty, so re-scraping after a config reset silently no-oped
+  // while reporting success.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString existingLogo =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  const QString existingBg =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
+  QVERIFY(QDir().mkpath(QFileInfo(existingLogo).absolutePath()));
+  QVERIFY(QDir().mkpath(QFileInfo(existingBg).absolutePath()));
+  {
+    QFile f(existingLogo);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    QVERIFY(f.write(QByteArray("OLD_LOGO")) > 0);
+  }
+  {
+    QFile f(existingBg);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    QVERIFY(f.write(QByteArray("OLD_BG")) > 0);
+  }
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  wheel.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(wheel);
+  Scraper::MediaAsset illustration;
+  illustration.type = QStringLiteral("illustration");
+  illustration.scope = Scraper::MediaScope::Platform;
+  illustration.scopeKey = QStringLiteral("4");
+  illustration.url = QUrl(QStringLiteral("https://example.test/illustration.png"));
+  illustration.entityRole = Scraper::EntityArtRole::Background;
+  item.media.append(illustration);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, QByteArray("NEW_LOGO_BYTES"));
+  provider->mediaBytes.insert(illustration.url, QByteArray("NEW_BG_BYTES"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::FillMissing;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  // Nothing rewritten — both destinations were already present.
+  QCOMPARE(service.summary().mediaWritten, 0);
+  // The kept files are wired into the config anyway (Kartend-jjyst.5).
+  QCOMPARE(collections[0].background.headerLogoImage, existingLogo);
+  QCOMPARE(collections[0].collectionIcon, existingLogo);
+  QCOMPARE(collections[0].background.backgroundImage, existingBg);
+  // FillMissing kept the original bytes on disk.
+  QFile after(existingLogo);
+  QVERIFY(after.open(QIODevice::ReadOnly));
+  QCOMPARE(after.readAll(), QByteArray("OLD_LOGO"));
 }
 
 void TestScraperServiceResume::entityJobLoadsFromPendingState() {
@@ -863,6 +1004,207 @@ void TestScraperServiceResume::interactiveQuotaErrorStopsQueueWithResumePoint() 
   const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
   QCOMPARE(queue.size(), 1);
   QCOMPARE(queue.first().toObject().value(QStringLiteral("remaining")).toArray().size(), 2);
+}
+
+void TestScraperServiceResume::interactiveConsecutive429sEscalateToQuotaStop() {
+  // Kartend-jjyst.15: the interactive path mirrors the runner's consecutive-429
+  // escalation (threshold 3). A lone 429 fails just its item, but a streak
+  // means the limiter isn't letting up — the queue stops through the same
+  // graceful quota-stop, with the tripping item (and everything behind it)
+  // left queued as the resume point.
+  auto provider = std::make_shared<ParkedProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionUuid = QStringLiteral("uuid-429");
+  job.collectionName = QStringLiteral("Coll");
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin"),
+                          QStringLiteral("/m/c.bin"), QStringLiteral("/m/d.bin")};
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  const auto rateLimited = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("rate limited"))
+                               .withHttpStatus(429);
+  const auto fire429 = [provider, &rateLimited]() {
+    auto cb = provider->lastLookupCallback; // copy — firing parks the NEXT item's callback
+    QVERIFY(static_cast<bool>(cb));
+    cb(rateLimited);
+  };
+
+  // Two 429s in a row: both items fail as ordinary errors, run keeps going.
+  fire429();
+  fire429();
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(service.summary().errors, 2);
+  QVERIFY(!service.summary().quotaExhausted);
+
+  // The third consecutive 429 trips the escalation: graceful stop, resume
+  // point kept, the tripping item NOT consumed as a terminal error.
+  fire429();
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().errors, 2);
+  QCOMPARE(finishedSpy.count(), 1);
+  QVERIFY(service.summary()
+              .firstFailures.join(QLatin1Char('\n'))
+              .contains(QStringLiteral("consecutive HTTP 429")));
+  // The tripping item c and the never-dispatched d stay queued for resume.
+  QVERIFY(QFile::exists(pendingFilePath()));
+  QFile f(pendingFilePath());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+  const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  const QJsonArray remaining =
+      queue.first().toObject().value(QStringLiteral("remaining")).toArray();
+  QCOMPARE(remaining.size(), 2);
+  QCOMPARE(remaining.first().toString(), QStringLiteral("/m/c.bin"));
+}
+
+void TestScraperServiceResume::interactive429StreakResetByDeliveredResult() {
+  // Kartend-jjyst.15: any delivered lookup result (here a clean "no match")
+  // proves the limiter let a request through — it must reset the 429 streak,
+  // so alternating 429s and results never trip the escalation.
+  auto provider = std::make_shared<ParkedProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionName = QStringLiteral("Coll");
+  for (int i = 0; i < 6; ++i) {
+    job.items.append(QStringLiteral("/m/item%1.bin").arg(i));
+  }
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  const auto rateLimited = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("rate limited"))
+                               .withHttpStatus(429);
+  const auto fire = [provider](const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &r) {
+    auto cb = provider->lastLookupCallback;
+    QVERIFY(static_cast<bool>(cb));
+    cb(r);
+  };
+
+  fire(rateLimited);
+  fire(rateLimited);
+  fire(QList<Scraper::ScrapeCandidate>{}); // delivered "no match" — resets the streak
+  fire(rateLimited);
+  fire(rateLimited);
+
+  // Never three CONSECUTIVE 429s, so no escalation: the run is still live on
+  // its last item.
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QVERIFY(!service.summary().quotaExhausted);
+  QCOMPARE(service.summary().errors, 4);
+  QCOMPARE(service.summary().notFound, 1);
+}
+
+void TestScraperServiceResume::entityConsecutive429sEscalateToQuotaStop() {
+  // Kartend-jjyst.15, entity path: three consecutive 429'd entity fetches
+  // escalate to the graceful quota-stop — the tripping job stays queued as
+  // the resume point instead of the whole queue machine-gunning into a
+  // limiter that isn't letting up.
+  auto provider = std::make_shared<EntityStubProvider>();
+  provider->entityResult = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                           QStringLiteral("rate limited"))
+                               .withHttpStatus(429);
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  QList<ScraperService::CollectionJob> jobs;
+  for (int i = 0; i < 4; ++i) {
+    ScraperService::CollectionJob job;
+    job.collectionIndex = i;
+    job.collectionUuid = QStringLiteral("uuid-%1").arg(i);
+    job.collectionName = QStringLiteral("Coll%1").arg(i);
+    job.entity.type = Scraper::ScrapeEntityType::Platform;
+    job.entity.identity = QString::number(i);
+    job.entity.collectionIndex = i;
+    jobs.append(job);
+  }
+  QSignalSpy finishedSpy(&service, &ScraperService::scrapeFinished);
+  service.startScrape(jobs, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // Jobs 0 and 1 fail as ordinary errors; job 2's fetch trips the streak and
+  // stops the queue; job 3 is never dispatched.
+  QCOMPARE(provider->fetchEntityCalls, 3);
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().errors, 2);
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(finishedSpy.count(), 1);
+  QVERIFY(service.summary()
+              .firstFailures.join(QLatin1Char('\n'))
+              .contains(QStringLiteral("consecutive HTTP 429")));
+  // The tripping job (and the never-dispatched one) persist as the resume point.
+  QVERIFY(QFile::exists(pendingFilePath()));
+  QFile f(pendingFilePath());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+  const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 2);
+  QCOMPARE(queue.first().toObject().value(QStringLiteral("collection_uuid")).toString(),
+           QStringLiteral("uuid-2"));
+}
+
+void TestScraperServiceResume::entityMedia429sEscalateToQuotaStop() {
+  // Kartend-jjyst.15, entity media path: image CDNs are the realistic 429
+  // source. Three parallel platform-art fetches all answering 429 trip the
+  // shared escalation — the job stays queued for resume (atomic, one fetch to
+  // retry) rather than landing in errors.
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  for (const QString &type :
+       {QStringLiteral("wheel"), QStringLiteral("illustration"), QStringLiteral("steel")}) {
+    Scraper::MediaAsset asset;
+    asset.type = type;
+    asset.scope = Scraper::MediaScope::Platform;
+    asset.scopeKey = QStringLiteral("4");
+    asset.url = QUrl(QStringLiteral("https://example.test/%1.png").arg(type));
+    item.media.append(asset);
+  }
+  provider->entityResult = item;
+  provider->mediaError = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                                         QStringLiteral("rate limited"))
+                             .withHttpStatus(429);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionUuid = QStringLiteral("uuid-media-429");
+  job.collectionName = QStringLiteral("SNES");
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+  QVERIFY(service.summary().quotaExhausted);
+  QCOMPARE(service.summary().scraped, 0);
+  QCOMPARE(service.summary().errors, 0); // queued for resume, not a terminal error
+  QVERIFY(QFile::exists(pendingFilePath()));
 }
 
 void TestScraperServiceResume::entityMediaQuotaKeepsJobQueuedForResume() {
@@ -1254,6 +1596,10 @@ void TestScraperServiceResume::entityFailedItemRoundTripsDiscriminator() {
   gameFail.collectionUuid = QStringLiteral("uuid-game");
   gameFail.path = QStringLiteral("/m/broken.bin"); // an ordinary game item
   snap.summarySoFar.failedItems = {entityFail, gameFail};
+  // Media failure counters ride the same serialize→deserialize round trip
+  // (Kartend-jjyst.16).
+  snap.summarySoFar.mediaFetchFailures = 7;
+  snap.summarySoFar.mediaWriteFailures = 3;
   // A queue entry is required for isValid()/deserialize to keep the state.
   ScraperService::CollectionJob queued;
   queued.collectionIndex = 1;
@@ -1263,6 +1609,8 @@ void TestScraperServiceResume::entityFailedItemRoundTripsDiscriminator() {
 
   const QByteArray bytes = Scraper::ScrapePendingState::serialize(snap);
   const ScraperService::PendingState back = Scraper::ScrapePendingState::deserialize(bytes);
+  QCOMPARE(back.summarySoFar.mediaFetchFailures, 7);
+  QCOMPARE(back.summarySoFar.mediaWriteFailures, 3);
   QCOMPARE(back.summarySoFar.failedItems.size(), 2);
   const auto &e = back.summarySoFar.failedItems.at(0);
   QVERIFY(e.isEntity);

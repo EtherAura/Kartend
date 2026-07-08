@@ -14,7 +14,8 @@ class QWheelEvent;
 class QWidget;
 QT_END_NAMESPACE
 
-class IScrollManager;
+class IGridLayoutScroll;
+class IScrollDataSource;
 class SelectionManager;
 class ItemWidget;
 class InteractionStateHolder;
@@ -111,9 +112,14 @@ public:
 
   // --- Widget Finding Utilities (static) ---
   /// Finds the best widget at the given click position and returns its visual
-  /// index Returns {widget, visualIndex} pair; visualIndex is -1 if not found
+  /// index Returns {widget, visualIndex} pair; visualIndex is -1 if not found.
+  /// Takes the two scroll roles it actually reads (active widgets + totals
+  /// from the data source, metrics from the grid role) instead of the full
+  /// IScrollManager facade (Kartend-dl0uz.2); callers pass role views of the
+  /// same ScrollManager object.
   static std::pair<ItemWidget *, int> findBestWidgetForClick(const QPoint &clickPos,
-                                                             IScrollManager *scrollManager,
+                                                             IScrollDataSource *scrollData,
+                                                             IGridLayoutScroll *scrollGrid,
                                                              QWidget *gridContainer);
 
   /// Finds the closest widget to the click position from candidates

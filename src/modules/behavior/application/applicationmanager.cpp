@@ -92,12 +92,13 @@ void ApplicationManager::destroyManagersAndClearContextSlots() {
   if (ctx) {
     ctx->managers.interactionManager = nullptr;
     // InteractionManager-owned sub-managers (registered by
-    // MainWindow::initializeAppContext) die with it.
-    ctx->managers.animationManager = nullptr;
-    ctx->managers.selectionManager = nullptr;
-    ctx->managers.viewportManager = nullptr;
-    ctx->managers.mouseManager = nullptr;
-    ctx->managers.keyboardManager = nullptr;
+    // MainWindow::initializeAppContext) die with it. Each facade slot is
+    // nulled together with its role views (Kartend-dl0uz.2).
+    ctx->managers.seedAnimationRoles(nullptr);
+    ctx->managers.seedSelectionRoles(nullptr);
+    ctx->managers.seedViewportRoles(nullptr);
+    ctx->managers.seedMouseRoles(nullptr);
+    ctx->managers.seedKeyboardRoles(nullptr);
     ctx->managers.eventManager = nullptr;
     ctx->managers.searchManager = nullptr;
     ctx->managers.launchManager = nullptr;
@@ -145,12 +146,12 @@ void ApplicationManager::destroyManagersAndClearContextSlots() {
   m_playlistManager.reset();
 
   if (ctx) {
-    ctx->managers.databaseManager = nullptr;
+    ctx->managers.seedDatabaseRoles(nullptr);
   }
   m_databaseManager.reset();
 
   if (ctx) {
-    ctx->managers.artworkManager = nullptr;
+    ctx->managers.seedArtworkRoles(nullptr);
   }
   m_artworkManager.reset();
 
@@ -209,7 +210,8 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   // gone now.
   m_artworkManager = std::make_unique<ArtworkManager>(nullptr);
   if (ctx) {
-    ctx->managers.artworkManager = m_artworkManager.get();
+    // Seeds the facade plus its role view in lockstep (Kartend-dl0uz.2).
+    ctx->managers.seedArtworkRoles(m_artworkManager.get());
   }
 
   // 5. SettingsManager — reads SessionManager, ArtworkManager, CacheManager
@@ -224,7 +226,8 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   m_databaseManager = g_databaseManagerFactory ? g_databaseManagerFactory(ctx, nullptr)
                                                : std::make_unique<DatabaseManager>(ctx, nullptr);
   if (ctx) {
-    ctx->managers.databaseManager = m_databaseManager.get();
+    // Seeds the facade plus its role view in lockstep (Kartend-dl0uz.2).
+    ctx->managers.seedDatabaseRoles(m_databaseManager.get());
   }
 
   // 6b. PlaylistManager — opens its own main-thread connection

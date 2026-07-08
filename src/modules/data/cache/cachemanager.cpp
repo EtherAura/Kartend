@@ -252,38 +252,60 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
         (nowMs - m_lastRevalidatedMs.value(artworkPath, 0)) >= kArtworkRevalidateIntervalMs;
     // Only construct QFileInfo / stat the file once the throttle window has
     // elapsed — a fresh memory hit skips the QFileInfo allocation (Kartend-5agy1).
-    if (dueForRevalidation) {
-      const QFileInfo fileInfo(artworkPath);
-      if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-          fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
-        // Cache invalidation - file changed on disk
-        QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
-        QFile::remove(cachePath);
-        artworkCache.remove(artworkPath);
-        fileTimestamps.remove(artworkPath);
-        dirtyTimestamps.remove(artworkPath);
-        dirtyRemovals.insert(artworkPath);
-        m_dirtyImages.remove(artworkPath);
-        m_lastRevalidatedMs.remove(artworkPath);
-        m_metadataDirty = true;
-        ++m_metrics.invalidations;
-        invalidated = true;
-      } else {
-        m_lastRevalidatedMs.insert(artworkPath, nowMs);
-      }
-    }
-    if (!invalidated) {
+    if (!dueForRevalidation) {
       // Memory cache hit
       ++m_metrics.memoryHits;
       return *pix;
     }
+    // Revalidation due: snapshot the recorded timestamp and the pixmap under
+    // the lock, then stat with the lock RELEASED — one slow stat on cold or
+    // network storage held under m_mutex stalls every worker cache probe and
+    // the GUI apply loop (mirrors cacheArtwork's stat-outside-the-lock shape).
+    const auto tsIt = fileTimestamps.constFind(artworkPath);
+    const bool timestampKnown = tsIt != fileTimestamps.constEnd();
+    const qint64 recordedTs = timestampKnown ? tsIt.value() : 0;
+    // Implicitly shared copy — the QCache entry may be evicted while unlocked.
+    const QPixmap pixmapSnapshot = *pix;
+    locker.unlock();
+
+    const QFileInfo fileInfo(artworkPath);
+    const bool mismatch = timestampKnown && fileInfo.exists() &&
+                          recordedTs != fileInfo.lastModified().toMSecsSinceEpoch();
+
+    locker.relock();
+    if (!mismatch) {
+      m_lastRevalidatedMs.insert(artworkPath, nowMs);
+      // Memory cache hit
+      ++m_metrics.memoryHits;
+      return pixmapSnapshot;
+    }
+    // Re-check the recorded timestamp before invalidating: a concurrent
+    // writer (worker disk-cache hit / re-cache) may have re-stamped the key
+    // while we statted, and invalidating now would destroy the fresh entry.
+    const auto recheckIt = fileTimestamps.constFind(artworkPath);
+    if (recheckIt == fileTimestamps.constEnd() || recheckIt.value() != recordedTs) {
+      ++m_metrics.memoryHits;
+      return pixmapSnapshot;
+    }
+    // Cache invalidation - file changed on disk
+    artworkCache.remove(artworkPath);
+    fileTimestamps.remove(artworkPath);
+    dirtyTimestamps.remove(artworkPath);
+    dirtyRemovals.insert(artworkPath);
+    m_dirtyImages.remove(artworkPath);
+    m_lastRevalidatedMs.remove(artworkPath);
+    m_metadataDirty = true;
+    ++m_metrics.invalidations;
+    invalidated = true;
   }
   locker.unlock();
 
-  // Flush the invalidation's store-row deletion on the debounced save path —
-  // an invalidate-then-never-recache key must not wait for the bounded prune
+  // Delete the cached PNG outside the lock (filesystem I/O), then flush the
+  // invalidation's store-row deletion on the debounced save path — an
+  // invalidate-then-never-recache key must not wait for the bounded prune
   // pass (or the next session) to drop its stale row (Kartend-9lm54).
   if (invalidated) {
+    QFile::remove(CacheDiskStorage::artworkCachePath(artworkPath));
     scheduleSaveToDisk();
   }
 
@@ -423,34 +445,57 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
     // Only construct QFileInfo / stat the file once the throttle window has
     // elapsed — a fresh hit (the common case while scrolling) skips the
     // QFileInfo allocation entirely (Kartend-5agy1).
-    if (dueForRevalidation) {
-      const QFileInfo fileInfo(artworkPath);
-      if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-          fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
-        // Cache invalidation - file changed on disk.
-        // Note: This may touch the filesystem, but avoids large image reads.
-        const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
-        QFile::remove(cachePath);
-        artworkCache.remove(artworkPath);
-        fileTimestamps.remove(artworkPath);
-        dirtyTimestamps.remove(artworkPath);
-        dirtyRemovals.insert(artworkPath);
-        dirtyArtwork.remove(artworkPath);
-        m_dirtyImages.remove(artworkPath);
-        m_lastRevalidatedMs.remove(artworkPath);
-        m_metadataDirty = true;
-        ++m_metrics.invalidations;
-        ++m_metrics.misses;
-        locker.unlock();
-        // Flush the store-row deletion on the debounced save path; see
-        // getArtwork (Kartend-9lm54).
-        scheduleSaveToDisk();
-        return {};
-      }
-      m_lastRevalidatedMs.insert(artworkPath, nowMs);
+    if (!dueForRevalidation) {
+      ++m_metrics.memoryHits;
+      return *pix;
     }
-    ++m_metrics.memoryHits;
-    return *pix;
+    // Revalidation due: snapshot the recorded timestamp and the pixmap under
+    // the lock, then stat with the lock RELEASED — one slow stat on cold or
+    // network storage held under m_mutex stalls the whole decode pool and
+    // the GUI apply loop (mirrors cacheArtwork's stat-outside-the-lock shape).
+    const auto tsIt = fileTimestamps.constFind(artworkPath);
+    const bool timestampKnown = tsIt != fileTimestamps.constEnd();
+    const qint64 recordedTs = timestampKnown ? tsIt.value() : 0;
+    // Implicitly shared copy — the QCache entry may be evicted while unlocked.
+    const QPixmap pixmapSnapshot = *pix;
+    locker.unlock();
+
+    const QFileInfo fileInfo(artworkPath);
+    const bool mismatch = timestampKnown && fileInfo.exists() &&
+                          recordedTs != fileInfo.lastModified().toMSecsSinceEpoch();
+
+    locker.relock();
+    if (!mismatch) {
+      m_lastRevalidatedMs.insert(artworkPath, nowMs);
+      ++m_metrics.memoryHits;
+      return pixmapSnapshot;
+    }
+    // Re-check the recorded timestamp before invalidating: a concurrent
+    // writer (worker disk-cache hit / re-cache) may have re-stamped the key
+    // while we statted, and invalidating now would destroy the fresh entry.
+    const auto recheckIt = fileTimestamps.constFind(artworkPath);
+    if (recheckIt == fileTimestamps.constEnd() || recheckIt.value() != recordedTs) {
+      ++m_metrics.memoryHits;
+      return pixmapSnapshot;
+    }
+    // Cache invalidation - file changed on disk.
+    artworkCache.remove(artworkPath);
+    fileTimestamps.remove(artworkPath);
+    dirtyTimestamps.remove(artworkPath);
+    dirtyRemovals.insert(artworkPath);
+    dirtyArtwork.remove(artworkPath);
+    m_dirtyImages.remove(artworkPath);
+    m_lastRevalidatedMs.remove(artworkPath);
+    m_metadataDirty = true;
+    ++m_metrics.invalidations;
+    ++m_metrics.misses;
+    locker.unlock();
+    // Delete the cached PNG outside the lock (filesystem I/O, but no large
+    // image reads), then flush the store-row deletion on the debounced save
+    // path; see getArtwork (Kartend-9lm54).
+    QFile::remove(CacheDiskStorage::artworkCachePath(artworkPath));
+    scheduleSaveToDisk();
+    return {};
   }
 
   ++m_metrics.misses;
@@ -782,9 +827,6 @@ qint64 CacheManager::getCacheSize() const {
         // lambda never outlives `this`. The captured pointer is safe.
         QMutexLocker locker(&m_diskCacheSizeMutex);
         m_cachedDiskCacheSize = totalSize;
-        m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();
-        m_diskWalkInFlight = false;
-        // NOLINTEND(clang-analyzer-core.NullDereference)
       }
       // Opportunistic timestamp GC piggybacks on this walk thread so it
       // never runs on the GUI thread (Kartend-0ldg2). getCacheSize() is
@@ -793,6 +835,17 @@ qint64 CacheManager::getCacheSize() const {
       // cast the const away here rather than poisoning the maps with
       // `mutable` (precedent: databasemanager_items.cpp).
       const_cast<CacheManager *>(this)->pruneStaleEntries();
+      {
+        // Release the single-flight flag only after pruneStaleEntries() so
+        // the flag covers the whole task: releasing it earlier would let a
+        // scroll-driven getCacheSize() redispatch and overwrite
+        // m_cacheSizeWalkFuture while this lambda still runs, leaving
+        // ~CacheManager waiting on the wrong future.
+        QMutexLocker locker(&m_diskCacheSizeMutex);
+        m_lastDiskWalkMs = QDateTime::currentMSecsSinceEpoch();
+        m_diskWalkInFlight = false;
+        // NOLINTEND(clang-analyzer-core.NullDereference)
+      }
     });
   }
 
@@ -801,8 +854,10 @@ qint64 CacheManager::getCacheSize() const {
 
 // Opportunistic GC for the timestamp store + in-memory bookkeeping
 // (Kartend-0ldg2). Runs on the background getCacheSize() walk thread (the
-// walk is single-flight, so passes never overlap; ~CacheManager waits on the
-// walk future, so the pass can't outlive the object). Each pass is bounded:
+// walk lambda holds the single-flight flag until this pass returns, so
+// passes never overlap and the walk future is never replaced while live;
+// ~CacheManager waits on the walk future, so the pass can't outlive the
+// object). Each pass is bounded:
 // it stats at most 2 * kPruneBatchPerWalk files, so a pass over a 100k-entry
 // store costs milliseconds and the rotating cursors cover the full keyspace
 // over successive walks (one walk per ≥30 s of getCacheSize() traffic).

@@ -259,8 +259,11 @@ void BatchScrapeRunner::cancel() {
   // per-host queues (up to itemConcurrency x N assets) would still dispatch
   // as slots free, burning bandwidth and the provider's daily quota for a
   // run the user just killed, and contending with any freshly-started run.
-  // clearPending resolves each dropped callback with OperationCancelled (the
-  // cancelled chains discard those) and leaves in-flight replies to finish.
+  // clearPending resolves each dropped callback with RequestQueueCleared — a
+  // code RetryPolicy::isTransient never retries, so the provider's transient-
+  // retry gate can't re-issue the dropped lookups 500ms later against a run
+  // the user just killed (Kartend-jjyst.2); the cancelled chains discard
+  // those callbacks — and leaves in-flight replies to finish.
   // The queue is global, but a cancel is user-initiated and rare: the only
   // other queued traffic is background catalog/quota refreshes, which retry
   // on their own schedule.
@@ -344,6 +347,13 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   skipCtx.metadataByPath = metadataByPath;
   skipCtx.presentByType = std::move(coverage.presentByType);
   skipCtx.frontFlatBases = std::move(coverage.frontFlatBases);
+  // Which wanted media types the provider reliably supplies for this collection
+  // (present for the vast majority of items) — only those block a FillMissing
+  // skip; sparse / never-delivered types are optional (Kartend-ib46d). Computed
+  // from the just-built collection-wide presence index over all candidate paths.
+  skipCtx.requiredMediaTypes = Scraper::computePrevalentMediaTypes(
+      skipCtx.presentByType, skipCtx.frontFlatBases, skipCtx.wantedTypes,
+      static_cast<int>(m_paths.size()), Scraper::kMediaPrevalenceThreshold);
   skipCtx.hasWindow = hasWindow;
   skipCtx.cutoff = cutoff;
 
@@ -592,8 +602,11 @@ void BatchScrapeRunner::fetchMediaAndFinish(const std::shared_ptr<ItemState> &st
   agg->pending = wantedAssets.size();
   QPointer<BatchScrapeRunner> self(this);
   for (const auto &asset : wantedAssets) {
-    m_provider->fetchMediaBytes(
-        asset.url, [self, state, scraped, asset, agg](const ErrorUtils::Result<QByteArray> &r) {
+    // Kind-aware entry point: the asset type selects the provider's per-kind
+    // Content-Type prefix + response cap (video/manual vs image, Kartend-jjyst.1).
+    m_provider->fetchMediaBytesForType(
+        asset.url, asset.type,
+        [self, state, scraped, asset, agg](const ErrorUtils::Result<QByteArray> &r) {
           if (self.isNull()) return;
           self->onMediaBytesComplete(state, scraped, asset, agg, r);
         });
@@ -627,24 +640,53 @@ void BatchScrapeRunner::onMediaBytesComplete(const std::shared_ptr<ItemState> &s
     // Track byte count regardless of write success
     // — the user's bandwidth was already spent.
     m_totalBytesDownloaded += r.value().size();
+    // A delivered asset proves the host's rate limiter let us through —
+    // it ends any consecutive-429 run (Kartend-jjyst.3).
+    m_consecutive429Count = 0;
     Scraper::PendingMediaWrite w;
     w.asset = asset;
     w.bytes = r.value();
     agg->writes.append(w);
-  } else if (r.isError() && m_provider && m_provider->isQuotaExhausted(r.error())) {
-    // A quota-exhausted media fetch is still
-    // non-fatal for THIS item (it keeps its
-    // metadata + whatever assets already landed),
-    // but it must stop new items from dispatching
-    // — same stop signal as the lookup/detail path.
-    m_summary.quotaExhausted = true;
-    m_quotaStopped = true;
+  } else {
+    // Returned-but-undownloadable: remember the type so the mediaAbsent
+    // merge doesn't prune its absent marker as satisfied (Kartend-jjyst.1).
+    agg->failedTypes.append(asset.type.toLower());
+    // Count the loss and record a bounded diagnosis — previously a failed
+    // asset fetch ticked nothing and a run full of dead media URLs reported
+    // "scraped N, 0 media" with zero explanation (Kartend-jjyst.4). The
+    // entity path already records its fetch failures; this brings the game
+    // path in line.
+    ++m_summary.mediaFetchFailures;
+    if (m_summary.firstFailures.size() < kMaxReportedFailures) {
+      const QString itemName = QFileInfo(state->path).fileName();
+      m_summary.firstFailures.append(
+          r.isError() ? QStringLiteral("%1: %2 fetch failed: %3")
+                            .arg(itemName, asset.type, r.error().userFacingSummary())
+                      : QStringLiteral("%1: %2 fetch returned no data").arg(itemName, asset.type));
+    }
+    if (r.isError() && m_provider && m_provider->isQuotaExhausted(r.error())) {
+      // A quota-exhausted media fetch is still
+      // non-fatal for THIS item (it keeps its
+      // metadata + whatever assets already landed),
+      // but it must stop new items from dispatching
+      // — same stop signal as the lookup/detail path.
+      m_summary.quotaExhausted = true;
+      m_quotaStopped = true;
+    } else if (r.isError() && r.error().httpStatus == 429) {
+      // Media CDNs are the realistic 429 source (TMDB images, Cover Art
+      // Archive). One 429'd asset is throttling, not exhaustion — escalate
+      // to a queue stop only when the limiter answers 429 repeatedly
+      // (Kartend-jjyst.3).
+      noteRateLimited429();
+    }
   }
   // Asset fetch failures are non-fatal — partial
   // success is better than failing the whole item
   // because one 404'd asset.
   if (--agg->pending == 0) {
-    applyAndFinish(state, scraped, agg->writes);
+    Scraper::ScrapedItem effective = scraped;
+    effective.mediaFetchFailedThisRun = agg->failedTypes;
+    applyAndFinish(state, effective, agg->writes);
   }
 }
 
@@ -662,12 +704,13 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
   // Custom fields collapse to empty so the merge becomes a no-op.
   // sourceProviderId is also cleared so the item's `source` column
   // doesn't get overwritten to attribute the (skipped) text scrape.
-  // INVARIANT (Kartend-kihyx): do NOT clear effective.mediaAbsentThisRun or
-  // effective.media here. Known-absent media tracking is independent of the
-  // text-metadata opt-out — a media-only FillMissing run (metadata already
-  // complete, only filling art) is precisely where it must keep working, and
-  // the merge needs `media` to prune types the provider now supplies. Clearing
-  // either would silently reintroduce the perpetual re-scrape this feature fixes.
+  // INVARIANT (Kartend-kihyx): do NOT clear effective.mediaAbsentThisRun,
+  // effective.mediaFetchFailedThisRun, or effective.media here. Known-absent
+  // media tracking is independent of the text-metadata opt-out — a media-only
+  // FillMissing run (metadata already complete, only filling art) is precisely
+  // where it must keep working, and the merge needs `media` (minus the failed
+  // fetches, Kartend-jjyst.1) to prune types the provider now supplies. Clearing
+  // any of them would silently reintroduce the perpetual re-scrape this fixes.
   Scraper::ScrapedItem effective = scraped;
   if (!m_writeMetadata) {
     effective.title.clear();
@@ -745,6 +788,17 @@ void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &s
   if (m_cancelled) {
     itemFinished();
     return;
+  }
+
+  // Fold writeMediaFiles' genuine failures (disk full, mkpath failure, unsafe
+  // remote-derived path) into the summary — previously they were dropped
+  // here, so a disk-full batch reported "scraped N, 0 media" with zero
+  // diagnostics (Kartend-jjyst.4). Benign rescrape-policy skips are not in
+  // writeFailures, so FillMissing's kept-existing files don't flood the list.
+  m_summary.mediaWriteFailures += static_cast<int>(writeRes.writeFailures.size());
+  for (const QString &f : writeRes.writeFailures) {
+    if (m_summary.firstFailures.size() >= kMaxReportedFailures) break;
+    m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(baseName, f));
   }
 
   const QStringList thumbPaths = resolveThumbnailPaths(baseName, writeRes.writtenPaths);
@@ -933,6 +987,26 @@ void BatchScrapeRunner::onStepTimedOut(const std::shared_ptr<ItemState> &state,
               state->path);
 }
 
+void BatchScrapeRunner::noteRateLimited429() {
+  ++m_consecutive429Count;
+  if (m_consecutive429Count < kConsecutive429StopThreshold || m_quotaStopped) return;
+  // The limiter answered 429 to every recent request — it isn't a burst
+  // we can ride out. Stop new dispatch via the quota-stop machinery so the
+  // un-run work persists as the resume point (Kartend-jjyst.3).
+  m_summary.quotaExhausted = true;
+  m_quotaStopped = true;
+  qCWarning(lcBatchScrape) << "BatchScrapeRunner:" << m_consecutive429Count
+                           << "consecutive HTTP 429 rate-limit responses — stopping dispatch; "
+                              "un-dispatched items stay queued for resume";
+  if (m_summary.firstFailures.size() < kMaxReportedFailures) {
+    m_summary.firstFailures.append(
+        QStringLiteral("Stopped after %1 consecutive HTTP 429 rate-limit responses — the "
+                       "provider is throttling this run; remaining items were left queued "
+                       "for resume")
+            .arg(m_consecutive429Count));
+  }
+}
+
 void BatchScrapeRunner::recordError(const QString &reason, const QString &failedPath) {
   ++m_summary.errors;
   if (m_summary.firstFailures.size() < kMaxReportedFailures) {
@@ -981,8 +1055,23 @@ void BatchScrapeRunner::recordError(const QString &itemPath, const ErrorUtils::E
   if (m_provider && m_provider->isQuotaExhausted(err)) {
     m_summary.quotaExhausted = true;
     m_quotaStopped = true;
+  } else if (err.httpStatus == 429) {
+    // A 429 landing here means the provider's transient retry either waited
+    // out a Retry-After hint and still got throttled, or had no hint to wait
+    // on. It's burst throttling, not daily-quota exhaustion — a single one no
+    // longer halts the whole multi-collection run (Kartend-jjyst.3); the
+    // queue stops only after kConsecutive429StopThreshold in a row. A 429 is
+    // also a differently-shaped error for the fatal breaker below, so its
+    // streak resets here — without resetting the 429 streak itself (which
+    // resetFatalStreak() would).
+    m_consecutiveFatalCount = 0;
+    m_lastFatalStatus = 0;
+    noteRateLimited429();
   } else if (err.httpStatus == 401 || err.httpStatus == 403 || err.httpStatus == 423 ||
              err.httpStatus == 426) {
+    // A non-429 status breaks any consecutive-429 run (see resetFatalStreak;
+    // this branch tracks its own streak instead of calling it).
+    m_consecutive429Count = 0;
     // Circuit breaker (see the member doc): persistent auth/infra failures
     // fail every request identically — stop dispatch after N consecutive
     // identical statuses instead of firing one doomed request per item (each
