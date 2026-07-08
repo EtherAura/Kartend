@@ -22,13 +22,17 @@ inline constexpr int ABOUT_HEIGHT = 200;
 // =============================================================================
 namespace ScrapeResultDialog {
 /// Preferred (initial) dialog size; the dialog reflows responsively when
-/// the user resizes (narrower → fewer chips per row, wider → more).
-inline constexpr int DEFAULT_WIDTH = 900;
-inline constexpr int DEFAULT_HEIGHT = 780;
+/// the user resizes (narrower → fewer chips per row, wider → more). Sized so
+/// the whole setup view — collection tree + items list, the 3-column
+/// "What to scrape" grid, and the scrape-options panel — fits without any
+/// scrollbar (Kartend-1hose).
+inline constexpr int DEFAULT_WIDTH = 1200;
+inline constexpr int DEFAULT_HEIGHT = 920;
 /// Hard lower bound so the dialog stays usable on low-res screens while
-/// still letting the user shrink it below the preferred size.
-inline constexpr int MIN_WIDTH = 640;
-inline constexpr int MIN_HEIGHT = 520;
+/// still letting the user shrink it below the preferred size. Tall enough that
+/// the scrape controls still fit under the tree/list without clipping.
+inline constexpr int MIN_WIDTH = 780;
+inline constexpr int MIN_HEIGHT = 700;
 /// Minimum width of the left-side collection tree.
 inline constexpr int COLLECTION_TREE_MIN_WIDTH = 220;
 /// Outer layout spacing for the dialog root.

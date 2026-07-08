@@ -150,15 +150,34 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
                            UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
   root->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
 
-  // ── Top: collection tree (left) + items list (right) ────────────
-  root->addWidget(buildCollectionAndItemsPanel(), 1);
+  // ── Setup view: a vertical splitter so the collection/items panel gets the
+  //    majority of the height and the user can drag the divider for even more
+  //    room (Kartend-1hose). Tree/list on top; the "What to scrape" + mode +
+  //    scrape-options controls sit below inside a scroll area so they never crowd
+  //    out the list and gracefully scroll when the window is short.
+  auto *setupSplit = new QSplitter(Qt::Vertical, m_dlg->m_unifiedPage);
+  m_dlg->m_setupVerticalSplitter = setupSplit;
+  setupSplit->setChildrenCollapsible(false);
+  setupSplit->addWidget(buildCollectionAndItemsPanel());
 
-  // ── Middle: media types + mode toggle ───────────────────────────
   QGroupBox *mediaTypesGroup = nullptr;
   QWidget *modeRowContainer = nullptr;
   buildMediaTypesGroup(mediaTypesGroup, modeRowContainer);
-  root->addWidget(mediaTypesGroup);
-  root->addWidget(modeRowContainer);
+  auto *controls = new QWidget(setupSplit);
+  auto *controlsCol = new QVBoxLayout(controls);
+  controlsCol->setContentsMargins(0, 0, 0, 0);
+  controlsCol->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
+  controlsCol->addWidget(mediaTypesGroup);
+  controlsCol->addWidget(modeRowContainer);
+  controlsCol->addWidget(buildScrapeOptionsGroup());
+  // No scroll area: the default window size (below) is tall enough to show every
+  // control, and a scrollbar here would shift the 3-column media grid and
+  // misalign it. The controls keep their full height; extra vertical space goes
+  // to the tree/list, which the user can grow further by dragging the divider.
+  setupSplit->addWidget(controls);
+  setupSplit->setStretchFactor(0, 1);
+  setupSplit->setStretchFactor(1, 0);
+  root->addWidget(setupSplit, 1);
 
   // ── Live view: currently-scraping metadata panel ────────────────
   root->addWidget(buildLiveMetadataPanel());
@@ -218,6 +237,12 @@ QWidget *ScrapeResultDialogUnified::buildCollectionAndItemsPanel() {
           [this]() { m_dlg->m_selectionModel->setAllItemsChecked(false); });
   m_dlg->m_unifiedItemsList = new QListWidget(rightContainer);
   m_dlg->m_unifiedItemsList->setSelectionMode(QAbstractItemView::NoSelection);
+  // Hide the horizontal scrollbar — a long filename still scrolls into view via
+  // shift-wheel / arrow keys, but the bar no longer sits under the list (where it
+  // showed for even a few pixels of overflow and pushed the rows out of
+  // alignment). Vertical scrolling / its bar are unaffected (Kartend-1hose).
+  m_dlg->m_unifiedItemsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_dlg->m_unifiedItemsList->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(m_dlg->m_unifiedItemsList, &QListWidget::itemChanged, m_dlg->m_selectionModel.get(),
           &ScrapeResultSelectionModel::onItemCheckChanged);
   rightLayout->addWidget(m_dlg->m_unifiedItemsList, 1);
@@ -263,6 +288,137 @@ void ScrapeResultDialogUnified::buildMediaTypesGroup(QGroupBox *&mediaTypesGroup
   modeRow->addWidget(m_dlg->m_modeInteractiveRadio);
   modeRow->addStretch(1);
   modeRowContainer = m_dlg->m_modeRowContainer;
+}
+
+QWidget *ScrapeResultDialogUnified::buildScrapeOptionsGroup() {
+  // Setup-view duplicates of the Settings → Scraper knobs users tweak most, so a
+  // scrape can be re-aimed without a Settings round-trip (Kartend-1hose). Labels
+  // and userData mirror scrapersettingspanel.cpp verbatim; changes persist back
+  // into ScraperOptions via persistScrapeOptions().
+  auto *group = new QGroupBox(tr("Scrape options"), m_dlg->m_unifiedPage);
+  m_dlg->m_setupOptionsContainer = group;
+  auto *form = new QFormLayout(group);
+  form->setContentsMargins(UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN,
+                           UIConstants::ScrapeResultDialog::CONTENT_MARGIN);
+  form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+  m_dlg->m_setupRescrapeCombo = new QComboBox(group);
+  m_dlg->m_setupRescrapeCombo->addItem(tr("Overwrite — replace existing assets"),
+                                       static_cast<int>(ScraperRescrapeMode::Overwrite));
+  m_dlg->m_setupRescrapeCombo->addItem(
+      tr("Fill missing — keep existing, only download what's missing"),
+      static_cast<int>(ScraperRescrapeMode::FillMissing));
+  m_dlg->m_setupRescrapeCombo->addItem(
+      tr("Update changed — compare bytes, write only if different"),
+      static_cast<int>(ScraperRescrapeMode::UpdateChanged));
+  m_dlg->m_setupRescrapeCombo->addItem(
+      tr("Skip — don't re-scrape items that already have metadata"),
+      static_cast<int>(ScraperRescrapeMode::Skip));
+  form->addRow(tr("Re-scrape policy:"), m_dlg->m_setupRescrapeCombo);
+
+  m_dlg->m_setupRegionCombo = new QComboBox(group);
+  m_dlg->m_setupRegionCombo->addItem(tr("World"), QStringLiteral("wor"));
+  m_dlg->m_setupRegionCombo->addItem(tr("USA"), QStringLiteral("us"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Europe"), QStringLiteral("eu"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Japan"), QStringLiteral("jp"));
+  m_dlg->m_setupRegionCombo->addItem(tr("United Kingdom"), QStringLiteral("uk"));
+  m_dlg->m_setupRegionCombo->addItem(tr("France"), QStringLiteral("fr"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Germany"), QStringLiteral("de"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Spain"), QStringLiteral("sp"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Italy"), QStringLiteral("it"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Brazil"), QStringLiteral("br"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Australia"), QStringLiteral("au"));
+  m_dlg->m_setupRegionCombo->addItem(tr("Korea"), QStringLiteral("kr"));
+  m_dlg->m_setupRegionCombo->setToolTip(
+      tr("Fallback region for titles, dates, and box art when an item's own region "
+         "has no entry."));
+  form->addRow(tr("Fallback region:"), m_dlg->m_setupRegionCombo);
+
+  m_dlg->m_setupRefreshWindowSpin = new QSpinBox(group);
+  m_dlg->m_setupRefreshWindowSpin->setRange(0, 365);
+  m_dlg->m_setupRefreshWindowSpin->setSuffix(tr(" days"));
+  m_dlg->m_setupRefreshWindowSpin->setSpecialValueText(tr("Always skip covered items"));
+  m_dlg->m_setupRefreshWindowSpin->setToolTip(
+      tr("Under Fill missing / Skip, re-scrape an already-covered item only when its "
+         "last scrape is older than this. 0 = never refresh."));
+  form->addRow(tr("Refresh items older than:"), m_dlg->m_setupRefreshWindowSpin);
+
+  m_dlg->m_setupItemConcurrencySpin = new QSpinBox(group);
+  m_dlg->m_setupItemConcurrencySpin->setRange(1, 16);
+  m_dlg->m_setupItemConcurrencySpin->setToolTip(tr("How many items scrape in parallel."));
+  form->addRow(tr("Items in parallel:"), m_dlg->m_setupItemConcurrencySpin);
+
+  m_dlg->m_setupPresetCombo = new QComboBox(group);
+  m_dlg->m_setupPresetCombo->addItem(tr("Fastest"), static_cast<int>(ScraperPreset::Fastest));
+  m_dlg->m_setupPresetCombo->addItem(tr("Balanced"), static_cast<int>(ScraperPreset::Balanced));
+  m_dlg->m_setupPresetCombo->addItem(tr("Best Quality"),
+                                     static_cast<int>(ScraperPreset::BestQuality));
+  m_dlg->m_setupPresetCombo->addItem(tr("Custom"), static_cast<int>(ScraperPreset::Custom));
+  m_dlg->m_setupPresetCombo->setToolTip(
+      tr("Media speed/quality: image size cap, per-host concurrency, and JPG re-encode. "
+         "Custom keeps whatever you set in Settings."));
+  form->addRow(tr("Media preset:"), m_dlg->m_setupPresetCombo);
+
+  // Persist any change straight back to the scraper settings.
+  connect(m_dlg->m_setupRescrapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+          [this](int) { persistScrapeOptions(); });
+  connect(m_dlg->m_setupRegionCombo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+          [this](int) { persistScrapeOptions(); });
+  connect(m_dlg->m_setupPresetCombo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+          [this](int) { persistScrapeOptions(); });
+  // editingFinished (not valueChanged) so holding an arrow / typing a number
+  // writes the INI once on commit, not once per step.
+  connect(m_dlg->m_setupRefreshWindowSpin, &QSpinBox::editingFinished, this,
+          [this]() { persistScrapeOptions(); });
+  connect(m_dlg->m_setupItemConcurrencySpin, &QSpinBox::editingFinished, this,
+          [this]() { persistScrapeOptions(); });
+  return group;
+}
+
+void ScrapeResultDialogUnified::loadScrapeOptionsFromSettings() {
+  if (!m_dlg->m_scraperCtx.generalSettings || !m_dlg->m_setupRescrapeCombo) return;
+  const ScraperOptions &opts = m_dlg->m_scraperCtx.generalSettings->scraper.options;
+  // Block change signals so populating the controls doesn't trigger a spurious
+  // persist back over the very values we're loading.
+  const QSignalBlocker b1(m_dlg->m_setupRescrapeCombo);
+  const QSignalBlocker b2(m_dlg->m_setupRegionCombo);
+  const QSignalBlocker b3(m_dlg->m_setupRefreshWindowSpin);
+  const QSignalBlocker b4(m_dlg->m_setupItemConcurrencySpin);
+  const QSignalBlocker b5(m_dlg->m_setupPresetCombo);
+  m_dlg->m_setupRescrapeCombo->setCurrentIndex(
+      m_dlg->m_setupRescrapeCombo->findData(static_cast<int>(opts.rescrapeMode)));
+  const int regionIdx = m_dlg->m_setupRegionCombo->findData(opts.preferredScraperRegion);
+  m_dlg->m_setupRegionCombo->setCurrentIndex(regionIdx >= 0 ? regionIdx : 0);
+  m_dlg->m_setupRefreshWindowSpin->setValue(qBound(0, opts.skipRecentScrapeDays, 365));
+  m_dlg->m_setupItemConcurrencySpin->setValue(qBound(1, opts.batchItemConcurrency, 16));
+  m_dlg->m_setupPresetCombo->setCurrentIndex(
+      m_dlg->m_setupPresetCombo->findData(static_cast<int>(opts.preset)));
+}
+
+void ScrapeResultDialogUnified::persistScrapeOptions() {
+  if (!m_dlg->m_scraperCtx.generalSettings || !m_dlg->m_scraperCtx.ctx ||
+      !m_dlg->m_setupRescrapeCombo) {
+    return;
+  }
+  ISettingsManager *sm = m_dlg->m_scraperCtx.ctx->settingsManager();
+  if (!sm) return;
+  // Mutate the shared live GeneralSettings (== MainWindow's m_generalSettings) so
+  // the running service — which reads these live, per collection — picks the
+  // change up, then persist. saveGeneralSettings re-clamps the ranges and fires
+  // scraperOptionsChanged only on a real change (Kartend-1hose).
+  ScraperOptions &opts = m_dlg->m_scraperCtx.generalSettings->scraper.options;
+  opts.rescrapeMode =
+      static_cast<ScraperRescrapeMode>(m_dlg->m_setupRescrapeCombo->currentData().toInt());
+  opts.preferredScraperRegion = m_dlg->m_setupRegionCombo->currentData().toString();
+  opts.skipRecentScrapeDays = m_dlg->m_setupRefreshWindowSpin->value();
+  opts.batchItemConcurrency = m_dlg->m_setupItemConcurrencySpin->value();
+  opts.preset = static_cast<ScraperPreset>(m_dlg->m_setupPresetCombo->currentData().toInt());
+  // The scrape reads the numeric media fields, not opts.preset, so stamp them to
+  // match the chosen preset (Custom is a no-op — hand-tuned values stay).
+  applyScraperPreset(opts, opts.preset);
+  (void)sm->saveGeneralSettings(*m_dlg->m_scraperCtx.generalSettings);
 }
 
 QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
@@ -751,6 +907,9 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
   // in one place so nothing from the previous run survives the reopen.
   m_dlg->resetRunState();
   setUnifiedSetupEnabled(true);
+  // Reflect the current scraper settings in the setup-view quick options each
+  // time the dialog opens fresh (Kartend-1hose).
+  loadScrapeOptionsFromSettings();
   m_dlg->m_selectionModel->populateCollectionTree();
 
   // Right-click flow: pre-check exactly the requested collection +
@@ -768,6 +927,11 @@ void ScrapeResultDialogUnified::setUnifiedSetupEnabled(bool enabled) {
   if (m_dlg->m_unifiedSplitterContainer) m_dlg->m_unifiedSplitterContainer->setVisible(enabled);
   if (m_dlg->m_mediaTypesGroup) m_dlg->m_mediaTypesGroup->setVisible(enabled);
   if (m_dlg->m_modeRowContainer) m_dlg->m_modeRowContainer->setVisible(enabled);
+  // Scrape-options group is Setup-only too — no mid-run edits (Kartend-1hose).
+  if (m_dlg->m_setupOptionsContainer) m_dlg->m_setupOptionsContainer->setVisible(enabled);
+  // The whole setup view lives in one vertical splitter; hide it as a unit so the
+  // live view gets the full height during a run (Kartend-1hose).
+  if (m_dlg->m_setupVerticalSplitter) m_dlg->m_setupVerticalSplitter->setVisible(enabled);
 
   const bool showProgress = !enabled;
   m_dlg->m_unifiedCurrentLabel->setVisible(showProgress);

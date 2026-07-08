@@ -33,30 +33,9 @@ constexpr int kComboMaxWidth = 320;
 // stamps these onto the three numeric fields. Custom leaves the user's
 // existing values alone (they get back the controls editability).
 //
-// Concurrency note: SS's per-account "threads allowed" cap (1-8
-// depending on tier) does NOT scale bandwidth. SS enforces a fixed
-// per-account bytes-per-second ceiling that gets split between
-// however many concurrent streams you open. Empirical aggregate
-// throughput measured on a premium 6-thread account:
-//   concurrency=3 → 159 KiB/s aggregate
-//   concurrency=6 → ~100 KiB/s aggregate (each stream slower)
-// So presets bias LOW: more concurrency hurts more than it helps
-// past the per-account cap. HTTP/2 is enabled to avoid the *network*-
-// side TCP-fairness collapse (which would make this even worse), but
-// the *server*-side rate cap is the real ceiling here.
-struct PresetSnap {
-  int maxDim;
-  int concurrency;
-  int throttleMs;
-  // Stamps the SS `outputformat=jpg` query param onto image URLs. Only
-  // the Fastest preset opts in by default — JPG is lossy, and the
-  // Balanced/BestQuality presets favor fidelity. Custom users can flip
-  // the checkbox manually without changing presets.
-  bool preferJpg;
-};
-constexpr PresetSnap kFastest{640, 3, 50, true};
-constexpr PresetSnap kBalanced{1024, 2, 100, false};
-constexpr PresetSnap kBestQuality{0, 1, 150, false};
+// Preset → media speed/quality field mapping now lives in
+// applyScraperPreset (collection/scraper_settings.h) so the Settings panel and
+// the in-scrape-window quick options share one source of truth (Kartend-1hose).
 
 } // namespace
 
@@ -591,30 +570,22 @@ void ScraperSettingsPanel::updateConditionalVisibility() {
 
 void ScraperSettingsPanel::applyPresetToFields() {
   const auto preset = static_cast<ScraperPreset>(m_presetCombo->currentData().toInt());
-  PresetSnap snap;
-  switch (preset) {
-  case ScraperPreset::Fastest:
-    snap = kFastest;
-    break;
-  case ScraperPreset::Balanced:
-    snap = kBalanced;
-    break;
-  case ScraperPreset::BestQuality:
-    snap = kBestQuality;
-    break;
-  case ScraperPreset::Custom:
-    return; // leave existing values alone
-  }
+  if (preset == ScraperPreset::Custom) return; // leave existing values alone
+  // Shared preset → fields mapping (single source of truth with the scrape
+  // window's quick options, Kartend-1hose). Stamp onto a scratch ScraperOptions,
+  // then mirror into the spinboxes.
+  ScraperOptions snapped;
+  applyScraperPreset(snapped, preset);
   // Block numeric signals while snapping so we don't re-trigger the
   // Custom-demotion path and stamp the user's selection back to Custom.
   QSignalBlocker b1(m_maxDimSpin);
   QSignalBlocker b2(m_concurrencySpin);
   QSignalBlocker b3(m_throttleSpin);
   QSignalBlocker b4(m_preferJpgCheck);
-  m_maxDimSpin->setValue(snap.maxDim);
-  m_concurrencySpin->setValue(snap.concurrency);
-  m_throttleSpin->setValue(snap.throttleMs);
-  m_preferJpgCheck->setChecked(snap.preferJpg);
+  m_maxDimSpin->setValue(snapped.mediaMaxDimension);
+  m_concurrencySpin->setValue(snapped.mediaConcurrency);
+  m_throttleSpin->setValue(snapped.mediaThrottleMs);
+  m_preferJpgCheck->setChecked(snapped.preferJpgOutput);
 }
 
 void ScraperSettingsPanel::setModel(SettingsModel *model) {

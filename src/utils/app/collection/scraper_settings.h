@@ -166,6 +166,44 @@ struct ScraperOptions {
   void normalize() { quarantineDefaultDir = quarantineDefaultDir.trimmed(); }
 };
 
+// Stamp the media speed/quality fields (dimension cap, per-host media
+// concurrency, throttle, JPG re-encode) from a speed PRESET. Custom leaves them
+// untouched — the user is hand-tuning. Single source of truth shared by the
+// Settings → Scraper panel and the in-scrape-window quick options (Kartend-1hose)
+// so the two can't drift. Does not touch batchItemConcurrency / rescrapeMode /
+// region etc.; those are independent of the speed preset.
+//
+// Concurrency note: SS's per-account "threads allowed" cap (1-8 depending on
+// tier) does NOT scale bandwidth — SS enforces a fixed per-account
+// bytes-per-second ceiling split across however many concurrent streams you
+// open (measured on a premium 6-thread account: concurrency=3 → ~159 KiB/s;
+// concurrency=6 → ~100 KiB/s, each stream slower). So the presets bias LOW:
+// more media concurrency hurts more than it helps past the per-account cap.
+inline void applyScraperPreset(ScraperOptions &opts, ScraperPreset preset) {
+  switch (preset) {
+  case ScraperPreset::Fastest:
+    opts.mediaMaxDimension = 640;
+    opts.mediaConcurrency = 3;
+    opts.mediaThrottleMs = 50;
+    opts.preferJpgOutput = true;
+    break;
+  case ScraperPreset::Balanced:
+    opts.mediaMaxDimension = 1024;
+    opts.mediaConcurrency = 2;
+    opts.mediaThrottleMs = 100;
+    opts.preferJpgOutput = false;
+    break;
+  case ScraperPreset::BestQuality:
+    opts.mediaMaxDimension = 0;
+    opts.mediaConcurrency = 1;
+    opts.mediaThrottleMs = 150;
+    opts.preferJpgOutput = false;
+    break;
+  case ScraperPreset::Custom:
+    break; // hand-tuned — leave the numeric fields alone
+  }
+}
+
 struct ScraperSettings {
   // Per-provider key/value blobs — one inner QHash per provider id
   // (e.g. "tmdb", "screenscraper") keyed on the credential field name

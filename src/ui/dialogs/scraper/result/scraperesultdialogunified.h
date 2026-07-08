@@ -131,6 +131,14 @@ private:
   // (m_dlg->m_modeRowContainer). Returned via out-params because the two are
   // sibling widgets added to the root in sequence, not nested.
   void buildMediaTypesGroup(QGroupBox *&mediaTypesGroup, QWidget *&modeRowContainer);
+  // Setup-panel duplicates of the Settings → Scraper options (rescrape mode,
+  // fallback region, refresh window, item concurrency, speed preset) so the user
+  // can tune them without opening Settings (Kartend-1hose). The group is tracked
+  // as m_dlg->m_setupOptionsContainer; load populates from the live ScraperOptions,
+  // persist writes changes straight back via SettingsManager.
+  [[nodiscard]] QWidget *buildScrapeOptionsGroup();
+  void loadScrapeOptionsFromSettings();
+  void persistScrapeOptions();
   // The "Currently scraping" live-metadata group (m_dlg->m_liveMetadataGroup):
   // interactive candidate row, title/description, and the typed-field chip
   // flow. Hidden on return (shown only while a scrape is live).
