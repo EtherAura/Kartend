@@ -37,6 +37,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -98,10 +99,17 @@ def find_test_executable(build_dir: Path, name: str) -> Path | None:
     return None
 
 
-def dump_failed_test(name: str, exe: Path | None) -> None:
+def dump_failed_test(name: str, exe: Path | None, rerun_timeout: int) -> None:
     """Print a `::group::` block with the test's QTest output, or a stub if
     we couldn't locate the executable. The group header includes the
     resolved exe path so a wrong-glob bug is visible in the log.
+
+    The re-run is hard-bounded by `rerun_timeout` seconds (Kartend-yjw52):
+    the ctest run that produced LastTestsFailed.log was bounded by the
+    per-test TIMEOUT properties from tests/CMakeLists.txt, but this direct
+    exe invocation was not — a wedged re-run (e.g. an event-loop test
+    waiting on a window system that never answers) hung here until the
+    JOB's 90-minute ceiling killed the whole workflow.
     """
     group_label = f"{name} → {exe}" if exe else f"{name} (no matching exe under build/tests/)"
     print(f"::group::{group_label}", flush=True)
@@ -117,10 +125,34 @@ def dump_failed_test(name: str, exe: Path | None) -> None:
     ) as tmp:
         out_path = Path(tmp.name)
     try:
-        proc = subprocess.run(
-            [str(exe), "-v2", "-o", f"{out_path},txt"],
-            check=False,
-        )
+        returncode: int | None = None
+        # POSIX: run the test in its own process group so a timeout can kill
+        # the WHOLE group. Killing only the direct child leaves grandchildren
+        # (a QProcess the test spawned) orphaned — and since they inherit this
+        # script's stdout, an orphan holds the step's log pipe open and stalls
+        # the step even after this script exits (observed locally: python
+        # returns at the timeout; the pipeline drains only when the orphan
+        # dies). Windows has no POSIX process groups; there the direct-child
+        # kill plus the workflow step's timeout-minutes bound the damage.
+        popen_kwargs: dict = {}
+        if os.name == "posix":
+            popen_kwargs["start_new_session"] = True
+        proc = subprocess.Popen([str(exe), "-v2", "-o", f"{out_path},txt"], **popen_kwargs)
+        try:
+            returncode = proc.wait(timeout=rerun_timeout)
+        except subprocess.TimeoutExpired:
+            if os.name == "posix":
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+            else:
+                proc.kill()
+            proc.wait()
+            print(
+                f"::warning::re-run of {name} timed out after {rerun_timeout}s and was killed",
+                flush=True,
+            )
         print("--- QTest -o txt ---", flush=True)
         if out_path.is_file():
             try:
@@ -129,7 +161,10 @@ def dump_failed_test(name: str, exe: Path | None) -> None:
                 print(f"(could not read {out_path}: {err})", flush=True)
         else:
             print(f"(no {out_path} produced — process exited before QTest wrote)", flush=True)
-        print(f"exit: {proc.returncode}", flush=True)
+        if returncode is None:
+            print(f"exit: (killed after {rerun_timeout}s timeout)", flush=True)
+        else:
+            print(f"exit: {returncode}", flush=True)
     finally:
         # Always clean up the tmp file. The runner already disposes
         # $RUNNER_TEMP between jobs, but a long local debug run could leak.
@@ -172,6 +207,23 @@ def main() -> int:
         type=Path,
         help="Path to the CMake build directory (contains Testing/Temporary/).",
     )
+    parser.add_argument(
+        "--rerun-timeout",
+        type=int,
+        default=300,
+        help="Hard bound in seconds for each failed test's diagnostic re-run "
+        "(Kartend-yjw52). Matches the 300s unit-test TIMEOUT the original "
+        "ctest run enforced; a re-run that outlives it is killed and noted.",
+    )
+    parser.add_argument(
+        "--max-reruns",
+        type=int,
+        default=15,
+        help="Re-run at most this many failed tests (skipped ones are named "
+        "in a ::warning::). A systemic breakage failing dozens of tests "
+        "would otherwise spend max-reruns × rerun-timeout of CI budget on "
+        "diagnostics that all say the same thing. Negative = unlimited.",
+    )
     args = parser.parse_args()
 
     build_dir = args.build_dir.resolve()
@@ -190,9 +242,18 @@ def main() -> int:
     # per-test re-runs below pass and would otherwise hide it (Kartend-c5byx).
     dump_last_test_log(build_dir)
 
-    for name in failed:
+    to_rerun = failed if args.max_reruns < 0 else failed[: args.max_reruns]
+    for name in to_rerun:
         exe = find_test_executable(build_dir, name)
-        dump_failed_test(name, exe)
+        dump_failed_test(name, exe, args.rerun_timeout)
+    skipped = failed[len(to_rerun):]
+    if skipped:
+        print(
+            f"::warning::{len(skipped)} more failed test(s) not re-run "
+            f"(--max-reruns={args.max_reruns}); their original output is in the "
+            f"LastTest.log dump above: {', '.join(skipped)}",
+            flush=True,
+        )
 
     return 0
 
