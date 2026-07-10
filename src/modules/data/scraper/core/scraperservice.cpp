@@ -116,8 +116,17 @@ bool ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   m_writeMetadata = writeMetadata;
   m_consecutive429Count = 0;
   m_summary = Summary{};
-  m_totalItemsAtStart = countQueueRemaining();
-  m_itemsCompleted = 0;
+  // Kartend-resxp: Auto mode pre-filters already-covered items inside
+  // BatchScrapeRunner::start(); interactive mode must drop them from its
+  // queue up front instead, or a Skip/FillMissing run prompts the user for
+  // every item regardless of coverage. Runs before the totals below so the
+  // dropped items are counted as skipped-and-settled from the first tick,
+  // the same way a resumed run folds processedItems() into its totals.
+  if (m_mode == Mode::Interactive) {
+    m_summary.skipped += preFilterInteractiveQueue();
+  }
+  m_totalItemsAtStart = countQueueRemaining() + m_summary.skipped;
+  m_itemsCompleted = m_summary.skipped;
   m_startedAtMs = QDateTime::currentMSecsSinceEpoch();
   m_currentCollectionName.clear();
   m_currentItemPath.clear();
@@ -137,6 +146,37 @@ bool ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   persistState();
   pump();
   return true;
+}
+
+int ScraperService::preFilterInteractiveQueue() {
+  if (!m_ctx.generalSettings) return 0;
+  const auto rescrapeMode =
+      static_cast<Scraper::RescrapeMode>(m_ctx.generalSettings->scraper.options.rescrapeMode);
+  // Overwrite / UpdateChanged intentionally visit every item — Overwrite
+  // always re-fetches and UpdateChanged needs the bytes back to compare —
+  // so only Skip / FillMissing pay for the coverage indexes. Same gate as
+  // BatchScrapeRunner::start().
+  if (rescrapeMode != Scraper::RescrapeMode::Skip &&
+      rescrapeMode != Scraper::RescrapeMode::FillMissing) {
+    return 0;
+  }
+  IDatabaseManager *db = m_ctx.ctx ? m_ctx.ctx->databaseManager() : nullptr;
+  const int skipRecentDays = m_ctx.generalSettings->scraper.options.skipRecentScrapeDays;
+  int dropped = 0;
+  for (auto &job : m_queue) {
+    if (job.isEntityJob() || job.items.isEmpty()) continue;
+    BatchScrapeRunner::PreFilterResult res = BatchScrapeRunner::preFilterAlreadyScraped(
+        db, job.collectionUuid, job.artworkDir, m_mediaFilter,
+        /*fetchPrimaryCover=*/true, rescrapeMode, m_writeMetadata, skipRecentDays, job.items);
+    if (res.dropped > 0) {
+      qCInfo(lcScraperService) << "interactive pre-filter:" << job.collectionName << "dropped"
+                               << res.dropped << "of" << job.items.size()
+                               << "already-covered items";
+    }
+    dropped += res.dropped;
+    job.items = std::move(res.kept);
+  }
+  return dropped;
 }
 
 void ScraperService::resumeFromState(const PendingState &state) {

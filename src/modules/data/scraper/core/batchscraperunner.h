@@ -144,6 +144,29 @@ public:
     [[nodiscard]] int processedItems() const { return scraped + skipped + errors + notFound; }
   };
 
+  /// Outcome of the shared already-scraped pre-filter: the paths that still
+  /// need scraping plus how many were dropped as already covered.
+  struct PreFilterResult {
+    QStringList kept;
+    int dropped = 0;
+  };
+
+  /// The Skip / FillMissing already-scraped pre-filter, callable without a
+  /// runner instance so the interactive path can drop covered items from its
+  /// queue up front with the exact same criterion as an Auto run
+  /// (Kartend-resxp). Batch-loads DB metadata for @p paths (when @p db and
+  /// @p collectionUuid allow a DB check), indexes media-on-disk under
+  /// @p artworkDir, and applies shouldSkipScrapedItem per path. The caller
+  /// owns the accounting for `dropped`. @p rescrapeMode is expected to be
+  /// Skip or FillMissing — Overwrite / UpdateChanged intentionally visit
+  /// every item, so callers gate on the mode before paying for the indexes
+  /// (see start()).
+  [[nodiscard]] static PreFilterResult
+  preFilterAlreadyScraped(IDatabaseManager *db, const QString &collectionUuid,
+                          const QString &artworkDir, const QSet<QString> &mediaTypeFilter,
+                          bool fetchPrimaryCover, Scraper::RescrapeMode rescrapeMode,
+                          bool writeMetadata, int skipRecentDays, const QStringList &paths);
+
   /// `db` may be nullptr — the runner still drives the scrape but
   /// applyScrapedItem skips DB writes (file writes still happen). The
   /// tests use that mode to exercise the state machine without a real
