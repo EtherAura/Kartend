@@ -37,6 +37,19 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.16" date="2026-07-18">
+      <description>
+        <p>Scraper improvements and fixes:</p>
+        <ul>
+          <li>Re-scrape policy, fallback region, and media quality preset can now be tuned inside the scrape window</li>
+          <li>Video and manual media types now download correctly</li>
+          <li>"Download only what's missing" now skips completed items reliably: partially-filled metadata gets completed, mixed-case artwork folders are recognised, and media a provider doesn't supply is no longer re-chased on every run</li>
+          <li>Interactive scrapes pre-filter already-complete items instead of prompting for them</li>
+          <li>Rate-limited providers are retried politely, and per-media download failures show in the completion summary</li>
+          <li>Smoother UI during large imports and scrapes, plus accessibility and stability fixes</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.15" date="2026-07-04">
       <description>
         <p>DAT audit fix:</p>

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-07-18
+
 ### Added
 
 - **Scraper — setup options inside the scrape window.** The scrape window
@@ -114,93 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stability:** fixed data-scan completion races flagged by the thread
   sanitizer; the audit browser no longer crashes on first open.
 
-## [0.0.13] - 2026-06-11
-
-### Added
-
-- **Plaintext-credential warning banner.** When a transient keychain
-  failure forces the scraper password into unencrypted INI storage, both
-  scraper credential panels now show a persistent, non-modal warning with
-  the failure reason. The banner clears automatically once a later
-  keychain write succeeds and the secret moves back (which already
-  happened silently on the next settings save).
-- **Cancellable, off-thread archive extraction at launch.** Extracting an
-  archive-backed item no longer freezes the UI (previously up to 30
-  seconds); a busy overlay shows progress and the extraction can be
-  cancelled. Extraction is also bounded at 4 GiB decompressed to stop
-  zip-bomb / tmpfs-exhaustion archives.
-- **Full-text-search index self-healing.** Damaged or partially built
-  search indexes (from older versions) are detected and rebuilt
-  automatically on launch.
-
-### Changed
-
-- Collection deletion/purge now also removes the collection's scraped
-  metadata, artwork overrides, launch history, and playlist entries
-  instead of stranding them in the database forever.
-- The artwork timestamp cache moved from a single multi-megabyte JSON
-  file (fully rewritten on every save) to an SQLite store with
-  incremental writes and automatic pruning — faster startup and far less
-  disk churn during background artwork loading.
-- Emptying a collection's media directory now correctly removes its
-  items on the next rescan (previously ghost entries persisted and the
-  directory was re-scanned on every load); a temporarily unmounted
-  directory still never triggers removal.
-
-### Fixed
-
-- **Scanning:** cancelling a collection scan no longer blocks that
-  collection from being rescanned until the app is restarted; and a scan
-  whose final apply loses a database-lock race is now retried instead of
-  being silently dropped until the next full pass.
-- **Search:** results matching literal `_` or `%` characters no longer
-  over-match (an underscore in a subfolder name matched sibling folders);
-  clearing a search quickly no longer snaps the view back to the
-  abandoned query's results.
-- **Gamepad (SDL2):** a controller that disconnects or sleeps mid-session
-  is detected and re-attached on reconnect — input no longer stays dead
-  until restart.
-- **Launching:** rapid double-presses (bouncy Enter, gamepad chatter) can
-  no longer spawn two child processes — the launch debounce now covers
-  every launch surface, not just mouse double-click; pressing Enter with
-  nothing selected no longer launches the first item; play counts are
-  recorded only when the child process actually starts.
-- **Usage stats:** launch/play-session writes are no longer silently lost
-  when quitting right after a launch, when a background scan holds the
-  database write lock, or before the first query of a session; stats
-  shown right after launching an item no longer stay stale for the
-  session.
-- **Scanning:** a database hiccup mid-scan can no longer silently delete
-  items that exist on disk; cancelling a scan no longer wedges the scan
-  worker (intermittent shutdown aborts); scan results survive write-lock
-  contention with bounded retries; extension-filtered collections scan
-  correctly again after settings round-trips; file sizes and added-dates
-  are now recorded by every scan path (Size sort and "recently added"
-  smart playlists).
-- **Stability:** several shutdown-window use-after-free races fixed
-  (cache teardown ordering, superseded artwork catalog builds, event
-  filters during teardown, worker-thread pointer races); cover flow no
-  longer rebuilds every card on each data chunk while scrolling large
-  collections; per-tile artwork lookups reuse the warm directory cache
-  instead of re-probing the filesystem during scroll.
-
-### Security
-
-- All third-party GitHub Actions are pinned to commit SHAs and release
-  workflow permissions are scoped to the publishing jobs only; `main` is
-  now protected by required CI checks. Windows release dependencies are
-  pinned to a vcpkg baseline for reproducible builds.
-
-### Removed
-
-### Deprecated
-
 ## Older releases
 
-Releases 0.0.1 through 0.0.12 are archived in
+Releases 0.0.1 through 0.0.13 are archived in
 [docs/changelogs/v0.0.x.md](docs/changelogs/v0.0.x.md).
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.15...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.16...HEAD
+[0.0.16]: https://github.com/EtherAura/Kartend/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/EtherAura/Kartend/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/EtherAura/Kartend/compare/v0.0.13...v0.0.14
-[0.0.13]: https://github.com/EtherAura/Kartend/compare/v0.0.12...v0.0.13
