@@ -7,7 +7,10 @@ name: Nightly TSan
 # environment (or by tests interacting across many runs) may slip past it.
 #
 # A failure here opens a GitHub Issue tagged `tsan-nightly` so it stays
-# visible even when nobody is watching the Actions tab.
+# visible even when nobody is watching the Actions tab. The issue carries an
+# embedded evidence block (failed tests, first TSan report, per-test output
+# tails) because the run log and the uploaded artifact both die if the run
+# is deleted — the 2026-07-17 failure (GH#77) left nothing to triage.
 #
 # Also hosts the nightly benchmark job (Kartend-w9s8e): every other ctest
 # invocation across the workflows passes `-LE benchmark`, so the QBENCHMARK
@@ -113,6 +116,60 @@ jobs:
             build/TSan/Testing/Temporary/LastTestsFailed.log
           retention-days: 30
 
+      - name: Harvest failure evidence for the tracking issue
+        # Distill the ctest logs into a bounded markdown block the issue can
+        # carry inline. The run log and the artifact above are both tied to
+        # the run's lifetime; the tracking issue is the only place evidence
+        # survives a deleted run (GH#77) or the 30-day artifact expiry.
+        if: ${{ failure() && github.event_name == 'schedule' }}
+        run: |
+          LOG=build/TSan/Testing/Temporary/LastTest.log
+          FAILED=build/TSan/Testing/Temporary/LastTestsFailed.log
+          EVIDENCE="$RUNNER_TEMP/tsan-evidence.md"
+          {
+            if [ -f "$FAILED" ]; then
+              echo '**Failed tests**'
+              echo '```'
+              cat "$FAILED"
+              echo '```'
+            else
+              echo '_No LastTestsFailed.log — the failure preceded ctest (configure or build); see the workflow log._'
+            fi
+            if [ -f "$LOG" ]; then
+              # First report only: halt_on_error=1 aborts each test binary at
+              # its FIRST unsuppressed report, so later blocks in the log are
+              # separate binaries echoing the same root cause — triage is
+              # one-report-per-night regardless.
+              first_tsan=$(awk '/WARNING: ThreadSanitizer/{f=1} f{print; if (/SUMMARY: ThreadSanitizer/) exit}' "$LOG" | head -c 20000)
+              if [ -n "$first_tsan" ]; then
+                printf '\n**First ThreadSanitizer report**\n```\n%s\n```\n' "$first_tsan"
+              fi
+              if [ -f "$FAILED" ]; then
+                # Tail of each failed test's LastTest.log section: a plain
+                # assertion failure (no TSan report) prints its QVERIFY
+                # detail at the end of the test's output.
+                while IFS=: read -r _idx name; do
+                  [ -n "$name" ] || continue
+                  section=$(awk -v n="$name" '
+                    started && $0 ~ /^[0-9]+\/[0-9]+ Testing: / { exit }
+                    $0 ~ ("^[0-9]+/[0-9]+ Testing: " n "$") { started = 1 }
+                    started { print }' "$LOG" | tail -c 8000)
+                  if [ -n "$section" ]; then
+                    printf '\n**%s — tail of its LastTest.log section**\n```\n%s\n```\n' "$name" "$section"
+                  fi
+                done < "$FAILED"
+              fi
+            fi
+          } > "$EVIDENCE"
+          # GitHub issue bodies/comments cap at 65536 chars; leave headroom
+          # for the fixed body text around the evidence block.
+          if [ "$(wc -c < "$EVIDENCE")" -gt 60000 ]; then
+            head -c 60000 "$EVIDENCE" > "$EVIDENCE.tmp"
+            printf '\n```\n\n_… truncated to fit the GitHub comment limit; full logs are in the run artifact (30 days) while the run exists._\n' >> "$EVIDENCE.tmp"
+            mv "$EVIDENCE.tmp" "$EVIDENCE"
+          fi
+          echo "TSAN_EVIDENCE_FILE=$EVIDENCE" >> "$GITHUB_ENV"
+
       - name: File or update tracking issue on failure
         # On failure, file/update a single rolling 'Nightly TSan failing'
         # issue. Subsequent failures append a comment with the failing run
@@ -121,9 +178,19 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
+            const fs = require('fs');
             const title = 'Nightly TSan failing';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `Nightly TSan job failed.\n\nRun: ${runUrl}\nSHA: ${context.sha}`;
+            let evidence = '';
+            try {
+              evidence = fs.readFileSync(process.env.TSAN_EVIDENCE_FILE, 'utf8').trim();
+            } catch {
+              // Harvest step failed or never ran — file the issue without it.
+            }
+            const evidenceBlock = evidence
+              ? `\n\n<details>\n<summary>Failure evidence (embedded — survives run/artifact deletion)</summary>\n\n${evidence}\n\n</details>`
+              : '';
+            const body = `Nightly TSan job failed.\n\nRun: ${runUrl}\nSHA: ${context.sha}${evidenceBlock}`;
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
