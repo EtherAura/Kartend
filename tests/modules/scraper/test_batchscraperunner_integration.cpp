@@ -226,18 +226,29 @@ void TestBatchScrapeRunnerIntegration::cancelMidBatchAtHighConcurrencyDrainsClea
                        captured = s;
                        ++finishedCount;
                      });
+    // Event-driven warmup (Kartend-46d28): cancel only once at least one
+    // item has fully completed. The old fixed 100ms spin raced the host —
+    // under CPU contention no item settled inside the window and the
+    // scraped>0 assertion below tripped without ever exercising the
+    // cancel-vs-write race it guards. Cancelling on the FIRST completion
+    // still leaves a healthy batch mid-flight at kQueueSize scale, which is
+    // exactly the window the race needs.
+    int completedBeforeCancel = 0;
+    QObject::connect(&runner, &Scraper::BatchScrapeRunner::itemCompleted,
+                     [&completedBeforeCancel](int, int, const auto &, const auto &) {
+                       ++completedBeforeCancel;
+                     });
     runner.start();
 
-    // Spin briefly to let some items dispatch into the worker thread
-    // (otherwise cancel runs before any callback has had a chance to
-    // fire and we test nothing). 100ms is enough to get a healthy
-    // batch in flight at the stub's 0-delay cadence — a few dozen
-    // items typically complete or are mid-flight by then.
+    // Bounded so a genuinely wedged runner still fails fast; 10s is load
+    // headroom, not expected latency (first completion lands in ~ms idle).
     QElapsedTimer warmup;
     warmup.start();
-    while (warmup.elapsed() < 100) {
+    while (completedBeforeCancel == 0 && warmup.elapsed() < 10000) {
       QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     }
+    QVERIFY2(completedBeforeCancel > 0,
+             "no item completed within 10s of start() — runner wedged before cancel");
 
     runner.cancel();
 

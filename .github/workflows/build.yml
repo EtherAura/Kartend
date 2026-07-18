@@ -801,9 +801,13 @@ jobs:
   # .zip artifact.
   windows-build-test:
     runs-on: windows-latest
-    # ~45 min observed warm; a cold vcpkg cache rebuilds deps from source and
-    # runs much longer, so 90 avoids false failures while bounding a true hang.
-    timeout-minutes: 90
+    # Warm runs have crept from ~45 min to ~1h20-1h30 (Kartend-cdklm tracks
+    # profiling that growth) — a green main run once cleared the old 90-min
+    # cap by 13 seconds. 120 restores real margin over a warm run and still
+    # bounds a true hang: the known hang shapes are themselves bounded well
+    # below this (per-test TIMEOUT properties in the ctest phase, re-run
+    # timeout + step timeout on the diagnostics step; Kartend-yjw52).
+    timeout-minutes: 120
     # h4j5s: matrix Release + Debug so Q_ASSERT / debug checks run on Windows
     # too, not just the Release pipeline. fail-fast off so one leg's failure
     # doesn't cancel the other; the staging/packaging steps below are gated to
@@ -876,7 +880,13 @@ jobs:
         # test exe with `-o file,txt` so QTest's per-assertion output
         # bypasses the broken-on-Windows ctest stdout pipe. Identical
         # invocation on both OSes.
+        # Kartend-yjw52: a wedged re-run once ate the rest of the job's
+        # 90-min budget from inside this step. The script now bounds each
+        # re-run (300s) and caps the re-run count (15); the step timeout is
+        # the belt-and-braces layer so even a pathological hang shape the
+        # script can't see leaves the job budget intact.
         if: ${{ failure() }}
+        timeout-minutes: 20
         env:
           QT_QPA_PLATFORM: offscreen
         run: python .scripts/print-failed-tests.py --build-dir build

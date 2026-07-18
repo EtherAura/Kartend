@@ -315,6 +315,16 @@ private:
   void startNextCollection();
   void startAutoCollection();
   void startInteractiveItem();
+  /// Kartend-resxp: the Skip / FillMissing already-scraped pre-filter for an
+  /// interactive run. Auto mode gets this inside BatchScrapeRunner::start();
+  /// the interactive picker used to walk every queued item regardless, so a
+  /// Skip/FillMissing interactive scrape prompted for items that needed
+  /// nothing. Drops covered items from every game job in m_queue up front
+  /// (entity jobs have no item paths to filter) using the exact same
+  /// criterion as an Auto run and returns the dropped count; the caller
+  /// (startScrape) accounts them as skipped-and-settled. No-op for
+  /// Overwrite / UpdateChanged, mirroring the runner's mode gate.
+  int preFilterInteractiveQueue();
   /// Stop the whole queue because the provider's quota is exhausted, leaving
   /// the current cursor position (and therefore the un-finished jobs) in the
   /// persisted state as the resume point — mirrors onAutoFinished's quota

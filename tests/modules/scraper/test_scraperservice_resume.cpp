@@ -142,6 +142,8 @@ private slots:
   void loadSkipsResumeWhenOwnedByLiveInstance();
   void startScrapePersistsInitialSnapshot();
   void startScrapeWhileActiveRefusesAndKeepsRunState();
+  void interactivePreFilterDropsCoveredItems();
+  void interactivePreFilterRespectsModeGate();
   void cancelledInteractiveScrapeIgnoresLateLookupResult();
   void entityScrapeProcessesViaQueue();
   void entityScrapeNotFoundCountedSeparately();
@@ -442,6 +444,97 @@ void TestScraperServiceResume::startScrapeWhileActiveRefusesAndKeepsRunState() {
   QCOMPARE(service.currentMode(), ScraperService::Mode::Interactive);
   QCOMPARE(service.totalItems(), 2);
   QCOMPARE(startedSpy.count(), 1);
+}
+
+void TestScraperServiceResume::interactivePreFilterDropsCoveredItems() {
+  // Kartend-resxp: an interactive Skip/FillMissing scrape must drop
+  // already-covered items from its queue up front — the Auto runner has
+  // this pre-filter inside BatchScrapeRunner::start(), but the interactive
+  // picker walked every queued item and prompted for items that needed
+  // nothing.
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  // A metadata sidecar marks a.bin as already scraped — the DB-free
+  // presence marker shouldSkipScrapedItem probes under Skip mode.
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("metadata")));
+  QFile sidecar(QDir(artDir.path()).filePath(QStringLiteral("metadata/a.json")));
+  QVERIFY(sidecar.open(QIODevice::WriteOnly));
+  sidecar.write("{}");
+  sidecar.close();
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return std::make_shared<ParkedProvider>();
+  };
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::Skip;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionUuid = QStringLiteral("uuid-1");
+  job.collectionName = QStringLiteral("Coll");
+  job.artworkDir = artDir.path();
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+
+  QSignalSpy startedSpy(&service, &ScraperService::scrapeStarted);
+  QSignalSpy beganSpy(&service, &ScraperService::itemBegan);
+  QVERIFY(service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                              /*writeMetadata=*/true));
+
+  // a.bin was dropped up front: it counts as skipped-and-settled (total
+  // stays 2, progress starts at 1), and the only picker prompt is b.bin.
+  QCOMPARE(startedSpy.count(), 1);
+  QCOMPARE(startedSpy.first().at(0).toInt(), 2);
+  QTRY_COMPARE(beganSpy.count(), 1);
+  QCOMPARE(beganSpy.first().at(0).toInt(), 1);
+  QCOMPARE(beganSpy.first().at(3).toString(), QStringLiteral("b.bin"));
+  QCOMPARE(service.summary().skipped, 1);
+}
+
+void TestScraperServiceResume::interactivePreFilterRespectsModeGate() {
+  // Overwrite / UpdateChanged intentionally visit every item (Overwrite
+  // always re-fetches; UpdateChanged needs the bytes back to compare), so
+  // the interactive pre-filter must not drop covered items under them —
+  // same gate as BatchScrapeRunner::start().
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("metadata")));
+  QFile sidecar(QDir(artDir.path()).filePath(QStringLiteral("metadata/a.json")));
+  QVERIFY(sidecar.open(QIODevice::WriteOnly));
+  sidecar.write("{}");
+  sidecar.close();
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return std::make_shared<ParkedProvider>();
+  };
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::Overwrite;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionUuid = QStringLiteral("uuid-1");
+  job.collectionName = QStringLiteral("Coll");
+  job.artworkDir = artDir.path();
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+
+  QSignalSpy beganSpy(&service, &ScraperService::itemBegan);
+  QVERIFY(service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                              /*writeMetadata=*/true));
+
+  // Nothing dropped: the covered a.bin is still the first picker prompt
+  // and the skipped tally stays clean.
+  QTRY_COMPARE(beganSpy.count(), 1);
+  QCOMPARE(beganSpy.first().at(0).toInt(), 0);
+  QCOMPARE(beganSpy.first().at(3).toString(), QStringLiteral("a.bin"));
+  QCOMPARE(service.summary().skipped, 0);
+  QCOMPARE(service.totalItems(), 2);
 }
 
 void TestScraperServiceResume::cancelledInteractiveScrapeIgnoresLateLookupResult() {

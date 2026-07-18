@@ -287,14 +287,19 @@ void BatchScrapeRunner::skipCurrentItem() {
   }
 }
 
-void BatchScrapeRunner::filterAlreadyScraped() {
+BatchScrapeRunner::PreFilterResult BatchScrapeRunner::preFilterAlreadyScraped(
+    IDatabaseManager *db, const QString &collectionUuid, const QString &artworkDir,
+    const QSet<QString> &mediaTypeFilter, bool fetchPrimaryCover,
+    Scraper::RescrapeMode rescrapeMode, bool writeMetadata, int skipRecentDays,
+    const QStringList &paths) {
+  PreFilterResult out;
+  out.kept = paths;
   // No DB AND no artwork dir means nothing to check against — bail
   // before the loop so an empty test fixture (no DB, no artwork dir)
   // keeps every item, matching the legacy behaviour for those callers.
-  auto *db = dbMgr();
-  const bool dbCheckPossible = db && !m_collectionUuid.isEmpty();
-  const bool sidecarCheckPossible = !m_artworkDir.isEmpty();
-  if (!dbCheckPossible && !sidecarCheckPossible) return;
+  const bool dbCheckPossible = db && !collectionUuid.isEmpty();
+  const bool sidecarCheckPossible = !artworkDir.isEmpty();
+  if (!dbCheckPossible && !sidecarCheckPossible) return out;
 
   // Effective "wanted" set under FillMissing — mirrors what the
   // per-item write phase would attempt for this run. mediaTypeFilter
@@ -303,44 +308,44 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   // documents this). With nothing wanted at all we have nothing to
   // pre-skip on, so leave the queue untouched.
   QSet<QString> wantedTypes;
-  for (const QString &type : m_mediaTypeFilter) {
+  for (const QString &type : mediaTypeFilter) {
     wantedTypes.insert(type.toLower());
   }
-  if (wantedTypes.isEmpty() && m_fetchPrimaryCover) {
+  if (wantedTypes.isEmpty() && fetchPrimaryCover) {
     wantedTypes.insert(QStringLiteral("front"));
   }
-  const bool isFillMissing = m_rescrapeMode == Scraper::RescrapeMode::FillMissing;
-  if (isFillMissing && wantedTypes.isEmpty() && !m_writeMetadata) {
+  const bool isFillMissing = rescrapeMode == Scraper::RescrapeMode::FillMissing;
+  if (isFillMissing && wantedTypes.isEmpty() && !writeMetadata) {
     // Nothing is being asked for; the run is a no-op anyway. Keep
     // the queue untouched so the caller's tallies match.
-    return;
+    return out;
   }
 
   // Media-on-disk coverage indexes, pre-built once so the per-item skip check
   // is an O(1) hash lookup (Kartend audit 2w4wz).
   MediaCoverageIndex coverage =
-      Scraper::buildMediaCoverageIndex(m_artworkDir, wantedTypes, sidecarCheckPossible);
+      Scraper::buildMediaCoverageIndex(artworkDir, wantedTypes, sidecarCheckPossible);
   // updated_at is stored UTC ISO; compute the cutoff in UTC so the
   // comparison stays timezone-agnostic regardless of how the parsed
   // QDateTime's TimeSpec ends up after fromString().
   const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
-  const bool hasWindow = m_skipRecentDays > 0;
-  const QDateTime cutoff = hasWindow ? nowUtc.addDays(-m_skipRecentDays) : QDateTime();
+  const bool hasWindow = skipRecentDays > 0;
+  const QDateTime cutoff = hasWindow ? nowUtc.addDays(-skipRecentDays) : QDateTime();
 
   // Batch-fetch metadata for every candidate path up front. Without this
   // pre-flight, the per-item check below would issue one SELECT per path
   // on the GUI thread — a 1000-item collection burned multiple seconds
   // freezing the window before pump() even started.
   const QHash<QString, ItemMetadataStore::ItemMetadata> metadataByPath =
-      dbCheckPossible ? db->loadItemMetadataBatch(m_collectionUuid, m_paths)
+      dbCheckPossible ? db->loadItemMetadataBatch(collectionUuid, paths)
                       : QHash<QString, ItemMetadataStore::ItemMetadata>{};
 
   // Bundle the precomputed read-only context for the per-item skip
   // predicate. shouldSkipScrapedItem() consumes this once per path.
   ScrapeSkipContext skipCtx;
-  skipCtx.mode = m_rescrapeMode;
-  skipCtx.writeMetadata = m_writeMetadata;
-  skipCtx.artworkDir = m_artworkDir;
+  skipCtx.mode = rescrapeMode;
+  skipCtx.writeMetadata = writeMetadata;
+  skipCtx.artworkDir = artworkDir;
   skipCtx.dbCheckPossible = dbCheckPossible;
   skipCtx.sidecarCheckPossible = sidecarCheckPossible;
   skipCtx.wantedTypes = std::move(wantedTypes);
@@ -353,25 +358,35 @@ void BatchScrapeRunner::filterAlreadyScraped() {
   // from the just-built collection-wide presence index over all candidate paths.
   skipCtx.requiredMediaTypes = Scraper::computePrevalentMediaTypes(
       skipCtx.presentByType, skipCtx.frontFlatBases, skipCtx.wantedTypes,
-      static_cast<int>(m_paths.size()), Scraper::kMediaPrevalenceThreshold);
+      static_cast<int>(paths.size()), Scraper::kMediaPrevalenceThreshold);
   skipCtx.hasWindow = hasWindow;
   skipCtx.cutoff = cutoff;
 
   QStringList kept;
-  kept.reserve(m_paths.size());
-  for (const QString &path : m_paths) {
+  kept.reserve(paths.size());
+  for (const QString &path : paths) {
     if (!Scraper::shouldSkipScrapedItem(path, skipCtx)) {
       kept.append(path);
     }
   }
+  out.dropped = static_cast<int>(paths.size() - kept.size());
+  out.kept = std::move(kept);
+  return out;
+}
+
+void BatchScrapeRunner::filterAlreadyScraped() {
+  PreFilterResult res = preFilterAlreadyScraped(dbMgr(), m_collectionUuid, m_artworkDir,
+                                                m_mediaTypeFilter, m_fetchPrimaryCover,
+                                                m_rescrapeMode, m_writeMetadata, m_skipRecentDays,
+                                                m_paths);
   // The dropped items were intentionally skipped (Skip rescrape mode:
   // they already have metadata). Count them as `skipped` rather than
   // dropping them silently — otherwise scraped+skipped+errors never
   // reconciles with the total the caller computed before this filter,
   // and the items just vanish from the progress accounting.
-  m_preSkippedCount = static_cast<int>(m_paths.size() - kept.size());
+  m_preSkippedCount = res.dropped;
   m_summary.skipped += m_preSkippedCount;
-  m_paths = std::move(kept);
+  m_paths = std::move(res.kept);
 }
 
 void BatchScrapeRunner::pump() {
