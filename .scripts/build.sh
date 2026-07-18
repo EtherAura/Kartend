@@ -445,6 +445,12 @@ if $maintenance_build; then
     "${generator_args[@]}"
     -DCMAKE_BUILD_TYPE=Release
     -DKARTEND_MAINTENANCE=ON
+    # Portable flags: this is a lint gate, not a perf build. -march=native
+    # under -Werror makes the gate depend on the host CPU — GitHub's runner
+    # fleet grew AVX10.1 CPUs on 2026-07-18 and clang's promotion warning
+    # (-Winvalid-feature-combination) broke every TU, while the same tree
+    # passed locally. Every other CI compile job already sets this.
+    -DKARTEND_PORTABLE_RELEASE=ON
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     -DCMAKE_C_COMPILER=clang
     -DCMAKE_CXX_COMPILER=clang++
