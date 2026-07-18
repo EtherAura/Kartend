@@ -375,10 +375,9 @@ BatchScrapeRunner::PreFilterResult BatchScrapeRunner::preFilterAlreadyScraped(
 }
 
 void BatchScrapeRunner::filterAlreadyScraped() {
-  PreFilterResult res = preFilterAlreadyScraped(dbMgr(), m_collectionUuid, m_artworkDir,
-                                                m_mediaTypeFilter, m_fetchPrimaryCover,
-                                                m_rescrapeMode, m_writeMetadata, m_skipRecentDays,
-                                                m_paths);
+  PreFilterResult res = preFilterAlreadyScraped(
+      dbMgr(), m_collectionUuid, m_artworkDir, m_mediaTypeFilter, m_fetchPrimaryCover,
+      m_rescrapeMode, m_writeMetadata, m_skipRecentDays, m_paths);
   // The dropped items were intentionally skipped (Skip rescrape mode:
   // they already have metadata). Count them as `skipped` rather than
   // dropping them silently — otherwise scraped+skipped+errors never
