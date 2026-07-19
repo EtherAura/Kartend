@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-07-19
+
+### Fixed
+
+- **Windows packaging:** the Windows `.zip` and installer failed to start
+  ("archive.dll was not found") ever since the archive engine became a hard
+  dependency in 0.0.14 — the packaging step's hand-maintained DLL list was
+  never updated. Runtime DLLs are now staged from the executable's actual
+  import table, so the package stays complete by construction. Linux
+  packages were unaffected.
+
 ## [0.0.16] - 2026-07-18
 
 ### Added
@@ -75,53 +86,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry (e.g. a non-merged clone set that re-lists a shared entry), the audit
   no longer reports the duplicate entry as Missing while the file is present.
 
-## [0.0.14] - 2026-06-20
-
-### Added
-
-- **DAT Manager.** A new tool for auditing your collections against
-  Logiqx / clrmamepro DAT files. Associate a DAT with a collection (or a
-  linked launcher profile) and Kartend reports which items are present,
-  wrong, or missing — reading inside `.zip` / `.7z` archives so compressed
-  sets audit correctly whatever their internal layout. DATs can be
-  downloaded, watched for updates, and re-downloaded in one click, and
-  `.zip`-packed DAT files are read transparently.
-- **Audit browser.** A dedicated browser for audit results: a collapsible
-  tree with two detail panes, status filters (Complete / Partial / Empty /
-  Fixes / MIA), an optional folder-as-item rollup view, optional grouping
-  by category, and named view presets. Splitter sizes, column widths,
-  filter states, and expanded rows persist across sessions, and a ZipIndex
-  column shows each member's position within its archive.
-- **Clone-aware auditing.** Sets are audited under a configurable merge
-  mode (Split / Merged / Non-merged): clones resolve through the full
-  parent chain, a parent that already contains its clones is reported
-  once, and set membership is scoped per folder.
-- **One-click Fix.** Applicable fixes — repacking a set into a single,
-  correctly-named archive and renaming inner entries — can be applied
-  straight from the browser, with inline progress while the re-audit runs.
-  Files whose contents don't match (not just unrecognised files) are moved
-  to a global or per-collection quarantine folder.
-
-### Changed
-
-- The audit scan folder can be overridden on linked launcher profiles, and
-  the linked-profile DAT hint is now actionable.
-
-### Fixed
-
-- **Dialogs:** the mouse wheel now scrolls the focused dialog instead of
-  the content behind it.
-- **Theming:** changing the system accent colour at runtime live-updates
-  every colour in the app instead of needing a restart.
-- **Stability:** fixed data-scan completion races flagged by the thread
-  sanitizer; the audit browser no longer crashes on first open.
-
 ## Older releases
 
-Releases 0.0.1 through 0.0.13 are archived in
+Releases 0.0.1 through 0.0.14 are archived in
 [docs/changelogs/v0.0.x.md](docs/changelogs/v0.0.x.md).
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.16...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.17...HEAD
+[0.0.17]: https://github.com/EtherAura/Kartend/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/EtherAura/Kartend/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/EtherAura/Kartend/compare/v0.0.14...v0.0.15
-[0.0.14]: https://github.com/EtherAura/Kartend/compare/v0.0.13...v0.0.14

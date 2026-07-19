@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "$comment": "Vcpkg manifest for the Windows MSVC CI build. Linux uses pkg-config + apt; only consumed when CMAKE_TOOLCHAIN_FILE points at vcpkg.cmake (i.e. in the windows-build-test job).",
   "name": "kartend",
-  "version-string": "0.0.16",
+  "version-string": "0.0.17",
   "$comment-baseline": "Kartend-szdbl: pins the vcpkg port snapshot so sdl2/zstd versions don't float with whatever windows-latest ships that week (non-reproducible release builds). Advance deliberately: update to a newer microsoft/vcpkg commit SHA and rebuild the Windows leg. bump-version.sh keeps version-string in sync with VERSION; release.yml enforces it.",
   "builtin-baseline": "ca07b157e8b7f2a96f608f20b6fb08ff15ea50fb",
   "homepage": "https://github.com/EtherAura/Kartend",

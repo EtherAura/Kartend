@@ -37,6 +37,14 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.17" date="2026-07-19">
+      <description>
+        <p>Windows packaging fix:</p>
+        <ul>
+          <li>The Windows .zip and installer failed to start since 0.0.14 ("archive.dll was not found") — all required runtime DLLs are now bundled. Linux packages were unaffected.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.16" date="2026-07-18">
       <description>
         <p>Scraper improvements and fixes:</p>
