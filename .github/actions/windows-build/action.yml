@@ -34,8 +34,19 @@ inputs:
   stage:
     description: >-
       When "true", stage a portable dist\kartend (kartend.exe + LICENSE +
-      readme.md + windeployqt Qt runtime + vcpkg SDL2/zstd DLLs).
+      readme.md + windeployqt Qt runtime + vcpkg dependency DLLs).
     default: 'false'
+  applocal-deps:
+    description: >-
+      VCPKG_APPLOCAL_DEPS (ON/OFF). Default OFF (Kartend-mks5u): the vcpkg
+      toolchain's per-link z-applocal hook copies the same dependency DLLs
+      into build\tests from every test-exe link running in parallel, and
+      Windows file locking randomly fails one of them ("The process cannot
+      access the file because it is being used by another process"). The
+      staging step below deploys DLLs for the shipped exe with ONE explicit
+      z-applocal call instead; test-running callers put the vcpkg bin dir
+      on PATH before ctest.
+    default: 'OFF'
 
 runs:
   using: 'composite'
@@ -102,6 +113,7 @@ runs:
           "-DKARTEND_BUILD_TESTS=${{ inputs.build-tests }}",
           '-DKARTEND_ENABLE_CCACHE=OFF',
           "-DKARTEND_PORTABLE_RELEASE=${{ inputs.portable-release }}",
+          "-DVCPKG_APPLOCAL_DEPS=${{ inputs.applocal-deps }}",
           '-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake'
         )
         if ('${{ inputs.compiler-launcher }}' -ne '') {
@@ -121,9 +133,20 @@ runs:
       # windeployqt walks the exe's import table and copies Qt DLLs + the
       # platforms/sqldrivers/imageformats/multimedia/... plugin set into the
       # exe's directory. --release picks release-mode DLLs; --no-translations
-      # drops Qt's own qm files (kartend ships its own under translations/). The
-      # vcpkg-built SDL2 and zstd DLLs aren't on Qt's import-table walk, so copy
-      # them by name from the vcpkg installed/ tree.
+      # drops Qt's own qm files (kartend ships its own under translations/).
+      #
+      # vcpkg DLLs come from ONE explicit z-applocal call: it walks the PE
+      # import table recursively and copies every vcpkg-provided dependency
+      # (archive.dll + its z/bz2/liblzma chain, ...). The previous by-name
+      # copy list (SDL2 + zstd only) silently went stale when libarchive
+      # became a link-time dependency (Kartend-ah20x): kartend.exe imported
+      # archive.dll, nothing staged it, and the v0.0.14–v0.0.16 Windows
+      # zips/installers failed at launch with "archive.dll was not found"
+      # (Kartend-ru1vw — the applocal deploys that used to mask this locally
+      # were per-link side effects, never part of staging). SDL2.dll is
+      # loaded at runtime (LoadLibrary), so it is invisible to the import
+      # walk and must stay an explicit copy; zstd.dll is kept explicit for
+      # the same caution.
       shell: pwsh
       run: |
         mkdir dist\kartend
@@ -132,5 +155,7 @@ runs:
         Copy-Item readme.md dist\kartend\
         windeployqt --release --no-translations dist\kartend\kartend.exe
         $vcpkgBin = "${{ github.workspace }}\build\vcpkg_installed\x64-windows\bin"
+        C:\vcpkg\vcpkg.exe z-applocal --target-binary=dist\kartend\kartend.exe --installed-bin-dir=$vcpkgBin
         if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
         if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
+        Write-Host "Staged DLLs:"; Get-ChildItem dist\kartend\*.dll | Select-Object -ExpandProperty Name

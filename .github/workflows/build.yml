@@ -855,6 +855,16 @@ jobs:
         if: always()
         run: sccache --show-stats
 
+      # Kartend-mks5u: VCPKG_APPLOCAL_DEPS is OFF (windows-build action
+      # default) — the per-link z-applocal deploys raced each other copying
+      # the same DLLs into build\tests and randomly failed links. Instead,
+      # test exes resolve their vcpkg DLLs (archive.dll + z/bz2/liblzma
+      # chain) from PATH, same as they already resolve Qt DLLs. Debug links
+      # against the debug\bin DLLs per the vcpkg triplet layout.
+      - name: Put vcpkg runtime DLLs on PATH for ctest
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "${{ github.workspace }}\build\vcpkg_installed\x64-windows${{ matrix.build_type == 'Debug' && '\debug' || '' }}\bin"
+
       - name: Run tests
         # QT_QPA_PLATFORM=offscreen mirrors every Linux ctest invocation —
         # the runner has no display server. Output-on-failure so red tests
