@@ -10,11 +10,13 @@ name: Winget Submission
 # off the Release workflow's completion event instead, which is not
 # blocked.
 #
-# The first time this fires for the EtherAura.Kartend package id, the
-# action runs `wingetcreate new` against the upstream
-# microsoft/winget-pkgs repo via the user's fork; subsequent releases
-# use `wingetcreate update`. Either way the resulting PR appears under
-# the winget-pkgs main repo and Microsoft's bot reviews it.
+# winget-releaser is UPDATE-ONLY: it hard-fails ("Package ... does not
+# exist in the winget-pkgs repository") until at least one version of
+# the package id has been merged upstream. The 0.0.17 bootstrap was
+# submitted manually (hand-written 1.9.0 manifests pushed to the
+# EtherAura/winget-pkgs fork via the contents API; PR
+# microsoft/winget-pkgs#404966 — see Kartend-3qqck). From the first
+# merged version onward, this workflow handles every release.
 #
 # Setup (one-time, on the user side):
 #
