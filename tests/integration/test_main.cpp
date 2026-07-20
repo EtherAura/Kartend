@@ -52,6 +52,7 @@
 #include "../support/machomesandbox.h"
 
 #include <QApplication>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
 #include <QThreadPool>
@@ -265,6 +266,20 @@ int main(int argc, char *argv[]) {
   // own startup are sandboxed too. Each MainWindowFixture re-asserts this
   // in case a test toggles it off.
   QStandardPaths::setTestModeEnabled(true);
+
+  // Kartend-u6vt3: pin QSettings' default config directory to the sandbox.
+  // QSettings resolves its per-scope directory ONCE per process — a global
+  // path cache filled by the first default-path QSettings constructed —
+  // and whichever QStandardPaths test-mode state is active at that instant
+  // is baked in until exit. Constructing one throwaway instance now, with
+  // test mode on and before QApplication, guarantees every later
+  // QSettings("kartend", ...) in any test or thread writes under .qttest
+  // even inside a fixture's brief test-mode-off snapshot windows. Without
+  // the pin, a straggler write landing in such a window pinned the REAL
+  // ~/.config and every subsequent ui-state write escaped the sandbox —
+  // surfacing as another class's MainWindowFixture tripwire abort under
+  // ctest -j ('new file: ~/.config/kartend/ui-state.conf').
+  { QSettings pathCachePin(QStringLiteral("kartend"), QStringLiteral("ui-state")); }
 
   // The offscreen platform plugin lets the binary run on headless CI without
   // a display server. Tests that need real rendering can override this by

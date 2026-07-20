@@ -4,6 +4,7 @@
 #include "settingsutils.h"
 
 #include "settingskeys.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -157,7 +158,21 @@ MainWindowFixture::MainWindowFixture(const std::function<void()> &seedSandbox) {
 
 MainWindowFixture::~MainWindowFixture() {
   m_window.reset();
-  QStandardPaths::setTestModeEnabled(false);
+  // Flush deleteLater'd widgets NOW, while the sandbox is still active
+  // (Kartend-u6vt3). QTest otherwise processes deferred deletions between
+  // test functions; a still-visible dialog destroyed there delivers its
+  // Hide event and persists ui-state (DatAuditDialog::persistGeometry,
+  // SettingsDialog::saveDialogState) outside any fixture — after this
+  // dtor's recapture and before the next ctor's snapshot, where the
+  // tripwire below can never see it.
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  // Deliberately NOT disabling test mode here (Kartend-u6vt3): the capture
+  // helper inside assertNoRealUserWrites toggles it off around its own
+  // directory scan and restores it. The old explicit disable left test mode
+  // OFF for the whole gap until the next fixture's ctor, so any straggler
+  // write in that gap resolved real user paths — and the FIRST default-path
+  // QSettings constructed in such a gap pinned the real ~/.config into
+  // QSettings' process-wide path cache for every later write.
   assertNoRealUserWrites(m_realPathsBefore);
 }
 
