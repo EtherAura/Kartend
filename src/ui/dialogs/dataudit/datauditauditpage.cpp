@@ -70,24 +70,38 @@ struct FilterEntry {
   std::optional<QSet<Status>> statuses;
 };
 
+// Kartend-dfix4: QT_TRANSLATE_NOOP, not QT_TR_NOOP. This is a free function in
+// an anonymous namespace, so QT_TR_NOOP gave lupdate no class to attribute the
+// strings to — it warned "tr() cannot be called without context" and then
+// DROPPED them, which is why none of these labels were in
+// translations/kartend_en.ts and the filter combo was untranslatable.
+//
+// The context has to be the one the strings are looked up under at runtime.
+// Both consumers (populateFilterCombo, onFilterChanged) are DatAuditAuditPage
+// members calling tr(e.label), and DatAuditAuditPage is a Q_OBJECT at global
+// scope — the `namespace DatAudit` block in the header is only a forward
+// declaration of DatAuditModel — so that context is "DatAuditAuditPage",
+// matching the existing context of the same name in the .ts seed. It is
+// repeated literally on every entry because lupdate parses QT_TRANSLATE_NOOP
+// statically; a shared constant would put it right back to extracting nothing.
 QList<FilterEntry> filterEntries() {
   return {
-      {QT_TR_NOOP("All"), std::nullopt},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "All"), std::nullopt},
       // Framing presets: file-centric ("the files I own") vs entry-centric
       // ("how complete is the catalogue"). Both are just status subsets.
-      {QT_TR_NOOP("Files I own"),
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Files I own"),
        QSet<Status>{Status::Have, Status::WrongName, Status::WrongHash, Status::Duplicate,
                     Status::Unknown, Status::Corrupt}},
-      {QT_TR_NOOP("Catalogue completeness"),
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Catalogue completeness"),
        QSet<Status>{Status::Have, Status::WrongName, Status::Missing}},
       // Individual statuses.
-      {QT_TR_NOOP("Have"), QSet<Status>{Status::Have}},
-      {QT_TR_NOOP("Missing"), QSet<Status>{Status::Missing}},
-      {QT_TR_NOOP("Wrong name"), QSet<Status>{Status::WrongName}},
-      {QT_TR_NOOP("Wrong content"), QSet<Status>{Status::WrongHash}},
-      {QT_TR_NOOP("Duplicate"), QSet<Status>{Status::Duplicate}},
-      {QT_TR_NOOP("Unknown"), QSet<Status>{Status::Unknown}},
-      {QT_TR_NOOP("Corrupt"), QSet<Status>{Status::Corrupt}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Have"), QSet<Status>{Status::Have}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Missing"), QSet<Status>{Status::Missing}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Wrong name"), QSet<Status>{Status::WrongName}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Wrong content"), QSet<Status>{Status::WrongHash}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Duplicate"), QSet<Status>{Status::Duplicate}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Unknown"), QSet<Status>{Status::Unknown}},
+      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Corrupt"), QSet<Status>{Status::Corrupt}},
   };
 }
 

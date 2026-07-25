@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **DAT Manager — the audit status filter can now be translated.** The ten
+  entries in the Audit page's status-filter dropdown ("All", "Files I own",
+  "Catalogue completeness", and the individual statuses) were marked for
+  translation in a way the string extractor rejected, so they never reached
+  the translator seed and stayed English in every locale. They are now
+  extracted under the same context the UI looks them up in.
+
 ## [0.0.17] - 2026-07-19
 
 ### Fixed
