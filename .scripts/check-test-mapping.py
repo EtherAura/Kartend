@@ -88,6 +88,20 @@ INTEGRATION_ONLY: set[str] = {
 # gap" is a NEW, unexamined hole rather than a known-accepted one. Scoped to
 # src/chrome for now; src/core UI-coordinator gaps stay listed (a broader
 # category, much of it integration-tested — left visible deliberately).
+#
+# THIS DICT IS A RATCHET, NOT A PARKING LOT (Kartend-pnlot.11). An exemption
+# means "no extractable logic here today", not "never testable". So:
+#
+#   * When you touch an exempted file for any reason, try to lift its
+#     testable logic into a free function or small helper, test that, and
+#     DELETE the entry. tests/ui/widgets/test_itemplaceholdertint.cpp is the
+#     worked example — tint math peeled out of a paint-only widget.
+#   * Adding an entry needs a reason that says why nothing is liftable, not
+#     just that the file is untested.
+#
+# The metric is the entry count, and it should trend down. It was 14 when
+# this note was written (2026-07-25); if you find it materially higher, the
+# ratchet has slipped and that is worth a look rather than a shrug.
 COVERAGE_EXEMPT: dict[str, str] = {
     "src/chrome/items/itemwidget.cpp": "QWidget item shell; paint/lifecycle, no extractable logic",
     "src/chrome/items/itemwidgetlifecycle.cpp": "QWidget lifecycle partial of itemwidget",

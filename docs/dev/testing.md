@@ -179,6 +179,16 @@ renamed/removed) so the allowlist can't rot. `src/core` UI-coordinator
 gaps are deliberately left in the plain list (a broader category, much of
 it integration-tested) rather than exempted.
 
+**The allowlist is a ratchet, not a parking lot.** An exemption asserts
+"nothing extractable here *today*", not "never testable". When you touch an
+exempted file for any reason, try to peel its testable logic into a free
+function or small helper, test that, and delete the entry —
+`tests/ui/widgets/test_itemplaceholdertint.cpp` is the worked example, tint
+math lifted out of a paint-only widget. Adding an entry needs a reason that
+says why nothing is liftable, not merely that the file is untested. The
+metric is the entry count and it should trend down; it was 14 on
+2026-07-25.
+
 **Enforcement: `src/core/` is NOT mapping-tracked, by design.** Unlike
 `src/modules/` (bidirectional per-feature mapping) and `tests/utils/`
 (cluster mirror), `check-test-mapping.py` enforces **no** structural rule
