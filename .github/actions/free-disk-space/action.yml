@@ -1,0 +1,91 @@
+name: 'Free runner disk space'
+description: >-
+  Deletes preinstalled toolchains that no Kartend job uses, to keep
+  disk-hungry Linux jobs (instrumented builds linking ~244 test executables)
+  off the runner's disk ceiling.
+
+  Kartend-dbkuy: the GitHub-hosted ubuntu-24.04 fleet is NOT uniform in disk
+  size. On 2026-07-20 the same sanitizers job failed on attempt 1 and passed
+  on attempt 2 purely because of which runner it landed on:
+
+    attempt 1 (failed):  /dev/root  72G total,  36G avail after reclaim
+    attempt 2 (passed):  /dev/root 145G total, 106G avail after reclaim
+
+  Attempt 1 died at "[1325/1547] ld: final link failed: No space left on
+  device". So the Debug+ASan build needs somewhere north of 36 GB, and a
+  72 GB runner only clears that bar if the reclaim is thorough. This action
+  is that reclaim; it frees roughly 20-25 GB in ~30s.
+
+  This buys headroom, it does not remove the ceiling — the footprint grows
+  with the test-executable count. Kartend-bkidv tracks shrinking the build
+  itself (compressed debug sections / reduced -g level for sanitizer jobs).
+
+  WARNING: this is `sudo rm -rf` over system paths. It is only ever safe on a
+  throwaway GitHub-hosted runner. It self-disables under `act` (which sets
+  ACT=true) so a local .scripts/ci-local.sh run never wipes the container's
+  tool cache — and so nobody is one stray `bash` away from doing it to their
+  own machine.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Free disk space
+      shell: bash
+      # Everything is best-effort (`|| true`): the exact set of preinstalled
+      # toolchains drifts between runner-image releases, and a path that has
+      # already gone away must not fail the job it is meant to protect.
+      run: |
+        set -u
+        # act's container has its own (much smaller) preinstalled set and is
+        # not what this guards against; wiping it only slows local iteration.
+        if [ "${ACT:-}" = "true" ]; then
+          echo "act detected — skipping runner disk reclaim"
+          exit 0
+        fi
+
+        # `df --output` is GNU-only, and this reporting must never be the
+        # reason a job fails — an empty reading just skips the summary below.
+        avail_kb() { df --output=avail -k / 2>/dev/null | tail -n 1 | tr -cd '0-9'; }
+        before=$(avail_kb)
+
+        # Approximate ubuntu-24.04 footprints as of 2026-07. No Kartend job
+        # touches any of these — we build C++/Qt from apt packages only.
+        sudo rm -rf \
+          /usr/local/lib/android \
+          /usr/share/dotnet \
+          /opt/ghc \
+          /usr/local/.ghcup \
+          /usr/share/swift \
+          /usr/local/share/powershell \
+          /usr/local/lib/node_modules \
+          /usr/local/share/boost \
+          /opt/microsoft \
+          /usr/local/graalvm \
+          || true
+
+        # Tool cache: CodeQL alone is ~5 GB, and the Go/Node/Ruby/Java
+        # entries add several more. Python is deliberately kept — steps that
+        # run `python3` resolve /usr/bin/python3 today, but leaving the
+        # tool-cache interpreter in place costs ~1.5 GB and removes a whole
+        # class of "worked until someone added actions/setup-python" breakage.
+        #
+        # Do NOT use this action in codeql.yml: github/codeql-action wants the
+        # preinstalled bundle here and re-downloads it when it is missing.
+        if [ -d /opt/hostedtoolcache ]; then
+          sudo find /opt/hostedtoolcache -mindepth 1 -maxdepth 1 \
+            ! -name Python -exec rm -rf {} + || true
+        fi
+
+        # Preloaded container images (~3-4 GB). No workflow here uses
+        # `container:`, `services:`, or the docker CLI.
+        if command -v docker >/dev/null 2>&1; then
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+        fi
+
+        sudo apt-get clean || true
+
+        after=$(avail_kb)
+        if [ -n "$before" ] && [ -n "$after" ]; then
+          echo "Reclaimed $(( (after - before) / 1024 )) MiB"
+        fi
+        df -h /

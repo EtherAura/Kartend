@@ -401,14 +401,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Free disk space
-        # The instrumented (ASan/UBSan) build plus the full test-binary set
-        # outgrew the runner's root disk ("No space left on device" at link).
-        # Reclaim the large preinstalled toolchains this job never uses.
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
-                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
-          df -h /
+      # The instrumented (ASan/UBSan) build plus the full test-binary set
+      # outgrew the runner's root disk ("No space left on device" at link).
+      # Kartend-dbkuy widened this from an inline rm -rf to the shared action
+      # after a 72 GB runner still ran dry with the old, narrower reclaim.
+      - uses: ./.github/actions/free-disk-space
 
       - name: Install dependencies
         uses: ./.github/actions/install-deps
@@ -508,6 +505,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Same instrumented-build disk profile as the ASan job above
+      # (Kartend-dbkuy) — TSan binaries are just as large.
+      - uses: ./.github/actions/free-disk-space
+
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
@@ -600,6 +601,11 @@ jobs:
           # Full history so the diff-scope step below can resolve the merge
           # base against the PR's target branch (origin/$GITHUB_BASE_REF...HEAD).
           fetch-depth: 0
+
+      # Kartend-dbkuy: not an instrumented build, but a full clang build plus
+      # the clang-analyzer machinery over every src/ TU is the next-heaviest
+      # Linux job — cheap insurance on a 72 GB runner.
+      - uses: ./.github/actions/free-disk-space
 
       - name: Compute clang-tidy diff scope (PRs only)
         # Kartend-z4ev0: restrict the PR clang-tidy pass to the .cpp TUs the

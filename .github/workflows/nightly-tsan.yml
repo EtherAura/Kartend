@@ -44,6 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Kartend-dbkuy: instrumented build of the full test set — same disk
+      # profile as the PR-side sanitizer jobs in build.yml.
+      - uses: ./.github/actions/free-disk-space
+
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:

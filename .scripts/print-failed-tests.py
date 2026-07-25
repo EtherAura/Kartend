@@ -199,6 +199,40 @@ def dump_last_test_log(build_dir: Path) -> None:
     print("::endgroup::", flush=True)
 
 
+def report_disk_space(build_dir: Path) -> None:
+    """Print free space on the filesystem holding the build directory.
+
+    Kartend-dbkuy: a runner that fills its root disk fails with `ld: final
+    link failed: No space left on device` buried thousands of lines into a
+    ninja log, and the job then looks like an ordinary build break. One line
+    of free-space accounting on every failure makes "was it disk?" a glance
+    instead of an archaeology session. Reported unconditionally — including
+    when there are no failed tests, which is exactly the build-failure case.
+    """
+    # Walk up to the nearest existing ancestor: on a build-time failure the
+    # build dir usually exists, but a configure-time one may leave nothing.
+    probe = build_dir
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    try:
+        usage = shutil.disk_usage(probe)
+    except OSError as err:  # pragma: no cover — needs a vanishing mount
+        print(f"::warning::could not stat filesystem for {probe}: {err}", flush=True)
+        return
+    gib = 1024**3
+    print(
+        f"disk ({probe}): {usage.free / gib:.1f} GiB free of "
+        f"{usage.total / gib:.1f} GiB",
+        flush=True,
+    )
+    if usage.free < 2 * gib:
+        print(
+            "::warning::under 2 GiB free — treat any build or test failure "
+            "above as suspect-disk-exhaustion first",
+            flush=True,
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dump QTest output for failed CI tests.")
     parser.add_argument(
@@ -227,6 +261,10 @@ def main() -> int:
     args = parser.parse_args()
 
     build_dir = args.build_dir.resolve()
+    # Before any early return below — a disk-exhausted run often has no
+    # failed-test log at all (Kartend-dbkuy).
+    report_disk_space(build_dir)
+
     if not build_dir.is_dir():
         print(f"::warning::{build_dir} not found", flush=True)
         return 0

@@ -83,6 +83,11 @@ jobs:
           # lines against the merge base (a shallow clone has no common ancestor).
           fetch-depth: 0
 
+      # Kartend-dbkuy: --coverage instrumentation plus the full test-binary
+      # set and its .gcno/.gcda spill is the same disk profile as the
+      # sanitizer jobs, and it has the same 72 GB-runner exposure.
+      - uses: ./.github/actions/free-disk-space
+
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
