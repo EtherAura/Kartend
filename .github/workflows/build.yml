@@ -215,9 +215,26 @@ jobs:
           # Cache key is content-addressed on the build config files. A
           # source-only change (the common case) reuses the existing cache;
           # a config change rolls a new cache. Avoid github.run_id keys —
-          # they force a write on every run and balloon the repo cache size.
+          # they force a write on every run and balloon the repo cache size
+          # (11 ccache steps x max_size=2G against a 10 GB repo limit).
+          #
+          # Kartend-kpnv9: the hash deliberately does NOT include this
+          # workflow file any more. It used to, so editing an unrelated job —
+          # the Windows leg, a comment — rolled a brand new key and cold-built
+          # every Linux ccache job. Dropping it is safe because ccache hashes
+          # the real compiler command line itself: if a configure flag here
+          # does change compilation, those entries simply miss rather than
+          # being served wrongly. The workflow file was buying invalidation we
+          # already get for free, at the cost of throwing the cache away.
+          #
+          # KNOWN, NOT FIXED HERE (Kartend-pcc65): on the common path the key
+          # is unchanged, which is an EXACT hit — and actions/cache does not
+          # save on an exact hit. So the cache is never refreshed and slowly
+          # decays as sources drift. Fixing that means always-write keys,
+          # which is the thing this comment rules out, so it needs a cache-size
+          # budget decision rather than a one-line change.
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-
             ${{ runner.os }}-ccache-${{ matrix.build_type }}-
@@ -340,7 +357,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-no-zstd-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-no-zstd-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-no-zstd-
             ${{ runner.os }}-ccache-
@@ -419,7 +436,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-sanitize-
             ${{ runner.os }}-ccache-
@@ -529,7 +546,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-tsan-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-tsan-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-tsan-
             ${{ runner.os }}-ccache-
@@ -677,7 +694,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-maintenance-
             ${{ runner.os }}-ccache-
@@ -1018,7 +1035,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-qt68-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-ccache-qt68-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-qt68-
             ${{ runner.os }}-ccache-
@@ -1110,7 +1127,7 @@ jobs:
           # macos-14 → macos-15) starts from a clean ccache rather than reusing
           # objects built against the old SDK. (A runs-on change also rolls the
           # hashFiles() component, but the literal makes the intent explicit.)
-          key: ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-
             ${{ runner.os }}-macos14-ccache-

@@ -66,7 +66,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-tsan-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/nightly-tsan.yml') }}
+          key: ${{ runner.os }}-ccache-tsan-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-tsan-nightly-
             ${{ runner.os }}-ccache-tsan-
@@ -253,7 +253,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-bench-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/nightly-tsan.yml') }}
+          key: ${{ runner.os }}-ccache-bench-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-bench-
             ${{ runner.os }}-ccache-

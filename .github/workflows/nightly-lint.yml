@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-maintenance-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/nightly-lint.yml') }}
+          key: ${{ runner.os }}-ccache-maintenance-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-maintenance-nightly-
             ${{ runner.os }}-ccache-maintenance-

@@ -104,7 +104,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/coverage.yml') }}
+          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ runner.os }}-ccache-coverage-
             ${{ runner.os }}-ccache-
