@@ -26,6 +26,7 @@ installs:
 | `libtsan2`, `libasan8`, `libubsan1`, `libclang-rt-18-dev` | Sanitizer runtime libs (the last one covers clang's static runtimes) |
 | `llvm-18` | `llvm-symbolizer` — clang's sanitizers need it to print `file:line` instead of bare addresses |
 | `pulseaudio` | QtMultimedia tests SIGILL under TSan without a running PulseAudio session |
+| `unzip`, `zip`, `p7zip-full` | Archive tests. `unzip`/`7z` extract; `zip` **creates** the fixture archives five test files build — without it some QFAIL under `KARTEND_REQUIRE_ARCHIVE_TOOLS=1` and others QSKIP silently |
 
 The Dockerfile also symlinks `clang-format-19` → `clang-format` so
 the pre-commit hook and `--format-check` runner pick up the pinned

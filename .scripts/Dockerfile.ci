@@ -48,7 +48,16 @@ RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       clang g++ libtsan2 libasan8 libubsan1 libclang-rt-18-dev llvm-18 \
       cmake ninja-build lld ccache git python3 pulseaudio \
-      unzip p7zip-full \
+      `# unzip/p7zip-full EXTRACT archives; zip CREATES them (Kartend-nyy6l).` \
+      `# Five test files shell out to the zip binary to build their fixture` \
+      `# archives — romhasher, datpackimport, nointrodownloader, datlookup and` \
+      `# launchmanager. Without it romhasher and launchmanager QFAIL under` \
+      `# KARTEND_REQUIRE_ARCHIVE_TOOLS=1 (the flag CI's build/sanitizers jobs` \
+      `# set, so a local repro that matches CI got 4 bogus failures), and the` \
+      `# other three QSKIP in SILENCE — the container was quietly testing less` \
+      `# than CI does. GitHub's ubuntu-24.04 image ships zip, which is why real` \
+      `# CI never noticed.` \
+      unzip zip p7zip-full \
       qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
       libarchive-dev qtkeychain-qt6-dev \
       clang-tidy clang-format-19 cppcheck iwyu jq \
