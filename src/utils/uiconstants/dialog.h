@@ -6,6 +6,14 @@ namespace UIConstants {
 // =============================================================================
 // Dialog Sizes
 // Dimensions for application dialogs.
+//
+// NOT a shared spacing/margin bucket. Each dialog owns its own namespace
+// below (ScrapeResultDialog, StatisticsDialog, …). If you came here looking
+// for a common ROOT_LAYOUT_SPACING to point a third dialog at, there isn't
+// one on purpose — see "Inline layout literals in dialogs — promote on touch"
+// in README.md and promote into that dialog's own namespace. Two dialogs that
+// both space at 8px aren't coupled; a shared constant would claim they are,
+// and whoever retunes one would silently move the other.
 // =============================================================================
 namespace Dialog {
 /// Width of the About dialog

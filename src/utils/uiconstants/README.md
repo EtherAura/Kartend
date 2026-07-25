@@ -1,4 +1,4 @@
-# `src/ui/uiconstants/`
+# `src/utils/uiconstants/`
 
 Header-only `inline constexpr` constants for UI tuning, split per domain
 (one header per concern: `animation.h`, `artwork.h`, `grid.h`, …).
@@ -37,6 +37,37 @@ New `<domain>.h` when the constant belongs to a UI concern not covered by
 any existing file. Otherwise add to whichever existing header already owns
 the concept (`grid.h` for layout, `animation.h` for durations,
 `color.h` for color literals, …).
+
+## Inline layout literals in dialogs — promote on touch
+
+There are ~113 bare `setSpacing(8)` / `setContentsMargins(12, …)`-style
+literals across `src/ui` and `src/chrome`, against ~21 call sites already
+reading a `UIConstants` value. **This is not a backlog to burn down in one
+pass.** Converting a dialog you are not otherwise editing produces a wide,
+untestable diff over pixel values, and the layout literals that matter are
+the ones someone is already looking at.
+
+The rule is opportunistic: **when you touch a dialog for another reason,
+promote that dialog's bare layout literals as part of the same change.**
+
+Promote them into **that dialog's own namespace** in `dialog.h`, following
+what `ScrapeResultDialog` already does:
+
+```cpp
+namespace UIConstants {
+namespace MyDialog {
+inline constexpr int ROOT_LAYOUT_SPACING = 8;
+inline constexpr int SECTION_LAYOUT_SPACING = 6;
+} // namespace MyDialog
+} // namespace UIConstants
+```
+
+Do **not** reach for a shared `UIConstants::Dialog::*` spacing set. It does
+not exist — `Dialog` holds only the About dialog's size — and inventing one
+would work against the per-domain ownership this directory is built on. Two
+dialogs both spacing at 8px are not thereby coupled; a shared constant would
+claim they are, and the next person tuning one would silently move the
+other. Same-valued is not same-meaning.
 
 ## When NOT to use this directory
 
