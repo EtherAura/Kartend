@@ -70,16 +70,33 @@ include_directories(
 # mid-link (Kartend-dbkuy). A SHARED twin exists once and the executables
 # reference it, which is the same trade every distro makes.
 #
-# CONSTRAINT 1 — ELF only. The area libs already build with
+# CONSTRAINT 1 — Linux only. The area libs already build with
 # POSITION_INDEPENDENT_CODE ON (src/CMakeLists.txt) so the SAME objects feed
 # the shared twin with no extra compile, and this project sets no
 # VISIBILITY_PRESET — default ELF visibility exports everything, so tests that
-# reach internal symbols keep working with no export annotations. Neither
-# holds on MSVC: a Windows DLL exports nothing without __declspec(dllexport)
+# reach internal symbols keep working with no export annotations.
+#
+# Windows is out because a DLL exports nothing without __declspec(dllexport)
 # or WINDOWS_EXPORT_ALL_SYMBOLS, and the latter does not reliably cover DATA
-# symbols such as Q_OBJECT's staticMetaObject. Windows therefore keeps the
-# STATIC twins. Kartend-qwxy2 tracks the Windows link cost separately — its
-# 62 min is /LTCG, not archive copying, so it needs a different fix anyway.
+# symbols such as Q_OBJECT's staticMetaObject. Kartend-qwxy2 tracks the
+# Windows link cost separately — its 62 min is /LTCG, not archive copying, so
+# it needs a different fix anyway.
+#
+# macOS is out for a subtler reason, learned the hard way (fdb60dbb turned
+# macos-build-test red). The twin gets its Qt dependencies only as INTERFACE
+# usage requirements from the OBJECT lib — it never links them itself — so the
+# shared twin is full of undefined Qt symbols that the test executable
+# resolves later. ELF permits that in a .so; ld64 defaults to
+# `-undefined error` and refuses:
+#
+#   "typeinfo for QObject", referenced from: ... mocs_compilation.cpp.o
+#   "vtable for QRunnable", referenced from: QRunnable::QRunnable()
+#   ld: symbol(s) not found for architecture arm64
+#
+# Extending to macOS means making the twin self-contained — walking the OBJECT
+# lib's INTERFACE_LINK_LIBRARIES and linking the non-area (Qt, zstd, …)
+# entries into the twin directly. That is a real change, and macOS CI has no
+# disk pressure to justify the risk, so it is not done here.
 #
 # CONSTRAINT 2 — Debug only, and this one is not conservatism either.
 # CompilerFlags.cmake applies HARDENING_COMPILE_OPTS under
@@ -101,7 +118,7 @@ include_directories(
 #
 # An empty CMAKE_BUILD_TYPE (multi-config generators) falls through to STATIC,
 # which is the safe default.
-if (WIN32)
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(KARTEND_TEST_TWIN_TYPE STATIC)
 elseif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(KARTEND_TEST_TWIN_TYPE STATIC)
