@@ -227,12 +227,43 @@ jobs:
           # being served wrongly. The workflow file was buying invalidation we
           # already get for free, at the cost of throwing the cache away.
           #
-          # KNOWN, NOT FIXED HERE (Kartend-pcc65): on the common path the key
-          # is unchanged, which is an EXACT hit — and actions/cache does not
-          # save on an exact hit. So the cache is never refreshed and slowly
-          # decays as sources drift. Fixing that means always-write keys,
-          # which is the thing this comment rules out, so it needs a cache-size
-          # budget decision rather than a one-line change.
+          # ACCEPTED LIMITATION — the cache goes stale and we live with it
+          # (Kartend-pcc65, decided 2026-07-25). Read this before "fixing" the
+          # hit rate, because the obvious remedies are worse.
+          #
+          # Source files are not in the hash, so an ordinary source-only
+          # change leaves the key UNCHANGED — an exact primary-key hit. And
+          # actions/cache does not save on an exact hit. The cache is
+          # therefore populated once, when a config change rolls the key, and
+          # never written back afterwards. Objects for changed or new sources
+          # are never persisted, so the hit rate decays as the tree drifts
+          # away from whenever the key last rolled.
+          #
+          # Measured on the sanitizers job (run 30166939300):
+          #   Cache size (GB):  2.0 / 2.0 (99.97%)   <- full, at max_size
+          #   Hits:               18 / 1029 (1.75%)
+          # i.e. saturated with entries that no longer match anything being
+          # compiled, and with no mechanism to flush them.
+          #
+          # Why we accept it rather than fix it:
+          #   * Always-write keys (github.run_id/sha) would refresh the cache
+          #     but write ~11 caches per run against a 10 GB per-repo limit;
+          #     they would LRU-evict each other and plausibly do worse.
+          #   * Shrinking max_size to fit more generations in that budget is
+          #     backwards: 2 GB already holds only about ONE build's objects
+          #     (1029 cacheable compiles), so smaller means more thrash.
+          #   * The failure mode is mild — a cold-ish compile costs minutes on
+          #     jobs whose real cost is elsewhere (Kartend-cdklm: the Windows
+          #     leg was link-bound, not compile-bound).
+          # Revisit only with real per-job cache sizes in hand; the 10 GB
+          # budget cannot be divided sensibly without them.
+          #
+          # Nuance worth knowing if you touch the key: 'CMakeLists.txt' in the
+          # hash below matches only the ROOT one — the pattern is not
+          # recursive, so src/CMakeLists.txt and tests/CMakeLists.txt do NOT
+          # roll it. Kartend-wjgjy rewrote tests/CMakeLists.txt without
+          # rolling any cache key. Harmless there (it changed link type, not
+          # compile lines), but do not assume "all build config" is covered.
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |

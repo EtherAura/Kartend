@@ -62,6 +62,10 @@ jobs:
         # fresh cache write each night and evict PR caches.
         uses: actions/cache@v6
         with:
+          # Cache-key policy, and the accepted staleness that comes with
+          # it, are documented once at the ccache step in build.yml
+          # (Kartend-pcc65). Do not chase the hit rate here without
+          # reading that first.
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-maintenance-nightly-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
