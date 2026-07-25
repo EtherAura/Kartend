@@ -920,7 +920,28 @@ jobs:
 
       - name: sccache stats
         if: always()
-        run: sccache --show-stats
+        # Kartend-0uhex: the two legs of this matrix report wildly different
+        # cache outcomes from identical request counts — Debug 1035 requests /
+        # 483 hits / 85 misses (85%), Release 1035 / 0 hits / 568 misses (0%).
+        # Neither reports non-cacheable compilations or cache errors, so
+        # sccache is willing to cache the Release objects and simply has
+        # nothing to serve.
+        #
+        # --show-adv-stats adds the per-backend read/write breakdown that
+        # plain --show-stats omits, which is what separates the candidate
+        # explanations: writes never reaching the GHA backend at all (expect
+        # zero cache writes here), versus writes landing under keys nothing
+        # ever reads back (expect writes > 0 with hits still 0), versus the
+        # entries being evicted between runs (expect writes > 0 and the
+        # Release leg's objects simply absent). Cheap, and the alternative is
+        # guessing — plain --show-stats has already sustained one wrong
+        # conclusion on this job (its "Compile requests 0" was an
+        # idle-timeout artifact, Kartend-cdklm).
+        run: |
+          sccache --show-stats
+          echo "::group::sccache adv stats (per-backend breakdown)"
+          sccache --show-adv-stats || echo "(--show-adv-stats unsupported by this sccache build)"
+          echo "::endgroup::"
 
       # Kartend-mks5u: VCPKG_APPLOCAL_DEPS is OFF (windows-build action
       # default) — the per-link z-applocal deploys raced each other copying
