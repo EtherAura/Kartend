@@ -870,10 +870,17 @@ jobs:
     # ~250 executables that are never shipped. It is also exactly why the
     # LTO-free Debug leg is 3-6x faster.
     #
-    # Two ways out, both tracked, neither safe to do casually: Kartend-wjgjy
-    # (link the app code once as a shared library, cutting the executable
-    # count) and Kartend-qwxy2 (stop paying LTCG on CI test exes, which
-    # trades away CI's only pre-tag check that the LTO link is clean).
+    # RESOLVED by Kartend-qwxy2: the Release leg no longer builds tests, so
+    # those ~250 LTCG links are gone and only kartend.exe is whole-program
+    # optimised — which is what release.yml ships anyway, so the pre-tag LTO
+    # link check survives intact. Expect the Release leg around ~15 min
+    # (compiles plus one app link) rather than 78-109. The Debug leg is
+    # unchanged and still runs the full test suite.
+    #
+    # The 120 stays: it bounds a hang rather than tracking the happy path,
+    # and the Debug leg has been observed at 43 min. Revisit once a few runs
+    # establish the new Release baseline — but do not tighten it to just
+    # above the mean, since that converts a slow runner into a red build.
     timeout-minutes: 120
     # h4j5s: matrix Release + Debug so Q_ASSERT / debug checks run on Windows
     # too, not just the Release pipeline. fail-fast off so one leg's failure
@@ -909,11 +916,30 @@ jobs:
       # staging — same action release.yml's windows-release uses, so the two
       # can't drift. PORTABLE_RELEASE is Release-only (matches the old matrix
       # include); the action defaults it OFF for the Debug leg.
+      # Kartend-qwxy2: tests are built on the DEBUG leg only. Kartend-cdklm
+      # measured this job at 79.6 min of "Build kartend + tests" against 2.07
+      # min of "Run tests" — the Release leg was spending ~80 minutes
+      # LTCG-linking ~250 test executables to run two minutes of tests. /GL +
+      # /LTCG is Release-only and propagates to every consumer via
+      # kartend_utils's INTERFACE_LINK_OPTIONS, so each test exe pays MSVC
+      # whole-program optimisation and none of them ship.
+      #
+      # The pre-tag LTO link check is NOT lost, which was the objection to
+      # dropping LTCG outright: kartend.exe is still built Release with
+      # /GL + /LTCG on every push here, exactly as release.yml's
+      # windows-release builds it (same composite action, build-tests OFF).
+      #
+      # What IS given up: Release-mode test EXECUTION on Windows. Both axes
+      # stay covered separately — the Windows Debug leg runs the full suite,
+      # and Linux `build (Release, gcc)` / `(Release, clang)` run it in
+      # Release. The residual gap is the intersection: a bug needing MSVC +
+      # optimiser + NDEBUG (Q_ASSERT compiled out) together. Narrow, not
+      # zero. Re-enable here if that ever bites.
       - name: Build kartend + tests
         uses: ./.github/actions/windows-build
         with:
           build-type: ${{ matrix.build_type }}
-          build-tests: 'ON'
+          build-tests: ${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }}
           portable-release: ${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }}
           compiler-launcher: 'sccache'
           stage: ${{ matrix.build_type == 'Release' && 'true' || 'false' }}
@@ -950,6 +976,8 @@ jobs:
       # chain) from PATH, same as they already resolve Qt DLLs. Debug links
       # against the debug\bin DLLs per the vcpkg triplet layout.
       - name: Put vcpkg runtime DLLs on PATH for ctest
+        # Debug only — the Release leg builds no tests (Kartend-qwxy2).
+        if: matrix.build_type == 'Debug'
         shell: pwsh
         run: Add-Content $env:GITHUB_PATH "${{ github.workspace }}\build\vcpkg_installed\x64-windows${{ matrix.build_type == 'Debug' && '\debug' || '' }}\bin"
 
@@ -968,6 +996,9 @@ jobs:
         # windows-latest runner image (7z/tar preinstalled today), which
         # this workflow doesn't control — enforcing would turn an image
         # change into a red wall. QSKIP stays the intended fallback.
+        #
+        # Debug only — the Release leg builds no tests (Kartend-qwxy2).
+        if: matrix.build_type == 'Debug'
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -LE benchmark
@@ -983,7 +1014,9 @@ jobs:
         # re-run (300s) and caps the re-run count (15); the step timeout is
         # the belt-and-braces layer so even a pathological hang shape the
         # script can't see leaves the job budget intact.
-        if: ${{ failure() }}
+        #
+        # Debug only — the Release leg has no tests to dump (Kartend-qwxy2).
+        if: ${{ failure() && matrix.build_type == 'Debug' }}
         timeout-minutes: 20
         env:
           QT_QPA_PLATFORM: offscreen
