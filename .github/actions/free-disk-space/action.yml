@@ -13,8 +13,12 @@ description: >-
 
   Attempt 1 died at "[1325/1547] ld: final link failed: No space left on
   device". So the Debug+ASan build needs somewhere north of 36 GB, and a
-  72 GB runner only clears that bar if the reclaim is thorough. This action
-  is that reclaim; it frees roughly 20-25 GB in ~30s.
+  72 GB runner only clears that bar if the reclaim is thorough.
+
+  Measured on the first main run that used this action (run 30157308308):
+  "Reclaimed 31456 MiB" in 1m51s. The minute-plus is mostly rm -rf walking
+  the Android SDK's file count; it is worth it against a coin-flip failure,
+  but it is NOT free — do not add this to jobs that aren't disk-constrained.
 
   This buys headroom, it does not remove the ceiling — the footprint grows
   with the test-executable count. Kartend-bkidv tracks shrinking the build

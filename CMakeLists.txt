@@ -28,6 +28,11 @@ option(KARTEND_ENABLE_SANITIZERS "Enable ASan+UBSan in Debug builds" OFF)
 # them as separate options and FATAL_ERROR if both are requested.
 option(KARTEND_ENABLE_TSAN "Enable ThreadSanitizer in Debug builds" OFF)
 option(KARTEND_ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation in Debug builds" OFF)
+# Kartend-bkidv: line-tables-only debug info. OFF by default so a developer
+# debugging a sanitizer finding locally keeps full DWARF (variable inspection
+# in gdb); CI's instrumented jobs turn it ON to stay under the runner disk
+# ceiling. See the KARTEND_SLIM_DEBUG_INFO block further down for the numbers.
+option(KARTEND_SLIM_DEBUG_INFO "Emit line tables only (-g1) instead of full DWARF" OFF)
 option(KARTEND_USE_PGO "Enable Profile-Guided Optimization" OFF)
 option(KARTEND_PGO_GENERATE "Generate PGO profile data" OFF)
 option(KARTEND_PGO_USE "Use existing PGO profile data" OFF)
@@ -168,6 +173,47 @@ if (KARTEND_ENABLE_COVERAGE)
     add_link_options(
       $<$<CONFIG:Debug>:--coverage>
     )
+  endif()
+endif()
+
+# Kartend-bkidv: shrink the instrumented build trees.
+#
+# An instrumented Debug build links ~240 test executables, and that tree
+# outgrew the smaller half of the GitHub-hosted runner fleet — Kartend-dbkuy
+# established that the ubuntu-24.04 pool mixes 72 GB and 145 GB root disks,
+# and the same commit failed on a 72 GB runner with "ld: final link failed:
+# No space left on device" while passing on a 145 GB one.
+#
+# Measured on the largest test binary (test_statisticsdialog, Debug+ASan,
+# GCC 15 locally; section sizes via readelf):
+#
+#   -g (today)      513.5 MiB   .debug_info 147.6  link ~8.6s
+#   -g -gz=zlib     413.1 MiB   .debug_info  70.6  link ~17-28s
+#   -g1             343.5 MiB   .debug_info   2.7  link ~5.9s
+#
+# So -g1 wins on both axes and compressed debug sections lose on both: -gz
+# buys 1.24x for roughly DOUBLE the link time (x240 executables), while -g1
+# buys 1.49x and links FASTER because there is far less DWARF to copy. Don't
+# re-try -gz here — it was measured, not assumed.
+#
+# What is left after -g1 is not debug info at all: .data 139.3 MiB (ASan
+# global redzones) + .text 39.1 + .rodata 24.3. That ~203 MiB floor per
+# executable is why Kartend-wjgjy (link the app code once as a shared library
+# instead of statically into all ~240 test exes) is the real structural fix.
+#
+# Diagnostics are unaffected: verified on the CI toolchain (Ubuntu 24.04)
+# that sanitizer stack traces stay identical down to file:line:col under -g1
+# for GCC 13 + ASan, Clang 18 + ASan and Clang 18 + TSan. -g1 keeps line
+# tables and drops only local-variable DWARF, i.e. exactly the part CI never
+# reads. It stays opt-in so a developer debugging a sanitizer finding in gdb
+# still gets full DWARF by default.
+if (KARTEND_SLIM_DEBUG_INFO)
+  if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    message(WARNING "KARTEND_SLIM_DEBUG_INFO is only supported on GCC/Clang")
+  else()
+    # Appended after CMAKE_CXX_FLAGS_DEBUG's own -g; the last -g<level> on the
+    # command line wins, so this demotes it rather than fighting it.
+    add_compile_options($<$<CONFIG:Debug>:-g1>)
   endif()
 endif()
 

@@ -91,6 +91,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_TSAN=ON \
+            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -99,8 +100,13 @@ jobs:
           cd build/TSan
           cmake --build . --parallel $(nproc)
 
-      - name: ccache stats
-        run: ccache --show-stats
+      - name: ccache stats + build tree size
+        # Kartend-bkidv: track the instrumented tree's size — it is what puts
+        # this job near the disk ceiling on a 72 GB runner.
+        run: |
+          ccache --show-stats
+          du -sh build/TSan
+          df -h /
 
       - name: Run Tests (TSan)
         env:

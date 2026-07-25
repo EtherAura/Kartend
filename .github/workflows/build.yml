@@ -442,6 +442,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_SANITIZERS=ON \
+            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -450,8 +451,15 @@ jobs:
           cd build/Sanitize
           cmake --build . --parallel $(nproc)
 
-      - name: ccache stats
-        run: ccache --show-stats
+      - name: ccache stats + build tree size
+        # Kartend-bkidv: the instrumented tree is what puts this job near the
+        # disk ceiling on a 72 GB runner, so record its size every run. A
+        # steadily climbing number here is the early warning that the -g1
+        # headroom has been eaten by new test executables.
+        run: |
+          ccache --show-stats
+          du -sh build/Sanitize
+          df -h /
 
       - name: Run Tests (ASan/UBSan)
         env:
@@ -545,6 +553,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_TSAN=ON \
+            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -553,8 +562,12 @@ jobs:
           cd build/TSan
           cmake --build . --parallel $(nproc)
 
-      - name: ccache stats
-        run: ccache --show-stats
+      - name: ccache stats + build tree size
+        # Kartend-bkidv — see the ASan job above for why this is tracked.
+        run: |
+          ccache --show-stats
+          du -sh build/TSan
+          df -h /
 
       - name: Run Tests (TSan)
         env:
@@ -602,10 +615,12 @@ jobs:
           # base against the PR's target branch (origin/$GITHUB_BASE_REF...HEAD).
           fetch-depth: 0
 
-      # Kartend-dbkuy: not an instrumented build, but a full clang build plus
-      # the clang-analyzer machinery over every src/ TU is the next-heaviest
-      # Linux job — cheap insurance on a 72 GB runner.
-      - uses: ./.github/actions/free-disk-space
+      # Kartend-bkidv: deliberately NO free-disk-space step here. It looked
+      # like cheap insurance when Kartend-dbkuy added it, but the first main
+      # run measured the reclaim at 1m51s, and this job has never once failed
+      # on disk — it is a single uninstrumented build, nothing like the ~40 GB
+      # sanitizer trees. Report the numbers instead (see the ccache stats step
+      # below); re-add the reclaim if the data says this job is actually tight.
 
       - name: Compute clang-tidy diff scope (PRs only)
         # Kartend-z4ev0: restrict the PR clang-tidy pass to the .cpp TUs the
@@ -792,8 +807,14 @@ jobs:
             echo "::endgroup::"
           fi
 
-      - name: ccache stats
-        run: ccache --show-stats
+      - name: ccache stats + build tree size
+        # Kartend-bkidv: this job gets no disk reclaim (see the note above the
+        # clang-tidy diff-scope step) — these numbers are what would justify
+        # adding one.
+        run: |
+          ccache --show-stats
+          du -sh build/ninja-maintenance || true
+          df -h /
 
   # Full Windows MSVC build + test job. Pulls Qt 6.7 LTS via
   # install-qt-action (its official binaries are faster than vcpkg can

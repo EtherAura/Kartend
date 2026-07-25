@@ -123,14 +123,20 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_COVERAGE=ON \
+            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build/coverage --parallel $(nproc)
 
-      - name: ccache stats
-        run: ccache --show-stats
+      - name: ccache stats + build tree size
+        # Kartend-bkidv: track the instrumented tree's size — same disk
+        # exposure as the sanitizer jobs on a 72 GB runner.
+        run: |
+          ccache --show-stats
+          du -sh build/coverage
+          df -h /
 
       - name: Reset coverage counters
         run: lcov --directory build/coverage --zerocounters
